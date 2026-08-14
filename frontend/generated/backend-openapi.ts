@@ -760,6 +760,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/h3/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview H3 Probe */
+        post: operations["preview_h3_probe_api_short_drama_projects__project_id__h3_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/h3/probes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enqueue H3 Probe */
+        post: operations["enqueue_h3_probe_api_short_drama_projects__project_id__h3_probes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/h3/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List H3 Provider Runs */
+        get: operations["list_h3_provider_runs_api_short_drama_projects__project_id__h3_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/manifest/rebuild": {
         parameters: {
             query?: never;
@@ -845,6 +896,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/providers/minimax-h3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get H3 Provider Config */
+        get: operations["get_h3_provider_config_api_short_drama_providers_minimax_h3_get"];
+        put?: never;
+        /** Update H3 Provider Config */
+        post: operations["update_h3_provider_config_api_short_drama_providers_minimax_h3_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/providers/minimax-h3/reconciliation-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List H3 Reconciliation Candidates */
+        get: operations["list_h3_reconciliation_candidates_api_short_drama_providers_minimax_h3_reconciliation_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/providers/minimax-h3/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate H3 Provider Config */
+        post: operations["validate_h3_provider_config_api_short_drama_providers_minimax_h3_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/takes/{take_id}/h3/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review H3 Take */
+        post: operations["review_h3_take_api_short_drama_takes__take_id__h3_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/takes/{take_id}/select": {
         parameters: {
             query?: never;
@@ -890,6 +1010,23 @@ export interface paths {
         put?: never;
         /** Cancel Task */
         post: operations["cancel_task_api_short_drama_tasks__task_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/tasks/{task_id}/h3/resolve-submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve H3 Submission */
+        post: operations["resolve_h3_submission_api_short_drama_tasks__task_id__h3_resolve_submit_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1377,6 +1514,16 @@ export interface components {
             /** Shot Ids */
             shot_ids?: string[] | null;
         };
+        /**
+         * EvidencePurpose
+         * @enum {string}
+         */
+        EvidencePurpose: "CONTRACT_SMOKE" | "QUALITY_PROBE";
+        /**
+         * EvidenceStatus
+         * @enum {string}
+         */
+        EvidenceStatus: "AWAITING_OUTPUT" | "AWAITING_REVIEW" | "REVIEWED" | "SUBMIT_UNKNOWN" | "OUTPUT_MISSING" | "FAILED" | "CANCELLED";
         /** ExecutionPlanEntry */
         ExecutionPlanEntry: {
             /** Candidate Count */
@@ -1630,6 +1777,7 @@ export interface components {
             input_bible_version_id: string;
             /** Input Script Version Id */
             input_script_version_id: string;
+            /** @default SUCCESS */
             mock_behavior: components["schemas"]["MockBehavior"];
             /** Model */
             model: string;
@@ -1638,14 +1786,23 @@ export interface components {
             project_id: string;
             /** Provider */
             provider: string;
+            /** Provider Run Id */
+            provider_run_id?: string | null;
             /** Provider Task Id */
             provider_task_id?: string | null;
             /** Request Fingerprint */
             request_fingerprint: string;
             /** Requested Duration Seconds */
             requested_duration_seconds: number;
+            /**
+             * Resolution
+             * @default 432x768
+             */
+            resolution: string;
             /** Retry Of Task Id */
             retry_of_task_id?: string | null;
+            /** @default DIRECT */
+            route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
             shot_id: string;
             /** Started At */
@@ -1684,6 +1841,324 @@ export interface components {
             vram: number;
             /** Vramused */
             vramUsed: number;
+        };
+        /** H3CompilePreviewResponse */
+        H3CompilePreviewResponse: {
+            /** Prompt */
+            prompt: string;
+            request: components["schemas"]["H3VideoRequest"];
+        };
+        /** H3ContentItem */
+        H3ContentItem: {
+            audio_url?: components["schemas"]["H3UrlValue"] | null;
+            image_url?: components["schemas"]["H3UrlValue"] | null;
+            role?: components["schemas"]["H3MediaRole"] | null;
+            /** Text */
+            text?: string | null;
+            /** Type */
+            type: string;
+            video_url?: components["schemas"]["H3UrlValue"] | null;
+        };
+        /** H3MediaInput */
+        H3MediaInput: {
+            kind: components["schemas"]["H3MediaKind"];
+            role: components["schemas"]["H3MediaRole"];
+            source: components["schemas"]["H3MediaSource"];
+        };
+        /**
+         * H3MediaKind
+         * @enum {string}
+         */
+        H3MediaKind: "IMAGE" | "VIDEO" | "AUDIO";
+        /**
+         * H3MediaRole
+         * @enum {string}
+         */
+        H3MediaRole: "first_frame" | "last_frame" | "reference_image" | "reference_video" | "reference_audio";
+        /** H3MediaSource */
+        H3MediaSource: {
+            /** External Url */
+            external_url?: string | null;
+            /** File Id */
+            file_id?: string | null;
+            /** Local Path */
+            local_path?: string | null;
+        };
+        /** H3PricingSnapshot */
+        H3PricingSnapshot: {
+            /**
+             * Additional Image Each
+             * @default 0.04
+             */
+            additional_image_each: number;
+            /** Captured At */
+            captured_at: string;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Included Images
+             * @default 5
+             */
+            included_images: number;
+            /**
+             * Output Per Second
+             * @default 0.08
+             */
+            output_per_second: number;
+            /**
+             * Reference Audio Each
+             * @default 0
+             */
+            reference_audio_each: number;
+            /**
+             * Reference Video Per Second
+             * @default 0.08
+             */
+            reference_video_per_second: number;
+            /**
+             * Source Url
+             * @default https://platform.minimax.io/docs/guides/pricing-paygo#video
+             */
+            source_url: string;
+        };
+        /** H3ProbeRequest */
+        H3ProbeRequest: {
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Media Inputs */
+            media_inputs?: components["schemas"]["H3MediaInput"][];
+            /** Prompt Override */
+            prompt_override?: string | null;
+            /** @default QUALITY_PROBE */
+            purpose: components["schemas"]["EvidencePurpose"];
+            /** @default DIRECT */
+            route: components["schemas"]["VideoGenerationRoute"];
+            /** Shot Id */
+            shot_id: string;
+        };
+        /** H3ProbeResponse */
+        H3ProbeResponse: {
+            project: components["schemas"]["ProjectAggregate"];
+            provider_run: components["schemas"]["H3ProviderRun"];
+            task: components["schemas"]["GenerationTask"];
+        };
+        /** H3ProviderConfigResponse */
+        H3ProviderConfigResponse: {
+            /**
+             * Base Url
+             * @default https://api.minimax.io
+             */
+            base_url: string;
+            /** Can Submit */
+            can_submit: boolean;
+            /** Has Api Key */
+            has_api_key: boolean;
+            /** Key Source */
+            key_source: string;
+            /**
+             * Model
+             * @default MiniMax-H3
+             */
+            model: string;
+            pricing: components["schemas"]["H3PricingSnapshot"];
+            /**
+             * Provider
+             * @default minimax
+             */
+            provider: string;
+            /**
+             * Resolution
+             * @default 768P
+             */
+            resolution: string;
+        };
+        /** H3ProviderConfigUpdate */
+        H3ProviderConfigUpdate: {
+            /** Api Key */
+            api_key?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
+        };
+        /** H3ProviderRun */
+        H3ProviderRun: {
+            /** Created At */
+            created_at: string;
+            /** Downloaded Path */
+            downloaded_path?: string | null;
+            /** Estimated Cost Usd */
+            estimated_cost_usd?: number | null;
+            /** Id */
+            id: string;
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Last Error Message */
+            last_error_message?: string | null;
+            latest_remote_task?: components["schemas"]["H3RemoteTask"] | null;
+            /** Media Inputs */
+            media_inputs?: components["schemas"]["H3MediaInput"][];
+            /** Output Url */
+            output_url?: string | null;
+            pricing: components["schemas"]["H3PricingSnapshot"];
+            /** Project Id */
+            project_id: string;
+            /** Prompt */
+            prompt: string;
+            purpose: components["schemas"]["EvidencePurpose"];
+            request?: components["schemas"]["H3VideoRequest"] | null;
+            route: components["schemas"]["VideoGenerationRoute"];
+            /** Shot Id */
+            shot_id: string;
+            /** Task Id */
+            task_id: string;
+            /** Updated At */
+            updated_at: string;
+            /** Uploaded Inputs */
+            uploaded_inputs?: components["schemas"]["H3UploadedInput"][];
+        };
+        /** H3ProviderRunsResponse */
+        H3ProviderRunsResponse: {
+            /** Runs */
+            runs: components["schemas"]["H3ProviderRun"][];
+        };
+        /** H3ReconcileRequest */
+        H3ReconcileRequest: {
+            /** Provider Task Id */
+            provider_task_id: string;
+        };
+        /** H3ReconciliationCandidatesResponse */
+        H3ReconciliationCandidatesResponse: {
+            /** Tasks */
+            tasks: components["schemas"]["H3RemoteTask"][];
+        };
+        /**
+         * H3RemoteStatus
+         * @enum {string}
+         */
+        H3RemoteStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        /** H3RemoteTask */
+        H3RemoteTask: {
+            content?: components["schemas"]["H3TaskContent"] | null;
+            /** Created At */
+            created_at?: number | null;
+            /** Duration */
+            duration?: number | null;
+            error?: components["schemas"]["H3TaskError"] | null;
+            /** Id */
+            id: string;
+            /** Modality */
+            modality?: string | null;
+            /**
+             * Model
+             * @default MiniMax-H3
+             */
+            model: string;
+            /** Ratio */
+            ratio?: string | null;
+            /** Resolution */
+            resolution?: string | null;
+            status: components["schemas"]["H3RemoteStatus"];
+            /** Task Type */
+            task_type?: string | null;
+            /** Updated At */
+            updated_at?: number | null;
+            usage?: components["schemas"]["H3TaskUsage"] | null;
+        };
+        /** H3TakeReviewRequest */
+        H3TakeReviewRequest: {
+            /** Hard Gate Passed */
+            hard_gate_passed: boolean;
+            /** Issues */
+            issues?: components["schemas"]["QaIssue"][];
+            /** Notes */
+            notes: string;
+            /** Score */
+            score: number;
+        };
+        /** H3TakeReviewResponse */
+        H3TakeReviewResponse: {
+            evidence: components["schemas"]["RouteEvidence"];
+            project: components["schemas"]["ProjectAggregate"];
+            take: components["schemas"]["Take"];
+        };
+        /** H3TaskActionResponse */
+        H3TaskActionResponse: {
+            project: components["schemas"]["ProjectAggregate"];
+            provider_run: components["schemas"]["H3ProviderRun"];
+            task: components["schemas"]["GenerationTask"];
+        };
+        /** H3TaskContent */
+        H3TaskContent: {
+            /** Prompt */
+            prompt?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** H3TaskError */
+        H3TaskError: {
+            /** Code */
+            code?: string | null;
+            /** Message */
+            message?: string | null;
+        };
+        /** H3TaskUsage */
+        H3TaskUsage: {
+            /** Completion Tokens */
+            completion_tokens?: number | null;
+            /** Input Audio Seconds */
+            input_audio_seconds?: number | null;
+            /** Input Image Count */
+            input_image_count?: number | null;
+            /** Input Seconds */
+            input_seconds?: number | null;
+            /** Output Seconds */
+            output_seconds?: number | null;
+            /** Prompt Tokens */
+            prompt_tokens?: number | null;
+            /** Total Seconds */
+            total_seconds?: number | null;
+            /** Total Tokens */
+            total_tokens?: number | null;
+        };
+        /** H3UploadedInput */
+        H3UploadedInput: {
+            /** Expires At */
+            expires_at: string;
+            /** Local Path */
+            local_path: string;
+            media_kind: components["schemas"]["H3MediaKind"];
+            /** Provider File Id */
+            provider_file_id: string;
+            role: components["schemas"]["H3MediaRole"];
+        };
+        /** H3UrlValue */
+        H3UrlValue: {
+            /** Url */
+            url: string;
+        };
+        /** H3VideoRequest */
+        H3VideoRequest: {
+            /** Content */
+            content: components["schemas"]["H3ContentItem"][];
+            /** Duration */
+            duration: number;
+            /**
+             * Model
+             * @default MiniMax-H3
+             */
+            model: string;
+            /** Ratio */
+            ratio?: string | null;
+            /**
+             * Resolution
+             * @default 768P
+             */
+            resolution: string;
         };
         /** HTTPErrorResponse */
         HTTPErrorResponse: {
@@ -2527,6 +3002,8 @@ export interface components {
             /** Exports */
             exports: components["schemas"]["ExportRecord"][];
             progress: components["schemas"]["ProgressSummary"];
+            /** Route Evidence */
+            route_evidence?: components["schemas"]["RouteEvidence"][];
             /** Takes */
             takes: components["schemas"]["Take"][];
             /** Tasks */
@@ -2672,6 +3149,10 @@ export interface components {
             id: string;
             /** Issues */
             issues: components["schemas"]["QaIssue"][];
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewer Notes */
+            reviewer_notes?: string | null;
             /** Score */
             score: number;
             status: components["schemas"]["QaStatus"];
@@ -2777,6 +3258,40 @@ export interface components {
             spoken_text: string;
             /** Subtitle Text */
             subtitle_text: string;
+        };
+        /** RouteEvidence */
+        RouteEvidence: {
+            /** Created At */
+            created_at: string;
+            /** Hard Gate Passed */
+            hard_gate_passed?: boolean | null;
+            /** Id */
+            id: string;
+            /** Model */
+            model: string;
+            /** Notes */
+            notes?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Provider */
+            provider: string;
+            purpose: components["schemas"]["EvidencePurpose"];
+            /** Resolution */
+            resolution: string;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            route: components["schemas"]["VideoGenerationRoute"];
+            /** Score */
+            score?: number | null;
+            /** Shot Id */
+            shot_id: string;
+            status: components["schemas"]["EvidenceStatus"];
+            /** Take Id */
+            take_id?: string | null;
+            /** Task Id */
+            task_id: string;
+            /** Technical Passed */
+            technical_passed?: boolean | null;
         };
         /**
          * RunMode
@@ -3064,11 +3579,23 @@ export interface components {
             is_selected: boolean;
             /** Media Path */
             media_path: string;
+            /**
+             * Model
+             * @default deterministic-media-v1
+             */
+            model: string;
             operation: components["schemas"]["OperationKind"];
             /** Project Id */
             project_id: string;
+            /**
+             * Provider
+             * @default mock
+             */
+            provider: string;
             qa_report: components["schemas"]["QAReport"];
             qa_status: components["schemas"]["QaStatus"];
+            /** @default DIRECT */
+            route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
             shot_id: string;
             /** Task Id */
@@ -3188,6 +3715,11 @@ export interface components {
             /** Transition Out */
             transition_out: string;
         };
+        /**
+         * VideoGenerationRoute
+         * @enum {string}
+         */
+        VideoGenerationRoute: "DIRECT" | "FRAME_FIRST" | "FRAME_FIRST_LAST" | "REFERENCE";
         /** WorkerDrainRequest */
         WorkerDrainRequest: {
             /**
@@ -5070,6 +5602,134 @@ export interface operations {
             };
         };
     };
+    preview_h3_probe_api_short_drama_projects__project_id__h3_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3ProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3CompilePreviewResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    enqueue_h3_probe_api_short_drama_projects__project_id__h3_probes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3ProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProbeResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_h3_provider_runs_api_short_drama_projects__project_id__h3_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProviderRunsResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     rebuild_manifest_api_short_drama_projects__project_id__manifest_rebuild_post: {
         parameters: {
             query?: never;
@@ -5289,6 +5949,206 @@ export interface operations {
             };
         };
     };
+    get_h3_provider_config_api_short_drama_providers_minimax_h3_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    update_h3_provider_config_api_short_drama_providers_minimax_h3_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3ProviderConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_h3_reconciliation_candidates_api_short_drama_providers_minimax_h3_reconciliation_candidates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ReconciliationCandidatesResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_h3_provider_config_api_short_drama_providers_minimax_h3_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    review_h3_take_api_short_drama_takes__take_id__h3_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                take_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3TakeReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3TakeReviewResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     select_take_api_short_drama_takes__take_id__select_post: {
         parameters: {
             query?: never;
@@ -5387,6 +6247,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskActionResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_h3_submission_api_short_drama_tasks__task_id__h3_resolve_submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3ReconcileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3TaskActionResponse"];
                 };
             };
             /** @description Client Error */

@@ -13,6 +13,7 @@ import {
   FileAudio,
   FileText,
   Film,
+  FlaskConical,
   FolderOpen,
   Image as ImageIcon,
   Layers3,
@@ -43,8 +44,9 @@ import {
   type Take,
   type TimelineManifest,
 } from './api'
+import { H3LabPanel } from './H3LabPanel'
 
-type StudioTab = 'overview' | 'script' | 'assets' | 'shots' | 'takes' | 'timeline' | 'qa'
+type StudioTab = 'overview' | 'script' | 'assets' | 'shots' | 'h3' | 'takes' | 'timeline' | 'qa'
 
 type ResultLike<T> =
   | { ok: true; data: T }
@@ -159,13 +161,13 @@ function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; on
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 1 · Mock</Badge>
+              <Badge tone="blue">Phase 2 · Mock Core + H3</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
             </div>
             <h2 className="text-2xl font-semibold text-white">从策划工件到可播放成片的一键闭环</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-300">
-              本阶段使用固定规划 fixture、程序化视听占位和本地 FFmpeg，不调用 H3、GPT Image、TTS/STT 或任何闭源平台。它验证的是项目状态、恢复、候选、连续性、时间线与导出是否真实贯通。
+              Mock 继续提供无付费完整闭环；MiniMax-H3 768P 已作为唯一真实视频 Provider 接入同一任务、Take 与时间线核心。真实生成只在 H3 实验台显式提交，下载后必须人工审片才可入选。
             </p>
           </div>
           <button className={`${primaryButton} min-w-52 py-3`} onClick={onAutoDraft}>
@@ -433,7 +435,7 @@ function ShotsPanel({ project, onGenerate, onRework }: { project: ProjectAggrega
 function taskAction(task: GenerationTask): 'advance' | 'cancel' | 'retry' | 'reconcile' | 'recover' | null {
   if (['QUEUED', 'SUBMITTING', 'ACKNOWLEDGED', 'RUNNING'].includes(task.status)) return 'advance'
   if (task.status === 'FAILED' || task.status === 'CANCELLED') return 'retry'
-  if (task.status === 'SUBMIT_UNKNOWN') return 'reconcile'
+  if (task.status === 'SUBMIT_UNKNOWN') return task.provider === 'minimax' ? null : 'reconcile'
   if (task.status === 'OUTPUT_MISSING') return 'recover'
   return null
 }
@@ -567,7 +569,7 @@ function TimelinePanel({ project, onBuild, onExport }: { project: ProjectAggrega
               </div>
             </div>
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-              <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><FileAudio className="h-3.5 w-3.5" />A1 · Native Mock Audio</div>
+              <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><FileAudio className="h-3.5 w-3.5" />A1 · {manifest.audio_clips.some((clip) => clip.role === 'MODEL_NATIVE_H3') ? 'H3 + Mock Native Audio' : 'Native Mock Audio'}</div>
               <div className="flex h-9 overflow-hidden rounded bg-zinc-950">
                 {manifest.audio_clips.map((clip, index) => <div key={clip.id} className="border-r border-zinc-900 bg-emerald-500/15" style={{ width: `${(clip.duration_seconds / totalDuration) * 100}%` }} title={`S${index + 1} gain ${clip.gain_db}dB`} />)}
               </div>
@@ -660,7 +662,7 @@ function QaPanel({ project }: { project: ProjectAggregate }) {
         </div>
       </div>
       <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-        <div className="flex gap-3"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" /><div><p className="text-sm font-medium text-amber-100">质量结论边界</p><p className="mt-1 text-xs leading-5 text-zinc-400">占位画面、程序化音调和 Mock 分数不能证明真人短剧质量。进入 H3 Phase 后才按固定五句台词、身份/道具连续性、声音、口型和至少三人盲评执行真正的质量验收。</p></div></div>
+        <div className="flex gap-3"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" /><div><p className="text-sm font-medium text-amber-100">质量结论边界</p><p className="mt-1 text-xs leading-5 text-zinc-400">Mock 分数只证明工程链路。H3 实验台会保存真实 768P 输出与单人硬门槛审片；路线稳定性和最终质量仍需按固定五句台词、身份/道具连续性、声音、口型和至少三人盲评完成。</p></div></div>
       </div>
     </div>
   )
@@ -677,7 +679,7 @@ function CreateProjectPanel({ onCreate, onFixture }: { onCreate: (name: string, 
         <div className="flex flex-col justify-center">
           <Badge tone="blue">AI 短剧制片工作台</Badge>
           <h1 className="mt-5 text-4xl font-semibold leading-tight text-white">从一句话或剧本，进入可编辑的完整制片闭环</h1>
-          <p className="mt-4 text-sm leading-7 text-zinc-400">当前是供应商中立 Mock 阶段：先证明工件、任务、候选、时间线、恢复和导出都正确，再接 H3 768P、GPT Image 与声音能力。</p>
+          <p className="mt-4 text-sm leading-7 text-zinc-400">供应商中立 Mock 闭环与 MiniMax-H3 768P 已共用同一项目核心；可先生成零成本 Mock 草稿，再在代表镜头上比较 Direct、Frame 与 Reference 的真实质量。</p>
           <button className={`${secondaryButton} mt-8 w-fit px-5 py-3`} onClick={onFixture}><Clapperboard className="h-4 w-4 text-blue-400" />打开固定验收片《别相信我》</button>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-2xl">
@@ -691,7 +693,7 @@ function CreateProjectPanel({ onCreate, onFixture }: { onCreate: (name: string, 
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">{sourceMode === 'IDEA_EXPANSION' ? '一句话创意' : '锁定剧本'}</span><textarea value={input} onChange={(event) => setInput(event.target.value)} className="min-h-36 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm leading-6 text-zinc-200 outline-none focus:border-blue-500" /></label>
             <button className={`${primaryButton} w-full py-3`} disabled={!name.trim() || !input.trim()} onClick={() => onCreate(name.trim(), sourceMode, input.trim(), runMode)}><Plus className="h-4 w-4" />建立结构化项目</button>
           </div>
-          <p className="mt-4 text-center text-[11px] text-zinc-600">Mock Planner 以固定 fixture 替代模型输出；已有剧本的原文、口播文和字幕文会分开保存。</p>
+          <p className="mt-4 text-center text-[11px] text-zinc-600">当前 Planner 仍以固定 fixture 验证结构；已有剧本的原文、口播文和字幕文会分开保存。</p>
         </div>
       </div>
     </div>
@@ -861,6 +863,7 @@ export function ShortDramaStudio() {
     { id: 'script', label: '剧本', icon: <FileText className="h-4 w-4" />, count: project.document.script_versions.length },
     { id: 'assets', label: '资产', icon: <Layers3 className="h-4 w-4" />, count: project.document.assets.length },
     { id: 'shots', label: '分镜', icon: <Clapperboard className="h-4 w-4" />, count: project.document.shots.length },
+    { id: 'h3', label: 'H3 实验', icon: <FlaskConical className="h-4 w-4" />, count: project.tasks.filter((task) => task.provider === 'minimax').length },
     { id: 'takes', label: '候选', icon: <Sparkles className="h-4 w-4" />, count: project.takes.filter((take) => take.freshness === 'CURRENT').length },
     { id: 'timeline', label: '时间线', icon: <Film className="h-4 w-4" /> },
     { id: 'qa', label: '质检', icon: <CheckCircle2 className="h-4 w-4" /> },
@@ -872,6 +875,7 @@ export function ShortDramaStudio() {
     if (tab === 'script') return <ScriptPanel project={project} onRevise={reviseLine} />
     if (tab === 'assets') return <AssetsPanel project={project} />
     if (tab === 'shots') return <ShotsPanel project={project} onGenerate={generateShot} onRework={localRework} />
+    if (tab === 'h3') return <H3LabPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
     if (tab === 'takes') return <TakesPanel project={project} onDrain={drain} onTaskAction={handleTaskAction} onCancel={cancelTask} onSelect={selectTake} />
     if (tab === 'timeline') return <TimelinePanel project={project} onBuild={buildManifest} onExport={exportProject} />
     return <QaPanel project={project} />

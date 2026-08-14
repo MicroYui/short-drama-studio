@@ -1,0 +1,161 @@
+# Phase 2：MiniMax-H3 768P Provider 与真实证据门
+
+## 当前状态
+
+Phase 2 的工程闭环已经落地：MiniMax-H3 是当前唯一真实视频 Provider，所有请求固定为 `768P`，Direct、首帧、首尾帧和 Reference 都由同一套项目、任务、Take、QA 与 `TimelineManifest` 核心承载。离线合约、状态恢复、媒体下载和桌面实验台已通过自动测试。
+
+真实生成尚未执行。当前环境没有 `MINIMAX_API_KEY`，因此本文不记录任何未经实测的画质、人声、台词、声线、口型或连续性结论；镜头 1/2/5/8 的证据仍为 `UNKNOWN`。这不是工程失败，而是下一步真实冒烟所需的外部输入。
+
+## 官方契约快照
+
+快照日期：2026-08-14。实现依据 MiniMax 当前 V2 官方接口：
+
+- 创建：`POST /v2/video_generation`；
+- 查询：`GET /v2/query/video_generation/{task_id}`；
+- 最近任务：`GET /v2/query/video_generation`；
+- 取消/删除：`DELETE /v2/video_generation/{task_id}`；
+- 本地参考素材上传：`POST /v1/files/upload`，`purpose=video_generation_input`；
+- 模型固定 `MiniMax-H3`，PoC 分辨率固定 `768P`；
+- 时长为 4–15 秒整数；Direct 与 Reference 明确提交 `9:16`，Frame 由输入图决定画幅；
+- 内容类型为 `text`、`image_url`、`video_url`、`audio_url`；
+- Frame roles 与 Reference roles 互斥；Reference 最多 9 图、3 视频、3 音频，混合输入总数最多 12；
+- 远端状态为 `queued/running/succeeded/failed/cancelled`；只有远端仍在 `queued` 时允许取消；
+- 任务查询窗口为最近 7 天，输出 URL 有时效，因此成功后立即下载到项目目录；
+- 当前价格快照：768P 输出 `$0.08/秒`，Reference 视频输入 `$0.08/秒`，前 5 张输入图免费、之后 `$0.04/张`，Reference 音频输入免费。价格只记录，不主导质量路线。
+
+官方同一创建页面对“仅尾帧”存在文字矛盾：配置说明列出 last-frame-only，字段说明又写 `last_frame` 必须与 `first_frame` 配对。首版 Adapter 采用保守能力集合，只开放首帧和首尾帧，不开放仅尾帧；在官方契约澄清或固定输入探针证明前保持 `UNKNOWN`。
+
+## 实现结构
+
+```mermaid
+flowchart LR
+    UI["桌面 H3 实验台"] --> API["Short Drama Product API"]
+    API --> SERVICE["ShortDramaService"]
+    SERVICE --> VALIDATOR["H3 Capability Validator / Prompt Compiler"]
+    SERVICE --> DB["SQLite WAL"]
+    SERVICE --> WORKER["Persistent H3 Worker"]
+    WORKER --> UPLOAD["MiniMax File Upload"]
+    WORKER --> H3["MiniMax-H3 V2"]
+    H3 --> WORKER
+    WORKER --> MEDIA["本地原始 Take + Thumbnail"]
+    MEDIA --> QA["技术 QA + 人工硬门槛"]
+    QA --> TIMELINE["Take 选择 / TimelineManifest"]
+```
+
+通用领域只增加 `provider/model/route/resolution/provider_run_id` 等跨 Provider 事实。MiniMax 请求、响应、上传缓存、价格快照和远端用量保存在 Provider 专有记录中，不把 H3 字段扩散到 `ProjectDocument`。
+
+SQLite schema 版本 2 增加：
+
+- `provider_runs`：请求、远端最新状态、输出 URL、本地下载路径、用量和价格快照；
+- `provider_uploads`：按本地文件路径、大小和修改时间形成普通缓存键，上传记录在官方 7 天保留期前一小时失效；
+- `route_evidence`：镜头、路线、Take、生成/对账/恢复状态、技术检查、人工硬门槛、评分与备注。失败、取消、提交未知和输出缺失不会伪装成“仍在等待”。
+
+## 请求编译与能力校验
+
+`build_h3_prompt` 从当前 `ScriptVersion`、`ProjectBible`、`ShotPlan` 和连续性起止状态编译中文真人都市短剧提示，锁定人物、服装、便利店空间、红色录音笔、动作方向、台词说话人与禁止项。用户可以显式覆盖 prompt，但不静默修改锁定剧本。
+
+联网前执行：
+
+- 非空 prompt、最多 7000 字；
+- 4–15 秒整数；
+- Direct 不接受媒体；
+- `FRAME_FIRST` 必须恰有一张首帧；
+- `FRAME_FIRST_LAST` 必须恰有一张首帧和一张尾帧；
+- Reference 至少一个 reference input；
+- role 与图像/视频/音频类型匹配；
+- Frame 与 Reference 不混用；
+- 输入数量、扩展名、单文件大小和本地路径存在性检查。
+
+公网 URL 的像素、编码、帧率和媒体时长无法在不下载素材的前提下可靠确认，因此仍由 MiniMax 做最终媒体校验；本地视频下载后再由 FFmpeg 做输出技术 QA。
+
+## 持久化状态与恢复
+
+正常路径：
+
+`QUEUED → SUBMITTING → ACKNOWLEDGED → RUNNING → SUCCEEDED`
+
+- `QUEUED` 阶段完成本地文件上传与最终请求编译；只有请求已持久化、下一步将实际 POST 时才进入 `SUBMITTING`；
+- 创建成功后保存 MiniMax `task_id` 和 request fingerprint；
+- `ACKNOWLEDGED/RUNNING` 可在应用重启后继续轮询；
+- 成功后立即下载原始 MP4、生成缩略图、记录远端 usage 和价格快照；
+- 下载成功只创建 `PENDING` Take，不自动通过、不自动入选。
+
+异常路径：
+
+- 创建请求被明确拒绝：`FAILED`；
+- 创建发生网络中断、5xx 或成功响应缺少合法 `task_id`：`SUBMIT_UNKNOWN`；
+- 应用在 `SUBMITTING` 中断：重启后转 `SUBMIT_UNKNOWN`；
+- `SUBMIT_UNKNOWN` 绝不自动重新 POST，必须从最近任务中核对并显式绑定 MiniMax `task_id`；
+- 远端成功但 URL 缺失、过期或下载/解析失败：`OUTPUT_MISSING`；恢复时重新查询最新 URL 并下载，不重新生成；
+- 本地尚未提交的任务可以直接取消；远端 queued 先查询再调用取消；远端 running 按官方限制拒绝取消；
+- `FAILED/CANCELLED` 重试会建立新任务、新 fingerprint 和新 `RouteEvidence`，保留全部历史。
+
+Mock Worker 的“运行队列”只消费 `provider=mock`，不会误触发真实 H3 付费提交。H3 由实验台显式创建后每 8 秒轮询一次，即使远端连续返回同一状态也会继续轮询；也可手动推进，关闭应用不会丢失任务。
+
+## 输出、费用与审片
+
+H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。自动检查：
+
+- 竖屏且接近 9:16；
+- 短边为 768P 级别；
+- 实际时长与请求时长误差不超过 0.75 秒；
+- 存在音轨；
+- FFmpeg 可读取并能生成缩略图。
+
+技术检查不判断真人身份、表演、台词、声线、口型、空间、道具或动作连续性。审片人必须播放真实 Take，填写硬门槛、0–5 分和具体备注。技术门槛未通过时，系统不允许人工标记为硬通过；人工通过后仍需显式“选入时间线”。正式路线稳定性仍按既定 5/10/20 样本和至少三人盲评执行。
+
+## 桌面实验台
+
+新增“H3 实验”页：
+
+- 保存、清除和验证 MiniMax API Key；响应永不返回 Key；环境变量优先于本地配置；
+- 镜头 1/2/5/8 的 Direct、首帧、首尾帧与 Reference 四路线证据矩阵；
+- Direct、首帧、首尾帧、Reference 路线选择；
+- 本地文件、公网 URL 与已有 MiniMax file ID 输入；
+- 免费请求预览与真实 768P 提交；
+- 自动轮询、手动推进、取消、保留历史重试、输出恢复；
+- `SUBMIT_UNKNOWN` 最近任务读取与显式对账；
+- Provider run、远端 ID、状态、错误和费用展示；
+- 真实视频播放、技术门槛、人工审片和 Take 选择。
+
+平台仍不增加登录、权限、团队、多租户或发布模块。
+
+## 离线验证
+
+新增官方响应形状 fixture：create、queued、running、succeeded、failed、list 和 upload。测试覆盖：
+
+- V2 URL、Bearer header、固定 `MiniMax-H3/768P/9:16` 请求体；
+- multipart 上传的 `video_generation_input` purpose；
+- Direct/Frame/Reference 编译和非法组合联网前拒绝；
+- 本地上传缓存；
+- queued/running/succeeded、远端取消和 running 不可取消；
+- `SUBMIT_UNKNOWN` 不重复提交、显式对账；
+- `SUBMITTING` 重启恢复；
+- `OUTPUT_MISSING` 重新查询和下载；
+- 768P 级真实 FFmpeg 媒体摄取、费用计算、人工审片与 Take 入选；
+- 配置 API 不泄露 Key；
+- Mock 队列与 H3 队列隔离；
+- Phase 1 八镜 Mock 闭环回归。
+
+最终离线验证结果：
+
+- 后端整库 `580/580` 通过；其中短剧/H3 定向回归 `13/13` 通过；
+- TypeScript `tsc --noEmit` 通过，Python Pyright 为 `0 errors / 0 warnings`；
+- OpenAPI JSON 与 TypeScript 类型连续生成结果一致；
+- Vite renderer、Electron main/preload 和 unpacked macOS 应用构建通过；
+- 最终 `.app` 通过 `codesign --verify --deep --strict`；398MB arm64 ZIP 及 blockmap 生成成功，ZIP 完整性检查通过；
+- electron-builder 的 DMG 步骤两次在 macOS 临时卷卸载处报告 `disk4 资源忙`，发生在应用签名与 ZIP 已成功之后，属于本机打包环境问题，不影响当前可运行 `.app`、ZIP 或 H3 代码验收；
+- 当前 Mac 处于锁屏状态，桌面页面的最终人工视觉走查尚未执行；真实 Provider 冒烟仍等待本机凭证输入。
+
+## 首批真实证据计划
+
+| 镜头 | 风险覆盖 | 首批请求 | 当前证据 |
+| --- | --- | --- | --- |
+| 1 | 空间建立、雨夜、推镜 | Direct 5s；批准便利店首帧后 F1 | `UNKNOWN / NOT_RUN` |
+| 2 | 林夏正脸、8s 锁定中文台词、轻推 | Direct；角色/场景 Reference；批准首帧 F1 | `UNKNOWN / NOT_RUN` |
+| 5 | 手部、红色录音笔、人物闭嘴、画外音 | Direct；道具/角色 Reference；首尾帧 F2 | `UNKNOWN / NOT_RUN` |
+| 8 | 左手拿道具、转身、推门、动作接续 | Direct；上一镜批准尾帧或连续性首帧 F1；必要时 F2 | `UNKNOWN / NOT_RUN` |
+
+Direct 不依赖外部视觉资产，可先做最小真实 API/媒体冒烟。Frame/Reference 的质量探针不能使用程序化 Mock 图冒充批准资产；需要用户上传/素材库/GPT Image 生成编辑后再运行。当前会话没有可用的内置图像生成工具，因此没有擅自切换到需要另一枚 API Key 的 CLI 路径。
+
+Phase 2 只有在以下事实被记录后才关闭：凭证验证成功；至少一个 Direct 768P 任务完成创建、轮询、下载和人工审片；镜头 1/2/5/8 的计划路线获得实际 `RouteEvidence`，或明确记录某路线因缺少合格资产而保持 `UNKNOWN`，不能把“接口存在”写成质量通过。

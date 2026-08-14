@@ -35,6 +35,17 @@ class RenderedTakeMedia:
     height: int
 
 
+@dataclass(frozen=True)
+class IngestedVideoMedia:
+    media_path: Path
+    thumbnail_path: Path
+    width: int
+    height: int
+    duration_seconds: float
+    fps: float
+    audio_present: bool
+
+
 def _run_ffmpeg(args: list[str]) -> None:
     executable = imageio_ffmpeg.get_ffmpeg_exe()
     result = subprocess.run(
@@ -46,6 +57,35 @@ def _run_ffmpeg(args: list[str]) -> None:
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "unknown ffmpeg failure"
         raise MediaGenerationError(detail)
+
+
+def probe_media_with_ffmpeg(path: Path) -> dict[str, str]:
+    executable = imageio_ffmpeg.get_ffmpeg_exe()
+    result = subprocess.run(
+        [executable, "-hide_banner", "-i", str(path), "-f", "null", "-"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stderr
+    if result.returncode != 0:
+        raise MediaGenerationError(output.strip() or f"Could not probe {path}")
+    size_match = re.search(r"Video:.*?\b(\d{2,5}x\d{2,5})\b", output)
+    fps_match = re.search(r"\b(\d+(?:\.\d+)?) fps\b", output)
+    duration_match = re.search(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)", output)
+    duration = 0.0
+    if duration_match is not None:
+        duration = (
+            int(duration_match.group(1)) * 3600
+            + int(duration_match.group(2)) * 60
+            + float(duration_match.group(3))
+        )
+    return {
+        "size": size_match.group(1) if size_match is not None else "unknown",
+        "fps": fps_match.group(1) if fps_match is not None else "0",
+        "duration": f"{duration:.3f}",
+        "audio": "present" if "Audio:" in output else "missing",
+    }
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -255,6 +295,42 @@ def _filter_path(path: Path) -> str:
     return value.replace(":", r"\:").replace("'", r"\'").replace(",", r"\,")
 
 
+class H3MediaIngestor:
+    """Validates a downloaded H3 source and creates a thumbnail without transcoding it."""
+
+    def ingest(self, media_path: Path) -> IngestedVideoMedia:
+        if not media_path.is_file() or media_path.stat().st_size == 0:
+            raise MediaGenerationError(f"H3 output is missing: {media_path}")
+        metadata = probe_media_with_ffmpeg(media_path)
+        if metadata["size"] == "unknown":
+            raise MediaGenerationError("H3 output has no readable video stream")
+        width_text, height_text = metadata["size"].split("x", maxsplit=1)
+        thumbnail_path = media_path.with_name(media_path.stem + "-thumb.jpg")
+        _run_ffmpeg(
+            [
+                "-y",
+                "-ss",
+                "0.2",
+                "-i",
+                str(media_path),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=432:-2:flags=lanczos",
+                str(thumbnail_path),
+            ]
+        )
+        return IngestedVideoMedia(
+            media_path=media_path,
+            thumbnail_path=thumbnail_path,
+            width=int(width_text),
+            height=int(height_text),
+            duration_seconds=float(metadata["duration"]),
+            fps=float(metadata["fps"]),
+            audio_present=metadata["audio"] == "present",
+        )
+
+
 class TimelineExporter:
     """Renders all delivery artifacts from one persisted TimelineManifest."""
 
@@ -431,7 +507,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             checks.append(TechnicalCheck(name=f"{label}_file", passed=exists, detail=str(path)))
             if not exists:
                 continue
-            metadata = self._probe_with_ffmpeg(path)
+            metadata = probe_media_with_ffmpeg(path)
             expected_size = f"{manifest.output_spec.width}x{manifest.output_spec.height}"
             checks.extend(
                 [
@@ -469,31 +545,3 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             )
         )
         return checks
-
-    def _probe_with_ffmpeg(self, path: Path) -> dict[str, str]:
-        executable = imageio_ffmpeg.get_ffmpeg_exe()
-        result = subprocess.run(
-            [executable, "-hide_banner", "-i", str(path), "-f", "null", "-"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        output = result.stderr
-        if result.returncode != 0:
-            raise MediaGenerationError(output.strip() or f"Could not probe {path}")
-        size_match = re.search(r"Video:.*?\b(\d{2,5}x\d{2,5})\b", output)
-        fps_match = re.search(r"\b(\d+(?:\.\d+)?) fps\b", output)
-        duration_match = re.search(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)", output)
-        duration = 0.0
-        if duration_match is not None:
-            duration = (
-                int(duration_match.group(1)) * 3600
-                + int(duration_match.group(2)) * 60
-                + float(duration_match.group(3))
-            )
-        return {
-            "size": size_match.group(1) if size_match is not None else "unknown",
-            "fps": fps_match.group(1) if fps_match is not None else "0",
-            "duration": f"{duration:.3f}",
-            "audio": "present" if "Audio:" in output else "missing",
-        }

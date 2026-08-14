@@ -542,6 +542,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pynvml", marker = "sys_platform != 'darwin'" },
     { name = "python-multipart" },
+    { name = "requests" },
     { name = "sageattention", version = "1.0.6", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin' and sys_platform != 'win32'" },
     { name = "sageattention", version = "2.2.0+cu128torch2.10.0andhigher.post5", source = { url = "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post5/sageattention-2.2.0+cu128torch2.10.0andhigher.post5-cp310-abi3-win_amd64.whl" }, marker = "sys_platform == 'win32'" },
     { name = "sentencepiece" },
@@ -563,7 +564,6 @@ dev = [
 test = [
     { name = "httpx" },
     { name = "pytest" },
-    { name = "requests" },
 ]
 
 [package.metadata]
@@ -589,7 +589,7 @@ requires-dist = [
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.380" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
     { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "requests", marker = "extra == 'test'", specifier = ">=2.31" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "sageattention", marker = "sys_platform != 'darwin' and sys_platform != 'win32'", specifier = ">=1.0.0" },
     { name = "sageattention", marker = "sys_platform == 'win32'", url = "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post5/sageattention-2.2.0+cu128torch2.10.0andhigher.post5-cp310-abi3-win_amd64.whl" },
     { name = "sentencepiece", specifier = ">=0.1.99" },

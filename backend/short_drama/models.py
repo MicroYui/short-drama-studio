@@ -88,6 +88,28 @@ class ExecutionStrategy(StrEnum):
     HYBRID_REPAIR = "hybrid_repair"
 
 
+class VideoGenerationRoute(StrEnum):
+    DIRECT = "DIRECT"
+    FRAME_FIRST = "FRAME_FIRST"
+    FRAME_FIRST_LAST = "FRAME_FIRST_LAST"
+    REFERENCE = "REFERENCE"
+
+
+class EvidencePurpose(StrEnum):
+    CONTRACT_SMOKE = "CONTRACT_SMOKE"
+    QUALITY_PROBE = "QUALITY_PROBE"
+
+
+class EvidenceStatus(StrEnum):
+    AWAITING_OUTPUT = "AWAITING_OUTPUT"
+    AWAITING_REVIEW = "AWAITING_REVIEW"
+    REVIEWED = "REVIEWED"
+    SUBMIT_UNKNOWN = "SUBMIT_UNKNOWN"
+    OUTPUT_MISSING = "OUTPUT_MISSING"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
 class MockBehavior(StrEnum):
     SUCCESS = "SUCCESS"
     FAIL_ONCE = "FAIL_ONCE"
@@ -374,6 +396,9 @@ class GenerationTask(DomainModel):
     status: TaskStatus
     provider: str
     model: str
+    route: VideoGenerationRoute = VideoGenerationRoute.DIRECT
+    resolution: str = "432x768"
+    provider_run_id: str | None = None
     provider_task_id: str | None = None
     request_fingerprint: str
     input_script_version_id: str
@@ -381,7 +406,7 @@ class GenerationTask(DomainModel):
     requested_duration_seconds: float
     attempt: int
     retry_of_task_id: str | None = None
-    mock_behavior: MockBehavior
+    mock_behavior: MockBehavior = MockBehavior.SUCCESS
     error_code: str | None = None
     error_message: str | None = None
     submitted_at: str | None = None
@@ -406,6 +431,8 @@ class QAReport(DomainModel):
     score: float = Field(ge=0.0, le=5.0)
     issues: list[QaIssue]
     checks: list[str]
+    reviewer_notes: str | None = None
+    reviewed_at: str | None = None
     created_at: str
 
 
@@ -416,6 +443,9 @@ class Take(DomainModel):
     task_id: str
     candidate_index: int
     operation: OperationKind
+    provider: str = "mock"
+    model: str = "deterministic-media-v1"
+    route: VideoGenerationRoute = VideoGenerationRoute.DIRECT
     media_path: str
     thumbnail_path: str
     duration_seconds: float
@@ -427,6 +457,26 @@ class Take(DomainModel):
     freshness: Freshness
     qa_report: QAReport
     created_at: str
+
+
+class RouteEvidence(DomainModel):
+    id: str
+    project_id: str
+    shot_id: str
+    task_id: str
+    take_id: str | None = None
+    provider: str
+    model: str
+    route: VideoGenerationRoute
+    resolution: str
+    purpose: EvidencePurpose
+    status: EvidenceStatus
+    technical_passed: bool | None = None
+    hard_gate_passed: bool | None = None
+    score: float | None = Field(default=None, ge=0.0, le=5.0)
+    notes: str | None = None
+    created_at: str
+    reviewed_at: str | None = None
 
 
 class TechnicalCheck(DomainModel):
@@ -467,6 +517,7 @@ class ProjectAggregate(DomainModel):
     tasks: list[GenerationTask]
     takes: list[Take]
     exports: list[ExportRecord]
+    route_evidence: list[RouteEvidence] = Field(default_factory=list[RouteEvidence])
     progress: ProgressSummary
 
 

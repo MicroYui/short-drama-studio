@@ -13,6 +13,12 @@
 ### MiniMax
 
 - [Video Generation Guide](https://platform.minimax.io/docs/guides/video-generation)
+- [Create Video Generation Task V2](https://platform.minimax.io/docs/api-reference/video-generation-v2-create)
+- [Query Video Generation Task V2](https://platform.minimax.io/docs/api-reference/video-generation-v2-query)
+- [List Video Generation Tasks V2](https://platform.minimax.io/docs/api-reference/video-generation-v2-list)
+- [Cancel or Delete Video Generation Task V2](https://platform.minimax.io/docs/api-reference/video-generation-v2-delete)
+- [Upload File](https://platform.minimax.io/docs/api-reference/file-management-upload)
+- [Pay-as-you-go pricing](https://platform.minimax.io/docs/guides/pricing-paygo#video)
 - [H3 Context-IR API](https://platform.minimax.io/docs/api-reference/video-generation-v2-h3-context-ir)
 - [MiniMax-H3 Base Prompt Guide](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_base_en.md)
 - [MiniMax-H3 Reference Prompt Guide](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md)

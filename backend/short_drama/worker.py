@@ -98,7 +98,7 @@ class PersistentMockWorker:
     def drain(self, project_id: str, max_steps: int) -> int:
         steps = 0
         while steps < max_steps:
-            task = self.repository.next_runnable_task(project_id)
+            task = self.repository.next_runnable_task(project_id, provider="mock")
             if task is None:
                 break
             self.advance(task.id)

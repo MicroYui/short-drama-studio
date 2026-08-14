@@ -1104,6 +1104,27 @@
         "title": "EnqueueRequest",
         "type": "object"
       },
+      "EvidencePurpose": {
+        "enum": [
+          "CONTRACT_SMOKE",
+          "QUALITY_PROBE"
+        ],
+        "title": "EvidencePurpose",
+        "type": "string"
+      },
+      "EvidenceStatus": {
+        "enum": [
+          "AWAITING_OUTPUT",
+          "AWAITING_REVIEW",
+          "REVIEWED",
+          "SUBMIT_UNKNOWN",
+          "OUTPUT_MISSING",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "title": "EvidenceStatus",
+        "type": "string"
+      },
       "ExecutionPlanEntry": {
         "additionalProperties": false,
         "properties": {
@@ -1723,7 +1744,8 @@
             "type": "string"
           },
           "mock_behavior": {
-            "$ref": "#/components/schemas/MockBehavior"
+            "$ref": "#/components/schemas/MockBehavior",
+            "default": "SUCCESS"
           },
           "model": {
             "title": "Model",
@@ -1739,6 +1761,17 @@
           "provider": {
             "title": "Provider",
             "type": "string"
+          },
+          "provider_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Run Id"
           },
           "provider_task_id": {
             "anyOf": [
@@ -1759,6 +1792,11 @@
             "title": "Requested Duration Seconds",
             "type": "number"
           },
+          "resolution": {
+            "default": "432x768",
+            "title": "Resolution",
+            "type": "string"
+          },
           "retry_of_task_id": {
             "anyOf": [
               {
@@ -1769,6 +1807,10 @@
               }
             ],
             "title": "Retry Of Task Id"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute",
+            "default": "DIRECT"
           },
           "shot_id": {
             "title": "Shot Id",
@@ -1818,7 +1860,6 @@
           "input_bible_version_id",
           "requested_duration_seconds",
           "attempt",
-          "mock_behavior",
           "created_at",
           "updated_at"
         ],
@@ -1897,6 +1938,1018 @@
           "vramUsed"
         ],
         "title": "GpuTelemetry",
+        "type": "object"
+      },
+      "H3CompilePreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/H3VideoRequest"
+          }
+        },
+        "required": [
+          "prompt",
+          "request"
+        ],
+        "title": "H3CompilePreviewResponse",
+        "type": "object"
+      },
+      "H3ContentItem": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_url": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3UrlValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3UrlValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3MediaRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "video_url": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3UrlValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "H3ContentItem",
+        "type": "object"
+      },
+      "H3MediaInput": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/H3MediaKind"
+          },
+          "role": {
+            "$ref": "#/components/schemas/H3MediaRole"
+          },
+          "source": {
+            "$ref": "#/components/schemas/H3MediaSource"
+          }
+        },
+        "required": [
+          "kind",
+          "role",
+          "source"
+        ],
+        "title": "H3MediaInput",
+        "type": "object"
+      },
+      "H3MediaKind": {
+        "enum": [
+          "IMAGE",
+          "VIDEO",
+          "AUDIO"
+        ],
+        "title": "H3MediaKind",
+        "type": "string"
+      },
+      "H3MediaRole": {
+        "enum": [
+          "first_frame",
+          "last_frame",
+          "reference_image",
+          "reference_video",
+          "reference_audio"
+        ],
+        "title": "H3MediaRole",
+        "type": "string"
+      },
+      "H3MediaSource": {
+        "additionalProperties": false,
+        "properties": {
+          "external_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Url"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "local_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Path"
+          }
+        },
+        "title": "H3MediaSource",
+        "type": "object"
+      },
+      "H3PricingSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "additional_image_each": {
+            "default": 0.04,
+            "title": "Additional Image Each",
+            "type": "number"
+          },
+          "captured_at": {
+            "title": "Captured At",
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "included_images": {
+            "default": 5,
+            "title": "Included Images",
+            "type": "integer"
+          },
+          "output_per_second": {
+            "default": 0.08,
+            "title": "Output Per Second",
+            "type": "number"
+          },
+          "reference_audio_each": {
+            "default": 0.0,
+            "title": "Reference Audio Each",
+            "type": "number"
+          },
+          "reference_video_per_second": {
+            "default": 0.08,
+            "title": "Reference Video Per Second",
+            "type": "number"
+          },
+          "source_url": {
+            "default": "https://platform.minimax.io/docs/guides/pricing-paygo#video",
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "captured_at"
+        ],
+        "title": "H3PricingSnapshot",
+        "type": "object"
+      },
+      "H3ProbeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "maximum": 15.0,
+                "minimum": 4.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "media_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/H3MediaInput"
+            },
+            "maxItems": 12,
+            "title": "Media Inputs",
+            "type": "array"
+          },
+          "prompt_override": {
+            "anyOf": [
+              {
+                "maxLength": 7000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Override"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/EvidencePurpose",
+            "default": "QUALITY_PROBE"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute",
+            "default": "DIRECT"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id"
+        ],
+        "title": "H3ProbeRequest",
+        "type": "object"
+      },
+      "H3ProbeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "provider_run": {
+            "$ref": "#/components/schemas/H3ProviderRun"
+          },
+          "task": {
+            "$ref": "#/components/schemas/GenerationTask"
+          }
+        },
+        "required": [
+          "task",
+          "project",
+          "provider_run"
+        ],
+        "title": "H3ProbeResponse",
+        "type": "object"
+      },
+      "H3ProviderConfigResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "default": "https://api.minimax.io",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "can_submit": {
+            "title": "Can Submit",
+            "type": "boolean"
+          },
+          "has_api_key": {
+            "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "key_source": {
+            "title": "Key Source",
+            "type": "string"
+          },
+          "model": {
+            "default": "MiniMax-H3",
+            "title": "Model",
+            "type": "string"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/H3PricingSnapshot"
+          },
+          "provider": {
+            "default": "minimax",
+            "title": "Provider",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "768P",
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "has_api_key",
+          "key_source",
+          "can_submit",
+          "pricing"
+        ],
+        "title": "H3ProviderConfigResponse",
+        "type": "object"
+      },
+      "H3ProviderConfigUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          }
+        },
+        "title": "H3ProviderConfigUpdate",
+        "type": "object"
+      },
+      "H3ProviderRun": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "downloaded_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloaded Path"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Message"
+          },
+          "latest_remote_task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3RemoteTask"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/H3MediaInput"
+            },
+            "title": "Media Inputs",
+            "type": "array"
+          },
+          "output_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Url"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/H3PricingSnapshot"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/EvidencePurpose"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3VideoRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "uploaded_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/H3UploadedInput"
+            },
+            "title": "Uploaded Inputs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "project_id",
+          "shot_id",
+          "route",
+          "purpose",
+          "prompt",
+          "pricing",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "H3ProviderRun",
+        "type": "object"
+      },
+      "H3ProviderRunsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/H3ProviderRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "H3ProviderRunsResponse",
+        "type": "object"
+      },
+      "H3ReconcileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "provider_task_id": {
+            "minLength": 1,
+            "title": "Provider Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_task_id"
+        ],
+        "title": "H3ReconcileRequest",
+        "type": "object"
+      },
+      "H3ReconciliationCandidatesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/H3RemoteTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks"
+        ],
+        "title": "H3ReconciliationCandidatesResponse",
+        "type": "object"
+      },
+      "H3RemoteStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ],
+        "title": "H3RemoteStatus",
+        "type": "string"
+      },
+      "H3RemoteTask": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3TaskContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3TaskError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "modality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modality"
+          },
+          "model": {
+            "default": "MiniMax-H3",
+            "title": "Model",
+            "type": "string"
+          },
+          "ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
+          "status": {
+            "$ref": "#/components/schemas/H3RemoteStatus"
+          },
+          "task_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Type"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3TaskUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "H3RemoteTask",
+        "type": "object"
+      },
+      "H3TakeReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "hard_gate_passed": {
+            "title": "Hard Gate Passed",
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/QaIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "notes": {
+            "minLength": 1,
+            "title": "Notes",
+            "type": "string"
+          },
+          "score": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "hard_gate_passed",
+          "score",
+          "notes"
+        ],
+        "title": "H3TakeReviewRequest",
+        "type": "object"
+      },
+      "H3TakeReviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/RouteEvidence"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "take": {
+            "$ref": "#/components/schemas/Take"
+          }
+        },
+        "required": [
+          "take",
+          "evidence",
+          "project"
+        ],
+        "title": "H3TakeReviewResponse",
+        "type": "object"
+      },
+      "H3TaskActionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "provider_run": {
+            "$ref": "#/components/schemas/H3ProviderRun"
+          },
+          "task": {
+            "$ref": "#/components/schemas/GenerationTask"
+          }
+        },
+        "required": [
+          "task",
+          "project",
+          "provider_run"
+        ],
+        "title": "H3TaskActionResponse",
+        "type": "object"
+      },
+      "H3TaskContent": {
+        "properties": {
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "H3TaskContent",
+        "type": "object"
+      },
+      "H3TaskError": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "title": "H3TaskError",
+        "type": "object"
+      },
+      "H3TaskUsage": {
+        "properties": {
+          "completion_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completion Tokens"
+          },
+          "input_audio_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Audio Seconds"
+          },
+          "input_image_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Image Count"
+          },
+          "input_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Seconds"
+          },
+          "output_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Seconds"
+          },
+          "prompt_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Tokens"
+          },
+          "total_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Seconds"
+          },
+          "total_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Tokens"
+          }
+        },
+        "title": "H3TaskUsage",
+        "type": "object"
+      },
+      "H3UploadedInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "local_path": {
+            "title": "Local Path",
+            "type": "string"
+          },
+          "media_kind": {
+            "$ref": "#/components/schemas/H3MediaKind"
+          },
+          "provider_file_id": {
+            "title": "Provider File Id",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/H3MediaRole"
+          }
+        },
+        "required": [
+          "local_path",
+          "provider_file_id",
+          "media_kind",
+          "role",
+          "expires_at"
+        ],
+        "title": "H3UploadedInput",
+        "type": "object"
+      },
+      "H3UrlValue": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "H3UrlValue",
+        "type": "object"
+      },
+      "H3VideoRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/H3ContentItem"
+            },
+            "title": "Content",
+            "type": "array"
+          },
+          "duration": {
+            "maximum": 15.0,
+            "minimum": 4.0,
+            "title": "Duration",
+            "type": "integer"
+          },
+          "model": {
+            "default": "MiniMax-H3",
+            "title": "Model",
+            "type": "string"
+          },
+          "ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio"
+          },
+          "resolution": {
+            "default": "768P",
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "duration"
+        ],
+        "title": "H3VideoRequest",
         "type": "object"
       },
       "HTTPErrorResponse": {
@@ -4160,6 +5213,13 @@
           "progress": {
             "$ref": "#/components/schemas/ProgressSummary"
           },
+          "route_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/RouteEvidence"
+            },
+            "title": "Route Evidence",
+            "type": "array"
+          },
           "takes": {
             "items": {
               "$ref": "#/components/schemas/Take"
@@ -4567,6 +5627,28 @@
             "title": "Issues",
             "type": "array"
           },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewer_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Notes"
+          },
           "score": {
             "maximum": 5.0,
             "minimum": 0.0,
@@ -4827,6 +5909,135 @@
           "change_reason"
         ],
         "title": "ReviseScriptLineRequest",
+        "type": "object"
+      },
+      "RouteEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "hard_gate_passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hard Gate Passed"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/EvidencePurpose"
+          },
+          "resolution": {
+            "title": "Resolution",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EvidenceStatus"
+          },
+          "take_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take Id"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "technical_passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Passed"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "shot_id",
+          "task_id",
+          "provider",
+          "model",
+          "route",
+          "resolution",
+          "purpose",
+          "status",
+          "created_at"
+        ],
+        "title": "RouteEvidence",
         "type": "object"
       },
       "RunMode": {
@@ -5467,6 +6678,11 @@
             "title": "Media Path",
             "type": "string"
           },
+          "model": {
+            "default": "deterministic-media-v1",
+            "title": "Model",
+            "type": "string"
+          },
           "operation": {
             "$ref": "#/components/schemas/OperationKind"
           },
@@ -5474,11 +6690,20 @@
             "title": "Project Id",
             "type": "string"
           },
+          "provider": {
+            "default": "mock",
+            "title": "Provider",
+            "type": "string"
+          },
           "qa_report": {
             "$ref": "#/components/schemas/QAReport"
           },
           "qa_status": {
             "$ref": "#/components/schemas/QaStatus"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute",
+            "default": "DIRECT"
           },
           "shot_id": {
             "title": "Shot Id",
@@ -5828,6 +7053,16 @@
         ],
         "title": "TimelineVideoClip",
         "type": "object"
+      },
+      "VideoGenerationRoute": {
+        "enum": [
+          "DIRECT",
+          "FRAME_FIRST",
+          "FRAME_FIRST_LAST",
+          "REFERENCE"
+        ],
+        "title": "VideoGenerationRoute",
+        "type": "string"
       },
       "WorkerDrainRequest": {
         "additionalProperties": false,
@@ -8182,6 +9417,182 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/h3/preview": {
+      "post": {
+        "operationId": "preview_h3_probe_api_short_drama_projects__project_id__h3_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3ProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3CompilePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Preview H3 Probe",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/h3/probes": {
+      "post": {
+        "operationId": "enqueue_h3_probe_api_short_drama_projects__project_id__h3_probes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3ProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProbeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Enqueue H3 Probe",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/h3/runs": {
+      "get": {
+        "operationId": "list_h3_provider_runs_api_short_drama_projects__project_id__h3_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProviderRunsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List H3 Provider Runs",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects/{project_id}/manifest/rebuild": {
       "post": {
         "operationId": "rebuild_manifest_api_short_drama_projects__project_id__manifest_rebuild_post",
@@ -8509,6 +9920,240 @@
         ]
       }
     },
+    "/api/short-drama/providers/minimax-h3": {
+      "get": {
+        "operationId": "get_h3_provider_config_api_short_drama_providers_minimax_h3_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get H3 Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "post": {
+        "operationId": "update_h3_provider_config_api_short_drama_providers_minimax_h3_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3ProviderConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Update H3 Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/minimax-h3/reconciliation-candidates": {
+      "get": {
+        "operationId": "list_h3_reconciliation_candidates_api_short_drama_providers_minimax_h3_reconciliation_candidates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ReconciliationCandidatesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List H3 Reconciliation Candidates",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/minimax-h3/validate": {
+      "post": {
+        "operationId": "validate_h3_provider_config_api_short_drama_providers_minimax_h3_validate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Validate H3 Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/takes/{take_id}/h3/review": {
+      "post": {
+        "operationId": "review_h3_take_api_short_drama_takes__take_id__h3_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "take_id",
+            "required": true,
+            "schema": {
+              "title": "Take Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3TakeReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3TakeReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Review H3 Take",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/takes/{take_id}/select": {
       "post": {
         "operationId": "select_take_api_short_drama_takes__take_id__select_post",
@@ -8660,6 +10305,68 @@
           }
         },
         "summary": "Cancel Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/tasks/{task_id}/h3/resolve-submit": {
+      "post": {
+        "operationId": "resolve_h3_submission_api_short_drama_tasks__task_id__h3_resolve_submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3ReconcileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Resolve H3 Submission",
         "tags": [
           "short-drama"
         ]

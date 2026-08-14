@@ -1,0 +1,18 @@
+{
+  "task": {
+    "id": "424010985738629",
+    "model": "MiniMax-H3",
+    "status": "failed",
+    "error": {
+      "code": "content_policy_violation",
+      "message": "The request could not be completed."
+    },
+    "created_at": 1786665600,
+    "updated_at": 1786665610,
+    "resolution": "768P",
+    "duration": 5,
+    "ratio": "9:16",
+    "task_type": "generation",
+    "modality": "video"
+  }
+}

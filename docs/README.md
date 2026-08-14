@@ -14,9 +14,9 @@
 
 首版运行在单用户、受信环境中，不设计注册、登录、账号体系、RBAC、多租户、团队成员或分享权限。生产流程中的“批准/确认”是内容状态，不是访问控制。外部模型 API 凭证只作为 Provider 配置处理。
 
-当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线和供应商中立的 Phase 1 Mock 垂直切片。短剧业务已能从输入走到 8 镜、50 秒的可播放时间线与完整导出，但尚未运行 H3、GPT Image 或任何真实音频 Provider，因此当前结果只证明工程闭环，不代表真人短剧质量。
+当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、供应商中立的 Phase 1 Mock 垂直切片，以及 Phase 2 的 MiniMax-H3 768P Provider 工程接入。短剧业务已能从输入走到 8 镜、50 秒的可播放时间线与完整导出；H3 的请求编译、异步状态、对账、下载、费用和人工证据门已通过离线测试，但尚未配置凭证或运行真实 H3/GPT Image/音频样本，因此不代表真人短剧质量。
 
-工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md) 和 [Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)。
+工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md) 和 [Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)。
 
 ## 证据等级
 
@@ -88,5 +88,5 @@ H3 的首帧/尾帧角色与 reference image/video/audio 角色不能在同一�
 
 - 闭源平台结论主要来自官方页面与官方指南；按项目边界不登录、不调用，也不把其效果和价格纳入生产决策。
 - 开源结论基于 [固定 commit](sources.md)，没有安装全部依赖或运行其真实付费 Provider。
-- 当前只有确定性 Mock 样片，没有真实 AI 生成样片，因此任何质量排序都不是实测榜单。
+- 当前只有确定性 Mock 样片和离线 H3 合约/媒体 fixture，没有真实 AI 生成样片，因此任何质量排序都不是实测榜单。
 - 成本与配额高度时效化；本轮保留 `UNKNOWN` 并在实施时记录，但它们不是质量路线的主要决策因子。

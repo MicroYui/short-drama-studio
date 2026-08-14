@@ -9,11 +9,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
+from short_drama.h3_models import H3ProviderRun, H3UploadedInput
 from short_drama.models import (
+    EvidenceStatus,
     ExportRecord,
     Freshness,
     GenerationTask,
     ProjectDocument,
+    RouteEvidence,
     Take,
     TaskStatus,
 )
@@ -73,6 +76,7 @@ class ShortDramaRepository:
                     id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                     shot_id TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT 'mock',
                     status TEXT NOT NULL,
                     candidate_index INTEGER NOT NULL,
                     request_fingerprint TEXT NOT NULL,
@@ -116,10 +120,55 @@ class ShortDramaRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_exports_project_manifest
                     ON exports(project_id, manifest_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS provider_runs (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL UNIQUE REFERENCES generation_tasks(id) ON DELETE CASCADE,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    provider TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_provider_runs_project
+                    ON provider_runs(project_id, provider, updated_at);
+
+                CREATE TABLE IF NOT EXISTS provider_uploads (
+                    cache_key TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS route_evidence (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    shot_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL REFERENCES generation_tasks(id) ON DELETE CASCADE,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_route_evidence_project_shot
+                    ON route_evidence(project_id, shot_id, created_at);
                 """
+            )
+            task_columns = {
+                cast(str, row["name"])
+                for row in connection.execute("PRAGMA table_info(generation_tasks)").fetchall()
+            }
+            if "provider" not in task_columns:
+                connection.execute(
+                    "ALTER TABLE generation_tasks ADD COLUMN provider TEXT NOT NULL DEFAULT 'mock'"
+                )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_generation_tasks_project_provider_status "
+                "ON generation_tasks(project_id, provider, status, created_at)"
             )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(2, datetime('now'))"
             )
 
     def save_project(self, document: ProjectDocument) -> None:
@@ -179,10 +228,11 @@ class ShortDramaRepository:
             connection.execute(
                 """
                 INSERT INTO generation_tasks(
-                    id, project_id, shot_id, status, candidate_index,
+                    id, project_id, shot_id, provider, status, candidate_index,
                     request_fingerprint, created_at, updated_at, record_json
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
+                    provider = excluded.provider,
                     status = excluded.status,
                     updated_at = excluded.updated_at,
                     record_json = excluded.record_json
@@ -191,6 +241,7 @@ class ShortDramaRepository:
                     task.id,
                     task.project_id,
                     task.shot_id,
+                    task.provider,
                     task.status.value,
                     task.candidate_index,
                     task.request_fingerprint,
@@ -232,14 +283,23 @@ class ShortDramaRepository:
             ).fetchall()
         return [GenerationTask.model_validate_json(cast(str, row["record_json"])) for row in rows]
 
-    def next_runnable_task(self, project_id: str) -> GenerationTask | None:
+    def next_runnable_task(
+        self,
+        project_id: str,
+        provider: str | None = None,
+    ) -> GenerationTask | None:
         placeholders = ", ".join("?" for _status in _RUNNABLE_STATUSES)
         values: list[str] = [project_id, *[status.value for status in _RUNNABLE_STATUSES]]
+        provider_clause = ""
+        if provider is not None:
+            provider_clause = " AND provider = ?"
+            values.append(provider)
         with self._lock, self._connection() as connection:
             row = connection.execute(
                 f"""
                 SELECT record_json FROM generation_tasks
                 WHERE project_id = ? AND status IN ({placeholders})
+                {provider_clause}
                 ORDER BY created_at ASC, candidate_index ASC, id ASC LIMIT 1
                 """,
                 values,
@@ -248,14 +308,19 @@ class ShortDramaRepository:
             return None
         return GenerationTask.model_validate_json(cast(str, row["record_json"]))
 
-    def count_runnable_tasks(self, project_id: str) -> int:
+    def count_runnable_tasks(self, project_id: str, provider: str | None = None) -> int:
         placeholders = ", ".join("?" for _status in _RUNNABLE_STATUSES)
         values: list[str] = [project_id, *[status.value for status in _RUNNABLE_STATUSES]]
+        provider_clause = ""
+        if provider is not None:
+            provider_clause = " AND provider = ?"
+            values.append(provider)
         with self._lock, self._connection() as connection:
             row = connection.execute(
                 f"""
                 SELECT COUNT(*) AS count FROM generation_tasks
                 WHERE project_id = ? AND status IN ({placeholders})
+                {provider_clause}
                 """,
                 values,
             ).fetchone()
@@ -277,6 +342,11 @@ class ShortDramaRepository:
                 task.error_code = "PROCESS_INTERRUPTED_DURING_SUBMIT"
                 task.error_message = "提交阶段进程中断，需要先按请求指纹对账。"
                 self.save_task(task)
+                if task.provider == "minimax":
+                    evidence = self.get_route_evidence_for_task(task.id)
+                    if evidence is not None:
+                        evidence.status = EvidenceStatus.SUBMIT_UNKNOWN
+                        self.save_route_evidence(evidence)
                 recovered += 1
         return recovered
 
@@ -443,3 +513,129 @@ class ShortDramaRepository:
                 (project_id,),
             ).fetchall()
         return [ExportRecord.model_validate_json(cast(str, row["record_json"])) for row in rows]
+
+    def save_provider_run(self, run: H3ProviderRun) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO provider_runs(
+                    id, task_id, project_id, provider, updated_at, record_json
+                ) VALUES(?, ?, ?, 'minimax', ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    updated_at = excluded.updated_at,
+                    record_json = excluded.record_json
+                """,
+                (
+                    run.id,
+                    run.task_id,
+                    run.project_id,
+                    run.updated_at,
+                    run.model_dump_json(),
+                ),
+            )
+
+    def get_provider_run(self, task_id: str) -> H3ProviderRun | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM provider_runs WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return H3ProviderRun.model_validate_json(cast(str, row["record_json"]))
+
+    def list_provider_runs(self, project_id: str) -> list[H3ProviderRun]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM provider_runs
+                WHERE project_id = ? ORDER BY updated_at DESC, id DESC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [H3ProviderRun.model_validate_json(cast(str, row["record_json"])) for row in rows]
+
+    def save_provider_upload(
+        self,
+        *,
+        cache_key: str,
+        provider: str,
+        record: H3UploadedInput,
+    ) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO provider_uploads(cache_key, provider, expires_at, record_json)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    provider = excluded.provider,
+                    expires_at = excluded.expires_at,
+                    record_json = excluded.record_json
+                """,
+                (cache_key, provider, record.expires_at, record.model_dump_json()),
+            )
+
+    def get_provider_upload(self, cache_key: str, now: str) -> H3UploadedInput | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT record_json FROM provider_uploads
+                WHERE cache_key = ? AND expires_at > ?
+                """,
+                (cache_key, now),
+            ).fetchone()
+        if row is None:
+            return None
+        return H3UploadedInput.model_validate_json(cast(str, row["record_json"]))
+
+    def save_route_evidence(self, evidence: RouteEvidence) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO route_evidence(
+                    id, project_id, shot_id, task_id, status, created_at, record_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    record_json = excluded.record_json
+                """,
+                (
+                    evidence.id,
+                    evidence.project_id,
+                    evidence.shot_id,
+                    evidence.task_id,
+                    evidence.status.value,
+                    evidence.created_at,
+                    evidence.model_dump_json(),
+                ),
+            )
+
+    def get_route_evidence_for_take(self, take_id: str) -> RouteEvidence | None:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute("SELECT record_json FROM route_evidence").fetchall()
+        for row in rows:
+            evidence = RouteEvidence.model_validate_json(cast(str, row["record_json"]))
+            if evidence.take_id == take_id:
+                return evidence
+        return None
+
+    def get_route_evidence_for_task(self, task_id: str) -> RouteEvidence | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM route_evidence WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return RouteEvidence.model_validate_json(cast(str, row["record_json"]))
+
+    def list_route_evidence(self, project_id: str) -> list[RouteEvidence]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM route_evidence
+                WHERE project_id = ? ORDER BY created_at ASC, id ASC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [RouteEvidence.model_validate_json(cast(str, row["record_json"])) for row in rows]

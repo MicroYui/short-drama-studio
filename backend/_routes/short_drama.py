@@ -5,6 +5,19 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from _routes._errors import HTTPError
+from short_drama.h3_models import (
+    H3CompilePreviewResponse,
+    H3ProbeRequest,
+    H3ProbeResponse,
+    H3ProviderConfigResponse,
+    H3ProviderConfigUpdate,
+    H3ProviderRunsResponse,
+    H3ReconcileRequest,
+    H3ReconciliationCandidatesResponse,
+    H3TakeReviewRequest,
+    H3TakeReviewResponse,
+    H3TaskActionResponse,
+)
 from short_drama.media import MediaGenerationError
 from short_drama.models import (
     AutoDraftRequest,
@@ -26,6 +39,7 @@ from short_drama.models import (
 )
 from short_drama.service import (
     ArtifactNotFoundError,
+    ProviderOperationError,
     ProjectNotFoundError,
     WorkflowConflictError,
 )
@@ -41,9 +55,119 @@ def _translate_error(error: Exception) -> HTTPError:
         return HTTPError(404, str(error.args[0]), code="SHORT_DRAMA_NOT_FOUND")
     if isinstance(error, WorkflowConflictError):
         return HTTPError(409, str(error), code="SHORT_DRAMA_STATE_CONFLICT")
+    if isinstance(error, ProviderOperationError):
+        return HTTPError(502, str(error), code="SHORT_DRAMA_PROVIDER_FAILED")
     if isinstance(error, MediaGenerationError):
         return HTTPError(500, str(error), code="SHORT_DRAMA_MEDIA_FAILED")
     return HTTPError(500, str(error), code="SHORT_DRAMA_INTERNAL_ERROR")
+
+
+@router.get("/providers/minimax-h3", response_model=H3ProviderConfigResponse)
+def get_h3_provider_config(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProviderConfigResponse:
+    return service.get_h3_config()
+
+
+@router.post("/providers/minimax-h3", response_model=H3ProviderConfigResponse)
+def update_h3_provider_config(
+    request: H3ProviderConfigUpdate,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProviderConfigResponse:
+    return service.update_h3_config(request)
+
+
+@router.post("/providers/minimax-h3/validate", response_model=H3ProviderConfigResponse)
+def validate_h3_provider_config(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProviderConfigResponse:
+    try:
+        return service.validate_h3_credentials()
+    except (WorkflowConflictError, ProviderOperationError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/providers/minimax-h3/reconciliation-candidates",
+    response_model=H3ReconciliationCandidatesResponse,
+)
+def list_h3_reconciliation_candidates(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ReconciliationCandidatesResponse:
+    try:
+        return service.list_h3_reconciliation_candidates()
+    except (WorkflowConflictError, ProviderOperationError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/h3/preview",
+    response_model=H3CompilePreviewResponse,
+)
+def preview_h3_probe(
+    project_id: str,
+    request: H3ProbeRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3CompilePreviewResponse:
+    try:
+        return service.preview_h3_probe(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/projects/{project_id}/h3/probes", response_model=H3ProbeResponse)
+def enqueue_h3_probe(
+    project_id: str,
+    request: H3ProbeRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProbeResponse:
+    try:
+        return service.enqueue_h3_probe(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get("/projects/{project_id}/h3/runs", response_model=H3ProviderRunsResponse)
+def list_h3_provider_runs(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProviderRunsResponse:
+    try:
+        return service.list_h3_provider_runs(project_id)
+    except (ProjectNotFoundError, ArtifactNotFoundError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/tasks/{task_id}/h3/resolve-submit",
+    response_model=H3TaskActionResponse,
+)
+def resolve_h3_submission(
+    task_id: str,
+    request: H3ReconcileRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3TaskActionResponse:
+    try:
+        return service.resolve_h3_submission(task_id, request.provider_task_id)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/takes/{take_id}/h3/review", response_model=H3TakeReviewResponse)
+def review_h3_take(
+    take_id: str,
+    request: H3TakeReviewRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3TakeReviewResponse:
+    try:
+        return service.review_h3_take(take_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
 
 
 @router.get("/projects", response_model=ProjectListResponse)
@@ -106,7 +230,13 @@ def drain_worker(
 ) -> WorkerDrainResponse:
     try:
         return service.drain(request.project_id, request.max_steps)
-    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError, MediaGenerationError) as exc:
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+        MediaGenerationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 
@@ -118,7 +248,13 @@ def advance_task(
     try:
         task = service.advance_task(task_id)
         return TaskActionResponse(task=task, project=service.get_project(task.project_id))
-    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError, MediaGenerationError) as exc:
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+        MediaGenerationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 
@@ -130,7 +266,12 @@ def cancel_task(
     try:
         task = service.cancel_task(task_id)
         return TaskActionResponse(task=task, project=service.get_project(task.project_id))
-    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 
@@ -166,7 +307,13 @@ def recover_task_output(
     try:
         task = service.recover_task_output(task_id)
         return TaskActionResponse(task=task, project=service.get_project(task.project_id))
-    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError, MediaGenerationError) as exc:
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+        MediaGenerationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 

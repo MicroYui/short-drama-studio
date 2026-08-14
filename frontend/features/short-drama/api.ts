@@ -12,6 +12,16 @@ export type ExportRecord = components['schemas']['ExportRecord']
 export type SourceMode = components['schemas']['SourceMode']
 export type RunMode = components['schemas']['RunMode']
 export type OperationKind = components['schemas']['OperationKind']
+export type VideoGenerationRoute = components['schemas']['VideoGenerationRoute']
+export type H3ProviderConfig = components['schemas']['H3ProviderConfigResponse']
+export type H3ProviderRun = components['schemas']['H3ProviderRun']
+export type H3ProbeRequest = components['schemas']['H3ProbeRequest']
+export type H3CompilePreview = components['schemas']['H3CompilePreviewResponse']
+export type H3MediaInput = components['schemas']['H3MediaInput']
+export type H3MediaKind = components['schemas']['H3MediaKind']
+export type H3MediaRole = components['schemas']['H3MediaRole']
+export type H3TakeReviewRequest = components['schemas']['H3TakeReviewRequest']
+export type RouteEvidence = components['schemas']['RouteEvidence']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -32,6 +42,15 @@ const recoverTaskOutput = makeEndpointClient('/api/short-drama/tasks/{task_id}/r
 const retake = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/retake', 'post')
 const extend = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/extend', 'post')
 const gapFill = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/gap-fill', 'post')
+const getH3Config = makeEndpointClient('/api/short-drama/providers/minimax-h3', 'get')
+const updateH3Config = makeEndpointClient('/api/short-drama/providers/minimax-h3', 'post')
+const validateH3Config = makeEndpointClient('/api/short-drama/providers/minimax-h3/validate', 'post')
+const previewH3Probe = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/preview', 'post')
+const enqueueH3Probe = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/probes', 'post')
+const listH3Runs = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/runs', 'get')
+const listH3ReconciliationCandidates = makeEndpointClient('/api/short-drama/providers/minimax-h3/reconciliation-candidates', 'get')
+const resolveH3Submission = makeEndpointClient('/api/short-drama/tasks/{task_id}/h3/resolve-submit', 'post')
+const reviewH3Take = makeEndpointClient('/api/short-drama/takes/{take_id}/h3/review', 'post')
 
 function projectPath(projectId: string, suffix = ''): string {
   return `/api/short-drama/projects/${encodeURIComponent(projectId)}${suffix}`
@@ -72,6 +91,35 @@ export const ShortDramaApi = {
   retryTask: (taskId: string) => retryTask(undefined, undefined, taskPath(taskId, 'retry')),
   reconcileTask: (taskId: string) => reconcileTask(undefined, undefined, taskPath(taskId, 'reconcile')),
   recoverTaskOutput: (taskId: string) => recoverTaskOutput(undefined, undefined, taskPath(taskId, 'recover-output')),
+  getH3Config: () => getH3Config(),
+  updateH3Config: (apiKey: string | null, clearApiKey = false) => (
+    updateH3Config({ api_key: apiKey, clear_api_key: clearApiKey })
+  ),
+  validateH3Config: () => validateH3Config(),
+  previewH3Probe: (projectId: string, body: H3ProbeRequest) => (
+    previewH3Probe(body, undefined, projectPath(projectId, '/h3/preview'))
+  ),
+  enqueueH3Probe: (projectId: string, body: H3ProbeRequest) => (
+    enqueueH3Probe(body, undefined, projectPath(projectId, '/h3/probes'))
+  ),
+  listH3Runs: (projectId: string) => (
+    listH3Runs(undefined, undefined, projectPath(projectId, '/h3/runs'))
+  ),
+  listH3ReconciliationCandidates: () => listH3ReconciliationCandidates(),
+  resolveH3Submission: (taskId: string, providerTaskId: string) => (
+    resolveH3Submission(
+      { provider_task_id: providerTaskId },
+      undefined,
+      taskPath(taskId, 'h3/resolve-submit'),
+    )
+  ),
+  reviewH3Take: (takeId: string, body: H3TakeReviewRequest) => (
+    reviewH3Take(
+      body,
+      undefined,
+      `/api/short-drama/takes/${encodeURIComponent(takeId)}/h3/review`,
+    )
+  ),
   localRework: (
     projectId: string,
     shotId: string,

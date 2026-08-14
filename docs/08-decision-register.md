@@ -98,6 +98,7 @@
 ## 实施证据
 
 - 2026-08-14：I001–I004 的供应商中立 Mock 部分已落地并通过 Phase 1 验收。SQLite/API、持久化任务与恢复、16 个 Take、局部失效、Retake/Extend/Gap Fill、50 秒 TimelineManifest、带/无字幕导出和桌面交互闭环均已验证；详见 [Phase 1 实施记录](10-phase1-mock-vertical-slice.md)。
+- 2026-08-14：H3 768P Provider 的工程部分已落地。Direct/Frame/Reference capability 校验、V2 API Adapter、上传缓存、持久化提交/轮询/取消、`SUBMIT_UNKNOWN` 显式对账、`OUTPUT_MISSING` 恢复、原始 Take 下载、用量/价格、人工 QA 和桌面实验台已通过离线测试；详见 [Phase 2 实施记录](11-phase2-minimax-h3-provider.md)。当前没有 MiniMax 凭证或真实样本，E003/E004/E005 的质量结论保持 `EXPERIMENT_REQUIRED/UNKNOWN`。
 - 这项结果关闭的是工程 Mock 门，不改变 M002–M004、M006、M008、M010 和 E008 的 `EXPERIMENT_REQUIRED` 状态；它们仍必须由真实 H3/GPT Image/音频样本决定。
 
 ## 对话顺序

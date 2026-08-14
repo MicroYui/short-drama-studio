@@ -4,17 +4,40 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import threading
 from pathlib import Path
 from uuid import uuid4
 
 from short_drama.fixture import build_dont_trust_me_fixture, build_project_document
+from short_drama.h3_models import (
+    H3CompilePreviewResponse,
+    H3MediaInput,
+    H3ProbeRequest,
+    H3ProbeResponse,
+    H3ProviderConfigResponse,
+    H3ProviderConfigUpdate,
+    H3ProviderRun,
+    H3ProviderRunsResponse,
+    H3ReconciliationCandidatesResponse,
+    H3TakeReviewRequest,
+    H3TakeReviewResponse,
+    H3TaskActionResponse,
+)
+from short_drama.h3_worker import (
+    H3ClientFactory,
+    H3ProviderConfigurationError,
+    PersistentH3Worker,
+    default_h3_client_factory,
+)
 from short_drama.media import MockMediaRenderer, TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
     AutoDraftResponse,
     CreateProjectRequest,
     EnqueueRequest,
+    EvidencePurpose,
+    EvidenceStatus,
     ExportRecord,
     Freshness,
     GenerationTask,
@@ -27,16 +50,27 @@ from short_drama.models import (
     ProjectDocument,
     ProjectListResponse,
     ProjectStage,
+    RouteEvidence,
     QaStatus,
     ReviseScriptLineRequest,
     ScriptVersion,
+    ShotPlan,
     SubtitleCue,
     Take,
     TaskStatus,
     TimelineAudioClip,
     TimelineManifest,
     TimelineVideoClip,
+    VideoGenerationRoute,
     WorkerDrainResponse,
+)
+from short_drama.providers.h3_config import H3ProviderConfigStore
+from short_drama.providers.minimax_h3_client import H3ClientError
+from short_drama.providers.minimax_h3_compiler import (
+    H3CapabilityError,
+    build_h3_prompt,
+    compile_h3_request,
+    validate_h3_probe,
 )
 from short_drama.repository import ShortDramaRepository
 from short_drama.worker import InvalidTaskTransition, PersistentMockWorker, utc_now
@@ -54,6 +88,10 @@ class WorkflowConflictError(ValueError):
     """Raised when persisted workflow state does not allow the requested action."""
 
 
+class ProviderOperationError(RuntimeError):
+    """Raised when a configured external provider cannot complete an operation."""
+
+
 _TERMINAL_TASK_STATUSES = {
     TaskStatus.SUCCEEDED,
     TaskStatus.FAILED,
@@ -64,12 +102,27 @@ _TERMINAL_TASK_STATUSES = {
 class ShortDramaService:
     """Owns the SQLite truth source, worker, Mock adapter, and manifest exporter."""
 
-    def __init__(self, *, database_path: Path, workspace_root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        database_path: Path,
+        workspace_root: Path,
+        h3_client_factory: H3ClientFactory | None = None,
+    ) -> None:
         self.repository = ShortDramaRepository(database_path)
         self.workspace_root = workspace_root
         self.media_renderer = MockMediaRenderer(workspace_root)
         self.exporter = TimelineExporter(workspace_root)
         self.worker = PersistentMockWorker(self.repository, self.media_renderer)
+        self.h3_config = H3ProviderConfigStore(
+            database_path.parent / "short-drama-provider-settings.json"
+        )
+        self.h3_worker = PersistentH3Worker(
+            repository=self.repository,
+            workspace_root=workspace_root,
+            config_store=self.h3_config,
+            client_factory=h3_client_factory or default_h3_client_factory,
+        )
         self._lock = threading.RLock()
 
     def list_projects(self) -> ProjectListResponse:
@@ -104,6 +157,107 @@ class ShortDramaService:
     def get_project(self, project_id: str) -> ProjectAggregate:
         document = self._require_project_document(project_id)
         return self._aggregate(document)
+
+    def get_h3_config(self) -> H3ProviderConfigResponse:
+        return self.h3_config.response()
+
+    def update_h3_config(
+        self,
+        request: H3ProviderConfigUpdate,
+    ) -> H3ProviderConfigResponse:
+        return self.h3_config.update(request)
+
+    def validate_h3_credentials(self) -> H3ProviderConfigResponse:
+        try:
+            self.h3_worker.validate_credentials()
+        except H3ProviderConfigurationError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        except H3ClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        return self.h3_config.response()
+
+    def preview_h3_probe(
+        self,
+        project_id: str,
+        request: H3ProbeRequest,
+    ) -> H3CompilePreviewResponse:
+        _document, _shot, prompt, duration = self._resolve_h3_probe(
+            project_id=project_id,
+            request=request,
+        )
+
+        def preview_url(media: H3MediaInput) -> str:
+            if media.source.external_url is not None:
+                return media.source.external_url
+            if media.source.file_id is not None:
+                return f"mm_file://{media.source.file_id}"
+            assert media.source.local_path is not None
+            return f"local-upload://{Path(media.source.local_path).name}"
+
+        try:
+            compiled = compile_h3_request(
+                route=request.route,
+                prompt=prompt,
+                duration_seconds=duration,
+                media_inputs=request.media_inputs,
+                resolve_url=preview_url,
+            )
+        except H3CapabilityError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        return H3CompilePreviewResponse(prompt=prompt, request=compiled)
+
+    def enqueue_h3_probe(
+        self,
+        project_id: str,
+        request: H3ProbeRequest,
+    ) -> H3ProbeResponse:
+        with self._lock:
+            if not self.h3_config.api_key():
+                raise WorkflowConflictError(
+                    "MiniMax API key is required before enqueueing a paid H3 probe"
+                )
+            document, shot, prompt, duration = self._resolve_h3_probe(
+                project_id=project_id,
+                request=request,
+            )
+            existing = self.repository.list_tasks_for_shot(project_id, shot.id)
+            candidate_index = max((task.candidate_index for task in existing), default=0) + 1
+            task, run, evidence = self._new_h3_task_and_run(
+                document=document,
+                shot_id=shot.id,
+                route=request.route,
+                duration_seconds=duration,
+                prompt=prompt,
+                media_inputs=request.media_inputs,
+                purpose=request.purpose,
+                candidate_index=candidate_index,
+                attempt=1,
+                retry_of_task_id=None,
+            )
+            self.repository.save_task(task)
+            self.repository.save_provider_run(run)
+            self.repository.save_route_evidence(evidence)
+            document.project.stage = ProjectStage.GENERATING
+            document.project.updated_at = utc_now()
+            self.repository.save_project(document)
+            return H3ProbeResponse(
+                task=task,
+                provider_run=run,
+                project=self._aggregate(document),
+            )
+
+    def list_h3_provider_runs(self, project_id: str) -> H3ProviderRunsResponse:
+        self._require_project_document(project_id)
+        return H3ProviderRunsResponse(runs=self.repository.list_provider_runs(project_id))
+
+    def list_h3_reconciliation_candidates(self) -> H3ReconciliationCandidatesResponse:
+        try:
+            tasks = self.h3_worker.list_reconciliation_candidates()
+        except H3ProviderConfigurationError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        except H3ClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        return H3ReconciliationCandidatesResponse(tasks=tasks)
 
     def enqueue(self, project_id: str, request: EnqueueRequest) -> ProjectAggregate:
         with self._lock:
@@ -141,12 +295,19 @@ class ShortDramaService:
             return self._aggregate(document)
 
     def advance_task(self, task_id: str) -> GenerationTask:
+        persisted = self._require_task(task_id)
         try:
-            task = self.worker.advance(task_id)
+            task = (
+                self.h3_worker.advance(task_id)
+                if persisted.provider == "minimax"
+                else self.worker.advance(task_id)
+            )
         except KeyError as exc:
             raise ArtifactNotFoundError(task_id) from exc
-        except InvalidTaskTransition as exc:
+        except (InvalidTaskTransition, H3ProviderConfigurationError, H3CapabilityError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        except H3ClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
         return task
 
@@ -156,17 +317,27 @@ class ShortDramaService:
         self._refresh_project_stage(project_id)
         return WorkerDrainResponse(
             processed_steps=processed_steps,
-            remaining_runnable=self.repository.count_runnable_tasks(project_id),
+            remaining_runnable=self.repository.count_runnable_tasks(
+                project_id,
+                provider="mock",
+            ),
             project=self.get_project(project_id),
         )
 
     def cancel_task(self, task_id: str) -> GenerationTask:
+        persisted = self._require_task(task_id)
         try:
-            task = self.worker.cancel(task_id)
+            task = (
+                self.h3_worker.cancel(task_id)
+                if persisted.provider == "minimax"
+                else self.worker.cancel(task_id)
+            )
         except KeyError as exc:
             raise ArtifactNotFoundError(task_id) from exc
-        except InvalidTaskTransition as exc:
+        except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        except H3ClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
         return task
 
@@ -178,23 +349,50 @@ class ShortDramaService:
                     f"Task {task.id} cannot retry from {task.status.value}"
                 )
             document = self._require_project_document(task.project_id)
-            retry = self._new_task(
-                document=document,
-                shot_id=task.shot_id,
-                operation=task.operation,
-                candidate_index=task.candidate_index,
-                requested_duration_seconds=task.requested_duration_seconds,
-                behavior=MockBehavior.SUCCESS,
-                attempt=task.attempt + 1,
-                retry_of_task_id=task.id,
-            )
+            retry_run: H3ProviderRun | None = None
+            retry_evidence: RouteEvidence | None = None
+            if task.provider == "minimax":
+                run = self.repository.get_provider_run(task.id)
+                if run is None:
+                    raise WorkflowConflictError(f"H3 provider run for task {task.id} is missing")
+                retry, retry_run, retry_evidence = self._new_h3_task_and_run(
+                    document=document,
+                    shot_id=task.shot_id,
+                    route=run.route,
+                    duration_seconds=int(task.requested_duration_seconds),
+                    prompt=run.prompt,
+                    media_inputs=run.media_inputs,
+                    purpose=run.purpose,
+                    candidate_index=task.candidate_index,
+                    attempt=task.attempt + 1,
+                    retry_of_task_id=task.id,
+                )
+            else:
+                retry = self._new_task(
+                    document=document,
+                    shot_id=task.shot_id,
+                    operation=task.operation,
+                    candidate_index=task.candidate_index,
+                    requested_duration_seconds=task.requested_duration_seconds,
+                    behavior=MockBehavior.SUCCESS,
+                    attempt=task.attempt + 1,
+                    retry_of_task_id=task.id,
+                )
             self.repository.save_task(retry)
+            if retry_run is not None and retry_evidence is not None:
+                self.repository.save_provider_run(retry_run)
+                self.repository.save_route_evidence(retry_evidence)
             document.project.stage = ProjectStage.GENERATING
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
             return retry
 
     def reconcile_task(self, task_id: str) -> GenerationTask:
+        persisted = self._require_task(task_id)
+        if persisted.provider == "minimax":
+            raise WorkflowConflictError(
+                "Use explicit MiniMax task reconciliation for an H3 SUBMIT_UNKNOWN task"
+            )
         try:
             task = self.worker.reconcile(task_id)
         except KeyError as exc:
@@ -203,13 +401,43 @@ class ShortDramaService:
             raise WorkflowConflictError(str(exc)) from exc
         return task
 
-    def recover_task_output(self, task_id: str) -> GenerationTask:
+    def resolve_h3_submission(
+        self,
+        task_id: str,
+        provider_task_id: str,
+    ) -> H3TaskActionResponse:
         try:
-            task = self.worker.recover_output(task_id)
+            task = self.h3_worker.reconcile(task_id, provider_task_id.strip())
         except KeyError as exc:
             raise ArtifactNotFoundError(task_id) from exc
-        except InvalidTaskTransition as exc:
+        except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        except H3ClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        self._refresh_project_stage(task.project_id)
+        run = self.repository.get_provider_run(task.id)
+        if run is None:
+            raise WorkflowConflictError(f"H3 provider run for task {task.id} is missing")
+        return H3TaskActionResponse(
+            task=task,
+            project=self.get_project(task.project_id),
+            provider_run=run,
+        )
+
+    def recover_task_output(self, task_id: str) -> GenerationTask:
+        persisted = self._require_task(task_id)
+        try:
+            task = (
+                self.h3_worker.recover_output(task_id)
+                if persisted.provider == "minimax"
+                else self.worker.recover_output(task_id)
+            )
+        except KeyError as exc:
+            raise ArtifactNotFoundError(task_id) from exc
+        except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        except H3ClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
         return task
 
@@ -231,6 +459,59 @@ class ShortDramaService:
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
             return self._aggregate(document)
+
+    def review_h3_take(
+        self,
+        take_id: str,
+        request: H3TakeReviewRequest,
+    ) -> H3TakeReviewResponse:
+        with self._lock:
+            take = self.repository.get_take(take_id)
+            if take is None:
+                raise ArtifactNotFoundError(take_id)
+            if take.provider != "minimax" or take.model != "MiniMax-H3":
+                raise WorkflowConflictError("Only a MiniMax-H3 Take uses H3 route review")
+            if take.freshness != Freshness.CURRENT:
+                raise WorkflowConflictError("A stale H3 Take cannot be reviewed")
+            evidence = self.repository.get_route_evidence_for_take(take_id)
+            if evidence is None:
+                raise WorkflowConflictError(f"Route evidence for Take {take_id} is missing")
+            if request.hard_gate_passed and evidence.technical_passed is not True:
+                raise WorkflowConflictError(
+                    "Technical media gates failed; this Take cannot be marked hard-gate passed"
+                )
+
+            now = utc_now()
+            status = QaStatus.PASSED if request.hard_gate_passed else QaStatus.REJECTED
+            merged_issues = {issue.code: issue for issue in take.qa_report.issues}
+            merged_issues.update({issue.code: issue for issue in request.issues})
+            take.qa_status = status
+            take.qa_report.status = status
+            take.qa_report.hard_gate_passed = request.hard_gate_passed
+            take.qa_report.score = request.score
+            take.qa_report.issues = list(merged_issues.values())
+            take.qa_report.reviewer_notes = request.notes
+            take.qa_report.reviewed_at = now
+            if status != QaStatus.PASSED:
+                take.is_selected = False
+            self.repository.save_take(take)
+
+            evidence.status = EvidenceStatus.REVIEWED
+            evidence.hard_gate_passed = request.hard_gate_passed
+            evidence.score = request.score
+            evidence.notes = request.notes
+            evidence.reviewed_at = now
+            self.repository.save_route_evidence(evidence)
+
+            document = self._require_project_document(take.project_id)
+            document.project.stage = ProjectStage.REVIEW
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            return H3TakeReviewResponse(
+                take=take,
+                evidence=evidence,
+                project=self._aggregate(document),
+            )
 
     def revise_script_line(
         self,
@@ -367,7 +648,11 @@ class ShortDramaService:
                         start_seconds=cursor,
                         duration_seconds=take.duration_seconds,
                         gain_db=0.0,
-                        role="MODEL_NATIVE_MOCK_PLACEHOLDER",
+                        role=(
+                            "MODEL_NATIVE_H3"
+                            if take.provider == "minimax"
+                            else "MODEL_NATIVE_MOCK_PLACEHOLDER"
+                        ),
                     )
                 )
                 lines = [line_by_id[line_id] for line_id in shot.dialogue_line_ids if line_id in line_by_id]
@@ -442,6 +727,124 @@ class ShortDramaService:
             export = self.export_project(project_id, rebuild_manifest=False) if render_export else None
             return AutoDraftResponse(project=self.get_project(project_id), export=export)
 
+    def _resolve_h3_probe(
+        self,
+        *,
+        project_id: str,
+        request: H3ProbeRequest,
+    ) -> tuple[ProjectDocument, ShotPlan, str, int]:
+        document = self._require_project_document(project_id)
+        shot = next((item for item in document.shots if item.id == request.shot_id), None)
+        if shot is None:
+            raise ArtifactNotFoundError(request.shot_id)
+        prompt = (
+            request.prompt_override.strip()
+            if request.prompt_override is not None
+            else build_h3_prompt(document, shot)
+        )
+        duration = request.duration_seconds or math.ceil(shot.duration_seconds)
+        try:
+            validate_h3_probe(
+                route=request.route,
+                prompt=prompt,
+                duration_seconds=duration,
+                media_inputs=request.media_inputs,
+            )
+        except H3CapabilityError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        return document, shot, prompt, duration
+
+    def _new_h3_task_and_run(
+        self,
+        *,
+        document: ProjectDocument,
+        shot_id: str,
+        route: VideoGenerationRoute,
+        duration_seconds: int,
+        prompt: str,
+        media_inputs: list[H3MediaInput],
+        purpose: EvidencePurpose,
+        candidate_index: int,
+        attempt: int,
+        retry_of_task_id: str | None,
+    ) -> tuple[GenerationTask, H3ProviderRun, RouteEvidence]:
+        now = utc_now()
+        task_id = f"task-{uuid4().hex}"
+        run_id = f"h3-run-{uuid4().hex}"
+        normalized_request = {
+            "provider": "minimax",
+            "model": "MiniMax-H3",
+            "project_id": document.project.id,
+            "shot_id": shot_id,
+            "route": route.value,
+            "resolution": "768P",
+            "duration": duration_seconds,
+            "prompt": prompt,
+            "media_inputs": [
+                item.model_dump(mode="json", exclude_none=True) for item in media_inputs
+            ],
+            "candidate_index": candidate_index,
+            "script_version_id": document.project.current_script_version_id,
+            "bible_version_id": document.project.current_bible_version_id,
+            "attempt": attempt,
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                normalized_request,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        task = GenerationTask(
+            id=task_id,
+            project_id=document.project.id,
+            shot_id=shot_id,
+            operation=OperationKind.GENERATE,
+            candidate_index=candidate_index,
+            status=TaskStatus.QUEUED,
+            provider="minimax",
+            model="MiniMax-H3",
+            route=route,
+            resolution="768P",
+            provider_run_id=run_id,
+            request_fingerprint=fingerprint,
+            input_script_version_id=document.project.current_script_version_id,
+            input_bible_version_id=document.project.current_bible_version_id,
+            requested_duration_seconds=float(duration_seconds),
+            attempt=attempt,
+            retry_of_task_id=retry_of_task_id,
+            created_at=now,
+            updated_at=now,
+        )
+        run = H3ProviderRun(
+            id=run_id,
+            task_id=task_id,
+            project_id=document.project.id,
+            shot_id=shot_id,
+            route=route,
+            purpose=purpose,
+            prompt=prompt,
+            media_inputs=[item.model_copy(deep=True) for item in media_inputs],
+            pricing=self.h3_config.pricing_snapshot(),
+            created_at=now,
+            updated_at=now,
+        )
+        evidence = RouteEvidence(
+            id=f"evidence-{uuid4().hex}",
+            project_id=document.project.id,
+            shot_id=shot_id,
+            task_id=task_id,
+            provider="minimax",
+            model="MiniMax-H3",
+            route=route,
+            resolution="768P",
+            purpose=purpose,
+            status=EvidenceStatus.AWAITING_OUTPUT,
+            created_at=now,
+        )
+        return task, run, evidence
+
     def _new_task(
         self,
         *,
@@ -478,6 +881,7 @@ class ShortDramaService:
             status=TaskStatus.QUEUED,
             provider="mock",
             model="deterministic-media-v1",
+            resolution="432x768",
             request_fingerprint=fingerprint,
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
@@ -538,6 +942,7 @@ class ShortDramaService:
             tasks=tasks,
             takes=takes,
             exports=exports,
+            route_evidence=self.repository.list_route_evidence(document.project.id),
             progress=progress,
         )
 

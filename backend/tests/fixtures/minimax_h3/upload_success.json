@@ -1,0 +1,13 @@
+{
+  "file": {
+    "file_id": 987654321,
+    "bytes": 1048576,
+    "created_at": 1786665600,
+    "filename": "reference.png",
+    "purpose": "video_generation_input"
+  },
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  }
+}
