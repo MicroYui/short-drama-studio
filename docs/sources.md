@@ -1,0 +1,79 @@
+# 来源与源码快照
+
+快照日期：2026-08-14。本清单优先记录官方资料和固定源码 commit。产品能力、模型接口、价格与仓库代码都会变化，进入实现前应重新核验。
+
+## 1. 模型与 API 官方资料
+
+### OpenAI
+
+- [GPT-5.6-sol model](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+- [GPT Image 2 model](https://developers.openai.com/api/docs/models/gpt-image-2)
+- [Image generation guide](https://developers.openai.com/api/docs/guides/image-generation)
+
+### MiniMax
+
+- [Video Generation Guide](https://platform.minimax.io/docs/guides/video-generation)
+- [H3 Context-IR API](https://platform.minimax.io/docs/api-reference/video-generation-v2-h3-context-ir)
+- [MiniMax-H3 Base Prompt Guide](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_base_en.md)
+- [MiniMax-H3 Reference Prompt Guide](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md)
+
+### Azure Speech
+
+- [Text to speech](https://learn.microsoft.com/en-us/azure/ai-services/Speech-Service/text-to-speech)
+- [SSML pronunciation](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-pronunciation)
+- [Viseme events](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-speech-synthesis-viseme)
+- [Batch transcription and word timestamps](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/batch-transcription-create)
+
+### 抖音交付兼容
+
+- [抖音开放平台：上传视频](https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/create/upload/)
+- [抖音内容发布接入方案](https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution)
+
+官方资料只提供 MP4/WebM、720p 以上、大小和时长等基础边界，没有给出统一字幕安全区、固定码率或响度值；本项目的安全区、编码和响度是内部可调整交付预设，不冒充平台强制规范。
+
+这些页面只证明接口和声明的能力，不证明固定剧本的实际质量。GPT Image 2、H3 和 Azure 都是可选能力，不因列入来源清单而成为必选项。
+
+## 2. 闭源平台官方资料
+
+仅用于研究产品机制；最终系统不调用或依赖这些产品。
+
+- 即梦：[官方主页](https://www.jimeng.com/)
+- 可灵：[VIDEO 3.0 用户指南](https://app.klingai.com/cn/quickstart/klingai-video-3-model-user-guide)
+- LTX Studio：[产品主页](https://website.ltx.studio/)、[TV/Media workflow](https://ltx.io/studio/solution/tv-media-networks)、[Audio-to-Video](https://ltx.io/blog/audio-to-video-syncing-sound-with-ai-video-generation)、[Top Features 2026](https://ltx.io/blog/top-ltx-studio-features)、[Projects update](https://ltx.io/blog/introducing-projects)
+- 纳逗 Pro：[业务页](https://www.iqiyi.com/common/aqynatoopro.html)、[发布说明](https://pages.iqiyi.com/m/scpr/63x0au29.html?qyc-pr=1)、[新功能说明](https://pages.iqiyi.com/m/scpr/63x0avkx.html?qyc-pr=1)
+
+公开产品资料中的效果描述标为 `PRODUCT-CLAIM`。由于这些产品不可用于本项目，本轮不安排登录、积分或平台实测。
+
+## 3. 开源源码固定快照
+
+| 项目 | 仓库 | 本轮审查 commit | License |
+| --- | --- | --- | --- |
+| Toonflow | [HBAI-Ltd/Toonflow-app](https://github.com/HBAI-Ltd/Toonflow-app) | [`bc61ec7a1b5df31293b286981a5f4ad4635464ee`](https://github.com/HBAI-Ltd/Toonflow-app/commit/bc61ec7a1b5df31293b286981a5f4ad4635464ee) | Apache-2.0 |
+| ComfyUI | [comfy-org/ComfyUI](https://github.com/comfy-org/ComfyUI) | [`7fe8a6138504f90ff7be82f3babf416da32876b1`](https://github.com/comfy-org/ComfyUI/commit/7fe8a6138504f90ff7be82f3babf416da32876b1) | GPL-3.0 |
+| ViMax | [HKUDS/ViMax](https://github.com/HKUDS/ViMax) | [`05a48943878312d88fe5a016c12a9654940ecc43`](https://github.com/HKUDS/ViMax/commit/05a48943878312d88fe5a016c12a9654940ecc43) | MIT |
+| Jellyfish | [Forget-C/Jellyfish](https://github.com/Forget-C/Jellyfish) | [`a9678194ddf2d9be3ccbe78d4287d87d5089e123`](https://github.com/Forget-C/Jellyfish/commit/a9678194ddf2d9be3ccbe78d4287d87d5089e123) | Apache-2.0 |
+| Wind Comic | [ChrisChen667788/wind-comic](https://github.com/ChrisChen667788/wind-comic) | [`c83e1cf5e9b88fa8ac62bb737c79985a95243b8d`](https://github.com/ChrisChen667788/wind-comic/commit/c83e1cf5e9b88fa8ac62bb737c79985a95243b8d) | MIT |
+| LumenX | [alibaba/lumenx](https://github.com/alibaba/lumenx) | [`f2a02e23171447c939e7d8e1386b24d17049bbf1`](https://github.com/alibaba/lumenx/commit/f2a02e23171447c939e7d8e1386b24d17049bbf1) | MIT |
+| LTX Desktop | [Lightricks/LTX-Desktop](https://github.com/Lightricks/LTX-Desktop) | [`24a8440d7a424c283d7e6dd534cbf78549785090`](https://github.com/Lightricks/LTX-Desktop/commit/24a8440d7a424c283d7e6dd534cbf78549785090)（`v1.1.0`） | Apache-2.0（应用代码） |
+
+本轮为静态源码审查，没有安装全部依赖、运行全套测试或调用仓库配置的真实 Provider。License 取自对应快照的仓库声明；进入发布或 SaaS 集成前仍需按最终使用方式复核。
+
+LTX Desktop 的应用代码与模型权重必须分开判断：[应用 License](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/LICENSE.txt) 是 Apache-2.0，但 [NOTICES](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/NOTICES.md) 明确指出模型权重另受模型条款约束。该快照绑定 LTX-2.3；其 [Community License](https://huggingface.co/Lightricks/LTX-2.3/blob/main/LICENSE) 对年营收至少 1,000 万美元的实体要求另购商业许可，并限制未经许可将模型用于直接竞争或替代 Lightricks 商业产品的应用。这里仅记录会影响底座选择的事实，不作法律结论；当前决定只复用 Apache 应用代码，LTX 权重不进入产品或本轮实验。
+
+LTX 模型本身的当前能力与版本另见 [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)。截至本快照，官方仓库推荐 LTX-2.5，而 LTX Desktop `v1.1.0` 的代码和 LoRA 目录仍围绕 LTX-2.3，因此不能把 Desktop 内置引擎等同于 LTX 模型线的最新能力。
+
+## 4. ComfyUI 官方开发资料
+
+- [Submit a workflow](https://docs.comfy.org/api-reference/cloud/workflow/submit-a-workflow-for-execution)
+- [Custom nodes overview](https://docs.comfy.org/custom-nodes/overview)
+- [Server-side custom node overview](https://docs.comfy.org/custom-nodes/backend/server_overview)
+- [Registry overview](https://docs.comfy.org/registry/overview)
+
+## 5. 证据使用规则
+
+- 官方文档用于确认接口、字段和产品公开功能；
+- 固定源码用于确认代码里实际存在的数据模型和执行路径；
+- README 宣传若没有对应源码路径，不升级为 `SOURCE-CONFIRMED`；
+- 宣传中的“连贯、精准口型、一键成片”等效果词，未经固定输入生成仍为 `PRODUCT-CLAIM` 或 `UNKNOWN`；
+- 能接受某种参考输入不等于能稳定遵循它；
+- 最终路线只采用解决了具体质量问题的资源。
