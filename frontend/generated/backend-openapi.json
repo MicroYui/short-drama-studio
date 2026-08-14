@@ -232,6 +232,142 @@
         "title": "AppSettingsPatch",
         "type": "object"
       },
+      "ApprovalStatus": {
+        "enum": [
+          "DRAFT",
+          "APPROVED",
+          "SUPERSEDED"
+        ],
+        "title": "ApprovalStatus",
+        "type": "string"
+      },
+      "Asset": {
+        "additionalProperties": false,
+        "properties": {
+          "current_version_id": {
+            "title": "Current Version Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/AssetVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "kind",
+          "name",
+          "current_version_id",
+          "versions"
+        ],
+        "title": "Asset",
+        "type": "object"
+      },
+      "AssetVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_status": {
+            "$ref": "#/components/schemas/ApprovalStatus"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "descriptor": {
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "external_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Url"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "local_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Path"
+          },
+          "origin_type": {
+            "$ref": "#/components/schemas/OriginType"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "origin_type",
+          "descriptor",
+          "approval_status",
+          "freshness",
+          "created_at"
+        ],
+        "title": "AssetVersion",
+        "type": "object"
+      },
+      "AudioKind": {
+        "enum": [
+          "DIALOGUE",
+          "VOICEOVER",
+          "AMBIENCE",
+          "BREATH",
+          "EFFECT"
+        ],
+        "title": "AudioKind",
+        "type": "string"
+      },
       "AuthorSpec": {
         "properties": {
           "affiliation": {
@@ -263,6 +399,42 @@
           "name"
         ],
         "title": "AuthorSpec",
+        "type": "object"
+      },
+      "AutoDraftRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "render_export": {
+            "default": true,
+            "title": "Render Export",
+            "type": "boolean"
+          }
+        },
+        "title": "AutoDraftRequest",
+        "type": "object"
+      },
+      "AutoDraftResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "export": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExportRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          }
+        },
+        "required": [
+          "project",
+          "export"
+        ],
+        "title": "AutoDraftResponse",
         "type": "object"
       },
       "CancelCancellingResponse": {
@@ -298,6 +470,45 @@
         "title": "CancelNoActiveGenerationResponse",
         "type": "object"
       },
+      "CapabilitySnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "native_audio": {
+            "title": "Native Audio",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "resolution": {
+            "title": "Resolution",
+            "type": "string"
+          },
+          "supports_asset_reference": {
+            "title": "Supports Asset Reference",
+            "type": "boolean"
+          },
+          "supports_frame_reference": {
+            "title": "Supports Frame Reference",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "resolution",
+          "native_audio",
+          "supports_frame_reference",
+          "supports_asset_reference"
+        ],
+        "title": "CapabilitySnapshot",
+        "type": "object"
+      },
       "CatalogDownloadStartResponse": {
         "properties": {
           "sessionId": {
@@ -314,6 +525,50 @@
           "sessionId"
         ],
         "title": "CatalogDownloadStartResponse",
+        "type": "object"
+      },
+      "CharacterProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "age": {
+            "title": "Age",
+            "type": "integer"
+          },
+          "appearance": {
+            "title": "Appearance",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "performance": {
+            "title": "Performance",
+            "type": "string"
+          },
+          "voice_identity": {
+            "title": "Voice Identity",
+            "type": "string"
+          },
+          "wardrobe": {
+            "title": "Wardrobe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "age",
+          "appearance",
+          "wardrobe",
+          "performance",
+          "voice_identity"
+        ],
+        "title": "CharacterProfile",
         "type": "object"
       },
       "CheckModelAccessRequest": {
@@ -412,6 +667,75 @@
           "downloaded"
         ],
         "title": "CheckpointDescriptor",
+        "type": "object"
+      },
+      "ContinuityState": {
+        "additionalProperties": false,
+        "properties": {
+          "action_in": {
+            "title": "Action In",
+            "type": "string"
+          },
+          "action_out": {
+            "title": "Action Out",
+            "type": "string"
+          },
+          "character_positions": {
+            "title": "Character Positions",
+            "type": "string"
+          },
+          "eyeline": {
+            "title": "Eyeline",
+            "type": "string"
+          },
+          "prop_state_in": {
+            "title": "Prop State In",
+            "type": "string"
+          },
+          "prop_state_out": {
+            "title": "Prop State Out",
+            "type": "string"
+          }
+        },
+        "required": [
+          "character_positions",
+          "eyeline",
+          "prop_state_in",
+          "prop_state_out",
+          "action_in",
+          "action_out"
+        ],
+        "title": "ContinuityState",
+        "type": "object"
+      },
+      "CreateProjectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "input_text": {
+            "minLength": 1,
+            "title": "Input Text",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "run_mode": {
+            "$ref": "#/components/schemas/RunMode",
+            "default": "AUTO_DRAFT"
+          },
+          "source_mode": {
+            "$ref": "#/components/schemas/SourceMode"
+          }
+        },
+        "required": [
+          "name",
+          "source_mode",
+          "input_text"
+        ],
+        "title": "CreateProjectRequest",
         "type": "object"
       },
       "DescribeCheckpointsRequest": {
@@ -741,6 +1065,184 @@
         "title": "EnhancePromptResponse",
         "type": "object"
       },
+      "EnqueueRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "behavior_by_candidate": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/MockBehavior"
+            },
+            "title": "Behavior By Candidate",
+            "type": "object"
+          },
+          "candidate_count": {
+            "default": 2,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationKind",
+            "default": "GENERATE"
+          },
+          "shot_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Ids"
+          }
+        },
+        "title": "EnqueueRequest",
+        "type": "object"
+      },
+      "ExecutionPlanEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "capability_snapshot": {
+            "$ref": "#/components/schemas/CapabilitySnapshot"
+          },
+          "fallback": {
+            "title": "Fallback",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "skipped_optional_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped Optional Steps",
+            "type": "array"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/ExecutionStrategy"
+          }
+        },
+        "required": [
+          "shot_id",
+          "strategy",
+          "rationale",
+          "skipped_optional_steps",
+          "provider",
+          "capability_snapshot",
+          "candidate_count",
+          "fallback"
+        ],
+        "title": "ExecutionPlanEntry",
+        "type": "object"
+      },
+      "ExecutionStrategy": {
+        "enum": [
+          "direct_audiovisual",
+          "image_guided",
+          "audio_driven",
+          "hybrid_repair"
+        ],
+        "title": "ExecutionStrategy",
+        "type": "string"
+      },
+      "ExportRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "ass_path": {
+            "title": "Ass Path",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "clean_video_path": {
+            "title": "Clean Video Path",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "manifest_path": {
+            "title": "Manifest Path",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "qa_report_path": {
+            "title": "Qa Report Path",
+            "type": "string"
+          },
+          "srt_path": {
+            "title": "Srt Path",
+            "type": "string"
+          },
+          "subtitled_video_path": {
+            "title": "Subtitled Video Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "manifest_id",
+          "clean_video_path",
+          "subtitled_video_path",
+          "srt_path",
+          "ass_path",
+          "manifest_path",
+          "qa_report_path",
+          "checks",
+          "created_at"
+        ],
+        "title": "ExportRecord",
+        "type": "object"
+      },
+      "ExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "rebuild_manifest": {
+            "default": true,
+            "title": "Rebuild Manifest",
+            "type": "boolean"
+          }
+        },
+        "title": "ExportRequest",
+        "type": "object"
+      },
       "ExtendRequest": {
         "properties": {
           "duration": {
@@ -783,6 +1285,14 @@
         ],
         "title": "ExtendRequest",
         "type": "object"
+      },
+      "Freshness": {
+        "enum": [
+          "CURRENT",
+          "STALE"
+        ],
+        "title": "Freshness",
+        "type": "string"
       },
       "GenerateImageCancelledResponse": {
         "properties": {
@@ -1150,6 +1660,169 @@
           "totalSteps"
         ],
         "title": "GenerationProgressResponse",
+        "type": "object"
+      },
+      "GenerationTask": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "candidate_index": {
+            "title": "Candidate Index",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_bible_version_id": {
+            "title": "Input Bible Version Id",
+            "type": "string"
+          },
+          "input_script_version_id": {
+            "title": "Input Script Version Id",
+            "type": "string"
+          },
+          "mock_behavior": {
+            "$ref": "#/components/schemas/MockBehavior"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationKind"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Task Id"
+          },
+          "request_fingerprint": {
+            "title": "Request Fingerprint",
+            "type": "string"
+          },
+          "requested_duration_seconds": {
+            "title": "Requested Duration Seconds",
+            "type": "number"
+          },
+          "retry_of_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Of Task Id"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "shot_id",
+          "operation",
+          "candidate_index",
+          "status",
+          "provider",
+          "model",
+          "request_fingerprint",
+          "input_script_version_id",
+          "input_bible_version_id",
+          "requested_duration_seconds",
+          "attempt",
+          "mock_behavior",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GenerationTask",
         "type": "object"
       },
       "GpuInfoResponse": {
@@ -2437,6 +3110,66 @@
         "title": "LicenseSpec",
         "type": "object"
       },
+      "LocalReworkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "behavior": {
+            "$ref": "#/components/schemas/MockBehavior",
+            "default": "SUCCESS"
+          },
+          "duration_delta_seconds": {
+            "default": 0.0,
+            "maximum": 4.0,
+            "minimum": -2.0,
+            "title": "Duration Delta Seconds",
+            "type": "number"
+          }
+        },
+        "title": "LocalReworkRequest",
+        "type": "object"
+      },
+      "LocationProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key_views": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Views",
+            "type": "array"
+          },
+          "layout": {
+            "title": "Layout",
+            "type": "string"
+          },
+          "lighting": {
+            "title": "Lighting",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "palette": {
+            "title": "Palette",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "layout",
+          "lighting",
+          "palette",
+          "key_views"
+        ],
+        "title": "LocationProfile",
+        "type": "object"
+      },
       "LoraCatalogItem": {
         "description": "Base catalog entry — used as-is for a plain LoRA.",
         "properties": {
@@ -3046,6 +3779,16 @@
         "title": "MediaSpec",
         "type": "object"
       },
+      "MockBehavior": {
+        "enum": [
+          "SUCCESS",
+          "FAIL_ONCE",
+          "SUBMIT_UNKNOWN",
+          "OUTPUT_MISSING"
+        ],
+        "title": "MockBehavior",
+        "type": "string"
+      },
       "ModelDeleteRequest": {
         "properties": {
           "cp_ids": {
@@ -3206,6 +3949,27 @@
         "title": "MpsMemoryResponse",
         "type": "object"
       },
+      "OperationKind": {
+        "enum": [
+          "GENERATE",
+          "RETAKE",
+          "EXTEND",
+          "GAP_FILL"
+        ],
+        "title": "OperationKind",
+        "type": "string"
+      },
+      "OriginType": {
+        "enum": [
+          "UPLOAD",
+          "LIBRARY_IMPORT",
+          "AI_GENERATED",
+          "AI_EDITED",
+          "FIXTURE"
+        ],
+        "title": "OriginType",
+        "type": "string"
+      },
       "OutpaintPads": {
         "description": "Per-edge pixels to add around the source video (extend-only, so all ≥ 0).\n\nThe +100% cap (each ≤ the source's axis size) needs the source dimensions, so it's enforced\nin `_outpaint_canvas`, not here.",
         "properties": {
@@ -3239,6 +4003,68 @@
         "title": "OutpaintPads",
         "type": "object"
       },
+      "OutputSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_bitrate_kbps": {
+            "default": 192,
+            "title": "Audio Bitrate Kbps",
+            "type": "integer"
+          },
+          "audio_codec": {
+            "default": "aac",
+            "title": "Audio Codec",
+            "type": "string"
+          },
+          "audio_sample_rate": {
+            "default": 48000,
+            "title": "Audio Sample Rate",
+            "type": "integer"
+          },
+          "color_space": {
+            "default": "bt709",
+            "title": "Color Space",
+            "type": "string"
+          },
+          "crf": {
+            "default": 18,
+            "title": "Crf",
+            "type": "integer"
+          },
+          "fps": {
+            "default": 30,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "height": {
+            "default": 1920,
+            "title": "Height",
+            "type": "integer"
+          },
+          "pixel_format": {
+            "default": "yuv420p",
+            "title": "Pixel Format",
+            "type": "string"
+          },
+          "profile": {
+            "default": "high",
+            "title": "Profile",
+            "type": "string"
+          },
+          "video_codec": {
+            "default": "h264",
+            "title": "Video Codec",
+            "type": "string"
+          },
+          "width": {
+            "default": 1080,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "title": "OutputSpec",
+        "type": "object"
+      },
       "PreprocessingStep": {
         "properties": {
           "params": {
@@ -3258,6 +4084,362 @@
         ],
         "title": "PreprocessingStep",
         "type": "object"
+      },
+      "ProgressSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "export_ready": {
+            "title": "Export Ready",
+            "type": "boolean"
+          },
+          "failed_tasks": {
+            "title": "Failed Tasks",
+            "type": "integer"
+          },
+          "manifest_ready": {
+            "title": "Manifest Ready",
+            "type": "boolean"
+          },
+          "passed_takes": {
+            "title": "Passed Takes",
+            "type": "integer"
+          },
+          "shots_with_selected_take": {
+            "title": "Shots With Selected Take",
+            "type": "integer"
+          },
+          "stale_takes": {
+            "title": "Stale Takes",
+            "type": "integer"
+          },
+          "terminal_tasks": {
+            "title": "Terminal Tasks",
+            "type": "integer"
+          },
+          "total_shots": {
+            "title": "Total Shots",
+            "type": "integer"
+          },
+          "total_tasks": {
+            "title": "Total Tasks",
+            "type": "integer"
+          },
+          "unresolved_tasks": {
+            "title": "Unresolved Tasks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_shots",
+          "shots_with_selected_take",
+          "total_tasks",
+          "terminal_tasks",
+          "failed_tasks",
+          "unresolved_tasks",
+          "passed_takes",
+          "stale_takes",
+          "manifest_ready",
+          "export_ready"
+        ],
+        "title": "ProgressSummary",
+        "type": "object"
+      },
+      "ProjectAggregate": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/ProjectDocument"
+          },
+          "exports": {
+            "items": {
+              "$ref": "#/components/schemas/ExportRecord"
+            },
+            "title": "Exports",
+            "type": "array"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/ProgressSummary"
+          },
+          "takes": {
+            "items": {
+              "$ref": "#/components/schemas/Take"
+            },
+            "title": "Takes",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/GenerationTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document",
+          "tasks",
+          "takes",
+          "exports",
+          "progress"
+        ],
+        "title": "ProjectAggregate",
+        "type": "object"
+      },
+      "ProjectBibleVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_status": {
+            "$ref": "#/components/schemas/ApprovalStatus"
+          },
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterProfile"
+            },
+            "title": "Characters",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/LocationProfile"
+            },
+            "title": "Locations",
+            "type": "array"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "props": {
+            "items": {
+              "$ref": "#/components/schemas/PropProfile"
+            },
+            "title": "Props",
+            "type": "array"
+          },
+          "style": {
+            "$ref": "#/components/schemas/StyleProfile"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "version",
+          "characters",
+          "locations",
+          "props",
+          "style",
+          "approval_status",
+          "freshness",
+          "created_at"
+        ],
+        "title": "ProjectBibleVersion",
+        "type": "object"
+      },
+      "ProjectDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "bible_versions": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectBibleVersion"
+            },
+            "title": "Bible Versions",
+            "type": "array"
+          },
+          "execution_plan": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionPlanEntry"
+            },
+            "title": "Execution Plan",
+            "type": "array"
+          },
+          "manifests": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineManifest"
+            },
+            "title": "Manifests",
+            "type": "array"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectRecord"
+          },
+          "reference_plan": {
+            "items": {
+              "$ref": "#/components/schemas/ReferencePlanEntry"
+            },
+            "title": "Reference Plan",
+            "type": "array"
+          },
+          "script_versions": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptVersion"
+            },
+            "title": "Script Versions",
+            "type": "array"
+          },
+          "shots": {
+            "items": {
+              "$ref": "#/components/schemas/ShotPlan"
+            },
+            "title": "Shots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project",
+          "script_versions",
+          "bible_versions",
+          "assets",
+          "shots",
+          "execution_plan",
+          "reference_plan",
+          "manifests"
+        ],
+        "title": "ProjectDocument",
+        "type": "object"
+      },
+      "ProjectListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRecord"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "title": "ProjectListResponse",
+        "type": "object"
+      },
+      "ProjectRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "aspect_ratio": {
+            "default": "9:16",
+            "title": "Aspect Ratio",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_bible_version_id": {
+            "title": "Current Bible Version Id",
+            "type": "string"
+          },
+          "current_manifest_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Manifest Id"
+          },
+          "current_script_version_id": {
+            "title": "Current Script Version Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_text": {
+            "title": "Input Text",
+            "type": "string"
+          },
+          "language": {
+            "default": "zh-CN",
+            "title": "Language",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "run_mode": {
+            "$ref": "#/components/schemas/RunMode"
+          },
+          "source_mode": {
+            "$ref": "#/components/schemas/SourceMode"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/ProjectStage"
+          },
+          "target_duration_seconds": {
+            "default": 50.0,
+            "title": "Target Duration Seconds",
+            "type": "number"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source_mode",
+          "run_mode",
+          "input_text",
+          "stage",
+          "current_script_version_id",
+          "current_bible_version_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProjectRecord",
+        "type": "object"
+      },
+      "ProjectStage": {
+        "enum": [
+          "INPUT",
+          "PLANNED",
+          "GENERATING",
+          "REVIEW",
+          "TIMELINE_READY",
+          "EXPORTED"
+        ],
+        "title": "ProjectStage",
+        "type": "string"
       },
       "PromptTemplatePlaceholder": {
         "properties": {
@@ -3298,6 +4480,220 @@
           "template"
         ],
         "title": "PromptTemplateSpec",
+        "type": "object"
+      },
+      "PropProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "appearance": {
+            "title": "Appearance",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "states": {
+            "items": {
+              "$ref": "#/components/schemas/PropState"
+            },
+            "title": "States",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "appearance",
+          "states"
+        ],
+        "title": "PropProfile",
+        "type": "object"
+      },
+      "PropState": {
+        "additionalProperties": false,
+        "properties": {
+          "holder": {
+            "title": "Holder",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "holder",
+          "location"
+        ],
+        "title": "PropState",
+        "type": "object"
+      },
+      "QAReport": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "hard_gate_passed": {
+            "title": "Hard Gate Passed",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/QaIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "score": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "status": {
+            "$ref": "#/components/schemas/QaStatus"
+          },
+          "take_id": {
+            "title": "Take Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "take_id",
+          "status",
+          "hard_gate_passed",
+          "score",
+          "issues",
+          "checks",
+          "created_at"
+        ],
+        "title": "QAReport",
+        "type": "object"
+      },
+      "QaIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "repair_layer": {
+            "title": "Repair Layer",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message",
+          "repair_layer"
+        ],
+        "title": "QaIssue",
+        "type": "object"
+      },
+      "QaStatus": {
+        "enum": [
+          "PENDING",
+          "PASSED",
+          "REJECTED"
+        ],
+        "title": "QaStatus",
+        "type": "string"
+      },
+      "ReferenceBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "requirement": {
+            "title": "Requirement",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_id",
+          "purpose",
+          "requirement"
+        ],
+        "title": "ReferenceBinding",
+        "type": "object"
+      },
+      "ReferencePlanEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceBinding"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "capability_valid": {
+            "title": "Capability Valid",
+            "type": "boolean"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "validation_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Validation Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shot_id",
+          "bindings",
+          "capability_valid",
+          "validation_notes"
+        ],
+        "title": "ReferencePlanEntry",
         "type": "object"
       },
       "RetakeCancelledResponse": {
@@ -3401,6 +4797,46 @@
         "title": "RetakeVideoResponse",
         "type": "object"
       },
+      "ReviseScriptLineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change_reason": {
+            "minLength": 1,
+            "title": "Change Reason",
+            "type": "string"
+          },
+          "line_id": {
+            "title": "Line Id",
+            "type": "string"
+          },
+          "spoken_text": {
+            "minLength": 1,
+            "title": "Spoken Text",
+            "type": "string"
+          },
+          "subtitle_text": {
+            "minLength": 1,
+            "title": "Subtitle Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line_id",
+          "spoken_text",
+          "subtitle_text",
+          "change_reason"
+        ],
+        "title": "ReviseScriptLineRequest",
+        "type": "object"
+      },
+      "RunMode": {
+        "enum": [
+          "AUTO_DRAFT",
+          "GUIDED"
+        ],
+        "title": "RunMode",
+        "type": "string"
+      },
       "RuntimePolicyResponse": {
         "properties": {
           "force_api_generations": {
@@ -3412,6 +4848,138 @@
           "force_api_generations"
         ],
         "title": "RuntimePolicyResponse",
+        "type": "object"
+      },
+      "ScriptLine": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_kind": {
+            "$ref": "#/components/schemas/AudioKind"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "original_text": {
+            "title": "Original Text",
+            "type": "string"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "spoken_text": {
+            "title": "Spoken Text",
+            "type": "string"
+          },
+          "subtitle_text": {
+            "title": "Subtitle Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "speaker",
+          "original_text",
+          "spoken_text",
+          "subtitle_text",
+          "audio_kind"
+        ],
+        "title": "ScriptLine",
+        "type": "object"
+      },
+      "ScriptVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_status": {
+            "$ref": "#/components/schemas/ApprovalStatus"
+          },
+          "change_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Reason"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "original_text": {
+            "title": "Original Text",
+            "type": "string"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source_mode": {
+            "$ref": "#/components/schemas/SourceMode"
+          },
+          "spoken_text": {
+            "title": "Spoken Text",
+            "type": "string"
+          },
+          "structured_scenes": {
+            "items": {
+              "$ref": "#/components/schemas/StructuredScene"
+            },
+            "title": "Structured Scenes",
+            "type": "array"
+          },
+          "subtitle_text": {
+            "title": "Subtitle Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "version",
+          "source_mode",
+          "original_text",
+          "spoken_text",
+          "subtitle_text",
+          "lines",
+          "structured_scenes",
+          "approval_status",
+          "freshness",
+          "created_at"
+        ],
+        "title": "ScriptVersion",
         "type": "object"
       },
       "SetActiveLtxModelRequest": {
@@ -3537,6 +5105,122 @@
         "title": "SettingsResponse",
         "type": "object"
       },
+      "ShotPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_status": {
+            "$ref": "#/components/schemas/ApprovalStatus"
+          },
+          "audio_intent": {
+            "title": "Audio Intent",
+            "type": "string"
+          },
+          "camera": {
+            "title": "Camera",
+            "type": "string"
+          },
+          "continuity": {
+            "$ref": "#/components/schemas/ContinuityState"
+          },
+          "dialogue_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dialogue Line Ids",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "framing": {
+            "title": "Framing",
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "local_rework_risk": {
+            "title": "Local Rework Risk",
+            "type": "string"
+          },
+          "merge_candidate": {
+            "title": "Merge Candidate",
+            "type": "boolean"
+          },
+          "narrative_purpose": {
+            "title": "Narrative Purpose",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "transition_out": {
+            "title": "Transition Out",
+            "type": "string"
+          },
+          "visual": {
+            "title": "Visual",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "sequence",
+          "duration_seconds",
+          "narrative_purpose",
+          "visual",
+          "framing",
+          "camera",
+          "audio_intent",
+          "dialogue_line_ids",
+          "continuity",
+          "transition_out",
+          "merge_candidate",
+          "local_rework_risk",
+          "approval_status",
+          "freshness"
+        ],
+        "title": "ShotPlan",
+        "type": "object"
+      },
+      "SourceMode": {
+        "enum": [
+          "IDEA_EXPANSION",
+          "SCRIPT_LOCKED"
+        ],
+        "title": "SourceMode",
+        "type": "string"
+      },
+      "StatusMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "StatusMessage",
+        "type": "object"
+      },
       "StatusResponse": {
         "properties": {
           "status": {
@@ -3548,6 +5232,119 @@
           "status"
         ],
         "title": "StatusResponse",
+        "type": "object"
+      },
+      "StructuredScene": {
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Line Ids",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "heading",
+          "summary",
+          "line_ids"
+        ],
+        "title": "StructuredScene",
+        "type": "object"
+      },
+      "StyleProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "cinematography": {
+            "title": "Cinematography",
+            "type": "string"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "forbidden": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden",
+            "type": "array"
+          },
+          "genre": {
+            "title": "Genre",
+            "type": "string"
+          },
+          "medium": {
+            "title": "Medium",
+            "type": "string"
+          },
+          "texture": {
+            "title": "Texture",
+            "type": "string"
+          }
+        },
+        "required": [
+          "medium",
+          "genre",
+          "cinematography",
+          "color",
+          "texture",
+          "forbidden"
+        ],
+        "title": "StyleProfile",
+        "type": "object"
+      },
+      "SubtitleCue": {
+        "additionalProperties": false,
+        "properties": {
+          "end_seconds": {
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "script_line_id": {
+            "title": "Script Line Id",
+            "type": "string"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "start_seconds": {
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "script_line_id",
+          "start_seconds",
+          "end_seconds",
+          "text",
+          "speaker"
+        ],
+        "title": "SubtitleCue",
         "type": "object"
       },
       "SuggestGapPromptRequest": {
@@ -3633,6 +5430,103 @@
         "title": "SuggestGapPromptResponse",
         "type": "object"
       },
+      "Take": {
+        "additionalProperties": false,
+        "properties": {
+          "availability": {
+            "$ref": "#/components/schemas/TakeAvailability"
+          },
+          "candidate_index": {
+            "title": "Candidate Index",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_selected": {
+            "title": "Is Selected",
+            "type": "boolean"
+          },
+          "media_path": {
+            "title": "Media Path",
+            "type": "string"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/OperationKind"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "qa_report": {
+            "$ref": "#/components/schemas/QAReport"
+          },
+          "qa_status": {
+            "$ref": "#/components/schemas/QaStatus"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "thumbnail_path": {
+            "title": "Thumbnail Path",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "shot_id",
+          "task_id",
+          "candidate_index",
+          "operation",
+          "media_path",
+          "thumbnail_path",
+          "duration_seconds",
+          "width",
+          "height",
+          "availability",
+          "qa_status",
+          "is_selected",
+          "freshness",
+          "qa_report",
+          "created_at"
+        ],
+        "title": "Take",
+        "type": "object"
+      },
+      "TakeAvailability": {
+        "enum": [
+          "AVAILABLE",
+          "MISSING"
+        ],
+        "title": "TakeAvailability",
+        "type": "string"
+      },
       "TargetResolution": {
         "description": "Desired output resolution for a local generation. The backend corrects it to the\nnearest valid size (snapped down to a multiple of 32, never above the source).",
         "properties": {
@@ -3652,6 +5546,62 @@
           "height"
         ],
         "title": "TargetResolution",
+        "type": "object"
+      },
+      "TaskActionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "task": {
+            "$ref": "#/components/schemas/GenerationTask"
+          }
+        },
+        "required": [
+          "task",
+          "project"
+        ],
+        "title": "TaskActionResponse",
+        "type": "object"
+      },
+      "TaskStatus": {
+        "enum": [
+          "QUEUED",
+          "SUBMITTING",
+          "ACKNOWLEDGED",
+          "RUNNING",
+          "SUCCEEDED",
+          "FAILED",
+          "CANCELLED",
+          "SUBMIT_UNKNOWN",
+          "OUTPUT_MISSING"
+        ],
+        "title": "TaskStatus",
+        "type": "string"
+      },
+      "TechnicalCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "passed",
+          "detail"
+        ],
+        "title": "TechnicalCheck",
         "type": "object"
       },
       "TextEncoderRecommendationResponse": {
@@ -3694,6 +5644,233 @@
           "expected_size_gb"
         ],
         "title": "TextEncoderRecommendationResponse",
+        "type": "object"
+      },
+      "TimelineAudioClip": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "gain_db": {
+            "title": "Gain Db",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "media_path": {
+            "title": "Media Path",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "start_seconds": {
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "take_id": {
+            "title": "Take Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "shot_id",
+          "take_id",
+          "media_path",
+          "start_seconds",
+          "duration_seconds",
+          "gain_db",
+          "role"
+        ],
+        "title": "TimelineAudioClip",
+        "type": "object"
+      },
+      "TimelineManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_status": {
+            "$ref": "#/components/schemas/ApprovalStatus"
+          },
+          "audio_clips": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineAudioClip"
+            },
+            "title": "Audio Clips",
+            "type": "array"
+          },
+          "bible_version_id": {
+            "title": "Bible Version Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "output_spec": {
+            "$ref": "#/components/schemas/OutputSpec"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "script_version_id": {
+            "title": "Script Version Id",
+            "type": "string"
+          },
+          "subtitle_cues": {
+            "items": {
+              "$ref": "#/components/schemas/SubtitleCue"
+            },
+            "title": "Subtitle Cues",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "video_clips": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineVideoClip"
+            },
+            "title": "Video Clips",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "version",
+          "script_version_id",
+          "bible_version_id",
+          "video_clips",
+          "audio_clips",
+          "subtitle_cues",
+          "output_spec",
+          "duration_seconds",
+          "approval_status",
+          "freshness",
+          "created_at"
+        ],
+        "title": "TimelineManifest",
+        "type": "object"
+      },
+      "TimelineVideoClip": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "media_path": {
+            "title": "Media Path",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "source_in_seconds": {
+            "title": "Source In Seconds",
+            "type": "number"
+          },
+          "start_seconds": {
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "take_id": {
+            "title": "Take Id",
+            "type": "string"
+          },
+          "transition_in": {
+            "title": "Transition In",
+            "type": "string"
+          },
+          "transition_out": {
+            "title": "Transition Out",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "shot_id",
+          "take_id",
+          "media_path",
+          "start_seconds",
+          "source_in_seconds",
+          "duration_seconds",
+          "transition_in",
+          "transition_out"
+        ],
+        "title": "TimelineVideoClip",
+        "type": "object"
+      },
+      "WorkerDrainRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "max_steps": {
+            "default": 500,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "WorkerDrainRequest",
+        "type": "object"
+      },
+      "WorkerDrainResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "processed_steps": {
+            "title": "Processed Steps",
+            "type": "integer"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "remaining_runnable": {
+            "title": "Remaining Runnable",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "processed_steps",
+          "remaining_runnable",
+          "project"
+        ],
+        "title": "WorkerDrainResponse",
         "type": "object"
       }
     }
@@ -5583,6 +7760,1115 @@
         "summary": "Route Post Settings",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/api/short-drama/fixtures/dont-trust-me": {
+      "post": {
+        "operationId": "initialize_dont_trust_me_fixture_api_short_drama_fixtures_dont_trust_me_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Initialize Dont Trust Me Fixture",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects": {
+      "get": {
+        "operationId": "list_projects_api_short_drama_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "post": {
+        "operationId": "create_project_api_short_drama_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Project",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}": {
+      "delete": {
+        "operationId": "delete_project_api_short_drama_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusMessage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Delete Project",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "get": {
+        "operationId": "get_project_api_short_drama_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/auto-draft": {
+      "post": {
+        "operationId": "auto_draft_api_short_drama_projects__project_id__auto_draft_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Auto Draft",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/enqueue": {
+      "post": {
+        "operationId": "enqueue_generation_api_short_drama_projects__project_id__enqueue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnqueueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Enqueue Generation",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/export": {
+      "post": {
+        "operationId": "export_project_api_short_drama_projects__project_id__export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Export Project",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/manifest/rebuild": {
+      "post": {
+        "operationId": "rebuild_manifest_api_short_drama_projects__project_id__manifest_rebuild_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineManifest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Rebuild Manifest",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/script/revise-line": {
+      "post": {
+        "operationId": "revise_script_line_api_short_drama_projects__project_id__script_revise_line_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseScriptLineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Revise Script Line",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/extend": {
+      "post": {
+        "operationId": "enqueue_extend_api_short_drama_projects__project_id__shots__shot_id__extend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalReworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Enqueue Extend",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/gap-fill": {
+      "post": {
+        "operationId": "enqueue_gap_fill_api_short_drama_projects__project_id__shots__shot_id__gap_fill_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalReworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Enqueue Gap Fill",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/retake": {
+      "post": {
+        "operationId": "enqueue_retake_api_short_drama_projects__project_id__shots__shot_id__retake_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalReworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Enqueue Retake",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/takes/{take_id}/select": {
+      "post": {
+        "operationId": "select_take_api_short_drama_takes__take_id__select_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "take_id",
+            "required": true,
+            "schema": {
+              "title": "Take Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Select Take",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/tasks/{task_id}/advance": {
+      "post": {
+        "operationId": "advance_task_api_short_drama_tasks__task_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Advance Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/tasks/{task_id}/cancel": {
+      "post": {
+        "operationId": "cancel_task_api_short_drama_tasks__task_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Cancel Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/tasks/{task_id}/reconcile": {
+      "post": {
+        "operationId": "reconcile_task_api_short_drama_tasks__task_id__reconcile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Reconcile Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/tasks/{task_id}/recover-output": {
+      "post": {
+        "operationId": "recover_task_output_api_short_drama_tasks__task_id__recover_output_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Recover Task Output",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/tasks/{task_id}/retry": {
+      "post": {
+        "operationId": "retry_task_api_short_drama_tasks__task_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Retry Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/worker/drain": {
+      "post": {
+        "operationId": "drain_worker_api_short_drama_worker_drain_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerDrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerDrainResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Drain Worker",
+        "tags": [
+          "short-drama"
         ]
       }
     },

@@ -95,6 +95,11 @@
 | I004 | `LOCKED` | 六层验证：单元测试覆盖状态机、失效、版本、时间码、字幕、Prompt/路线和 Manifest；临时 SQLite 加真实 Worker 的集成测试覆盖成功、取消、重试、重启、SUBMIT_UNKNOWN、OUTPUT_MISSING、换 Take 与局部失效；固定 fixture 加 Mock Provider 的桌面 E2E 走完整八镜并中途重启；ffprobe/FFmpeg 检查交付规格及预览/Manifest/导出一致性，黑帧/冻帧/静音仅作诊断；离线 fixture 做 Provider 合约测试，各启用模式做最小真实冒烟；最终质量严格执行 E007。每次提交跑快速测试，阶段出口跑完整 Mock E2E 和媒体检查，真实 Provider/盲评独立运行；上游基线问题与新增回归分开记录 | I002、I003 |
 | I005 | `LOCKED` | 产品、架构、技术设计、实验方案与实施计划按普通工程方式持续维护；Git 自然保留历史，不设置额外冻结层级、文档 SHA 锁定、审批门或证据链。只清楚标记已确认决定和待实验结论，实验完成后直接更新相应文档与实现 | 全部前置项 |
 
+## 实施证据
+
+- 2026-08-14：I001–I004 的供应商中立 Mock 部分已落地并通过 Phase 1 验收。SQLite/API、持久化任务与恢复、16 个 Take、局部失效、Retake/Extend/Gap Fill、50 秒 TimelineManifest、带/无字幕导出和桌面交互闭环均已验证；详见 [Phase 1 实施记录](10-phase1-mock-vertical-slice.md)。
+- 这项结果关闭的是工程 Mock 门，不改变 M002–M004、M006、M008、M010 和 E008 的 `EXPERIMENT_REQUIRED` 状态；它们仍必须由真实 H3/GPT Image/音频样本决定。
+
 ## 对话顺序
 
 从 `P001` 开始，严格按依赖推进。可以并行确认的相邻小项仍逐项记录；必须实测的事项先锁定实验和判定规则，运行实验后再把状态改为 `LOCKED`。

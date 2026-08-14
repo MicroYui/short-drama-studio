@@ -299,7 +299,7 @@ export async function startPythonBackend(): Promise<void> {
   startPromise = new Promise((resolve, reject) => {
     const pythonPath = getPythonPath()
     const backendPath = getBackendPath()
-    const mainPy = path.join(backendPath, 'ltx2_server.py')
+    const mainPy = path.join(backendPath, 'short_drama_server.py')
 
     logger.info(`Starting Python backend: ${pythonPath} ${mainPy}`)
 

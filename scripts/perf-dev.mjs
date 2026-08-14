@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const BACKEND_DIR = path.join(ROOT, 'backend')
 const PERF_DIR = path.join(BACKEND_DIR, 'performance_runner')
-const APP_FOLDER_NAME = 'LTXDesktop' // must match electron/app-paths.ts
+const APP_FOLDER_NAME = 'ShortDramaStudio' // must match electron/app-paths.ts
 const PORT = process.env.LTX_PORT || '41954'
 const TOKEN = crypto.randomBytes(32).toString('base64url')
 
@@ -74,7 +74,7 @@ console.log('  Ctrl+C to stop both.\n')
 let dashboard = null
 let backendReady = false
 
-const [bcmd, bargs] = runPy('ltx2_server.py')
+const [bcmd, bargs] = runPy('short_drama_server.py')
 const backend = spawn(bcmd, bargs, {
   cwd: BACKEND_DIR,
   env: {

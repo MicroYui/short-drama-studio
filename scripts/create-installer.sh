@@ -118,19 +118,19 @@ if [ "$UNPACK" = true ]; then
     mac)
       echo ""
       echo "Unpacked app ready!"
-      echo "Run: open \"$RELEASE_DIR/mac-arm64/LTX Desktop.app\""
+      echo "Run: open \"$RELEASE_DIR/mac-arm64/Short Drama Studio.app\""
       ;;
     win)
       echo ""
       echo "Unpacked app ready!"
-      echo "Run: $RELEASE_DIR/win-unpacked/LTX Desktop.exe"
+      echo "Run: $RELEASE_DIR/win-unpacked/Short Drama Studio.exe"
       ;;
     linux)
       echo ""
       echo "Unpacked app ready!"
       LINUX_UNPACKED="$RELEASE_DIR/linux-unpacked"
       [ -d "$RELEASE_DIR/linux-arm64-unpacked" ] && LINUX_UNPACKED="$RELEASE_DIR/linux-arm64-unpacked"
-      echo "Run: $LINUX_UNPACKED/ltx-desktop"
+      echo "Run: $LINUX_UNPACKED/short-drama-studio"
       ;;
   esac
 else
@@ -140,4 +140,4 @@ else
 fi
 
 echo ""
-echo "Note: AI models (~150GB) will be downloaded on first run."
+echo "Note: Phase 1 uses local Mock media and does not download AI model weights."

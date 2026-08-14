@@ -1,14 +1,12 @@
 {
-  "name": "ltx-desktop",
-  "version": "1.1.0",
-  "description": "LTX-2 Video Generation - Desktop App",
+  "name": "short-drama-studio",
+  "version": "0.1.0",
+  "description": "Provider-neutral AI short-drama production desktop app",
   "type": "module",
   "main": "dist-electron/main.js",
   "author": {
-    "name": "Lightricks",
-    "email": "ltx-desktop-dev@lightricks.com"
+    "name": "Short Drama Studio contributors"
   },
-  "homepage": "https://github.com/Lightricks/LTX-Desktop",
   "license": "Apache-2.0",
   "private": true,
   "packageManager": "pnpm@10.30.3",
@@ -31,8 +29,8 @@
     "build:fast": "node scripts/run-script.js scripts/local-build --unpack --skip-python",
     "prepare:python": "node scripts/run-script.js scripts/prepare-python",
     "build:frontend": "vite build",
-    "start:unpacked:mac": "open release/mac-arm64/LTX\\ Desktop.app",
-    "start:unpacked:win": "powershell -Command \"& '.\\release\\win-unpacked\\LTX Desktop.exe'\""
+    "start:unpacked:mac": "open release/mac-arm64/Short\\ Drama\\ Studio.app",
+    "start:unpacked:win": "powershell -Command \"& '.\\release\\win-unpacked\\Short Drama Studio.exe'\""
   },
   "dependencies": {
     "class-variance-authority": "^0.7.0",

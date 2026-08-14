@@ -223,14 +223,16 @@ Mock 阶段直接实现当前完整闭环所需的 schema、模块边界、API �
 
 ## 4. 进入真实质量实验前的工程验收门
 
-当前架构与实验协议已经确认。真实 Provider 实验开始前，需要：
+当前架构与实验协议已经确认。前五项已由 Phase 0/Phase 1 验证；H3 Adapter 与最小真实冒烟是进入扩大质量实验前的剩余工程门：
 
 - LTX Desktop 上游构建、测试和桌面打包基线可复现；
 - SQLite/API、持久化 Worker 和固定《别相信我》fixture 完成；
 - Mock 垂直切片通过排队、取消、重试、重启、对账、Take、局部返工、时间线和导出测试；
 - 预览、TimelineManifest 与最终导出的音画结果一致；
 - LTX Desktop 应用代码与未采用的 LTX 模型权重保持清晰分离；
-- H3 Adapter 完成 capability 校验、任务恢复、用量记录和最小真实冒烟。
+- H3 Adapter 完成 capability 校验、任务恢复、用量记录和最小真实冒烟（待下一阶段完成）。
+
+Mock 工程门的实现和验证证据见 [Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)。
 
 没有合理质量或控制增益预期的资源不需要为了凑栈测试；有正向预期的资源可以主动进入基准。闭源平台不需要账号实测结果。
 

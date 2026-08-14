@@ -28,6 +28,7 @@ from _routes.retake import router as retake_router
 from _routes.extend import router as extend_router
 from _routes.runtime_policy import router as runtime_policy_router
 from _routes.settings import router as settings_router
+from _routes.short_drama import router as short_drama_router
 from api_types import HTTPErrorResponse
 from logging_policy import log_http_error, log_unhandled_exception
 from state import init_state_service
@@ -167,5 +168,6 @@ def create_app(
     app.include_router(prompt_enhancement_router)
     app.include_router(runtime_policy_router)
     app.include_router(hf_auth_router)
+    app.include_router(short_drama_router)
 
     return app

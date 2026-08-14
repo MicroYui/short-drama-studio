@@ -47,6 +47,8 @@ from services.interfaces import (
 )
 from services.lora_catalog import LoraCatalogProvider
 from services.prompt_enhancer_pipeline.gemini_prompt_enhancer_pipeline import GeminiPromptEnhancerPipeline
+from short_drama import ShortDramaService
+from short_drama.deps import init_short_drama_service
 from state.app_state_types import AppState, TextEncoderState
 
 
@@ -249,6 +251,12 @@ class AppHandler:
             gemini_pipeline=GeminiPromptEnhancerPipeline(http),
             config=config,
         )
+
+        self.short_drama = ShortDramaService(
+            database_path=config.app_data_dir / "short-drama.sqlite3",
+            workspace_root=config.outputs_dir / "short-drama-projects",
+        )
+        init_short_drama_service(self.short_drama)
 
         self.downloads.cleanup_downloading_dir()
 

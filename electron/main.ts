@@ -10,15 +10,13 @@ import { registerVideoProcessingHandlers } from './ipc/video-processing-handlers
 import { logger } from './logger'
 import { initSessionLog } from './logging-management'
 import { stopPythonBackend } from './python-backend'
-import { initAutoUpdater } from './updater'
 import { createWindow, getMainWindow } from './window'
-import { sendAnalyticsEvent } from './analytics'
 
 function logAppVersion(): void {
   if (!app.isPackaged) {
-    logger.info('[LTX Desktop] Running in development mode')
+    logger.info('[Short Drama Studio] Running in development mode')
   } else {
-    logger.info(`[LTX Desktop] Version ${app.getVersion()}`)
+    logger.info(`[Short Drama Studio] Version ${app.getVersion()}`)
   }
 }
 
@@ -56,11 +54,7 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     setupCSP()
     createWindow()
-    initAutoUpdater()
     // Python setup + backend start are now driven by the renderer via IPC
-
-    // Fire analytics event (no-op if user hasn't opted in)
-    void sendAnalyticsEvent('ltxdesktop_app_launched')
   })
 
   app.on('window-all-closed', () => {

@@ -32,12 +32,13 @@ export function createWindow(): BrowserWindow {
     },
     backgroundColor: '#1a1a1a',
     titleBarStyle: 'default',
+    title: 'Short Drama Studio',
     show: false,
   })
 
   // Load the app
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173')
     // DevTools can be opened manually with Ctrl+Shift+I or F12
   } else {
     mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'))
