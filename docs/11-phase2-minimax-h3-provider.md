@@ -111,12 +111,14 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 - 保存、清除和验证 MiniMax API Key；响应永不返回 Key；环境变量优先于本地配置；
 - 镜头 1/2/5/8 的 Direct、首帧、首尾帧与 Reference 四路线证据矩阵；
 - Direct、首帧、首尾帧、Reference 路线选择；
-- 本地文件、公网 URL 与已有 MiniMax file ID 输入；
+- 本地文件、公网 URL 与已有 MiniMax file ID 输入；Reference 可动态加入最多 9 图、3 视频、3 音频，并在混合总数 12 的上限内预检；
+- 显式区分 `CONTRACT_SMOKE` 与 `QUALITY_PROBE`，临时素材的合同冒烟不会冒充质量结论；
+- 未显式选择时默认为 `CONTRACT_SMOKE`；证据矩阵以 `Q/C` 区分质量与合同证据，并优先展示质量证据；
 - 免费请求预览与真实 768P 提交；
 - 自动轮询、手动推进、取消、保留历史重试、输出恢复；
 - `SUBMIT_UNKNOWN` 最近任务读取与显式对账；
 - Provider run、远端 ID、状态、错误和费用展示；
-- 真实视频播放、技术门槛、人工审片和 Take 选择。
+- 真实视频播放、技术门槛、人工审片和 Take 选择；`CONTRACT_SMOKE` Take 可审片记录但不能选入正式时间线。
 
 平台仍不增加登录、权限、团队、多租户或发布模块。
 
@@ -127,6 +129,7 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 - V2 URL、Bearer header、固定 `MiniMax-H3/768P/9:16` 请求体；
 - multipart 上传的 `video_generation_input` purpose；
 - Direct/Frame/Reference 编译和非法组合联网前拒绝；
+- Reference 混合多素材、9 图/3 视频/3 音频分项上限和 12 个总上限；
 - 本地上传缓存；
 - queued/running/succeeded、远端取消和 running 不可取消；
 - `SUBMIT_UNKNOWN` 不重复提交、显式对账；
@@ -134,6 +137,7 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 - `OUTPUT_MISSING` 重新查询和下载；
 - 768P 级真实 FFmpeg 媒体摄取、费用计算、人工审片与 Take 入选；
 - 配置 API 不泄露 Key；
+- 合同冒烟与质量探针的时间线选择边界；
 - Mock 队列与 H3 队列隔离；
 - Phase 1 八镜 Mock 闭环回归。
 
@@ -142,6 +146,7 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 - 后端整库 `580/580` 通过；其中短剧/H3 定向回归 `13/13` 通过；
 - TypeScript `tsc --noEmit` 通过，Python Pyright 为 `0 errors / 0 warnings`；
 - OpenAPI JSON 与 TypeScript 类型连续生成结果一致；
+- 使用本仓库的实际候选素材完成 6 组无网络请求预编译：镜头 2 Direct、镜头 1/5/8 首帧、镜头 1/5 多图 Reference；全部为 `MiniMax-H3/768P`，Frame 使用自适应画幅，Direct/Reference 为 `9:16`；
 - Vite renderer、Electron main/preload 和 unpacked macOS 应用构建通过；
 - 最终 `.app` 通过 `codesign --verify --deep --strict`；398MB arm64 ZIP 及 blockmap 生成成功，ZIP 完整性检查通过；
 - electron-builder 的 DMG 步骤两次在 macOS 临时卷卸载处报告 `disk4 资源忙`，发生在应用签名与 ZIP 已成功之后，属于本机打包环境问题，不影响当前可运行 `.app`、ZIP 或 H3 代码验收；
@@ -151,11 +156,11 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 
 | 镜头 | 风险覆盖 | 首批请求 | 当前证据 |
 | --- | --- | --- | --- |
-| 1 | 空间建立、雨夜、推镜 | Direct 5s；批准便利店首帧后 F1 | `UNKNOWN / NOT_RUN` |
+| 1 | 空间建立、雨夜、推镜 | Direct 5s；临时便利店首帧做合同冒烟；批准首帧后做 F1 质量探针 | `UNKNOWN / NOT_RUN` |
 | 2 | 林夏正脸、8s 锁定中文台词、轻推 | Direct；角色/场景 Reference；批准首帧 F1 | `UNKNOWN / NOT_RUN` |
-| 5 | 手部、红色录音笔、人物闭嘴、画外音 | Direct；道具/角色 Reference；首尾帧 F2 | `UNKNOWN / NOT_RUN` |
-| 8 | 左手拿道具、转身、推门、动作接续 | Direct；上一镜批准尾帧或连续性首帧 F1；必要时 F2 | `UNKNOWN / NOT_RUN` |
+| 5 | 手部、红色录音笔、人物闭嘴、画外音 | Direct；临时录音设备图做合同冒烟；批准道具/角色 Reference 与首尾帧 F2 | `UNKNOWN / NOT_RUN` |
+| 8 | 左手拿道具、转身、推门、动作接续 | Direct；临时便利店图做合同冒烟；上一镜批准尾帧或连续性首帧 F1；必要时 F2 | `UNKNOWN / NOT_RUN` |
 
-Direct 不依赖外部视觉资产，可先做最小真实 API/媒体冒烟。Frame/Reference 的质量探针不能使用程序化 Mock 图冒充批准资产；需要用户上传/素材库/GPT Image 生成编辑后再运行。当前会话没有可用的内置图像生成工具，因此没有擅自切换到需要另一枚 API Key 的 CLI 路径。
+Direct 不依赖外部视觉资产，可先做最小真实 API/媒体冒烟。仓库新增 [Phase 2 素材候选](../assets/phase2/README.md)，包含有来源记录的便利店、录音设备原图和 768×1366 裁切，只允许作为 Frame/Reference 合同冒烟。可识别的库存人物未纳入项目资产；Frame/Reference 的质量探针不能使用程序化 Mock 或不匹配库存图冒充批准资产，需要用户上传/合规角色库/GPT Image 生成编辑后再运行。当前会话没有可用的内置图像生成工具，因此没有擅自切换到需要另一枚 API Key 的 CLI 路径。
 
 Phase 2 只有在以下事实被记录后才关闭：凭证验证成功；至少一个 Direct 768P 任务完成创建、轮询、下载和人工审片；镜头 1/2/5/8 的计划路线获得实际 `RouteEvidence`，或明确记录某路线因缺少合格资产而保持 `UNKNOWN`，不能把“接口存在”写成质量通过。

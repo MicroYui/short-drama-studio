@@ -27,6 +27,7 @@ import {
   type H3ProviderRun,
   type H3ProbeRequest,
   type ProjectAggregate,
+  type RouteEvidence,
   type Take,
   type VideoGenerationRoute,
 } from './api'
@@ -37,6 +38,19 @@ type ApiResult<T> =
 
 type SourceMode = 'local_path' | 'external_url' | 'file_id'
 type SourceDraft = { mode: SourceMode; value: string }
+
+const referenceRoles: H3MediaRole[] = ['reference_image', 'reference_video', 'reference_audio']
+const referenceRoleLimits: Record<H3MediaRole, number> = {
+  first_frame: 1,
+  last_frame: 1,
+  reference_image: 9,
+  reference_video: 3,
+  reference_audio: 3,
+}
+
+function emptySourceDraft(): SourceDraft {
+  return { mode: 'local_path', value: '' }
+}
 
 const primaryButton = 'inline-flex items-center justify-center gap-2 rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-40'
 const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40'
@@ -114,15 +128,22 @@ function sourceFromDraft(draft: SourceDraft): H3MediaInput['source'] {
 
 function SourceInput({
   role,
+  index,
   draft,
+  disabled = false,
   onChange,
+  onRemove,
 }: {
   role: H3MediaRole
+  index: number
   draft: SourceDraft
+  disabled?: boolean
   onChange: (next: SourceDraft) => void
+  onRemove?: () => void
 }) {
   const kind = roleKinds[role]
   const browse = async () => {
+    if (disabled) return
     const filters = kind === 'IMAGE'
       ? [{ name: 'Image', extensions: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'] }]
       : kind === 'VIDEO'
@@ -137,12 +158,16 @@ function SourceInput({
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-medium text-zinc-300">{roleLabels[role]}</span>
-        <span className="text-[10px] text-zinc-600">{kind}</span>
+        <span className="text-xs font-medium text-zinc-300">{roleLabels[role]}{referenceRoles.includes(role) ? ` ${index + 1}` : ''}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-zinc-600">{kind}</span>
+          {onRemove && <button className="text-[10px] text-zinc-600 hover:text-red-300" onClick={onRemove} type="button">移除</button>}
+        </div>
       </div>
       <div className="flex gap-2">
         <select
           className="rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-300"
+          disabled={disabled}
           value={draft.mode}
           onChange={(event) => onChange({ mode: event.target.value as SourceMode, value: draft.value })}
         >
@@ -152,12 +177,13 @@ function SourceInput({
         </select>
         <input
           className={`${inputClass} min-w-0 flex-1 py-2 text-xs`}
+          disabled={disabled}
           placeholder={draft.mode === 'local_path' ? '/path/to/file' : draft.mode === 'file_id' ? '123456789' : 'https://...'}
           value={draft.value}
           onChange={(event) => onChange({ ...draft, value: event.target.value })}
         />
         {draft.mode === 'local_path' && (
-          <button className={subtleButton} onClick={() => void browse()} type="button">
+          <button className={subtleButton} disabled={disabled} onClick={() => void browse()} type="button">
             <FileUp className="h-3.5 w-3.5" />选择
           </button>
         )}
@@ -194,13 +220,14 @@ export function H3LabPanel({
   const [route, setRoute] = useState<VideoGenerationRoute>('DIRECT')
   const selectedShot = project.document.shots.find((shot) => shot.id === shotId) ?? project.document.shots[0]
   const [duration, setDuration] = useState(Math.ceil(selectedShot?.duration_seconds ?? 5))
+  const [purpose, setPurpose] = useState<'CONTRACT_SMOKE' | 'QUALITY_PROBE'>('CONTRACT_SMOKE')
   const [promptOverride, setPromptOverride] = useState('')
-  const [drafts, setDrafts] = useState<Record<H3MediaRole, SourceDraft>>({
-    first_frame: { mode: 'local_path', value: '' },
-    last_frame: { mode: 'local_path', value: '' },
-    reference_image: { mode: 'local_path', value: '' },
-    reference_video: { mode: 'local_path', value: '' },
-    reference_audio: { mode: 'local_path', value: '' },
+  const [drafts, setDrafts] = useState<Record<H3MediaRole, SourceDraft[]>>({
+    first_frame: [emptySourceDraft()],
+    last_frame: [emptySourceDraft()],
+    reference_image: [emptySourceDraft()],
+    reference_video: [emptySourceDraft()],
+    reference_audio: [emptySourceDraft()],
   })
   const [config, setConfig] = useState<H3ProviderConfig | null>(null)
   const [apiKey, setApiKey] = useState('')
@@ -242,21 +269,44 @@ export function H3LabPanel({
         : route === 'FRAME_FIRST_LAST'
           ? ['first_frame', 'last_frame']
           : ['reference_image', 'reference_video', 'reference_audio']
-    return roles
-      .filter((roleName) => drafts[roleName].value.trim().length > 0)
-      .map((roleName): H3MediaInput => ({
+    return roles.flatMap((roleName) => drafts[roleName]
+      .filter((draft) => draft.value.trim().length > 0)
+      .map((draft): H3MediaInput => ({
         kind: roleKinds[roleName],
         role: roleName,
-        source: sourceFromDraft(drafts[roleName]),
-      }))
+        source: sourceFromDraft(draft),
+      })))
   }, [drafts, route])
 
   const requiredInputsReady = route === 'DIRECT'
-    || (route === 'FRAME_FIRST' && drafts.first_frame.value.trim().length > 0)
+    || (route === 'FRAME_FIRST' && drafts.first_frame[0].value.trim().length > 0)
     || (route === 'FRAME_FIRST_LAST'
-      && drafts.first_frame.value.trim().length > 0
-      && drafts.last_frame.value.trim().length > 0)
+      && drafts.first_frame[0].value.trim().length > 0
+      && drafts.last_frame[0].value.trim().length > 0)
     || (route === 'REFERENCE' && mediaInputs.length > 0)
+
+  const updateDraft = (roleName: H3MediaRole, index: number, next: SourceDraft) => {
+    setDrafts((current) => ({
+      ...current,
+      [roleName]: current[roleName].map((draft, draftIndex) => (
+        draftIndex === index ? next : draft
+      )),
+    }))
+  }
+
+  const addReferenceDraft = (roleName: H3MediaRole) => {
+    setDrafts((current) => ({
+      ...current,
+      [roleName]: [...current[roleName], emptySourceDraft()],
+    }))
+  }
+
+  const removeReferenceDraft = (roleName: H3MediaRole, index: number) => {
+    setDrafts((current) => ({
+      ...current,
+      [roleName]: current[roleName].filter((_draft, draftIndex) => draftIndex !== index),
+    }))
+  }
 
   const probeRequest = (): H3ProbeRequest => ({
     shot_id: shotId,
@@ -264,7 +314,7 @@ export function H3LabPanel({
     duration_seconds: duration,
     prompt_override: promptOverride.trim() || null,
     media_inputs: mediaInputs,
-    purpose: 'QUALITY_PROBE',
+    purpose,
   })
 
   const run = async <T,>(label: string, action: () => Promise<ApiResult<T>>, success: (value: T) => void) => {
@@ -394,6 +444,9 @@ export function H3LabPanel({
   const reviewTake = h3Takes.find((take) => take.id === reviewTakeId)
     ?? h3Takes.find((take) => take.qa_status === 'PENDING')
     ?? h3Takes[0]
+  const reviewEvidence = reviewTake
+    ? (project.route_evidence ?? []).find((item) => item.take_id === reviewTake.id)
+    : undefined
   useEffect(() => {
     if (reviewTake && reviewTakeId !== reviewTake.id) setReviewTakeId(reviewTake.id)
   }, [reviewTake?.id])
@@ -428,9 +481,14 @@ export function H3LabPanel({
   const unknownTasks = project.tasks.filter((task) => task.provider === 'minimax' && task.status === 'SUBMIT_UNKNOWN')
   const totalCost = runs.reduce((sum, item) => sum + (item.estimated_cost_usd ?? 0), 0)
   const routeEvidence = project.route_evidence ?? []
-  const evidenceByShotRoute = new Map(
-    routeEvidence.map((item) => [`${item.shot_id}:${item.route}`, item]),
-  )
+  const evidenceByShotRoute = new Map<string, RouteEvidence>()
+  for (const evidence of routeEvidence) {
+    const key = `${evidence.shot_id}:${evidence.route}`
+    const current = evidenceByShotRoute.get(key)
+    if (!current || evidence.purpose === 'QUALITY_PROBE' || current.purpose !== 'QUALITY_PROBE') {
+      evidenceByShotRoute.set(key, evidence)
+    }
+  }
   const evidenceRoutes = Object.keys(evidenceRouteLabels) as VideoGenerationRoute[]
   const inputRoles: H3MediaRole[] = route === 'FRAME_FIRST'
     ? ['first_frame']
@@ -487,16 +545,17 @@ export function H3LabPanel({
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {representativeShots.map((shot) => {
               const reviewedCount = evidenceRoutes.filter((routeName) => (
-                evidenceByShotRoute.get(`${shot.id}:${routeName}`)?.status === 'REVIEWED'
+                evidenceByShotRoute.get(`${shot.id}:${routeName}`)?.purpose === 'QUALITY_PROBE'
+                && evidenceByShotRoute.get(`${shot.id}:${routeName}`)?.status === 'REVIEWED'
               )).length
               return (
                 <button key={shot.id} onClick={() => setShotId(shot.id)} className={`rounded-xl border p-3 text-left transition ${shotId === shot.id ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'}`}>
-                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-white">镜头 {shot.sequence}</span><span className="text-[10px] text-zinc-600">已审 {reviewedCount}/{evidenceRoutes.length}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-white">镜头 {shot.sequence}</span><span className="text-[10px] text-zinc-600">质量已审 {reviewedCount}/{evidenceRoutes.length}</span></div>
                   <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{shot.narrative_purpose}</p>
                   <div className="mt-3 grid grid-cols-2 gap-1.5">
                     {evidenceRoutes.map((routeName) => {
                       const evidence = evidenceByShotRoute.get(`${shot.id}:${routeName}`)
-                      return <span key={routeName} className="flex items-center justify-between rounded border border-zinc-800 bg-black/20 px-1.5 py-1 text-[10px]"><span className="font-medium text-zinc-400">{evidenceRouteLabels[routeName]}</span><span className={evidence ? badgeTone(evidence.status) : 'text-zinc-700'}>{evidence ? evidenceStatusLabels[evidence.status] ?? evidence.status : '未测试'}</span></span>
+                      return <span key={routeName} className="flex items-center justify-between rounded border border-zinc-800 bg-black/20 px-1.5 py-1 text-[10px]"><span className="font-medium text-zinc-400">{evidenceRouteLabels[routeName]}</span><span className={evidence ? badgeTone(evidence.status) : 'text-zinc-700'}>{evidence ? `${evidence.purpose === 'QUALITY_PROBE' ? 'Q' : 'C'}·${evidenceStatusLabels[evidence.status] ?? evidence.status}` : '未测试'}</span></span>
                     })}
                   </div>
                 </button>
@@ -513,9 +572,10 @@ export function H3LabPanel({
         </div>
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
           <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+            <div className="grid gap-3 md:grid-cols-[1fr_180px_190px]">
               <label><span className="mb-1.5 block text-xs text-zinc-500">镜头</span><select className={inputClass} value={shotId} onChange={(event) => setShotId(event.target.value)}>{project.document.shots.map((shot) => <option key={shot.id} value={shot.id}>镜头 {shot.sequence} · {shot.narrative_purpose}</option>)}</select></label>
               <label><span className="mb-1.5 block text-xs text-zinc-500">时长（4–15 秒）</span><input className={inputClass} type="number" min={4} max={15} step={1} value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label>
+              <label><span className="mb-1.5 block text-xs text-zinc-500">证据用途</span><select className={inputClass} value={purpose} onChange={(event) => setPurpose(event.target.value as 'CONTRACT_SMOKE' | 'QUALITY_PROBE')}><option value="CONTRACT_SMOKE">合同冒烟</option><option value="QUALITY_PROBE">质量探针</option></select></label>
             </div>
             <div>
               <span className="mb-2 block text-xs text-zinc-500">H3 路线</span>
@@ -523,11 +583,11 @@ export function H3LabPanel({
                 {(Object.keys(routeLabels) as VideoGenerationRoute[]).map((item) => <button key={item} className={`rounded-lg border px-3 py-2.5 text-left text-xs transition ${route === item ? 'border-blue-500 bg-blue-500/10 text-blue-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`} onClick={() => { setRoute(item); setPreview(null) }}>{routeLabels[item]}</button>)}
               </div>
             </div>
-            {inputRoles.length > 0 && <div className="space-y-2">{inputRoles.map((roleName) => <SourceInput key={roleName} role={roleName} draft={drafts[roleName]} onChange={(next) => setDrafts((current) => ({ ...current, [roleName]: next }))} />)}</div>}
+            {inputRoles.length > 0 && <div className="space-y-3">{route === 'REFERENCE' && <p className="text-xs text-zinc-500">已填写 {mediaInputs.length}/12 个参考素材；填满后其他空槽自动锁定。</p>}{inputRoles.map((roleName) => <div key={roleName} className="space-y-2">{drafts[roleName].map((draft, draftIndex) => <SourceInput key={`${roleName}-${draftIndex}`} role={roleName} index={draftIndex} draft={draft} disabled={route === 'REFERENCE' && mediaInputs.length >= 12 && !draft.value.trim()} onChange={(next) => updateDraft(roleName, draftIndex, next)} onRemove={route === 'REFERENCE' && drafts[roleName].length > 1 ? () => removeReferenceDraft(roleName, draftIndex) : undefined} />)}{route === 'REFERENCE' && <button className={subtleButton} type="button" disabled={drafts[roleName].length >= referenceRoleLimits[roleName] || mediaInputs.length >= 12} onClick={() => addReferenceDraft(roleName)}>+ 添加{roleLabels[roleName]}（{drafts[roleName].length}/{referenceRoleLimits[roleName]}）</button>}</div>)}</div>}
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Prompt override（留空则由当前剧本、Bible、分镜与连续性自动编译）</span><textarea className={`${inputClass} min-h-24 resize-y leading-6`} value={promptOverride} onChange={(event) => setPromptOverride(event.target.value)} /></label>
             <div className="flex flex-wrap gap-2">
               <button className={secondaryButton} disabled={!shotId || !requiredInputsReady || busy !== null} onClick={compilePreview}><Eye className="h-3.5 w-3.5" />预览请求</button>
-              <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交真实 H3 · 基础约 ${estimatedBaseCost(duration, config)}</button>
+              <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交{purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'} · 基础约 ${estimatedBaseCost(duration, config)}</button>
             </div>
           </div>
           <div className="min-h-72 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
@@ -544,7 +604,7 @@ export function H3LabPanel({
             {project.tasks.filter((task) => task.provider === 'minimax').map((task) => {
               const providerRun = runs.find((item) => item.task_id === task.id)
               const canAdvance = ['QUEUED', 'SUBMITTING', 'ACKNOWLEDGED', 'RUNNING'].includes(task.status)
-              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
+              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
             })}
           </div>
           {unknownTasks.length > 0 && <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><div className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /><div><p className="text-xs font-medium text-amber-100">未知提交必须先对账，系统不会自动重发</p><p className="mt-1 text-[11px] leading-5 text-zinc-500">从 MiniMax 最近 7 天任务中核对模型、768P、时长与创建时间，再显式绑定 task ID。</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><select className={inputClass} value={reconcileTaskId} onChange={(event) => setReconcileTaskId(event.target.value)}><option value="">选择本地未知任务</option>{unknownTasks.map((task) => <option key={task.id} value={task.id}>{task.id.slice(-10)} · 镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence}</option>)}</select><input className={inputClass} placeholder="MiniMax task_id" value={remoteTaskId} onChange={(event) => setRemoteTaskId(event.target.value)} /><button className={secondaryButton} onClick={resolveUnknown} disabled={!reconcileTaskId || !remoteTaskId.trim()}>绑定</button></div><button className={`${subtleButton} mt-2`} onClick={loadCandidates}>读取并预填匹配候选</button></div>}
@@ -552,7 +612,7 @@ export function H3LabPanel({
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <div className="flex items-center justify-between"><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><h3 className="font-medium text-white">真实 Take 人工审片</h3></div><span className="text-xs text-zinc-600">不自动通过</span></div>
-          {!reviewTake ? <p className="mt-4 rounded-lg border border-dashed border-zinc-800 py-16 text-center text-xs text-zinc-600">H3 输出下载后在这里审片</p> : <div className="mt-4 grid gap-4 sm:grid-cols-[190px_1fr]"><div><video key={reviewTake.id} className="aspect-[9/16] max-h-80 w-full rounded-lg bg-black object-contain" src={pathToFileUrl(reviewTake.media_path)} poster={pathToFileUrl(reviewTake.thumbnail_path)} controls preload="metadata" /><select className={`${inputClass} mt-2 py-2 text-xs`} value={reviewTake.id} onChange={(event) => setReviewTakeId(event.target.value)}>{h3Takes.map((take) => <option key={take.id} value={take.id}>镜头 {project.document.shots.find((shot) => shot.id === take.shot_id)?.sequence} · Take {take.candidate_index} · {take.qa_status}</option>)}</select></div><div><div className="flex flex-wrap gap-2"><Badge status={reviewTake.qa_status}>QA {reviewTake.qa_status}</Badge><Badge status={routeEvidence.find((item) => item.take_id === reviewTake.id)?.technical_passed ? 'SUCCEEDED' : 'FAILED'}>技术门槛 {routeEvidence.find((item) => item.take_id === reviewTake.id)?.technical_passed ? '通过' : '未通过'}</Badge></div><p className="mt-3 text-xs leading-5 text-zinc-500">逐项听看身份、服装、场景、道具、动作、画面瑕疵、锁定台词、说话人、声线、口型与音频。这里先记录单人硬门槛；正式路线结论仍需后续盲评样本。</p><label className="mt-3 flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={reviewPassed} onChange={(event) => setReviewPassed(event.target.checked)} />全部严重失败硬门槛通过</label><label className="mt-3 block"><span className="text-xs text-zinc-500">质量分：{reviewScore.toFixed(1)} / 5</span><input className="mt-2 w-full accent-blue-500" type="range" min={0} max={5} step={0.1} value={reviewScore} onChange={(event) => setReviewScore(Number(event.target.value))} /></label><textarea className={`${inputClass} mt-3 min-h-20 resize-y text-xs leading-5`} placeholder="必填：记录通过/失败的具体画面、台词、声线和口型证据" value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /><div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!reviewNotes.trim() || busy !== null} onClick={submitReview}>保存审片</button><button className={secondaryButton} disabled={reviewTake.qa_status !== 'PASSED' || reviewTake.is_selected} onClick={() => selectReviewedTake(reviewTake)}>{reviewTake.is_selected ? '已入选' : '选入时间线'}</button></div></div></div>}
+          {!reviewTake ? <p className="mt-4 rounded-lg border border-dashed border-zinc-800 py-16 text-center text-xs text-zinc-600">H3 输出下载后在这里审片</p> : <div className="mt-4 grid gap-4 sm:grid-cols-[190px_1fr]"><div><video key={reviewTake.id} className="aspect-[9/16] max-h-80 w-full rounded-lg bg-black object-contain" src={pathToFileUrl(reviewTake.media_path)} poster={pathToFileUrl(reviewTake.thumbnail_path)} controls preload="metadata" /><select className={`${inputClass} mt-2 py-2 text-xs`} value={reviewTake.id} onChange={(event) => setReviewTakeId(event.target.value)}>{h3Takes.map((take) => <option key={take.id} value={take.id}>镜头 {project.document.shots.find((shot) => shot.id === take.shot_id)?.sequence} · Take {take.candidate_index} · {take.qa_status}</option>)}</select></div><div><div className="flex flex-wrap gap-2"><Badge status={reviewTake.qa_status}>QA {reviewTake.qa_status}</Badge><Badge status={reviewEvidence?.technical_passed ? 'SUCCEEDED' : 'FAILED'}>技术门槛 {reviewEvidence?.technical_passed ? '通过' : '未通过'}</Badge><Badge status={reviewEvidence?.purpose === 'QUALITY_PROBE' ? 'SUCCEEDED' : 'ACKNOWLEDGED'}>{reviewEvidence?.purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'}</Badge></div><p className="mt-3 text-xs leading-5 text-zinc-500">逐项听看身份、服装、场景、道具、动作、画面瑕疵、锁定台词、说话人、声线、口型与音频。这里先记录单人硬门槛；正式路线结论仍需后续盲评样本。</p>{reviewEvidence?.purpose === 'CONTRACT_SMOKE' && <p className="mt-2 text-xs text-amber-300/80">合同冒烟只验证接口与媒体闭环，不能选入正式时间线。</p>}<label className="mt-3 flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={reviewPassed} onChange={(event) => setReviewPassed(event.target.checked)} />全部严重失败硬门槛通过</label><label className="mt-3 block"><span className="text-xs text-zinc-500">质量分：{reviewScore.toFixed(1)} / 5</span><input className="mt-2 w-full accent-blue-500" type="range" min={0} max={5} step={0.1} value={reviewScore} onChange={(event) => setReviewScore(Number(event.target.value))} /></label><textarea className={`${inputClass} mt-3 min-h-20 resize-y text-xs leading-5`} placeholder="必填：记录通过/失败的具体画面、台词、声线和口型证据" value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /><div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!reviewNotes.trim() || busy !== null} onClick={submitReview}>保存审片</button><button className={secondaryButton} disabled={reviewTake.qa_status !== 'PASSED' || reviewTake.is_selected || reviewEvidence?.purpose !== 'QUALITY_PROBE'} onClick={() => selectReviewedTake(reviewTake)}>{reviewTake.is_selected ? '已入选' : '选入时间线'}</button></div></div></div>}
         </div>
       </section>
 

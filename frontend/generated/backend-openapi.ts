@@ -1932,7 +1932,7 @@ export interface components {
             media_inputs?: components["schemas"]["H3MediaInput"][];
             /** Prompt Override */
             prompt_override?: string | null;
-            /** @default QUALITY_PROBE */
+            /** @default CONTRACT_SMOKE */
             purpose: components["schemas"]["EvidencePurpose"];
             /** @default DIRECT */
             route: components["schemas"]["VideoGenerationRoute"];

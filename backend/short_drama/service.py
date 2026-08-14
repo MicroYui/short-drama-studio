@@ -450,6 +450,11 @@ class ShortDramaService:
                 raise WorkflowConflictError("A stale Take cannot be selected for the current timeline")
             if take.qa_status != QaStatus.PASSED:
                 raise WorkflowConflictError("Only a QA-passed Take can be selected")
+            evidence = self.repository.get_route_evidence_for_take(take_id)
+            if evidence is not None and evidence.purpose == EvidencePurpose.CONTRACT_SMOKE:
+                raise WorkflowConflictError(
+                    "A contract-smoke Take cannot be selected for the production timeline"
+                )
             selected = self.repository.select_take(take_id)
             if selected is None:
                 raise ArtifactNotFoundError(take_id)

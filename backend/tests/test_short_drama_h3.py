@@ -31,7 +31,13 @@ from short_drama.h3_models import (
     H3UploadResponse,
     H3VideoRequest,
 )
-from short_drama.models import EvidenceStatus, QaStatus, TaskStatus, VideoGenerationRoute
+from short_drama.models import (
+    EvidencePurpose,
+    EvidenceStatus,
+    QaStatus,
+    TaskStatus,
+    VideoGenerationRoute,
+)
 from short_drama.providers.minimax_h3_client import H3SubmissionUnknown
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
@@ -229,6 +235,18 @@ def test_h3_compiler_enforces_routes_before_network() -> None:
         role=H3MediaRole.REFERENCE_IMAGE,
         source=H3MediaSource(file_id="123"),
     )
+    reference_video = H3MediaInput(
+        kind=H3MediaKind.VIDEO,
+        role=H3MediaRole.REFERENCE_VIDEO,
+        source=H3MediaSource(external_url="https://example.invalid/reference.mp4"),
+    )
+    reference_audio = H3MediaInput(
+        kind=H3MediaKind.AUDIO,
+        role=H3MediaRole.REFERENCE_AUDIO,
+        source=H3MediaSource(external_url="https://example.invalid/reference.wav"),
+    )
+
+    assert H3ProbeRequest(shot_id="shot-1").purpose == EvidencePurpose.CONTRACT_SMOKE
 
     direct = compile_h3_request(
         route=VideoGenerationRoute.DIRECT,
@@ -267,12 +285,51 @@ def test_h3_compiler_enforces_routes_before_network() -> None:
         route=VideoGenerationRoute.REFERENCE,
         prompt="角色参考",
         duration_seconds=5,
-        media_inputs=[reference],
-        resolve_url=lambda _item: "mm_file://123",
+        media_inputs=[reference, reference_video, reference_audio],
+        resolve_url=lambda item: item.source.external_url or "mm_file://123",
     )
     assert referenced.ratio == "9:16"
     assert referenced.content[1].image_url is not None
     assert referenced.content[1].image_url.url == "mm_file://123"
+    assert [item.role for item in referenced.content[1:]] == [
+        H3MediaRole.REFERENCE_IMAGE,
+        H3MediaRole.REFERENCE_VIDEO,
+        H3MediaRole.REFERENCE_AUDIO,
+    ]
+
+    reference_images = [
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(external_url=f"https://example.invalid/reference-{index}.png"),
+        )
+        for index in range(10)
+    ]
+    reference_videos = [
+        H3MediaInput(
+            kind=H3MediaKind.VIDEO,
+            role=H3MediaRole.REFERENCE_VIDEO,
+            source=H3MediaSource(external_url=f"https://example.invalid/reference-{index}.mp4"),
+        )
+        for index in range(4)
+    ]
+    reference_audios = [
+        H3MediaInput(
+            kind=H3MediaKind.AUDIO,
+            role=H3MediaRole.REFERENCE_AUDIO,
+            source=H3MediaSource(external_url=f"https://example.invalid/reference-{index}.wav"),
+        )
+        for index in range(4)
+    ]
+    at_total_limit = reference_images[:9] + reference_videos[:3]
+    compiled_at_limit = compile_h3_request(
+        route=VideoGenerationRoute.REFERENCE,
+        prompt="12 个参考素材合法",
+        duration_seconds=5,
+        media_inputs=at_total_limit,
+        resolve_url=lambda item: item.source.external_url or "unused",
+    )
+    assert len(compiled_at_limit.content) == 13
 
     with pytest.raises(H3CapabilityError, match="mutually exclusive"):
         compile_h3_request(
@@ -281,6 +338,46 @@ def test_h3_compiler_enforces_routes_before_network() -> None:
             duration_seconds=5,
             media_inputs=[first, reference],
             resolve_url=lambda _item: "unused",
+        )
+    with pytest.raises(H3CapabilityError, match="paired"):
+        compile_h3_request(
+            route=VideoGenerationRoute.FRAME_FIRST_LAST,
+            prompt="官方字段 schema 仍要求尾帧与首帧配对",
+            duration_seconds=5,
+            media_inputs=[last],
+            resolve_url=lambda _item: "unused",
+        )
+    with pytest.raises(H3CapabilityError, match="nine reference images"):
+        compile_h3_request(
+            route=VideoGenerationRoute.REFERENCE,
+            prompt="超过参考图上限",
+            duration_seconds=5,
+            media_inputs=reference_images,
+            resolve_url=lambda item: item.source.external_url or "unused",
+        )
+    with pytest.raises(H3CapabilityError, match="three reference videos"):
+        compile_h3_request(
+            route=VideoGenerationRoute.REFERENCE,
+            prompt="超过参考视频上限",
+            duration_seconds=5,
+            media_inputs=reference_videos,
+            resolve_url=lambda item: item.source.external_url or "unused",
+        )
+    with pytest.raises(H3CapabilityError, match="three reference audio"):
+        compile_h3_request(
+            route=VideoGenerationRoute.REFERENCE,
+            prompt="超过参考音频上限",
+            duration_seconds=5,
+            media_inputs=reference_audios,
+            resolve_url=lambda item: item.source.external_url or "unused",
+        )
+    with pytest.raises(H3CapabilityError, match="at most 12"):
+        compile_h3_request(
+            route=VideoGenerationRoute.REFERENCE,
+            prompt="超过混合参考总数上限",
+            duration_seconds=5,
+            media_inputs=at_total_limit + reference_audios[:1],
+            resolve_url=lambda item: item.source.external_url or "unused",
         )
     with pytest.raises(H3CapabilityError, match="LAST"):
         compile_h3_request(
@@ -311,7 +408,11 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
 
     probe = service.enqueue_h3_probe(
         project_id,
-        H3ProbeRequest(shot_id=shot.id, route=VideoGenerationRoute.DIRECT),
+        H3ProbeRequest(
+            shot_id=shot.id,
+            route=VideoGenerationRoute.DIRECT,
+            purpose=EvidencePurpose.QUALITY_PROBE,
+        ),
     )
     assert probe.task.status == TaskStatus.QUEUED
     assert probe.task.resolution == "768P"
@@ -362,6 +463,15 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     assert reviewed.take.qa_status == QaStatus.PASSED
     assert reviewed.take.is_selected is False
     assert reviewed.evidence.status == EvidenceStatus.REVIEWED
+    persisted_evidence = service.repository.get_route_evidence_for_take(take.id)
+    assert persisted_evidence is not None
+    assert persisted_evidence.purpose == EvidencePurpose.QUALITY_PROBE
+    persisted_evidence.purpose = EvidencePurpose.CONTRACT_SMOKE
+    service.repository.save_route_evidence(persisted_evidence)
+    with pytest.raises(WorkflowConflictError, match="contract-smoke"):
+        service.select_take(take.id)
+    persisted_evidence.purpose = EvidencePurpose.QUALITY_PROBE
+    service.repository.save_route_evidence(persisted_evidence)
     selected = service.select_take(take.id)
     assert next(item for item in selected.takes if item.id == take.id).is_selected is True
 

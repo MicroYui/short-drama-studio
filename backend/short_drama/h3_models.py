@@ -68,7 +68,7 @@ class H3ProbeRequest(DomainModel):
         default_factory=list[H3MediaInput],
         max_length=12,
     )
-    purpose: EvidencePurpose = EvidencePurpose.QUALITY_PROBE
+    purpose: EvidencePurpose = EvidencePurpose.CONTRACT_SMOKE
 
 
 class H3UrlValue(DomainModel):

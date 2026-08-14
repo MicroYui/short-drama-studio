@@ -2191,7 +2191,7 @@
           },
           "purpose": {
             "$ref": "#/components/schemas/EvidencePurpose",
-            "default": "QUALITY_PROBE"
+            "default": "CONTRACT_SMOKE"
           },
           "route": {
             "$ref": "#/components/schemas/VideoGenerationRoute",
