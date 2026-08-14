@@ -1,5 +1,7 @@
 # LTX Desktop
 
+> This branch is the Phase 0 upstream baseline for the AI short-drama project. The original LTX Desktop application is preserved here for build and packaging verification; the product decisions, target architecture and experiment plan are documented in [`docs/README.md`](docs/README.md). LTX model integration is not part of the target product.
+
 LTX Desktop is an open-source desktop app for generating videos with LTX models — locally on supported Windows/Linux NVIDIA GPUs or Apple Silicon Macs, with an API mode for unsupported hardware.
 
 > **Status: Beta.** Expect breaking changes.

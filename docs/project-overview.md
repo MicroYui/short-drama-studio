@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库是 2026-08-14 的调研与方案讨论底稿，目前不包含实现，也没有调用任何付费生成接口。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线；本文件保留 AI 短剧调研与方案总览。当前尚未实现短剧业务，也没有调用任何付费生成接口。
 
 ## 结论先行
 
@@ -28,19 +28,20 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 
 ## 文档导航
 
-1. [调研总览与证据规则](docs/README.md)
-2. [目标、方法与成功标准](docs/01-method-and-success-criteria.md)
-3. [可用能力池与供应商基线](docs/02-provider-capability-baseline.md)
-4. [闭源平台拆解](docs/03-closed-platforms.md)
-5. [开源源码审查与复用建议](docs/04-open-source-code-review.md)
-6. [固定输入实验与验收方案](docs/05-experiment-plan.md)
-7. [当前架构与技术设计](docs/06-candidate-architecture-hypotheses.md)
-8. [当前结论与待讨论决策](docs/07-decisions-and-open-questions.md)
-9. [逐项确认决策账本](docs/08-decision-register.md)
-10. [来源与源码快照](docs/sources.md)
+1. [调研总览与证据规则](README.md)
+2. [目标、方法与成功标准](01-method-and-success-criteria.md)
+3. [可用能力池与供应商基线](02-provider-capability-baseline.md)
+4. [闭源平台拆解](03-closed-platforms.md)
+5. [开源源码审查与复用建议](04-open-source-code-review.md)
+6. [固定输入实验与验收方案](05-experiment-plan.md)
+7. [当前架构与技术设计](06-candidate-architecture-hypotheses.md)
+8. [当前结论与待讨论决策](07-decisions-and-open-questions.md)
+9. [逐项确认决策账本](08-decision-register.md)
+10. [来源与源码快照](sources.md)
+11. [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)
 
 ## 当前边界
 
 - 已做：官方资料核验、指定与补充开源项目源码审查、能力差距分析、固定样片、架构、实验协议、实施顺序和验收方案确认。
-- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未做：真实模型实验和代码实现。
-- 下一步：导入并验证 LTX Desktop 上游基线，完成供应商中立的 Mock 垂直切片；随后按已确认顺序接入 H3 768P、资产与音频能力并运行固定实验。
+- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未做：真实模型实验和短剧业务实现。
+- 下一步：在已验证的 LTX Desktop 上游基线上完成供应商中立的 Mock 垂直切片；随后按已确认顺序接入 H3 768P、资产与音频能力并运行固定实验。

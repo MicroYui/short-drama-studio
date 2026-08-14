@@ -84,7 +84,18 @@ esac
 
 if [ "$UNPACK" = true ]; then
   echo "Packaging unpacked app (fast mode)..."
-  pnpm exec electron-builder $BUILDER_ARGS --dir
+  if [ "$PLATFORM" = "mac" ] && [ "${CSC_IDENTITY_AUTO_DISCOVERY:-}" = "false" ]; then
+    # A hardened macOS app needs every Mach-O image to share a real signing
+    # identity. electron-builder falls back to ad-hoc signatures when local
+    # signing discovery is disabled, which macOS rejects at launch. Keep the
+    # release configuration hardened, but make the explicitly unsigned local
+    # smoke-test build runnable.
+    pnpm exec electron-builder $BUILDER_ARGS --dir \
+      --config.mac.hardenedRuntime=false \
+      --config.mac.notarize=false
+  else
+    pnpm exec electron-builder $BUILDER_ARGS --dir
+  fi
 else
   PUBLISH_ARGS=""
   if [ -n "$PUBLISH" ]; then
