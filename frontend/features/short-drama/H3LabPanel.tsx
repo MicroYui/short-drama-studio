@@ -316,6 +316,7 @@ export function H3LabPanel({
   const [config, setConfig] = useState<H3ProviderConfig | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [runs, setRuns] = useState<H3ProviderRun[]>([])
+  const [runsStatus, setRunsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [preview, setPreview] = useState<H3CompilePreview | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [polling, setPolling] = useState(false)
@@ -337,8 +338,13 @@ export function H3LabPanel({
     ])
     if (configResult.ok) setConfig(configResult.data)
     else onError(configResult.error.message)
-    if (runsResult.ok) setRuns(runsResult.data.runs)
-    else onError(runsResult.error.message)
+    if (runsResult.ok) {
+      setRuns(runsResult.data.runs)
+      setRunsStatus('ready')
+    } else {
+      setRunsStatus('error')
+      onError(runsResult.error.message)
+    }
   }, [onError, project.document.project.id])
 
   useEffect(() => {
@@ -702,6 +708,10 @@ export function H3LabPanel({
                   <div className="mt-3 grid grid-cols-2 gap-1.5">
                     {evidenceRoutes.map((routeName) => {
                       const evidence = evidenceByShotRoute.get(`${shot.id}:${routeName}`) ?? []
+                      if (evidence.length > 0 && runsStatus !== 'ready') {
+                        const label = runsStatus === 'error' ? '汇总失败' : '读取中'
+                        return <span key={routeName} className="flex items-center justify-between gap-1 rounded border border-zinc-800 bg-black/20 px-1.5 py-1 text-[10px]"><span className="font-medium text-zinc-400">{evidenceRouteLabels[routeName]}</span><span className={runsStatus === 'error' ? 'text-red-300' : 'text-zinc-600'}>{label}</span></span>
+                      }
                       const conditionSummaries = summarizeRouteConditions(evidence, runsByTask)
                       const summary = conditionSummaries[0] ?? summarizeRouteEvidence([])
                       const otherSamples = conditionSummaries.slice(1).reduce((sum, item) => sum + item.total, 0)
