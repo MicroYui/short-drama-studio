@@ -14,9 +14,9 @@
 
 首版运行在单用户、受信环境中，不设计注册、登录、账号体系、RBAC、多租户、团队成员或分享权限。生产流程中的“批准/确认”是内容状态，不是访问控制。外部模型 API 凭证只作为 Provider 配置处理。
 
-当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、供应商中立的 Phase 1 Mock 垂直切片，以及 Phase 2 的 MiniMax-H3 768P Provider 工程接入与首个真实合同冒烟。短剧业务已能从输入走到 8 镜、50 秒的可播放时间线与完整导出；H3 的请求编译、状态恢复、对账、下载、费用和人工证据门均已验证。首个 5 秒 Direct 样本的声音听审无明显问题，但因店招乱码和红色录音笔变成对讲机被判硬门槛不通过、`3.0/5`，因此仍不代表真人短剧质量通过。
+当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、供应商中立的 Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider 工程接入，以及 Phase 3 Azure GPT Image 2 资产生成/编辑与正式资产批准。Phase 4 已用固定资产执行多组 H3 Direct、Frame、Reference 实验并保存真实 Take、费用与人工 RouteEvidence：S01 F1、S02 Reference、S05 F1 的首批五样本均通过，S08 原 F1 只有 3/5，证明不同镜头类型不能共用一个默认路线。候选路线尚未达到至少 10 个有效样本的稳定性门槛，因此真人单集最终质量仍未宣告通过。
 
-工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md) 和 [Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)。
+工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md) 和 [Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)。
 
 ## 证据等级
 
@@ -88,5 +88,6 @@ H3 的首帧/尾帧角色与 reference image/video/audio 角色不能在同一�
 
 - 闭源平台结论主要来自官方页面与官方指南；按项目边界不登录、不调用，也不把其效果和价格纳入生产决策。
 - 开源结论基于 [固定 commit](sources.md)，没有安装全部依赖或运行其真实付费 Provider。
-- 当前只有一条用于接口闭环的真实 H3 合同冒烟，且视觉硬门槛失败；它不能构成 Direct、Frame、Reference 或声音路线的质量排序，正式结论仍需固定资产和多样本实验。
+- 当前已有固定资产下的多路线、多样本和人工审片证据，但主要通过路线仍只有首批 5 个有效样本，不能提前写成稳定默认路线；S03、S08 修复和未生成的 S04/S06/S07 仍需补齐。
+- 代表样本中的普通话声音与口型总体可用，但跨镜声线稳定、严格逐字正确率和完整单集音画一致性仍需最终八镜成片验证。
 - 成本与配额高度时效化；本轮保留 `UNKNOWN` 并在实施时记录，但它们不是质量路线的主要决策因子。

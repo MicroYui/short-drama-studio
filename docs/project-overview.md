@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟，以及 Phase 3 来源中立资产工作台和 GPT Image 2 真实资产生产。H3 首条 Direct 样本的声音无明显问题，但店招乱码和录音笔变成对讲机导致视觉硬门槛失败；Phase 3 已针对这两个问题生成无可读店名的便利店和明确的红色录音笔候选，但最终真人整集质量仍需后续 H3 Frame/Reference 实验验证。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟，以及 Phase 3 来源中立资产工作台、Azure GPT Image 2 生成/编辑链路和首批正式资产批准。Phase 4 已在固定资产下执行 Direct、Frame 与 Reference 真实质量实验：S01 建立镜头的批准双人首帧 F1、S02 长对白近景的 Reference、S05 道具落台的批准首帧 F1 均取得首批 5/5 人工硬门槛通过；S08 原 F1 只有 3/5，通过率不足以成为稳定默认路线。当前结果证明路线必须按镜头类型选择，但候选默认路线仍需扩展到至少 10 个有效样本，S03 与 S08 修复样本也仍待最终人工审片。
 
 ## 结论先行
 
@@ -42,9 +42,10 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 12. [Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)
 13. [Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)
 14. [Phase 3：来源中立资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)
+15. [Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、架构和实验协议；LTX Desktop 基线；SQLite/API 短剧领域核心、可恢复 Mock Worker、多 Take、局部返工、TimelineManifest、字幕/音频占位、9:16 导出、QA 和桌面闭环；MiniMax-H3 768P Adapter 与一条真实 Direct 合同冒烟；资产工作台、本地/链接导入、版本与批准、GPT Image 2 生成/编辑任务、Azure 完整 endpoint 适配、本地 GPT-5.6-sol 连接，以及 5 张已落盘的真实 `DRAFT` 资产候选。
-- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未做：人工批准首批资产、固定资产下的 H3 多路线质量实验、锁定对白/声线/口型实验和真人整集质量验收。
-- 下一步：用户在资产工作台审片并批准林夏、周衡、便利店和录音笔的正式版本；然后固定这些 `AssetVersion`，运行 H3 Direct、Frame、Reference 质量实验。
+- 已做：官方资料与开源源码审查、固定样片、架构和实验协议；LTX Desktop 基线；SQLite/API 短剧领域核心、可恢复 Mock Worker、多 Take、局部返工、TimelineManifest、字幕/音频占位、9:16 导出、QA 和桌面闭环；MiniMax-H3 768P Adapter 与真实异步媒体闭环；资产工作台、本地/链接导入、版本与批准、Azure GPT Image 2 生成/编辑、本地 GPT-5.6-sol 连接；林夏、周衡、便利店、录音笔及镜头关键帧正式版本；代表镜头多路线样本、人审 RouteEvidence、八镜头 GPT 提示词编译与无提交 H3 请求预检。
+- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：候选路线扩展到默认路线所需的 10 个有效样本，S03/S08 修复样本人审，S04/S06/S07 首批动态候选，以及真人单集最终时间线与成片质量验收。
+- 下一步：先审现有 S03 Reference 五样本和 S08 修复样本；再按信息增益补足 S01/S02/S05/S08 的稳定性或 GPT 编译提示对照，生成 S04/S06/S07 首批候选，最终只把 100% 通过镜头硬门槛的 Take 选入单集时间线。

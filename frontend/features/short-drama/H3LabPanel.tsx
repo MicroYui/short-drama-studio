@@ -42,6 +42,14 @@ type ApiResult<T> =
 type SourceMode = 'local_path' | 'external_url' | 'file_id'
 type SourceDraft = { mode: SourceMode; value: string; assetVersionId?: string }
 type ApprovedAsset = { asset: Asset; version: AssetVersion }
+type RouteEvidenceSummary = {
+  total: number
+  reviewed: number
+  passed: number
+  failed: number
+  pending: number
+  averageScore: number | null
+}
 
 const referenceRoles: H3MediaRole[] = ['reference_image', 'reference_video', 'reference_audio']
 const referenceRoleLimits: Record<H3MediaRole, number> = {
@@ -103,21 +111,86 @@ const evidenceRouteLabels: Record<VideoGenerationRoute, string> = {
   REFERENCE: 'R',
 }
 
-const evidenceStatusLabels: Record<string, string> = {
-  AWAITING_OUTPUT: '生成中',
-  AWAITING_REVIEW: '待审',
-  REVIEWED: '已审',
-  SUBMIT_UNKNOWN: '待对账',
-  OUTPUT_MISSING: '待恢复',
-  FAILED: '失败',
-  CANCELLED: '取消',
-}
-
 function badgeTone(status: string): string {
   if (status === 'SUCCEEDED' || status === 'PASSED' || status === 'REVIEWED') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
   if (status === 'FAILED' || status === 'REJECTED') return 'border-red-500/30 bg-red-500/10 text-red-300'
   if (status === 'SUBMIT_UNKNOWN' || status === 'OUTPUT_MISSING') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
   return 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+}
+
+function summarizeRouteEvidence(evidence: RouteEvidence[]): RouteEvidenceSummary {
+  const qualityEvidence = evidence.filter((item) => item.purpose === 'QUALITY_PROBE')
+  const reviewedEvidence = qualityEvidence.filter((item) => item.status === 'REVIEWED')
+  const scores = reviewedEvidence.flatMap((item) => (
+    item.score === null || item.score === undefined ? [] : [item.score]
+  ))
+  return {
+    total: qualityEvidence.length,
+    reviewed: reviewedEvidence.length,
+    passed: reviewedEvidence.filter((item) => item.hard_gate_passed === true).length,
+    failed: reviewedEvidence.filter((item) => item.hard_gate_passed === false).length,
+    pending: qualityEvidence.length - reviewedEvidence.length,
+    averageScore: scores.length > 0
+      ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+      : null,
+  }
+}
+
+function routeConditionKey(run: H3ProviderRun | undefined, evidence: RouteEvidence): string {
+  if (!run) return `missing-run:${evidence.task_id}`
+  return JSON.stringify({
+    route: run.route,
+    duration: run.request?.duration ?? null,
+    prompt: run.prompt.trim(),
+    media: (run.media_inputs ?? []).map((input) => ({
+      kind: input.kind,
+      role: input.role,
+      asset_version_id: input.asset_version_id ?? null,
+      source: input.asset_version_id ? null : input.source,
+    })),
+  })
+}
+
+function summarizeRouteConditions(
+  evidence: RouteEvidence[],
+  runsByTask: Map<string, H3ProviderRun>,
+): RouteEvidenceSummary[] {
+  const byCondition = new Map<string, RouteEvidence[]>()
+  for (const item of evidence.filter((candidate) => candidate.purpose === 'QUALITY_PROBE')) {
+    const key = routeConditionKey(runsByTask.get(item.task_id), item)
+    byCondition.set(key, [...(byCondition.get(key) ?? []), item])
+  }
+  return [...byCondition.values()]
+    .map(summarizeRouteEvidence)
+    .sort((left, right) => (
+      right.reviewed - left.reviewed
+      || right.total - left.total
+      || right.passed - left.passed
+    ))
+}
+
+function evidenceSummaryTone(summary: RouteEvidenceSummary): string {
+  if (summary.total === 0) return 'text-zinc-700'
+  if (summary.reviewed === 0) return 'text-amber-300'
+  const passRate = summary.passed / summary.reviewed
+  const failureRate = summary.failed / summary.reviewed
+  if (summary.reviewed >= 10 && passRate >= 0.7 && failureRate <= 0.2) return 'text-emerald-300'
+  if (summary.failed > 0) return 'text-amber-300'
+  return 'text-blue-300'
+}
+
+function evidenceSummaryLabel(
+  summary: RouteEvidenceSummary,
+  conditionCount: number,
+  otherSamples: number,
+): string {
+  if (summary.total === 0) return '未测试'
+  const conditionPrefix = conditionCount > 1 ? `${conditionCount}组·` : ''
+  const otherSuffix = otherSamples > 0 ? `·另${otherSamples}样本` : ''
+  if (summary.reviewed === 0) return `${conditionPrefix}${summary.pending}待审${otherSuffix}`
+  const pending = summary.pending > 0 ? `·${summary.pending}待审` : ''
+  const sampleGate = summary.reviewed < 10 ? '·待扩样' : ''
+  return `${conditionPrefix}${summary.passed}/${summary.reviewed}过${pending}${otherSuffix}${sampleGate}`
 }
 
 function Badge({ status, children }: { status: string; children: React.ReactNode }) {
@@ -556,14 +629,12 @@ export function H3LabPanel({
 
   const unknownTasks = project.tasks.filter((task) => task.provider === 'minimax' && task.status === 'SUBMIT_UNKNOWN')
   const totalCost = runs.reduce((sum, item) => sum + (item.estimated_cost_usd ?? 0), 0)
+  const runsByTask = new Map(runs.map((run) => [run.task_id, run]))
   const routeEvidence = project.route_evidence ?? []
-  const evidenceByShotRoute = new Map<string, RouteEvidence>()
+  const evidenceByShotRoute = new Map<string, RouteEvidence[]>()
   for (const evidence of routeEvidence) {
     const key = `${evidence.shot_id}:${evidence.route}`
-    const current = evidenceByShotRoute.get(key)
-    if (!current || evidence.purpose === 'QUALITY_PROBE' || current.purpose !== 'QUALITY_PROBE') {
-      evidenceByShotRoute.set(key, evidence)
-    }
+    evidenceByShotRoute.set(key, [...(evidenceByShotRoute.get(key) ?? []), evidence])
   }
   const evidenceRoutes = Object.keys(evidenceRouteLabels) as VideoGenerationRoute[]
   const inputRoles: H3MediaRole[] = route === 'FRAME_FIRST'
@@ -580,7 +651,7 @@ export function H3LabPanel({
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <Badge status="RUNNING">Phase 2</Badge>
+              <Badge status="RUNNING">Phase 4</Badge>
               <Badge status="ACKNOWLEDGED">MiniMax-H3 via AceData</Badge>
               <Badge status="SUCCEEDED">768P fixed</Badge>
             </div>
@@ -617,27 +688,32 @@ export function H3LabPanel({
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">代表镜头证据矩阵</h3></div><span className="text-xs text-zinc-600">镜头 1 / 2 / 5 / 8</span></div>
+          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">镜头路线证据矩阵</h3></div><span className="text-xs text-zinc-600">镜头 1–8</span></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {availableShots.map((shot) => {
-              const reviewedCount = evidenceRoutes.filter((routeName) => (
-                evidenceByShotRoute.get(`${shot.id}:${routeName}`)?.purpose === 'QUALITY_PROBE'
-                && evidenceByShotRoute.get(`${shot.id}:${routeName}`)?.status === 'REVIEWED'
-              )).length
+              const shotEvidence = routeEvidence.filter((evidence) => (
+                evidence.shot_id === shot.id && evidence.purpose === 'QUALITY_PROBE'
+              ))
+              const reviewedCount = shotEvidence.filter((evidence) => evidence.status === 'REVIEWED').length
               return (
                 <button key={shot.id} onClick={() => setShotId(shot.id)} className={`rounded-xl border p-3 text-left transition ${shotId === shot.id ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700'}`}>
-                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-white">镜头 {shot.sequence}</span><span className="text-[10px] text-zinc-600">质量已审 {reviewedCount}/{evidenceRoutes.length}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-white">镜头 {shot.sequence}</span><span className="text-[10px] text-zinc-600">样本已审 {reviewedCount}/{shotEvidence.length}</span></div>
                   <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-500">{shot.narrative_purpose}</p>
                   <div className="mt-3 grid grid-cols-2 gap-1.5">
                     {evidenceRoutes.map((routeName) => {
-                      const evidence = evidenceByShotRoute.get(`${shot.id}:${routeName}`)
-                      return <span key={routeName} className="flex items-center justify-between rounded border border-zinc-800 bg-black/20 px-1.5 py-1 text-[10px]"><span className="font-medium text-zinc-400">{evidenceRouteLabels[routeName]}</span><span className={evidence ? badgeTone(evidence.status) : 'text-zinc-700'}>{evidence ? `${evidence.purpose === 'QUALITY_PROBE' ? 'Q' : 'C'}·${evidenceStatusLabels[evidence.status] ?? evidence.status}` : '未测试'}</span></span>
+                      const evidence = evidenceByShotRoute.get(`${shot.id}:${routeName}`) ?? []
+                      const conditionSummaries = summarizeRouteConditions(evidence, runsByTask)
+                      const summary = conditionSummaries[0] ?? summarizeRouteEvidence([])
+                      const otherSamples = conditionSummaries.slice(1).reduce((sum, item) => sum + item.total, 0)
+                      const averageScore = summary.averageScore === null ? '' : `，均分 ${summary.averageScore.toFixed(1)}`
+                      return <span key={routeName} title={`条件组 ${conditionSummaries.length}；主组样本 ${summary.total}，已审 ${summary.reviewed}，通过 ${summary.passed}，失败 ${summary.failed}，待审 ${summary.pending}${averageScore}；其他条件样本 ${otherSamples}`} className="flex items-center justify-between gap-1 rounded border border-zinc-800 bg-black/20 px-1.5 py-1 text-[10px]"><span className="font-medium text-zinc-400">{evidenceRouteLabels[routeName]}</span><span className={evidenceSummaryTone(summary)}>{evidenceSummaryLabel(summary, conditionSummaries.length, otherSamples)}</span></span>
                     })}
                   </div>
                 </button>
               )
             })}
           </div>
+          <p className="mt-3 text-[11px] leading-5 text-zinc-600">矩阵按质量样本聚合；提示词、媒体绑定或时长变化会拆成不同条件组，卡片显示已审样本最多的主组并标出其他样本。“待扩样”表示尚未达到默认路线至少 10 个有效样本的门槛。</p>
         </div>
       </section>
 

@@ -100,6 +100,7 @@
 - 2026-08-14：I001–I004 的供应商中立 Mock 部分已落地并通过 Phase 1 验收。SQLite/API、持久化任务与恢复、16 个 Take、局部失效、Retake/Extend/Gap Fill、50 秒 TimelineManifest、带/无字幕导出和桌面交互闭环均已验证；详见 [Phase 1 实施记录](10-phase1-mock-vertical-slice.md)。
 - 2026-08-15：H3 768P Provider 工程与真实合同冒烟均已落地。Direct/Frame/Reference capability 校验、AceData Adapter、持久化提交/轮询/取消、`SUBMIT_UNKNOWN` 对账、`OUTPUT_MISSING` 恢复、原始 Take 下载、用量/价格、人工 QA 和桌面实验台通过验证。首条 5 秒 Direct 样本完成远端创建、下载和人工听看，RouteEvidence 为 `REVIEWED / HARD_FAIL / 3.0`：声音无明显问题，店招乱码且红色录音笔变成对讲机；详见 [Phase 2 实施记录](11-phase2-minimax-h3-provider.md)。
 - 这项结果关闭的是 H3 Provider 与真实媒体闭环门，不改变 M002–M004、M006、M008、M010 和 E008 的 `EXPERIMENT_REQUIRED` 状态；合同冒烟不构成 Direct 质量通过，Frame/Reference、锁定对白、跨镜声线、口型和镜头分组仍必须由批准资产下的多样本实验决定。
+- 2026-08-15：Phase 3 已批准林夏、周衡、便利店、红色录音笔及 S01/S02/S05/S08 镜头关键帧正式版本，并验证 Azure GPT Image 2 多图编辑链路。Phase 4 首轮人工审片得到 S01 F1 5/5、S02 Reference 5/5、S05 F1 5/5、S08 原 F1 3/5；前三者是候选首选路线，S08 原方案因动作完成度波动不能作为稳定默认。GPT-5.6-sol 已按 Toonflow、ViMax、LTX Desktop 的成熟机制接入可见资产、实际媒体绑定、上一镜终态、动作拍数和头尾安全区，八镜头均通过无提交 H3 768P 请求预检。E008 仍保持 `EXPERIMENT_REQUIRED`，直到候选路线达到样本门槛、其余镜头有通过 Take，并完成单集最终人审；详见 [Phase 4 实验记录](13-phase4-h3-visual-route-experiment.md)。
 
 ## 对话顺序
 
