@@ -12,7 +12,7 @@
 | Jellyfish | `a9678194` | Apache-2.0 | 项目/资产/准备度/任务架构清楚 | 时间线是占位壳，无音频与成片链路，媒体契约难表达多模态角色 | 长期控制面候选 |
 | Wind Comic | `c83e1cf5` | MIT | 一句话、9:16、FFmpeg、字幕、音频、QA、预算模块丰富 | 系统面很宽；当前候选模型适配器过时或不完整 | 拆用成片/QA 模块，不宜直接全盘继承 |
 | LumenX | `f2a02e23` | MIT | Pipeline-first 产品、模型目录、候选工作台、TTS/合成 | Provider 契约偏现有模型；导出选项不完整 | 快速改造候选，不因已有某个模型适配器加分 |
-| LTX Desktop | `24a8440d`（`v1.1.0`） | Apache-2.0（应用；权重另授权） | Electron 桌面壳、专业时间线、Take/Retake/Extend、补空隙、真实 FFmpeg 导出 | 缺少短剧语义模型；项目元数据与任务恢复较弱；Provider 强绑定 LTX；预览与导出能力不完全一致 | 桌面编辑壳与底座 Spike 强候选 |
+| LTX Desktop | `2ac5730`（2026-08-14 上游快照） | Apache-2.0（应用；权重另授权） | Electron 桌面壳、专业时间线、Take/Retake/Extend、补空隙、真实 FFmpeg 导出 | 缺少短剧语义模型；项目元数据与任务恢复较弱；Provider 强绑定 LTX；预览与导出能力不完全一致 | 已采用的桌面编辑底座 |
 
 完整仓库链接见 [来源清单](sources.md)。
 
@@ -176,7 +176,7 @@
 
 ## 8. LTX Desktop
 
-本轮固定审查 `v1.1.0` 对应 commit `24a8440d`。它是 Beta，前端仍在重构；本轮没有下载数十 GB 模型或实际运行生成，只做静态源码、CI 和测试结构审查。
+最初审查基于 `v1.1.0` 对应 commit `24a8440d`；2026-08-15 又对最新上游 commit `2ac57301af814f4fbdde2380c23e64e673860770` 做了增量静态复核。没有下载或运行 LTX 模型，只审查应用代码、CI 和测试结构。
 
 ### 源码确认的优点
 
@@ -188,6 +188,24 @@
 - 支持本地或 API 生成，Windows/Linux CUDA 与 Apple Silicon MPS 都有路径；`v1.1.0` 还加入 LoRA/IC-LoRA 库、模型版本管理、Extend 和 Stage Cache；
 - 后端测试数量和跨 Linux/macOS/Windows 的 CI 明显强于一般 Demo，另有冷启动、显存、输出完整性与 soak/leak 性能检查；
 - 没有产品用户、组织、RBAC 或租户系统。Hugging Face 登录只服务于受限模型下载，LTX/fal/Gemini Key 只服务于 Provider，符合单用户边界。
+
+### 最新上游增量复核
+
+- `suggest_gap_prompt_handler.py` 会同时读取缺口前一段的末帧、后一段的首帧、两侧 prompt 和缺口时长，再生成桥接提示。这确认了“相邻镜头状态是局部重做输入”，而不是只依赖当前镜头的一段自由文本；
+- `GapGenerationModal.tsx` 把前后帧并排展示，并允许替换起始或结束参考。当前视频模型一次仍只能使用一个条件帧；选择结束帧时使用从该帧起生成再反向播放的模型特定折衷，不能泛化成 H3 的双边界能力；
+- Retake、Extend 与 Gap Fill 仍是不同操作，生成结果作为新 Take/新资产保存，保留原片。这继续支持本项目“局部返工不覆盖原 Take”的产品边界；
+- 生成恢复仍主要依赖 `localStorage` 中的单个 recovery marker，因而本项目继续以 SQLite 任务表和 Provider task ID 为真实恢复来源，不照搬该实现。
+
+### 已落实到本项目的复用点
+
+本轮不只把这些项目作为灵感来源，而是把明确机制落进当前实现：
+
+- Toonflow：提示编译输入增加上一镜终态、每镜前后 0.5 秒安全区、按时长限制动作节拍，并把可见资产与项目资产库分开；
+- Toonflow 的模式边界：H3 路线由上游规划器确定，GPT 提示编译器不得自行把 Direct、Frame 或 Reference 改成另一条路线；
+- ViMax：继续分开保存首帧、尾帧、运动和声音意图；实际媒体绑定会携带 role、资产名、版本描述和用途进入提示编译，避免“知道用了参考图但不知道参考什么”；
+- ViMax：下一轮关键帧生成采用多候选后按人物身份、空间关系和目标描述筛选，不把单次最好看的图直接视为批准资产；
+- LTX Desktop：保留 Take、Retake、Extend、Gap Fill 与非破坏性时间线；相邻镜头上下文用于局部返工，但模型能力限制仍由 H3 Adapter 独立校验；
+- 纳逗 Pro：将同一场景的多视角空间包作为后续反打镜头优化方向；当前便利店只有单张场景基准图，因此该能力仍是下一轮资产实验，不伪装成已实现。
 
 ### 对短剧平台最有价值的可复用机制
 
@@ -309,15 +327,16 @@ LTX Desktop 会实质改变原先的底座判断：**如果首版要做单用户
 
 ### LTX Desktop
 
-- [三层架构与运行要求](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/README.md)
+- [三层架构与运行要求](https://github.com/Lightricks/LTX-Desktop/blob/2ac57301af814f4fbdde2380c23e64e673860770/README.md)
 - [项目、资产、时间线与字幕 schema](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/frontend/types/project-model.ts)
 - [`localStorage` 项目持久化](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/frontend/lib/project-storage.ts)
 - [单客户端内存后端架构](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/backend/architecture.md)
 - [活动生成状态](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/backend/state/app_state_types.py)
 - [导航期间的生成恢复](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/frontend/lib/generation-recovery.ts)
 - [LTX 专用视频请求 contract](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/backend/api_types.py)
-- [时间线 Gap Fill 交互](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/frontend/views/editor/VideoEditorTimelineEditingPanel.tsx)
-- [相邻镜头 Gap Prompt 建议](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/backend/handlers/suggest_gap_prompt_handler.py)
+- [时间线 Gap Fill 交互](https://github.com/Lightricks/LTX-Desktop/blob/2ac57301af814f4fbdde2380c23e64e673860770/frontend/views/editor/VideoEditorTimelineEditingPanel.tsx)
+- [Gap 起止帧选择交互](https://github.com/Lightricks/LTX-Desktop/blob/2ac57301af814f4fbdde2380c23e64e673860770/frontend/views/editor/GapGenerationModal.tsx)
+- [相邻镜头 Gap Prompt 建议](https://github.com/Lightricks/LTX-Desktop/blob/2ac57301af814f4fbdde2380c23e64e673860770/backend/handlers/suggest_gap_prompt_handler.py)
 - [FFmpeg 导出入口](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/electron/export/export-handler.ts)
 - [导出视频滤镜图](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/electron/export/video-filter.ts)
 - [跨平台 CI](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/.github/workflows/ci.yml)

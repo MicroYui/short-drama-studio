@@ -59,10 +59,12 @@ def build_h3_prompt(document: ProjectDocument, shot: ShotPlan) -> str:
         f"镜头运动：{shot.camera}。表演与动作从“{shot.continuity.action_in}”"
         f"自然衔接到“{shot.continuity.action_out}”。"
         f"人物位置与视线：{shot.continuity.character_positions}；{shot.continuity.eyeline}。"
-        f"关键道具：{shot.continuity.prop_state_in}，结束时{shot.continuity.prop_state_out}。"
+        f"连续性状态：开始时{shot.continuity.prop_state_in}；"
+        f"结束时{shot.continuity.prop_state_out}。"
         f"声音：{shot.audio_intent}。{dialogue_text}"
-        "保持人物身份、服装、便利店空间、红色录音笔外观和手持方向准确；"
-        "禁止额外人物、错误字幕、水印、画面内文字和无关对白。"
+        "只保持本镜头明确出现的人物、服装、场景、道具及左右手方向连续；"
+        "不要主动加入本镜头未提及的角色或道具；"
+        "禁止错误字幕、水印、画面内可读文字和无关对白。"
     )
     if len(prompt) > 7000:
         raise H3CapabilityError("Compiled H3 prompt exceeds 7000 characters")

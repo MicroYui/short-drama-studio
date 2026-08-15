@@ -5089,6 +5089,108 @@
         "title": "LTXVideoGenerationSpec",
         "type": "object"
       },
+      "LanguagePromptCompileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "maximum": 15.0,
+                "minimum": 4.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "media_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/H3MediaInput"
+            },
+            "maxItems": 12,
+            "title": "Media Inputs",
+            "type": "array"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute",
+            "default": "DIRECT"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "source_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 7000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prompt"
+          }
+        },
+        "required": [
+          "shot_id"
+        ],
+        "title": "LanguagePromptCompileRequest",
+        "type": "object"
+      },
+      "LanguagePromptCompileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "compiled_prompt": {
+            "title": "Compiled Prompt",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "model": {
+            "default": "gpt-5.6-sol",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "default": "openai-compatible",
+            "title": "Provider",
+            "type": "string"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "source_prompt": {
+            "title": "Source Prompt",
+            "type": "string"
+          },
+          "validation_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Validation Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shot_id",
+          "route",
+          "duration_seconds",
+          "source_prompt",
+          "compiled_prompt",
+          "validation_notes"
+        ],
+        "title": "LanguagePromptCompileResponse",
+        "type": "object"
+      },
       "LanguageProviderConfigResponse": {
         "additionalProperties": false,
         "properties": {
@@ -11126,6 +11228,68 @@
           }
         },
         "summary": "Enqueue H3 Probe",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/h3/prompt/compile": {
+      "post": {
+        "operationId": "compile_h3_prompt_with_language_model_api_short_drama_projects__project_id__h3_prompt_compile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LanguagePromptCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguagePromptCompileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Compile H3 Prompt With Language Model",
         "tags": [
           "short-drama"
         ]

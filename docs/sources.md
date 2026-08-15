@@ -55,7 +55,7 @@
 
 - 即梦：[官方主页](https://www.jimeng.com/)
 - 可灵：[VIDEO 3.0 用户指南](https://app.klingai.com/cn/quickstart/klingai-video-3-model-user-guide)
-- LTX Studio：[产品主页](https://website.ltx.studio/)、[TV/Media workflow](https://ltx.io/studio/solution/tv-media-networks)、[Audio-to-Video](https://ltx.io/blog/audio-to-video-syncing-sound-with-ai-video-generation)、[Top Features 2026](https://ltx.io/blog/top-ltx-studio-features)、[Projects update](https://ltx.io/blog/introducing-projects)
+- LTX Studio：[产品主页](https://website.ltx.studio/)、[完整工作流教程](https://ltx.io/blog/ltx-studio-tutorial)、[TV/Media workflow](https://ltx.io/studio/solution/tv-media-networks)、[Retake 教程](https://ltx.io/blog/retake-ai-directing-tool-ltx-studio)、[Elements 教程](https://ltx.io/blog/getting-started-with-elements)、[Retake API](https://docs.ltx.io/api-documentation/api-reference/async-video-generation/submit-retake)
 - 纳逗 Pro：[业务页](https://www.iqiyi.com/common/aqynatoopro.html)、[发布说明](https://pages.iqiyi.com/m/scpr/63x0au29.html?qyc-pr=1)、[新功能说明](https://pages.iqiyi.com/m/scpr/63x0avkx.html?qyc-pr=1)
 
 公开产品资料中的效果描述标为 `PRODUCT-CLAIM`。由于这些产品不可用于本项目，本轮不安排登录、积分或平台实测。
@@ -70,13 +70,13 @@
 | Jellyfish | [Forget-C/Jellyfish](https://github.com/Forget-C/Jellyfish) | [`a9678194ddf2d9be3ccbe78d4287d87d5089e123`](https://github.com/Forget-C/Jellyfish/commit/a9678194ddf2d9be3ccbe78d4287d87d5089e123) | Apache-2.0 |
 | Wind Comic | [ChrisChen667788/wind-comic](https://github.com/ChrisChen667788/wind-comic) | [`c83e1cf5e9b88fa8ac62bb737c79985a95243b8d`](https://github.com/ChrisChen667788/wind-comic/commit/c83e1cf5e9b88fa8ac62bb737c79985a95243b8d) | MIT |
 | LumenX | [alibaba/lumenx](https://github.com/alibaba/lumenx) | [`f2a02e23171447c939e7d8e1386b24d17049bbf1`](https://github.com/alibaba/lumenx/commit/f2a02e23171447c939e7d8e1386b24d17049bbf1) | MIT |
-| LTX Desktop | [Lightricks/LTX-Desktop](https://github.com/Lightricks/LTX-Desktop) | [`24a8440d7a424c283d7e6dd534cbf78549785090`](https://github.com/Lightricks/LTX-Desktop/commit/24a8440d7a424c283d7e6dd534cbf78549785090)（`v1.1.0`） | Apache-2.0（应用代码） |
+| LTX Desktop | [Lightricks/LTX-Desktop](https://github.com/Lightricks/LTX-Desktop) | [`2ac57301af814f4fbdde2380c23e64e673860770`](https://github.com/Lightricks/LTX-Desktop/commit/2ac57301af814f4fbdde2380c23e64e673860770)（2026-08-14 上游快照） | Apache-2.0（应用代码） |
 
 本轮为静态源码审查，没有安装全部依赖、运行全套测试或调用仓库配置的真实 Provider。License 取自对应快照的仓库声明；进入发布或 SaaS 集成前仍需按最终使用方式复核。
 
-LTX Desktop 的应用代码与模型权重必须分开判断：[应用 License](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/LICENSE.txt) 是 Apache-2.0，但 [NOTICES](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/NOTICES.md) 明确指出模型权重另受模型条款约束。该快照绑定 LTX-2.3；其 [Community License](https://huggingface.co/Lightricks/LTX-2.3/blob/main/LICENSE) 对年营收至少 1,000 万美元的实体要求另购商业许可，并限制未经许可将模型用于直接竞争或替代 Lightricks 商业产品的应用。这里仅记录会影响底座选择的事实，不作法律结论；当前决定只复用 Apache 应用代码，LTX 权重不进入产品或本轮实验。
+LTX Desktop 的应用代码与模型权重必须分开判断：[应用 License](https://github.com/Lightricks/LTX-Desktop/blob/2ac57301af814f4fbdde2380c23e64e673860770/LICENSE.txt) 是 Apache-2.0，但 [NOTICES](https://github.com/Lightricks/LTX-Desktop/blob/2ac57301af814f4fbdde2380c23e64e673860770/NOTICES.md) 明确指出模型权重另受模型条款约束。这里仅记录会影响底座选择的事实，不作法律结论；当前决定只复用 Apache 应用代码，LTX 权重不进入产品或本轮实验。
 
-LTX 模型本身的当前能力与版本另见 [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)。截至本快照，官方仓库推荐 LTX-2.5，而 LTX Desktop `v1.1.0` 的代码和 LoRA 目录仍围绕 LTX-2.3，因此不能把 Desktop 内置引擎等同于 LTX 模型线的最新能力。
+LTX 模型本身的版本与能力另见 [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)。Desktop 代码中的生成、Retake、Extend 和 LoRA 路径仍带有具体 LTX 模型版本假设，因此不能把桌面应用壳等同于某个模型版本的通用能力；当前项目只复用应用与编辑代码。
 
 ## 4. ComfyUI 官方开发资料
 

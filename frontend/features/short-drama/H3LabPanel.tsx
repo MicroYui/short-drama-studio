@@ -13,6 +13,7 @@ import {
   RefreshCw,
   RotateCcw,
   Send,
+  Sparkles,
   Square,
 } from 'lucide-react'
 import { pathToFileUrl } from '../../lib/file-url'
@@ -215,8 +216,8 @@ export function H3LabPanel({
   onError: (message: string) => void
   onNotice: (message: string) => void
 }) {
-  const representativeShots = useMemo(
-    () => project.document.shots.filter((shot) => [1, 2, 5, 8].includes(shot.sequence)),
+  const availableShots = useMemo(
+    () => [...project.document.shots].sort((left, right) => left.sequence - right.sequence),
     [project.document.shots],
   )
   const approvedAssets = useMemo<ApprovedAsset[]>(() => project.document.assets.flatMap((asset) => {
@@ -226,7 +227,7 @@ export function H3LabPanel({
     if (!version.local_path && !version.external_url) return []
     return [{ asset, version }]
   }), [project.document.assets])
-  const [shotId, setShotId] = useState(representativeShots[0]?.id ?? project.document.shots[0]?.id ?? '')
+  const [shotId, setShotId] = useState(availableShots[0]?.id ?? '')
   const [route, setRoute] = useState<VideoGenerationRoute>('DIRECT')
   const selectedShot = project.document.shots.find((shot) => shot.id === shotId) ?? project.document.shots[0]
   const [duration, setDuration] = useState(Math.ceil(selectedShot?.duration_seconds ?? 5))
@@ -407,6 +408,25 @@ export function H3LabPanel({
     '编译 H3 请求预览',
     () => ShortDramaApi.previewH3Probe(project.document.project.id, probeRequest()),
     setPreview,
+  )
+
+  const compileWithGpt = () => void run(
+    'GPT-5.6-sol 编译镜头提示词',
+    () => ShortDramaApi.compileH3PromptWithLanguageModel(
+      project.document.project.id,
+      {
+        shot_id: shotId,
+        route,
+        duration_seconds: duration,
+        source_prompt: promptOverride.trim() || null,
+        media_inputs: mediaInputs,
+      },
+    ),
+    (result) => {
+      setPromptOverride(result.compiled_prompt)
+      setPreview(null)
+      onNotice(`GPT 提示词已通过 ${result.validation_notes.length} 项锁定事实检查；请继续预览，不会自动提交 H3`)
+    },
   )
 
   const submitProbe = () => void run(
@@ -599,7 +619,7 @@ export function H3LabPanel({
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <div className="flex items-center justify-between"><div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">代表镜头证据矩阵</h3></div><span className="text-xs text-zinc-600">镜头 1 / 2 / 5 / 8</span></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {representativeShots.map((shot) => {
+            {availableShots.map((shot) => {
               const reviewedCount = evidenceRoutes.filter((routeName) => (
                 evidenceByShotRoute.get(`${shot.id}:${routeName}`)?.purpose === 'QUALITY_PROBE'
                 && evidenceByShotRoute.get(`${shot.id}:${routeName}`)?.status === 'REVIEWED'
@@ -643,6 +663,7 @@ export function H3LabPanel({
             {inputRoles.length > 0 && <div className="space-y-3">{route === 'REFERENCE' && <p className="text-xs text-zinc-500">已填写 {mediaInputs.length}/12 个参考素材；填满后其他空槽自动锁定。</p>}{inputRoles.map((roleName) => <div key={roleName} className="space-y-2">{drafts[roleName].map((draft, draftIndex) => <SourceInput key={`${roleName}-${draftIndex}`} role={roleName} index={draftIndex} draft={draft} disabled={route === 'REFERENCE' && mediaInputs.length >= 12 && !draft.value.trim()} onChange={(next) => updateDraft(roleName, draftIndex, next)} onRemove={route === 'REFERENCE' && drafts[roleName].length > 1 ? () => removeReferenceDraft(roleName, draftIndex) : undefined} />)}{route === 'REFERENCE' && <button className={subtleButton} type="button" disabled={drafts[roleName].length >= referenceRoleLimits[roleName] || mediaInputs.length >= 12} onClick={() => addReferenceDraft(roleName)}>+ 添加{roleLabels[roleName]}（{drafts[roleName].length}/{referenceRoleLimits[roleName]}）</button>}</div>)}</div>}
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Prompt override（留空则由当前剧本、Bible、分镜与连续性自动编译）</span><textarea className={`${inputClass} min-h-24 resize-y leading-6`} value={promptOverride} onChange={(event) => setPromptOverride(event.target.value)} /></label>
             <div className="flex flex-wrap gap-2">
+              <button className={secondaryButton} disabled={!shotId || busy !== null} onClick={compileWithGpt}><Sparkles className="h-3.5 w-3.5" />GPT-5.6-sol 编译（仅文本）</button>
               <button className={secondaryButton} disabled={!shotId || !requiredInputsReady || busy !== null} onClick={compilePreview}><Eye className="h-3.5 w-3.5" />预览请求</button>
               <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交{purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'} · 基础约 ${estimatedBaseCost(duration, config)}</button>
             </div>

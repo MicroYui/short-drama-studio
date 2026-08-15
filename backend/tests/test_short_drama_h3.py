@@ -11,6 +11,7 @@ import imageio_ffmpeg
 import pytest
 from PIL import Image
 
+from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
     H3CreateResponse,
     H3DeleteResponse,
@@ -39,6 +40,7 @@ from short_drama.models import (
 from short_drama.providers.minimax_h3_client import H3SubmissionUnknown
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
+    build_h3_prompt,
     compile_h3_request,
 )
 from short_drama.service import ShortDramaService, WorkflowConflictError
@@ -212,6 +214,20 @@ def test_acedata_h3_response_fixtures_parse() -> None:
     listed = H3ListResponse.model_validate(_load("list_tasks.json"))
     assert listed.total == 1
     assert listed.items[0].model == "MiniMax-H3"
+
+
+def test_h3_prompt_only_constrains_assets_present_in_the_shot() -> None:
+    document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    shot_2 = next(shot for shot in document.shots if shot.sequence == 2)
+    shot_5 = next(shot for shot in document.shots if shot.sequence == 5)
+
+    dialogue_prompt = build_h3_prompt(document, shot_2)
+    prop_prompt = build_h3_prompt(document, shot_5)
+
+    assert "红色录音笔" not in dialogue_prompt
+    assert "不要主动加入本镜头未提及的角色或道具" in dialogue_prompt
+    assert "红色录音笔" in prop_prompt
+    assert "连续性状态：开始时道具从周衡右手进入" in prop_prompt
 
 
 def test_h3_compiler_enforces_routes_before_network() -> None:

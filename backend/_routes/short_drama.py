@@ -31,6 +31,8 @@ from short_drama.image_models import (
     ImageTaskResponse,
 )
 from short_drama.language_models import (
+    LanguagePromptCompileRequest,
+    LanguagePromptCompileResponse,
     LanguageProviderConfigResponse,
     LanguageProviderConfigUpdate,
 )
@@ -128,6 +130,26 @@ def validate_language_provider_config(
     try:
         return service.validate_language_provider_credentials()
     except (WorkflowConflictError, ProviderOperationError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/h3/prompt/compile",
+    response_model=LanguagePromptCompileResponse,
+)
+def compile_h3_prompt_with_language_model(
+    project_id: str,
+    request: LanguagePromptCompileRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> LanguagePromptCompileResponse:
+    try:
+        return service.compile_h3_prompt_with_language_model(project_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 

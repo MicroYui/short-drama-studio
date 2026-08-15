@@ -30,6 +30,7 @@ export type ImageGenerationTask = components['schemas']['ImageGenerationTask']
 export type ImageTaskCreateRequest = components['schemas']['ImageTaskCreateRequest']
 export type ImageProviderConfig = components['schemas']['ImageProviderConfigResponse']
 export type LanguageProviderConfig = components['schemas']['LanguageProviderConfigResponse']
+export type LanguagePromptCompileResponse = components['schemas']['LanguagePromptCompileResponse']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -65,6 +66,7 @@ const validateImageConfig = makeEndpointClient('/api/short-drama/providers/gpt-i
 const getLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol', 'get')
 const updateLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol', 'post')
 const validateLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol/validate', 'post')
+const compileH3PromptWithLanguageModel = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/prompt/compile', 'post')
 const createAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/assets', 'post')
 const importLocalAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-local', 'post')
 const importUrlAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-url', 'post')
@@ -162,6 +164,14 @@ export const ShortDramaApi = {
     updateLanguageConfig({ api_key: apiKey, base_url: baseUrl, clear_api_key: clearApiKey })
   ),
   validateLanguageConfig: () => validateLanguageConfig(),
+  compileH3PromptWithLanguageModel: (
+    projectId: string,
+    body: components['schemas']['LanguagePromptCompileRequest'],
+  ) => compileH3PromptWithLanguageModel(
+    body,
+    undefined,
+    projectPath(projectId, '/h3/prompt/compile'),
+  ),
   createAsset: (
     projectId: string,
     body: components['schemas']['AssetCreateRequest'],

@@ -947,6 +947,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/h3/prompt/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compile H3 Prompt With Language Model */
+        post: operations["compile_h3_prompt_with_language_model_api_short_drama_projects__project_id__h3_prompt_compile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/h3/runs": {
         parameters: {
             query?: never;
@@ -3178,6 +3195,43 @@ export interface components {
             supported_resolutions_durations: {
                 [key: string]: components["schemas"]["LTXVideoGenerationResolutionSpec"];
             };
+        };
+        /** LanguagePromptCompileRequest */
+        LanguagePromptCompileRequest: {
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Media Inputs */
+            media_inputs?: components["schemas"]["H3MediaInput"][];
+            /** @default DIRECT */
+            route: components["schemas"]["VideoGenerationRoute"];
+            /** Shot Id */
+            shot_id: string;
+            /** Source Prompt */
+            source_prompt?: string | null;
+        };
+        /** LanguagePromptCompileResponse */
+        LanguagePromptCompileResponse: {
+            /** Compiled Prompt */
+            compiled_prompt: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /**
+             * Model
+             * @default gpt-5.6-sol
+             */
+            model: string;
+            /**
+             * Provider
+             * @default openai-compatible
+             */
+            provider: string;
+            route: components["schemas"]["VideoGenerationRoute"];
+            /** Shot Id */
+            shot_id: string;
+            /** Source Prompt */
+            source_prompt: string;
+            /** Validation Notes */
+            validation_notes: string[];
         };
         /** LanguageProviderConfigResponse */
         LanguageProviderConfigResponse: {
@@ -6676,6 +6730,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["H3ProbeResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    compile_h3_prompt_with_language_model_api_short_drama_projects__project_id__h3_prompt_compile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LanguagePromptCompileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguagePromptCompileResponse"];
                 };
             };
             /** @description Client Error */

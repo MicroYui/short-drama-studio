@@ -53,6 +53,8 @@ from short_drama.image_models import (
     ImageTaskResponse,
 )
 from short_drama.language_models import (
+    LanguagePromptCompileRequest,
+    LanguagePromptCompileResponse,
     LanguageProviderConfigResponse,
     LanguageProviderConfigUpdate,
 )
@@ -93,6 +95,11 @@ from short_drama.models import (
     WorkerDrainResponse,
 )
 from short_drama.providers.h3_config import H3ProviderConfigStore
+from short_drama.providers.h3_language_prompt import (
+    LanguagePromptValidationError,
+    build_language_prompt_input,
+    validate_language_prompt,
+)
 from short_drama.providers.image_config import ImageProviderConfigStore
 from short_drama.providers.image_provider import ImageProviderError
 from short_drama.providers.language_config import LanguageProviderConfigStore
@@ -255,6 +262,70 @@ class ShortDramaService:
         except LanguageProviderError as exc:
             raise ProviderOperationError(str(exc)) from exc
         return self.language_config.response()
+
+    def compile_h3_prompt_with_language_model(
+        self,
+        project_id: str,
+        request: LanguagePromptCompileRequest,
+    ) -> LanguagePromptCompileResponse:
+        document = self._require_project_document(project_id)
+        shot = next((item for item in document.shots if item.id == request.shot_id), None)
+        if shot is None:
+            raise ArtifactNotFoundError(request.shot_id)
+        duration = request.duration_seconds or math.ceil(shot.duration_seconds)
+        source_prompt = (
+            request.source_prompt.strip()
+            if request.source_prompt is not None
+            else build_h3_prompt(document, shot)
+        )
+        if not source_prompt:
+            raise WorkflowConflictError("H3 source prompt is empty")
+        media_inputs = self._resolve_approved_asset_inputs(document, request.media_inputs)
+        if media_inputs:
+            try:
+                validate_h3_probe(
+                    route=request.route,
+                    prompt=source_prompt,
+                    duration_seconds=duration,
+                    media_inputs=media_inputs,
+                )
+            except H3CapabilityError as exc:
+                raise WorkflowConflictError(str(exc)) from exc
+
+        api_key = self.language_config.api_key()
+        base_url = self.language_config.base_url()
+        if not api_key and not is_loopback_openai_url(base_url):
+            raise WorkflowConflictError("GPT-5.6-sol API key is not configured")
+        instructions, input_text = build_language_prompt_input(
+            document,
+            shot,
+            route=request.route,
+            duration_seconds=duration,
+            source_prompt=source_prompt,
+            media_inputs=media_inputs,
+        )
+        try:
+            client = self.language_provider_factory(api_key, base_url)
+            compiled_prompt = client.generate_text(
+                instructions=instructions,
+                input_text=input_text,
+            )
+            validation_notes = validate_language_prompt(
+                compiled_prompt,
+                document,
+                shot,
+                duration_seconds=duration,
+            )
+        except (LanguageProviderError, LanguagePromptValidationError) as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        return LanguagePromptCompileResponse(
+            shot_id=shot.id,
+            route=request.route,
+            duration_seconds=duration,
+            source_prompt=source_prompt,
+            compiled_prompt=compiled_prompt,
+            validation_notes=validation_notes,
+        )
 
     def create_asset(
         self,

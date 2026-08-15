@@ -1,4 +1,4 @@
-"""No-generation connectivity check for an OpenAI-compatible language endpoint."""
+"""Connectivity and text generation for an OpenAI-compatible Responses endpoint."""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ class LanguageProviderError(RuntimeError):
 
 class LanguageProviderClient(Protocol):
     def validate_credentials(self) -> None: ...
+
+    def generate_text(self, *, instructions: str, input_text: str) -> str: ...
 
 
 LanguageProviderClientFactory = Callable[[str, str], LanguageProviderClient]
@@ -37,6 +39,7 @@ class OpenAICompatibleLanguageClient:
         model: str = "gpt-5.6-sol",
         session: Session | None = None,
         timeout_seconds: float = 30.0,
+        generation_timeout_seconds: float = 180.0,
     ) -> None:
         if not api_key.strip() and not is_loopback_openai_url(base_url):
             raise ValueError("GPT-5.6-sol API key is required")
@@ -45,6 +48,7 @@ class OpenAICompatibleLanguageClient:
         self.model = model
         self.session = session or requests.Session()
         self.timeout_seconds = timeout_seconds
+        self.generation_timeout_seconds = generation_timeout_seconds
 
     def validate_credentials(self) -> None:
         try:
@@ -68,6 +72,27 @@ class OpenAICompatibleLanguageClient:
             ) from exc
         self._raise_error(response)
         self._validate_model_identity(response)
+
+    def generate_text(self, *, instructions: str, input_text: str) -> str:
+        try:
+            response = self.session.post(
+                f"{self.base_url}/responses",
+                headers={**self._headers(), "Content-Type": "application/json"},
+                json={
+                    "model": self.model,
+                    "instructions": instructions,
+                    "input": input_text,
+                    "reasoning": {"effort": "low"},
+                    "max_output_tokens": 2200,
+                },
+                timeout=self.generation_timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            raise LanguageProviderError(
+                "GPT-5.6-sol generation could not reach the configured URL"
+            ) from exc
+        self._raise_error(response)
+        return self._extract_output_text(response)
 
     def _headers(self) -> dict[str, str]:
         if not self.api_key:
@@ -113,6 +138,42 @@ class OpenAICompatibleLanguageClient:
             raise LanguageProviderError(
                 f"Configured endpoint model list does not include {self.model!r}"
             )
+
+    @staticmethod
+    def _extract_output_text(response: Response) -> str:
+        try:
+            payload = cast(object, response.json())
+        except ValueError as exc:
+            raise LanguageProviderError(
+                "GPT-5.6-sol generation returned invalid JSON"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise LanguageProviderError("GPT-5.6-sol generation returned an invalid object")
+        response_payload = cast(dict[str, object], payload)
+        direct_text = response_payload.get("output_text")
+        if isinstance(direct_text, str) and direct_text.strip():
+            return direct_text.strip()
+
+        text_parts: list[str] = []
+        raw_output = response_payload.get("output")
+        if isinstance(raw_output, list):
+            for raw_item in cast(list[object], raw_output):
+                if not isinstance(raw_item, dict):
+                    continue
+                raw_content = cast(dict[str, object], raw_item).get("content")
+                if not isinstance(raw_content, list):
+                    continue
+                for raw_part in cast(list[object], raw_content):
+                    if not isinstance(raw_part, dict):
+                        continue
+                    part = cast(dict[str, object], raw_part)
+                    text = part.get("text")
+                    if part.get("type") == "output_text" and isinstance(text, str):
+                        text_parts.append(text)
+        result = "\n".join(part.strip() for part in text_parts if part.strip()).strip()
+        if not result:
+            raise LanguageProviderError("GPT-5.6-sol generation returned no output text")
+        return result
 
     @staticmethod
     def _raise_error(response: Response) -> None:
