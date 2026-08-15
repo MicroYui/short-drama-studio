@@ -673,6 +673,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/image-tasks/{task_id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Advance Image Task */
+        post: operations["advance_image_task_api_short_drama_image_tasks__task_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/image-tasks/{task_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Image Task */
+        post: operations["cancel_image_task_api_short_drama_image_tasks__task_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/image-tasks/{task_id}/recover-output": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recover Image Task Output */
+        post: operations["recover_image_task_output_api_short_drama_image_tasks__task_id__recover_output_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/image-tasks/{task_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Image Task */
+        post: operations["retry_image_task_api_short_drama_image_tasks__task_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects": {
         parameters: {
             query?: never;
@@ -704,6 +772,91 @@ export interface paths {
         post?: never;
         /** Delete Project */
         delete: operations["delete_project_api_short_drama_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Asset */
+        post: operations["create_asset_api_short_drama_projects__project_id__assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/image-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enqueue Image Task */
+        post: operations["enqueue_image_task_api_short_drama_projects__project_id__assets__asset_id__image_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Local Asset Version */
+        post: operations["import_local_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions_import_local_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Url Asset Version */
+        post: operations["import_url_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions_import_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/{version_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Asset Version */
+        post: operations["review_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions__version_id__review_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -811,6 +964,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/image-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Image Tasks */
+        get: operations["list_image_tasks_api_short_drama_projects__project_id__image_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/manifest/rebuild": {
         parameters: {
             query?: never;
@@ -890,6 +1060,76 @@ export interface paths {
         put?: never;
         /** Enqueue Retake */
         post: operations["enqueue_retake_api_short_drama_projects__project_id__shots__shot_id__retake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/providers/gpt-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Provider Config */
+        get: operations["get_image_provider_config_api_short_drama_providers_gpt_image_get"];
+        put?: never;
+        /** Update Image Provider Config */
+        post: operations["update_image_provider_config_api_short_drama_providers_gpt_image_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/providers/gpt-image/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Image Provider Config */
+        post: operations["validate_image_provider_config_api_short_drama_providers_gpt_image_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/providers/gpt-sol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Language Provider Config */
+        get: operations["get_language_provider_config_api_short_drama_providers_gpt_sol_get"];
+        put?: never;
+        /** Update Language Provider Config */
+        post: operations["update_language_provider_config_api_short_drama_providers_gpt_sol_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/providers/gpt-sol/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Language Provider Config */
+        post: operations["validate_language_provider_config_api_short_drama_providers_gpt_sol_validate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1202,21 +1442,95 @@ export interface components {
          * ApprovalStatus
          * @enum {string}
          */
-        ApprovalStatus: "DRAFT" | "APPROVED" | "SUPERSEDED";
+        ApprovalStatus: "DRAFT" | "APPROVED" | "REJECTED" | "SUPERSEDED";
         /** Asset */
         Asset: {
+            /** Approved Version Id */
+            approved_version_id?: string | null;
             /** Current Version Id */
             current_version_id: string;
             /** Id */
             id: string;
-            /** Kind */
-            kind: string;
+            kind: components["schemas"]["AssetKind"];
             /** Name */
             name: string;
             /** Project Id */
             project_id: string;
             /** Versions */
             versions: components["schemas"]["AssetVersion"][];
+        };
+        /** AssetCreateRequest */
+        AssetCreateRequest: {
+            /** Descriptor */
+            descriptor: string;
+            kind: components["schemas"]["AssetKind"];
+            /** Name */
+            name: string;
+        };
+        /** AssetImportLocalRequest */
+        AssetImportLocalRequest: {
+            /** Descriptor */
+            descriptor: string;
+            /** Local Path */
+            local_path: string;
+            /** Parent Version Id */
+            parent_version_id?: string | null;
+        };
+        /** AssetImportUrlRequest */
+        AssetImportUrlRequest: {
+            /** Descriptor */
+            descriptor: string;
+            /** External Url */
+            external_url: string;
+            /** @default IMAGE */
+            media_type: components["schemas"]["AssetMediaType"];
+            /** Parent Version Id */
+            parent_version_id?: string | null;
+        };
+        /**
+         * AssetKind
+         * @enum {string}
+         */
+        AssetKind: "CHARACTER" | "LOCATION" | "PROP" | "REFERENCE";
+        /**
+         * AssetMediaType
+         * @enum {string}
+         */
+        AssetMediaType: "TEXT_REFERENCE" | "IMAGE" | "VIDEO" | "AUDIO";
+        /** AssetMutationResponse */
+        AssetMutationResponse: {
+            asset: components["schemas"]["Asset"];
+            project: components["schemas"]["ProjectAggregate"];
+            version: components["schemas"]["AssetVersion"];
+        };
+        /**
+         * AssetReviewDecision
+         * @enum {string}
+         */
+        AssetReviewDecision: "APPROVED" | "REJECTED";
+        /** AssetReviewRequest */
+        AssetReviewRequest: {
+            decision: components["schemas"]["AssetReviewDecision"];
+            /** Notes */
+            notes: string;
+        };
+        /** AssetSourceRecord */
+        AssetSourceRecord: {
+            /** Created At */
+            created_at: string;
+            /** Model */
+            model?: string | null;
+            /** Original Filename */
+            original_filename?: string | null;
+            /** Prompt */
+            prompt?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /** Source Label */
+            source_label: string;
+            source_type: components["schemas"]["OriginType"];
+            /** Source Uri */
+            source_uri?: string | null;
         };
         /** AssetVersion */
         AssetVersion: {
@@ -1227,16 +1541,31 @@ export interface components {
             descriptor: string;
             /** External Url */
             external_url?: string | null;
+            /** File Size Bytes */
+            file_size_bytes?: number | null;
             freshness: components["schemas"]["Freshness"];
+            /** Height */
+            height?: number | null;
             /** Id */
             id: string;
+            /** Image Task Id */
+            image_task_id?: string | null;
             /** Local Path */
             local_path?: string | null;
+            /** @default TEXT_REFERENCE */
+            media_type: components["schemas"]["AssetMediaType"];
+            /** Mime Type */
+            mime_type?: string | null;
             origin_type: components["schemas"]["OriginType"];
             /** Parent Version Id */
             parent_version_id?: string | null;
+            /** Review Notes */
+            review_notes?: string | null;
+            source?: components["schemas"]["AssetSourceRecord"] | null;
             /** Version */
             version: number;
+            /** Width */
+            width?: number | null;
         };
         /**
          * AudioKind
@@ -1861,6 +2190,8 @@ export interface components {
         };
         /** H3MediaInput */
         H3MediaInput: {
+            /** Asset Version Id */
+            asset_version_id?: string | null;
             kind: components["schemas"]["H3MediaKind"];
             role: components["schemas"]["H3MediaRole"];
             source: components["schemas"]["H3MediaSource"];
@@ -2509,10 +2840,266 @@ export interface components {
              */
             use_lora_in_stage_2: boolean;
         };
+        /**
+         * ImageBackground
+         * @enum {string}
+         */
+        ImageBackground: "auto" | "opaque" | "transparent";
+        /** ImageCostRecord */
+        ImageCostRecord: {
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /** Estimated Amount */
+            estimated_amount: number;
+            /**
+             * Note
+             * @default Estimate from provider token usage; provider billing is authoritative.
+             */
+            note: string;
+            pricing: components["schemas"]["ImagePricingSnapshot"];
+            usage: components["schemas"]["ImageUsage"];
+        };
         /** ImageGenRecommendationResponse */
         ImageGenRecommendationResponse: {
             /** Cp To Download */
             cp_to_download: ("ltx-2.3-22b-distilled" | "ltx-2.3-22b-distilled-1.1" | "ltx-2.3-spatial-upscaler-x2-1.0" | "ltx-2.3-spatial-upscaler-x2-1.1" | "ltx-2.3-22b-ic-lora-union-control-ref0.5" | "dpt-hybrid-midas" | "yolox-l-torchscript" | "dw-ll-ucoco-384-bs5" | "gemma-3-12b-it-qat-q4_0-unquantized" | "z-image-turbo") | null;
+        };
+        /** ImageGenerationTask */
+        ImageGenerationTask: {
+            /** Asset Id */
+            asset_id: string;
+            /**
+             * Attempt
+             * @default 1
+             */
+            attempt: number;
+            cost?: components["schemas"]["ImageCostRecord"] | null;
+            /** Created At */
+            created_at: string;
+            /** Descriptor */
+            descriptor: string;
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Model
+             * @default gpt-image-2
+             */
+            model: string;
+            operation: components["schemas"]["ImageOperation"];
+            /** Output Mime Type */
+            output_mime_type?: string | null;
+            /** Output Path */
+            output_path?: string | null;
+            /** Output Version Id */
+            output_version_id: string;
+            /** Output Version Number */
+            output_version_number: number;
+            /** Parent Version Id */
+            parent_version_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Provider
+             * @default openai
+             */
+            provider: string;
+            /** Provider Request Id */
+            provider_request_id?: string | null;
+            request: components["schemas"]["ImageProviderRequest"];
+            /** Retry Of Task Id */
+            retry_of_task_id?: string | null;
+            /** Revised Prompt */
+            revised_prompt?: string | null;
+            /** Staged Path */
+            staged_path?: string | null;
+            status: components["schemas"]["ImageTaskStatus"];
+            /** Submitted At */
+            submitted_at?: string | null;
+            /** Updated At */
+            updated_at: string;
+            usage?: components["schemas"]["ImageUsage"] | null;
+        };
+        /**
+         * ImageOperation
+         * @enum {string}
+         */
+        ImageOperation: "GENERATE" | "EDIT";
+        /**
+         * ImageOutputFormat
+         * @enum {string}
+         */
+        ImageOutputFormat: "png" | "jpeg" | "webp";
+        /** ImagePricingSnapshot */
+        ImagePricingSnapshot: {
+            /** Captured At */
+            captured_at: string;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Image Input
+             * @default 8
+             */
+            image_input: number;
+            /**
+             * Image Output
+             * @default 30
+             */
+            image_output: number;
+            /**
+             * Text Input
+             * @default 5
+             */
+            text_input: number;
+            /**
+             * Unit
+             * @default PER_1M_TOKENS
+             */
+            unit: string;
+        };
+        /** ImageProviderConfigResponse */
+        ImageProviderConfigResponse: {
+            /**
+             * Base Url
+             * @default https://api.openai.com/v1
+             */
+            base_url: string;
+            /** Can Generate */
+            can_generate: boolean;
+            /** Has Api Key */
+            has_api_key: boolean;
+            /** Key Source */
+            key_source: string;
+            /**
+             * Model
+             * @default gpt-image-2
+             */
+            model: string;
+            pricing: components["schemas"]["ImagePricingSnapshot"];
+            /**
+             * Provider
+             * @default openai-compatible
+             */
+            provider: string;
+        };
+        /** ImageProviderConfigUpdate */
+        ImageProviderConfigUpdate: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
+        };
+        /** ImageProviderRequest */
+        ImageProviderRequest: {
+            /** @default opaque */
+            background: components["schemas"]["ImageBackground"];
+            /** Input Version Ids */
+            input_version_ids?: string[];
+            operation: components["schemas"]["ImageOperation"];
+            /** @default png */
+            output_format: components["schemas"]["ImageOutputFormat"];
+            /** Prompt */
+            prompt: string;
+            /** @default high */
+            quality: components["schemas"]["ImageQuality"];
+            /**
+             * Size
+             * @default 768x1344
+             */
+            size: string;
+        };
+        /**
+         * ImageQuality
+         * @enum {string}
+         */
+        ImageQuality: "low" | "medium" | "high";
+        /** ImageTaskCreateRequest */
+        ImageTaskCreateRequest: {
+            /** @default opaque */
+            background: components["schemas"]["ImageBackground"];
+            /** Descriptor */
+            descriptor: string;
+            /** Input Version Ids */
+            input_version_ids?: string[];
+            /** @default GENERATE */
+            operation: components["schemas"]["ImageOperation"];
+            /** @default png */
+            output_format: components["schemas"]["ImageOutputFormat"];
+            /** Parent Version Id */
+            parent_version_id?: string | null;
+            /** Prompt */
+            prompt: string;
+            /** @default high */
+            quality: components["schemas"]["ImageQuality"];
+            /**
+             * Size
+             * @default 768x1344
+             */
+            size: string;
+        };
+        /** ImageTaskListResponse */
+        ImageTaskListResponse: {
+            /** Tasks */
+            tasks: components["schemas"]["ImageGenerationTask"][];
+        };
+        /** ImageTaskResponse */
+        ImageTaskResponse: {
+            project: components["schemas"]["ProjectAggregate"];
+            task: components["schemas"]["ImageGenerationTask"];
+        };
+        /**
+         * ImageTaskStatus
+         * @enum {string}
+         */
+        ImageTaskStatus: "QUEUED" | "SUBMITTING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "SUBMIT_UNKNOWN" | "OUTPUT_MISSING";
+        /** ImageTokenDetails */
+        ImageTokenDetails: {
+            /**
+             * Image Tokens
+             * @default 0
+             */
+            image_tokens: number;
+            /**
+             * Text Tokens
+             * @default 0
+             */
+            text_tokens: number;
+        };
+        /** ImageUsage */
+        ImageUsage: {
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            input_tokens_details?: components["schemas"]["ImageTokenDetails"];
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            output_tokens_details?: components["schemas"]["ImageTokenDetails"];
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
         };
         /** InputSpec */
         InputSpec: {
@@ -2591,6 +3178,42 @@ export interface components {
             supported_resolutions_durations: {
                 [key: string]: components["schemas"]["LTXVideoGenerationResolutionSpec"];
             };
+        };
+        /** LanguageProviderConfigResponse */
+        LanguageProviderConfigResponse: {
+            /**
+             * Base Url
+             * @default https://api.openai.com/v1
+             */
+            base_url: string;
+            /** Can Connect */
+            can_connect: boolean;
+            /** Has Api Key */
+            has_api_key: boolean;
+            /** Key Source */
+            key_source: string;
+            /**
+             * Model
+             * @default gpt-5.6-sol
+             */
+            model: string;
+            /**
+             * Provider
+             * @default openai-compatible
+             */
+            provider: string;
+        };
+        /** LanguageProviderConfigUpdate */
+        LanguageProviderConfigUpdate: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
         };
         /** LicenseSpec */
         LicenseSpec: {
@@ -2888,7 +3511,7 @@ export interface components {
          * OriginType
          * @enum {string}
          */
-        OriginType: "UPLOAD" | "LIBRARY_IMPORT" | "AI_GENERATED" | "AI_EDITED" | "FIXTURE";
+        OriginType: "MANUAL" | "UPLOAD" | "LIBRARY_IMPORT" | "AI_GENERATED" | "AI_EDITED" | "FIXTURE";
         /**
          * OutpaintPads
          * @description Per-edge pixels to add around the source video (extend-only, so all ≥ 0).
@@ -5310,6 +5933,166 @@ export interface operations {
             };
         };
     };
+    advance_image_task_api_short_drama_image_tasks__task_id__advance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_image_task_api_short_drama_image_tasks__task_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    recover_image_task_output_api_short_drama_image_tasks__task_id__recover_output_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_image_task_api_short_drama_image_tasks__task_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     list_projects_api_short_drama_projects_get: {
         parameters: {
             query?: never;
@@ -5448,6 +6231,231 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusMessage"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_asset_api_short_drama_projects__project_id__assets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    enqueue_image_task_api_short_drama_projects__project_id__assets__asset_id__image_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageTaskCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    import_local_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions_import_local_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetImportLocalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    import_url_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions_import_url_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetImportUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    review_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions__version_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                asset_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetMutationResponse"];
                 };
             };
             /** @description Client Error */
@@ -5730,6 +6738,48 @@ export interface operations {
             };
         };
     };
+    list_image_tasks_api_short_drama_projects__project_id__image_tasks_get: {
+        parameters: {
+            query?: {
+                asset_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     rebuild_manifest_api_short_drama_projects__project_id__manifest_rebuild_post: {
         parameters: {
             query?: never;
@@ -5927,6 +6977,242 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskActionResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_image_provider_config_api_short_drama_providers_gpt_image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    update_image_provider_config_api_short_drama_providers_gpt_image_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageProviderConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_image_provider_config_api_short_drama_providers_gpt_image_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_language_provider_config_api_short_drama_providers_gpt_sol_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguageProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    update_language_provider_config_api_short_drama_providers_gpt_sol_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LanguageProviderConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguageProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_language_provider_config_api_short_drama_providers_gpt_sol_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguageProviderConfigResponse"];
                 };
             };
             /** @description Client Error */

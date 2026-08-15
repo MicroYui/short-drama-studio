@@ -57,6 +57,7 @@ class H3MediaInput(DomainModel):
     kind: H3MediaKind
     role: H3MediaRole
     source: H3MediaSource
+    asset_version_id: str | None = None
 
 
 class H3ProbeRequest(DomainModel):

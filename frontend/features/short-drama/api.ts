@@ -22,6 +22,14 @@ export type H3MediaKind = components['schemas']['H3MediaKind']
 export type H3MediaRole = components['schemas']['H3MediaRole']
 export type H3TakeReviewRequest = components['schemas']['H3TakeReviewRequest']
 export type RouteEvidence = components['schemas']['RouteEvidence']
+export type Asset = components['schemas']['Asset']
+export type AssetVersion = components['schemas']['AssetVersion']
+export type AssetKind = components['schemas']['AssetKind']
+export type AssetMediaType = components['schemas']['AssetMediaType']
+export type ImageGenerationTask = components['schemas']['ImageGenerationTask']
+export type ImageTaskCreateRequest = components['schemas']['ImageTaskCreateRequest']
+export type ImageProviderConfig = components['schemas']['ImageProviderConfigResponse']
+export type LanguageProviderConfig = components['schemas']['LanguageProviderConfigResponse']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -51,6 +59,22 @@ const listH3Runs = makeEndpointClient('/api/short-drama/projects/{project_id}/h3
 const listH3ReconciliationCandidates = makeEndpointClient('/api/short-drama/providers/minimax-h3/reconciliation-candidates', 'get')
 const resolveH3Submission = makeEndpointClient('/api/short-drama/tasks/{task_id}/h3/resolve-submit', 'post')
 const reviewH3Take = makeEndpointClient('/api/short-drama/takes/{take_id}/h3/review', 'post')
+const getImageConfig = makeEndpointClient('/api/short-drama/providers/gpt-image', 'get')
+const updateImageConfig = makeEndpointClient('/api/short-drama/providers/gpt-image', 'post')
+const validateImageConfig = makeEndpointClient('/api/short-drama/providers/gpt-image/validate', 'post')
+const getLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol', 'get')
+const updateLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol', 'post')
+const validateLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol/validate', 'post')
+const createAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/assets', 'post')
+const importLocalAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-local', 'post')
+const importUrlAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-url', 'post')
+const reviewAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/{version_id}/review', 'post')
+const enqueueImageTask = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/image-tasks', 'post')
+const listImageTasks = makeEndpointClient('/api/short-drama/projects/{project_id}/image-tasks', 'get')
+const advanceImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/advance', 'post')
+const cancelImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/cancel', 'post')
+const retryImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/retry', 'post')
+const recoverImageTaskOutput = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/recover-output', 'post')
 
 function projectPath(projectId: string, suffix = ''): string {
   return `/api/short-drama/projects/${encodeURIComponent(projectId)}${suffix}`
@@ -58,6 +82,14 @@ function projectPath(projectId: string, suffix = ''): string {
 
 function taskPath(taskId: string, action: string): string {
   return `/api/short-drama/tasks/${encodeURIComponent(taskId)}/${action}`
+}
+
+function assetPath(projectId: string, assetId: string, suffix = ''): string {
+  return `${projectPath(projectId, `/assets/${encodeURIComponent(assetId)}`)}${suffix}`
+}
+
+function imageTaskPath(taskId: string, action: string): string {
+  return `/api/short-drama/image-tasks/${encodeURIComponent(taskId)}/${action}`
 }
 
 export const ShortDramaApi = {
@@ -119,6 +151,62 @@ export const ShortDramaApi = {
       undefined,
       `/api/short-drama/takes/${encodeURIComponent(takeId)}/h3/review`,
     )
+  ),
+  getImageConfig: () => getImageConfig(),
+  updateImageConfig: (apiKey: string | null, baseUrl: string | null, clearApiKey = false) => (
+    updateImageConfig({ api_key: apiKey, base_url: baseUrl, clear_api_key: clearApiKey })
+  ),
+  validateImageConfig: () => validateImageConfig(),
+  getLanguageConfig: () => getLanguageConfig(),
+  updateLanguageConfig: (apiKey: string | null, baseUrl: string | null, clearApiKey = false) => (
+    updateLanguageConfig({ api_key: apiKey, base_url: baseUrl, clear_api_key: clearApiKey })
+  ),
+  validateLanguageConfig: () => validateLanguageConfig(),
+  createAsset: (
+    projectId: string,
+    body: components['schemas']['AssetCreateRequest'],
+  ) => createAsset(body, undefined, projectPath(projectId, '/assets')),
+  importLocalAssetVersion: (
+    projectId: string,
+    assetId: string,
+    body: components['schemas']['AssetImportLocalRequest'],
+  ) => importLocalAssetVersion(body, undefined, assetPath(projectId, assetId, '/versions/import-local')),
+  importUrlAssetVersion: (
+    projectId: string,
+    assetId: string,
+    body: components['schemas']['AssetImportUrlRequest'],
+  ) => importUrlAssetVersion(body, undefined, assetPath(projectId, assetId, '/versions/import-url')),
+  reviewAssetVersion: (
+    projectId: string,
+    assetId: string,
+    versionId: string,
+    decision: components['schemas']['AssetReviewDecision'],
+    notes: string,
+  ) => reviewAssetVersion(
+    { decision, notes },
+    undefined,
+    assetPath(projectId, assetId, `/versions/${encodeURIComponent(versionId)}/review`),
+  ),
+  enqueueImageTask: (
+    projectId: string,
+    assetId: string,
+    body: ImageTaskCreateRequest,
+  ) => enqueueImageTask(body, undefined, assetPath(projectId, assetId, '/image-tasks')),
+  listImageTasks: (projectId: string, assetId?: string) => {
+    const query = assetId ? `?asset_id=${encodeURIComponent(assetId)}` : ''
+    return listImageTasks(undefined, undefined, `${projectPath(projectId, '/image-tasks')}${query}`)
+  },
+  advanceImageTask: (taskId: string) => (
+    advanceImageTask(undefined, undefined, imageTaskPath(taskId, 'advance'))
+  ),
+  cancelImageTask: (taskId: string) => (
+    cancelImageTask(undefined, undefined, imageTaskPath(taskId, 'cancel'))
+  ),
+  retryImageTask: (taskId: string) => (
+    retryImageTask(undefined, undefined, imageTaskPath(taskId, 'retry'))
+  ),
+  recoverImageTaskOutput: (taskId: string) => (
+    recoverImageTaskOutput(undefined, undefined, imageTaskPath(taskId, 'recover-output'))
   ),
   localRework: (
     projectId: string,

@@ -1,0 +1,762 @@
+"""Asset versioning, imports, approval, and persistent image-provider tasks."""
+
+from __future__ import annotations
+
+import base64
+import mimetypes
+import shutil
+import threading
+from collections.abc import Callable
+from pathlib import Path
+from uuid import uuid4
+
+from PIL import Image, UnidentifiedImageError
+
+from short_drama.image_models import (
+    AssetCreateRequest,
+    AssetImportLocalRequest,
+    AssetImportUrlRequest,
+    AssetReviewDecision,
+    AssetReviewRequest,
+    ImageBackground,
+    ImageCostRecord,
+    ImageGenerationTask,
+    ImageOperation,
+    ImageProviderConfigResponse,
+    ImageProviderConfigUpdate,
+    ImageProviderRequest,
+    ImageTaskCreateRequest,
+    ImageTaskStatus,
+    ImageUsage,
+)
+from short_drama.models import (
+    ApprovalStatus,
+    Asset,
+    AssetKind,
+    AssetMediaType,
+    AssetSourceRecord,
+    AssetVersion,
+    Freshness,
+    OriginType,
+    ProjectDocument,
+)
+from short_drama.providers.image_config import ImageProviderConfigStore
+from short_drama.providers.image_provider import (
+    ImageProvider,
+    ImageProviderDefiniteError,
+    ImageProviderInput,
+    ImageProviderResult,
+    ImageProviderSubmissionUnknown,
+)
+from short_drama.providers.openai_image_client import OpenAIImageClient
+from short_drama.repository import ShortDramaRepository
+from short_drama.worker import utc_now
+
+
+class AssetWorkbenchError(RuntimeError):
+    """Base class for asset workbench failures."""
+
+
+class AssetWorkbenchNotFound(AssetWorkbenchError):
+    """Requested project, asset, version, or image task does not exist."""
+
+
+class AssetWorkbenchConflict(AssetWorkbenchError):
+    """Requested action is incompatible with current persisted state."""
+
+
+class AssetProviderConfigurationError(AssetWorkbenchError):
+    """A paid image action needs a configured provider credential."""
+
+
+ImageProviderFactory = Callable[[str, str], ImageProvider]
+
+
+def default_image_provider_factory(api_key: str, base_url: str) -> ImageProvider:
+    return OpenAIImageClient(api_key=api_key, base_url=base_url)
+
+
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".aac", ".flac"}
+_MAX_LOCAL_ASSET_BYTES = 256 * 1024 * 1024
+_MAX_EDIT_IMAGE_BYTES = 20 * 1024 * 1024
+
+
+class AssetWorkbench:
+    """Owns provider-neutral asset mutations and synchronous image task execution."""
+
+    def __init__(
+        self,
+        *,
+        repository: ShortDramaRepository,
+        workspace_root: Path,
+        config_store: ImageProviderConfigStore,
+        provider_factory: ImageProviderFactory = default_image_provider_factory,
+    ) -> None:
+        self.repository = repository
+        self.workspace_root = workspace_root
+        self.config_store = config_store
+        self.provider_factory = provider_factory
+        self._lock = threading.RLock()
+        self.recovered_submissions = self.repository.recover_interrupted_image_tasks()
+
+    def get_config(self) -> ImageProviderConfigResponse:
+        return self.config_store.response()
+
+    def update_config(
+        self,
+        request: ImageProviderConfigUpdate,
+    ) -> ImageProviderConfigResponse:
+        return self.config_store.update(request)
+
+    def validate_credentials(self) -> ImageProviderConfigResponse:
+        self._provider().validate_credentials()
+        return self.config_store.response()
+
+    def create_asset(self, project_id: str, request: AssetCreateRequest) -> AssetVersion:
+        with self._lock:
+            document = self._require_project(project_id)
+            now = utc_now()
+            asset_id = f"asset-{uuid4().hex[:12]}"
+            version = AssetVersion(
+                id=f"asset-version-{uuid4().hex[:12]}",
+                version=1,
+                origin_type=OriginType.MANUAL,
+                descriptor=request.descriptor.strip(),
+                media_type=AssetMediaType.TEXT_REFERENCE,
+                approval_status=ApprovalStatus.DRAFT,
+                freshness=Freshness.CURRENT,
+                source=AssetSourceRecord(
+                    source_type=OriginType.MANUAL,
+                    source_label="用户创建的资产说明",
+                    created_at=now,
+                ),
+                created_at=now,
+            )
+            asset = Asset(
+                id=asset_id,
+                project_id=project_id,
+                kind=request.kind,
+                name=request.name.strip(),
+                current_version_id=version.id,
+                versions=[version],
+            )
+            document.assets.append(asset)
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            return version
+
+    def import_local(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetImportLocalRequest,
+    ) -> AssetVersion:
+        source_path = Path(request.local_path).expanduser().resolve()
+        if not source_path.is_file():
+            raise AssetWorkbenchConflict(f"Local asset does not exist: {source_path}")
+        size_bytes = source_path.stat().st_size
+        if size_bytes <= 0 or size_bytes > _MAX_LOCAL_ASSET_BYTES:
+            raise AssetWorkbenchConflict("Local asset must be between 1 byte and 256 MB")
+        media_type = self._media_type_for_path(source_path)
+        with self._lock:
+            document = self._require_project(project_id)
+            asset = self._require_asset(document, asset_id)
+            self._validate_asset_media_kind(asset, media_type)
+            parent_id = self._resolve_parent(asset, request.parent_version_id)
+            number = self._next_version_number(asset)
+            version_id = f"asset-version-{uuid4().hex[:12]}"
+            destination = self._asset_directory(project_id, asset_id) / (
+                f"v{number}-{version_id}{source_path.suffix.lower()}"
+            )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, destination)
+            mime_type = mimetypes.guess_type(destination.name)[0]
+            width, height = self._image_dimensions(destination, media_type)
+            now = utc_now()
+            version = AssetVersion(
+                id=version_id,
+                version=number,
+                origin_type=OriginType.UPLOAD,
+                descriptor=request.descriptor.strip(),
+                media_type=media_type,
+                local_path=str(destination),
+                mime_type=mime_type,
+                width=width,
+                height=height,
+                file_size_bytes=destination.stat().st_size,
+                parent_version_id=parent_id,
+                source=AssetSourceRecord(
+                    source_type=OriginType.UPLOAD,
+                    source_label="本地文件导入",
+                    source_uri=str(source_path),
+                    original_filename=source_path.name,
+                    created_at=now,
+                ),
+                approval_status=ApprovalStatus.DRAFT,
+                freshness=Freshness.CURRENT,
+                created_at=now,
+            )
+            self._append_version(document, asset, version)
+            return version
+
+    def import_url(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetImportUrlRequest,
+    ) -> AssetVersion:
+        external_url = request.external_url.strip()
+        if not external_url.startswith(("https://", "http://")):
+            raise AssetWorkbenchConflict("External asset URL must use HTTP or HTTPS")
+        with self._lock:
+            document = self._require_project(project_id)
+            asset = self._require_asset(document, asset_id)
+            self._validate_asset_media_kind(asset, request.media_type)
+            parent_id = self._resolve_parent(asset, request.parent_version_id)
+            now = utc_now()
+            version = AssetVersion(
+                id=f"asset-version-{uuid4().hex[:12]}",
+                version=self._next_version_number(asset),
+                origin_type=OriginType.LIBRARY_IMPORT,
+                descriptor=request.descriptor.strip(),
+                media_type=request.media_type,
+                external_url=external_url,
+                parent_version_id=parent_id,
+                source=AssetSourceRecord(
+                    source_type=OriginType.LIBRARY_IMPORT,
+                    source_label="外部链接导入",
+                    source_uri=external_url,
+                    created_at=now,
+                ),
+                approval_status=ApprovalStatus.DRAFT,
+                freshness=Freshness.CURRENT,
+                created_at=now,
+            )
+            self._append_version(document, asset, version)
+            return version
+
+    def review_version(
+        self,
+        project_id: str,
+        asset_id: str,
+        version_id: str,
+        request: AssetReviewRequest,
+    ) -> AssetVersion:
+        with self._lock:
+            document = self._require_project(project_id)
+            asset = self._require_asset(document, asset_id)
+            version = self._require_asset_version(asset, version_id)
+            if request.decision == AssetReviewDecision.APPROVED:
+                if version.local_path is None and version.external_url is None:
+                    raise AssetWorkbenchConflict(
+                        "Only an AssetVersion with usable media can be approved"
+                    )
+                for existing in asset.versions:
+                    if (
+                        existing.id != version.id
+                        and existing.approval_status == ApprovalStatus.APPROVED
+                    ):
+                        existing.approval_status = ApprovalStatus.SUPERSEDED
+                        existing.freshness = Freshness.STALE
+                version.approval_status = ApprovalStatus.APPROVED
+                version.freshness = Freshness.CURRENT
+                asset.approved_version_id = version.id
+                asset.current_version_id = version.id
+            else:
+                version.approval_status = ApprovalStatus.REJECTED
+            version.review_notes = request.notes.strip()
+            document.project.updated_at = utc_now()
+            self.repository.save_project(document)
+            return version
+
+    def enqueue_image_task(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: ImageTaskCreateRequest,
+        *,
+        attempt: int = 1,
+        retry_of_task_id: str | None = None,
+    ) -> ImageGenerationTask:
+        if not self.config_store.api_key():
+            raise AssetProviderConfigurationError(
+                "OpenAI API key is required before enqueueing a paid GPT Image task"
+            )
+        provider_request = ImageProviderRequest(
+            operation=request.operation,
+            prompt=request.prompt.strip(),
+            size=request.size,
+            quality=request.quality,
+            background=request.background,
+            output_format=request.output_format,
+            input_version_ids=request.input_version_ids,
+        )
+        if (
+            provider_request.background == ImageBackground.TRANSPARENT
+            and provider_request.output_format.value not in {"png", "webp"}
+        ):
+            raise AssetWorkbenchConflict("Transparent output requires PNG or WebP")
+        with self._lock:
+            document = self._require_project(project_id)
+            asset = self._require_asset(document, asset_id)
+            parent_id = (
+                self._resolve_parent(asset, request.parent_version_id)
+                if request.operation == ImageOperation.EDIT
+                or request.parent_version_id is not None
+                else None
+            )
+            self._validate_image_inputs(document, asset, provider_request, parent_id)
+            now = utc_now()
+            task = ImageGenerationTask(
+                id=f"image-task-{uuid4().hex[:12]}",
+                project_id=project_id,
+                asset_id=asset_id,
+                output_version_id=f"asset-version-{uuid4().hex[:12]}",
+                output_version_number=self._next_version_number(asset),
+                descriptor=request.descriptor.strip(),
+                parent_version_id=parent_id,
+                operation=request.operation,
+                status=ImageTaskStatus.QUEUED,
+                request=provider_request,
+                attempt=attempt,
+                retry_of_task_id=retry_of_task_id,
+                created_at=now,
+                updated_at=now,
+            )
+            self.repository.save_image_task(task)
+            return task
+
+    def list_image_tasks(
+        self,
+        project_id: str,
+        asset_id: str | None = None,
+    ) -> list[ImageGenerationTask]:
+        self._require_project(project_id)
+        return self.repository.list_image_tasks(project_id, asset_id)
+
+    def advance_image_task(self, task_id: str) -> ImageGenerationTask:
+        task = self._require_image_task(task_id)
+        if task.status == ImageTaskStatus.QUEUED:
+            task.status = ImageTaskStatus.SUBMITTING
+            task.updated_at = utc_now()
+            self.repository.save_image_task(task)
+            return task
+        if task.status != ImageTaskStatus.SUBMITTING:
+            raise AssetWorkbenchConflict(
+                f"Image task {task.id} cannot advance from {task.status.value}"
+            )
+        return self._submit_image_task(task)
+
+    def cancel_image_task(self, task_id: str) -> ImageGenerationTask:
+        task = self._require_image_task(task_id)
+        if task.status != ImageTaskStatus.QUEUED:
+            raise AssetWorkbenchConflict("Only a queued image task can be cancelled")
+        task.status = ImageTaskStatus.CANCELLED
+        task.error_code = "CANCELLED_BY_USER"
+        task.error_message = "尚未提交到 OpenAI 的图像任务已取消。"
+        task.finished_at = utc_now()
+        task.updated_at = task.finished_at
+        self.repository.save_image_task(task)
+        return task
+
+    def retry_image_task(self, task_id: str) -> ImageGenerationTask:
+        task = self._require_image_task(task_id)
+        if task.status not in {
+            ImageTaskStatus.FAILED,
+            ImageTaskStatus.CANCELLED,
+            ImageTaskStatus.SUBMIT_UNKNOWN,
+            ImageTaskStatus.OUTPUT_MISSING,
+        }:
+            raise AssetWorkbenchConflict(
+                f"Image task {task.id} cannot retry from {task.status.value}"
+            )
+        request = ImageTaskCreateRequest(
+            operation=task.operation,
+            prompt=task.request.prompt,
+            descriptor=task.descriptor,
+            parent_version_id=task.parent_version_id,
+            input_version_ids=task.request.input_version_ids,
+            size=task.request.size,
+            quality=task.request.quality,
+            background=task.request.background,
+            output_format=task.request.output_format,
+        )
+        return self.enqueue_image_task(
+            task.project_id,
+            task.asset_id,
+            request,
+            attempt=task.attempt + 1,
+            retry_of_task_id=task.id,
+        )
+
+    def recover_image_output(self, task_id: str) -> ImageGenerationTask:
+        task = self._require_image_task(task_id)
+        if task.status != ImageTaskStatus.OUTPUT_MISSING:
+            raise AssetWorkbenchConflict("Image task has no recoverable output")
+        candidate = Path(task.output_path) if task.output_path else None
+        if candidate is None or not candidate.is_file():
+            staged = Path(task.staged_path) if task.staged_path else None
+            if staged is None or not staged.is_file():
+                raise AssetWorkbenchConflict(
+                    "No staged image remains; create an explicit retry task"
+                )
+            candidate = self._final_output_path(task)
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            staged.replace(candidate)
+            task.output_path = str(candidate)
+        width, height = self._validate_output_image(candidate)
+        return self._finalize_image_version(task, candidate, width, height)
+
+    def _submit_image_task(self, task: ImageGenerationTask) -> ImageGenerationTask:
+        task.submitted_at = utc_now()
+        task.updated_at = task.submitted_at
+        task.error_code = None
+        task.error_message = None
+        self.repository.save_image_task(task)
+        inputs = self._resolve_provider_inputs(task)
+        try:
+            result = self._provider().create(task.request, inputs)
+        except ImageProviderDefiniteError as exc:
+            return self._mark_task_failed(task, exc.code, str(exc))
+        except ImageProviderSubmissionUnknown as exc:
+            task.status = ImageTaskStatus.SUBMIT_UNKNOWN
+            task.error_code = "IMAGE_SUBMIT_UNKNOWN"
+            task.error_message = str(exc)
+            task.updated_at = utc_now()
+            self.repository.save_image_task(task)
+            return task
+
+        task.provider_request_id = result.provider_request_id
+        task.revised_prompt = result.revised_prompt
+        task.usage = result.usage
+        task.cost = self._cost_record(result.usage)
+        try:
+            output_path, width, height = self._land_provider_output(task, result)
+            return self._finalize_image_version(task, output_path, width, height)
+        except (OSError, ValueError, UnidentifiedImageError) as exc:
+            task.status = ImageTaskStatus.OUTPUT_MISSING
+            task.error_code = "IMAGE_OUTPUT_MISSING"
+            task.error_message = str(exc)
+            task.updated_at = utc_now()
+            self.repository.save_image_task(task)
+            return task
+
+    def _land_provider_output(
+        self,
+        task: ImageGenerationTask,
+        result: ImageProviderResult,
+    ) -> tuple[Path, int, int]:
+        try:
+            payload = base64.b64decode(result.image_base64, validate=True)
+        except ValueError as exc:
+            raise ValueError("Provider returned invalid image base64") from exc
+        suffix = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/webp": ".webp",
+        }.get(result.mime_type)
+        if suffix is None:
+            raise ValueError(f"Unsupported image MIME type: {result.mime_type}")
+        staging_dir = self.workspace_root / task.project_id / "assets" / ".staging"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        staged = staging_dir / f"{task.id}{suffix}.part"
+        staged.write_bytes(payload)
+        task.staged_path = str(staged)
+        task.output_mime_type = result.mime_type
+        task.updated_at = utc_now()
+        self.repository.save_image_task(task)
+        width, height = self._validate_output_image(staged)
+        output_path = self._final_output_path(task, suffix)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        staged.replace(output_path)
+        task.output_path = str(output_path)
+        task.updated_at = utc_now()
+        self.repository.save_image_task(task)
+        return output_path, width, height
+
+    def _finalize_image_version(
+        self,
+        task: ImageGenerationTask,
+        output_path: Path,
+        width: int,
+        height: int,
+    ) -> ImageGenerationTask:
+        with self._lock:
+            document = self._require_project(task.project_id)
+            asset = self._require_asset(document, task.asset_id)
+            existing = next(
+                (item for item in asset.versions if item.id == task.output_version_id),
+                None,
+            )
+            now = utc_now()
+            if existing is None:
+                origin = (
+                    OriginType.AI_EDITED
+                    if task.operation == ImageOperation.EDIT
+                    else OriginType.AI_GENERATED
+                )
+                version = AssetVersion(
+                    id=task.output_version_id,
+                    version=task.output_version_number,
+                    origin_type=origin,
+                    descriptor=task.descriptor,
+                    media_type=AssetMediaType.IMAGE,
+                    local_path=str(output_path),
+                    mime_type=task.output_mime_type,
+                    width=width,
+                    height=height,
+                    file_size_bytes=output_path.stat().st_size,
+                    parent_version_id=task.parent_version_id,
+                    image_task_id=task.id,
+                    source=AssetSourceRecord(
+                        source_type=origin,
+                        source_label=(
+                            "GPT Image 2 编辑" if task.operation == ImageOperation.EDIT else "GPT Image 2 生成"
+                        ),
+                        provider=task.provider,
+                        model=task.model,
+                        prompt=task.request.prompt,
+                        created_at=now,
+                    ),
+                    approval_status=ApprovalStatus.DRAFT,
+                    freshness=Freshness.CURRENT,
+                    created_at=now,
+                )
+                asset.versions.append(version)
+            else:
+                existing.local_path = str(output_path)
+                existing.width = width
+                existing.height = height
+                existing.file_size_bytes = output_path.stat().st_size
+            asset.current_version_id = task.output_version_id
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            task.status = ImageTaskStatus.SUCCEEDED
+            task.error_code = None
+            task.error_message = None
+            task.finished_at = now
+            task.updated_at = now
+            self.repository.save_image_task(task)
+            return task
+
+    def _resolve_provider_inputs(
+        self,
+        task: ImageGenerationTask,
+    ) -> list[ImageProviderInput]:
+        document = self._require_project(task.project_id)
+        result: list[ImageProviderInput] = []
+        for version_id in task.request.input_version_ids:
+            _asset, version = self._find_version(document, version_id)
+            if version.external_url is not None:
+                image_url = version.external_url
+            elif version.local_path is not None:
+                path = Path(version.local_path)
+                if not path.is_file():
+                    raise AssetWorkbenchConflict(
+                        f"Input AssetVersion file is missing: {version.id}"
+                    )
+                if path.stat().st_size > _MAX_EDIT_IMAGE_BYTES:
+                    raise AssetWorkbenchConflict(
+                        f"Edit input exceeds 20 MB: {path.name}"
+                    )
+                mime_type = version.mime_type or mimetypes.guess_type(path.name)[0]
+                if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
+                    raise AssetWorkbenchConflict(
+                        f"Unsupported GPT Image input type: {mime_type or path.suffix}"
+                    )
+                encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+                image_url = f"data:{mime_type};base64,{encoded}"
+            else:
+                raise AssetWorkbenchConflict(
+                    f"Input AssetVersion has no usable media: {version.id}"
+                )
+            result.append(
+                ImageProviderInput(asset_version_id=version.id, image_url=image_url)
+            )
+        return result
+
+    def _validate_image_inputs(
+        self,
+        document: ProjectDocument,
+        target_asset: Asset,
+        request: ImageProviderRequest,
+        parent_version_id: str | None,
+    ) -> None:
+        if request.operation == ImageOperation.GENERATE:
+            if request.input_version_ids:
+                raise AssetWorkbenchConflict("Generate does not accept input AssetVersions")
+            if parent_version_id is not None:
+                raise AssetWorkbenchConflict("Use EDIT to derive from an existing AssetVersion")
+            return
+        if not request.input_version_ids:
+            raise AssetWorkbenchConflict("Edit requires at least one input AssetVersion")
+        for version_id in request.input_version_ids:
+            _asset, version = self._find_version(document, version_id)
+            if version.media_type != AssetMediaType.IMAGE:
+                raise AssetWorkbenchConflict("GPT Image edit inputs must be images")
+            if version.local_path is None and version.external_url is None:
+                raise AssetWorkbenchConflict("GPT Image edit input has no usable media")
+        if parent_version_id is None:
+            raise AssetWorkbenchConflict("Edit requires a parent version from the target asset")
+        self._require_asset_version(target_asset, parent_version_id)
+
+    def _append_version(
+        self,
+        document: ProjectDocument,
+        asset: Asset,
+        version: AssetVersion,
+    ) -> None:
+        asset.versions.append(version)
+        asset.current_version_id = version.id
+        document.project.updated_at = utc_now()
+        self.repository.save_project(document)
+
+    def _resolve_parent(self, asset: Asset, requested: str | None) -> str | None:
+        if requested is not None:
+            self._require_asset_version(asset, requested)
+            return requested
+        current = self._require_asset_version(asset, asset.current_version_id)
+        return current.id if current.media_type != AssetMediaType.TEXT_REFERENCE else None
+
+    def _validate_asset_media_kind(
+        self,
+        asset: Asset,
+        media_type: AssetMediaType,
+    ) -> None:
+        if asset.kind != AssetKind.REFERENCE and media_type != AssetMediaType.IMAGE:
+            raise AssetWorkbenchConflict(
+                "Character, location, and prop assets currently accept image media only"
+            )
+
+    @staticmethod
+    def _media_type_for_path(path: Path) -> AssetMediaType:
+        suffix = path.suffix.lower()
+        if suffix in _IMAGE_EXTENSIONS:
+            return AssetMediaType.IMAGE
+        if suffix in _VIDEO_EXTENSIONS:
+            return AssetMediaType.VIDEO
+        if suffix in _AUDIO_EXTENSIONS:
+            return AssetMediaType.AUDIO
+        raise AssetWorkbenchConflict(f"Unsupported asset file type: {suffix or 'none'}")
+
+    @staticmethod
+    def _image_dimensions(
+        path: Path,
+        media_type: AssetMediaType,
+    ) -> tuple[int | None, int | None]:
+        if media_type != AssetMediaType.IMAGE:
+            return None, None
+        try:
+            with Image.open(path) as image:
+                image.verify()
+            with Image.open(path) as image:
+                return image.size
+        except (OSError, UnidentifiedImageError) as exc:
+            raise AssetWorkbenchConflict(f"Invalid image file: {path.name}") from exc
+
+    @staticmethod
+    def _validate_output_image(path: Path) -> tuple[int, int]:
+        try:
+            with Image.open(path) as image:
+                image.verify()
+            with Image.open(path) as image:
+                width, height = image.size
+        except (OSError, UnidentifiedImageError) as exc:
+            raise ValueError("Provider output is not a readable image") from exc
+        if width <= 0 or height <= 0:
+            raise ValueError("Provider output has invalid dimensions")
+        return width, height
+
+    def _cost_record(self, usage: ImageUsage) -> ImageCostRecord:
+        pricing = self.config_store.pricing_snapshot()
+        estimated = (
+            usage.input_tokens_details.image_tokens * pricing.image_input
+            + usage.input_tokens_details.text_tokens * pricing.text_input
+            + usage.output_tokens_details.image_tokens * pricing.image_output
+        ) / 1_000_000
+        if usage.output_tokens_details.image_tokens == 0 and usage.output_tokens:
+            estimated += usage.output_tokens * pricing.image_output / 1_000_000
+        return ImageCostRecord(
+            estimated_amount=round(estimated, 8),
+            pricing=pricing,
+            usage=usage,
+        )
+
+    def _provider(self) -> ImageProvider:
+        api_key = self.config_store.api_key()
+        if not api_key:
+            raise AssetProviderConfigurationError("OpenAI API key is not configured")
+        return self.provider_factory(api_key, self.config_store.base_url())
+
+    def _mark_task_failed(
+        self,
+        task: ImageGenerationTask,
+        code: str,
+        message: str,
+    ) -> ImageGenerationTask:
+        now = utc_now()
+        task.status = ImageTaskStatus.FAILED
+        task.error_code = code
+        task.error_message = message
+        task.finished_at = now
+        task.updated_at = now
+        self.repository.save_image_task(task)
+        return task
+
+    def _asset_directory(self, project_id: str, asset_id: str) -> Path:
+        return self.workspace_root / project_id / "assets" / asset_id
+
+    def _final_output_path(
+        self,
+        task: ImageGenerationTask,
+        suffix: str | None = None,
+    ) -> Path:
+        resolved_suffix = suffix or Path(task.output_path or task.staged_path or ".png").suffix
+        if resolved_suffix == ".part":
+            resolved_suffix = Path(Path(task.staged_path or "image.png").stem).suffix or ".png"
+        return self._asset_directory(task.project_id, task.asset_id) / (
+            f"v{task.output_version_number}-{task.output_version_id}{resolved_suffix}"
+        )
+
+    def _require_project(self, project_id: str) -> ProjectDocument:
+        document = self.repository.get_project(project_id)
+        if document is None:
+            raise AssetWorkbenchNotFound(project_id)
+        return document
+
+    @staticmethod
+    def _require_asset(document: ProjectDocument, asset_id: str) -> Asset:
+        asset = next((item for item in document.assets if item.id == asset_id), None)
+        if asset is None:
+            raise AssetWorkbenchNotFound(asset_id)
+        return asset
+
+    @staticmethod
+    def _require_asset_version(asset: Asset, version_id: str) -> AssetVersion:
+        version = next((item for item in asset.versions if item.id == version_id), None)
+        if version is None:
+            raise AssetWorkbenchNotFound(version_id)
+        return version
+
+    def _find_version(
+        self,
+        document: ProjectDocument,
+        version_id: str,
+    ) -> tuple[Asset, AssetVersion]:
+        for asset in document.assets:
+            for version in asset.versions:
+                if version.id == version_id:
+                    return asset, version
+        raise AssetWorkbenchNotFound(version_id)
+
+    def _require_image_task(self, task_id: str) -> ImageGenerationTask:
+        task = self.repository.get_image_task(task_id)
+        if task is None:
+            raise AssetWorkbenchNotFound(task_id)
+        return task
+
+    @staticmethod
+    def _next_version_number(asset: Asset) -> int:
+        return max((version.version for version in asset.versions), default=0) + 1

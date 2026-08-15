@@ -5,6 +5,7 @@ from __future__ import annotations
 from short_drama.models import (
     ApprovalStatus,
     Asset,
+    AssetKind,
     AssetVersion,
     AudioKind,
     CapabilitySnapshot,
@@ -195,7 +196,7 @@ def _asset(
     *,
     project_id: str,
     suffix: str,
-    kind: str,
+    kind: AssetKind,
     name: str,
     descriptor: str,
     created_at: str,
@@ -226,7 +227,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
         _asset(
             project_id=project_id,
             suffix="linxia",
-            kind="CHARACTER",
+            kind=AssetKind.CHARACTER,
             name="林夏定妆",
             descriptor="28 岁，短黑发，米白风衣，克制警觉，声线标识 S1",
             created_at=created_at,
@@ -234,7 +235,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
         _asset(
             project_id=project_id,
             suffix="zhouheng",
-            kind="CHARACTER",
+            kind=AssetKind.CHARACTER,
             name="周衡定妆",
             descriptor="32 岁，深灰西装，左眉浅疤，平静，声线标识 S2",
             created_at=created_at,
@@ -242,7 +243,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
         _asset(
             project_id=project_id,
             suffix="store",
-            kind="LOCATION",
+            kind=AssetKind.LOCATION,
             name="雨夜便利店",
             descriptor="冷白顶灯，右侧玻璃门，左后收银台，蓝色霓虹雨夜反光",
             created_at=created_at,
@@ -250,7 +251,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
         _asset(
             project_id=project_id,
             suffix="recorder",
-            kind="PROP",
+            kind=AssetKind.PROP,
             name="红色旧录音笔",
             descriptor="磨损红壳，指示灯；周衡右手 → 柜台 → 林夏左手",
             created_at=created_at,

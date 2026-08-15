@@ -18,6 +18,8 @@ import {
 import { pathToFileUrl } from '../../lib/file-url'
 import {
   ShortDramaApi,
+  type Asset,
+  type AssetVersion,
   type GenerationTask,
   type H3CompilePreview,
   type H3MediaInput,
@@ -37,7 +39,8 @@ type ApiResult<T> =
   | { ok: false; error: { message: string } }
 
 type SourceMode = 'local_path' | 'external_url' | 'file_id'
-type SourceDraft = { mode: SourceMode; value: string }
+type SourceDraft = { mode: SourceMode; value: string; assetVersionId?: string }
+type ApprovedAsset = { asset: Asset; version: AssetVersion }
 
 const referenceRoles: H3MediaRole[] = ['reference_image', 'reference_video', 'reference_audio']
 const referenceRoleLimits: Record<H3MediaRole, number> = {
@@ -160,7 +163,7 @@ function SourceInput({
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-medium text-zinc-300">{roleLabels[role]}{referenceRoles.includes(role) ? ` ${index + 1}` : ''}</span>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-zinc-600">{kind}</span>
+          <span className="text-[10px] text-zinc-600">{draft.assetVersionId ? '正式 AssetVersion' : kind}</span>
           {onRemove && <button className="text-[10px] text-zinc-600 hover:text-red-300" onClick={onRemove} type="button">移除</button>}
         </div>
       </div>
@@ -180,7 +183,7 @@ function SourceInput({
           disabled={disabled}
           placeholder={draft.mode === 'local_path' ? '/path/to/file' : draft.mode === 'file_id' ? '123456789' : 'https://...'}
           value={draft.value}
-          onChange={(event) => onChange({ ...draft, value: event.target.value })}
+          onChange={(event) => onChange({ mode: draft.mode, value: event.target.value })}
         />
         {draft.mode === 'local_path' && (
           <button className={subtleButton} disabled={disabled} onClick={() => void browse()} type="button">
@@ -216,6 +219,13 @@ export function H3LabPanel({
     () => project.document.shots.filter((shot) => [1, 2, 5, 8].includes(shot.sequence)),
     [project.document.shots],
   )
+  const approvedAssets = useMemo<ApprovedAsset[]>(() => project.document.assets.flatMap((asset) => {
+    if (!asset.approved_version_id) return []
+    const version = asset.versions.find((candidate) => candidate.id === asset.approved_version_id)
+    if (!version || !['IMAGE', 'VIDEO', 'AUDIO'].includes(version.media_type)) return []
+    if (!version.local_path && !version.external_url) return []
+    return [{ asset, version }]
+  }), [project.document.assets])
   const [shotId, setShotId] = useState(representativeShots[0]?.id ?? project.document.shots[0]?.id ?? '')
   const [route, setRoute] = useState<VideoGenerationRoute>('DIRECT')
   const selectedShot = project.document.shots.find((shot) => shot.id === shotId) ?? project.document.shots[0]
@@ -275,6 +285,7 @@ export function H3LabPanel({
         kind: roleKinds[roleName],
         role: roleName,
         source: sourceFromDraft(draft),
+        ...(draft.assetVersionId ? { asset_version_id: draft.assetVersionId } : {}),
       })))
   }, [drafts, route])
 
@@ -306,6 +317,46 @@ export function H3LabPanel({
       ...current,
       [roleName]: current[roleName].filter((_draft, draftIndex) => draftIndex !== index),
     }))
+  }
+
+  const addApprovedAsset = (entry: ApprovedAsset) => {
+    if (route === 'DIRECT') {
+      onError('Direct 路线不接受媒体资产')
+      return
+    }
+    const source: SourceDraft = entry.version.local_path
+      ? { mode: 'local_path', value: entry.version.local_path, assetVersionId: entry.version.id }
+      : { mode: 'external_url', value: entry.version.external_url ?? '', assetVersionId: entry.version.id }
+    let roleName: H3MediaRole
+    if (route === 'FRAME_FIRST') {
+      if (entry.version.media_type !== 'IMAGE') { onError('Frame 路线只能使用已批准图像'); return }
+      roleName = 'first_frame'
+    } else if (route === 'FRAME_FIRST_LAST') {
+      if (entry.version.media_type !== 'IMAGE') { onError('Frame 路线只能使用已批准图像'); return }
+      roleName = drafts.first_frame[0].value.trim() ? 'last_frame' : 'first_frame'
+    } else {
+      roleName = entry.version.media_type === 'VIDEO'
+        ? 'reference_video'
+        : entry.version.media_type === 'AUDIO'
+          ? 'reference_audio'
+          : 'reference_image'
+    }
+    setDrafts((current) => {
+      const roleDrafts = current[roleName]
+      const emptyIndex = roleDrafts.findIndex((draft) => !draft.value.trim())
+      if (emptyIndex >= 0) {
+        return {
+          ...current,
+          [roleName]: roleDrafts.map((draft, index) => index === emptyIndex ? source : draft),
+        }
+      }
+      if (route === 'REFERENCE' && roleDrafts.length < referenceRoleLimits[roleName] && mediaInputs.length < 12) {
+        return { ...current, [roleName]: [...roleDrafts, source] }
+      }
+      return { ...current, [roleName]: roleDrafts.map((draft, index) => index === roleDrafts.length - 1 ? source : draft) }
+    })
+    setPreview(null)
+    onNotice(`已加入正式资产：${entry.asset.name} v${entry.version.version}`)
   }
 
   const probeRequest = (): H3ProbeRequest => ({
@@ -588,6 +639,7 @@ export function H3LabPanel({
                 {(Object.keys(routeLabels) as VideoGenerationRoute[]).map((item) => <button key={item} className={`rounded-lg border px-3 py-2.5 text-left text-xs transition ${route === item ? 'border-blue-500 bg-blue-500/10 text-blue-200' : 'border-zinc-800 bg-zinc-950 text-zinc-400'}`} onClick={() => { setRoute(item); setPreview(null) }}>{routeLabels[item]}</button>)}
               </div>
             </div>
+            {inputRoles.length > 0 && <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/5 p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-medium text-emerald-200">从资产工作台加入正式版本</p><p className="mt-1 text-[11px] text-zinc-600">这里只列出当前 approved_version_id；服务端会再次校验并按版本记录解析来源。</p></div><Badge status={approvedAssets.length ? 'SUCCEEDED' : 'FAILED'}>{approvedAssets.length} 个</Badge></div>{approvedAssets.length === 0 ? <p className="mt-3 text-xs text-zinc-600">先在资产页批准至少一个带媒体的版本。</p> : <div className="mt-3 flex flex-wrap gap-2">{approvedAssets.map((entry) => { const compatible = route === 'REFERENCE' || entry.version.media_type === 'IMAGE'; return <button key={entry.version.id} type="button" className={subtleButton} disabled={!compatible} onClick={() => addApprovedAsset(entry)}>{entry.asset.name} · v{entry.version.version} · {entry.version.media_type}</button> })}</div>}</div>}
             {inputRoles.length > 0 && <div className="space-y-3">{route === 'REFERENCE' && <p className="text-xs text-zinc-500">已填写 {mediaInputs.length}/12 个参考素材；填满后其他空槽自动锁定。</p>}{inputRoles.map((roleName) => <div key={roleName} className="space-y-2">{drafts[roleName].map((draft, draftIndex) => <SourceInput key={`${roleName}-${draftIndex}`} role={roleName} index={draftIndex} draft={draft} disabled={route === 'REFERENCE' && mediaInputs.length >= 12 && !draft.value.trim()} onChange={(next) => updateDraft(roleName, draftIndex, next)} onRemove={route === 'REFERENCE' && drafts[roleName].length > 1 ? () => removeReferenceDraft(roleName, draftIndex) : undefined} />)}{route === 'REFERENCE' && <button className={subtleButton} type="button" disabled={drafts[roleName].length >= referenceRoleLimits[roleName] || mediaInputs.length >= 12} onClick={() => addReferenceDraft(roleName)}>+ 添加{roleLabels[roleName]}（{drafts[roleName].length}/{referenceRoleLimits[roleName]}）</button>}</div>)}</div>}
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Prompt override（留空则由当前剧本、Bible、分镜与连续性自动编译）</span><textarea className={`${inputClass} min-h-24 resize-y leading-6`} value={promptOverride} onChange={(event) => setPromptOverride(event.target.value)} /></label>
             <div className="flex flex-wrap gap-2">

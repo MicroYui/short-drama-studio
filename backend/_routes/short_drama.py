@@ -18,6 +18,22 @@ from short_drama.h3_models import (
     H3TakeReviewResponse,
     H3TaskActionResponse,
 )
+from short_drama.image_models import (
+    AssetCreateRequest,
+    AssetImportLocalRequest,
+    AssetImportUrlRequest,
+    AssetMutationResponse,
+    AssetReviewRequest,
+    ImageProviderConfigResponse,
+    ImageProviderConfigUpdate,
+    ImageTaskCreateRequest,
+    ImageTaskListResponse,
+    ImageTaskResponse,
+)
+from short_drama.language_models import (
+    LanguageProviderConfigResponse,
+    LanguageProviderConfigUpdate,
+)
 from short_drama.media import MediaGenerationError
 from short_drama.models import (
     AutoDraftRequest,
@@ -60,6 +76,59 @@ def _translate_error(error: Exception) -> HTTPError:
     if isinstance(error, MediaGenerationError):
         return HTTPError(500, str(error), code="SHORT_DRAMA_MEDIA_FAILED")
     return HTTPError(500, str(error), code="SHORT_DRAMA_INTERNAL_ERROR")
+
+
+@router.get("/providers/gpt-image", response_model=ImageProviderConfigResponse)
+def get_image_provider_config(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageProviderConfigResponse:
+    return service.get_image_provider_config()
+
+
+@router.post("/providers/gpt-image", response_model=ImageProviderConfigResponse)
+def update_image_provider_config(
+    request: ImageProviderConfigUpdate,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageProviderConfigResponse:
+    return service.update_image_provider_config(request)
+
+
+@router.post("/providers/gpt-image/validate", response_model=ImageProviderConfigResponse)
+def validate_image_provider_config(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageProviderConfigResponse:
+    try:
+        return service.validate_image_provider_credentials()
+    except (WorkflowConflictError, ProviderOperationError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get("/providers/gpt-sol", response_model=LanguageProviderConfigResponse)
+def get_language_provider_config(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> LanguageProviderConfigResponse:
+    return service.get_language_provider_config()
+
+
+@router.post("/providers/gpt-sol", response_model=LanguageProviderConfigResponse)
+def update_language_provider_config(
+    request: LanguageProviderConfigUpdate,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> LanguageProviderConfigResponse:
+    return service.update_language_provider_config(request)
+
+
+@router.post(
+    "/providers/gpt-sol/validate",
+    response_model=LanguageProviderConfigResponse,
+)
+def validate_language_provider_config(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> LanguageProviderConfigResponse:
+    try:
+        return service.validate_language_provider_credentials()
+    except (WorkflowConflictError, ProviderOperationError) as exc:
+        raise _translate_error(exc) from exc
 
 
 @router.get("/providers/minimax-h3", response_model=H3ProviderConfigResponse)
@@ -181,6 +250,152 @@ def create_project(
     service: ShortDramaService = Depends(get_short_drama_service),
 ) -> ProjectAggregate:
     return service.create_project(request)
+
+
+@router.post("/projects/{project_id}/assets", response_model=AssetMutationResponse)
+def create_asset(
+    project_id: str,
+    request: AssetCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetMutationResponse:
+    try:
+        return service.create_asset(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/assets/{asset_id}/versions/import-local",
+    response_model=AssetMutationResponse,
+)
+def import_local_asset_version(
+    project_id: str,
+    asset_id: str,
+    request: AssetImportLocalRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetMutationResponse:
+    try:
+        return service.import_local_asset_version(project_id, asset_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/assets/{asset_id}/versions/import-url",
+    response_model=AssetMutationResponse,
+)
+def import_url_asset_version(
+    project_id: str,
+    asset_id: str,
+    request: AssetImportUrlRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetMutationResponse:
+    try:
+        return service.import_url_asset_version(project_id, asset_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/assets/{asset_id}/versions/{version_id}/review",
+    response_model=AssetMutationResponse,
+)
+def review_asset_version(
+    project_id: str,
+    asset_id: str,
+    version_id: str,
+    request: AssetReviewRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetMutationResponse:
+    try:
+        return service.review_asset_version(
+            project_id,
+            asset_id,
+            version_id,
+            request,
+        )
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/assets/{asset_id}/image-tasks",
+    response_model=ImageTaskResponse,
+)
+def enqueue_image_task(
+    project_id: str,
+    asset_id: str,
+    request: ImageTaskCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageTaskResponse:
+    try:
+        return service.enqueue_image_task(project_id, asset_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/image-tasks",
+    response_model=ImageTaskListResponse,
+)
+def list_image_tasks(
+    project_id: str,
+    asset_id: str | None = None,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageTaskListResponse:
+    try:
+        return service.list_image_tasks(project_id, asset_id)
+    except (ProjectNotFoundError, ArtifactNotFoundError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/image-tasks/{task_id}/advance", response_model=ImageTaskResponse)
+def advance_image_task(
+    task_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageTaskResponse:
+    try:
+        return service.advance_image_task(task_id)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/image-tasks/{task_id}/cancel", response_model=ImageTaskResponse)
+def cancel_image_task(
+    task_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageTaskResponse:
+    try:
+        return service.cancel_image_task(task_id)
+    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/image-tasks/{task_id}/retry", response_model=ImageTaskResponse)
+def retry_image_task(
+    task_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageTaskResponse:
+    try:
+        return service.retry_image_task(task_id)
+    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/image-tasks/{task_id}/recover-output", response_model=ImageTaskResponse)
+def recover_image_task_output(
+    task_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageTaskResponse:
+    try:
+        return service.recover_image_task_output(task_id)
+    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
 
 
 @router.post("/fixtures/dont-trust-me", response_model=ProjectAggregate)

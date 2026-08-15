@@ -26,6 +26,7 @@ class RunMode(StrEnum):
 class ApprovalStatus(StrEnum):
     DRAFT = "DRAFT"
     APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
     SUPERSEDED = "SUPERSEDED"
 
 
@@ -67,11 +68,26 @@ class TakeAvailability(StrEnum):
 
 
 class OriginType(StrEnum):
+    MANUAL = "MANUAL"
     UPLOAD = "UPLOAD"
     LIBRARY_IMPORT = "LIBRARY_IMPORT"
     AI_GENERATED = "AI_GENERATED"
     AI_EDITED = "AI_EDITED"
     FIXTURE = "FIXTURE"
+
+
+class AssetKind(StrEnum):
+    CHARACTER = "CHARACTER"
+    LOCATION = "LOCATION"
+    PROP = "PROP"
+    REFERENCE = "REFERENCE"
+
+
+class AssetMediaType(StrEnum):
+    TEXT_REFERENCE = "TEXT_REFERENCE"
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    AUDIO = "AUDIO"
 
 
 class OperationKind(StrEnum):
@@ -230,15 +246,34 @@ class ProjectBibleVersion(DomainModel):
     created_at: str
 
 
+class AssetSourceRecord(DomainModel):
+    source_type: OriginType
+    source_label: str
+    source_uri: str | None = None
+    original_filename: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    prompt: str | None = None
+    created_at: str
+
+
 class AssetVersion(DomainModel):
     id: str
     version: int
     origin_type: OriginType
     descriptor: str
+    media_type: AssetMediaType = AssetMediaType.TEXT_REFERENCE
     local_path: str | None = None
     external_url: str | None = None
+    mime_type: str | None = None
+    width: int | None = None
+    height: int | None = None
+    file_size_bytes: int | None = None
     parent_version_id: str | None = None
+    image_task_id: str | None = None
+    source: AssetSourceRecord | None = None
     approval_status: ApprovalStatus
+    review_notes: str | None = None
     freshness: Freshness
     created_at: str
 
@@ -246,9 +281,10 @@ class AssetVersion(DomainModel):
 class Asset(DomainModel):
     id: str
     project_id: str
-    kind: str
+    kind: AssetKind
     name: str
     current_version_id: str
+    approved_version_id: str | None = None
     versions: list[AssetVersion]
 
 

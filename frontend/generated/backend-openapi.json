@@ -236,6 +236,7 @@
         "enum": [
           "DRAFT",
           "APPROVED",
+          "REJECTED",
           "SUPERSEDED"
         ],
         "title": "ApprovalStatus",
@@ -244,6 +245,17 @@
       "Asset": {
         "additionalProperties": false,
         "properties": {
+          "approved_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Version Id"
+          },
           "current_version_id": {
             "title": "Current Version Id",
             "type": "string"
@@ -253,8 +265,7 @@
             "type": "string"
           },
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/AssetKind"
           },
           "name": {
             "title": "Name",
@@ -283,6 +294,251 @@
         "title": "Asset",
         "type": "object"
       },
+      "AssetCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "descriptor": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AssetKind"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "descriptor"
+        ],
+        "title": "AssetCreateRequest",
+        "type": "object"
+      },
+      "AssetImportLocalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "descriptor": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "local_path": {
+            "minLength": 1,
+            "title": "Local Path",
+            "type": "string"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          }
+        },
+        "required": [
+          "local_path",
+          "descriptor"
+        ],
+        "title": "AssetImportLocalRequest",
+        "type": "object"
+      },
+      "AssetImportUrlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "descriptor": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "external_url": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "External Url",
+            "type": "string"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/AssetMediaType",
+            "default": "IMAGE"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          }
+        },
+        "required": [
+          "external_url",
+          "descriptor"
+        ],
+        "title": "AssetImportUrlRequest",
+        "type": "object"
+      },
+      "AssetKind": {
+        "enum": [
+          "CHARACTER",
+          "LOCATION",
+          "PROP",
+          "REFERENCE"
+        ],
+        "title": "AssetKind",
+        "type": "string"
+      },
+      "AssetMediaType": {
+        "enum": [
+          "TEXT_REFERENCE",
+          "IMAGE",
+          "VIDEO",
+          "AUDIO"
+        ],
+        "title": "AssetMediaType",
+        "type": "string"
+      },
+      "AssetMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/Asset"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "version": {
+            "$ref": "#/components/schemas/AssetVersion"
+          }
+        },
+        "required": [
+          "asset",
+          "version",
+          "project"
+        ],
+        "title": "AssetMutationResponse",
+        "type": "object"
+      },
+      "AssetReviewDecision": {
+        "enum": [
+          "APPROVED",
+          "REJECTED"
+        ],
+        "title": "AssetReviewDecision",
+        "type": "string"
+      },
+      "AssetReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/AssetReviewDecision"
+          },
+          "notes": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Notes",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "notes"
+        ],
+        "title": "AssetReviewRequest",
+        "type": "object"
+      },
+      "AssetSourceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "original_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Filename"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "source_label": {
+            "title": "Source Label",
+            "type": "string"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/OriginType"
+          },
+          "source_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Uri"
+          }
+        },
+        "required": [
+          "source_type",
+          "source_label",
+          "created_at"
+        ],
+        "title": "AssetSourceRecord",
+        "type": "object"
+      },
       "AssetVersion": {
         "additionalProperties": false,
         "properties": {
@@ -308,12 +564,45 @@
             ],
             "title": "External Url"
           },
+          "file_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size Bytes"
+          },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
           },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "image_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Task Id"
           },
           "local_path": {
             "anyOf": [
@@ -325,6 +614,21 @@
               }
             ],
             "title": "Local Path"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/AssetMediaType",
+            "default": "TEXT_REFERENCE"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
           },
           "origin_type": {
             "$ref": "#/components/schemas/OriginType"
@@ -340,9 +644,41 @@
             ],
             "title": "Parent Version Id"
           },
+          "review_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Notes"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetSourceRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "version": {
             "title": "Version",
             "type": "integer"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
           }
         },
         "required": [
@@ -2026,6 +2362,17 @@
       "H3MediaInput": {
         "additionalProperties": false,
         "properties": {
+          "asset_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Version Id"
+          },
           "kind": {
             "$ref": "#/components/schemas/H3MediaKind"
           },
@@ -3880,6 +4227,47 @@
         "title": "IcLoraSettings",
         "type": "object"
       },
+      "ImageBackground": {
+        "enum": [
+          "auto",
+          "opaque",
+          "transparent"
+        ],
+        "title": "ImageBackground",
+        "type": "string"
+      },
+      "ImageCostRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "estimated_amount": {
+            "title": "Estimated Amount",
+            "type": "number"
+          },
+          "note": {
+            "default": "Estimate from provider token usage; provider billing is authoritative.",
+            "title": "Note",
+            "type": "string"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/ImagePricingSnapshot"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ImageUsage"
+          }
+        },
+        "required": [
+          "estimated_amount",
+          "pricing",
+          "usage"
+        ],
+        "title": "ImageCostRecord",
+        "type": "object"
+      },
       "ImageGenRecommendationResponse": {
         "properties": {
           "cp_to_download": {
@@ -3910,6 +4298,568 @@
           "cp_to_download"
         ],
         "title": "ImageGenRecommendationResponse",
+        "type": "object"
+      },
+      "ImageGenerationTask": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "attempt": {
+            "default": 1,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageCostRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "descriptor": {
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "default": "gpt-image-2",
+            "title": "Model",
+            "type": "string"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ImageOperation"
+          },
+          "output_mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Mime Type"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path"
+          },
+          "output_version_id": {
+            "title": "Output Version Id",
+            "type": "string"
+          },
+          "output_version_number": {
+            "title": "Output Version Number",
+            "type": "integer"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider": {
+            "default": "openai",
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Request Id"
+          },
+          "request": {
+            "$ref": "#/components/schemas/ImageProviderRequest"
+          },
+          "retry_of_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Of Task Id"
+          },
+          "revised_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revised Prompt"
+          },
+          "staged_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staged Path"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ImageTaskStatus"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "asset_id",
+          "output_version_id",
+          "output_version_number",
+          "descriptor",
+          "operation",
+          "status",
+          "request",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ImageGenerationTask",
+        "type": "object"
+      },
+      "ImageOperation": {
+        "enum": [
+          "GENERATE",
+          "EDIT"
+        ],
+        "title": "ImageOperation",
+        "type": "string"
+      },
+      "ImageOutputFormat": {
+        "enum": [
+          "png",
+          "jpeg",
+          "webp"
+        ],
+        "title": "ImageOutputFormat",
+        "type": "string"
+      },
+      "ImagePricingSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "title": "Captured At",
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "image_input": {
+            "default": 8.0,
+            "title": "Image Input",
+            "type": "number"
+          },
+          "image_output": {
+            "default": 30.0,
+            "title": "Image Output",
+            "type": "number"
+          },
+          "text_input": {
+            "default": 5.0,
+            "title": "Text Input",
+            "type": "number"
+          },
+          "unit": {
+            "default": "PER_1M_TOKENS",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "captured_at"
+        ],
+        "title": "ImagePricingSnapshot",
+        "type": "object"
+      },
+      "ImageProviderConfigResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "default": "https://api.openai.com/v1",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "can_generate": {
+            "title": "Can Generate",
+            "type": "boolean"
+          },
+          "has_api_key": {
+            "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "key_source": {
+            "title": "Key Source",
+            "type": "string"
+          },
+          "model": {
+            "default": "gpt-image-2",
+            "title": "Model",
+            "type": "string"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/ImagePricingSnapshot"
+          },
+          "provider": {
+            "default": "openai-compatible",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "has_api_key",
+          "key_source",
+          "can_generate",
+          "pricing"
+        ],
+        "title": "ImageProviderConfigResponse",
+        "type": "object"
+      },
+      "ImageProviderConfigUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          }
+        },
+        "title": "ImageProviderConfigUpdate",
+        "type": "object"
+      },
+      "ImageProviderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "background": {
+            "$ref": "#/components/schemas/ImageBackground",
+            "default": "opaque"
+          },
+          "input_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Input Version Ids",
+            "type": "array"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ImageOperation"
+          },
+          "output_format": {
+            "$ref": "#/components/schemas/ImageOutputFormat",
+            "default": "png"
+          },
+          "prompt": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/ImageQuality",
+            "default": "high"
+          },
+          "size": {
+            "default": "768x1344",
+            "title": "Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "prompt"
+        ],
+        "title": "ImageProviderRequest",
+        "type": "object"
+      },
+      "ImageQuality": {
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "title": "ImageQuality",
+        "type": "string"
+      },
+      "ImageTaskCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "background": {
+            "$ref": "#/components/schemas/ImageBackground",
+            "default": "opaque"
+          },
+          "descriptor": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "input_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Input Version Ids",
+            "type": "array"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/ImageOperation",
+            "default": "GENERATE"
+          },
+          "output_format": {
+            "$ref": "#/components/schemas/ImageOutputFormat",
+            "default": "png"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "prompt": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/ImageQuality",
+            "default": "high"
+          },
+          "size": {
+            "default": "768x1344",
+            "title": "Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt",
+          "descriptor"
+        ],
+        "title": "ImageTaskCreateRequest",
+        "type": "object"
+      },
+      "ImageTaskListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ImageGenerationTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks"
+        ],
+        "title": "ImageTaskListResponse",
+        "type": "object"
+      },
+      "ImageTaskResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "task": {
+            "$ref": "#/components/schemas/ImageGenerationTask"
+          }
+        },
+        "required": [
+          "task",
+          "project"
+        ],
+        "title": "ImageTaskResponse",
+        "type": "object"
+      },
+      "ImageTaskStatus": {
+        "enum": [
+          "QUEUED",
+          "SUBMITTING",
+          "SUCCEEDED",
+          "FAILED",
+          "CANCELLED",
+          "SUBMIT_UNKNOWN",
+          "OUTPUT_MISSING"
+        ],
+        "title": "ImageTaskStatus",
+        "type": "string"
+      },
+      "ImageTokenDetails": {
+        "additionalProperties": false,
+        "properties": {
+          "image_tokens": {
+            "default": 0,
+            "title": "Image Tokens",
+            "type": "integer"
+          },
+          "text_tokens": {
+            "default": 0,
+            "title": "Text Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "ImageTokenDetails",
+        "type": "object"
+      },
+      "ImageUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "input_tokens_details": {
+            "$ref": "#/components/schemas/ImageTokenDetails"
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "output_tokens_details": {
+            "$ref": "#/components/schemas/ImageTokenDetails"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "ImageUsage",
         "type": "object"
       },
       "InputSpec": {
@@ -4137,6 +5087,82 @@
           "supported_resolutions_durations"
         ],
         "title": "LTXVideoGenerationSpec",
+        "type": "object"
+      },
+      "LanguageProviderConfigResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "default": "https://api.openai.com/v1",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "can_connect": {
+            "title": "Can Connect",
+            "type": "boolean"
+          },
+          "has_api_key": {
+            "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "key_source": {
+            "title": "Key Source",
+            "type": "string"
+          },
+          "model": {
+            "default": "gpt-5.6-sol",
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "default": "openai-compatible",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "has_api_key",
+          "key_source",
+          "can_connect"
+        ],
+        "title": "LanguageProviderConfigResponse",
+        "type": "object"
+      },
+      "LanguageProviderConfigUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          }
+        },
+        "title": "LanguageProviderConfigUpdate",
         "type": "object"
       },
       "LicenseSpec": {
@@ -5014,6 +6040,7 @@
       },
       "OriginType": {
         "enum": [
+          "MANUAL",
           "UPLOAD",
           "LIBRARY_IMPORT",
           "AI_GENERATED",
@@ -9039,6 +10066,214 @@
         ]
       }
     },
+    "/api/short-drama/image-tasks/{task_id}/advance": {
+      "post": {
+        "operationId": "advance_image_task_api_short_drama_image_tasks__task_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Advance Image Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/image-tasks/{task_id}/cancel": {
+      "post": {
+        "operationId": "cancel_image_task_api_short_drama_image_tasks__task_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Cancel Image Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/image-tasks/{task_id}/recover-output": {
+      "post": {
+        "operationId": "recover_image_task_output_api_short_drama_image_tasks__task_id__recover_output_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Recover Image Task Output",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/image-tasks/{task_id}/retry": {
+      "post": {
+        "operationId": "retry_image_task_api_short_drama_image_tasks__task_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Retry Image Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects": {
       "get": {
         "operationId": "list_projects_api_short_drama_projects_get",
@@ -9226,6 +10461,361 @@
           }
         },
         "summary": "Get Project",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/assets": {
+      "post": {
+        "operationId": "create_asset_api_short_drama_projects__project_id__assets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Asset",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/image-tasks": {
+      "post": {
+        "operationId": "enqueue_image_task_api_short_drama_projects__project_id__assets__asset_id__image_tasks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageTaskCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Enqueue Image Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-local": {
+      "post": {
+        "operationId": "import_local_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions_import_local_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetImportLocalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Import Local Asset Version",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-url": {
+      "post": {
+        "operationId": "import_url_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions_import_url_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetImportUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Import Url Asset Version",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/{version_id}/review": {
+      "post": {
+        "operationId": "review_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions__version_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Review Asset Version",
         "tags": [
           "short-drama"
         ]
@@ -9593,6 +11183,74 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/image-tasks": {
+      "get": {
+        "operationId": "list_image_tasks_api_short_drama_projects__project_id__image_tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "asset_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTaskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Image Tasks",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects/{project_id}/manifest/rebuild": {
       "post": {
         "operationId": "rebuild_manifest_api_short_drama_projects__project_id__manifest_rebuild_post",
@@ -9915,6 +11573,268 @@
           }
         },
         "summary": "Enqueue Retake",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/gpt-image": {
+      "get": {
+        "operationId": "get_image_provider_config_api_short_drama_providers_gpt_image_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Image Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "post": {
+        "operationId": "update_image_provider_config_api_short_drama_providers_gpt_image_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageProviderConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Update Image Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/gpt-image/validate": {
+      "post": {
+        "operationId": "validate_image_provider_config_api_short_drama_providers_gpt_image_validate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Validate Image Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/gpt-sol": {
+      "get": {
+        "operationId": "get_language_provider_config_api_short_drama_providers_gpt_sol_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguageProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Language Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "post": {
+        "operationId": "update_language_provider_config_api_short_drama_providers_gpt_sol_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LanguageProviderConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguageProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Update Language Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/gpt-sol/validate": {
+      "post": {
+        "operationId": "validate_language_provider_config_api_short_drama_providers_gpt_sol_validate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguageProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Validate Language Provider Config",
         "tags": [
           "short-drama"
         ]

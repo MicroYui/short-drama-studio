@@ -15,7 +15,6 @@ import {
   Film,
   FlaskConical,
   FolderOpen,
-  Image as ImageIcon,
   Layers3,
   Loader2,
   PanelTop,
@@ -45,6 +44,7 @@ import {
   type TimelineManifest,
 } from './api'
 import { H3LabPanel } from './H3LabPanel'
+import { AssetWorkbenchPanel } from './AssetWorkbenchPanel'
 
 type StudioTab = 'overview' | 'script' | 'assets' | 'shots' | 'h3' | 'takes' | 'timeline' | 'qa'
 
@@ -331,53 +331,6 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
             </Badge>
           ))}
         </div>
-      </div>
-    </div>
-  )
-}
-
-function AssetsPanel({ project }: { project: ProjectAggregate }) {
-  const icons: Record<string, React.ReactNode> = {
-    CHARACTER: <PanelTop className="h-5 w-5" />,
-    LOCATION: <ImageIcon className="h-5 w-5" />,
-    PROP: <CircleDot className="h-5 w-5" />,
-  }
-  return (
-    <div>
-      <SectionTitle
-        title="ProjectBible 与资产"
-        description="稳定 Asset 身份与 AssetVersion 分离。正式阶段可接用户上传、外部素材库、GPT 新生成或 GPT 修整；Mock 只使用已批准的文字 fixture。"
-        action={<Badge tone="blue">{project.document.assets.length} 项资产</Badge>}
-      />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {project.document.assets.map((asset) => {
-          const version = asset.versions.find((item) => item.id === asset.current_version_id) ?? asset.versions[0]
-          return (
-            <div key={asset.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
-              <div className="flex h-36 items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-950 text-blue-300">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10">
-                  {icons[asset.kind] ?? <Layers3 className="h-5 w-5" />}
-                </div>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-medium text-white">{asset.name}</h3>
-                  <Badge>{asset.kind}</Badge>
-                </div>
-                <p className="mt-2 min-h-20 text-xs leading-5 text-zinc-400">{version.descriptor}</p>
-                <div className="mt-3 flex items-center justify-between">
-                  <Badge tone="green">{version.origin_type}</Badge>
-                  <span className="text-xs text-zinc-600">v{version.version}</span>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="mt-6 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/30 p-5 text-center">
-        <Plus className="mx-auto h-6 w-6 text-zinc-600" />
-        <p className="mt-2 text-sm text-zinc-300">上传、素材导入、GPT 生成与 GPT 修整的入口留在统一资产模型中</p>
-        <p className="mt-1 text-xs text-zinc-500">真实资产生产属于后续 Phase；本阶段不为了展示按钮调用任何 Provider。</p>
       </div>
     </div>
   )
@@ -889,7 +842,7 @@ export function ShortDramaStudio() {
     if (!project) return null
     if (tab === 'overview') return <OverviewPanel project={project} onAutoDraft={autoDraft} />
     if (tab === 'script') return <ScriptPanel project={project} onRevise={reviseLine} />
-    if (tab === 'assets') return <AssetsPanel project={project} />
+    if (tab === 'assets') return <AssetWorkbenchPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
     if (tab === 'shots') return <ShotsPanel project={project} onGenerate={generateShot} onRework={localRework} />
     if (tab === 'h3') return <H3LabPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
     if (tab === 'takes') return <TakesPanel project={project} onDrain={drain} onTaskAction={handleTaskAction} onCancel={cancelTask} onSelect={selectTake} />

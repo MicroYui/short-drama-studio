@@ -9,10 +9,20 @@ import threading
 from pathlib import Path
 from uuid import uuid4
 
+from short_drama.asset_workbench import (
+    AssetProviderConfigurationError,
+    AssetWorkbench,
+    AssetWorkbenchConflict,
+    AssetWorkbenchNotFound,
+    ImageProviderFactory,
+    default_image_provider_factory,
+)
 from short_drama.fixture import build_dont_trust_me_fixture, build_project_document
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
     H3MediaInput,
+    H3MediaKind,
+    H3MediaSource,
     H3ProbeRequest,
     H3ProbeResponse,
     H3ProviderConfigResponse,
@@ -30,9 +40,27 @@ from short_drama.h3_worker import (
     PersistentH3Worker,
     default_h3_client_factory,
 )
+from short_drama.image_models import (
+    AssetCreateRequest,
+    AssetImportLocalRequest,
+    AssetImportUrlRequest,
+    AssetMutationResponse,
+    AssetReviewRequest,
+    ImageProviderConfigResponse,
+    ImageProviderConfigUpdate,
+    ImageTaskCreateRequest,
+    ImageTaskListResponse,
+    ImageTaskResponse,
+)
+from short_drama.language_models import (
+    LanguageProviderConfigResponse,
+    LanguageProviderConfigUpdate,
+)
 from short_drama.media import MockMediaRenderer, TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
+    AssetVersion,
+    AssetMediaType,
     AutoDraftResponse,
     CreateProjectRequest,
     EnqueueRequest,
@@ -65,12 +93,20 @@ from short_drama.models import (
     WorkerDrainResponse,
 )
 from short_drama.providers.h3_config import H3ProviderConfigStore
+from short_drama.providers.image_config import ImageProviderConfigStore
+from short_drama.providers.image_provider import ImageProviderError
+from short_drama.providers.language_config import LanguageProviderConfigStore
 from short_drama.providers.minimax_h3_client import H3ClientError
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
     build_h3_prompt,
     compile_h3_request,
     validate_h3_probe,
+)
+from short_drama.providers.openai_compatible_language_client import (
+    LanguageProviderClientFactory,
+    LanguageProviderError,
+    default_language_provider_factory,
 )
 from short_drama.repository import ShortDramaRepository
 from short_drama.worker import InvalidTaskTransition, PersistentMockWorker, utc_now
@@ -108,6 +144,8 @@ class ShortDramaService:
         database_path: Path,
         workspace_root: Path,
         h3_client_factory: H3ClientFactory | None = None,
+        image_provider_factory: ImageProviderFactory | None = None,
+        language_provider_factory: LanguageProviderClientFactory | None = None,
     ) -> None:
         self.repository = ShortDramaRepository(database_path)
         self.workspace_root = workspace_root
@@ -122,6 +160,21 @@ class ShortDramaService:
             workspace_root=workspace_root,
             config_store=self.h3_config,
             client_factory=h3_client_factory or default_h3_client_factory,
+        )
+        self.image_config = ImageProviderConfigStore(
+            database_path.parent / "short-drama-image-provider-settings.json"
+        )
+        self.asset_workbench = AssetWorkbench(
+            repository=self.repository,
+            workspace_root=workspace_root,
+            config_store=self.image_config,
+            provider_factory=image_provider_factory or default_image_provider_factory,
+        )
+        self.language_config = LanguageProviderConfigStore(
+            database_path.parent / "short-drama-language-provider-settings.json"
+        )
+        self.language_provider_factory = (
+            language_provider_factory or default_language_provider_factory
         )
         self._lock = threading.RLock()
 
@@ -161,6 +214,170 @@ class ShortDramaService:
     def get_h3_config(self) -> H3ProviderConfigResponse:
         return self.h3_config.response()
 
+    def get_image_provider_config(self) -> ImageProviderConfigResponse:
+        return self.asset_workbench.get_config()
+
+    def update_image_provider_config(
+        self,
+        request: ImageProviderConfigUpdate,
+    ) -> ImageProviderConfigResponse:
+        return self.asset_workbench.update_config(request)
+
+    def validate_image_provider_credentials(self) -> ImageProviderConfigResponse:
+        try:
+            return self.asset_workbench.validate_credentials()
+        except AssetProviderConfigurationError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        except ImageProviderError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+
+    def get_language_provider_config(self) -> LanguageProviderConfigResponse:
+        return self.language_config.response()
+
+    def update_language_provider_config(
+        self,
+        request: LanguageProviderConfigUpdate,
+    ) -> LanguageProviderConfigResponse:
+        return self.language_config.update(request)
+
+    def validate_language_provider_credentials(self) -> LanguageProviderConfigResponse:
+        api_key = self.language_config.api_key()
+        if not api_key:
+            raise WorkflowConflictError("GPT-5.6-sol API key is not configured")
+        try:
+            client = self.language_provider_factory(
+                api_key,
+                self.language_config.base_url(),
+            )
+            client.validate_credentials()
+        except LanguageProviderError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        return self.language_config.response()
+
+    def create_asset(
+        self,
+        project_id: str,
+        request: AssetCreateRequest,
+    ) -> AssetMutationResponse:
+        try:
+            version = self.asset_workbench.create_asset(project_id, request)
+            return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ProjectNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def import_local_asset_version(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetImportLocalRequest,
+    ) -> AssetMutationResponse:
+        try:
+            version = self.asset_workbench.import_local(project_id, asset_id, request)
+            return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def import_url_asset_version(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetImportUrlRequest,
+    ) -> AssetMutationResponse:
+        try:
+            version = self.asset_workbench.import_url(project_id, asset_id, request)
+            return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def review_asset_version(
+        self,
+        project_id: str,
+        asset_id: str,
+        version_id: str,
+        request: AssetReviewRequest,
+    ) -> AssetMutationResponse:
+        try:
+            version = self.asset_workbench.review_version(
+                project_id,
+                asset_id,
+                version_id,
+                request,
+            )
+            return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def enqueue_image_task(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: ImageTaskCreateRequest,
+    ) -> ImageTaskResponse:
+        try:
+            task = self.asset_workbench.enqueue_image_task(project_id, asset_id, request)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except (AssetWorkbenchConflict, AssetProviderConfigurationError) as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        return ImageTaskResponse(task=task, project=self.get_project(project_id))
+
+    def list_image_tasks(
+        self,
+        project_id: str,
+        asset_id: str | None = None,
+    ) -> ImageTaskListResponse:
+        try:
+            tasks = self.asset_workbench.list_image_tasks(project_id, asset_id)
+        except AssetWorkbenchNotFound as exc:
+            raise ProjectNotFoundError(str(exc)) from exc
+        return ImageTaskListResponse(tasks=tasks)
+
+    def advance_image_task(self, task_id: str) -> ImageTaskResponse:
+        try:
+            task = self.asset_workbench.advance_image_task(task_id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except (AssetWorkbenchConflict, AssetProviderConfigurationError) as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        except ImageProviderError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
+
+    def cancel_image_task(self, task_id: str) -> ImageTaskResponse:
+        try:
+            task = self.asset_workbench.cancel_image_task(task_id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
+
+    def retry_image_task(self, task_id: str) -> ImageTaskResponse:
+        try:
+            task = self.asset_workbench.retry_image_task(task_id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except (AssetWorkbenchConflict, AssetProviderConfigurationError) as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
+
+    def recover_image_task_output(self, task_id: str) -> ImageTaskResponse:
+        try:
+            task = self.asset_workbench.recover_image_output(task_id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
+
     def update_h3_config(
         self,
         request: H3ProviderConfigUpdate,
@@ -181,7 +398,7 @@ class ShortDramaService:
         project_id: str,
         request: H3ProbeRequest,
     ) -> H3CompilePreviewResponse:
-        _document, _shot, prompt, duration = self._resolve_h3_probe(
+        _document, _shot, prompt, duration, media_inputs = self._resolve_h3_probe(
             project_id=project_id,
             request=request,
         )
@@ -199,7 +416,7 @@ class ShortDramaService:
                 route=request.route,
                 prompt=prompt,
                 duration_seconds=duration,
-                media_inputs=request.media_inputs,
+                media_inputs=media_inputs,
                 resolve_url=preview_url,
             )
         except H3CapabilityError as exc:
@@ -216,7 +433,7 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "AceData API token is required before enqueueing a paid H3 probe"
                 )
-            document, shot, prompt, duration = self._resolve_h3_probe(
+            document, shot, prompt, duration, media_inputs = self._resolve_h3_probe(
                 project_id=project_id,
                 request=request,
             )
@@ -228,7 +445,7 @@ class ShortDramaService:
                 route=request.route,
                 duration_seconds=duration,
                 prompt=prompt,
-                media_inputs=request.media_inputs,
+                media_inputs=media_inputs,
                 purpose=request.purpose,
                 candidate_index=candidate_index,
                 attempt=1,
@@ -737,7 +954,7 @@ class ShortDramaService:
         *,
         project_id: str,
         request: H3ProbeRequest,
-    ) -> tuple[ProjectDocument, ShotPlan, str, int]:
+    ) -> tuple[ProjectDocument, ShotPlan, str, int, list[H3MediaInput]]:
         document = self._require_project_document(project_id)
         shot = next((item for item in document.shots if item.id == request.shot_id), None)
         if shot is None:
@@ -748,16 +965,68 @@ class ShortDramaService:
             else build_h3_prompt(document, shot)
         )
         duration = request.duration_seconds or math.ceil(shot.duration_seconds)
+        media_inputs = self._resolve_approved_asset_inputs(
+            document,
+            request.media_inputs,
+        )
         try:
             validate_h3_probe(
                 route=request.route,
                 prompt=prompt,
                 duration_seconds=duration,
-                media_inputs=request.media_inputs,
+                media_inputs=media_inputs,
             )
         except H3CapabilityError as exc:
             raise WorkflowConflictError(str(exc)) from exc
-        return document, shot, prompt, duration
+        return document, shot, prompt, duration, media_inputs
+
+    def _resolve_approved_asset_inputs(
+        self,
+        document: ProjectDocument,
+        media_inputs: list[H3MediaInput],
+    ) -> list[H3MediaInput]:
+        approved_versions: dict[str, AssetVersion] = {}
+        for asset in document.assets:
+            approved_id = asset.approved_version_id
+            if approved_id is None:
+                continue
+            approved = next(
+                (version for version in asset.versions if version.id == approved_id),
+                None,
+            )
+            if approved is not None and approved.approval_status == ApprovalStatus.APPROVED:
+                approved_versions[approved.id] = approved
+
+        expected_kinds = {
+            AssetMediaType.IMAGE: H3MediaKind.IMAGE,
+            AssetMediaType.VIDEO: H3MediaKind.VIDEO,
+            AssetMediaType.AUDIO: H3MediaKind.AUDIO,
+        }
+        resolved: list[H3MediaInput] = []
+        for media in media_inputs:
+            if media.asset_version_id is None:
+                resolved.append(media)
+                continue
+            version = approved_versions.get(media.asset_version_id)
+            if version is None:
+                raise WorkflowConflictError(
+                    f"Asset version {media.asset_version_id} is not the asset's approved formal version"
+                )
+            expected_kind = expected_kinds.get(version.media_type)
+            if expected_kind is None or expected_kind != media.kind:
+                raise WorkflowConflictError(
+                    f"Approved asset version {version.id} is not compatible with {media.kind.value}"
+                )
+            if version.local_path is not None:
+                source = H3MediaSource(local_path=version.local_path)
+            elif version.external_url is not None:
+                source = H3MediaSource(external_url=version.external_url)
+            else:
+                raise WorkflowConflictError(
+                    f"Approved asset version {version.id} has no usable media source"
+                )
+            resolved.append(media.model_copy(update={"source": source}))
+        return resolved
 
     def _new_h3_task_and_run(
         self,
@@ -950,6 +1219,25 @@ class ShortDramaService:
             route_evidence=self.repository.list_route_evidence(document.project.id),
             progress=progress,
         )
+
+    def _asset_mutation_response(
+        self,
+        project_id: str,
+        version_id: str,
+    ) -> AssetMutationResponse:
+        project = self.get_project(project_id)
+        for asset in project.document.assets:
+            version: AssetVersion | None = next(
+                (item for item in asset.versions if item.id == version_id),
+                None,
+            )
+            if version is not None:
+                return AssetMutationResponse(
+                    asset=asset,
+                    version=version,
+                    project=project,
+                )
+        raise ArtifactNotFoundError(version_id)
 
     def _refresh_project_stage(self, project_id: str) -> None:
         with self._lock:

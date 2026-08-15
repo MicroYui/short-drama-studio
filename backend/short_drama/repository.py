@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import cast
 
 from short_drama.h3_models import H3ProviderRun, H3UploadedInput
+from short_drama.image_models import ImageGenerationTask, ImageTaskStatus
 from short_drama.models import (
     EvidenceStatus,
     ExportRecord,
@@ -150,6 +151,22 @@ class ShortDramaRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_route_evidence_project_shot
                     ON route_evidence(project_id, shot_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS image_tasks (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    asset_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    operation TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_image_tasks_project_asset
+                    ON image_tasks(project_id, asset_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_image_tasks_project_status
+                    ON image_tasks(project_id, status, created_at);
                 """
             )
             task_columns = {
@@ -169,6 +186,9 @@ class ShortDramaRepository:
             )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(2, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, datetime('now'))"
             )
 
     def save_project(self, document: ProjectDocument) -> None:
@@ -639,3 +659,77 @@ class ShortDramaRepository:
                 (project_id,),
             ).fetchall()
         return [RouteEvidence.model_validate_json(cast(str, row["record_json"])) for row in rows]
+
+    def save_image_task(self, task: ImageGenerationTask) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO image_tasks(
+                    id, project_id, asset_id, provider, operation, status,
+                    created_at, updated_at, record_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    updated_at = excluded.updated_at,
+                    record_json = excluded.record_json
+                """,
+                (
+                    task.id,
+                    task.project_id,
+                    task.asset_id,
+                    task.provider,
+                    task.operation.value,
+                    task.status.value,
+                    task.created_at,
+                    task.updated_at,
+                    task.model_dump_json(),
+                ),
+            )
+
+    def get_image_task(self, task_id: str) -> ImageGenerationTask | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM image_tasks WHERE id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ImageGenerationTask.model_validate_json(cast(str, row["record_json"]))
+
+    def list_image_tasks(
+        self,
+        project_id: str,
+        asset_id: str | None = None,
+    ) -> list[ImageGenerationTask]:
+        query = "SELECT record_json FROM image_tasks WHERE project_id = ?"
+        values: list[str] = [project_id]
+        if asset_id is not None:
+            query += " AND asset_id = ?"
+            values.append(asset_id)
+        query += " ORDER BY created_at DESC, id DESC"
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(query, values).fetchall()
+        return [
+            ImageGenerationTask.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]
+
+    def recover_interrupted_image_tasks(self) -> int:
+        recovered = 0
+        with self._lock:
+            with self._connection() as connection:
+                rows = connection.execute(
+                    "SELECT record_json FROM image_tasks WHERE status = ?",
+                    (ImageTaskStatus.SUBMITTING.value,),
+                ).fetchall()
+            for row in rows:
+                task = ImageGenerationTask.model_validate_json(cast(str, row["record_json"]))
+                task.status = ImageTaskStatus.SUBMIT_UNKNOWN
+                task.error_code = "PROCESS_INTERRUPTED_DURING_SUBMIT"
+                task.error_message = (
+                    "图像提交阶段进程中断；OpenAI Image API 无远端任务查询，"
+                    "再次提交可能产生重复费用。"
+                )
+                self.save_image_task(task)
+                recovered += 1
+        return recovered
