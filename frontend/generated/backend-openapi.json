@@ -2233,7 +2233,7 @@
         "additionalProperties": false,
         "properties": {
           "base_url": {
-            "default": "https://api.minimax.io",
+            "default": "https://api.acedata.cloud",
             "title": "Base Url",
             "type": "string"
           },

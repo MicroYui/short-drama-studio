@@ -1,4 +1,4 @@
-"""HTTP contract tests for the thin MiniMax-H3 client without network access."""
+"""HTTP contract tests for MiniMax-H3 through AceData without network access."""
 
 from __future__ import annotations
 
@@ -88,15 +88,14 @@ def _client(session: FakeSession) -> MiniMaxH3Client:
     )
 
 
-def test_client_uses_v2_endpoints_and_exact_payload(tmp_path: Path) -> None:
+def test_client_uses_acedata_endpoints_and_exact_payload(tmp_path: Path) -> None:
     session = FakeSession()
     session.responses.extend(
         [
             FakeResponse(200, _fixture("create_success.json")),
             FakeResponse(200, _fixture("query_succeeded.json")),
             FakeResponse(200, _fixture("list_tasks.json")),
-            FakeResponse(200, {"task_id": "424010985738629", "action": "cancelled", "status": "cancelled"}),
-            FakeResponse(200, _fixture("upload_success.json")),
+            FakeResponse(200, {"id": "424010985738629", "deleted": True}),
             FakeResponse(200, {}, body=b"downloaded-video"),
         ]
     )
@@ -105,7 +104,7 @@ def test_client_uses_v2_endpoints_and_exact_payload(tmp_path: Path) -> None:
     task_id = client.submit(_request())
     assert task_id == "424010985738629"
     submit_call = session.calls[0]
-    assert submit_call[0:2] == ("POST", "https://api.minimax.io/v2/video_generation")
+    assert submit_call[0:2] == ("POST", "https://api.acedata.cloud/minimax/videos")
     assert submit_call[2]["headers"]["Authorization"] == "Bearer secret"
     assert submit_call[2]["json"] == {
         "model": "MiniMax-H3",
@@ -113,19 +112,25 @@ def test_client_uses_v2_endpoints_and_exact_payload(tmp_path: Path) -> None:
         "resolution": "768P",
         "duration": 5,
         "ratio": "9:16",
+        "async": True,
     }
 
     assert client.query(task_id).status == "succeeded"
     assert client.list_tasks(page_size=500)[0].id == task_id
     assert client.cancel_or_delete(task_id).action == "cancelled"
+    assert session.calls[1][0:2] == ("POST", "https://api.acedata.cloud/minimax/tasks")
+    assert session.calls[1][2]["json"] == {"action": "retrieve", "id": task_id}
+    assert session.calls[2][2]["json"] == {
+        "action": "retrieve_batch",
+        "offset": 0,
+        "limit": 100,
+    }
+    assert session.calls[3][2]["json"] == {"action": "delete", "id": task_id}
 
     source = tmp_path / "reference.png"
     source.write_bytes(b"image")
-    assert client.upload_file(source) == "987654321"
-    upload_call = session.calls[4]
-    assert upload_call[1] == "https://api.minimax.io/v1/files/upload"
-    assert upload_call[2]["data"] == {"purpose": "video_generation_input"}
-    assert "Content-Type" not in upload_call[2]["headers"]
+    assert client.upload_file(source) == "data:image/png;base64,aW1hZ2U="
+    assert len(session.calls) == 4
 
     destination = tmp_path / "output" / "take.mp4"
     client.download("https://signed.invalid/output.mp4", destination)
@@ -148,7 +153,7 @@ def test_submit_unknown_and_definite_errors_are_distinct() -> None:
     session.responses.append(
         FakeResponse(
             400,
-            {"error": {"type": "invalid_request", "message": "bad content"}},
+            {"error": {"code": "invalid_request", "message": "bad content"}},
         )
     )
     with pytest.raises(H3DefiniteRequestError) as definite:
@@ -158,3 +163,28 @@ def test_submit_unknown_and_definite_errors_are_distinct() -> None:
     session.responses.append(FakeResponse(429, {"error": {"message": "rate limited"}}))
     with pytest.raises(H3TransientError):
         client.query("task")
+
+
+def test_submit_falls_back_to_synchronous_when_live_gateway_rejects_async() -> None:
+    session = FakeSession()
+    session.responses.extend(
+        [
+            FakeResponse(
+                400,
+                {
+                    "error": {
+                        "code": "bad_request_error",
+                        "message": "async is not supported by the MiniMax H3 V2 contract",
+                    }
+                },
+            ),
+            FakeResponse(200, _fixture("query_succeeded.json")),
+        ]
+    )
+    client = _client(session)
+
+    assert client.submit(_request()) == "424010985738629"
+    assert len(session.calls) == 2
+    assert session.calls[0][2]["json"]["async"] is True
+    assert "async" not in session.calls[1][2]["json"]
+    assert session.calls[1][2]["timeout"] == 900.0

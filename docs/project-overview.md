@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环，并完成 Phase 2 的 MiniMax-H3 768P Provider 工程接入。当前尚未配置 H3 凭证或运行真实样本，Mock 成片与离线 Provider 测试都不能代表最终真人质量。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环，并完成 Phase 2 的 MiniMax-H3 768P Provider 工程接入与真实合同冒烟。首条 Direct 样本已完成创建、下载和人工审片，声音无明显问题，但视觉因店招乱码和录音笔变成对讲机被判硬门槛失败；因此工程闭环成立，最终真人质量仍未通过。
 
 ## 结论先行
 
@@ -44,6 +44,6 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、架构和实验协议；LTX Desktop 基线；SQLite/API 短剧领域核心、可恢复 Mock Worker、多 Take、局部返工、TimelineManifest、字幕/音频占位、9:16 导出、QA 和桌面闭环；MiniMax-H3 768P Adapter、能力校验、持久化异步状态、对账/恢复、费用记录、离线合约和桌面实验台。
-- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未做：真实 H3 样本、GPT Image 资产生产、真实声音/口型实验和真人质量验收。
-- 下一步：配置 MiniMax 凭证并完成 Direct 最小真实冒烟；为镜头 1/2/5/8 准备合格视觉资产后运行 Direct、Frame、Reference 固定输入实验。
+- 已做：官方资料与开源源码审查、固定样片、架构和实验协议；LTX Desktop 基线；SQLite/API 短剧领域核心、可恢复 Mock Worker、多 Take、局部返工、TimelineManifest、字幕/音频占位、9:16 导出、QA 和桌面闭环；MiniMax-H3 768P Adapter、能力校验、持久化状态、对账/恢复、费用记录、离线合约、桌面实验台，以及一条已人工审片的真实 Direct 合同冒烟。
+- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未做：GPT Image 正式资产生产、固定资产下的 H3 多路线质量实验、锁定对白/声线/口型实验和真人整集质量验收。
+- 下一步：建立资产工作台与 GPT Image 生成/编辑闭环，为镜头 1/2/5/8 准备批准的角色、场景和道具版本，再运行 Direct、Frame、Reference 固定输入实验。

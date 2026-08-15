@@ -324,6 +324,10 @@ export async function startPythonBackend(): Promise<void> {
         ...process.env,
         PYTHONUNBUFFERED: '1',
         PYTHONNOUSERSITE: '1',
+        // A packaged macOS app is code-signed and its Resources directory must stay
+        // immutable at runtime. Prevent Python from trying to create/replace .pyc
+        // files inside the app bundle during first startup.
+        PYTHONDONTWRITEBYTECODE: '1',
         // Put the interpreter's bin/ on PATH so torch's C++ extension loader can find
         // `ninja` — required to load mps-sdpa's zero-copy `mpsgraph_zc` attention
         // backend on Apple Silicon (even a prebuilt cache needs ninja to load; without

@@ -186,7 +186,7 @@ class PersistentH3Worker:
                 raise ValueError("H3 media source is empty")
             uploaded = self._upload_local_input(client, media)
             uploaded_inputs.append(uploaded)
-            return f"mm_file://{uploaded.provider_file_id}"
+            return uploaded.provider_file_id
 
         request = compile_h3_request(
             route=task.route,
@@ -577,7 +577,7 @@ class PersistentH3Worker:
         api_key = self.config_store.api_key()
         if not api_key:
             raise H3ProviderConfigurationError(
-                "MiniMax API key is required before a real H3 provider action"
+                "AceData API token is required before a real H3 provider action"
             )
         return self.client_factory(api_key)
 

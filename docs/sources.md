@@ -23,6 +23,12 @@
 - [MiniMax-H3 Base Prompt Guide](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_base_en.md)
 - [MiniMax-H3 Reference Prompt Guide](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md)
 
+### AceData Cloud（当前 MiniMax-H3 传输网关）
+
+- [MiniMax H3 Video Generation API Integration Guide](https://platform.acedata.cloud/documents/minimax-videos-integration)
+- [MiniMax H3 Task Query API Integration Guide](https://platform.acedata.cloud/documents/minimax-tasks-integration)
+- [AceDataCloud HailuoMCP source](https://github.com/AceDataCloud/HailuoMCP)
+
 ### Azure Speech
 
 - [Text to speech](https://learn.microsoft.com/en-us/azure/ai-services/Speech-Service/text-to-speech)

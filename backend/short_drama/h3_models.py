@@ -160,30 +160,6 @@ class H3DeleteResponse(DomainModel):
     status: str
 
 
-class H3FileObject(DomainModel):
-    model_config = ConfigDict(extra="ignore")
-
-    file_id: int
-    bytes: int | None = None
-    created_at: int | None = None
-    filename: str | None = None
-    purpose: str | None = None
-
-
-class H3BaseResponse(DomainModel):
-    model_config = ConfigDict(extra="ignore")
-
-    status_code: int = 0
-    status_msg: str = ""
-
-
-class H3UploadResponse(DomainModel):
-    model_config = ConfigDict(extra="ignore")
-
-    file: H3FileObject
-    base_resp: H3BaseResponse | None = None
-
-
 class H3UploadedInput(DomainModel):
     local_path: str
     provider_file_id: str
@@ -233,7 +209,7 @@ class H3ProviderConfigUpdate(DomainModel):
 class H3ProviderConfigResponse(DomainModel):
     provider: str = "minimax"
     model: str = "MiniMax-H3"
-    base_url: str = "https://api.minimax.io"
+    base_url: str = "https://api.acedata.cloud"
     resolution: str = "768P"
     has_api_key: bool
     key_source: str

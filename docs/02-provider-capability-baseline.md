@@ -59,7 +59,7 @@ GPT Image 2 可从首轮就作为质量增强候选，生成以下产物：
 - 支持 9:16；
 - 支持 T2V、首帧、尾帧、首尾帧和 reference-to-video；
 - reference 模式最多 9 张图片、3 段视频、3 段音频；视频与音频各自合计不超过 15 秒；
-- 实际视频任务通过 `https://api.minimax.io/v2/video_generation` 异步提交并返回 `task_id`。
+- MiniMax 官方直连接口通过 `https://api.minimax.io/v2/video_generation` 异步提交并返回 `task_id`；本项目当前实际接入采用 AceData Cloud 的 `POST /minimax/videos` 网关，使用同一 `MiniMax-H3` 多模态 `content` 语义。AceData 文档声明支持 `async: true`，但 2026-08-15 的真实账号合同明确拒绝该字段，因此 Adapter 只在这个确定 4xx 下安全回退到无 `async` 的默认模式。
 
 内容项可使用 `text`、`image_url`、`video_url` 和 `audio_url`，媒体角色包括 `first_frame`、`last_frame`、`reference_image`、`reference_video` 和 `reference_audio`。
 
@@ -83,7 +83,7 @@ GPT Image 2 可从首轮就作为质量增强候选，生成以下产物：
 1. GPT-5.6-sol 生成内部 `ShotPlan` 与 `ReferencePlan`；
 2. 可选调用 Context-IR 得到 H3 官方格式的增强 prompt；
 3. 比较自编译 prompt 与 Context-IR prompt，保留用户台词和约束；
-4. 再调用 `/v2/video_generation` 生成视频。
+4. 再通过当前配置的视频网关生成视频；现阶段为 AceData `POST /minimax/videos`。
 
 不能把 Context-IR 返回成功误记为“视频生成成功”。
 

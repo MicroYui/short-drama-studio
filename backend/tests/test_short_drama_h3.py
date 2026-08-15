@@ -14,7 +14,6 @@ from PIL import Image
 from short_drama.h3_models import (
     H3CreateResponse,
     H3DeleteResponse,
-    H3FileObject,
     H3ListResponse,
     H3MediaInput,
     H3MediaKind,
@@ -28,7 +27,6 @@ from short_drama.h3_models import (
     H3TakeReviewRequest,
     H3TaskContent,
     H3TaskUsage,
-    H3UploadResponse,
     H3VideoRequest,
 )
 from short_drama.models import (
@@ -96,7 +94,7 @@ class FakeH3Client:
 
     def upload_file(self, path: Path) -> str:
         self.upload_calls.append(path.resolve())
-        return f"file-{len(self.upload_calls)}"
+        return f"mm_file://file-{len(self.upload_calls)}"
 
     def download(self, url: str, destination: Path) -> None:
         del url
@@ -199,7 +197,7 @@ def _load(name: str) -> object:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def test_official_h3_response_fixtures_parse() -> None:
+def test_acedata_h3_response_fixtures_parse() -> None:
     assert H3CreateResponse.model_validate(_load("create_success.json")).task_id
     assert H3QueryResponse.model_validate(_load("query_queued.json")).task.status == "queued"
     assert H3QueryResponse.model_validate(_load("query_running.json")).task.status == "running"
@@ -214,9 +212,6 @@ def test_official_h3_response_fixtures_parse() -> None:
     listed = H3ListResponse.model_validate(_load("list_tasks.json"))
     assert listed.total == 1
     assert listed.items[0].model == "MiniMax-H3"
-    uploaded = H3UploadResponse.model_validate(_load("upload_success.json"))
-    assert isinstance(uploaded.file, H3FileObject)
-    assert uploaded.file.file_id == 987654321
 
 
 def test_h3_compiler_enforces_routes_before_network() -> None:
@@ -613,6 +608,7 @@ def test_h3_config_api_never_returns_secret_and_preview_is_free(client) -> None:
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["has_api_key"] is True
+    assert saved.json()["base_url"] == "https://api.acedata.cloud"
     assert secret not in saved.text
     fetched = client.get("/api/short-drama/providers/minimax-h3")
     assert fetched.status_code == 200

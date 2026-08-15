@@ -173,7 +173,7 @@ function SourceInput({
         >
           <option value="local_path">本地文件</option>
           <option value="external_url">公网 URL</option>
-          <option value="file_id">MiniMax file_id</option>
+          <option value="file_id">MiniMax mm_file ID</option>
         </select>
         <input
           className={`${inputClass} min-w-0 flex-1 py-2 text-xs`}
@@ -332,7 +332,7 @@ export function H3LabPanel({
   }
 
   const saveKey = () => void run(
-    '保存 MiniMax API Key',
+    '保存 AceData API Token',
     () => ShortDramaApi.updateH3Config(apiKey.trim()),
     (next) => {
       setConfig(next)
@@ -347,7 +347,7 @@ export function H3LabPanel({
   )
 
   const validateKey = () => void run(
-    '验证 MiniMax 连接',
+    '验证 AceData 连接',
     ShortDramaApi.validateH3Config,
     setConfig,
   )
@@ -393,7 +393,7 @@ export function H3LabPanel({
     const timer = window.setTimeout(() => {
       const next = pollableTasks[0]
       if (next) void advanceTask(next)
-    }, 8000)
+    }, 10000)
     return () => window.clearTimeout(timer)
   }, [advanceTask, pollKey, polling])
 
@@ -414,7 +414,7 @@ export function H3LabPanel({
   }
 
   const loadCandidates = () => void run(
-    '读取 MiniMax 最近任务',
+    '读取 AceData 最近任务',
     ShortDramaApi.listH3ReconciliationCandidates,
     (result) => {
       const unknown = project.tasks.find((task) => task.id === reconcileTaskId)
@@ -441,6 +441,11 @@ export function H3LabPanel({
   }
 
   const h3Takes = project.takes.filter((take) => take.provider === 'minimax')
+  const retriedTaskIds = new Set(
+    project.tasks
+      .map((task) => task.retry_of_task_id)
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  )
   const reviewTake = h3Takes.find((take) => take.id === reviewTakeId)
     ?? h3Takes.find((take) => take.qa_status === 'PENDING')
     ?? h3Takes[0]
@@ -505,7 +510,7 @@ export function H3LabPanel({
           <div>
             <div className="flex items-center gap-2">
               <Badge status="RUNNING">Phase 2</Badge>
-              <Badge status="ACKNOWLEDGED">MiniMax-H3 only</Badge>
+              <Badge status="ACKNOWLEDGED">MiniMax-H3 via AceData</Badge>
               <Badge status="SUCCEEDED">768P fixed</Badge>
             </div>
             <h2 className="mt-3 text-2xl font-semibold text-white">H3 真实路线实验台</h2>
@@ -522,13 +527,13 @@ export function H3LabPanel({
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <div className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-cyan-400" /><h3 className="font-medium text-white">MiniMax 连接</h3></div>
+          <div className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-cyan-400" /><h3 className="font-medium text-white">AceData Cloud 连接</h3></div>
           <div className="mt-4 flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2.5">
-            <div><p className="text-xs text-zinc-300">{config?.has_api_key ? 'API Key 已配置' : '尚未配置 API Key'}</p><p className="mt-0.5 text-[11px] text-zinc-600">来源：{config?.key_source ?? '读取中'} · Key 永不回传到界面</p></div>
+            <div><p className="text-xs text-zinc-300">{config?.has_api_key ? 'API Token 已配置' : '尚未配置 API Token'}</p><p className="mt-0.5 text-[11px] text-zinc-600">MiniMax-H3 · {config?.base_url ?? '读取中'} · Token 永不回传到界面</p></div>
             <Badge status={config?.has_api_key ? 'SUCCEEDED' : 'FAILED'}>{config?.has_api_key ? 'Ready' : 'Missing'}</Badge>
           </div>
           <div className="mt-3 flex gap-2">
-            <input className={`${inputClass} min-w-0 flex-1`} type="password" autoComplete="off" placeholder="粘贴 MiniMax API Key" value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
+            <input className={`${inputClass} min-w-0 flex-1`} type="password" autoComplete="off" placeholder="粘贴 AceData API Token" value={apiKey} onChange={(event) => setApiKey(event.target.value)} />
             <button className={primaryButton} disabled={!apiKey.trim() || busy !== null} onClick={saveKey}>保存</button>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -536,7 +541,7 @@ export function H3LabPanel({
             <button className={subtleButton} disabled={!config?.has_api_key || config.key_source === 'ENVIRONMENT' || busy !== null} onClick={clearKey}>清除本地 Key</button>
           </div>
           <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-5 text-zinc-500">
-            当前价格快照：768P 输出 ${config?.pricing.output_per_second.toFixed(2) ?? '0.08'}/秒；Reference 视频输入 ${config?.pricing.reference_video_per_second.toFixed(2) ?? '0.08'}/秒。成本只记录，不作为质量路线的优先级。
+            成本参考：按 MiniMax 官方费率估算 768P 输出 ${config?.pricing.output_per_second.toFixed(2) ?? '0.08'}/秒；AceData 实际扣费以平台账单为准，且不作为质量路线的优先级。
           </div>
         </div>
 
@@ -567,7 +572,7 @@ export function H3LabPanel({
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div><h3 className="font-medium text-white">请求编译与真实提交</h3><p className="mt-1 text-xs text-zinc-500">先预览编译结果；点击真实提交后，任务每 8 秒自动推进一次。Frame 与 Reference 的非法混用会在联网前拒绝。</p></div>
+          <div><h3 className="font-medium text-white">请求编译与真实提交</h3><p className="mt-1 text-xs text-zinc-500">先预览编译结果；点击真实提交后，任务每 10 秒自动推进一次。Frame 与 Reference 的非法混用会在联网前拒绝。</p></div>
           {busy && <div className="flex items-center gap-2 text-xs text-blue-300"><Loader2 className="h-3.5 w-3.5 animate-spin" />{busy}</div>}
         </div>
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
@@ -591,20 +596,21 @@ export function H3LabPanel({
             </div>
           </div>
           <div className="min-h-72 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-            {!preview ? <div className="flex h-full min-h-64 flex-col items-center justify-center text-center"><Eye className="h-7 w-7 text-zinc-700" /><p className="mt-3 text-sm text-zinc-400">尚未编译预览</p><p className="mt-1 max-w-xs text-xs leading-5 text-zinc-600">预览不联网、不计费，会显示实际提交的 prompt、content、768P、时长和 ratio。</p></div> : <><div className="flex items-center justify-between"><span className="text-xs font-medium text-zinc-300">MiniMax-H3 request</span><Badge status="SUCCEEDED">{preview.request.resolution}</Badge></div><p className="mt-3 max-h-36 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-zinc-400">{preview.prompt}</p><pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-black/40 p-3 text-[10px] leading-5 text-cyan-200">{JSON.stringify(preview.request, null, 2)}</pre></>}
+            {!preview ? <div className="flex h-full min-h-64 flex-col items-center justify-center text-center"><Eye className="h-7 w-7 text-zinc-700" /><p className="mt-3 text-sm text-zinc-400">尚未编译预览</p><p className="mt-1 max-w-xs text-xs leading-5 text-zinc-600">预览不联网、不计费；提交优先使用 async=true，若 AceData 当前 H3 V2 网关明确拒绝则安全回退到同步等待；本地素材会转换为 Data URI。</p></div> : <><div className="flex items-center justify-between"><span className="text-xs font-medium text-zinc-300">AceData /minimax/videos request</span><Badge status="SUCCEEDED">{preview.request.resolution}</Badge></div><p className="mt-3 max-h-36 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-zinc-400">{preview.prompt}</p><pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-black/40 p-3 text-[10px] leading-5 text-cyan-200">{JSON.stringify(preview.request, null, 2)}</pre></>}
           </div>
         </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><RefreshCw className={`h-4 w-4 text-blue-400 ${polling ? 'animate-spin' : ''}`} /><h3 className="font-medium text-white">H3 异步任务</h3></div><span className="text-xs text-zinc-600">自动轮询 · 8s</span></div>
+          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><RefreshCw className={`h-4 w-4 text-blue-400 ${polling ? 'animate-spin' : ''}`} /><h3 className="font-medium text-white">H3 异步任务</h3></div><span className="text-xs text-zinc-600">自动轮询 · 10s</span></div>
           <div className="mt-4 space-y-2">
             {project.tasks.filter((task) => task.provider === 'minimax').length === 0 && <p className="rounded-lg border border-dashed border-zinc-800 py-10 text-center text-xs text-zinc-600">暂无真实 H3 任务</p>}
             {project.tasks.filter((task) => task.provider === 'minimax').map((task) => {
               const providerRun = runs.find((item) => item.task_id === task.id)
               const canAdvance = ['QUEUED', 'SUBMITTING', 'ACKNOWLEDGED', 'RUNNING'].includes(task.status)
-              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
+              const wasRetried = retriedTaskIds.has(task.id)
+              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{wasRetried ? '已保留历史并创建重试' : providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
             })}
           </div>
           {unknownTasks.length > 0 && <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><div className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /><div><p className="text-xs font-medium text-amber-100">未知提交必须先对账，系统不会自动重发</p><p className="mt-1 text-[11px] leading-5 text-zinc-500">从 MiniMax 最近 7 天任务中核对模型、768P、时长与创建时间，再显式绑定 task ID。</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><select className={inputClass} value={reconcileTaskId} onChange={(event) => setReconcileTaskId(event.target.value)}><option value="">选择本地未知任务</option>{unknownTasks.map((task) => <option key={task.id} value={task.id}>{task.id.slice(-10)} · 镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence}</option>)}</select><input className={inputClass} placeholder="MiniMax task_id" value={remoteTaskId} onChange={(event) => setRemoteTaskId(event.target.value)} /><button className={secondaryButton} onClick={resolveUnknown} disabled={!reconcileTaskId || !remoteTaskId.trim()}>绑定</button></div><button className={`${subtleButton} mt-2`} onClick={loadCandidates}>读取并预填匹配候选</button></div>}

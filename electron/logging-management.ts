@@ -9,8 +9,9 @@ import { getLogDir } from './app-paths'
 let currentLogFilename: string | null = null
 
 function getGitCommitHash(): string {
+  if (!isDev) return 'packaged'
   try {
-    const cwd = isDev ? getCurrentDir() : process.resourcesPath
+    const cwd = getCurrentDir()
     return execSync('git rev-parse --short HEAD', { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   } catch {
     return 'unknown'

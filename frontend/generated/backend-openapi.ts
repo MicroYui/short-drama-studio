@@ -1949,7 +1949,7 @@ export interface components {
         H3ProviderConfigResponse: {
             /**
              * Base Url
-             * @default https://api.minimax.io
+             * @default https://api.acedata.cloud
              */
             base_url: string;
             /** Can Submit */

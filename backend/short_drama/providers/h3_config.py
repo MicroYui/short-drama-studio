@@ -1,4 +1,4 @@
-"""Local MiniMax-H3 credential and pricing configuration."""
+"""Local AceData credential and MiniMax-H3 pricing configuration."""
 
 from __future__ import annotations
 
@@ -26,14 +26,17 @@ class H3ProviderConfigStore:
         self.path = path
 
     def api_key(self) -> str:
-        environment_key = os.environ.get("MINIMAX_API_KEY", "").strip()
-        if environment_key:
-            return environment_key
+        for variable in ("ACEDATACLOUD_API_KEY", "MINIMAX_API_KEY"):
+            environment_key = os.environ.get(variable, "").strip()
+            if environment_key:
+                return environment_key
         return self._saved_key()
 
     def key_source(self) -> str:
+        if os.environ.get("ACEDATACLOUD_API_KEY", "").strip():
+            return "ACEDATACLOUD_ENVIRONMENT"
         if os.environ.get("MINIMAX_API_KEY", "").strip():
-            return "ENVIRONMENT"
+            return "MINIMAX_ENVIRONMENT_LEGACY"
         if self._saved_key():
             return "LOCAL_CONFIG"
         return "MISSING"

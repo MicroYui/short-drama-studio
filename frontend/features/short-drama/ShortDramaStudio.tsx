@@ -149,12 +149,24 @@ function selectedTakeMap(project: ProjectAggregate): Map<string, Take> {
   )
 }
 
+function retriedTaskIds(tasks: GenerationTask[]): Set<string> {
+  return new Set(
+    tasks
+      .map((task) => task.retry_of_task_id)
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  )
+}
+
 function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; onAutoDraft: () => void }) {
   const record = project.document.project
   const progress = project.progress
   const stages = ['PLANNED', 'GENERATING', 'REVIEW', 'TIMELINE_READY', 'EXPORTED']
   const activeIndex = Math.max(0, stages.indexOf(record.stage))
-  const unresolved = project.tasks.filter((task) => ['SUBMIT_UNKNOWN', 'OUTPUT_MISSING', 'FAILED'].includes(task.status))
+  const superseded = retriedTaskIds(project.tasks)
+  const unresolved = project.tasks.filter((task) => (
+    ['SUBMIT_UNKNOWN', 'OUTPUT_MISSING', 'FAILED'].includes(task.status)
+    && !superseded.has(task.id)
+  ))
   return (
     <div className="space-y-7">
       <section className="overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-zinc-950 to-cyan-500/5 p-6">
@@ -457,13 +469,17 @@ function TakesPanel({
   const shot = project.document.shots.find((item) => item.id === activeShotId) ?? project.document.shots[0]
   const takes = project.takes.filter((take) => take.shot_id === shot?.id)
   const tasks = project.tasks.filter((task) => task.shot_id === shot?.id)
+  const superseded = retriedTaskIds(project.tasks)
   return (
     <div>
       <SectionTitle title="Gen Space · Take 与任务" description="任务成功、媒体可用、QA 通过与时间线入选是四个独立事实。异常任务可对账或恢复，不盲目重复提交。" action={<button className={secondaryButton} onClick={onDrain}><Play className="h-3.5 w-3.5" />运行队列</button>} />
       <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
         {project.document.shots.map((item) => {
           const shotTasks = project.tasks.filter((task) => task.shot_id === item.id)
-          const hasIssue = shotTasks.some((task) => ['FAILED', 'SUBMIT_UNKNOWN', 'OUTPUT_MISSING'].includes(task.status))
+          const hasIssue = shotTasks.some((task) => (
+            ['FAILED', 'SUBMIT_UNKNOWN', 'OUTPUT_MISSING'].includes(task.status)
+            && !superseded.has(task.id)
+          ))
           const isActive = item.id === shot?.id
           return (
             <button key={item.id} onClick={() => setActiveShotId(item.id)} className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-medium transition ${isActive ? 'border-blue-500 bg-blue-500/10 text-blue-200' : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700'} ${hasIssue ? 'ring-1 ring-amber-500/40' : ''}`}>
@@ -507,7 +523,7 @@ function TakesPanel({
             <div className="mt-3 space-y-2">
               {tasks.length === 0 && <p className="py-6 text-center text-xs text-zinc-600">暂无任务</p>}
               {tasks.map((task) => {
-                const action = taskAction(task)
+                const action = superseded.has(task.id) ? null : taskAction(task)
                 return (
                   <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
                     <div className="flex items-center justify-between gap-2">

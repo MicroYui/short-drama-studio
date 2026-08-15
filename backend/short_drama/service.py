@@ -214,7 +214,7 @@ class ShortDramaService:
         with self._lock:
             if not self.h3_config.api_key():
                 raise WorkflowConflictError(
-                    "MiniMax API key is required before enqueueing a paid H3 probe"
+                    "AceData API token is required before enqueueing a paid H3 probe"
                 )
             document, shot, prompt, duration = self._resolve_h3_probe(
                 project_id=project_id,
