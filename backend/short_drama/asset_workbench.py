@@ -49,6 +49,7 @@ from short_drama.providers.image_provider import (
     ImageProviderSubmissionUnknown,
 )
 from short_drama.providers.openai_image_client import OpenAIImageClient
+from short_drama.providers.openai_image_endpoint import resolve_image_endpoint
 from short_drama.repository import ShortDramaRepository
 from short_drama.worker import utc_now
 
@@ -298,6 +299,14 @@ class AssetWorkbench:
             and provider_request.output_format.value not in {"png", "webp"}
         ):
             raise AssetWorkbenchConflict("Transparent output requires PNG or WebP")
+        if (
+            provider_request.background == ImageBackground.TRANSPARENT
+            and resolve_image_endpoint(self.config_store.base_url()).is_azure
+        ):
+            raise AssetWorkbenchConflict(
+                "This Azure GPT Image deployment does not support transparent background; "
+                "choose opaque"
+            )
         with self._lock:
             document = self._require_project(project_id)
             asset = self._require_asset(document, asset_id)

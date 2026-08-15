@@ -17,6 +17,7 @@ from short_drama.image_models import (
     AssetImportLocalRequest,
     AssetImportUrlRequest,
     AssetReviewRequest,
+    ImageBackground,
     ImageOperation,
     ImageProviderConfigUpdate,
     ImageTaskCreateRequest,
@@ -184,6 +185,39 @@ def test_generate_edit_cost_and_candidate_gate(tmp_path: Path) -> None:
     assert len(fake.calls) == 2
     assert fake.calls[1][1][0].asset_version_id == generated.id
     assert fake.calls[1][1][0].image_url.startswith("data:image/png;base64,")
+
+
+def test_azure_transparent_background_is_rejected_before_provider_call(
+    tmp_path: Path,
+) -> None:
+    fake = FakeImageProvider()
+    service = ShortDramaService(
+        database_path=tmp_path / "app_data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        image_provider_factory=lambda _api_key, _base_url: fake,
+    )
+    service.update_image_provider_config(
+        ImageProviderConfigUpdate(
+            api_key="azure-key",
+            base_url=(
+                "https://resource.openai.azure.com/openai/deployments/gpt-image-2/"
+                "images/generations?api-version=2025-04-01-preview"
+            ),
+        )
+    )
+    asset = _fixture_asset(service, "asset-recorder")
+
+    with pytest.raises(WorkflowConflictError, match="does not support transparent"):
+        service.enqueue_image_task(
+            asset.project_id,
+            asset.id,
+            ImageTaskCreateRequest(
+                prompt="red recorder",
+                descriptor="candidate",
+                background=ImageBackground.TRANSPARENT,
+            ),
+        )
+    assert fake.calls == []
 
 
 def test_h3_resolves_only_the_current_approved_asset_version(tmp_path: Path) -> None:

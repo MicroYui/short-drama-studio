@@ -83,7 +83,7 @@ function defaultPrompt(asset: Asset): string {
     return '真人都市悬疑短剧的雨夜便利店空间锚点，竖屏9:16。冷白顶灯，玻璃门明确位于画面右侧，收银台位于左后方，两个人物后续可以隔柜台对峙；门外蓝色霓虹与雨水反光，湿玻璃、货架和柜台空间关系真实清楚，冷青灰白色调，红色道具将是唯一高饱和点。电影级写实摄影，无人物。所有店招、价签和包装文字为空白或不可见，绝不生成乱码、品牌、logo或水印。'
   }
   if (asset.name.includes('录音笔')) {
-    return '用于真人都市悬疑短剧的红色旧录音笔产品参考图。紧凑的长方形便携录音设备，磨损红色金属外壳，顶部只有一个很小的状态指示灯，细小录音孔和少量物理按键，比例适合单手握持。必须像录音笔，绝对不要天线、对讲机轮廓、大扬声器网格、军事设备或手机。无文字、无品牌、无logo、无水印，完整物体居中，真实产品摄影，透明背景。'
+    return '用于真人都市悬疑短剧的红色旧录音笔产品参考图。紧凑的长方形便携录音设备，磨损红色金属外壳，顶部只有一个很小的状态指示灯，细小录音孔和少量物理按键，比例适合单手握持。必须像录音笔，绝对不要天线、对讲机轮廓、大扬声器网格、军事设备或手机。无文字、无品牌、无logo、无水印，完整物体居中，真实产品摄影，深灰色无缝中性背景。'
   }
   return `真人都市短剧的高质量写实参考素材：${currentVersion(asset).descriptor}。构图清晰，主体稳定，无文字、无logo、无水印。`
 }
@@ -162,7 +162,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     setDescriptor(defaultDescriptor(asset))
     const isProp = asset.kind === 'PROP'
     setSize(isProp ? '1024x1024' : '768x1344')
-    setBackground(isProp ? 'transparent' : 'opaque')
+    setBackground('opaque')
     setOperation('GENERATE')
     setSelectedInputs([])
   }, [asset?.id])
@@ -338,6 +338,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
 
   if (!asset || !version) return null
   const previewUrl = versionUrl(version)
+  const azureImageEndpoint = imageBaseUrl.includes('.openai.azure.com') || imageBaseUrl.includes('/openai/deployments/')
 
   return (
     <div className="space-y-6">
@@ -419,7 +420,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
             <div className="mt-3 grid grid-cols-2 gap-2"><button className={`${operation === 'GENERATE' ? primaryButton : secondaryButton} py-2`} onClick={() => { setOperation('GENERATE'); setSelectedInputs([]) }}>新生成</button><button className={`${operation === 'EDIT' ? primaryButton : secondaryButton} py-2`} onClick={() => { setOperation('EDIT'); setSelectedInputs(version.media_type === 'IMAGE' ? [version.id] : []) }}>修整/派生</button></div>
             <label className="mt-3 block text-xs text-zinc-500">提示词</label><textarea className={`${field} mt-1 min-h-44 resize-y leading-5`} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
             <label className="mt-3 block text-xs text-zinc-500">候选说明</label><input className={`${field} mt-1`} value={descriptor} onChange={(event) => setDescriptor(event.target.value)} />
-            <div className="mt-3 grid grid-cols-2 gap-2"><input className={field} value={size} onChange={(event) => setSize(event.target.value)} /><select className={field} value={background} onChange={(event) => setBackground(event.target.value as 'opaque' | 'transparent')}><option value="opaque">不透明背景</option><option value="transparent">透明背景</option></select></div>
+            <div className="mt-3 grid grid-cols-2 gap-2"><input className={field} value={size} onChange={(event) => setSize(event.target.value)} /><select className={field} value={background} onChange={(event) => setBackground(event.target.value as 'opaque' | 'transparent')}><option value="opaque">不透明背景</option><option value="transparent" disabled={azureImageEndpoint}>透明背景{azureImageEndpoint ? '（Azure 不支持）' : ''}</option></select></div>
             {operation === 'EDIT' && <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-xs text-zinc-500">编辑输入（最多 16 张）</p><div className="mt-2 max-h-36 space-y-1 overflow-y-auto">{imageVersions.map((item) => <label key={item.version.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-900"><input type="checkbox" checked={selectedInputs.includes(item.version.id)} onChange={(event) => setSelectedInputs((current) => event.target.checked ? [...current, item.version.id] : current.filter((id) => id !== item.version.id))} /><span className="truncate">{item.asset.name} · v{item.version.version}</span></label>)}</div></div>}
             <button className={`${primaryButton} mt-4 w-full py-3`} onClick={createImage} disabled={Boolean(busy) || !prompt.trim() || !descriptor.trim()}>{busy?.includes('GPT Image') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{operation === 'EDIT' ? '生成修整候选' : '生成新候选'}</button>
           </section>

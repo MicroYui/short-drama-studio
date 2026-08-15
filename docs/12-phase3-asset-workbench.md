@@ -60,6 +60,8 @@ OpenAI 当前响应包含图像 Base64 和 token usage。费用记录按调用�
 
 Azure OpenAI 使用独立路由解析：用户可直接填写 `/openai/deployments/{deployment}/images/generations?api-version=...` 完整 endpoint，Adapter 保留部署名和查询参数，编辑时只把末尾切换为 `/images/edits`，并使用 `api-key` 而非 Bearer 头。GPT Image 的 Azure 官方文档要求 `2025-04-01-preview` 或更高版本；配置中更早的日期版本会在保存时升级到该最低版本。
 
+2026-08-15 真实探针表明当前 Azure `gpt-image-2` 部署不支持 `background=transparent`，会返回 `invalid_value`。桌面端在 Azure endpoint 下禁用透明选项，后端也会在付费请求前拒绝该组合；道具默认改用深灰中性背景。
+
 ## Provider 连接
 
 - GPT Image 2：支持标准 OpenAI Base URL 和 Azure 部署级完整 endpoint；前者用 Bearer 头，后者用 `api-key`；
@@ -78,6 +80,20 @@ Azure OpenAI 使用独立路由解析：用户可直接填写 `/openai/deploymen
 4. 红色旧录音笔：紧凑矩形录音设备、磨损红壳和小指示灯，明确禁止天线、对讲机轮廓和文字 Logo。
 
 每个结果需要能在桌面端打开、查看来源与父版本、批准或拒绝。交付时保持 `DRAFT`，由用户确认后才成为正式 `approved_version_id`。
+
+### 2026-08-15 真实生成结果
+
+Azure 连接和本地 GPT-5.6-sol 连接都已在打包桌面应用中通过无生成验证。随后完成 5 张真实 GPT Image 2 候选：
+
+| 资产 | AssetVersion | 初步视觉结论 | 估算费用 |
+| --- | --- | --- | ---: |
+| 林夏定妆 | `asset-version-8b1cc2751da5` | 短黑发、米白风衣、警觉表情和雨夜便利店光线正确，手部与服装自然 | `$0.120815` |
+| 周衡定妆 v2 | `asset-version-23d828459396` | 写实气质成立，但左眉浅疤方向不够明确，保留为对照 | `$0.120975` |
+| 周衡定妆 v3 | `asset-version-72fb5bc022a3` | 观众画面右侧、人物本人左眉的浅疤清楚，气质与服装正确 | `$0.121165` |
+| 雨夜便利店 | `asset-version-a07499c3f496` | 右侧玻璃门、左后收银台和冷蓝雨夜空间正确，无可读店名或乱码 | `$0.121105` |
+| 红色旧录音笔 | `asset-version-8bb3afb34169` | 细长数字录音笔轮廓，无天线、无品牌文字，不再像对讲机 | `$0.211495` |
+
+成功请求估算合计 `$0.695555`；另有一次透明背景请求在 Provider 立即返回 `invalid_value`，无图像、无 usage 与费用记录。五张图均已落盘且保持 `DRAFT`，四个资产的 `approved_version_id` 均为 `null`，未自动进入 H3。
 
 ## 验证
 
