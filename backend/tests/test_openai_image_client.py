@@ -4,18 +4,25 @@ from __future__ import annotations
 
 import base64
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 import requests
 
-from short_drama.image_models import ImageOperation, ImageProviderRequest
+from short_drama.image_models import (
+    ImageOperation,
+    ImageProviderConfigUpdate,
+    ImageProviderRequest,
+)
+from short_drama.providers.image_config import ImageProviderConfigStore
 from short_drama.providers.image_provider import (
     ImageProviderDefiniteError,
     ImageProviderInput,
     ImageProviderSubmissionUnknown,
 )
 from short_drama.providers.openai_image_client import OpenAIImageClient
+from short_drama.providers.openai_image_endpoint import resolve_image_endpoint
 
 
 class FakeResponse:
@@ -163,3 +170,84 @@ def test_validation_and_error_classification() -> None:
     session.responses.append(requests.ConnectionError("offline"))
     with pytest.raises(ImageProviderSubmissionUnknown):
         client.create(ImageProviderRequest(operation="GENERATE", prompt="x"), [])
+
+
+def test_azure_full_endpoint_uses_api_key_and_upgrades_old_api_version() -> None:
+    session = FakeSession()
+    session.responses.append(
+        FakeResponse(
+            200,
+            _success_payload(),
+            headers={"apim-request-id": "azure-request-1"},
+        )
+    )
+    client = OpenAIImageClient(
+        api_key="azure-secret",
+        base_url=(
+            "https://datasetannotator-openai.openai.azure.com/openai/deployments/"
+            "gpt-image-2/images/generations?api-version=2024-02-01"
+        ),
+        session=session,  # type: ignore[arg-type]
+    )
+
+    result = client.create(
+        ImageProviderRequest(operation=ImageOperation.GENERATE, prompt="都市短剧定妆"),
+        [],
+    )
+
+    call = session.calls[0]
+    assert call[0:2] == (
+        "POST",
+        "https://datasetannotator-openai.openai.azure.com/openai/deployments/"
+        "gpt-image-2/images/generations?api-version=2025-04-01-preview",
+    )
+    assert call[2]["headers"] == {
+        "api-key": "azure-secret",
+        "Content-Type": "application/json",
+    }
+    assert result.provider_request_id == "azure-request-1"
+    endpoint = resolve_image_endpoint(client.base_url)
+    assert endpoint.edit_url.endswith(
+        "/images/edits?api-version=2025-04-01-preview"
+    )
+
+
+def test_azure_validation_uses_a_no_generation_invalid_payload() -> None:
+    session = FakeSession()
+    session.responses.append(
+        FakeResponse(
+            400,
+            {"error": {"code": "InvalidPayload", "message": "prompt is required"}},
+        )
+    )
+    client = OpenAIImageClient(
+        api_key="azure-secret",
+        base_url=(
+            "https://resource.openai.azure.com/openai/deployments/gpt-image-2/"
+            "images/generations?api-version=2025-04-01-preview"
+        ),
+        session=session,  # type: ignore[arg-type]
+    )
+
+    client.validate_credentials()
+
+    call = session.calls[0]
+    assert call[0] == "POST"
+    assert call[2]["json"] == {"model": "gpt-image-2", "prompt": None, "n": 0}
+
+
+def test_image_config_persists_the_normalized_azure_endpoint(tmp_path: Path) -> None:
+    store = ImageProviderConfigStore(tmp_path / "image-provider.json")
+    response = store.update(
+        request=ImageProviderConfigUpdate(
+            api_key="azure-secret",
+            base_url=(
+                "https://resource.openai.azure.com/openai/deployments/gpt-image-2/"
+                "images/generations?api-version=2024-02-01"
+            ),
+        )
+    )
+
+    assert response.base_url.endswith("api-version=2025-04-01-preview")
+    saved = json.loads(store.path.read_text(encoding="utf-8"))
+    assert saved["base_url"] == response.base_url

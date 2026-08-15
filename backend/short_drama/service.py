@@ -107,6 +107,7 @@ from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClientFactory,
     LanguageProviderError,
     default_language_provider_factory,
+    is_loopback_openai_url,
 )
 from short_drama.repository import ShortDramaRepository
 from short_drama.worker import InvalidTaskTransition, PersistentMockWorker, utc_now
@@ -242,12 +243,13 @@ class ShortDramaService:
 
     def validate_language_provider_credentials(self) -> LanguageProviderConfigResponse:
         api_key = self.language_config.api_key()
-        if not api_key:
+        base_url = self.language_config.base_url()
+        if not api_key and not is_loopback_openai_url(base_url):
             raise WorkflowConflictError("GPT-5.6-sol API key is not configured")
         try:
             client = self.language_provider_factory(
                 api_key,
-                self.language_config.base_url(),
+                base_url,
             )
             client.validate_credentials()
         except LanguageProviderError as exc:

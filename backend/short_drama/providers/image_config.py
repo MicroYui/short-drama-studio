@@ -13,6 +13,7 @@ from short_drama.image_models import (
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
 )
+from short_drama.providers.openai_image_endpoint import normalize_image_provider_url
 
 
 def _utc_now() -> str:
@@ -35,12 +36,12 @@ class ImageProviderConfigStore:
 
     def base_url(self) -> str:
         dedicated_url = os.environ.get("GPT_IMAGE_BASE_URL", "").strip()
-        return (
+        return normalize_image_provider_url(
             dedicated_url
             or self._saved_base_url()
             or os.environ.get("OPENAI_BASE_URL", "").strip()
             or "https://api.openai.com/v1"
-        ).rstrip("/")
+        )
 
     def key_source(self) -> str:
         if os.environ.get("GPT_IMAGE_API_KEY", "").strip():
@@ -69,7 +70,7 @@ class ImageProviderConfigStore:
         elif request.api_key is not None:
             current_key = request.api_key.strip()
         if request.base_url is not None:
-            current_base_url = request.base_url.strip().rstrip("/")
+            current_base_url = normalize_image_provider_url(request.base_url)
         self._write_saved_config(current_key, current_base_url)
         return self.response()
 
@@ -98,11 +99,12 @@ class ImageProviderConfigStore:
         return cast(dict[str, object], payload)
 
     def _write_saved_config(self, api_key: str, base_url: str) -> None:
+        normalized_base_url = normalize_image_provider_url(base_url)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
         temporary.write_text(
             json.dumps(
-                {"api_key": api_key, "base_url": base_url.rstrip("/")},
+                {"api_key": api_key, "base_url": normalized_base_url},
                 ensure_ascii=False,
                 indent=2,
             ),

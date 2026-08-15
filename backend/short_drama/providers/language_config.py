@@ -11,6 +11,9 @@ from short_drama.language_models import (
     LanguageProviderConfigResponse,
     LanguageProviderConfigUpdate,
 )
+from short_drama.providers.openai_compatible_language_client import (
+    is_loopback_openai_url,
+)
 
 
 class LanguageProviderConfigStore:
@@ -47,11 +50,12 @@ class LanguageProviderConfigStore:
 
     def response(self) -> LanguageProviderConfigResponse:
         key = self.api_key()
+        base_url = self.base_url()
         return LanguageProviderConfigResponse(
-            base_url=self.base_url(),
+            base_url=base_url,
             has_api_key=bool(key),
             key_source=self.key_source(),
-            can_connect=bool(key),
+            can_connect=bool(key) or is_loopback_openai_url(base_url),
         )
 
     def update(

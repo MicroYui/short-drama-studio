@@ -10,7 +10,7 @@ Phase 3 在现有 `ShortDramaService + SQLite + Product API + Electron` 主线�
 - 本地文件导入、外部 URL 导入、GPT Image 2 新生成和基于既有版本的编辑；
 - 稳定 `Asset` 身份、递增 `AssetVersion`、父子派生、候选/批准/拒绝状态和普通来源记录；
 - 供应商中立 `ImageProvider`，首个实现为 OpenAI `gpt-image-2`；
-- GPT Image 2 与 GPT-5.6-sol 分别支持用户填写 `Base URL + API Key`；模型名固定，不增加候选模型选择；
+- GPT Image 2 与 GPT-5.6-sol 分别支持用户填写连接地址与 API Key；模型名固定，不增加候选模型选择；
 - 本地连接配置、持久化图像任务、媒体落盘、用量与费用估算、失败与输出恢复；
 - 桌面端预览、版本历史、生成/编辑、批准/拒绝和任务重试；
 - 为《别相信我》建立林夏、周衡、雨夜便利店和红色旧录音笔的首批可审片候选。
@@ -58,11 +58,14 @@ Phase 3 在现有 `ShortDramaService + SQLite + Product API + Electron` 主线�
 
 OpenAI 当前响应包含图像 Base64 和 token usage。费用记录按调用时快照估算：标准调用中图像输入 `$8/1M tokens`、文本输入 `$5/1M tokens`、图像输出 `$30/1M tokens`；同时保留原始 token 数，实际账单仍以 Provider 为准。
 
+Azure OpenAI 使用独立路由解析：用户可直接填写 `/openai/deployments/{deployment}/images/generations?api-version=...` 完整 endpoint，Adapter 保留部署名和查询参数，编辑时只把末尾切换为 `/images/edits`，并使用 `api-key` 而非 Bearer 头。GPT Image 的 Azure 官方文档要求 `2025-04-01-preview` 或更高版本；配置中更早的日期版本会在保存时升级到该最低版本。
+
 ## Provider 连接
 
-- GPT Image 2：独立 `Base URL + API Key`，默认地址为 `https://api.openai.com/v1`，生成和编辑立即使用该配置；
-- GPT-5.6-sol：独立 OpenAI-compatible `Base URL + API Key`，首版只建立后续剧本、分镜和提示词任务可复用的连接边界；
-- 两者的验证都调用 `GET /models/{固定模型名}`，不发起图像或语言生成；
+- GPT Image 2：支持标准 OpenAI Base URL 和 Azure 部署级完整 endpoint；前者用 Bearer 头，后者用 `api-key`；
+- GPT-5.6-sol：支持 OpenAI-compatible `/v1`。验证先查 `GET /models/{model}`，遇到 404/405 再查 `GET /models`并在列表中确认 `gpt-5.6-sol`；
+- `localhost / 127.0.0.1 / ::1` 回环地址允许无 Key 连接，远程语言 endpoint 仍必须配置 Key；
+- 标准图像地址通过模型查询验证；Azure 图像 endpoint 使用缺少有效 prompt 且 `n=0` 的 schema 无效探测，使 Azure 检查凭证、部署和 API 版本，但不生成图像；
 - API 响应只返回是否已配置及来源，不回传密钥；用户可只更新 URL 而保留既有密钥，也可只更新密钥而保留 URL。
 
 ## 首批资产验收
@@ -78,7 +81,7 @@ OpenAI 当前响应包含图像 Base64 和 token usage。费用记录按调用�
 
 ## 验证
 
-- Provider 离线合约：生成、编辑、多输入、Base64、错误分类、usage 与费用计算；
+- Provider 离线合约：标准 OpenAI 和 Azure endpoint/鉴权、旧 Azure API 版本升级、本地模型列表降级、生成、编辑、多输入、Base64、错误分类、usage 与费用计算；
 - SQLite/API：导入、版本派生、批准替换、任务重试、重启恢复和媒体文件存在；
 - TypeScript/Pyright、后端整库、OpenAPI 生成和 Vite 构建；
 - 实际桌面交互：保存/验证凭证、导入、生成/编辑、预览、版本审片；

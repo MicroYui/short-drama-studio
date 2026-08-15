@@ -32,15 +32,19 @@ class FakeResponse:
 
 
 class FakeSession:
-    def __init__(self, response: FakeResponse | Exception) -> None:
-        self.response = response
+    def __init__(
+        self,
+        response: FakeResponse | Exception | list[FakeResponse | Exception],
+    ) -> None:
+        self.responses = response if isinstance(response, list) else [response]
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def get(self, url: str, **kwargs: Any) -> FakeResponse:
         self.calls.append((url, kwargs))
-        if isinstance(self.response, Exception):
-            raise self.response
-        return self.response
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def test_language_client_uses_configured_url_key_and_fixed_model() -> None:
@@ -80,6 +84,52 @@ def test_language_client_reports_transport_and_model_mismatch() -> None:
     )
     with pytest.raises(LanguageProviderError, match="expected 'gpt-5.6-sol'"):
         wrong_model.validate_credentials()
+
+
+def test_language_client_falls_back_to_model_list_for_local_gateway() -> None:
+    session = FakeSession(
+        [
+            FakeResponse(404, {"error": {"message": "not found"}}),
+            FakeResponse(
+                200,
+                {
+                    "object": "list",
+                    "data": [
+                        {"id": "gpt-5.6-luna"},
+                        {"id": "gpt-5.6-sol", "supported_endpoints": ["/responses"]},
+                    ],
+                },
+            ),
+        ]
+    )
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        session=session,  # type: ignore[arg-type]
+    )
+
+    client.validate_credentials()
+
+    assert [call[0] for call in session.calls] == [
+        "http://localhost:4141/v1/models/gpt-5.6-sol",
+        "http://localhost:4141/v1/models",
+    ]
+    assert all(call[1]["headers"] == {} for call in session.calls)
+
+
+def test_language_client_rejects_model_list_without_sol() -> None:
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://127.0.0.1:4141/v1",
+        session=FakeSession(
+            [
+                FakeResponse(404, {"error": {"message": "not found"}}),
+                FakeResponse(200, {"object": "list", "data": [{"id": "gpt-5.6-luna"}]}),
+            ]
+        ),  # type: ignore[arg-type]
+    )
+    with pytest.raises(LanguageProviderError, match="does not include 'gpt-5.6-sol'"):
+        client.validate_credentials()
 
 
 class FakeLanguageProvider:
@@ -157,3 +207,32 @@ def test_language_validation_requires_a_key(
     )
     with pytest.raises(WorkflowConflictError, match="API key is not configured"):
         service.validate_language_provider_credentials()
+
+
+def test_language_localhost_config_can_validate_without_a_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for variable in ("GPT_SOL_API_KEY", "OPENAI_API_KEY", "GPT_SOL_BASE_URL"):
+        monkeypatch.delenv(variable, raising=False)
+    fake = FakeLanguageProvider()
+
+    def factory(api_key: str, base_url: str) -> FakeLanguageProvider:
+        assert api_key == ""
+        assert base_url == "http://localhost:4141/v1"
+        return fake
+
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=factory,
+    )
+    response = service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    assert response.has_api_key is False
+    assert response.can_connect is True
+
+    validated = service.validate_language_provider_credentials()
+    assert validated.can_connect is True
+    assert fake.validations == 1

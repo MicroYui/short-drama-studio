@@ -1,6 +1,6 @@
 # 来源与源码快照
 
-快照日期：2026-08-14。本清单优先记录官方资料和固定源码 commit。产品能力、模型接口、价格与仓库代码都会变化，进入实现前应重新核验。
+快照日期：2026-08-15。本清单优先记录官方资料和固定源码 commit。产品能力、模型接口、价格与仓库代码都会变化，进入实现前应重新核验。
 
 ## 1. 模型与 API 官方资料
 
@@ -9,6 +9,10 @@
 - [GPT-5.6-sol model](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
 - [GPT Image 2 model](https://developers.openai.com/api/docs/models/gpt-image-2)
 - [Image generation guide](https://developers.openai.com/api/docs/guides/image-generation)
+
+### Azure OpenAI Image
+
+- [Azure OpenAI 图像生成模型](https://learn.microsoft.com/zh-cn/azure/ai-foundry/openai/dall-e-quickstart?view=foundry-classic)
 
 ### MiniMax
 

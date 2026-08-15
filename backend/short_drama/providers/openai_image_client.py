@@ -16,6 +16,7 @@ from short_drama.providers.image_provider import (
     ImageProviderResult,
     ImageProviderSubmissionUnknown,
 )
+from short_drama.providers.openai_image_endpoint import resolve_image_endpoint
 
 
 class OpenAIImageClient:
@@ -30,14 +31,22 @@ class OpenAIImageClient:
         timeout_seconds: float = 300.0,
     ) -> None:
         self.api_key = api_key.strip()
-        self.base_url = base_url.rstrip("/")
+        self.endpoint = resolve_image_endpoint(base_url)
+        self.base_url = self.endpoint.configured_url
         self.session = session or requests.Session()
         self.timeout_seconds = timeout_seconds
 
     def validate_credentials(self) -> None:
+        if self.endpoint.is_azure:
+            self._validate_azure_credentials()
+            return
+        if self.endpoint.model_url is None:
+            raise ImageProviderSubmissionUnknown(
+                "OpenAI image endpoint did not provide a model-validation URL"
+            )
         try:
             response = self.session.get(
-                f"{self.base_url}/models/gpt-image-2",
+                self.endpoint.model_url,
                 headers=self._headers(),
                 timeout=30.0,
             )
@@ -45,6 +54,38 @@ class OpenAIImageClient:
             raise ImageProviderSubmissionUnknown(
                 "OpenAI credential validation could not reach the API"
             ) from exc
+        self._raise_error(response, ambiguous_server_error=False)
+
+    def _validate_azure_credentials(self) -> None:
+        """Use a schema-invalid request so Azure checks auth/route without generating."""
+
+        try:
+            response = self.session.post(
+                self.endpoint.generation_url,
+                headers=self._headers(),
+                json={"model": "gpt-image-2", "prompt": None, "n": 0},
+                timeout=30.0,
+            )
+        except requests.RequestException as exc:
+            raise ImageProviderSubmissionUnknown(
+                "Azure GPT Image credential validation could not reach the API"
+            ) from exc
+        if response.status_code in {400, 422}:
+            code, message = self._error_details(response)
+            fatal_detail = f"{code} {message}".lower()
+            if any(
+                marker in fatal_detail
+                for marker in (
+                    "api-version",
+                    "api version",
+                    "deploymentnotfound",
+                    "deployment not found",
+                    "operationnotsupported",
+                    "operation not supported",
+                )
+            ):
+                self._raise_error(response, ambiguous_server_error=False)
+            return
         self._raise_error(response, ambiguous_server_error=False)
 
     def create(
@@ -66,15 +107,15 @@ class OpenAIImageClient:
             "background": request.background.value,
             "output_format": request.output_format.value,
         }
-        endpoint = "/images/generations"
+        endpoint = self.endpoint.generation_url
         if request.operation == ImageOperation.EDIT:
-            endpoint = "/images/edits"
+            endpoint = self.endpoint.edit_url
             payload["images"] = [{"image_url": item.image_url} for item in inputs]
             payload["input_fidelity"] = "high"
 
         try:
             response = self.session.post(
-                f"{self.base_url}{endpoint}",
+                endpoint,
                 headers=self._headers(),
                 json=payload,
                 timeout=self.timeout_seconds,
@@ -134,12 +175,20 @@ class OpenAIImageClient:
         return ImageProviderResult(
             image_base64=encoded,
             mime_type=mime_type,
-            provider_request_id=response.headers.get("x-request-id"),
+            provider_request_id=(
+                response.headers.get("x-request-id")
+                or response.headers.get("apim-request-id")
+            ),
             revised_prompt=revised_prompt if isinstance(revised_prompt, str) else None,
             usage=usage,
         )
 
     def _headers(self) -> dict[str, str]:
+        if self.endpoint.is_azure:
+            return {
+                "api-key": self.api_key,
+                "Content-Type": "application/json",
+            }
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -149,6 +198,13 @@ class OpenAIImageClient:
     def _raise_error(response: Response, *, ambiguous_server_error: bool) -> None:
         if response.status_code < 400:
             return
+        code, message = OpenAIImageClient._error_details(response)
+        if response.status_code >= 500 and ambiguous_server_error:
+            raise ImageProviderSubmissionUnknown(message)
+        raise ImageProviderDefiniteError(response.status_code, code, message)
+
+    @staticmethod
+    def _error_details(response: Response) -> tuple[str, str]:
         message = response.text or f"OpenAI request failed with {response.status_code}"
         code = str(response.status_code)
         try:
@@ -165,7 +221,4 @@ class OpenAIImageClient:
                         message = raw_message
         except ValueError:
             pass
-        if response.status_code >= 500 and ambiguous_server_error:
-            raise ImageProviderSubmissionUnknown(message)
-        raise ImageProviderDefiniteError(response.status_code, code, message)
-
+        return code, message

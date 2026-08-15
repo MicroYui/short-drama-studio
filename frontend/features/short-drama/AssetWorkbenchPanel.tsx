@@ -178,15 +178,16 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
   }
 
   const saveKey = () => void perform('保存 GPT Image 2 连接', () => ShortDramaApi.updateImageConfig(apiKey || null, imageBaseUrl.trim()), (value) => {
+    const normalized = value.base_url !== imageBaseUrl.trim().replace(/\/$/, '')
     setConfig(value)
     setImageBaseUrl(value.base_url)
     setApiKey('')
-    onNotice('GPT Image 2 的 Base URL 与 API Key 已保存在本机配置中')
+    onNotice(normalized ? 'GPT Image 2 连接已保存；旧 Azure api-version 已自动升级' : 'GPT Image 2 的地址与 API Key 已保存在本机配置中')
   })
 
   const validateKey = () => void perform('验证 GPT Image 2 连接', () => ShortDramaApi.validateImageConfig(), (value) => {
     setConfig(value)
-    onNotice('GPT Image 2 凭证与模型访问验证通过')
+    onNotice(value.base_url.includes('.openai.azure.com') ? 'Azure GPT Image 凭证与部署 endpoint 无生成探测通过' : 'GPT Image 2 凭证与模型访问验证通过')
   })
 
   const saveLanguageConnection = () => void perform('保存 GPT-5.6-sol 连接', () => ShortDramaApi.updateLanguageConfig(languageApiKey || null, languageBaseUrl.trim()), (value) => {
@@ -198,7 +199,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
 
   const validateLanguageConnection = () => void perform('验证 GPT-5.6-sol 连接', () => ShortDramaApi.validateLanguageConfig(), (value) => {
     setLanguageConfig(value)
-    onNotice('GPT-5.6-sol 地址、凭证与固定模型访问验证通过')
+    onNotice('GPT-5.6-sol 兼容地址与固定模型验证通过')
   })
 
   const createAsset = () => {
@@ -352,7 +353,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
       <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
         <div className="grid gap-3 xl:grid-cols-[170px_minmax(260px,1fr)_minmax(220px,0.8fr)_auto_auto] xl:items-end">
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">Image Provider</p><p className="mt-1 text-xs text-zinc-300">{config?.model ?? 'gpt-image-2'} · {config?.can_generate ? 'Ready' : '未配置'}</p></div>
-          <div><label className="text-xs text-zinc-500">Base URL</label><input className={`${field} mt-1`} value={imageBaseUrl} onChange={(event) => setImageBaseUrl(event.target.value)} placeholder="https://api.openai.com/v1" /></div>
+          <div><label className="text-xs text-zinc-500">Base URL / Azure 完整 endpoint</label><input className={`${field} mt-1`} value={imageBaseUrl} onChange={(event) => setImageBaseUrl(event.target.value)} placeholder="https://api.openai.com/v1" /></div>
           <div><label className="text-xs text-zinc-500">API Key</label><input className={`${field} mt-1`} value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder={config?.has_api_key ? `已配置 · ${config.key_source}` : '输入密钥'} /></div>
           <button className={secondaryButton} disabled={!imageBaseUrl.trim() || Boolean(busy)} onClick={saveKey}><KeyRound className="h-4 w-4" />保存</button>
           <button className={secondaryButton} disabled={!config?.has_api_key || Boolean(busy)} onClick={validateKey}><RefreshCw className="h-4 w-4" />验证</button>
@@ -362,9 +363,9 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
           <div><label className="text-xs text-zinc-500">Base URL</label><input className={`${field} mt-1`} value={languageBaseUrl} onChange={(event) => setLanguageBaseUrl(event.target.value)} placeholder="OpenAI-compatible /v1" /></div>
           <div><label className="text-xs text-zinc-500">API Key</label><input className={`${field} mt-1`} value={languageApiKey} onChange={(event) => setLanguageApiKey(event.target.value)} type="password" placeholder={languageConfig?.has_api_key ? `已配置 · ${languageConfig.key_source}` : '输入密钥'} /></div>
           <button className={secondaryButton} disabled={!languageBaseUrl.trim() || Boolean(busy)} onClick={saveLanguageConnection}><KeyRound className="h-4 w-4" />保存</button>
-          <button className={secondaryButton} disabled={!languageConfig?.has_api_key || Boolean(busy)} onClick={validateLanguageConnection}><RefreshCw className="h-4 w-4" />验证</button>
+          <button className={secondaryButton} disabled={!languageConfig?.can_connect || Boolean(busy)} onClick={validateLanguageConnection}><RefreshCw className="h-4 w-4" />验证</button>
         </div>
-        <p className="text-[11px] leading-5 text-zinc-600">两项连接彼此独立；模型名固定，不在这里选择候选模型。验证只查询模型信息，不发起图像或语言生成。</p>
+        <p className="text-[11px] leading-5 text-zinc-600">支持标准 OpenAI Base URL、Azure 部署级完整 endpoint 和本地 OpenAI-compatible /v1。本地回环地址可不填 Key；验证不发起图像或语言生成。</p>
       </section>
 
       {showCreate && (
