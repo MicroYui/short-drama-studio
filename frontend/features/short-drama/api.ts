@@ -68,6 +68,7 @@ const enqueueH3Probe = makeEndpointClient('/api/short-drama/projects/{project_id
 const listH3Runs = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/runs', 'get')
 const listH3ReconciliationCandidates = makeEndpointClient('/api/short-drama/providers/minimax-h3/reconciliation-candidates', 'get')
 const resolveH3Submission = makeEndpointClient('/api/short-drama/tasks/{task_id}/h3/resolve-submit', 'post')
+const resolveH3NotSubmitted = makeEndpointClient('/api/short-drama/tasks/{task_id}/h3/resolve-not-submitted', 'post')
 const reviewH3Take = makeEndpointClient('/api/short-drama/takes/{take_id}/h3/review', 'post')
 const getImageConfig = makeEndpointClient('/api/short-drama/providers/gpt-image', 'get')
 const updateImageConfig = makeEndpointClient('/api/short-drama/providers/gpt-image', 'post')
@@ -163,6 +164,13 @@ export const ShortDramaApi = {
       { provider_task_id: providerTaskId },
       undefined,
       taskPath(taskId, 'h3/resolve-submit'),
+    )
+  ),
+  resolveH3NotSubmitted: (taskId: string, reason: string) => (
+    resolveH3NotSubmitted(
+      { reason },
+      undefined,
+      taskPath(taskId, 'h3/resolve-not-submitted'),
     )
   ),
   reviewH3Take: (takeId: string, body: H3TakeReviewRequest) => (

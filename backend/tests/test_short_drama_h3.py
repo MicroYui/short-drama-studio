@@ -20,6 +20,7 @@ from short_drama.h3_models import (
     H3MediaKind,
     H3MediaRole,
     H3MediaSource,
+    H3NotSubmittedResolutionRequest,
     H3ProbeRequest,
     H3ProviderConfigUpdate,
     H3QueryResponse,
@@ -521,6 +522,40 @@ def test_h3_submit_unknown_never_blindly_reposts(tmp_path: Path) -> None:
     ) == 1
     assert len(fake.submitted_requests) == 1
     assert resolved.project.route_evidence[0].status == EvidenceStatus.AWAITING_OUTPUT
+
+
+def test_interrupted_prepare_can_be_explicitly_resolved_as_not_submitted(
+    tmp_path: Path,
+) -> None:
+    fake = FakeH3Client()
+    first = _service(tmp_path, fake)
+    project = first.initialize_fixture()
+    probe = first.enqueue_h3_probe(
+        project.document.project.id,
+        H3ProbeRequest(shot_id=project.document.shots[0].id),
+    )
+    assert first.advance_task(probe.task.id).status == TaskStatus.SUBMITTING
+    assert fake.submitted_requests == []
+
+    restarted = _service(tmp_path, fake)
+    recovered = restarted.get_project(project.document.project.id)
+    unknown = next(task for task in recovered.tasks if task.id == probe.task.id)
+    assert unknown.status == TaskStatus.SUBMIT_UNKNOWN
+    assert unknown.error_code == "PROCESS_INTERRUPTED_DURING_SUBMIT"
+
+    resolved = restarted.resolve_h3_not_submitted(
+        unknown.id,
+        H3NotSubmittedResolutionRequest(
+            reason="Process ended after local prepare and before the provider POST."
+        ),
+    )
+    assert resolved.task.status == TaskStatus.FAILED
+    assert resolved.task.error_code == "H3_SUBMISSION_NOT_CREATED"
+    assert resolved.provider_run.last_error_code == "H3_SUBMISSION_NOT_CREATED"
+    assert resolved.project.route_evidence[0].status == EvidenceStatus.FAILED
+    assert fake.submitted_requests == []
+    retry = restarted.retry_task(resolved.task.id)
+    assert retry.status == TaskStatus.QUEUED
 
 
 def test_h3_restart_reconciles_interrupted_submit_and_recovers_output(tmp_path: Path) -> None:

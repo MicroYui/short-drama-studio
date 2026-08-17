@@ -232,6 +232,24 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert "ORDERED ACTION BEATS" not in brief_body["prompt"]
     assert "Characters and eyeline" not in brief_body["prompt"]
 
+    start_brief = client.post(
+        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/keyframe-brief/compile",
+        json={
+            "position": "START",
+            "start_after_action_beat_order": 2,
+        },
+    )
+    assert start_brief.status_code == 200, start_brief.text
+    start_prompt = start_brief.json()["prompt"]
+    assert "through order 2 have completed" in start_prompt
+    assert "Do not replay completed beats" in start_prompt
+    assert "ACTION BEATS COMPLETED BEFORE THIS FRAME" in start_prompt
+    assert "ACTION BEATS REMAINING AFTER THIS FRAME" in start_prompt
+    assert "entrance.primary_door=closed" in start_prompt
+    assert "Other characters mentioned by broader continuity must remain off-screen" in start_prompt
+    assert "State at this frame from completed beats" in start_prompt
+    assert "Prop state in:" not in start_prompt
+
     topology_asset = service.create_asset(
         project_id,
         AssetCreateRequest(

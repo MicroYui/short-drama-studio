@@ -225,6 +225,10 @@ class H3ReconcileRequest(DomainModel):
     provider_task_id: str = Field(min_length=1)
 
 
+class H3NotSubmittedResolutionRequest(DomainModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class H3TakeReviewRequest(DomainModel):
     hard_gate_passed: bool
     score: float = Field(ge=0.0, le=5.0)

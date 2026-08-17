@@ -322,6 +322,7 @@ export function H3LabPanel({
   const [polling, setPolling] = useState(false)
   const [reconcileTaskId, setReconcileTaskId] = useState('')
   const [remoteTaskId, setRemoteTaskId] = useState('')
+  const [notSubmittedReason, setNotSubmittedReason] = useState('')
   const [reviewTakeId, setReviewTakeId] = useState('')
   const [reviewScore, setReviewScore] = useState(4)
   const [reviewPassed, setReviewPassed] = useState(false)
@@ -590,6 +591,19 @@ export function H3LabPanel({
     )
   }
 
+  const resolveNotSubmitted = () => {
+    if (!reconcileTaskId || !notSubmittedReason.trim()) return
+    void run(
+      '确认远端任务未创建',
+      () => ShortDramaApi.resolveH3NotSubmitted(reconcileTaskId, notSubmittedReason.trim()),
+      (result) => {
+        onProjectChange(result.project)
+        setNotSubmittedReason('')
+        void refreshProviderData()
+      },
+    )
+  }
+
   const h3Takes = project.takes.filter((take) => take.provider === 'minimax')
   const retriedTaskIds = new Set(
     project.tasks
@@ -772,7 +786,37 @@ export function H3LabPanel({
               return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{wasRetried ? '已保留历史并创建重试' : providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
             })}
           </div>
-          {unknownTasks.length > 0 && <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><div className="flex gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /><div><p className="text-xs font-medium text-amber-100">未知提交必须先对账，系统不会自动重发</p><p className="mt-1 text-[11px] leading-5 text-zinc-500">从 MiniMax 最近 7 天任务中核对模型、768P、时长与创建时间，再显式绑定 task ID。</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><select className={inputClass} value={reconcileTaskId} onChange={(event) => setReconcileTaskId(event.target.value)}><option value="">选择本地未知任务</option>{unknownTasks.map((task) => <option key={task.id} value={task.id}>{task.id.slice(-10)} · 镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence}</option>)}</select><input className={inputClass} placeholder="MiniMax task_id" value={remoteTaskId} onChange={(event) => setRemoteTaskId(event.target.value)} /><button className={secondaryButton} onClick={resolveUnknown} disabled={!reconcileTaskId || !remoteTaskId.trim()}>绑定</button></div><button className={`${subtleButton} mt-2`} onClick={loadCandidates}>读取并预填匹配候选</button></div>}
+          {unknownTasks.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <div className="flex gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                <div>
+                  <p className="text-xs font-medium text-amber-100">未知提交必须先对账，系统不会自动重发</p>
+                  <p className="mt-1 text-[11px] leading-5 text-zinc-500">先核对 AceData 最近任务、用量或账单，再选择一种明确结论。</p>
+                </div>
+              </div>
+              <select className={`${inputClass} mt-3`} value={reconcileTaskId} onChange={(event) => setReconcileTaskId(event.target.value)}>
+                <option value="">选择本地未知任务</option>
+                {unknownTasks.map((task) => <option key={task.id} value={task.id}>{task.id.slice(-10)} · 镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence}</option>)}
+              </select>
+              <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+                <p className="text-[11px] font-medium text-zinc-300">远端任务已经创建</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <input className={inputClass} placeholder="MiniMax task_id" value={remoteTaskId} onChange={(event) => setRemoteTaskId(event.target.value)} />
+                  <button className={secondaryButton} onClick={resolveUnknown} disabled={!reconcileTaskId || !remoteTaskId.trim() || busy !== null}>绑定</button>
+                </div>
+                <button className={`${subtleButton} mt-2`} onClick={loadCandidates} disabled={busy !== null}>读取并预填匹配候选</button>
+              </div>
+              <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+                <p className="text-[11px] font-medium text-zinc-300">确认远端任务没有创建</p>
+                <p className="mt-1 text-[11px] leading-5 text-zinc-600">只有在远端记录和计费中均未找到对应请求时使用；任务会转为失败，之后可正常重试。</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <input className={inputClass} placeholder="填写核对依据，例如：用量记录中无对应 7 秒请求" value={notSubmittedReason} onChange={(event) => setNotSubmittedReason(event.target.value)} />
+                  <button className={secondaryButton} onClick={resolveNotSubmitted} disabled={!reconcileTaskId || !notSubmittedReason.trim() || busy !== null}>确认未提交</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from _routes._errors import HTTPError
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
+    H3NotSubmittedResolutionRequest,
     H3ProbeRequest,
     H3ProbeResponse,
     H3ProviderConfigResponse,
@@ -340,6 +341,25 @@ def resolve_h3_submission(
         ArtifactNotFoundError,
         WorkflowConflictError,
         ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/tasks/{task_id}/h3/resolve-not-submitted",
+    response_model=H3TaskActionResponse,
+)
+def resolve_h3_not_submitted(
+    task_id: str,
+    request: H3NotSubmittedResolutionRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3TaskActionResponse:
+    try:
+        return service.resolve_h3_not_submitted(task_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
     ) as exc:
         raise _translate_error(exc) from exc
 

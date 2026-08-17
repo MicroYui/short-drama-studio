@@ -84,7 +84,19 @@ class ReferencePlanPreviewRequest(DomainModel):
 
 class KeyframeBriefCompileRequest(ReferencePlanPreviewRequest):
     position: KeyframePosition
+    start_after_action_beat_order: int | None = Field(default=None, ge=0)
     extra_constraints: list[str] = Field(default_factory=list[str], max_length=32)
+
+    @model_validator(mode="after")
+    def validate_action_boundary(self) -> KeyframeBriefCompileRequest:
+        if (
+            self.start_after_action_beat_order is not None
+            and self.position != KeyframePosition.START
+        ):
+            raise ValueError(
+                "start_after_action_beat_order is only valid for a START keyframe"
+            )
+        return self
 
 
 class DirectorAdviceRequest(ReferencePlanPreviewRequest):
@@ -279,6 +291,18 @@ def compile_keyframe_brief(
     request: KeyframeBriefCompileRequest,
 ) -> KeyframeBriefCompileResponse:
     preview = preview_reference_plan(document, shot, plan, request)
+    start_boundary = request.start_after_action_beat_order
+    sorted_beats = sorted(plan.action_beats, key=lambda item: item.order)
+    if start_boundary is not None:
+        beat_orders = [item.order for item in sorted_beats]
+        if start_boundary and start_boundary not in beat_orders:
+            raise ValueError(
+                f"Action beat order {start_boundary} does not exist in shot {shot.id}"
+            )
+        if beat_orders and start_boundary >= beat_orders[-1]:
+            raise ValueError(
+                "A START keyframe boundary must leave at least one action beat to perform"
+            )
 
     asset_index = {asset.id: asset for asset in document.assets}
     reference_lines = [
@@ -291,14 +315,18 @@ def compile_keyframe_brief(
     ]
     beat_lines = [
         _format_action_beat(item, asset_index)
-        for item in sorted(plan.action_beats, key=lambda item: item.order)
+        for item in sorted_beats
     ]
     interaction_lines = [
         _format_interaction(item, asset_index)
         for item in plan.interactions
     ]
     style = _current_style(document)
-    position_guidance = _position_guidance(request.position, plan)
+    position_guidance = _position_guidance(
+        request.position,
+        plan,
+        start_after_action_beat_order=start_boundary,
+    )
     extra = [item.strip() for item in request.extra_constraints if item.strip()]
     is_topology_reference = request.position == KeyframePosition.TOPOLOGY_REFERENCE
 
@@ -331,7 +359,28 @@ def compile_keyframe_brief(
         "FRAME INTENT:\n" + position_guidance,
     ]
     if beat_lines and not is_topology_reference:
-        sections.append("ORDERED ACTION BEATS:\n" + "\n".join(beat_lines))
+        if start_boundary is None:
+            sections.append("ORDERED ACTION BEATS:\n" + "\n".join(beat_lines))
+        else:
+            completed_lines = [
+                line
+                for line, beat in zip(beat_lines, sorted_beats, strict=True)
+                if beat.order <= start_boundary
+            ]
+            remaining_lines = [
+                line
+                for line, beat in zip(beat_lines, sorted_beats, strict=True)
+                if beat.order > start_boundary
+            ]
+            if completed_lines:
+                sections.append(
+                    "ACTION BEATS COMPLETED BEFORE THIS FRAME:\n"
+                    + "\n".join(completed_lines)
+                )
+            sections.append(
+                "ACTION BEATS REMAINING AFTER THIS FRAME:\n"
+                + "\n".join(remaining_lines)
+            )
     if interaction_lines:
         sections.append(
             (
@@ -346,11 +395,21 @@ def compile_keyframe_brief(
             )
         )
     if not is_topology_reference:
+        character_continuity = _character_continuity_lines(
+            shot,
+            plan,
+            preview.selected,
+            asset_index,
+        )
         sections.append(
             "CONTINUITY:\n"
-            f"Characters and eyeline: {shot.continuity.character_positions}; {shot.continuity.eyeline}\n"
-            f"Prop state in: {shot.continuity.prop_state_in}\n"
-            f"Prop state out: {shot.continuity.prop_state_out}"
+            + character_continuity
+            + _prop_continuity_lines(
+                shot,
+                plan,
+                request.position,
+                start_boundary,
+            )
         )
     if style:
         sections.append(
@@ -603,6 +662,8 @@ def _format_topology_interaction(
 def _position_guidance(
     position: KeyframePosition,
     plan: ReferencePlanEntry,
+    *,
+    start_after_action_beat_order: int | None = None,
 ) -> str:
     if position == KeyframePosition.TOPOLOGY_REFERENCE:
         return (
@@ -612,13 +673,22 @@ def _position_guidance(
             "Do not perform the action yet."
         )
     if position == KeyframePosition.START:
-        starts = "; ".join(
-            f"{item.target_anchor}={item.start_state}" for item in plan.interactions
+        states = "; ".join(
+            f"{item.target_anchor}="
+            f"{_interaction_state_at_boundary(item, plan, start_after_action_beat_order)}"
+            for item in plan.interactions
         )
+        if start_after_action_beat_order is not None:
+            return (
+                "Show the exact video opening state after all action beats through order "
+                f"{start_after_action_beat_order} have completed and immediately before the "
+                "next declared beat. Do not replay completed beats. "
+                + (f"Locked boundary states: {states}." if states else "")
+            )
         return (
             "Show the exact opening state immediately before the first required action beat. "
             "The actor may be poised to act but has not completed the first state transition. "
-            + (f"Locked starting states: {starts}." if starts else "")
+            + (f"Locked starting states: {states}." if states else "")
         )
     ends = "; ".join(
         f"{item.target_anchor}={item.end_state}" for item in plan.interactions
@@ -627,6 +697,83 @@ def _position_guidance(
         "Show the exact final state after every required action beat has completed. "
         "Keep the same identities, wardrobe, location geometry, camera side, and object design. "
         + (f"Locked ending states: {ends}." if ends else "")
+    )
+
+
+def _interaction_state_at_boundary(
+    interaction: SpatialInteractionConstraint,
+    plan: ReferencePlanEntry,
+    boundary: int | None,
+) -> str:
+    if boundary is None:
+        return interaction.start_state
+    target_orders = [
+        beat.order
+        for beat in plan.action_beats
+        if beat.target_anchor == interaction.target_anchor
+    ]
+    if target_orders and min(target_orders) <= boundary:
+        return interaction.end_state
+    return interaction.start_state
+
+
+def _character_continuity_lines(
+    shot: ShotPlan,
+    plan: ReferencePlanEntry,
+    selected: list[ReferenceSelection],
+    assets: dict[str, Asset],
+) -> str:
+    candidate_ids = list(
+        dict.fromkeys(
+            [
+                *(item.subject_asset_id for item in selected),
+                *(item.actor_asset_id for item in plan.action_beats),
+                *(item.actor_asset_id for item in plan.interactions),
+            ]
+        )
+    )
+    visible_names = [
+        asset.name
+        for asset_id in candidate_ids
+        if (asset := assets.get(asset_id)) is not None
+        and asset.kind == AssetKind.CHARACTER
+    ]
+    visible_names = list(dict.fromkeys(visible_names))
+    if len(visible_names) == 1:
+        return (
+            f"Visible characters: {visible_names[0]} only. Other characters mentioned by "
+            "broader continuity must remain off-screen.\n"
+        )
+    if len(visible_names) > 1:
+        return (
+            "Characters and eyeline: "
+            f"{shot.continuity.character_positions}; {shot.continuity.eyeline}\n"
+        )
+    return ""
+
+
+def _prop_continuity_lines(
+    shot: ShotPlan,
+    plan: ReferencePlanEntry,
+    position: KeyframePosition,
+    start_boundary: int | None,
+) -> str:
+    if position == KeyframePosition.END:
+        return f"Prop/object state at this frame: {shot.continuity.prop_state_out}"
+    if start_boundary is None:
+        return (
+            f"Prop/object state at this frame: {shot.continuity.prop_state_in}\n"
+            f"Final state required after the video: {shot.continuity.prop_state_out}"
+        )
+    completed_states = [
+        beat.required_end_state
+        for beat in plan.action_beats
+        if beat.order <= start_boundary and beat.required_end_state
+    ]
+    boundary_state = "; ".join(completed_states) or shot.continuity.prop_state_in
+    return (
+        f"State at this frame from completed beats: {boundary_state}\n"
+        f"Final state required after the video: {shot.continuity.prop_state_out}"
     )
 
 

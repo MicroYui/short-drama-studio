@@ -1358,6 +1358,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/tasks/{task_id}/h3/resolve-not-submitted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve H3 Not Submitted */
+        post: operations["resolve_h3_not_submitted_api_short_drama_tasks__task_id__h3_resolve_not_submitted_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/tasks/{task_id}/h3/resolve-submit": {
         parameters: {
             query?: never;
@@ -2383,6 +2400,11 @@ export interface components {
             /** Local Path */
             local_path?: string | null;
         };
+        /** H3NotSubmittedResolutionRequest */
+        H3NotSubmittedResolutionRequest: {
+            /** Reason */
+            reason: string;
+        };
         /** H3PricingSnapshot */
         H3PricingSnapshot: {
             /**
@@ -3332,6 +3354,8 @@ export interface components {
             position: components["schemas"]["KeyframePosition"];
             /** Requirement Ids */
             requirement_ids?: string[];
+            /** Start After Action Beat Order */
+            start_after_action_beat_order?: number | null;
         };
         /** KeyframeBriefCompileResponse */
         KeyframeBriefCompileResponse: {
@@ -8270,6 +8294,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskActionResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_h3_not_submitted_api_short_drama_tasks__task_id__h3_resolve_not_submitted_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3NotSubmittedResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3TaskActionResponse"];
                 };
             };
             /** @description Client Error */

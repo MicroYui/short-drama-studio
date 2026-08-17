@@ -23,6 +23,7 @@ from short_drama.h3_models import (
     H3MediaInput,
     H3MediaKind,
     H3MediaSource,
+    H3NotSubmittedResolutionRequest,
     H3ProbeRequest,
     H3ProbeResponse,
     H3ProviderConfigResponse,
@@ -918,6 +919,27 @@ class ShortDramaService:
             raise WorkflowConflictError(str(exc)) from exc
         except H3ClientError as exc:
             raise ProviderOperationError(str(exc)) from exc
+        self._refresh_project_stage(task.project_id)
+        run = self.repository.get_provider_run(task.id)
+        if run is None:
+            raise WorkflowConflictError(f"H3 provider run for task {task.id} is missing")
+        return H3TaskActionResponse(
+            task=task,
+            project=self.get_project(task.project_id),
+            provider_run=run,
+        )
+
+    def resolve_h3_not_submitted(
+        self,
+        task_id: str,
+        request: H3NotSubmittedResolutionRequest,
+    ) -> H3TaskActionResponse:
+        try:
+            task = self.h3_worker.resolve_not_submitted(task_id, request.reason)
+        except KeyError as exc:
+            raise ArtifactNotFoundError(task_id) from exc
+        except InvalidTaskTransition as exc:
+            raise WorkflowConflictError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
         run = self.repository.get_provider_run(task.id)
         if run is None:

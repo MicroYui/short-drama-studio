@@ -4,7 +4,7 @@
 
 Phase 2 的工程闭环已经落地：MiniMax-H3 是当前唯一真实视频 Provider，通过 AceData Cloud 网关调用；所有请求固定为 `768P`，Direct、首帧、首尾帧和 Reference 都由同一套项目、任务、Take、QA 与 `TimelineManifest` 核心承载。离线合约、状态恢复、媒体下载和桌面实验台已通过自动测试。
 
-AceData API Token 已由用户在桌面应用内保存并通过只读连接验证。镜头 1 的 Direct 5 秒合同冒烟已经完成远端创建、轮询、下载、自动技术 QA 与人工听看。RouteEvidence 记录为 `REVIEWED`、硬门槛不通过、`3.0/5`；它只证明真实媒体闭环成立，不构成质量路线通过。镜头 1 的 Frame/Reference 与镜头 2/5/8 的真实证据仍为 `UNKNOWN`。
+AceData API Token 已由用户在桌面应用内保存并通过只读连接验证。镜头 1 的 Direct 5 秒合同冒烟已经完成远端创建、轮询、下载、自动技术 QA 与人工听看。RouteEvidence 记录为 `REVIEWED`、硬门槛不通过、`3.0/5`；它只证明真实媒体闭环成立，不构成质量路线通过。此后 Phase 4 已继续积累 Frame/Reference 真实质量证据，当前结果统一记录在 [Phase 4 实验文档](13-phase4-h3-visual-route-experiment.md)，不再沿用本节最初的 `UNKNOWN` 快照。
 
 ## 当前接入契约快照
 
@@ -24,7 +24,7 @@ AceData API Token 已由用户在桌面应用内保存并通过只读连接验�
 
 AceData 契约支持仅尾帧，但首版产品路线已经确认只开放首帧和首尾帧；仅尾帧属于后续高级能力，不在本轮为扩大功能面而加入。
 
-2026-08-17 的同一账号已能接受 `async: true`。当前文档示例返回 `task_id` 与 `trace_id`；Adapter 的外部响应模型已补充 `trace_id` 并忽略其他新增字段。当天两条已成功计费并生成的请求曾因旧严格模型误记为 `SUBMIT_UNKNOWN`，系统从使用历史取回远端 ID 后只做对账和下载，没有重复提交。旧客户端未保存原始 2xx body，因此“额外 `trace_id` 触发解析失败”是基于当前文档形状与代码路径的高置信根因，而不是对旧响应的逐字节取证。
+2026-08-17 的同一账号已能接受 `async: true`。当前文档示例返回 `task_id` 与 `trace_id`；Adapter 的外部响应模型已补充 `trace_id` 并忽略其他新增字段。当天两条已成功计费并生成的请求曾因旧严格模型误记为 `SUBMIT_UNKNOWN`，系统从使用历史取回远端 ID 后只做对账和下载，没有重复提交。旧客户端未保存原始 2xx body，因此“额外 `trace_id` 触发解析失败”是基于当前文档形状与代码路径的高置信根因，而不是对旧响应的逐字节取证。随后 S07 的真实异步创建已直接取得并保存远端 task ID，验证新解析路径可用。
 
 ## 实现结构
 
@@ -86,7 +86,7 @@ SQLite schema 版本 2 增加：
 - 创建请求被明确拒绝：`FAILED`；
 - 创建发生网络中断、5xx 或成功响应缺少合法 `task_id`：`SUBMIT_UNKNOWN`；
 - 应用在 `SUBMITTING` 中断：重启后转 `SUBMIT_UNKNOWN`；
-- `SUBMIT_UNKNOWN` 绝不自动重新 POST，必须从 AceData 最近任务中核对并显式绑定 `task_id`；
+- `SUBMIT_UNKNOWN` 绝不自动重新 POST：若远端任务存在，则从 AceData 最近任务中核对并显式绑定 `task_id`；若结合最近任务、用量或账单确认请求从未创建，则显式填写核对依据并转为 `FAILED`，之后才允许建立新重试；
 - 远端成功但 URL 缺失、过期或下载/解析失败：`OUTPUT_MISSING`；恢复时重新查询最新 URL 并下载，不重新生成；
 - 本地尚未提交的任务可以直接取消；远端 queued 先查询再调用取消；远端 running 按官方限制拒绝取消；
 - `FAILED/CANCELLED` 重试会建立新任务、新 fingerprint 和新 `RouteEvidence`，保留全部历史。
@@ -131,7 +131,7 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 - 免费请求预览与真实 768P 提交；
 - 自动轮询、手动推进、取消、保留历史重试、输出恢复；
 - 已创建后继重试的失败任务仍保留历史，但不再作为总览阻断项或提供重复重试按钮；
-- `SUBMIT_UNKNOWN` 最近任务读取与显式对账；
+- `SUBMIT_UNKNOWN` 最近任务读取、远端 ID 显式绑定，以及确认远端未创建后的显式失败恢复；
 - Provider run、远端 ID、状态、错误和费用展示；
 - 真实视频播放、技术门槛、人工审片和 Take 选择；`CONTRACT_SMOKE` Take 可审片记录但不能选入正式时间线。
 
@@ -147,7 +147,7 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 - Reference 混合多素材、9 图/3 视频/3 音频分项上限和 12 个总上限；
 - 本地媒体引用缓存；
 - queued/running/succeeded、远端取消和 running 不可取消；
-- `SUBMIT_UNKNOWN` 不重复提交、显式对账；
+- `SUBMIT_UNKNOWN` 不重复提交、远端任务显式绑定、确认未提交后再重试；
 - `SUBMITTING` 重启恢复；
 - `OUTPUT_MISSING` 重新查询和下载；
 - 768P 级真实 FFmpeg 媒体摄取、费用计算、人工审片与 Take 入选；
@@ -158,7 +158,7 @@ H3 原始输出不转码覆盖，保存在项目 `takes/<shot>/h3-<task>.mp4`。
 
 最终离线验证结果：
 
-- 后端整库 `581/581` 通过；其中 AceData/H3 定向回归 `10/10` 通过；
+- 后端整库当前 `614/614` 通过；本轮 H3 恢复与参考规划相关定向回归 `13/13` 通过；
 - TypeScript `tsc --noEmit` 通过，Python Pyright 为 `0 errors / 0 warnings`；
 - OpenAPI JSON 与 TypeScript 类型连续生成结果一致；
 - 使用本仓库的实际候选素材完成 6 组无网络请求预编译：镜头 2 Direct、镜头 1/5/8 首帧、镜头 1/5 多图 Reference；全部为 `MiniMax-H3/768P`，Frame 使用自适应画幅，Direct/Reference 为 `9:16`；

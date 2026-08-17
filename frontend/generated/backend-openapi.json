@@ -2636,6 +2636,22 @@
         "title": "H3MediaSource",
         "type": "object"
       },
+      "H3NotSubmittedResolutionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "H3NotSubmittedResolutionRequest",
+        "type": "object"
+      },
       "H3PricingSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -5216,6 +5232,18 @@
             "maxItems": 32,
             "title": "Requirement Ids",
             "type": "array"
+          },
+          "start_after_action_beat_order": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start After Action Beat Order"
           }
         },
         "required": [
@@ -13670,6 +13698,68 @@
           }
         },
         "summary": "Cancel Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/tasks/{task_id}/h3/resolve-not-submitted": {
+      "post": {
+        "operationId": "resolve_h3_not_submitted_api_short_drama_tasks__task_id__h3_resolve_not_submitted_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3NotSubmittedResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3TaskActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Resolve H3 Not Submitted",
         "tags": [
           "short-drama"
         ]

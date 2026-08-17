@@ -149,6 +149,23 @@ class PersistentH3Worker:
         self._set_evidence_status(task.id, EvidenceStatus.AWAITING_OUTPUT)
         return self._apply_remote_state(task, run, remote)
 
+    def resolve_not_submitted(self, task_id: str, reason: str) -> GenerationTask:
+        task = self._require_h3_task(task_id)
+        if task.status != TaskStatus.SUBMIT_UNKNOWN:
+            raise InvalidTaskTransition(f"Task {task.id} is not waiting for reconciliation")
+        now = utc_now()
+        message = reason.strip()
+        if not message:
+            raise InvalidTaskTransition("A reconciliation reason is required")
+        run = self._require_run(task.id)
+        return self._mark_failed(
+            task,
+            run,
+            "H3_SUBMISSION_NOT_CREATED",
+            message,
+            now,
+        )
+
     def recover_output(self, task_id: str) -> GenerationTask:
         task = self._require_h3_task(task_id)
         if task.status != TaskStatus.OUTPUT_MISSING:
