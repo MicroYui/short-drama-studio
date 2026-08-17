@@ -181,6 +181,7 @@ def test_route_plan_reuses_reviewed_h3_takes_and_builds_real_manifest(
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            enqueue_new_generations=True,
             inspect_reused_takes=False,
             semantic_review=False,
             rebuild_manifest=True,
@@ -217,13 +218,13 @@ def test_route_plan_compiles_long_take_observation_and_advisory_asset_briefs(
     decision = compiled.plan.decisions[0]
 
     assert decision.action == H3ShotRouteAction.GENERATE
-    assert decision.route == VideoGenerationRoute.DIRECT
+    assert decision.route == VideoGenerationRoute.FRAME_FIRST
     assert decision.inspection.max_frames == 23
     assert decision.inspection.scopes == [
         "INTRA_SHOT",
         "SHOT_BOUNDARY",
     ]
-    assert decision.readiness == H3ShotRouteReadiness.READY_WITH_WARNINGS
+    assert decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
     assert decision.asset_preparations
     assert all(item.advisory_only for item in decision.asset_preparations)
     assert decision.override_allowed is True

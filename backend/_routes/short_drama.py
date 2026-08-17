@@ -48,6 +48,7 @@ from short_drama.models import (
     AutoDraftResponse,
     AutonomousDraftCreateRequest,
     AutonomousDraftResponse,
+    AutonomousRunAdvanceRequest,
     CreateProjectRequest,
     EnqueueRequest,
     ExportRecord,
@@ -505,6 +506,28 @@ def create_autonomous_draft(
     try:
         return service.create_autonomous_draft(request)
     except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/autonomous-runs/{run_id}/advance",
+    response_model=AutonomousDraftResponse,
+)
+def advance_autonomous_run(
+    project_id: str,
+    run_id: str,
+    request: AutonomousRunAdvanceRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AutonomousDraftResponse:
+    try:
+        return service.advance_autonomous_run(project_id, run_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+        MediaGenerationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 

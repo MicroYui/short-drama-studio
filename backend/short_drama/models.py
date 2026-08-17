@@ -25,6 +25,11 @@ class RunMode(StrEnum):
     GUIDED = "GUIDED"
 
 
+class AutonomousExecutionTarget(StrEnum):
+    MOCK = "MOCK"
+    REAL_H3 = "REAL_H3"
+
+
 class AutonomousRunStatus(StrEnum):
     RUNNING = "RUNNING"
     COMPLETE = "COMPLETE"
@@ -36,6 +41,9 @@ class AutonomousRunStep(StrEnum):
     NORMALIZE_INPUT = "NORMALIZE_INPUT"
     PLAN = "PLAN"
     IMPORT_INPUT_ASSETS = "IMPORT_INPUT_ASSETS"
+    PREPARE_ASSETS = "PREPARE_ASSETS"
+    PLAN_ROUTES = "PLAN_ROUTES"
+    PREPARE_SHOT_ASSETS = "PREPARE_SHOT_ASSETS"
     GENERATE = "GENERATE"
     QA_AND_REPAIR = "QA_AND_REPAIR"
     TIMELINE = "TIMELINE"
@@ -636,6 +644,12 @@ class AutonomousRunRecord(DomainModel):
         default_factory=list[AutonomousRunStep]
     )
     planner: str
+    execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
+    route_plan_id: str | None = None
+    repair_round: int = Field(default=0, ge=0, le=10)
+    max_repair_rounds: int = Field(default=2, ge=0, le=5)
+    render_export: bool = True
+    waiting_reason: str | None = None
     warnings: list[str] = Field(default_factory=list[str])
     error_message: str | None = None
     export_id: str | None = None
@@ -886,6 +900,7 @@ class VideoInspectionRequest(DomainModel):
 class AutonomousDraftCreateRequest(CreateProjectRequest):
     run_mode: RunMode = RunMode.AUTO_DRAFT
     render_export: bool = True
+    execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
 
     @model_validator(mode="after")
     def require_auto_mode(self) -> AutonomousDraftCreateRequest:
@@ -940,6 +955,10 @@ class ExportRequest(DomainModel):
 
 class AutoDraftRequest(DomainModel):
     render_export: bool = True
+
+
+class AutonomousRunAdvanceRequest(DomainModel):
+    max_actions: int = Field(default=24, ge=1, le=200)
 
 
 class AutoDraftResponse(DomainModel):

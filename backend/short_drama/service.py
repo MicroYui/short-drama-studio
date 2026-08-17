@@ -17,16 +17,24 @@ from short_drama.asset_workbench import (
     ImageProviderFactory,
     default_image_provider_factory,
 )
+from short_drama.asset_inspection import (
+    SemanticAssetReview,
+    build_base_asset_prompt,
+    build_keyframe_correction_prompt,
+    inspect_asset_image,
+)
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
     H3ProductionRouteExecuteRequest,
     H3ProductionRouteExecuteResponse,
+    H3ProductionRoutePlan,
     H3ProductionRoutePlanListResponse,
     H3ProductionRoutePlanRequest,
     H3ProductionRoutePlanResponse,
     H3MediaInput,
     H3MediaKind,
+    H3MediaRole,
     H3MediaSource,
     H3NotSubmittedResolutionRequest,
     H3ProbeRequest,
@@ -37,8 +45,11 @@ from short_drama.h3_models import (
     H3ProviderRunsResponse,
     H3ReconciliationCandidatesResponse,
     H3RoutePlanStatus,
+    H3RouteAssetPreparation,
+    H3RouteAssetPreparationStatus,
     H3ShotRouteAction,
     H3ShotRouteExecutionStatus,
+    H3ShotRoutePlan,
     H3ShotRouteReadiness,
     H3TakeReviewRequest,
     H3TakeReviewResponse,
@@ -62,11 +73,14 @@ from short_drama.image_models import (
     AssetMutationResponse,
     AssetReviewDecision,
     AssetReviewRequest,
+    ImageGenerationTask,
+    ImageOperation,
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
     ImageTaskCreateRequest,
     ImageTaskListResponse,
     ImageTaskResponse,
+    ImageTaskStatus,
 )
 from short_drama.language_models import (
     LanguagePromptCompileRequest,
@@ -82,8 +96,10 @@ from short_drama.models import (
     AssetVersion,
     AssetMediaType,
     AutoDraftResponse,
+    AutonomousExecutionTarget,
     AutonomousDraftCreateRequest,
     AutonomousDraftResponse,
+    AutonomousRunAdvanceRequest,
     AutonomousRunRecord,
     AutonomousRunStatus,
     AutonomousRunStep,
@@ -113,6 +129,8 @@ from short_drama.models import (
     ReferencePlanEntry,
     RouteEvidence,
     RunMode,
+    QaFailureCategory,
+    QaIssue,
     QaStatus,
     ReviseScriptLineRequest,
     ScriptVersion,
@@ -176,6 +194,7 @@ from short_drama.providers.minimax_h3_compiler import (
     validate_h3_probe,
 )
 from short_drama.providers.openai_compatible_language_client import (
+    LanguageProviderClient,
     LanguageProviderClientFactory,
     LanguageProviderError,
     default_language_provider_factory,
@@ -275,7 +294,7 @@ class ShortDramaService:
         request: AutonomousDraftCreateRequest,
     ) -> AutonomousDraftResponse:
         create_request = CreateProjectRequest.model_validate(
-            request.model_dump(exclude={"render_export"})
+            request.model_dump(exclude={"render_export", "execution_target"})
         )
         project, planning = self._create_planned_project(create_request)
         project_id = project.document.project.id
@@ -290,6 +309,8 @@ class ShortDramaService:
                 AutonomousRunStep.PLAN,
             ],
             planner=planning.planner,
+            execution_target=request.execution_target,
+            render_export=request.render_export,
             warnings=list(planning.warnings),
             created_at=now,
             updated_at=now,
@@ -304,8 +325,18 @@ class ShortDramaService:
                 project_id,
                 run.id,
                 completed_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
-                next_step=AutonomousRunStep.GENERATE,
+                next_step=(
+                    AutonomousRunStep.GENERATE
+                    if request.execution_target == AutonomousExecutionTarget.MOCK
+                    else AutonomousRunStep.PREPARE_ASSETS
+                ),
             )
+            if request.execution_target == AutonomousExecutionTarget.REAL_H3:
+                return self.advance_autonomous_run(
+                    project_id,
+                    run.id,
+                    AutonomousRunAdvanceRequest(max_actions=1),
+                )
             result = self._execute_auto_draft(
                 project_id,
                 render_export=request.render_export,
@@ -461,6 +492,7 @@ class ShortDramaService:
             run.status = AutonomousRunStatus.RUNNING
             run.current_step = next_step
             run.error_message = None
+            run.waiting_reason = None
             run.updated_at = utc_now()
             self.repository.save_project(document)
             return run
@@ -485,6 +517,7 @@ class ShortDramaService:
                     run.completed_steps.append(step)
             run.status = status
             run.error_message = error_message
+            run.waiting_reason = error_message if status == AutonomousRunStatus.NEEDS_ATTENTION else None
             run.export_id = export_id or run.export_id
             now = utc_now()
             run.updated_at = now
@@ -495,6 +528,969 @@ class ShortDramaService:
                 run.completed_at = now
             self.repository.save_project(document)
             return run
+
+    def advance_autonomous_run(
+        self,
+        project_id: str,
+        run_id: str,
+        request: AutonomousRunAdvanceRequest,
+    ) -> AutonomousDraftResponse:
+        run = self._require_autonomous_run(project_id, run_id)
+        if run.execution_target != AutonomousExecutionTarget.REAL_H3:
+            raise WorkflowConflictError("Only a REAL_H3 autonomous run uses resumable advance")
+        if run.status != AutonomousRunStatus.COMPLETE:
+            with self._lock:
+                document = self._require_project_document(project_id)
+                persisted = next(
+                    item for item in document.autonomous_runs if item.id == run_id
+                )
+                persisted.status = AutonomousRunStatus.RUNNING
+                persisted.error_message = None
+                persisted.waiting_reason = None
+                persisted.updated_at = utc_now()
+                self.repository.save_project(document)
+        try:
+            for _ in range(request.max_actions):
+                progressed, waiting = self._advance_real_autonomous_run_once(
+                    project_id,
+                    run_id,
+                )
+                run = self._require_autonomous_run(project_id, run_id)
+                if run.status in {
+                    AutonomousRunStatus.COMPLETE,
+                    AutonomousRunStatus.NEEDS_ATTENTION,
+                    AutonomousRunStatus.FAILED,
+                }:
+                    break
+                if waiting or not progressed:
+                    break
+        except (
+            WorkflowConflictError,
+            ProviderOperationError,
+            MediaGenerationError,
+        ) as exc:
+            run = self._finish_autonomous_run(
+                project_id,
+                run_id,
+                status=AutonomousRunStatus.NEEDS_ATTENTION,
+                error_message=str(exc),
+            )
+        except Exception as exc:
+            run = self._finish_autonomous_run(
+                project_id,
+                run_id,
+                status=AutonomousRunStatus.FAILED,
+                error_message=str(exc),
+            )
+            raise
+        else:
+            run = self._require_autonomous_run(project_id, run_id)
+        export = next(
+            (
+                item
+                for item in self.repository.list_exports(project_id)
+                if item.id == run.export_id
+            ),
+            None,
+        )
+        return AutonomousDraftResponse(
+            project=self.get_project(project_id),
+            export=export,
+            run=run,
+        )
+
+    def _advance_real_autonomous_run_once(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> tuple[bool, bool]:
+        run = self._require_autonomous_run(project_id, run_id)
+        if run.current_step == AutonomousRunStep.PREPARE_ASSETS:
+            return self._advance_base_asset_preparation(project_id, run_id)
+        if run.current_step == AutonomousRunStep.PLAN_ROUTES:
+            response = self.compile_h3_production_route_plan(
+                project_id,
+                H3ProductionRoutePlanRequest(
+                    use_language_agent=True,
+                    candidate_count=2,
+                ),
+            )
+            needs_asset = any(
+                decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
+                for decision in response.plan.decisions
+            )
+            with self._lock:
+                document = self._require_project_document(project_id)
+                persisted = next(
+                    item for item in document.autonomous_runs if item.id == run_id
+                )
+                persisted.route_plan_id = response.plan.id
+                if AutonomousRunStep.PLAN_ROUTES not in persisted.completed_steps:
+                    persisted.completed_steps.append(AutonomousRunStep.PLAN_ROUTES)
+                persisted.current_step = (
+                    AutonomousRunStep.PREPARE_SHOT_ASSETS
+                    if needs_asset
+                    else AutonomousRunStep.GENERATE
+                )
+                persisted.waiting_reason = None
+                persisted.updated_at = utc_now()
+                self.repository.save_project(document)
+            return True, False
+        if run.current_step == AutonomousRunStep.PREPARE_SHOT_ASSETS:
+            return self._advance_shot_asset_preparation(project_id, run_id)
+        if run.current_step == AutonomousRunStep.GENERATE:
+            return self._advance_real_video_generation(project_id, run_id)
+        if run.current_step == AutonomousRunStep.QA_AND_REPAIR:
+            return self._advance_real_qa_and_repair(project_id, run_id)
+        if run.current_step == AutonomousRunStep.TIMELINE:
+            self.rebuild_manifest(project_id)
+            if run.render_export:
+                self._advance_autonomous_run(
+                    project_id,
+                    run_id,
+                    completed_step=AutonomousRunStep.TIMELINE,
+                    next_step=AutonomousRunStep.EXPORT,
+                )
+            else:
+                self._finish_autonomous_run(
+                    project_id,
+                    run_id,
+                    status=AutonomousRunStatus.COMPLETE,
+                    completed_steps=[AutonomousRunStep.TIMELINE],
+                )
+            return True, False
+        if run.current_step == AutonomousRunStep.EXPORT:
+            export = self.export_project(project_id, rebuild_manifest=False)
+            self._finish_autonomous_run(
+                project_id,
+                run_id,
+                status=AutonomousRunStatus.COMPLETE,
+                export_id=export.id,
+                completed_steps=[AutonomousRunStep.EXPORT],
+            )
+            return True, False
+        if run.current_step == AutonomousRunStep.COMPLETE:
+            return False, False
+        raise WorkflowConflictError(
+            f"REAL_H3 run cannot advance from {run.current_step.value}"
+        )
+
+    def _advance_base_asset_preparation(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> tuple[bool, bool]:
+        document = self._require_project_document(project_id)
+        core_assets = [
+            asset
+            for asset in document.assets
+            if asset.kind in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}
+        ]
+        for asset in core_assets:
+            approved = self._approved_image_version(asset)
+            if approved is not None:
+                if self._rebind_asset_references(document, asset, approved):
+                    document.project.updated_at = utc_now()
+                    self.repository.save_project(document)
+                    return True, False
+                continue
+            tasks = self.asset_workbench.list_image_tasks(project_id, asset.id)
+            latest = max(tasks, key=lambda item: item.created_at, default=None)
+            if latest is None:
+                self._enqueue_base_asset_image(document, asset, None)
+                return True, False
+            if latest.status in {ImageTaskStatus.QUEUED, ImageTaskStatus.SUBMITTING}:
+                self.advance_image_task(latest.id)
+                return True, False
+            if latest.status == ImageTaskStatus.OUTPUT_MISSING:
+                self.recover_image_task_output(latest.id)
+                return True, False
+            if latest.status == ImageTaskStatus.SUBMIT_UNKNOWN:
+                raise WorkflowConflictError(
+                    f"Image task {latest.id} has an unknown submission result; reconcile it before continuing"
+                )
+            if latest.status == ImageTaskStatus.SUCCEEDED:
+                version = self._find_asset_version(
+                    self._require_project_document(project_id),
+                    latest.output_version_id,
+                )[1]
+                if version.approval_status == ApprovalStatus.DRAFT:
+                    _review, approved_by_agent = self._review_generated_asset(
+                        project_id=project_id,
+                        asset_id=asset.id,
+                        version_id=version.id,
+                    )
+                    if approved_by_agent:
+                        refreshed = self._require_project_document(project_id)
+                        refreshed_asset = self._require_asset_in_document(refreshed, asset.id)
+                        approved_version = self._approved_image_version(refreshed_asset)
+                        assert approved_version is not None
+                        self._rebind_asset_references(
+                            refreshed,
+                            refreshed_asset,
+                            approved_version,
+                        )
+                        refreshed.project.updated_at = utc_now()
+                        self.repository.save_project(refreshed)
+                    return True, False
+                if version.approval_status == ApprovalStatus.REJECTED:
+                    if latest.attempt >= 2:
+                        raise WorkflowConflictError(
+                            f"Automatic visual asset retries exhausted for {asset.name}"
+                        )
+                    self._enqueue_base_asset_image(document, asset, latest)
+                    return True, False
+            if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
+                if latest.attempt >= 2:
+                    raise WorkflowConflictError(
+                        f"Image task retries exhausted for {asset.name}: {latest.error_message or latest.status.value}"
+                    )
+                self._enqueue_base_asset_image(document, asset, latest)
+                return True, False
+        self._advance_autonomous_run(
+            project_id,
+            run_id,
+            completed_step=AutonomousRunStep.PREPARE_ASSETS,
+            next_step=AutonomousRunStep.PLAN_ROUTES,
+        )
+        return True, False
+
+    def _enqueue_base_asset_image(
+        self,
+        document: ProjectDocument,
+        asset: Asset,
+        previous: ImageGenerationTask | None,
+    ) -> ImageGenerationTask:
+        prompt = build_base_asset_prompt(document, asset)
+        if previous is not None:
+            previous_version = self._find_asset_version(
+                self._require_project_document(document.project.id),
+                previous.output_version_id,
+            )[1]
+            if previous_version.review_notes:
+                prompt += (
+                    "\n\n上一候选未通过制片检查。仅修复以下问题，不改变资产身份："
+                    + previous_version.review_notes
+                )
+        descriptor = next(
+            (
+                version.descriptor
+                for version in asset.versions
+                if version.media_type == AssetMediaType.TEXT_REFERENCE
+            ),
+            asset.versions[-1].descriptor,
+        )
+        try:
+            return self.asset_workbench.enqueue_image_task(
+                document.project.id,
+                asset.id,
+                ImageTaskCreateRequest(
+                    operation=ImageOperation.GENERATE,
+                    prompt=prompt,
+                    descriptor=descriptor,
+                ),
+                attempt=(previous.attempt + 1 if previous is not None else 1),
+                retry_of_task_id=previous.id if previous is not None else None,
+            )
+        except AssetProviderConfigurationError as exc:
+            raise WorkflowConflictError(
+                "请先在资产页配置 GPT Image 2 的 URL 和 API Key，再继续真人自动草稿。"
+            ) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def _advance_shot_asset_preparation(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> tuple[bool, bool]:
+        run = self._require_autonomous_run(project_id, run_id)
+        if run.route_plan_id is None:
+            raise WorkflowConflictError("REAL_H3 run has no production route plan")
+        plan = self.repository.get_h3_route_plan(run.route_plan_id)
+        if plan is None:
+            raise ArtifactNotFoundError(run.route_plan_id)
+        document = self._require_project_document(project_id)
+        for decision in sorted(plan.decisions, key=lambda item: item.shot_sequence):
+            if decision.readiness != H3ShotRouteReadiness.NEEDS_ASSET:
+                continue
+            shot = self._require_shot_in_document(document, decision.shot_id)
+            for preparation in decision.asset_preparations:
+                if preparation.approved_version_id is not None:
+                    continue
+                if preparation.asset_id is None:
+                    self._create_keyframe_asset(document, plan, decision, preparation)
+                    return True, False
+                tasks = self.asset_workbench.list_image_tasks(
+                    project_id,
+                    preparation.asset_id,
+                )
+                latest = max(tasks, key=lambda item: item.created_at, default=None)
+                if latest is None:
+                    task = self._enqueue_keyframe_image(
+                        document,
+                        shot,
+                        preparation,
+                        None,
+                    )
+                    preparation.image_task_ids.append(task.id)
+                    preparation.status = H3RouteAssetPreparationStatus.GENERATING
+                    plan.updated_at = utc_now()
+                    self.repository.save_h3_route_plan(plan)
+                    return True, False
+                if latest.status in {ImageTaskStatus.QUEUED, ImageTaskStatus.SUBMITTING}:
+                    self.advance_image_task(latest.id)
+                    return True, False
+                if latest.status == ImageTaskStatus.OUTPUT_MISSING:
+                    self.recover_image_task_output(latest.id)
+                    return True, False
+                if latest.status == ImageTaskStatus.SUBMIT_UNKNOWN:
+                    raise WorkflowConflictError(
+                        f"Keyframe task {latest.id} has an unknown submission result"
+                    )
+                if latest.status == ImageTaskStatus.SUCCEEDED:
+                    version = self._find_asset_version(
+                        self._require_project_document(project_id),
+                        latest.output_version_id,
+                    )[1]
+                    if version.approval_status == ApprovalStatus.DRAFT:
+                        review, approved_by_agent = self._review_generated_asset(
+                            project_id=project_id,
+                            asset_id=preparation.asset_id,
+                            version_id=version.id,
+                            shot=shot,
+                            preparation=preparation,
+                        )
+                        preparation.review_summary = review.summary
+                        if approved_by_agent:
+                            preparation.status = H3RouteAssetPreparationStatus.READY
+                            preparation.approved_version_id = version.id
+                            media_input = self._h3_image_input(
+                                self._require_project_document(project_id),
+                                version.id,
+                                preparation.role,
+                            )
+                            decision.media_inputs = [
+                                item
+                                for item in decision.media_inputs
+                                if item.role != preparation.role
+                            ] + [media_input]
+                            decision.missing_inputs = [
+                                item
+                                for item in decision.missing_inputs
+                                if item != preparation.role.value
+                            ]
+                            decision.warnings = [
+                                item
+                                for item in decision.warnings
+                                if "needs an approved start frame" not in item
+                            ]
+                        else:
+                            preparation.status = H3RouteAssetPreparationStatus.REJECTED
+                        plan.updated_at = utc_now()
+                        self.repository.save_h3_route_plan(plan)
+                        return True, False
+                    if version.approval_status == ApprovalStatus.REJECTED:
+                        if latest.attempt >= 2:
+                            raise WorkflowConflictError(
+                                f"Automatic keyframe retries exhausted for shot {shot.sequence}"
+                            )
+                        task = self._enqueue_keyframe_image(
+                            document,
+                            shot,
+                            preparation,
+                            latest,
+                        )
+                        preparation.image_task_ids.append(task.id)
+                        preparation.status = H3RouteAssetPreparationStatus.GENERATING
+                        plan.updated_at = utc_now()
+                        self.repository.save_h3_route_plan(plan)
+                        return True, False
+                if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
+                    if latest.attempt >= 2:
+                        raise WorkflowConflictError(
+                            f"Keyframe task retries exhausted for shot {shot.sequence}"
+                        )
+                    task = self._enqueue_keyframe_image(
+                        document,
+                        shot,
+                        preparation,
+                        latest,
+                    )
+                    preparation.image_task_ids.append(task.id)
+                    preparation.status = H3RouteAssetPreparationStatus.GENERATING
+                    plan.updated_at = utc_now()
+                    self.repository.save_h3_route_plan(plan)
+                    return True, False
+            if all(
+                item.approved_version_id is not None
+                for item in decision.asset_preparations
+            ):
+                decision.readiness = (
+                    H3ShotRouteReadiness.READY_WITH_WARNINGS
+                    if decision.warnings
+                    else H3ShotRouteReadiness.READY
+                )
+                plan.updated_at = utc_now()
+                self.repository.save_h3_route_plan(plan)
+                return True, False
+        self._advance_autonomous_run(
+            project_id,
+            run_id,
+            completed_step=AutonomousRunStep.PREPARE_SHOT_ASSETS,
+            next_step=AutonomousRunStep.GENERATE,
+        )
+        plan.status = H3RoutePlanStatus.READY
+        plan.updated_at = utc_now()
+        self.repository.save_h3_route_plan(plan)
+        return True, False
+
+    def _create_keyframe_asset(
+        self,
+        document: ProjectDocument,
+        plan: H3ProductionRoutePlan,
+        decision: H3ShotRoutePlan,
+        preparation: H3RouteAssetPreparation,
+    ) -> None:
+        bound = self._approved_bound_image_versions(document, decision.shot_id)
+        if not bound:
+            raise WorkflowConflictError(
+                f"Shot {decision.shot_sequence} has no approved visual base for keyframe editing"
+            )
+        primary_asset, primary_version = min(
+            bound,
+            key=lambda item: {
+                AssetKind.LOCATION: 0,
+                AssetKind.CHARACTER: 1,
+                AssetKind.PROP: 2,
+                AssetKind.REFERENCE: 3,
+            }[item[0].kind],
+        )
+        created = self.create_asset(
+            document.project.id,
+            AssetCreateRequest(
+                kind=AssetKind.REFERENCE,
+                name=preparation.name,
+                descriptor=preparation.descriptor,
+            ),
+        )
+        if primary_version.local_path is not None:
+            _seeded = self.import_local_asset_version(
+                document.project.id,
+                created.asset.id,
+                AssetImportLocalRequest(
+                    local_path=primary_version.local_path,
+                    descriptor=(
+                        f"镜头关键帧构图父图，来源于 {primary_asset.name} 的已批准版本"
+                    ),
+                ),
+            )
+        elif primary_version.external_url is not None:
+            _seeded = self.import_url_asset_version(
+                document.project.id,
+                created.asset.id,
+                AssetImportUrlRequest(
+                    external_url=primary_version.external_url,
+                    descriptor=(
+                        f"镜头关键帧构图父图，来源于 {primary_asset.name} 的已批准版本"
+                    ),
+                    media_type=AssetMediaType.IMAGE,
+                ),
+            )
+        else:
+            raise WorkflowConflictError("Approved keyframe base has no usable media")
+        preparation.asset_id = created.asset.id
+        plan.updated_at = utc_now()
+        self.repository.save_h3_route_plan(plan)
+
+    def _enqueue_keyframe_image(
+        self,
+        document: ProjectDocument,
+        shot: ShotPlan,
+        preparation: H3RouteAssetPreparation,
+        previous: ImageGenerationTask | None,
+    ) -> ImageGenerationTask:
+        if preparation.asset_id is None:
+            raise WorkflowConflictError("Keyframe preparation has no target asset")
+        refreshed = self._require_project_document(document.project.id)
+        target = self._require_asset_in_document(refreshed, preparation.asset_id)
+        parent = next(
+            (
+                item
+                for item in reversed(target.versions)
+                if item.media_type == AssetMediaType.IMAGE
+                and item.image_task_id is None
+            ),
+            None,
+        )
+        if parent is None:
+            raise WorkflowConflictError("Keyframe asset has no visual parent")
+        bound = self._approved_bound_image_versions(refreshed, shot.id)
+        input_ids = list(
+            dict.fromkeys(
+                [parent.id, *(version.id for _asset, version in bound)]
+            )
+        )[:16]
+        prompt = build_keyframe_correction_prompt(
+            preparation,
+            preparation.review_summary if previous is not None else None,
+        )
+        try:
+            return self.asset_workbench.enqueue_image_task(
+                refreshed.project.id,
+                target.id,
+                ImageTaskCreateRequest(
+                    operation=ImageOperation.EDIT,
+                    prompt=prompt,
+                    descriptor=preparation.descriptor,
+                    parent_version_id=parent.id,
+                    input_version_ids=input_ids,
+                    primary_input_version_id=parent.id,
+                ),
+                attempt=(previous.attempt + 1 if previous is not None else 1),
+                retry_of_task_id=previous.id if previous is not None else None,
+            )
+        except AssetProviderConfigurationError as exc:
+            raise WorkflowConflictError(
+                "请先在资产页配置 GPT Image 2 的 URL 和 API Key，再继续关键帧准备。"
+            ) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def _review_generated_asset(
+        self,
+        *,
+        project_id: str,
+        asset_id: str,
+        version_id: str,
+        shot: ShotPlan | None = None,
+        preparation: H3RouteAssetPreparation | None = None,
+    ) -> tuple[SemanticAssetReview, bool]:
+        document = self._require_project_document(project_id)
+        asset = self._require_asset_in_document(document, asset_id)
+        version = self._find_asset_version(document, version_id)[1]
+        client = self._require_language_client()
+        try:
+            review = inspect_asset_image(
+                document=document,
+                asset=asset,
+                version=version,
+                client=client,
+                shot=shot,
+                preparation=preparation,
+            )
+        except (LanguageProviderError, ValueError) as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        severe = any(
+            issue.severity.upper() in {"ERROR", "HIGH", "CRITICAL"}
+            for issue in review.issues
+        )
+        approved = review.recommended and review.score >= 3.5 and not severe
+        issue_text = "; ".join(
+            f"{item.code}:{item.message}" for item in review.issues
+        )
+        notes = (
+            f"AUTO_DRAFT GPT-5.6-sol visual review score={review.score:.1f}; "
+            f"{review.summary}"
+            + (f"; issues={issue_text}" if issue_text else "")
+        )
+        self.review_asset_version(
+            project_id,
+            asset_id,
+            version_id,
+            AssetReviewRequest(
+                decision=(
+                    AssetReviewDecision.APPROVED
+                    if approved
+                    else AssetReviewDecision.REJECTED
+                ),
+                notes=notes,
+            ),
+        )
+        return review, approved
+
+    def _advance_real_video_generation(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> tuple[bool, bool]:
+        run = self._require_autonomous_run(project_id, run_id)
+        if run.route_plan_id is None:
+            raise WorkflowConflictError("REAL_H3 run has no production route plan")
+        plan = self.repository.get_h3_route_plan(run.route_plan_id)
+        if plan is None:
+            raise ArtifactNotFoundError(run.route_plan_id)
+        has_unexecuted = any(
+            decision.execution_status == H3ShotRouteExecutionStatus.PLANNED
+            for decision in plan.decisions
+        )
+        if has_unexecuted:
+            self.execute_h3_production_route_plan(
+                project_id,
+                plan.id,
+                H3ProductionRouteExecuteRequest(
+                    reuse_passed_takes=True,
+                    enqueue_new_generations=True,
+                    inspect_reused_takes=False,
+                    semantic_review=False,
+                    rebuild_manifest=False,
+                    render_export=False,
+                ),
+            )
+            return True, False
+        plan = self.repository.get_h3_route_plan(plan.id) or plan
+        task_ids = [task_id for item in plan.decisions for task_id in item.task_ids]
+        tasks = [self._require_task(task_id) for task_id in task_ids]
+        for task in tasks:
+            if task.status in {TaskStatus.QUEUED, TaskStatus.SUBMITTING}:
+                self.advance_task(task.id)
+                return True, False
+            if task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}:
+                advanced = self.advance_task(task.id)
+                waiting = advanced.status in {
+                    TaskStatus.ACKNOWLEDGED,
+                    TaskStatus.RUNNING,
+                }
+                if waiting:
+                    self._set_autonomous_waiting(
+                        project_id,
+                        run_id,
+                        "MiniMax-H3 tasks are still running; the desktop will continue polling.",
+                    )
+                return True, waiting
+            if task.status == TaskStatus.OUTPUT_MISSING:
+                self.recover_task_output(task.id)
+                return True, False
+            if task.status == TaskStatus.SUBMIT_UNKNOWN:
+                raise WorkflowConflictError(
+                    f"H3 task {task.id} submission is unknown; reconcile it before continuing"
+                )
+            if task.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                if task.attempt >= 2:
+                    raise WorkflowConflictError(
+                        f"H3 retries exhausted for shot {task.shot_id}: {task.error_message or task.status.value}"
+                    )
+                retry = self.retry_task(task.id)
+                decision = next(
+                    item for item in plan.decisions if item.shot_id == task.shot_id
+                )
+                decision.task_ids.append(retry.id)
+                plan.updated_at = utc_now()
+                self.repository.save_h3_route_plan(plan)
+                return True, False
+        self._advance_autonomous_run(
+            project_id,
+            run_id,
+            completed_step=AutonomousRunStep.GENERATE,
+            next_step=AutonomousRunStep.QA_AND_REPAIR,
+        )
+        return True, False
+
+    def _advance_real_qa_and_repair(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> tuple[bool, bool]:
+        run = self._require_autonomous_run(project_id, run_id)
+        if run.route_plan_id is None:
+            raise WorkflowConflictError("REAL_H3 run has no production route plan")
+        plan = self.repository.get_h3_route_plan(run.route_plan_id)
+        if plan is None:
+            raise ArtifactNotFoundError(run.route_plan_id)
+        project = self.get_project(project_id)
+        task_ids = {task_id for item in plan.decisions for task_id in item.task_ids}
+        pending = sorted(
+            (
+                take
+                for take in project.takes
+                if take.task_id in task_ids
+                and take.freshness == Freshness.CURRENT
+                and take.qa_status == QaStatus.PENDING
+            ),
+            key=lambda item: next(
+                shot.sequence
+                for shot in project.document.shots
+                if shot.id == item.shot_id
+            ),
+        )
+        if pending:
+            take = pending[0]
+            decision = next(item for item in plan.decisions if item.shot_id == take.shot_id)
+            existing = next(
+                (
+                    report
+                    for report in reversed(project.video_inspections)
+                    if report.take_id == take.id
+                    and report.semantic_status == SemanticReviewStatus.COMPLETE
+                ),
+                None,
+            )
+            if existing is None:
+                response = self.inspect_take_video(
+                    take.id,
+                    VideoInspectionRequest(
+                        include_previous_boundary=True,
+                        semantic_review=True,
+                        max_frames=decision.inspection.max_frames,
+                        review_focus=decision.inspection.review_focus,
+                    ),
+                )
+                report = response.report
+            else:
+                report = existing
+            if report.semantic_status != SemanticReviewStatus.COMPLETE:
+                raise WorkflowConflictError(
+                    f"Semantic video review is unavailable for Take {take.id}"
+                )
+            self._apply_automatic_h3_review(take, report)
+            self._select_best_current_takes(project_id)
+            decision.execution_status = H3ShotRouteExecutionStatus.GENERATED
+            if report.id not in decision.inspection_ids:
+                decision.inspection_ids.append(report.id)
+            decision.inspection_issue_codes = list(
+                dict.fromkeys(
+                    [
+                        *decision.inspection_issue_codes,
+                        *(item.code for item in report.issues),
+                    ]
+                )
+            )
+            plan.updated_at = utc_now()
+            self.repository.save_h3_route_plan(plan)
+            return True, False
+
+        self._select_best_current_takes(project_id)
+        aggregate = self.get_project(project_id)
+        missing = [
+            shot.id
+            for shot in aggregate.document.shots
+            if not any(
+                take.shot_id == shot.id
+                and take.is_selected
+                and take.freshness == Freshness.CURRENT
+                and take.qa_status == QaStatus.PASSED
+                for take in aggregate.takes
+            )
+        ]
+        if not missing:
+            plan.status = H3RoutePlanStatus.COMPLETE
+            plan.updated_at = utc_now()
+            self.repository.save_h3_route_plan(plan)
+            self._advance_autonomous_run(
+                project_id,
+                run_id,
+                completed_step=AutonomousRunStep.QA_AND_REPAIR,
+                next_step=AutonomousRunStep.TIMELINE,
+            )
+            return True, False
+        if run.repair_round >= run.max_repair_rounds:
+            raise WorkflowConflictError(
+                "REAL_H3 AUTO_DRAFT exhausted Director repair rounds for: "
+                + ", ".join(missing)
+            )
+        repaired = self._run_autonomous_director_repairs(project_id, missing)
+        if not repaired:
+            raise WorkflowConflictError(
+                "REAL_H3 AUTO_DRAFT needs an executable Director repair for: "
+                + ", ".join(missing)
+            )
+        with self._lock:
+            plan.status = H3RoutePlanStatus.PARTIAL
+            plan.updated_at = utc_now()
+            self.repository.save_h3_route_plan(plan)
+            document = self._require_project_document(project_id)
+            persisted = next(item for item in document.autonomous_runs if item.id == run_id)
+            persisted.repair_round += 1
+            persisted.route_plan_id = None
+            persisted.current_step = AutonomousRunStep.PLAN_ROUTES
+            persisted.waiting_reason = None
+            persisted.updated_at = utc_now()
+            self.repository.save_project(document)
+        return True, False
+
+    def _apply_automatic_h3_review(
+        self,
+        take: Take,
+        report: VideoInspectionReport,
+    ) -> None:
+        evidence = self.repository.get_route_evidence_for_take(take.id)
+        if evidence is None:
+            raise WorkflowConflictError(f"Route evidence for Take {take.id} is missing")
+        severe = [
+            issue
+            for issue in report.issues
+            if issue.severity.upper() in {"ERROR", "HIGH", "CRITICAL"}
+        ]
+        passed = evidence.technical_passed is True and not severe
+        medium_count = sum(
+            issue.severity.upper() in {"WARN", "WARNING", "MEDIUM"}
+            for issue in report.issues
+        )
+        low_count = sum(issue.severity.upper() == "LOW" for issue in report.issues)
+        score = max(0.0, min(5.0, 4.6 - medium_count * 0.45 - low_count * 0.2))
+        issues = list(report.issues)
+        if not passed and not issues:
+            issues.append(
+                QaIssue(
+                    code="AUTOMATED_TECHNICAL_GATE_FAILED",
+                    severity="ERROR",
+                    message="Provider media did not pass the stored technical gate.",
+                    repair_layer="PROVIDER_RETRY",
+                    category=QaFailureCategory.TECHNICAL_MEDIA,
+                )
+            )
+        notes = (
+            f"AUTO_DRAFT visual candidate judge: {report.summary} "
+            "Audio-stream presence was checked; transcript, speaker identity, and cross-shot "
+            "voice identity remain outside this automated visual decision and require final "
+            "episode review or a future STT/voice tool. User override remains allowed."
+        )
+        self.review_h3_take(
+            take.id,
+            H3TakeReviewRequest(
+                hard_gate_passed=passed,
+                score=score,
+                notes=notes,
+                issues=issues,
+            ),
+        )
+
+    def _set_autonomous_waiting(
+        self,
+        project_id: str,
+        run_id: str,
+        reason: str,
+    ) -> None:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            run = next(item for item in document.autonomous_runs if item.id == run_id)
+            run.status = AutonomousRunStatus.RUNNING
+            run.waiting_reason = reason
+            run.updated_at = utc_now()
+            self.repository.save_project(document)
+
+    def _require_language_client(self) -> LanguageProviderClient:
+        api_key = self.language_config.api_key()
+        base_url = self.language_config.base_url()
+        if not api_key and not is_loopback_openai_url(base_url):
+            raise WorkflowConflictError(
+                "GPT-5.6-sol is required for autonomous visual asset and video review"
+            )
+        return self.language_provider_factory(api_key, base_url)
+
+    @staticmethod
+    def _approved_image_version(asset: Asset) -> AssetVersion | None:
+        if asset.approved_version_id is None:
+            return None
+        return next(
+            (
+                item
+                for item in asset.versions
+                if item.id == asset.approved_version_id
+                and item.approval_status == ApprovalStatus.APPROVED
+                and item.media_type == AssetMediaType.IMAGE
+                and (item.local_path is not None or item.external_url is not None)
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _rebind_asset_references(
+        document: ProjectDocument,
+        asset: Asset,
+        approved: AssetVersion,
+    ) -> bool:
+        version_ids = {item.id for item in asset.versions}
+        changed = False
+        for plan in document.reference_plan:
+            for binding in plan.bindings:
+                if binding.target_id in version_ids and binding.target_id != approved.id:
+                    binding.target_id = approved.id
+                    changed = True
+        return changed
+
+    def _approved_bound_image_versions(
+        self,
+        document: ProjectDocument,
+        shot_id: str,
+    ) -> list[tuple[Asset, AssetVersion]]:
+        plan = self._require_reference_plan(document, shot_id)
+        result: list[tuple[Asset, AssetVersion]] = []
+        seen: set[str] = set()
+        for binding in plan.bindings:
+            try:
+                asset, version = self._find_asset_version(document, binding.target_id)
+            except ArtifactNotFoundError:
+                continue
+            if (
+                version.id in seen
+                or version.approval_status != ApprovalStatus.APPROVED
+                or version.media_type != AssetMediaType.IMAGE
+                or (version.local_path is None and version.external_url is None)
+            ):
+                continue
+            seen.add(version.id)
+            result.append((asset, version))
+        if result:
+            return result
+        for asset in document.assets:
+            version = self._approved_image_version(asset)
+            if version is not None and version.id not in seen:
+                seen.add(version.id)
+                result.append((asset, version))
+        return result
+
+    def _h3_image_input(
+        self,
+        document: ProjectDocument,
+        version_id: str,
+        role: H3MediaRole,
+    ) -> H3MediaInput:
+        _asset, version = self._find_asset_version(document, version_id)
+        if version.local_path is not None:
+            source = H3MediaSource(local_path=version.local_path)
+        elif version.external_url is not None:
+            source = H3MediaSource(external_url=version.external_url)
+        else:
+            raise WorkflowConflictError(f"AssetVersion {version.id} has no usable media")
+        return H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=role,
+            source=source,
+            asset_version_id=version.id,
+        )
+
+    def _prepared_h3_media_inputs(
+        self,
+        document: ProjectDocument,
+        plans: list[H3ProductionRoutePlan],
+    ) -> dict[str, list[H3MediaInput]]:
+        shot_revisions = {item.id: item.revision for item in document.shots}
+        result: dict[str, list[H3MediaInput]] = {}
+        claimed: set[tuple[str, H3MediaRole]] = set()
+        for plan in plans:
+            for decision in plan.decisions:
+                if shot_revisions.get(decision.shot_id) != decision.input_shot_revision:
+                    continue
+                for preparation in decision.asset_preparations:
+                    key = (decision.shot_id, preparation.role)
+                    if (
+                        key in claimed
+                        or preparation.status != H3RouteAssetPreparationStatus.READY
+                        or preparation.approved_version_id is None
+                    ):
+                        continue
+                    try:
+                        media = self._h3_image_input(
+                            document,
+                            preparation.approved_version_id,
+                            preparation.role,
+                        )
+                    except (ArtifactNotFoundError, WorkflowConflictError):
+                        continue
+                    result.setdefault(decision.shot_id, []).append(media)
+                    claimed.add(key)
+        return result
 
     def delete_project(self, project_id: str) -> bool:
         return self.repository.delete_project(project_id)
@@ -878,6 +1874,10 @@ class ShortDramaService:
                 shot_ids=request.shot_ids,
                 candidate_count=request.candidate_count,
                 language_client=language_client,
+                prepared_media_inputs=self._prepared_h3_media_inputs(
+                    document,
+                    existing,
+                ),
             )
         except RoutePlanningError as exc:
             raise WorkflowConflictError(str(exc)) from exc
@@ -914,7 +1914,20 @@ class ShortDramaService:
                 self.repository.save_h3_route_plan(plan)
                 raise WorkflowConflictError(str(exc)) from exc
 
-            if request.enqueue_new_generations and not self.h3_config.api_key():
+            needs_provider_submission = any(
+                item.action == H3ShotRouteAction.GENERATE
+                and item.readiness
+                not in {
+                    H3ShotRouteReadiness.NEEDS_ASSET,
+                    H3ShotRouteReadiness.UNSUPPORTED,
+                }
+                for item in plan.decisions
+            )
+            if (
+                request.enqueue_new_generations
+                and needs_provider_submission
+                and not self.h3_config.api_key()
+            ):
                 raise WorkflowConflictError(
                     "AceData API token is required before enqueueing production H3 tasks"
                 )

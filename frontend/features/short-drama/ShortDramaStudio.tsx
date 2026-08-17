@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowRight,
@@ -35,6 +35,7 @@ import {
 import { pathToFileUrl } from '../../lib/file-url'
 import {
   ShortDramaApi,
+  type AutonomousExecutionTarget,
   type CreativeInputImage,
   type ExportRecord,
   type GenerationTask,
@@ -161,7 +162,15 @@ function retriedTaskIds(tasks: GenerationTask[]): Set<string> {
   )
 }
 
-function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; onAutoDraft: () => void }) {
+function OverviewPanel({
+  project,
+  onAutoDraft,
+  onContinueRealDraft,
+}: {
+  project: ProjectAggregate
+  onAutoDraft: () => void
+  onContinueRealDraft: () => void
+}) {
   const record = project.document.project
   const progress = project.progress
   const latestRun = (project.document.autonomous_runs ?? []).at(-1)
@@ -172,28 +181,37 @@ function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; on
     ['SUBMIT_UNKNOWN', 'OUTPUT_MISSING', 'FAILED'].includes(task.status)
     && !superseded.has(task.id)
   ))
+  const runNeedsAttention = latestRun?.status === 'NEEDS_ATTENTION'
+  const attentionCount = unresolved.length + (runNeedsAttention ? 1 : 0)
   return (
     <div className="space-y-7">
       <section className="overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-zinc-950 to-cyan-500/5 p-6">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 6 · Real Route Core</Badge>
+              <Badge tone="blue">Phase 7 · Real AUTO_DRAFT</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
               {latestRun && <Badge tone={latestRun.status === 'COMPLETE' ? 'green' : latestRun.status === 'FAILED' || latestRun.status === 'NEEDS_ATTENTION' ? 'amber' : 'blue'}>{latestRun.planner} · {latestRun.status}</Badge>}
             </div>
             <h2 className="text-2xl font-semibold text-white">从任意输入到可播放成片的一键闭环</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-300">
-              四种输入、结构化规划、任务、Take、视频观察和时间线共享同一项目核心。当前按钮仍可重跑无付费 Mock 草稿；H3 页面的制片路线 Agent 可优先复用已通过的 768P 真实 Take，只为缺口镜头入队新生成，并自动运行镜内与镜间观察。
+              四种输入、资产准备、H3 路线、异步任务、长镜头抽帧、镜间连续性、Director 有界返工和时间线共享同一可恢复状态。真实运行会自动轮询；只有配置缺失、提交结果未知或重试耗尽才需要介入。
             </p>
           </div>
-          <button className={`${primaryButton} min-w-52 py-3`} onClick={onAutoDraft}>
-            <WandSparkles className="h-4 w-4" />
-            重新生成完整 Mock 草稿
-          </button>
+          <div className="flex min-w-56 flex-col gap-2">
+            {latestRun?.execution_target === 'REAL_H3' && latestRun.status === 'NEEDS_ATTENTION' && <button className={`${primaryButton} py-3`} onClick={onContinueRealDraft}><RefreshCw className="h-4 w-4" />修复阻断后继续真实草稿</button>}
+            {latestRun?.execution_target === 'REAL_H3' && latestRun.status === 'RUNNING' && <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-100"><Loader2 className="h-4 w-4 animate-spin" />真实草稿自动推进中</div>}
+            <button className={secondaryButton} onClick={onAutoDraft}><WandSparkles className="h-4 w-4" />生成无付费 Mock 草稿</button>
+          </div>
         </div>
       </section>
+
+      {latestRun?.execution_target === 'REAL_H3' && (latestRun.waiting_reason || latestRun.error_message) && (
+        <section className={`rounded-xl border p-4 ${latestRun.status === 'NEEDS_ATTENTION' ? 'border-amber-500/20 bg-amber-500/5' : 'border-blue-500/20 bg-blue-500/5'}`}>
+          <div className="flex gap-3"><Clock3 className={`mt-0.5 h-4 w-4 shrink-0 ${latestRun.status === 'NEEDS_ATTENTION' ? 'text-amber-400' : 'text-blue-400'}`} /><div><p className="text-sm font-medium text-zinc-200">{latestRun.current_step} · 第 {latestRun.repair_round}/{latestRun.max_repair_rounds} 轮返工</p><p className="mt-1 text-xs leading-5 text-zinc-400">{latestRun.error_message ?? latestRun.waiting_reason}</p></div></div>
+        </section>
+      )}
 
       {latestRun && (latestRun.warnings?.length ?? 0) > 0 && (
         <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
@@ -246,9 +264,9 @@ function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; on
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <div className="flex items-center justify-between">
             <h3 className="font-medium text-white">需要处理</h3>
-            <Badge tone={unresolved.length ? 'amber' : 'green'}>{unresolved.length}</Badge>
+            <Badge tone={attentionCount ? 'amber' : 'green'}>{attentionCount}</Badge>
           </div>
-          {unresolved.length === 0 ? (
+          {attentionCount === 0 ? (
             <div className="mt-6 flex flex-col items-center py-6 text-center">
               <CheckCircle2 className="h-8 w-8 text-emerald-400" />
               <p className="mt-3 text-sm text-zinc-300">当前没有阻断项</p>
@@ -256,6 +274,7 @@ function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; on
             </div>
           ) : (
             <div className="mt-4 space-y-2">
+              {runNeedsAttention && <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"><div className="flex items-center justify-between gap-2"><span className="text-xs text-zinc-300">自动运行 · {latestRun.current_step}</span><Badge tone="amber">NEEDS_ATTENTION</Badge></div><p className="mt-1 text-xs leading-5 text-zinc-500">{latestRun.error_message ?? '修复配置或对账后继续。'}</p></div>}
               {unresolved.slice(0, 5).map((task) => (
                 <div key={task.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -697,6 +716,7 @@ function CreateProjectPanel({
     mode: SourceMode,
     input: string,
     runMode: RunMode,
+    executionTarget: AutonomousExecutionTarget,
     images: CreativeInputImage[],
   ) => void
   onFixture: () => void
@@ -704,6 +724,7 @@ function CreateProjectPanel({
   const [name, setName] = useState('新的都市短剧')
   const [sourceMode, setSourceMode] = useState<SourceMode>('AUTO_ORIGINAL')
   const [runMode, setRunMode] = useState<RunMode>('AUTO_DRAFT')
+  const [executionTarget, setExecutionTarget] = useState<AutonomousExecutionTarget>('REAL_H3')
   const [input, setInput] = useState('')
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const pickImages = async () => {
@@ -747,6 +768,7 @@ function CreateProjectPanel({
               <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">输入契约</span><select value={sourceMode} onChange={(event) => setSourceMode(event.target.value as SourceMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_ORIGINAL">完全自动创作</option><option value="IMAGE_SEEDED">图片启发创作</option><option value="IDEA_EXPANSION">一句话扩写</option><option value="SCRIPT_LOCKED">已有剧本锁定</option></select></label>
               <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">运行模式</span><select value={runMode} onChange={(event) => setRunMode(event.target.value as RunMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_DRAFT">自动到底</option><option value="GUIDED">可停靠引导</option></select></label>
             </div>
+            {runMode === 'AUTO_DRAFT' && <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">成片目标</span><select value={executionTarget} onChange={(event) => setExecutionTarget(event.target.value as AutonomousExecutionTarget)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="REAL_H3">真人 H3 自动草稿（调用已配置的付费资源）</option><option value="MOCK">无付费流程占位草稿</option></select></label>}
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">{inputLabel}</span><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder={requiresText ? '请输入内容' : '可以留空，让 Agent 自行创作'} className="min-h-28 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm leading-6 text-zinc-200 outline-none focus:border-blue-500" /></label>
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
               <div className="flex items-center justify-between gap-3">
@@ -755,7 +777,7 @@ function CreateProjectPanel({
               </div>
               {imagePaths.length > 0 && <div className="mt-3 space-y-1.5">{imagePaths.map((path) => <div key={path} className="flex items-center justify-between gap-3 rounded-lg bg-zinc-900 px-2.5 py-2"><span className="truncate text-[11px] text-zinc-400">{path.split(/[\\/]/).at(-1)}</span><button type="button" className="text-zinc-600 hover:text-red-300" onClick={() => setImagePaths((current) => current.filter((item) => item !== path))}><X className="h-3.5 w-3.5" /></button></div>)}</div>}
             </div>
-            <button className={`${primaryButton} w-full py-3`} disabled={!canSubmit} onClick={() => onCreate(name.trim(), sourceMode, input.trim(), runMode, images)}><WandSparkles className="h-4 w-4" />{runMode === 'AUTO_DRAFT' ? '一键生成并导出完整草稿' : '建立可编辑制片项目'}</button>
+            <button className={`${primaryButton} w-full py-3`} disabled={!canSubmit} onClick={() => onCreate(name.trim(), sourceMode, input.trim(), runMode, executionTarget, images)}><WandSparkles className="h-4 w-4" />{runMode === 'AUTO_DRAFT' ? executionTarget === 'REAL_H3' ? '启动无人值守真人草稿' : '生成完整 Mock 草稿' : '建立可编辑制片项目'}</button>
           </div>
           <p className="mt-4 text-center text-[11px] text-zinc-600">没有配置 GPT 时使用本地可复现策划回退；真实质量结论不会由 Mock 冒充。</p>
         </div>
@@ -773,6 +795,8 @@ export function ShortDramaStudio() {
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [autoPollTick, setAutoPollTick] = useState(0)
+  const autoAdvanceInFlight = useRef(false)
 
   const perform = useCallback(async <T,>(label: string, action: () => Promise<ResultLike<T>>, onSuccess: (data: T) => void) => {
     setBusyLabel(label)
@@ -831,6 +855,33 @@ export function ShortDramaStudio() {
     else setError(result.error.message)
   }, [activeProjectId])
 
+  useEffect(() => {
+    const run = project?.document.autonomous_runs?.at(-1)
+    if (!project || !run || run.execution_target !== 'REAL_H3' || run.status !== 'RUNNING') return
+    const timer = window.setTimeout(() => {
+      if (autoAdvanceInFlight.current) return
+      autoAdvanceInFlight.current = true
+      void ShortDramaApi.advanceAutonomousRun(project.document.project.id, run.id, 24)
+        .then((result) => {
+          if (!result.ok) {
+            setError(result.error.message)
+            window.setTimeout(() => setAutoPollTick((value) => value + 1), 5000)
+            return
+          }
+          setProject(result.data.project)
+          if (result.data.run.status === 'COMPLETE') {
+            setNotice('真人 AUTO_DRAFT 已完成并导出')
+            setTab('timeline')
+            void loadProjects()
+          } else if (result.data.run.status === 'NEEDS_ATTENTION') {
+            setError(result.data.run.error_message ?? '真人自动草稿需要处理后继续')
+          }
+        })
+        .finally(() => { autoAdvanceInFlight.current = false })
+    }, run.waiting_reason ? 4000 : 500)
+    return () => window.clearTimeout(timer)
+  }, [autoPollTick, loadProjects, project])
+
   const initializeFixture = () => void perform('初始化固定样片', ShortDramaApi.initializeFixture, (data) => {
     setProject(data)
     setActiveProjectId(data.document.project.id)
@@ -844,6 +895,7 @@ export function ShortDramaStudio() {
     sourceMode: SourceMode,
     inputText: string,
     runMode: RunMode,
+    executionTarget: AutonomousExecutionTarget,
     images: CreativeInputImage[],
   ) => {
     const request = {
@@ -855,13 +907,17 @@ export function ShortDramaStudio() {
     }
     if (runMode === 'AUTO_DRAFT') {
       void perform(
-        '自动策划、生成并导出完整草稿',
-        () => ShortDramaApi.createAutonomousDraft({ ...request, render_export: true }),
+        executionTarget === 'REAL_H3' ? '真人无人值守草稿启动' : '自动生成 Mock 草稿',
+        () => ShortDramaApi.createAutonomousDraft({
+          ...request,
+          execution_target: executionTarget,
+          render_export: true,
+        }),
         (data) => {
           setProject(data.project)
           setActiveProjectId(data.project.document.project.id)
           setShowCreate(false)
-          setTab('timeline')
+          setTab(data.run.status === 'COMPLETE' ? 'timeline' : 'overview')
           void loadProjects()
         },
       )
@@ -887,6 +943,20 @@ export function ShortDramaStudio() {
       setTab('timeline')
       void loadProjects()
     })
+  }
+
+  const continueRealDraft = () => {
+    if (!activeProjectId || !project) return
+    const run = project.document.autonomous_runs?.at(-1)
+    if (!run || run.execution_target !== 'REAL_H3') return
+    void perform(
+      '继续真人自动草稿',
+      () => ShortDramaApi.advanceAutonomousRun(activeProjectId, run.id, 24),
+      (data) => {
+        setProject(data.project)
+        if (data.run.status === 'COMPLETE') setTab('timeline')
+      },
+    )
   }
 
   const drain = () => {
@@ -976,7 +1046,7 @@ export function ShortDramaStudio() {
 
   const content = useMemo(() => {
     if (!project) return null
-    if (tab === 'overview') return <OverviewPanel project={project} onAutoDraft={autoDraft} />
+    if (tab === 'overview') return <OverviewPanel project={project} onAutoDraft={autoDraft} onContinueRealDraft={continueRealDraft} />
     if (tab === 'script') return <ScriptPanel project={project} onRevise={reviseLine} />
     if (tab === 'assets') return <AssetWorkbenchPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
     if (tab === 'shots') return <ShotsPanel project={project} onGenerate={generateShot} onRework={localRework} />

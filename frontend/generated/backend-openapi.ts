@@ -896,6 +896,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Advance Autonomous Run */
+        post: operations["advance_autonomous_run_api_short_drama_projects__project_id__autonomous_runs__run_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/enqueue": {
         parameters: {
             query?: never;
@@ -1852,6 +1869,8 @@ export interface components {
         };
         /** AutonomousDraftCreateRequest */
         AutonomousDraftCreateRequest: {
+            /** @default MOCK */
+            execution_target: components["schemas"]["AutonomousExecutionTarget"];
             /** Input Images */
             input_images?: components["schemas"]["CreativeInputImage"][];
             /**
@@ -1876,6 +1895,19 @@ export interface components {
             project: components["schemas"]["ProjectAggregate"];
             run: components["schemas"]["AutonomousRunRecord"];
         };
+        /**
+         * AutonomousExecutionTarget
+         * @enum {string}
+         */
+        AutonomousExecutionTarget: "MOCK" | "REAL_H3";
+        /** AutonomousRunAdvanceRequest */
+        AutonomousRunAdvanceRequest: {
+            /**
+             * Max Actions
+             * @default 24
+             */
+            max_actions: number;
+        };
         /** AutonomousRunRecord */
         AutonomousRunRecord: {
             /** Completed At */
@@ -1887,17 +1919,38 @@ export interface components {
             current_step: components["schemas"]["AutonomousRunStep"];
             /** Error Message */
             error_message?: string | null;
+            /** @default MOCK */
+            execution_target: components["schemas"]["AutonomousExecutionTarget"];
             /** Export Id */
             export_id?: string | null;
             /** Id */
             id: string;
+            /**
+             * Max Repair Rounds
+             * @default 2
+             */
+            max_repair_rounds: number;
             /** Planner */
             planner: string;
             /** Project Id */
             project_id: string;
+            /**
+             * Render Export
+             * @default true
+             */
+            render_export: boolean;
+            /**
+             * Repair Round
+             * @default 0
+             */
+            repair_round: number;
+            /** Route Plan Id */
+            route_plan_id?: string | null;
             status: components["schemas"]["AutonomousRunStatus"];
             /** Updated At */
             updated_at: string;
+            /** Waiting Reason */
+            waiting_reason?: string | null;
             /** Warnings */
             warnings?: string[];
         };
@@ -1910,7 +1963,7 @@ export interface components {
          * AutonomousRunStep
          * @enum {string}
          */
-        AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "EXPORT" | "COMPLETE";
+        AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "PREPARE_ASSETS" | "PLAN_ROUTES" | "PREPARE_SHOT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "EXPORT" | "COMPLETE";
         /** CancelCancellingResponse */
         CancelCancellingResponse: {
             /** Id */
@@ -3089,10 +3142,16 @@ export interface components {
              * @constant
              */
             advisory_only: true;
+            /** Approved Version Id */
+            approved_version_id?: string | null;
+            /** Asset Id */
+            asset_id?: string | null;
             /** Descriptor */
             descriptor: string;
             /** Id */
             id: string;
+            /** Image Task Ids */
+            image_task_ids?: string[];
             /** Input Version Ids */
             input_version_ids?: string[];
             /** Name */
@@ -3101,10 +3160,19 @@ export interface components {
             prompt: string;
             /** Rationale */
             rationale: string;
+            /** Review Summary */
+            review_summary?: string | null;
             role: components["schemas"]["H3MediaRole"];
             /** Shot Id */
             shot_id: string;
+            /** @default PLANNED */
+            status: components["schemas"]["H3RouteAssetPreparationStatus"];
         };
+        /**
+         * H3RouteAssetPreparationStatus
+         * @enum {string}
+         */
+        H3RouteAssetPreparationStatus: "PLANNED" | "GENERATING" | "READY" | "REJECTED";
         /**
          * H3RoutePlanStatus
          * @enum {string}
@@ -3119,7 +3187,7 @@ export interface components {
          * H3ShotRouteExecutionStatus
          * @enum {string}
          */
-        H3ShotRouteExecutionStatus: "PLANNED" | "REUSED" | "QUEUED" | "SKIPPED";
+        H3ShotRouteExecutionStatus: "PLANNED" | "REUSED" | "QUEUED" | "GENERATED" | "SKIPPED";
         /** H3ShotRoutePlan */
         H3ShotRoutePlan: {
             action: components["schemas"]["H3ShotRouteAction"];
@@ -7936,6 +8004,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutoDraftResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    advance_autonomous_run_api_short_drama_projects__project_id__autonomous_runs__run_id__advance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutonomousRunAdvanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutonomousDraftResponse"];
                 };
             };
             /** @description Client Error */

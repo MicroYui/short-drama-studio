@@ -19,6 +19,7 @@ from short_drama.h3_models import (
     H3PricingSnapshot,
     H3ProductionRoutePlan,
     H3RouteAssetPreparation,
+    H3RouteAssetPreparationStatus,
     H3RoutePlanStatus,
     H3ShotRouteAction,
     H3ShotRoutePlan,
@@ -114,6 +115,7 @@ def build_h3_production_route_plan(
     shot_ids: list[str],
     candidate_count: int,
     language_client: LanguageProviderClient | None,
+    prepared_media_inputs: dict[str, list[H3MediaInput]] | None = None,
 ) -> H3ProductionRoutePlan:
     selected_ids = set(shot_ids)
     known_ids = {shot.id for shot in document.shots}
@@ -161,6 +163,7 @@ def build_h3_production_route_plan(
             run_by_task=run_by_task,
             evidence_by_take=evidence_by_take,
             inspections_by_take=inspections_by_take,
+            prepared_media_inputs=(prepared_media_inputs or {}).get(shot.id, []),
         )
 
     agent_choices: dict[str, _AgentRouteChoice] = {}
@@ -308,6 +311,7 @@ def _build_candidates(
     run_by_task: dict[str, H3ProviderRun],
     evidence_by_take: dict[str, RouteEvidence],
     inspections_by_take: dict[str, list[VideoInspectionReport]],
+    prepared_media_inputs: list[H3MediaInput],
 ) -> list[_RouteCandidate]:
     del tasks, inspections_by_take
     duration, duration_warnings, supported = _duration_for_h3(shot.duration_seconds)
@@ -409,6 +413,77 @@ def _build_candidates(
                 )
             )
 
+    preparations = _asset_preparations(document, shot, reference_plan)
+    start_preparation = next(
+        (item for item in preparations if item.role == H3MediaRole.FIRST_FRAME),
+        None,
+    )
+    if supported and start_preparation is not None:
+        first_frame = next(
+            (
+                item
+                for item in prepared_media_inputs
+                if item.role == H3MediaRole.FIRST_FRAME
+            ),
+            None,
+        )
+        selected_preparation = start_preparation
+        if first_frame is None:
+            candidates.append(
+                _RouteCandidate(
+                    id=f"frame-first-pending:{shot.id}",
+                    action=H3ShotRouteAction.GENERATE,
+                    route=VideoGenerationRoute.FRAME_FIRST,
+                    prompt=fresh_prompt,
+                    duration_seconds=duration,
+                    media_inputs=[],
+                    rationale=(
+                        "Prepare one shot-specific start frame before H3 because the declared "
+                        "interaction or local rework risk benefits from stronger composition and "
+                        "continuity control. The user may still override this recommendation."
+                    ),
+                    quality_score=600.0,
+                    warnings=[
+                        *duration_warnings,
+                        "The recommended Frame-first route needs an approved start frame before submission.",
+                    ],
+                    missing_inputs=[H3MediaRole.FIRST_FRAME.value],
+                    preparations=[selected_preparation],
+                    readiness=H3ShotRouteReadiness.NEEDS_ASSET,
+                )
+            )
+        else:
+            selected_preparation.status = H3RouteAssetPreparationStatus.READY
+            selected_preparation.approved_version_id = first_frame.asset_version_id
+            try:
+                validate_h3_probe(
+                    route=VideoGenerationRoute.FRAME_FIRST,
+                    prompt=fresh_prompt,
+                    duration_seconds=duration,
+                    media_inputs=[first_frame],
+                )
+            except H3CapabilityError:
+                pass
+            else:
+                candidates.append(
+                    _RouteCandidate(
+                        id=f"frame-first:{shot.id}",
+                        action=H3ShotRouteAction.GENERATE,
+                        route=VideoGenerationRoute.FRAME_FIRST,
+                        prompt=fresh_prompt,
+                        duration_seconds=duration,
+                        media_inputs=[first_frame.model_copy(deep=True)],
+                        rationale=(
+                            "Use the approved shot-specific start frame to control identity, "
+                            "composition, action readiness, and continuity without constraining "
+                            "the terminal performance with a last frame."
+                        ),
+                        quality_score=650.0,
+                        warnings=duration_warnings,
+                        preparations=[selected_preparation],
+                    )
+                )
+
     if supported:
         reference_candidate = _reference_candidate(
             document=document,
@@ -421,7 +496,6 @@ def _build_candidates(
         if reference_candidate is not None:
             candidates.append(reference_candidate)
 
-    preparations = _asset_preparations(document, shot, reference_plan)
     direct_readiness = (
         H3ShotRouteReadiness.READY_WITH_WARNINGS
         if preparations or duration_warnings
@@ -449,7 +523,6 @@ def _build_candidates(
                         else []
                     ),
                 ],
-                preparations=preparations,
                 readiness=direct_readiness,
             )
         )

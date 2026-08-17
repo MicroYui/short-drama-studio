@@ -14,9 +14,9 @@
 
 首版运行在单用户、受信环境中，不设计注册、登录、账号体系、RBAC、多租户、团队成员或分享权限。生产流程中的“批准/确认”是内容状态，不是访问控制。外部模型 API 凭证只作为 Provider 配置处理。
 
-当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider、Phase 3 Azure GPT Image 2 资产工作台，以及 Phase 4 H3 Direct、Frame、Reference 与通用 Director 修复实验。S08 最终拆为两个覆盖镜头并由用户按整体可用标准通过，旧异常 Take 已退出正式时间线。Phase 5 已实现四种输入归一化、`AutonomousRun`、一键 Mock 草稿和长镜头/镜间观察工具。Phase 6 已实现证据优先的 H3 制片路线 Agent，不新增 H3 请求地复用 9 条已通过真实 Take，自动完成 9 镜观察、57.13 秒全 H3 TimelineManifest 和 1080×1920 技术导出。候选路线仍未达到跨项目稳定默认门槛，且整集观看验收与 E007 三次独立闭环尚未完成。
+当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider、Phase 3 Azure GPT Image 2 资产工作台，以及 Phase 4 H3 Direct、Frame、Reference 与通用 Director 修复实验。S08 最终拆为两个覆盖镜头并由用户按整体可用标准通过，旧异常 Take 已退出正式时间线。Phase 5 已实现四种输入归一化、`AutonomousRun`、一键 Mock 草稿和长镜头/镜间观察工具。Phase 6 已实现证据优先的 H3 制片路线 Agent，不新增 H3 请求地复用 9 条已通过真实 Take，自动完成 9 镜观察、57.13 秒全 H3 TimelineManifest 和 1080×1920 技术导出。Phase 7 已把资产准备、H3 异步候选、视频观察、通用 QA、Director 有界修复、Take 选择和导出串为可恢复的真人 `AUTO_DRAFT`，离线从零闭环与桌面自动轮询通过。候选路线仍未达到跨项目稳定默认门槛，真实从零单集、整集观看验收与 E007 三次独立闭环尚未完成。
 
-工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)、[成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)、[Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md) 和 [Phase 6：真实 H3 制片路线与整集复用闭环](16-phase6-real-route-planner.md)。
+工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)、[成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)、[Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md)、[Phase 6：真实 H3 制片路线与整集复用闭环](16-phase6-real-route-planner.md) 和 [Phase 7：从零真人 AUTO_DRAFT](17-phase7-real-autonomous-draft.md)。
 
 ## 证据等级
 

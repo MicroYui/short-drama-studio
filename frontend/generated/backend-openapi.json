@@ -824,6 +824,10 @@
       "AutonomousDraftCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "execution_target": {
+            "$ref": "#/components/schemas/AutonomousExecutionTarget",
+            "default": "MOCK"
+          },
           "input_images": {
             "items": {
               "$ref": "#/components/schemas/CreativeInputImage"
@@ -898,6 +902,28 @@
         "title": "AutonomousDraftResponse",
         "type": "object"
       },
+      "AutonomousExecutionTarget": {
+        "enum": [
+          "MOCK",
+          "REAL_H3"
+        ],
+        "title": "AutonomousExecutionTarget",
+        "type": "string"
+      },
+      "AutonomousRunAdvanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "max_actions": {
+            "default": 24,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Max Actions",
+            "type": "integer"
+          }
+        },
+        "title": "AutonomousRunAdvanceRequest",
+        "type": "object"
+      },
       "AutonomousRunRecord": {
         "additionalProperties": false,
         "properties": {
@@ -937,6 +963,10 @@
             ],
             "title": "Error Message"
           },
+          "execution_target": {
+            "$ref": "#/components/schemas/AutonomousExecutionTarget",
+            "default": "MOCK"
+          },
           "export_id": {
             "anyOf": [
               {
@@ -952,6 +982,13 @@
             "title": "Id",
             "type": "string"
           },
+          "max_repair_rounds": {
+            "default": 2,
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Max Repair Rounds",
+            "type": "integer"
+          },
           "planner": {
             "title": "Planner",
             "type": "string"
@@ -960,12 +997,46 @@
             "title": "Project Id",
             "type": "string"
           },
+          "render_export": {
+            "default": true,
+            "title": "Render Export",
+            "type": "boolean"
+          },
+          "repair_round": {
+            "default": 0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Repair Round",
+            "type": "integer"
+          },
+          "route_plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Plan Id"
+          },
           "status": {
             "$ref": "#/components/schemas/AutonomousRunStatus"
           },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
+          },
+          "waiting_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting Reason"
           },
           "warnings": {
             "items": {
@@ -1002,6 +1073,9 @@
           "NORMALIZE_INPUT",
           "PLAN",
           "IMPORT_INPUT_ASSETS",
+          "PREPARE_ASSETS",
+          "PLAN_ROUTES",
+          "PREPARE_SHOT_ASSETS",
           "GENERATE",
           "QA_AND_REPAIR",
           "TIMELINE",
@@ -4264,6 +4338,28 @@
             "title": "Advisory Only",
             "type": "boolean"
           },
+          "approved_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Version Id"
+          },
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
           "descriptor": {
             "maxLength": 4000,
             "minLength": 1,
@@ -4273,6 +4369,14 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "image_task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Image Task Ids",
+            "type": "array"
           },
           "input_version_ids": {
             "items": {
@@ -4300,12 +4404,28 @@
             "title": "Rationale",
             "type": "string"
           },
+          "review_summary": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Summary"
+          },
           "role": {
             "$ref": "#/components/schemas/H3MediaRole"
           },
           "shot_id": {
             "title": "Shot Id",
             "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/H3RouteAssetPreparationStatus",
+            "default": "PLANNED"
           }
         },
         "required": [
@@ -4319,6 +4439,16 @@
         ],
         "title": "H3RouteAssetPreparation",
         "type": "object"
+      },
+      "H3RouteAssetPreparationStatus": {
+        "enum": [
+          "PLANNED",
+          "GENERATING",
+          "READY",
+          "REJECTED"
+        ],
+        "title": "H3RouteAssetPreparationStatus",
+        "type": "string"
       },
       "H3RoutePlanStatus": {
         "enum": [
@@ -4344,6 +4474,7 @@
           "PLANNED",
           "REUSED",
           "QUEUED",
+          "GENERATED",
           "SKIPPED"
         ],
         "title": "H3ShotRouteExecutionStatus",
@@ -14327,6 +14458,77 @@
           }
         },
         "summary": "Auto Draft",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance": {
+      "post": {
+        "operationId": "advance_autonomous_run_api_short_drama_projects__project_id__autonomous_runs__run_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutonomousRunAdvanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomousDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Advance Autonomous Run",
         "tags": [
           "short-drama"
         ]

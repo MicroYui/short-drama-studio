@@ -52,6 +52,8 @@
 | A008 | `LOCKED` | 采用分离状态模型：产物版本 `DRAFT/APPROVED/SUPERSEDED`，依赖新鲜度 `CURRENT/STALE`，任务 `QUEUED→SUBMITTING→ACKNOWLEDGED→RUNNING→SUCCEEDED/FAILED/CANCELLED` 并处理 `SUBMIT_UNKNOWN/OUTPUT_MISSING`；Take 的可用性、QA 与入选状态彼此独立，TimelineManifest 精确引用版本；上游修改只失效受影响分支，旧产物保留可复现 | A003、P008 |
 | A009 | `LOCKED` | Mock 阶段实现完整闭环当前必需的 schema、模块边界、API 与任务状态机；后续实验产生的新需求通过普通 SQLite migration 和接口类型变更演进。Provider 特有参数留在 Adapter 请求/响应记录中，不污染通用领域模型；不设计万能元数据系统，也不等待全部实验结束再冻结结构 | A001–A008、A010、M001–M012 |
 | A010 | `LOCKED` | 当前只复用 LTX Desktop 的 Apache 应用代码、编辑壳和媒体能力，不集成、分发或评估 LTX 模型权重；视频生成只接 H3，未来若重新开放模型扩展再单独复核权重 License、硬件和质量 | A002、M001 |
+| A011 | `LOCKED` | 视频探测、适应性抽帧、镜内时间序列和相邻镜头边界检查作为 Agent 可调用的通用工具；观察只报告可见证据，Director 给出可覆盖建议，不把建议变成硬门，也不新增单一样片或门场景专用字段 | A006、A008、P007 |
+| A012 | `LOCKED` | 真人 `AUTO_DRAFT` 在同一 SQLite/API 核心上采用有限推进和自动轮询，复用现有资产/H3 任务、Take、QA 和 TimelineManifest；仅配置缺失、提交未知或重试耗尽进入 `NEEDS_ATTENTION`，应用重启后可继续 | A005、A008、P007 |
 
 ## C. 图像、视频、音频与后期路线
 
@@ -105,6 +107,7 @@
 - 2026-08-17：S08 新 F2 自动技术门槛通过但人工硬门槛失败，用户指出人物僵硬、画面观感差且离店方向错误。复盘认定“推门”是本次导演计划文本错误，人物僵硬主要属于路线与首尾帧适配问题；不为此新增门或区域穿越专用字段。导演计划已改为“拉门、转身、跨向店外”，当前默认建议拆成两镜，仍允许用户修改或忽略。
 - 2026-08-17：Phase 5 已完成四种输入归一化、`AutonomousRun`、适应性抽帧、镜内/镜间接触表、语义观察和观察结果到 Director Agent 的通用连接。观察结论是可忽略建议，不把单一样片的门、方向或动作词固化成底层领域字段；详见 [Phase 5 实施记录](15-phase5-autonomous-runner-and-video-observation.md)。
 - 2026-08-17：Phase 6 已完成证据优先的 H3 制片路线。系统在不新增 H3 请求的情况下自动复用 9 条当前版本、非合同冒烟且人工通过的真实 Take，运行逐镜和镜间观察，重建 57.13 秒全 H3 `TimelineManifest`，并完成 1080×1920 带/无字幕技术导出。该结果证明复用型真实执行闭环，不代表 E007 已完成；仍需从零项目的三次独立 `AUTO_DRAFT`、整集人工观看和匿名盲评。详见 [Phase 6 实施记录](16-phase6-real-route-planner.md)。
+- 2026-08-17：Phase 7 已完成可恢复的真人 `AUTO_DRAFT` 第一闭环。离线 Fake Provider 从空输入完成核心资产生成与语义检查、镜头关键帧、H3 异步候选、进程重建恢复、镜内/镜间观察、自动候选裁判、Director 有界修复、Take 选择、TimelineManifest 和导出；通用构图失败会使旧 Take 失效、自动修改镜头意图并重新规划，缺少配置时则持久化为 `NEEDS_ATTENTION`，不会回退 Mock。后端全量 641 项测试、Pyright、TypeScript 和 Vite 生产构建通过。该结果是工程闭环证据，不是新项目真实画面、对白或声线质量证据；详见 [Phase 7 实施记录](17-phase7-real-autonomous-draft.md)。
 
 ## 对话顺序
 

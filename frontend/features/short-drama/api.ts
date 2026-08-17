@@ -11,6 +11,7 @@ export type TimelineManifest = components['schemas']['TimelineManifest']
 export type ExportRecord = components['schemas']['ExportRecord']
 export type SourceMode = components['schemas']['SourceMode']
 export type RunMode = components['schemas']['RunMode']
+export type AutonomousExecutionTarget = components['schemas']['AutonomousExecutionTarget']
 export type OperationKind = components['schemas']['OperationKind']
 export type VideoGenerationRoute = components['schemas']['VideoGenerationRoute']
 export type H3ProviderConfig = components['schemas']['H3ProviderConfigResponse']
@@ -55,6 +56,7 @@ export type VideoInspectionRequest = components['schemas']['VideoInspectionReque
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
 const createAutonomousDraft = makeEndpointClient('/api/short-drama/projects/autonomous-draft', 'post')
+const advanceAutonomousRun = makeEndpointClient('/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance', 'post')
 const initializeFixture = makeEndpointClient('/api/short-drama/fixtures/dont-trust-me', 'post')
 const getProject = makeEndpointClient('/api/short-drama/projects/{project_id}', 'get')
 const autoDraft = makeEndpointClient('/api/short-drama/projects/{project_id}/auto-draft', 'post')
@@ -136,6 +138,16 @@ export const ShortDramaApi = {
   listProjects: () => listProjects(),
   createProject,
   createAutonomousDraft,
+  advanceAutonomousRun: (projectId: string, runId: string, maxActions = 24) => (
+    advanceAutonomousRun(
+      { max_actions: maxActions },
+      undefined,
+      projectPath(
+        projectId,
+        `/autonomous-runs/${encodeURIComponent(runId)}/advance`,
+      ),
+    )
+  ),
   initializeFixture: () => initializeFixture(),
   getProject: (projectId: string) => getProject(undefined, undefined, projectPath(projectId)),
   autoDraft: (projectId: string, renderExport = true) => (

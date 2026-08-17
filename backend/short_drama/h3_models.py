@@ -111,7 +111,15 @@ class H3ShotRouteExecutionStatus(StrEnum):
     PLANNED = "PLANNED"
     REUSED = "REUSED"
     QUEUED = "QUEUED"
+    GENERATED = "GENERATED"
     SKIPPED = "SKIPPED"
+
+
+class H3RouteAssetPreparationStatus(StrEnum):
+    PLANNED = "PLANNED"
+    GENERATING = "GENERATING"
+    READY = "READY"
+    REJECTED = "REJECTED"
 
 
 class H3InspectionPolicy(DomainModel):
@@ -131,6 +139,11 @@ class H3RouteAssetPreparation(DomainModel):
     input_version_ids: list[str] = Field(default_factory=list[str], max_length=16)
     rationale: str = Field(min_length=1, max_length=2000)
     advisory_only: Literal[True] = True
+    status: H3RouteAssetPreparationStatus = H3RouteAssetPreparationStatus.PLANNED
+    asset_id: str | None = None
+    image_task_ids: list[str] = Field(default_factory=list[str], max_length=10)
+    approved_version_id: str | None = None
+    review_summary: str | None = Field(default=None, max_length=4000)
 
 
 class H3ShotRoutePlan(DomainModel):
