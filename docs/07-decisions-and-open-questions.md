@@ -223,7 +223,7 @@ Mock 阶段直接实现当前完整闭环所需的 schema、模块边界、API �
 
 ## 4. 进入真实质量实验前的工程验收门
 
-当前架构与实验协议已经确认。Phase 0–5 已完成从工程基线到无人值守 Mock 运行器与视频观察工具；下一道门是把真实 H3 路线接入自动运行器：
+当前架构与实验协议已经确认。Phase 0–6 已完成从工程基线到无人值守 Mock 运行器、视频观察工具和证据优先的真实 H3 制片路线；下一道门是让从零项目在无人操作下完成资产准备、异步生成、审片和有限重试：
 
 - LTX Desktop 上游构建、测试和桌面打包基线可复现；
 - SQLite/API、持久化 Worker 和固定《别相信我》fixture 完成；
@@ -232,7 +232,8 @@ Mock 阶段直接实现当前完整闭环所需的 schema、模块边界、API �
 - LTX Desktop 应用代码与未采用的 LTX 模型权重保持清晰分离；
 - H3 Adapter 已完成 capability 校验、任务恢复、用量记录和真实冒烟；
 - 四种输入归一化、`AutonomousRun`、适应性抽帧、镜内/镜间观察和观察报告到 Director Agent 已完成；
-- 尚需让 Route Planner 自动选择真实 H3/图像/声音路线，并完成全真人单集 `AUTO_DRAFT`。
+- Route Planner 已能自动复用当前版本中通过的人审 H3 Take，或为缺口镜头编译 Direct、Frame、Reference 生产请求；《别相信我》已完成 9 镜、57.13 秒全 H3 时间线和技术导出；
+- 尚需让没有可复用 Take 的新项目自动完成图像资产准备、H3 异步候选收敛、必要声音路线和 Director 有界重试，并完成 E007 的三次独立 `AUTO_DRAFT` 与整集盲评。
 
 Mock 工程门的实现和验证证据见 [Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)。
 

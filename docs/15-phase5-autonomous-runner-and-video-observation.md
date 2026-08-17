@@ -72,4 +72,4 @@ GPT-5.6-sol 可输出 `ProductionPlan`，包含台词、人物、地点、道具
 - Renderer、Electron main 与 preload：Vite production build 通过；
 - OpenAPI JSON 与 TypeScript 类型已重新生成。
 
-下一阶段把已验证的 H3 路线和 RouteEvidence 接入执行计划，使观察报告驱动真实但有次数上限的 `QA → Director → regenerate` 循环，并完成第一轮全真人单集。
+后续 Phase 6 已把 H3 RouteEvidence 接入证据优先的整集路线计划，在不新增付费调用的情况下复用 9 条已通过真实 Take、自动观察并完成 57.13 秒全 H3 技术导出；详见 [Phase 6 实施记录](16-phase6-real-route-planner.md)。从零项目的 `资产准备 → H3 异步生成 → QA → Director → 有界重试` 仍是下一阶段工作。

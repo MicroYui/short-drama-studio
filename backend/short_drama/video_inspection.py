@@ -255,7 +255,11 @@ class VideoInspector:
                 duration_seconds=previous_probe.duration_seconds,
                 timestamps=[
                     max(0.0, previous_probe.duration_seconds - 0.4),
-                    max(0.0, previous_probe.duration_seconds - 0.05),
+                    max(
+                        0.0,
+                        previous_probe.duration_seconds
+                        - max(0.05, 1.1 / previous_probe.fps),
+                    ),
                 ],
                 output_dir=frames_dir,
                 prefix="previous-boundary",
@@ -441,14 +445,14 @@ class VideoInspector:
             _run_ffmpeg(
                 [
                     "-y",
-                    "-ss",
-                    f"{timestamp:.6f}",
                     "-i",
                     str(media_path),
+                    "-ss",
+                    f"{timestamp:.6f}",
                     "-frames:v",
                     "1",
                     "-vf",
-                    "scale=360:-2:flags=lanczos",
+                    "scale=360:-2:flags=lanczos,format=yuvj420p",
                     "-q:v",
                     "3",
                     str(destination),

@@ -178,14 +178,14 @@ function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; on
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 5 · Autonomous Core</Badge>
+              <Badge tone="blue">Phase 6 · Real Route Core</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
               {latestRun && <Badge tone={latestRun.status === 'COMPLETE' ? 'green' : latestRun.status === 'FAILED' || latestRun.status === 'NEEDS_ATTENTION' ? 'amber' : 'blue'}>{latestRun.planner} · {latestRun.status}</Badge>}
             </div>
             <h2 className="text-2xl font-semibold text-white">从任意输入到可播放成片的一键闭环</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-300">
-              四种输入、结构化规划、任务、Take、视频观察和时间线共享同一项目核心。当前按钮重跑无付费 Mock 草稿；MiniMax-H3 768P 的真实路线证据保留在同一工程中，尚未伪装成全真人自动成片。
+              四种输入、结构化规划、任务、Take、视频观察和时间线共享同一项目核心。当前按钮仍可重跑无付费 Mock 草稿；H3 页面的制片路线 Agent 可优先复用已通过的 768P 真实 Take，只为缺口镜头入队新生成，并自动运行镜内与镜间观察。
             </p>
           </div>
           <button className={`${primaryButton} min-w-52 py-3`} onClick={onAutoDraft}>
@@ -230,7 +230,7 @@ function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; on
       <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <h3 className="font-medium text-white">执行路线短名单</h3>
-          <p className="mt-1 text-xs text-zinc-500">同一 ShotPlan 可表达四条路线；本阶段只验证 contract，不做质量排名。</p>
+          <p className="mt-1 text-xs text-zinc-500">同一 ShotPlan 可表达四条路线；实际选择由已审 RouteEvidence、可复用 Take、批准资产与通用失败风险共同决定。</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {Array.from(new Set(project.document.execution_plan.map((entry) => entry.strategy))).map((strategy) => (
               <div key={strategy} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">

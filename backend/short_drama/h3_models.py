@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import ConfigDict, Field, model_validator
 
 from short_drama.models import (
     DomainModel,
     EvidencePurpose,
+    ExportRecord,
     GenerationTask,
     ProjectAggregate,
     QaIssue,
+    QaFailureCategory,
     RouteEvidence,
     Take,
+    TimelineManifest,
+    VideoInspectionReport,
+    VideoInspectionScope,
     VideoGenerationRoute,
 )
 
@@ -79,6 +85,152 @@ class H3ProbeRequest(DomainModel):
             if self.learning_objective is None or not self.learning_objective.strip():
                 raise ValueError("A QUALITY_PROBE requires a learning_objective")
         return self
+
+
+class H3RoutePlanStatus(StrEnum):
+    READY = "READY"
+    PARTIAL = "PARTIAL"
+    EXECUTING = "EXECUTING"
+    COMPLETE = "COMPLETE"
+    STALE = "STALE"
+
+
+class H3ShotRouteAction(StrEnum):
+    REUSE_TAKE = "REUSE_TAKE"
+    GENERATE = "GENERATE"
+
+
+class H3ShotRouteReadiness(StrEnum):
+    READY = "READY"
+    READY_WITH_WARNINGS = "READY_WITH_WARNINGS"
+    NEEDS_ASSET = "NEEDS_ASSET"
+    UNSUPPORTED = "UNSUPPORTED"
+
+
+class H3ShotRouteExecutionStatus(StrEnum):
+    PLANNED = "PLANNED"
+    REUSED = "REUSED"
+    QUEUED = "QUEUED"
+    SKIPPED = "SKIPPED"
+
+
+class H3InspectionPolicy(DomainModel):
+    scopes: list[VideoInspectionScope] = Field(min_length=1, max_length=2)
+    max_frames: int = Field(ge=6, le=24)
+    semantic_review: bool = True
+    review_focus: str | None = Field(default=None, max_length=2000)
+
+
+class H3RouteAssetPreparation(DomainModel):
+    id: str
+    shot_id: str
+    role: H3MediaRole
+    name: str = Field(min_length=1, max_length=120)
+    descriptor: str = Field(min_length=1, max_length=4000)
+    prompt: str = Field(min_length=1, max_length=32000)
+    input_version_ids: list[str] = Field(default_factory=list[str], max_length=16)
+    rationale: str = Field(min_length=1, max_length=2000)
+    advisory_only: Literal[True] = True
+
+
+class H3ShotRoutePlan(DomainModel):
+    shot_id: str
+    shot_sequence: int = Field(ge=1)
+    input_script_version_id: str
+    input_bible_version_id: str
+    input_shot_revision: int = Field(ge=1)
+    action: H3ShotRouteAction
+    route: VideoGenerationRoute
+    duration_seconds: int = Field(ge=4, le=15)
+    prompt: str = Field(min_length=1, max_length=7000)
+    media_inputs: list[H3MediaInput] = Field(
+        default_factory=list[H3MediaInput],
+        max_length=12,
+    )
+    reuse_take_id: str | None = None
+    route_evidence_ids: list[str] = Field(default_factory=list[str], max_length=100)
+    rationale: str = Field(min_length=1, max_length=3000)
+    risk_ids: list[str] = Field(default_factory=list[str], max_length=20)
+    qa_focus_categories: list[QaFailureCategory] = Field(
+        default_factory=list[QaFailureCategory],
+        max_length=12,
+    )
+    warnings: list[str] = Field(default_factory=list[str], max_length=32)
+    missing_inputs: list[str] = Field(default_factory=list[str], max_length=32)
+    asset_preparations: list[H3RouteAssetPreparation] = Field(
+        default_factory=list[H3RouteAssetPreparation],
+        max_length=4,
+    )
+    candidate_count: int = Field(default=1, ge=1, le=5)
+    inspection: H3InspectionPolicy
+    readiness: H3ShotRouteReadiness
+    execution_status: H3ShotRouteExecutionStatus = H3ShotRouteExecutionStatus.PLANNED
+    task_ids: list[str] = Field(default_factory=list[str], max_length=10)
+    inspection_ids: list[str] = Field(default_factory=list[str], max_length=10)
+    inspection_issue_codes: list[str] = Field(default_factory=list[str], max_length=50)
+    override_allowed: Literal[True] = True
+
+    @model_validator(mode="after")
+    def validate_action_target(self) -> H3ShotRoutePlan:
+        if self.action == H3ShotRouteAction.REUSE_TAKE and self.reuse_take_id is None:
+            raise ValueError("REUSE_TAKE requires reuse_take_id")
+        if self.action == H3ShotRouteAction.GENERATE and self.reuse_take_id is not None:
+            raise ValueError("GENERATE cannot declare reuse_take_id")
+        return self
+
+
+class H3ProductionRoutePlan(DomainModel):
+    id: str
+    project_id: str
+    version: int = Field(ge=1)
+    provider: str = "minimax"
+    model: str = "MiniMax-H3"
+    resolution: str = "768P"
+    status: H3RoutePlanStatus
+    planner: str
+    input_script_version_id: str
+    input_bible_version_id: str
+    decisions: list[H3ShotRoutePlan] = Field(min_length=1)
+    estimated_new_h3_seconds: int = Field(ge=0)
+    estimated_cost_usd: float = Field(ge=0.0)
+    warnings: list[str] = Field(default_factory=list[str], max_length=100)
+    created_at: str
+    updated_at: str
+    executed_at: str | None = None
+
+
+class H3ProductionRoutePlanRequest(DomainModel):
+    shot_ids: list[str] = Field(default_factory=list[str], max_length=100)
+    use_language_agent: bool = True
+    candidate_count: int = Field(default=1, ge=1, le=5)
+
+
+class H3ProductionRoutePlanResponse(DomainModel):
+    plan: H3ProductionRoutePlan
+
+
+class H3ProductionRoutePlanListResponse(DomainModel):
+    plans: list[H3ProductionRoutePlan]
+
+
+class H3ProductionRouteExecuteRequest(DomainModel):
+    reuse_passed_takes: bool = True
+    enqueue_new_generations: bool = False
+    inspect_reused_takes: bool = True
+    semantic_review: bool = True
+    rebuild_manifest: bool = True
+    render_export: bool = False
+
+
+class H3ProductionRouteExecuteResponse(DomainModel):
+    plan: H3ProductionRoutePlan
+    project: ProjectAggregate
+    queued_tasks: list[GenerationTask] = Field(default_factory=list[GenerationTask])
+    inspections: list[VideoInspectionReport] = Field(
+        default_factory=list[VideoInspectionReport]
+    )
+    manifest: TimelineManifest | None = None
+    export: ExportRecord | None = None
 
 
 class H3UrlValue(DomainModel):

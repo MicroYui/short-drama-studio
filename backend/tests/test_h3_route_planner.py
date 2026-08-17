@@ -1,0 +1,364 @@
+"""Offline coverage for evidence-first H3 production route planning."""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import imageio_ffmpeg
+import pytest
+
+from short_drama.h3_models import (
+    H3ProductionRouteExecuteRequest,
+    H3ProductionRoutePlanRequest,
+    H3ProviderConfigUpdate,
+    H3RoutePlanStatus,
+    H3ShotRouteAction,
+    H3ShotRouteExecutionStatus,
+    H3ShotRouteReadiness,
+)
+from short_drama.models import (
+    EvidencePurpose,
+    EvidenceStatus,
+    Freshness,
+    QAReport,
+    QaStatus,
+    Take,
+    TakeAvailability,
+    TaskStatus,
+    VideoGenerationRoute,
+)
+from short_drama.providers.minimax_h3_compiler import build_h3_prompt
+from short_drama.service import ShortDramaService, WorkflowConflictError
+
+
+NOW = "2026-08-17T12:00:00+00:00"
+
+
+def _service(tmp_path: Path) -> ShortDramaService:
+    return ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+    )
+
+
+def _render_video(path: Path, duration: float = 1.0) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [
+            imageio_ffmpeg.get_ffmpeg_exe(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"testsrc2=s=768x1344:r=12:d={duration}",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency=220:sample_rate=48000:duration={duration}",
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def _persist_passed_h3_take(
+    service: ShortDramaService,
+    *,
+    shot_id: str,
+    media_path: Path,
+    selected: bool = False,
+    score: float = 4.5,
+) -> Take:
+    document = service.repository.get_project("project-dont-trust-me")
+    assert document is not None
+    shot = next(item for item in document.shots if item.id == shot_id)
+    task, run, evidence = service._new_h3_task_and_run(
+        document=document,
+        shot_id=shot.id,
+        route=VideoGenerationRoute.DIRECT,
+        duration_seconds=max(4, min(15, round(shot.duration_seconds))),
+        prompt=build_h3_prompt(document, shot),
+        media_inputs=[],
+        purpose=EvidencePurpose.QUALITY_PROBE,
+        learning_objective="Verify a reusable current-version production route.",
+        regression_case_id=None,
+        candidate_index=1,
+        attempt=1,
+        retry_of_task_id=None,
+    )
+    task.status = TaskStatus.SUCCEEDED
+    task.finished_at = NOW
+    task.updated_at = NOW
+    service.repository.save_task(task)
+    service.repository.save_provider_run(run)
+    take = Take(
+        id=f"take-{shot.id}",
+        project_id=document.project.id,
+        shot_id=shot.id,
+        task_id=task.id,
+        candidate_index=1,
+        operation=task.operation,
+        provider="minimax",
+        model="MiniMax-H3",
+        route=VideoGenerationRoute.DIRECT,
+        media_path=str(media_path),
+        thumbnail_path=str(media_path),
+        duration_seconds=1.0,
+        width=768,
+        height=1344,
+        availability=TakeAvailability.AVAILABLE,
+        qa_status=QaStatus.PASSED,
+        is_selected=selected,
+        freshness=Freshness.CURRENT,
+        qa_report=QAReport(
+            id=f"qa-{shot.id}",
+            take_id=f"take-{shot.id}",
+            status=QaStatus.PASSED,
+            hard_gate_passed=True,
+            score=score,
+            issues=[],
+            checks=["technical-media", "human-quality-review"],
+            reviewer_notes="Current-version H3 Take accepted for production reuse.",
+            reviewed_at=NOW,
+            created_at=NOW,
+        ),
+        created_at=NOW,
+    )
+    service.repository.save_take(take)
+    evidence.take_id = take.id
+    evidence.status = EvidenceStatus.REVIEWED
+    evidence.technical_passed = True
+    evidence.hard_gate_passed = True
+    evidence.score = score
+    evidence.notes = "Accepted production-quality evidence."
+    evidence.reviewed_at = NOW
+    service.repository.save_route_evidence(evidence)
+    return take
+
+
+def test_route_plan_reuses_reviewed_h3_takes_and_builds_real_manifest(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    video = tmp_path / "shared-h3.mp4"
+    _render_video(video)
+    for shot in project.document.shots:
+        _persist_passed_h3_take(
+            service,
+            shot_id=shot.id,
+            media_path=video,
+        )
+
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(use_language_agent=False),
+    )
+
+    assert compiled.plan.status == H3RoutePlanStatus.READY
+    assert compiled.plan.estimated_new_h3_seconds == 0
+    assert all(
+        item.action == H3ShotRouteAction.REUSE_TAKE
+        for item in compiled.plan.decisions
+    )
+    executed = service.execute_h3_production_route_plan(
+        project.document.project.id,
+        compiled.plan.id,
+        H3ProductionRouteExecuteRequest(
+            inspect_reused_takes=False,
+            semantic_review=False,
+            rebuild_manifest=True,
+        ),
+    )
+
+    assert executed.plan.status == H3RoutePlanStatus.COMPLETE
+    assert executed.queued_tasks == []
+    assert executed.manifest is not None
+    assert len(executed.manifest.video_clips) == len(project.document.shots)
+    assert {item.role for item in executed.manifest.audio_clips} == {"MODEL_NATIVE_H3"}
+    selected = [item for item in executed.project.takes if item.is_selected]
+    assert len(selected) == len(project.document.shots)
+    assert {item.provider for item in selected} == {"minimax"}
+
+
+def test_route_plan_compiles_long_take_observation_and_advisory_asset_briefs(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    shot = next(item for item in document.shots if item.sequence == 3)
+    shot.duration_seconds = 15.0
+    service.repository.save_project(document)
+
+    compiled = service.compile_h3_production_route_plan(
+        document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+
+    assert decision.action == H3ShotRouteAction.GENERATE
+    assert decision.route == VideoGenerationRoute.DIRECT
+    assert decision.inspection.max_frames == 23
+    assert decision.inspection.scopes == [
+        "INTRA_SHOT",
+        "SHOT_BOUNDARY",
+    ]
+    assert decision.readiness == H3ShotRouteReadiness.READY_WITH_WARNINGS
+    assert decision.asset_preparations
+    assert all(item.advisory_only for item in decision.asset_preparations)
+    assert decision.override_allowed is True
+
+
+def test_route_execution_invokes_intra_shot_and_boundary_observation_tools(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    video = tmp_path / "observed-h3.mp4"
+    _render_video(video)
+    shots = project.document.shots[:2]
+    for shot in shots:
+        _persist_passed_h3_take(service, shot_id=shot.id, media_path=video)
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[item.id for item in shots],
+            use_language_agent=False,
+        ),
+    )
+
+    executed = service.execute_h3_production_route_plan(
+        project.document.project.id,
+        compiled.plan.id,
+        H3ProductionRouteExecuteRequest(
+            inspect_reused_takes=True,
+            semantic_review=False,
+            rebuild_manifest=False,
+        ),
+    )
+
+    assert len(executed.inspections) == 2
+    first, second = executed.inspections
+    assert first.scopes == ["INTRA_SHOT"]
+    assert second.scopes == ["INTRA_SHOT", "SHOT_BOUNDARY"]
+    assert second.boundary_contact_sheet_path is not None
+    assert all(report.samples for report in executed.inspections)
+
+
+def test_route_plan_can_enqueue_production_tasks_without_calling_provider(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    shot = project.document.shots[0]
+    service.update_h3_config(H3ProviderConfigUpdate(api_key="test-key"))
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+            candidate_count=2,
+        ),
+    )
+
+    executed = service.execute_h3_production_route_plan(
+        project.document.project.id,
+        compiled.plan.id,
+        H3ProductionRouteExecuteRequest(
+            enqueue_new_generations=True,
+            inspect_reused_takes=False,
+            rebuild_manifest=False,
+        ),
+    )
+
+    assert executed.plan.status == H3RoutePlanStatus.EXECUTING
+    assert executed.plan.decisions[0].execution_status == H3ShotRouteExecutionStatus.QUEUED
+    assert len(executed.queued_tasks) == 2
+    assert all(item.status == TaskStatus.QUEUED for item in executed.queued_tasks)
+    saved_evidence = service.repository.list_route_evidence(project.document.project.id)
+    assert {item.purpose for item in saved_evidence} == {EvidencePurpose.PRODUCTION}
+
+
+def test_route_plan_becomes_stale_after_shot_revision_changes(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    shot = project.document.shots[0]
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+        ),
+    )
+    document = service.repository.get_project(project.document.project.id)
+    assert document is not None
+    document.shots[0].revision += 1
+    service.repository.save_project(document)
+
+    with pytest.raises(WorkflowConflictError, match="outdated shot revisions"):
+        service.execute_h3_production_route_plan(
+            project.document.project.id,
+            compiled.plan.id,
+            H3ProductionRouteExecuteRequest(rebuild_manifest=False),
+        )
+
+    persisted = service.repository.get_h3_route_plan(compiled.plan.id)
+    assert persisted is not None
+    assert persisted.status == H3RoutePlanStatus.STALE
+
+
+def test_production_route_plan_api_supports_free_dry_run(client) -> None:
+    project = client.post("/api/short-drama/fixtures/dont-trust-me").json()
+    project_id = project["document"]["project"]["id"]
+    shot_id = project["document"]["shots"][0]["id"]
+
+    compiled = client.post(
+        f"/api/short-drama/projects/{project_id}/h3/production-route-plans",
+        json={
+            "shot_ids": [shot_id],
+            "use_language_agent": False,
+            "candidate_count": 1,
+        },
+    )
+    assert compiled.status_code == 200, compiled.text
+    plan = compiled.json()["plan"]
+    assert plan["estimated_new_h3_seconds"] == 5
+    assert plan["decisions"][0]["action"] == "GENERATE"
+
+    listed = client.get(
+        f"/api/short-drama/projects/{project_id}/h3/production-route-plans"
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["plans"][0]["id"] == plan["id"]
+
+    executed = client.post(
+        f"/api/short-drama/projects/{project_id}/h3/production-route-plans/{plan['id']}/execute",
+        json={
+            "enqueue_new_generations": False,
+            "inspect_reused_takes": False,
+            "rebuild_manifest": False,
+        },
+    )
+    assert executed.status_code == 200, executed.text
+    assert executed.json()["plan"]["status"] == "PARTIAL"
+    assert executed.json()["queued_tasks"] == []

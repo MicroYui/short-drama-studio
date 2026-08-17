@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
-from short_drama.h3_models import H3ProviderRun, H3UploadedInput
+from short_drama.h3_models import H3ProductionRoutePlan, H3ProviderRun, H3UploadedInput
 from short_drama.image_models import ImageGenerationTask, ImageTaskStatus
 from short_drama.models import (
     EvidenceStatus,
@@ -179,6 +179,20 @@ class ShortDramaRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_video_inspections_project_shot
                     ON video_inspections(project_id, shot_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS h3_route_plans (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    version INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_h3_route_plans_project_version
+                    ON h3_route_plans(project_id, version);
+                CREATE INDEX IF NOT EXISTS idx_h3_route_plans_project_updated
+                    ON h3_route_plans(project_id, updated_at);
                 """
             )
             task_columns = {
@@ -204,6 +218,9 @@ class ShortDramaRepository:
             )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(4, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, datetime('now'))"
             )
 
     def save_project(self, document: ProjectDocument) -> None:
@@ -715,6 +732,53 @@ class ShortDramaRepository:
             ).fetchall()
         return [
             VideoInspectionReport.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]
+
+    def save_h3_route_plan(self, plan: H3ProductionRoutePlan) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO h3_route_plans(
+                    id, project_id, version, status, created_at, updated_at, record_json
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    updated_at = excluded.updated_at,
+                    record_json = excluded.record_json
+                """,
+                (
+                    plan.id,
+                    plan.project_id,
+                    plan.version,
+                    plan.status.value,
+                    plan.created_at,
+                    plan.updated_at,
+                    plan.model_dump_json(),
+                ),
+            )
+
+    def get_h3_route_plan(self, plan_id: str) -> H3ProductionRoutePlan | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM h3_route_plans WHERE id = ?",
+                (plan_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return H3ProductionRoutePlan.model_validate_json(cast(str, row["record_json"]))
+
+    def list_h3_route_plans(self, project_id: str) -> list[H3ProductionRoutePlan]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM h3_route_plans
+                WHERE project_id = ? ORDER BY version DESC, updated_at DESC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            H3ProductionRoutePlan.model_validate_json(cast(str, row["record_json"]))
             for row in rows
         ]
 

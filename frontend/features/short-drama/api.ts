@@ -17,6 +17,10 @@ export type H3ProviderConfig = components['schemas']['H3ProviderConfigResponse']
 export type H3ProviderRun = components['schemas']['H3ProviderRun']
 export type H3ProbeRequest = components['schemas']['H3ProbeRequest']
 export type H3CompilePreview = components['schemas']['H3CompilePreviewResponse']
+export type H3ProductionRoutePlan = components['schemas']['H3ProductionRoutePlan']
+export type H3ProductionRoutePlanRequest = components['schemas']['H3ProductionRoutePlanRequest']
+export type H3ProductionRouteExecuteRequest = components['schemas']['H3ProductionRouteExecuteRequest']
+export type H3ProductionRouteExecuteResponse = components['schemas']['H3ProductionRouteExecuteResponse']
 export type H3MediaInput = components['schemas']['H3MediaInput']
 export type H3MediaKind = components['schemas']['H3MediaKind']
 export type H3MediaRole = components['schemas']['H3MediaRole']
@@ -73,6 +77,9 @@ const getH3Config = makeEndpointClient('/api/short-drama/providers/minimax-h3', 
 const updateH3Config = makeEndpointClient('/api/short-drama/providers/minimax-h3', 'post')
 const validateH3Config = makeEndpointClient('/api/short-drama/providers/minimax-h3/validate', 'post')
 const previewH3Probe = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/preview', 'post')
+const compileH3ProductionRoutePlan = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/production-route-plans', 'post')
+const listH3ProductionRoutePlans = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/production-route-plans', 'get')
+const executeH3ProductionRoutePlan = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/production-route-plans/{plan_id}/execute', 'post')
 const enqueueH3Probe = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/probes', 'post')
 const listH3Runs = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/runs', 'get')
 const listH3ReconciliationCandidates = makeEndpointClient('/api/short-drama/providers/minimax-h3/reconciliation-candidates', 'get')
@@ -171,6 +178,31 @@ export const ShortDramaApi = {
   validateH3Config: () => validateH3Config(),
   previewH3Probe: (projectId: string, body: H3ProbeRequest) => (
     previewH3Probe(body, undefined, projectPath(projectId, '/h3/preview'))
+  ),
+  compileH3ProductionRoutePlan: (
+    projectId: string,
+    body: H3ProductionRoutePlanRequest,
+  ) => compileH3ProductionRoutePlan(
+    body,
+    undefined,
+    projectPath(projectId, '/h3/production-route-plans'),
+  ),
+  listH3ProductionRoutePlans: (projectId: string) => listH3ProductionRoutePlans(
+    undefined,
+    undefined,
+    projectPath(projectId, '/h3/production-route-plans'),
+  ),
+  executeH3ProductionRoutePlan: (
+    projectId: string,
+    planId: string,
+    body: H3ProductionRouteExecuteRequest,
+  ) => executeH3ProductionRoutePlan(
+    body,
+    undefined,
+    projectPath(
+      projectId,
+      `/h3/production-route-plans/${encodeURIComponent(planId)}/execute`,
+    ),
   ),
   enqueueH3Probe: (projectId: string, body: H3ProbeRequest) => (
     enqueueH3Probe(body, undefined, projectPath(projectId, '/h3/probes'))

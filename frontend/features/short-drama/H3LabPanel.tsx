@@ -27,6 +27,7 @@ import {
   type H3MediaInput,
   type H3MediaKind,
   type H3MediaRole,
+  type H3ProductionRoutePlan,
   type H3ProviderConfig,
   type H3ProviderRun,
   type H3ProbeRequest,
@@ -126,14 +127,14 @@ const evidenceRouteLabels: Record<VideoGenerationRoute, string> = {
 }
 
 function badgeTone(status: string): string {
-  if (status === 'SUCCEEDED' || status === 'PASSED' || status === 'REVIEWED') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  if (status === 'SUCCEEDED' || status === 'PASSED' || status === 'REVIEWED' || status === 'READY' || status === 'COMPLETE' || status === 'REUSED') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
   if (status === 'FAILED' || status === 'REJECTED') return 'border-red-500/30 bg-red-500/10 text-red-300'
-  if (status === 'SUBMIT_UNKNOWN' || status === 'OUTPUT_MISSING') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+  if (status === 'SUBMIT_UNKNOWN' || status === 'OUTPUT_MISSING' || status === 'PARTIAL' || status === 'NEEDS_ASSET' || status === 'UNSUPPORTED' || status === 'SKIPPED') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
   return 'border-blue-500/30 bg-blue-500/10 text-blue-300'
 }
 
 function summarizeRouteEvidence(evidence: RouteEvidence[]): RouteEvidenceSummary {
-  const qualityEvidence = evidence.filter((item) => item.purpose === 'QUALITY_PROBE')
+  const qualityEvidence = evidence.filter((item) => item.purpose !== 'CONTRACT_SMOKE')
   const reviewedEvidence = qualityEvidence.filter((item) => item.status === 'REVIEWED')
   const scores = reviewedEvidence.flatMap((item) => (
     item.score === null || item.score === undefined ? [] : [item.score]
@@ -170,7 +171,7 @@ function summarizeRouteConditions(
   runsByTask: Map<string, H3ProviderRun>,
 ): RouteEvidenceSummary[] {
   const byCondition = new Map<string, RouteEvidence[]>()
-  for (const item of evidence.filter((candidate) => candidate.purpose === 'QUALITY_PROBE')) {
+  for (const item of evidence.filter((candidate) => candidate.purpose !== 'CONTRACT_SMOKE')) {
     const key = routeConditionKey(runsByTask.get(item.task_id), item)
     byCondition.set(key, [...(byCondition.get(key) ?? []), item])
   }
@@ -331,6 +332,7 @@ export function H3LabPanel({
   })
   const [config, setConfig] = useState<H3ProviderConfig | null>(null)
   const [capabilityProfile, setCapabilityProfile] = useState<H3CapabilityProfile | null>(null)
+  const [productionRoutePlans, setProductionRoutePlans] = useState<H3ProductionRoutePlan[]>([])
   const [apiKey, setApiKey] = useState('')
   const [runs, setRuns] = useState<H3ProviderRun[]>([])
   const [runsStatus, setRunsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -351,10 +353,11 @@ export function H3LabPanel({
   }, [selectedShot?.id])
 
   const refreshProviderData = useCallback(async () => {
-    const [configResult, runsResult, profileResult] = await Promise.all([
+    const [configResult, runsResult, profileResult, routePlansResult] = await Promise.all([
       ShortDramaApi.getH3Config(),
       ShortDramaApi.listH3Runs(project.document.project.id),
       ShortDramaApi.getH3CapabilityProfile(project.document.project.id),
+      ShortDramaApi.listH3ProductionRoutePlans(project.document.project.id),
     ])
     if (configResult.ok) setConfig(configResult.data)
     else onError(configResult.error.message)
@@ -367,6 +370,8 @@ export function H3LabPanel({
     }
     if (profileResult.ok) setCapabilityProfile(profileResult.data)
     else onError(profileResult.error.message)
+    if (routePlansResult.ok) setProductionRoutePlans(routePlansResult.data.plans)
+    else onError(routePlansResult.error.message)
   }, [onError, project.document.project.id])
 
   useEffect(() => {
@@ -505,6 +510,42 @@ export function H3LabPanel({
     '验证 AceData 连接',
     ShortDramaApi.validateH3Config,
     setConfig,
+  )
+
+  const compileProductionRoutePlan = () => void run(
+    '编译整集 H3 制片路线',
+    () => ShortDramaApi.compileH3ProductionRoutePlan(
+      project.document.project.id,
+      { shot_ids: [], use_language_agent: true, candidate_count: 1 },
+    ),
+    (result) => setProductionRoutePlans((current) => [
+      result.plan,
+      ...current.filter((item) => item.id !== result.plan.id),
+    ]),
+  )
+
+  const executeProductionRoutePlan = (plan: H3ProductionRoutePlan, enqueueNew: boolean) => void run(
+    enqueueNew ? '复用已通过 Take 并入队缺口镜头' : '应用已通过 Take 并自动视频检查',
+    () => ShortDramaApi.executeH3ProductionRoutePlan(
+      project.document.project.id,
+      plan.id,
+      {
+        reuse_passed_takes: true,
+        enqueue_new_generations: enqueueNew,
+        inspect_reused_takes: true,
+        semantic_review: true,
+        rebuild_manifest: true,
+        render_export: false,
+      },
+    ),
+    (result) => {
+      onProjectChange(result.project)
+      setProductionRoutePlans((current) => [
+        result.plan,
+        ...current.filter((item) => item.id !== result.plan.id),
+      ])
+      void refreshProviderData()
+    },
   )
 
   const compilePreview = () => void run(
@@ -687,6 +728,8 @@ export function H3LabPanel({
 
   const unknownTasks = project.tasks.filter((task) => task.provider === 'minimax' && task.status === 'SUBMIT_UNKNOWN')
   const totalCost = runs.reduce((sum, item) => sum + (item.estimated_cost_usd ?? 0), 0)
+  const latestProductionRoutePlan = productionRoutePlans[0]
+  const productionGenerationCount = latestProductionRoutePlan?.decisions.filter((item) => item.action === 'GENERATE').length ?? 0
   const runsByTask = new Map(runs.map((run) => [run.task_id, run]))
   const routeEvidence = project.route_evidence ?? []
   const evidenceByShotRoute = new Map<string, RouteEvidence[]>()
@@ -709,11 +752,11 @@ export function H3LabPanel({
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <Badge status="RUNNING">Phase 4</Badge>
+              <Badge status="RUNNING">Phase 6</Badge>
               <Badge status="ACKNOWLEDGED">MiniMax-H3 via AceData</Badge>
               <Badge status="SUCCEEDED">768P fixed</Badge>
             </div>
-            <h2 className="mt-3 text-2xl font-semibold text-white">H3 真实路线实验台</h2>
+            <h2 className="mt-3 text-2xl font-semibold text-white">H3 真实制片与路线实验台</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">
               在共享 ShotPlan、任务状态、Take 和 TimelineManifest 上比较 Direct、Frame 与 Reference。提交、轮询、下载、恢复、费用快照和人工审片都持久化；成功下载不等于质量通过，也不会自动入选。
             </p>
@@ -723,6 +766,50 @@ export function H3LabPanel({
             <div className="rounded-xl border border-zinc-800 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-zinc-600">Recorded cost</p><p className="mt-1 text-xl font-semibold text-white">${totalCost.toFixed(2)}</p></div>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">Phase 6 · 整集制片路线 Agent</h3></div>
+            <p className="mt-2 max-w-4xl text-xs leading-5 text-zinc-400">
+              基于当前 ShotPlan、已批准资产、RouteEvidence、失败能力画像和视频观察，逐镜头选择“复用已通过 Take / Direct / 首帧 / 首尾帧 / Reference”。先编译 dry-run；已通过的真实 Take 优先复用，关键帧和拆镜只是可忽略建议。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className={secondaryButton} disabled={busy !== null} onClick={compileProductionRoutePlan}><RefreshCw className="h-3.5 w-3.5" />生成整集路线计划</button>
+            {latestProductionRoutePlan && <button className={primaryButton} disabled={busy !== null} onClick={() => executeProductionRoutePlan(latestProductionRoutePlan, false)}><CheckCircle2 className="h-3.5 w-3.5" />复用 Take + 自动抽帧</button>}
+            {latestProductionRoutePlan && productionGenerationCount > 0 && <button className={secondaryButton} disabled={!config?.can_submit || busy !== null} onClick={() => executeProductionRoutePlan(latestProductionRoutePlan, true)}><Send className="h-3.5 w-3.5" />入队 {productionGenerationCount} 个缺口镜头</button>}
+          </div>
+        </div>
+        {!latestProductionRoutePlan ? (
+          <div className="mt-4 rounded-lg border border-dashed border-zinc-700 px-4 py-8 text-center text-xs text-zinc-500">尚未编译制片路线；此操作不会提交 H3 或产生视频费用。</div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge status={latestProductionRoutePlan.status}>{latestProductionRoutePlan.status}</Badge>
+              <span className="text-xs text-zinc-400">v{latestProductionRoutePlan.version} · {latestProductionRoutePlan.planner}</span>
+              <span className="text-xs text-zinc-500">新生成 {latestProductionRoutePlan.estimated_new_h3_seconds}s · 估算 ${latestProductionRoutePlan.estimated_cost_usd.toFixed(2)}</span>
+            </div>
+            {(latestProductionRoutePlan.warnings?.length ?? 0) > 0 && <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">{latestProductionRoutePlan.warnings?.map((warning) => <p key={warning} className="text-[11px] leading-5 text-amber-100/70">{warning}</p>)}</div>}
+            <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+              {latestProductionRoutePlan.decisions.map((decision) => (
+                <div key={decision.shot_id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div><p className="text-sm font-medium text-zinc-200">S{String(decision.shot_sequence).padStart(2, '0')} · {decision.route}</p><p className="mt-1 text-[10px] text-zinc-600">{decision.action === 'REUSE_TAKE' ? '复用已审真实 Take' : `新生成 ${decision.candidate_count} 个候选`}</p></div>
+                    <div className="flex flex-col items-end gap-1"><Badge status={decision.readiness}>{decision.readiness}</Badge><Badge status={decision.execution_status}>{decision.execution_status}</Badge></div>
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-zinc-400">{decision.rationale}</p>
+                  <div className="mt-3 rounded border border-zinc-800 bg-black/20 px-2.5 py-2 text-[10px] leading-4 text-zinc-500">观察：{decision.inspection.max_frames} 帧 · {decision.inspection.scopes.join(' + ')}{(decision.qa_focus_categories?.length ?? 0) > 0 ? ` · ${decision.qa_focus_categories?.join(', ')}` : ''}</div>
+                  {decision.reuse_take_id && <p className="mt-2 truncate text-[10px] text-emerald-300/70">Take: {decision.reuse_take_id}</p>}
+                  {(decision.inspection_issue_codes?.length ?? 0) > 0 && <p className="mt-2 text-[10px] leading-4 text-amber-300/70">观察提醒：{decision.inspection_issue_codes?.join(', ')}（可忽略或交给 Director Agent）</p>}
+                  {(decision.asset_preparations?.length ?? 0) > 0 && <p className="mt-2 text-[10px] text-amber-300/70">可选资产准备：{decision.asset_preparations?.map((item) => roleLabels[item.role]).join(' + ')}</p>}
+                  {decision.warnings?.map((warning) => <p key={warning} className="mt-1 text-[10px] leading-4 text-amber-200/60">{warning}</p>)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
@@ -750,7 +837,7 @@ export function H3LabPanel({
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {availableShots.map((shot) => {
               const shotEvidence = routeEvidence.filter((evidence) => (
-                evidence.shot_id === shot.id && evidence.purpose === 'QUALITY_PROBE'
+                evidence.shot_id === shot.id && evidence.purpose !== 'CONTRACT_SMOKE'
               ))
               const reviewedCount = shotEvidence.filter((evidence) => evidence.status === 'REVIEWED').length
               return (
@@ -822,7 +909,7 @@ export function H3LabPanel({
               const providerRun = runs.find((item) => item.task_id === task.id)
               const canAdvance = ['QUEUED', 'SUBMITTING', 'ACKNOWLEDGED', 'RUNNING'].includes(task.status)
               const wasRetried = retriedTaskIds.has(task.id)
-              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{wasRetried ? '已保留历史并创建重试' : providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
+              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : providerRun.purpose === 'PRODUCTION' ? '正式制片' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{wasRetried ? '已保留历史并创建重试' : providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
             })}
           </div>
           {unknownTasks.length > 0 && (
@@ -860,7 +947,7 @@ export function H3LabPanel({
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <div className="flex items-center justify-between"><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><h3 className="font-medium text-white">真实 Take 人工审片</h3></div><span className="text-xs text-zinc-600">不自动通过</span></div>
-          {!reviewTake ? <p className="mt-4 rounded-lg border border-dashed border-zinc-800 py-16 text-center text-xs text-zinc-600">H3 输出下载后在这里审片</p> : <div className="mt-4 grid gap-4 sm:grid-cols-[190px_1fr]"><div><video key={reviewTake.id} className="aspect-[9/16] max-h-80 w-full rounded-lg bg-black object-contain" src={pathToFileUrl(reviewTake.media_path)} poster={pathToFileUrl(reviewTake.thumbnail_path)} controls preload="metadata" /><select className={`${inputClass} mt-2 py-2 text-xs`} value={reviewTake.id} onChange={(event) => setReviewTakeId(event.target.value)}>{h3Takes.map((take) => <option key={take.id} value={take.id}>镜头 {project.document.shots.find((shot) => shot.id === take.shot_id)?.sequence} · Take {take.candidate_index} · {take.qa_status}</option>)}</select></div><div><div className="flex flex-wrap gap-2"><Badge status={reviewTake.qa_status}>QA {reviewTake.qa_status}</Badge><Badge status={reviewEvidence?.technical_passed ? 'SUCCEEDED' : 'FAILED'}>技术门槛 {reviewEvidence?.technical_passed ? '通过' : '未通过'}</Badge><Badge status={reviewEvidence?.purpose === 'QUALITY_PROBE' ? 'SUCCEEDED' : 'ACKNOWLEDGED'}>{reviewEvidence?.purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'}</Badge></div><p className="mt-3 text-xs leading-5 text-zinc-500">逐项听看身份、服装、场景、道具、动作、画面瑕疵、锁定台词、说话人、声线、口型与音频。失败必须进入通用分类，供能力画像与导演 Agent 使用。</p>{reviewEvidence?.purpose === 'CONTRACT_SMOKE' && <p className="mt-2 text-xs text-amber-300/80">合同冒烟只验证接口与媒体闭环，不能选入正式时间线。</p>}<label className="mt-3 flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={reviewPassed} onChange={(event) => setReviewPassed(event.target.checked)} />全部严重失败硬门槛通过</label>{!reviewPassed && <div className="mt-3"><span className="text-xs text-zinc-500">失败分类（至少一项）</span><div className="mt-2 flex flex-wrap gap-2">{(Object.keys(failureCategoryLabels) as QaFailureCategory[]).map((category) => <button key={category} type="button" className={`rounded-full border px-2.5 py-1 text-[11px] ${reviewCategories.includes(category) ? 'border-amber-400/50 bg-amber-400/10 text-amber-200' : 'border-zinc-700 text-zinc-500'}`} onClick={() => toggleReviewCategory(category)}>{failureCategoryLabels[category]}</button>)}</div></div>}<label className="mt-3 block"><span className="text-xs text-zinc-500">质量分：{reviewScore.toFixed(1)} / 5</span><input className="mt-2 w-full accent-blue-500" type="range" min={0} max={5} step={0.1} value={reviewScore} onChange={(event) => setReviewScore(Number(event.target.value))} /></label><textarea className={`${inputClass} mt-3 min-h-20 resize-y text-xs leading-5`} placeholder="必填：记录通过/失败的具体画面、台词、声线和口型证据" value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /><div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!reviewNotes.trim() || (!reviewPassed && reviewCategories.length === 0) || busy !== null} onClick={submitReview}>保存审片</button><button className={secondaryButton} disabled={reviewTake.qa_status !== 'PASSED' || reviewTake.is_selected || reviewEvidence?.purpose !== 'QUALITY_PROBE'} onClick={() => selectReviewedTake(reviewTake)}>{reviewTake.is_selected ? '已入选' : '选入时间线'}</button></div></div></div>}
+          {!reviewTake ? <p className="mt-4 rounded-lg border border-dashed border-zinc-800 py-16 text-center text-xs text-zinc-600">H3 输出下载后在这里审片</p> : <div className="mt-4 grid gap-4 sm:grid-cols-[190px_1fr]"><div><video key={reviewTake.id} className="aspect-[9/16] max-h-80 w-full rounded-lg bg-black object-contain" src={pathToFileUrl(reviewTake.media_path)} poster={pathToFileUrl(reviewTake.thumbnail_path)} controls preload="metadata" /><select className={`${inputClass} mt-2 py-2 text-xs`} value={reviewTake.id} onChange={(event) => setReviewTakeId(event.target.value)}>{h3Takes.map((take) => <option key={take.id} value={take.id}>镜头 {project.document.shots.find((shot) => shot.id === take.shot_id)?.sequence} · Take {take.candidate_index} · {take.qa_status}</option>)}</select></div><div><div className="flex flex-wrap gap-2"><Badge status={reviewTake.qa_status}>QA {reviewTake.qa_status}</Badge><Badge status={reviewEvidence?.technical_passed ? 'SUCCEEDED' : 'FAILED'}>技术门槛 {reviewEvidence?.technical_passed ? '通过' : '未通过'}</Badge><Badge status={reviewEvidence?.purpose === 'CONTRACT_SMOKE' ? 'ACKNOWLEDGED' : 'SUCCEEDED'}>{reviewEvidence?.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : reviewEvidence?.purpose === 'PRODUCTION' ? '正式制片' : '质量探针'}</Badge></div><p className="mt-3 text-xs leading-5 text-zinc-500">逐项听看身份、服装、场景、道具、动作、画面瑕疵、锁定台词、说话人、声线、口型与音频。失败必须进入通用分类，供能力画像与导演 Agent 使用。</p>{reviewEvidence?.purpose === 'CONTRACT_SMOKE' && <p className="mt-2 text-xs text-amber-300/80">合同冒烟只验证接口与媒体闭环，不能选入正式时间线。</p>}<label className="mt-3 flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={reviewPassed} onChange={(event) => setReviewPassed(event.target.checked)} />全部严重失败硬门槛通过</label>{!reviewPassed && <div className="mt-3"><span className="text-xs text-zinc-500">失败分类（至少一项）</span><div className="mt-2 flex flex-wrap gap-2">{(Object.keys(failureCategoryLabels) as QaFailureCategory[]).map((category) => <button key={category} type="button" className={`rounded-full border px-2.5 py-1 text-[11px] ${reviewCategories.includes(category) ? 'border-amber-400/50 bg-amber-400/10 text-amber-200' : 'border-zinc-700 text-zinc-500'}`} onClick={() => toggleReviewCategory(category)}>{failureCategoryLabels[category]}</button>)}</div></div>}<label className="mt-3 block"><span className="text-xs text-zinc-500">质量分：{reviewScore.toFixed(1)} / 5</span><input className="mt-2 w-full accent-blue-500" type="range" min={0} max={5} step={0.1} value={reviewScore} onChange={(event) => setReviewScore(Number(event.target.value))} /></label><textarea className={`${inputClass} mt-3 min-h-20 resize-y text-xs leading-5`} placeholder="必填：记录通过/失败的具体画面、台词、声线和口型证据" value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /><div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!reviewNotes.trim() || (!reviewPassed && reviewCategories.length === 0) || busy !== null} onClick={submitReview}>保存审片</button><button className={secondaryButton} disabled={reviewTake.qa_status !== 'PASSED' || reviewTake.is_selected || reviewEvidence?.purpose === 'CONTRACT_SMOKE'} onClick={() => selectReviewedTake(reviewTake)}>{reviewTake.is_selected ? '已入选' : '选入时间线'}</button></div></div></div>}
         </div>
       </section>
 

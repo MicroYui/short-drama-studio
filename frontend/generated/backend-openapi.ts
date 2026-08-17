@@ -964,6 +964,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/h3/production-route-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List H3 Production Route Plans */
+        get: operations["list_h3_production_route_plans_api_short_drama_projects__project_id__h3_production_route_plans_get"];
+        put?: never;
+        /** Compile H3 Production Route Plan */
+        post: operations["compile_h3_production_route_plan_api_short_drama_projects__project_id__h3_production_route_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/h3/production-route-plans/{plan_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute H3 Production Route Plan */
+        post: operations["execute_h3_production_route_plan_api_short_drama_projects__project_id__h3_production_route_plans__plan_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/h3/prompt/compile": {
         parameters: {
             query?: never;
@@ -2324,7 +2359,7 @@ export interface components {
          * EvidencePurpose
          * @enum {string}
          */
-        EvidencePurpose: "CONTRACT_SMOKE" | "QUALITY_PROBE";
+        EvidencePurpose: "CONTRACT_SMOKE" | "QUALITY_PROBE" | "PRODUCTION";
         /**
          * EvidenceStatus
          * @enum {string}
@@ -2694,6 +2729,20 @@ export interface components {
             type: string;
             video_url?: components["schemas"]["H3UrlValue"] | null;
         };
+        /** H3InspectionPolicy */
+        H3InspectionPolicy: {
+            /** Max Frames */
+            max_frames: number;
+            /** Review Focus */
+            review_focus?: string | null;
+            /** Scopes */
+            scopes: components["schemas"]["VideoInspectionScope"][];
+            /**
+             * Semantic Review
+             * @default true
+             */
+            semantic_review: boolean;
+        };
         /** H3MediaInput */
         H3MediaInput: {
             /** Asset Version Id */
@@ -2790,6 +2839,119 @@ export interface components {
             project: components["schemas"]["ProjectAggregate"];
             provider_run: components["schemas"]["H3ProviderRun"];
             task: components["schemas"]["GenerationTask"];
+        };
+        /** H3ProductionRouteExecuteRequest */
+        H3ProductionRouteExecuteRequest: {
+            /**
+             * Enqueue New Generations
+             * @default false
+             */
+            enqueue_new_generations: boolean;
+            /**
+             * Inspect Reused Takes
+             * @default true
+             */
+            inspect_reused_takes: boolean;
+            /**
+             * Rebuild Manifest
+             * @default true
+             */
+            rebuild_manifest: boolean;
+            /**
+             * Render Export
+             * @default false
+             */
+            render_export: boolean;
+            /**
+             * Reuse Passed Takes
+             * @default true
+             */
+            reuse_passed_takes: boolean;
+            /**
+             * Semantic Review
+             * @default true
+             */
+            semantic_review: boolean;
+        };
+        /** H3ProductionRouteExecuteResponse */
+        H3ProductionRouteExecuteResponse: {
+            export?: components["schemas"]["ExportRecord"] | null;
+            /** Inspections */
+            inspections?: components["schemas"]["VideoInspectionReport"][];
+            manifest?: components["schemas"]["TimelineManifest"] | null;
+            plan: components["schemas"]["H3ProductionRoutePlan"];
+            project: components["schemas"]["ProjectAggregate"];
+            /** Queued Tasks */
+            queued_tasks?: components["schemas"]["GenerationTask"][];
+        };
+        /** H3ProductionRoutePlan */
+        H3ProductionRoutePlan: {
+            /** Created At */
+            created_at: string;
+            /** Decisions */
+            decisions: components["schemas"]["H3ShotRoutePlan"][];
+            /** Estimated Cost Usd */
+            estimated_cost_usd: number;
+            /** Estimated New H3 Seconds */
+            estimated_new_h3_seconds: number;
+            /** Executed At */
+            executed_at?: string | null;
+            /** Id */
+            id: string;
+            /** Input Bible Version Id */
+            input_bible_version_id: string;
+            /** Input Script Version Id */
+            input_script_version_id: string;
+            /**
+             * Model
+             * @default MiniMax-H3
+             */
+            model: string;
+            /** Planner */
+            planner: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Provider
+             * @default minimax
+             */
+            provider: string;
+            /**
+             * Resolution
+             * @default 768P
+             */
+            resolution: string;
+            status: components["schemas"]["H3RoutePlanStatus"];
+            /** Updated At */
+            updated_at: string;
+            /** Version */
+            version: number;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** H3ProductionRoutePlanListResponse */
+        H3ProductionRoutePlanListResponse: {
+            /** Plans */
+            plans: components["schemas"]["H3ProductionRoutePlan"][];
+        };
+        /** H3ProductionRoutePlanRequest */
+        H3ProductionRoutePlanRequest: {
+            /**
+             * Candidate Count
+             * @default 1
+             */
+            candidate_count: number;
+            /** Shot Ids */
+            shot_ids?: string[];
+            /**
+             * Use Language Agent
+             * @default true
+             */
+            use_language_agent: boolean;
+        };
+        /** H3ProductionRoutePlanResponse */
+        H3ProductionRoutePlanResponse: {
+            plan: components["schemas"]["H3ProductionRoutePlan"];
         };
         /** H3ProviderConfigResponse */
         H3ProviderConfigResponse: {
@@ -2919,6 +3081,108 @@ export interface components {
             updated_at?: number | null;
             usage?: components["schemas"]["H3TaskUsage"] | null;
         };
+        /** H3RouteAssetPreparation */
+        H3RouteAssetPreparation: {
+            /**
+             * Advisory Only
+             * @default true
+             * @constant
+             */
+            advisory_only: true;
+            /** Descriptor */
+            descriptor: string;
+            /** Id */
+            id: string;
+            /** Input Version Ids */
+            input_version_ids?: string[];
+            /** Name */
+            name: string;
+            /** Prompt */
+            prompt: string;
+            /** Rationale */
+            rationale: string;
+            role: components["schemas"]["H3MediaRole"];
+            /** Shot Id */
+            shot_id: string;
+        };
+        /**
+         * H3RoutePlanStatus
+         * @enum {string}
+         */
+        H3RoutePlanStatus: "READY" | "PARTIAL" | "EXECUTING" | "COMPLETE" | "STALE";
+        /**
+         * H3ShotRouteAction
+         * @enum {string}
+         */
+        H3ShotRouteAction: "REUSE_TAKE" | "GENERATE";
+        /**
+         * H3ShotRouteExecutionStatus
+         * @enum {string}
+         */
+        H3ShotRouteExecutionStatus: "PLANNED" | "REUSED" | "QUEUED" | "SKIPPED";
+        /** H3ShotRoutePlan */
+        H3ShotRoutePlan: {
+            action: components["schemas"]["H3ShotRouteAction"];
+            /** Asset Preparations */
+            asset_preparations?: components["schemas"]["H3RouteAssetPreparation"][];
+            /**
+             * Candidate Count
+             * @default 1
+             */
+            candidate_count: number;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** @default PLANNED */
+            execution_status: components["schemas"]["H3ShotRouteExecutionStatus"];
+            /** Input Bible Version Id */
+            input_bible_version_id: string;
+            /** Input Script Version Id */
+            input_script_version_id: string;
+            /** Input Shot Revision */
+            input_shot_revision: number;
+            inspection: components["schemas"]["H3InspectionPolicy"];
+            /** Inspection Ids */
+            inspection_ids?: string[];
+            /** Inspection Issue Codes */
+            inspection_issue_codes?: string[];
+            /** Media Inputs */
+            media_inputs?: components["schemas"]["H3MediaInput"][];
+            /** Missing Inputs */
+            missing_inputs?: string[];
+            /**
+             * Override Allowed
+             * @default true
+             * @constant
+             */
+            override_allowed: true;
+            /** Prompt */
+            prompt: string;
+            /** Qa Focus Categories */
+            qa_focus_categories?: components["schemas"]["QaFailureCategory"][];
+            /** Rationale */
+            rationale: string;
+            readiness: components["schemas"]["H3ShotRouteReadiness"];
+            /** Reuse Take Id */
+            reuse_take_id?: string | null;
+            /** Risk Ids */
+            risk_ids?: string[];
+            route: components["schemas"]["VideoGenerationRoute"];
+            /** Route Evidence Ids */
+            route_evidence_ids?: string[];
+            /** Shot Id */
+            shot_id: string;
+            /** Shot Sequence */
+            shot_sequence: number;
+            /** Task Ids */
+            task_ids?: string[];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
+         * H3ShotRouteReadiness
+         * @enum {string}
+         */
+        H3ShotRouteReadiness: "READY" | "READY_WITH_WARNINGS" | "NEEDS_ASSET" | "UNSUPPORTED";
         /** H3TakeReviewRequest */
         H3TakeReviewRequest: {
             /** Hard Gate Passed */
@@ -7848,6 +8112,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["H3ProbeResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_h3_production_route_plans_api_short_drama_projects__project_id__h3_production_route_plans_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProductionRoutePlanListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    compile_h3_production_route_plan_api_short_drama_projects__project_id__h3_production_route_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3ProductionRoutePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProductionRoutePlanResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    execute_h3_production_route_plan_api_short_drama_projects__project_id__h3_production_route_plans__plan_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3ProductionRouteExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3ProductionRouteExecuteResponse"];
                 };
             };
             /** @description Client Error */

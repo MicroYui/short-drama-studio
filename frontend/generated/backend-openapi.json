@@ -2299,7 +2299,8 @@
       "EvidencePurpose": {
         "enum": [
           "CONTRACT_SMOKE",
-          "QUALITY_PROBE"
+          "QUALITY_PROBE",
+          "PRODUCTION"
         ],
         "title": "EvidencePurpose",
         "type": "string"
@@ -3272,6 +3273,49 @@
         "title": "H3ContentItem",
         "type": "object"
       },
+      "H3InspectionPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "max_frames": {
+            "maximum": 24.0,
+            "minimum": 6.0,
+            "title": "Max Frames",
+            "type": "integer"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/VideoInspectionScope"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Scopes",
+            "type": "array"
+          },
+          "semantic_review": {
+            "default": true,
+            "title": "Semantic Review",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "scopes",
+          "max_frames"
+        ],
+        "title": "H3InspectionPolicy",
+        "type": "object"
+      },
       "H3MediaInput": {
         "additionalProperties": false,
         "properties": {
@@ -3527,6 +3571,260 @@
           "provider_run"
         ],
         "title": "H3ProbeResponse",
+        "type": "object"
+      },
+      "H3ProductionRouteExecuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enqueue_new_generations": {
+            "default": false,
+            "title": "Enqueue New Generations",
+            "type": "boolean"
+          },
+          "inspect_reused_takes": {
+            "default": true,
+            "title": "Inspect Reused Takes",
+            "type": "boolean"
+          },
+          "rebuild_manifest": {
+            "default": true,
+            "title": "Rebuild Manifest",
+            "type": "boolean"
+          },
+          "render_export": {
+            "default": false,
+            "title": "Render Export",
+            "type": "boolean"
+          },
+          "reuse_passed_takes": {
+            "default": true,
+            "title": "Reuse Passed Takes",
+            "type": "boolean"
+          },
+          "semantic_review": {
+            "default": true,
+            "title": "Semantic Review",
+            "type": "boolean"
+          }
+        },
+        "title": "H3ProductionRouteExecuteRequest",
+        "type": "object"
+      },
+      "H3ProductionRouteExecuteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "export": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExportRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inspections": {
+            "items": {
+              "$ref": "#/components/schemas/VideoInspectionReport"
+            },
+            "title": "Inspections",
+            "type": "array"
+          },
+          "manifest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimelineManifest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/H3ProductionRoutePlan"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "queued_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/GenerationTask"
+            },
+            "title": "Queued Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plan",
+          "project"
+        ],
+        "title": "H3ProductionRouteExecuteResponse",
+        "type": "object"
+      },
+      "H3ProductionRoutePlan": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/H3ShotRoutePlan"
+            },
+            "minItems": 1,
+            "title": "Decisions",
+            "type": "array"
+          },
+          "estimated_cost_usd": {
+            "minimum": 0.0,
+            "title": "Estimated Cost Usd",
+            "type": "number"
+          },
+          "estimated_new_h3_seconds": {
+            "minimum": 0.0,
+            "title": "Estimated New H3 Seconds",
+            "type": "integer"
+          },
+          "executed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executed At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_bible_version_id": {
+            "title": "Input Bible Version Id",
+            "type": "string"
+          },
+          "input_script_version_id": {
+            "title": "Input Script Version Id",
+            "type": "string"
+          },
+          "model": {
+            "default": "MiniMax-H3",
+            "title": "Model",
+            "type": "string"
+          },
+          "planner": {
+            "title": "Planner",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider": {
+            "default": "minimax",
+            "title": "Provider",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "768P",
+            "title": "Resolution",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/H3RoutePlanStatus"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "version",
+          "status",
+          "planner",
+          "input_script_version_id",
+          "input_bible_version_id",
+          "decisions",
+          "estimated_new_h3_seconds",
+          "estimated_cost_usd",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "H3ProductionRoutePlan",
+        "type": "object"
+      },
+      "H3ProductionRoutePlanListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/H3ProductionRoutePlan"
+            },
+            "title": "Plans",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "title": "H3ProductionRoutePlanListResponse",
+        "type": "object"
+      },
+      "H3ProductionRoutePlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_count": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Shot Ids",
+            "type": "array"
+          },
+          "use_language_agent": {
+            "default": true,
+            "title": "Use Language Agent",
+            "type": "boolean"
+          }
+        },
+        "title": "H3ProductionRoutePlanRequest",
+        "type": "object"
+      },
+      "H3ProductionRoutePlanResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/H3ProductionRoutePlan"
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "title": "H3ProductionRoutePlanResponse",
         "type": "object"
       },
       "H3ProviderConfigResponse": {
@@ -3956,6 +4254,291 @@
         ],
         "title": "H3RemoteTask",
         "type": "object"
+      },
+      "H3RouteAssetPreparation": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "descriptor": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Input Version Ids",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "prompt": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/H3MediaRole"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "shot_id",
+          "role",
+          "name",
+          "descriptor",
+          "prompt",
+          "rationale"
+        ],
+        "title": "H3RouteAssetPreparation",
+        "type": "object"
+      },
+      "H3RoutePlanStatus": {
+        "enum": [
+          "READY",
+          "PARTIAL",
+          "EXECUTING",
+          "COMPLETE",
+          "STALE"
+        ],
+        "title": "H3RoutePlanStatus",
+        "type": "string"
+      },
+      "H3ShotRouteAction": {
+        "enum": [
+          "REUSE_TAKE",
+          "GENERATE"
+        ],
+        "title": "H3ShotRouteAction",
+        "type": "string"
+      },
+      "H3ShotRouteExecutionStatus": {
+        "enum": [
+          "PLANNED",
+          "REUSED",
+          "QUEUED",
+          "SKIPPED"
+        ],
+        "title": "H3ShotRouteExecutionStatus",
+        "type": "string"
+      },
+      "H3ShotRoutePlan": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/H3ShotRouteAction"
+          },
+          "asset_preparations": {
+            "items": {
+              "$ref": "#/components/schemas/H3RouteAssetPreparation"
+            },
+            "maxItems": 4,
+            "title": "Asset Preparations",
+            "type": "array"
+          },
+          "candidate_count": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "maximum": 15.0,
+            "minimum": 4.0,
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "execution_status": {
+            "$ref": "#/components/schemas/H3ShotRouteExecutionStatus",
+            "default": "PLANNED"
+          },
+          "input_bible_version_id": {
+            "title": "Input Bible Version Id",
+            "type": "string"
+          },
+          "input_script_version_id": {
+            "title": "Input Script Version Id",
+            "type": "string"
+          },
+          "input_shot_revision": {
+            "minimum": 1.0,
+            "title": "Input Shot Revision",
+            "type": "integer"
+          },
+          "inspection": {
+            "$ref": "#/components/schemas/H3InspectionPolicy"
+          },
+          "inspection_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Inspection Ids",
+            "type": "array"
+          },
+          "inspection_issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Inspection Issue Codes",
+            "type": "array"
+          },
+          "media_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/H3MediaInput"
+            },
+            "maxItems": 12,
+            "title": "Media Inputs",
+            "type": "array"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "override_allowed": {
+            "const": true,
+            "default": true,
+            "title": "Override Allowed",
+            "type": "boolean"
+          },
+          "prompt": {
+            "maxLength": 7000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "qa_focus_categories": {
+            "items": {
+              "$ref": "#/components/schemas/QaFailureCategory"
+            },
+            "maxItems": 12,
+            "title": "Qa Focus Categories",
+            "type": "array"
+          },
+          "rationale": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/H3ShotRouteReadiness"
+          },
+          "reuse_take_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reuse Take Id"
+          },
+          "risk_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Risk Ids",
+            "type": "array"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute"
+          },
+          "route_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Route Evidence Ids",
+            "type": "array"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "shot_sequence": {
+            "minimum": 1.0,
+            "title": "Shot Sequence",
+            "type": "integer"
+          },
+          "task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Task Ids",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shot_id",
+          "shot_sequence",
+          "input_script_version_id",
+          "input_bible_version_id",
+          "input_shot_revision",
+          "action",
+          "route",
+          "duration_seconds",
+          "prompt",
+          "rationale",
+          "inspection",
+          "readiness"
+        ],
+        "title": "H3ShotRoutePlan",
+        "type": "object"
+      },
+      "H3ShotRouteReadiness": {
+        "enum": [
+          "READY",
+          "READY_WITH_WARNINGS",
+          "NEEDS_ASSET",
+          "UNSUPPORTED"
+        ],
+        "title": "H3ShotRouteReadiness",
+        "type": "string"
       },
       "H3TakeReviewRequest": {
         "additionalProperties": false,
@@ -13992,6 +14575,189 @@
           }
         },
         "summary": "Enqueue H3 Probe",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/h3/production-route-plans": {
+      "get": {
+        "operationId": "list_h3_production_route_plans_api_short_drama_projects__project_id__h3_production_route_plans_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProductionRoutePlanListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List H3 Production Route Plans",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "post": {
+        "operationId": "compile_h3_production_route_plan_api_short_drama_projects__project_id__h3_production_route_plans_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3ProductionRoutePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProductionRoutePlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Compile H3 Production Route Plan",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/h3/production-route-plans/{plan_id}/execute": {
+      "post": {
+        "operationId": "execute_h3_production_route_plan_api_short_drama_projects__project_id__h3_production_route_plans__plan_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/H3ProductionRouteExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3ProductionRouteExecuteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Execute H3 Production Route Plan",
         "tags": [
           "short-drama"
         ]

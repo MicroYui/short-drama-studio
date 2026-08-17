@@ -218,6 +218,7 @@ class VideoGenerationRoute(StrEnum):
 class EvidencePurpose(StrEnum):
     CONTRACT_SMOKE = "CONTRACT_SMOKE"
     QUALITY_PROBE = "QUALITY_PROBE"
+    PRODUCTION = "PRODUCTION"
 
 
 class EvidenceStatus(StrEnum):

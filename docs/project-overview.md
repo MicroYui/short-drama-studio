@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟、Phase 3 来源中立资产工作台与 Azure GPT Image 2，以及 Phase 4 固定资产下的 Direct、Frame、Reference 与通用 Director 修复实验。Phase 5 已实现空输入、图片、一句话和锁定剧本的统一规划入口、`AUTO_DRAFT` 无人值守 Mock 闭环，以及媒体探测、适应性抽帧、长镜头镜内观察和相邻镜头边界观察工具。观察结果进入通用 QA 分类与 Director Agent，不新增门或区域穿越专用字段。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟、Phase 3 来源中立资产工作台与 Azure GPT Image 2，以及 Phase 4 固定资产下的 Direct、Frame、Reference 与通用 Director 修复实验。Phase 5 已实现空输入、图片、一句话和锁定剧本的统一规划入口、`AUTO_DRAFT` 无人值守 Mock 闭环和通用视频观察工具。Phase 6 已把这些工具接入证据优先的 H3 制片路线，自动复用 9 条已通过真实 Take、生成镜内/镜间观察，并完成 57.13 秒全 H3 时间线与技术导出。观察结果进入通用 QA 分类与 Director Agent，不新增门或区域穿越专用字段。
 
 ## 结论先行
 
@@ -45,9 +45,10 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 15. [Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)
 16. [成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)
 17. [Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md)
+18. [Phase 6：真实 H3 制片路线与整集复用闭环](16-phase6-real-route-planner.md)
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；代表镜头多路线、人审 RouteEvidence、通用 Director 修复；四种输入归一化、`AutonomousRun`、一键 Mock 草稿，以及可持久化的视频观察报告。当前 9 镜混合时间线为 55.34 秒且技术导出通过，但前 7 镜仍是 Mock 占位，不能冒充真人完整成片。
-- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：让无人值守运行器按镜头自动执行真实 H3/图像/声音路线、候选路线扩展到默认路线所需的有效样本，以及全部镜头使用真实媒体后的真人单集质量验收。
-- 下一步：让 Route Planner 使用现有 H3 能力画像和 VideoInspection 报告选择真实执行路线，在不新增样片特化规则的前提下完成一轮真实单集 `AUTO_DRAFT`。
+- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；代表镜头多路线、人审 RouteEvidence、通用 Director 修复；四种输入归一化、`AutonomousRun`、视频观察报告和证据优先 Route Planner。当前已有 57.13 秒、9 镜全 H3 时间线，带/无字幕技术导出全部通过。
+- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：新项目从图像准备到 H3 异步生成、语义审片、Director 定向重试的一键续跑；跨项目默认路线样本门槛；整集人工观看验收和 E007 三次独立闭环/盲评。
+- 下一步：把 Route Plan 中的缺口资产 brief、生产 H3 任务、观察报告和 Director 修复串成可安全续跑的真实 `AUTO_DRAFT`，再用新项目验证而不重复消耗已有样片。

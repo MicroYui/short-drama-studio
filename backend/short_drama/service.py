@@ -20,6 +20,11 @@ from short_drama.asset_workbench import (
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
+    H3ProductionRouteExecuteRequest,
+    H3ProductionRouteExecuteResponse,
+    H3ProductionRoutePlanListResponse,
+    H3ProductionRoutePlanRequest,
+    H3ProductionRoutePlanResponse,
     H3MediaInput,
     H3MediaKind,
     H3MediaSource,
@@ -31,9 +36,18 @@ from short_drama.h3_models import (
     H3ProviderRun,
     H3ProviderRunsResponse,
     H3ReconciliationCandidatesResponse,
+    H3RoutePlanStatus,
+    H3ShotRouteAction,
+    H3ShotRouteExecutionStatus,
+    H3ShotRouteReadiness,
     H3TakeReviewRequest,
     H3TakeReviewResponse,
     H3TaskActionResponse,
+)
+from short_drama.h3_route_planner import (
+    RoutePlanningError,
+    build_h3_production_route_plan,
+    validate_route_plan_freshness,
 )
 from short_drama.h3_worker import (
     H3ClientFactory,
@@ -102,6 +116,7 @@ from short_drama.models import (
     QaStatus,
     ReviseScriptLineRequest,
     ScriptVersion,
+    SemanticReviewStatus,
     ShotPlan,
     SourceMode,
     SubtitleCue,
@@ -111,6 +126,7 @@ from short_drama.models import (
     TimelineManifest,
     TimelineVideoClip,
     VideoGenerationRoute,
+    VideoInspectionReport,
     VideoInspectionRequest,
     VideoInspectionResponse,
     WorkerDrainResponse,
@@ -833,6 +849,221 @@ class ShortDramaService:
         return build_h3_capability_profile(
             self.repository.list_takes(project_id),
             project_id=project_id,
+        )
+
+    def compile_h3_production_route_plan(
+        self,
+        project_id: str,
+        request: H3ProductionRoutePlanRequest,
+    ) -> H3ProductionRoutePlanResponse:
+        document = self._require_project_document(project_id)
+        language_client = None
+        if request.use_language_agent:
+            api_key = self.language_config.api_key()
+            base_url = self.language_config.base_url()
+            if api_key or is_loopback_openai_url(base_url):
+                language_client = self.language_provider_factory(api_key, base_url)
+        existing = self.repository.list_h3_route_plans(project_id)
+        try:
+            plan = build_h3_production_route_plan(
+                document=document,
+                tasks=self.repository.list_tasks(project_id),
+                takes=self.repository.list_takes(project_id),
+                evidence=self.repository.list_route_evidence(project_id),
+                provider_runs=self.repository.list_provider_runs(project_id),
+                inspections=self.repository.list_video_inspections(project_id),
+                pricing=self.h3_config.pricing_snapshot(),
+                version=max((item.version for item in existing), default=0) + 1,
+                created_at=utc_now(),
+                shot_ids=request.shot_ids,
+                candidate_count=request.candidate_count,
+                language_client=language_client,
+            )
+        except RoutePlanningError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        self.repository.save_h3_route_plan(plan)
+        return H3ProductionRoutePlanResponse(plan=plan)
+
+    def list_h3_production_route_plans(
+        self,
+        project_id: str,
+    ) -> H3ProductionRoutePlanListResponse:
+        self._require_project_document(project_id)
+        return H3ProductionRoutePlanListResponse(
+            plans=self.repository.list_h3_route_plans(project_id)
+        )
+
+    def execute_h3_production_route_plan(
+        self,
+        project_id: str,
+        plan_id: str,
+        request: H3ProductionRouteExecuteRequest,
+    ) -> H3ProductionRouteExecuteResponse:
+        inspection_take_ids: list[str] = []
+        queued_tasks: list[GenerationTask] = []
+        with self._lock:
+            document = self._require_project_document(project_id)
+            plan = self.repository.get_h3_route_plan(plan_id)
+            if plan is None or plan.project_id != project_id:
+                raise ArtifactNotFoundError(plan_id)
+            try:
+                validate_route_plan_freshness(plan, document)
+            except RoutePlanningError as exc:
+                plan.status = H3RoutePlanStatus.STALE
+                plan.updated_at = utc_now()
+                self.repository.save_h3_route_plan(plan)
+                raise WorkflowConflictError(str(exc)) from exc
+
+            if request.enqueue_new_generations and not self.h3_config.api_key():
+                raise WorkflowConflictError(
+                    "AceData API token is required before enqueueing production H3 tasks"
+                )
+            for decision in sorted(plan.decisions, key=lambda item: item.shot_sequence):
+                if decision.action == H3ShotRouteAction.REUSE_TAKE:
+                    if not request.reuse_passed_takes or decision.reuse_take_id is None:
+                        decision.execution_status = H3ShotRouteExecutionStatus.SKIPPED
+                        continue
+                    self.select_take(decision.reuse_take_id)
+                    decision.execution_status = H3ShotRouteExecutionStatus.REUSED
+                    if request.inspect_reused_takes:
+                        inspection_take_ids.append(decision.reuse_take_id)
+                    continue
+
+                if (
+                    decision.readiness
+                    in {H3ShotRouteReadiness.NEEDS_ASSET, H3ShotRouteReadiness.UNSUPPORTED}
+                    or not request.enqueue_new_generations
+                ):
+                    decision.execution_status = H3ShotRouteExecutionStatus.SKIPPED
+                    continue
+                shot = self._require_shot_in_document(document, decision.shot_id)
+                media_inputs = self._resolve_approved_asset_inputs(
+                    document,
+                    decision.media_inputs,
+                )
+                try:
+                    validate_h3_probe(
+                        route=decision.route,
+                        prompt=decision.prompt,
+                        duration_seconds=decision.duration_seconds,
+                        media_inputs=media_inputs,
+                    )
+                except H3CapabilityError as exc:
+                    raise WorkflowConflictError(str(exc)) from exc
+                existing_tasks = self.repository.list_tasks_for_shot(project_id, shot.id)
+                next_candidate = max(
+                    (item.candidate_index for item in existing_tasks),
+                    default=0,
+                ) + 1
+                task_ids: list[str] = []
+                for offset in range(decision.candidate_count):
+                    task, run, route_evidence = self._new_h3_task_and_run(
+                        document=document,
+                        shot_id=shot.id,
+                        route=decision.route,
+                        duration_seconds=decision.duration_seconds,
+                        prompt=decision.prompt,
+                        media_inputs=media_inputs,
+                        purpose=EvidencePurpose.PRODUCTION,
+                        learning_objective=None,
+                        regression_case_id=None,
+                        candidate_index=next_candidate + offset,
+                        attempt=1,
+                        retry_of_task_id=None,
+                    )
+                    self.repository.save_task(task)
+                    self.repository.save_provider_run(run)
+                    self.repository.save_route_evidence(route_evidence)
+                    queued_tasks.append(task)
+                    task_ids.append(task.id)
+                decision.task_ids = task_ids
+                decision.execution_status = H3ShotRouteExecutionStatus.QUEUED
+
+            if queued_tasks:
+                document = self._require_project_document(project_id)
+                document.project.stage = ProjectStage.GENERATING
+                document.project.updated_at = utc_now()
+                self.repository.save_project(document)
+                plan.status = H3RoutePlanStatus.EXECUTING
+            elif all(
+                item.execution_status == H3ShotRouteExecutionStatus.REUSED
+                for item in plan.decisions
+            ):
+                plan.status = H3RoutePlanStatus.COMPLETE
+            else:
+                plan.status = H3RoutePlanStatus.PARTIAL
+            plan.updated_at = utc_now()
+            plan.executed_at = plan.updated_at
+            self.repository.save_h3_route_plan(plan)
+
+        inspections: list[VideoInspectionReport] = []
+        persisted_by_take: dict[str, VideoInspectionReport] = {}
+        for report in self.repository.list_video_inspections(project_id):
+            persisted_by_take[report.take_id] = report
+        for take_id in inspection_take_ids:
+            decision = next(
+                item for item in plan.decisions if item.reuse_take_id == take_id
+            )
+            existing_report = persisted_by_take.get(take_id)
+            if existing_report is not None and (
+                not request.semantic_review
+                or existing_report.semantic_status == SemanticReviewStatus.COMPLETE
+            ):
+                inspections.append(existing_report)
+                if existing_report.id not in decision.inspection_ids:
+                    decision.inspection_ids.append(existing_report.id)
+                decision.inspection_issue_codes = list(
+                    dict.fromkeys(
+                        [
+                            *decision.inspection_issue_codes,
+                            *(item.code for item in existing_report.issues),
+                        ]
+                    )
+                )
+                continue
+            response = self.inspect_take_video(
+                take_id,
+                VideoInspectionRequest(
+                    include_previous_boundary=True,
+                    semantic_review=request.semantic_review,
+                    max_frames=decision.inspection.max_frames,
+                    review_focus=decision.inspection.review_focus,
+                ),
+            )
+            inspections.append(response.report)
+            decision.inspection_ids.append(response.report.id)
+            decision.inspection_issue_codes = list(
+                dict.fromkeys(
+                    [
+                        *decision.inspection_issue_codes,
+                        *(item.code for item in response.report.issues),
+                    ]
+                )
+            )
+
+        manifest = None
+        export = None
+        if request.rebuild_manifest:
+            aggregate = self.get_project(project_id)
+            if aggregate.progress.shots_with_selected_take == aggregate.progress.total_shots:
+                manifest = self.rebuild_manifest(project_id)
+        if request.render_export and manifest is not None:
+            export = self.export_project(project_id, rebuild_manifest=False)
+
+        plan.updated_at = utc_now()
+        if not queued_tasks and all(
+            item.execution_status == H3ShotRouteExecutionStatus.REUSED
+            for item in plan.decisions
+        ):
+            plan.status = H3RoutePlanStatus.COMPLETE
+        self.repository.save_h3_route_plan(plan)
+        return H3ProductionRouteExecuteResponse(
+            plan=plan,
+            project=self.get_project(project_id),
+            queued_tasks=queued_tasks,
+            inspections=inspections,
+            manifest=manifest,
+            export=export,
         )
 
     def decide_director_repair(

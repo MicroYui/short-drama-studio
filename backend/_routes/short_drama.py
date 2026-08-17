@@ -10,6 +10,11 @@ from short_drama.h3_models import (
     H3NotSubmittedResolutionRequest,
     H3ProbeRequest,
     H3ProbeResponse,
+    H3ProductionRouteExecuteRequest,
+    H3ProductionRouteExecuteResponse,
+    H3ProductionRoutePlanListResponse,
+    H3ProductionRoutePlanRequest,
+    H3ProductionRoutePlanResponse,
     H3ProviderConfigResponse,
     H3ProviderConfigUpdate,
     H3ProviderRunsResponse,
@@ -340,6 +345,51 @@ def preview_h3_probe(
 ) -> H3CompilePreviewResponse:
     try:
         return service.preview_h3_probe(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/h3/production-route-plans",
+    response_model=H3ProductionRoutePlanResponse,
+)
+def compile_h3_production_route_plan(
+    project_id: str,
+    request: H3ProductionRoutePlanRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProductionRoutePlanResponse:
+    try:
+        return service.compile_h3_production_route_plan(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/h3/production-route-plans",
+    response_model=H3ProductionRoutePlanListResponse,
+)
+def list_h3_production_route_plans(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProductionRoutePlanListResponse:
+    try:
+        return service.list_h3_production_route_plans(project_id)
+    except ProjectNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/h3/production-route-plans/{plan_id}/execute",
+    response_model=H3ProductionRouteExecuteResponse,
+)
+def execute_h3_production_route_plan(
+    project_id: str,
+    plan_id: str,
+    request: H3ProductionRouteExecuteRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3ProductionRouteExecuteResponse:
+    try:
+        return service.execute_h3_production_route_plan(project_id, plan_id, request)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 
