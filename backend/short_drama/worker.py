@@ -10,8 +10,11 @@ from short_drama.models import (
     GenerationTask,
     MockBehavior,
     QAReport,
+    QaFailureCategory,
     QaIssue,
     QaStatus,
+    ProjectDocument,
+    ShotPlan,
     Take,
     TakeAvailability,
     TaskStatus,
@@ -155,8 +158,14 @@ class PersistentMockWorker:
         if document is None:
             raise InvalidTaskTransition(f"Project {task.project_id} no longer exists")
         shot = next((item for item in document.shots if item.id == task.shot_id), None)
-        if shot is None:
-            raise InvalidTaskTransition(f"Shot {task.shot_id} no longer exists")
+        if shot is None or shot.revision != task.input_shot_revision:
+            task.status = TaskStatus.CANCELLED
+            task.error_code = "SHOT_PLAN_SUPERSEDED"
+            task.error_message = "镜头方案已更新；旧任务不再生成正式候选。"
+            task.finished_at = now
+            task.updated_at = now
+            self.repository.save_task(task)
+            return task
         script = next(
             (item for item in document.script_versions if item.id == task.input_script_version_id),
             None,
@@ -173,6 +182,7 @@ class PersistentMockWorker:
                 severity="INFO",
                 message="第二候选使用轻微不同的占位构图，用于验证 Take 切换。",
                 repair_layer="TAKE_SELECTION",
+                category=QaFailureCategory.COMPOSITION_QUALITY,
             )
         ]
         qa_report = QAReport(
@@ -207,7 +217,7 @@ class PersistentMockWorker:
             availability=TakeAvailability.AVAILABLE,
             qa_status=QaStatus.PASSED,
             is_selected=False,
-            freshness=Freshness.CURRENT,
+            freshness=self._output_freshness(task, document, shot),
             qa_report=qa_report,
             created_at=now,
         )
@@ -220,7 +230,7 @@ class PersistentMockWorker:
             ),
             None,
         )
-        if existing_selected is None:
+        if existing_selected is None and take.freshness == Freshness.CURRENT:
             self.repository.select_take(take.id)
 
         task.status = TaskStatus.SUCCEEDED
@@ -230,6 +240,20 @@ class PersistentMockWorker:
         task.updated_at = now
         self.repository.save_task(task)
         return task
+
+    @staticmethod
+    def _output_freshness(
+        task: GenerationTask,
+        document: ProjectDocument,
+        shot: ShotPlan,
+    ) -> Freshness:
+        if task.input_script_version_id != document.project.current_script_version_id:
+            return Freshness.STALE
+        if task.input_bible_version_id != document.project.current_bible_version_id:
+            return Freshness.STALE
+        if task.input_shot_revision != shot.revision:
+            return Freshness.STALE
+        return Freshness.CURRENT
 
     def _require_task(self, task_id: str) -> GenerationTask:
         task = self.repository.get_task(task_id)

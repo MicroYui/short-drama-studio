@@ -17,8 +17,20 @@ from short_drama.image_models import (
     AssetReviewRequest,
 )
 from short_drama.language_models import LanguageProviderConfigUpdate
-from short_drama.models import AssetKind
-from short_drama.reference_planner import ReferencePackEntryCreateRequest
+from short_drama.models import (
+    AssetKind,
+    DirectorRepairDecision,
+    DirectorRepairStrategy,
+    EnqueueRequest,
+    Freshness,
+    RunMode,
+)
+from short_drama.reference_planner import (
+    DirectorRepairDecisionRequest,
+    ReferencePackEntryCreateRequest,
+    ReplacementShotDraft,
+    parse_director_advice,
+)
 from short_drama.service import ShortDramaService, WorkflowConflictError
 
 
@@ -442,7 +454,240 @@ def test_director_agent_recommends_without_creating_a_generation_gate(
     assert len(fake.generations) == 1
     instructions, input_text = fake.generations[0]
     assert "do not apply a fixed action-count or duration threshold" in instructions
+    assert "Compare prompt retry, keyframe replacement, shot split" in instructions
     assert "Advice never blocks generation" in input_text
+    assert '"provider_capability_profile"' in input_text
+    assert '"repair_strategy_library"' in input_text
+
+
+def test_auto_draft_director_loop_applies_executable_repair(tmp_path: Path) -> None:
+    fake = FakeDirectorLanguageProvider(
+        """{
+          "advisories": [],
+          "repair_options": [
+            {
+              "strategy": "CHANGE_CAMERA",
+              "summary": "Use a rear coverage angle.",
+              "rationale": "It reduces hidden orientation and contact requirements.",
+              "tradeoff": "The face is not visible during this beat.",
+              "recommended": true,
+              "dismissible": true
+            }
+          ],
+          "recommended_strategy": "CHANGE_CAMERA",
+          "proposed_repair": {
+            "decision": "APPLIED",
+            "strategy": "CHANGE_CAMERA",
+            "reason": "Use a simpler coverage angle while preserving the story beat.",
+            "issue_codes": ["HUMAN_CHARACTER_ORIENTATION"],
+            "shot_patch": {
+              "camera": "fixed rear coverage angle"
+            },
+            "split_shots": []
+          }
+        }"""
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _api_key, _base_url: fake,
+    )
+    project = service.initialize_fixture()
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    client = _client(service)
+    project_id = project.document.project.id
+    shot = next(item for item in project.document.shots if item.sequence == 8)
+
+    result = client.post(
+        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/director-loop",
+        json={"user_direction": "Prefer an uninterrupted automatic draft."},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert body["repair_applied"] is True
+    assert body["next_action"] == "REGENERATE_SHOT"
+    updated_shot = next(
+        item for item in body["project"]["document"]["shots"] if item["id"] == shot.id
+    )
+    assert updated_shot["camera"] == "fixed rear coverage angle"
+    assert updated_shot["revision"] == 2
+    assert body["project"]["document"]["repair_history"][-1]["decision"] == "APPLIED"
+
+
+def test_director_recommendation_and_executable_repair_must_match() -> None:
+    with pytest.raises(ValueError, match="invalid advisory JSON"):
+        parse_director_advice(
+            """{
+              "repair_options": [
+                {
+                  "strategy": "CHANGE_CAMERA",
+                  "summary": "Change coverage.",
+                  "rationale": "Reduce orientation risk.",
+                  "tradeoff": "Less facial detail.",
+                  "recommended": true,
+                  "dismissible": true
+                }
+              ],
+              "recommended_strategy": "CHANGE_CAMERA",
+              "proposed_repair": {
+                "decision": "APPLIED",
+                "strategy": "PROMPT_RETRY",
+                "reason": "This must not be applied because it contradicts the recommendation.",
+                "shot_patch": {"visual": "A materially revised visual intent."},
+                "split_shots": []
+              }
+            }"""
+        )
+
+
+def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
+    tmp_path: Path,
+) -> None:
+    fake = FakeDirectorLanguageProvider(
+        """{
+          "advisories": [],
+          "repair_options": [
+            {
+              "strategy": "CHANGE_CAMERA",
+              "summary": "Use a rear coverage angle.",
+              "rationale": "It reduces hidden orientation requirements.",
+              "tradeoff": "The face is not visible during this beat.",
+              "recommended": true,
+              "dismissible": true
+            }
+          ],
+          "recommended_strategy": "CHANGE_CAMERA",
+          "proposed_repair": {
+            "decision": "APPLIED",
+            "strategy": "CHANGE_CAMERA",
+            "reason": "Use a simpler coverage angle while preserving the story beat.",
+            "shot_patch": {"camera": "fixed rear coverage angle"},
+            "split_shots": []
+          }
+        }"""
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _api_key, _base_url: fake,
+    )
+    project = service.initialize_fixture()
+    document = service.repository.get_project(project.document.project.id)
+    assert document is not None
+    document.project.run_mode = RunMode.GUIDED
+    service.repository.save_project(document)
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    client = _client(service)
+    project_id = project.document.project.id
+    shot = next(item for item in document.shots if item.sequence == 8)
+
+    result = client.post(
+        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/director-loop",
+        json={},
+    )
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert body["repair_applied"] is False
+    assert body["next_action"] == "AWAIT_USER"
+    unchanged = next(
+        item for item in body["project"]["document"]["shots"] if item["id"] == shot.id
+    )
+    assert unchanged["revision"] == 1
+    assert unchanged["camera"] == shot.camera
+
+    ignored = client.post(
+        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/director-repair",
+        json={
+            "decision": "IGNORED",
+            "strategy": "CHANGE_CAMERA",
+            "reason": "Keep the original creative choice.",
+        },
+    )
+    assert ignored.status_code == 200, ignored.text
+    ignored_body = ignored.json()
+    ignored_shot = next(
+        item
+        for item in ignored_body["document"]["shots"]
+        if item["id"] == shot.id
+    )
+    assert ignored_shot["revision"] == 1
+    assert ignored_body["document"]["repair_history"][-1]["decision"] == "IGNORED"
+
+
+def test_split_repair_updates_dependencies_and_excludes_old_take(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = next(item for item in project.document.shots if item.sequence == 8)
+    service.enqueue(
+        project_id,
+        EnqueueRequest(shot_ids=[shot.id], candidate_count=1),
+    )
+    service.drain(project_id, 20)
+    before = service.get_project(project_id)
+    old_take = next(item for item in before.takes if item.shot_id == shot.id)
+    assert old_take.is_selected is True
+
+    first = ReplacementShotDraft(
+        id=shot.id,
+        duration_seconds=2.5,
+        narrative_purpose="Complete the first part of the action cleanly.",
+        visual="The actor completes the object interaction before leaving the frame.",
+        framing="medium",
+        camera="stable side coverage",
+        audio_intent="continuous ambience",
+        continuity=shot.continuity.model_copy(deep=True),
+        transition_out="action cut",
+        local_rework_risk="medium",
+    )
+    second = ReplacementShotDraft(
+        id=f"{project_id}-shot-09-regression",
+        duration_seconds=2.5,
+        narrative_purpose="Complete the spatial transition in a separate coverage shot.",
+        visual="The actor continues moving away with head, torso, and path aligned.",
+        framing="medium wide",
+        camera="rear coverage",
+        audio_intent="continuous ambience",
+        continuity=shot.continuity.model_copy(deep=True),
+        transition_out=shot.transition_out,
+        local_rework_risk="medium",
+        inherits_source_dependencies=True,
+    )
+    updated = service.decide_director_repair(
+        project_id,
+        shot.id,
+        DirectorRepairDecisionRequest(
+            decision=DirectorRepairDecision.APPLIED,
+            strategy=DirectorRepairStrategy.SPLIT_SHOT,
+            reason="Separate competing interaction and movement beats.",
+            source_take_id=old_take.id,
+            issue_codes=[
+                "HUMAN_CONTACT_CONTINUITY",
+                "HUMAN_CHARACTER_ORIENTATION",
+            ],
+            split_shots=[first, second],
+        ),
+    )
+
+    assert len(updated.document.shots) == 9
+    assert len(updated.document.execution_plan) == 9
+    assert len(updated.document.reference_plan) == 9
+    persisted_old_take = next(item for item in updated.takes if item.id == old_take.id)
+    assert persisted_old_take.freshness == Freshness.STALE
+    assert persisted_old_take.is_selected is False
+    recorder = next(
+        prop
+        for bible in updated.document.bible_versions
+        if bible.id == updated.document.project.current_bible_version_id
+        for prop in bible.props
+        if prop.name == "红色旧录音笔"
+    )
+    assert any(state.shot_id == second.id for state in recorder.states)
+    assert updated.document.repair_history[-1].affected_shot_ids == [first.id, second.id]
 
 
 def test_missing_recommended_reference_is_advisory_and_does_not_block_compile(

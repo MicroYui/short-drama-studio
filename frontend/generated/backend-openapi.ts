@@ -1015,6 +1015,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/providers/minimax-h3/capability-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get H3 Capability Profile */
+        get: operations["get_h3_capability_profile_api_short_drama_projects__project_id__providers_minimax_h3_capability_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/reference-packs/entries": {
         parameters: {
             query?: never;
@@ -1060,6 +1077,40 @@ export interface paths {
         put?: never;
         /** Get Director Advice */
         post: operations["get_director_advice_api_short_drama_projects__project_id__shots__shot_id__director_advice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/director-loop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Director Loop */
+        post: operations["run_director_loop_api_short_drama_projects__project_id__shots__shot_id__director_loop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/director-repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Director Repair */
+        post: operations["decide_director_repair_api_short_drama_projects__project_id__shots__shot_id__director_repair_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1748,6 +1799,31 @@ export interface components {
              */
             status: "no_active_generation";
         };
+        /** CapabilityRisk */
+        CapabilityRisk: {
+            /** Description */
+            description: string;
+            /** Evidence Take Ids */
+            evidence_take_ids?: string[];
+            /** Failure Categories */
+            failure_categories: components["schemas"]["QaFailureCategory"][];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Observed Failure Count
+             * @default 0
+             */
+            observed_failure_count: number;
+            /** Recommended Strategies */
+            recommended_strategies: components["schemas"]["DirectorRepairStrategy"][];
+            /**
+             * Risk Level
+             * @enum {string}
+             */
+            risk_level: "LOW" | "MEDIUM" | "HIGH";
+        };
         /** CapabilitySnapshot */
         CapabilitySnapshot: {
             /** Model */
@@ -1859,6 +1935,8 @@ export interface components {
             max_images?: number | null;
             /** Requirement Ids */
             requirement_ids?: string[];
+            /** Take Id */
+            take_id?: string | null;
             /** User Direction */
             user_direction?: string | null;
         };
@@ -1866,6 +1944,8 @@ export interface components {
         DirectorAdviceResponse: {
             /** Advisories */
             advisories?: components["schemas"]["DirectorAdvisory"][];
+            /** Capability Profile Version */
+            capability_profile_version: string;
             /**
              * Model
              * @default gpt-5.6-sol
@@ -1877,11 +1957,17 @@ export interface components {
              * @constant
              */
             proceed_allowed: true;
+            proposed_repair?: components["schemas"]["DirectorRepairDecisionRequest-Output"] | null;
             /**
              * Provider
              * @default openai-compatible
              */
             provider: string;
+            /** Qa Issue Codes */
+            qa_issue_codes?: string[];
+            recommended_strategy?: components["schemas"]["DirectorRepairStrategy"] | null;
+            /** Repair Options */
+            repair_options?: components["schemas"]["DirectorRepairOption"][];
             /** Shot Id */
             shot_id: string;
         };
@@ -1906,6 +1992,98 @@ export interface components {
          * @enum {string}
          */
         DirectorAdvisoryCategory: "REFERENCE_GAP" | "TOPOLOGY" | "ACTION_COMPLEXITY" | "SPLIT_SHOT" | "CAMERA" | "CONTINUITY" | "ROUTE" | "OTHER";
+        /** DirectorLoopResponse */
+        DirectorLoopResponse: {
+            advice: components["schemas"]["DirectorAdviceResponse"];
+            /**
+             * Next Action
+             * @enum {string}
+             */
+            next_action: "REGENERATE_SHOT" | "AWAIT_USER" | "NO_CHANGE";
+            project: components["schemas"]["ProjectAggregate"];
+            /** Repair Applied */
+            repair_applied: boolean;
+        };
+        /**
+         * DirectorRepairDecision
+         * @enum {string}
+         */
+        DirectorRepairDecision: "APPLIED" | "IGNORED";
+        /** DirectorRepairDecisionRequest */
+        "DirectorRepairDecisionRequest-Input": {
+            decision: components["schemas"]["DirectorRepairDecision"];
+            /** Issue Codes */
+            issue_codes?: string[];
+            /** Reason */
+            reason: string;
+            reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Input"] | null;
+            shot_patch?: components["schemas"]["ShotPlanPatch"] | null;
+            /** Source Take Id */
+            source_take_id?: string | null;
+            /** Split Shots */
+            split_shots?: components["schemas"]["ReplacementShotDraft-Input"][];
+            strategy: components["schemas"]["DirectorRepairStrategy"];
+        };
+        /** DirectorRepairDecisionRequest */
+        "DirectorRepairDecisionRequest-Output": {
+            decision: components["schemas"]["DirectorRepairDecision"];
+            /** Issue Codes */
+            issue_codes?: string[];
+            /** Reason */
+            reason: string;
+            reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Output"] | null;
+            shot_patch?: components["schemas"]["ShotPlanPatch"] | null;
+            /** Source Take Id */
+            source_take_id?: string | null;
+            /** Split Shots */
+            split_shots?: components["schemas"]["ReplacementShotDraft-Output"][];
+            strategy: components["schemas"]["DirectorRepairStrategy"];
+        };
+        /** DirectorRepairOption */
+        DirectorRepairOption: {
+            /**
+             * Dismissible
+             * @default true
+             * @constant
+             */
+            dismissible: true;
+            /** Rationale */
+            rationale: string;
+            /**
+             * Recommended
+             * @default false
+             */
+            recommended: boolean;
+            strategy: components["schemas"]["DirectorRepairStrategy"];
+            /** Summary */
+            summary: string;
+            /** Tradeoff */
+            tradeoff: string;
+        };
+        /** DirectorRepairRecord */
+        DirectorRepairRecord: {
+            /** Affected Shot Ids */
+            affected_shot_ids?: string[];
+            /** Created At */
+            created_at: string;
+            decision: components["schemas"]["DirectorRepairDecision"];
+            /** Id */
+            id: string;
+            /** Issue Codes */
+            issue_codes?: string[];
+            /** Reason */
+            reason: string;
+            /** Source Shot Id */
+            source_shot_id: string;
+            /** Source Take Id */
+            source_take_id?: string | null;
+            strategy: components["schemas"]["DirectorRepairStrategy"];
+        };
+        /**
+         * DirectorRepairStrategy
+         * @enum {string}
+         */
+        DirectorRepairStrategy: "PROMPT_RETRY" | "CHANGE_KEYFRAME" | "SPLIT_SHOT" | "CHANGE_CAMERA";
         /** DownloadProgressCompleteResponse */
         DownloadProgressCompleteResponse: {
             /**
@@ -2291,6 +2469,11 @@ export interface components {
             input_bible_version_id: string;
             /** Input Script Version Id */
             input_script_version_id: string;
+            /**
+             * Input Shot Revision
+             * @default 1
+             */
+            input_shot_revision: number;
             /** @default SUCCESS */
             mock_behavior: components["schemas"]["MockBehavior"];
             /** Model */
@@ -2355,6 +2538,30 @@ export interface components {
             vram: number;
             /** Vramused */
             vramUsed: number;
+        };
+        /** H3CapabilityProfileResponse */
+        H3CapabilityProfileResponse: {
+            /**
+             * Model
+             * @default MiniMax-H3
+             */
+            model: string;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Provider
+             * @default minimax
+             */
+            provider: string;
+            /** Regression Cases */
+            regression_cases: components["schemas"]["RegressionCase"][];
+            /** Risks */
+            risks: components["schemas"]["CapabilityRisk"][];
+            /**
+             * Version
+             * @default 2026-08-17.1
+             */
+            version: string;
         };
         /** H3CompilePreviewResponse */
         H3CompilePreviewResponse: {
@@ -2449,12 +2656,16 @@ export interface components {
         H3ProbeRequest: {
             /** Duration Seconds */
             duration_seconds?: number | null;
+            /** Learning Objective */
+            learning_objective?: string | null;
             /** Media Inputs */
             media_inputs?: components["schemas"]["H3MediaInput"][];
             /** Prompt Override */
             prompt_override?: string | null;
             /** @default CONTRACT_SMOKE */
             purpose: components["schemas"]["EvidencePurpose"];
+            /** Regression Case Id */
+            regression_case_id?: string | null;
             /** @default DIRECT */
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
@@ -2521,6 +2732,8 @@ export interface components {
             /** Last Error Message */
             last_error_message?: string | null;
             latest_remote_task?: components["schemas"]["H3RemoteTask"] | null;
+            /** Learning Objective */
+            learning_objective?: string | null;
             /** Media Inputs */
             media_inputs?: components["schemas"]["H3MediaInput"][];
             /** Output Url */
@@ -2531,6 +2744,8 @@ export interface components {
             /** Prompt */
             prompt: string;
             purpose: components["schemas"]["EvidencePurpose"];
+            /** Regression Case Id */
+            regression_case_id?: string | null;
             request?: components["schemas"]["H3VideoRequest"] | null;
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
@@ -3963,6 +4178,8 @@ export interface components {
             reference_packs?: components["schemas"]["ReferencePack"][];
             /** Reference Plan */
             reference_plan: components["schemas"]["ReferencePlanEntry"][];
+            /** Repair History */
+            repair_history?: components["schemas"]["DirectorRepairRecord"][];
             /** Script Versions */
             script_versions: components["schemas"]["ScriptVersion"][];
             /** Shots */
@@ -4078,8 +4295,15 @@ export interface components {
             /** Take Id */
             take_id: string;
         };
+        /**
+         * QaFailureCategory
+         * @enum {string}
+         */
+        QaFailureCategory: "TECHNICAL_MEDIA" | "SPATIAL_CONTINUITY" | "CONTACT_CONTINUITY" | "CHARACTER_ORIENTATION" | "COMPOSITION_QUALITY" | "IDENTITY_CONTINUITY" | "PROP_CONTINUITY" | "DIALOGUE_AUDIO" | "OTHER";
         /** QaIssue */
         QaIssue: {
+            /** @default OTHER */
+            category: components["schemas"]["QaFailureCategory"];
             /** Code */
             code: string;
             /** Message */
@@ -4298,6 +4522,97 @@ export interface components {
             subject_asset_id: string;
             /** Tags */
             tags: string[];
+        };
+        /** RegressionCase */
+        RegressionCase: {
+            /** Expected Repair Strategies */
+            expected_repair_strategies: components["schemas"]["DirectorRepairStrategy"][];
+            /** Failure Categories */
+            failure_categories: components["schemas"]["QaFailureCategory"][];
+            /** Id */
+            id: string;
+            /** Learning Objective */
+            learning_objective: string;
+            /** Scenario */
+            scenario: string;
+            /**
+             * Status
+             * @default ACTIVE
+             * @constant
+             */
+            status: "ACTIVE";
+            /** Title */
+            title: string;
+        };
+        /** ReplacementShotDraft */
+        "ReplacementShotDraft-Input": {
+            /** Audio Intent */
+            audio_intent: string;
+            /** Camera */
+            camera: string;
+            continuity: components["schemas"]["ContinuityState"];
+            /** Dialogue Line Ids */
+            dialogue_line_ids?: string[];
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Framing */
+            framing: string;
+            /** Id */
+            id?: string | null;
+            /**
+             * Inherits Source Dependencies
+             * @default false
+             */
+            inherits_source_dependencies: boolean;
+            /** Local Rework Risk */
+            local_rework_risk: string;
+            /**
+             * Merge Candidate
+             * @default false
+             */
+            merge_candidate: boolean;
+            /** Narrative Purpose */
+            narrative_purpose: string;
+            reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Input"] | null;
+            /** Transition Out */
+            transition_out: string;
+            /** Visual */
+            visual: string;
+        };
+        /** ReplacementShotDraft */
+        "ReplacementShotDraft-Output": {
+            /** Audio Intent */
+            audio_intent: string;
+            /** Camera */
+            camera: string;
+            continuity: components["schemas"]["ContinuityState"];
+            /** Dialogue Line Ids */
+            dialogue_line_ids?: string[];
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Framing */
+            framing: string;
+            /** Id */
+            id?: string | null;
+            /**
+             * Inherits Source Dependencies
+             * @default false
+             */
+            inherits_source_dependencies: boolean;
+            /** Local Rework Risk */
+            local_rework_risk: string;
+            /**
+             * Merge Candidate
+             * @default false
+             */
+            merge_candidate: boolean;
+            /** Narrative Purpose */
+            narrative_purpose: string;
+            reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Output"] | null;
+            /** Transition Out */
+            transition_out: string;
+            /** Visual */
+            visual: string;
         };
         /** RetakeCancelledResponse */
         RetakeCancelledResponse: {
@@ -4557,6 +4872,11 @@ export interface components {
             narrative_purpose: string;
             /** Project Id */
             project_id: string;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
             /** Sequence */
             sequence: number;
             /** Transition Out */
@@ -4564,8 +4884,48 @@ export interface components {
             /** Visual */
             visual: string;
         };
+        /** ShotPlanPatch */
+        ShotPlanPatch: {
+            /** Audio Intent */
+            audio_intent?: string | null;
+            /** Camera */
+            camera?: string | null;
+            continuity?: components["schemas"]["ContinuityState"] | null;
+            /** Dialogue Line Ids */
+            dialogue_line_ids?: string[] | null;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Framing */
+            framing?: string | null;
+            /** Local Rework Risk */
+            local_rework_risk?: string | null;
+            /** Merge Candidate */
+            merge_candidate?: boolean | null;
+            /** Narrative Purpose */
+            narrative_purpose?: string | null;
+            /** Transition Out */
+            transition_out?: string | null;
+            /** Visual */
+            visual?: string | null;
+        };
         /** ShotReferencePlanUpdateRequest */
-        ShotReferencePlanUpdateRequest: {
+        "ShotReferencePlanUpdateRequest-Input": {
+            /** Action Beats */
+            action_beats?: components["schemas"]["ActionBeat"][];
+            /** Interactions */
+            interactions?: components["schemas"]["SpatialInteractionConstraint"][];
+            /**
+             * Max Reference Images
+             * @default 3
+             */
+            max_reference_images: number;
+            /** Planning Notes */
+            planning_notes?: string | null;
+            /** Requirements */
+            requirements?: components["schemas"]["ReferenceRequirement"][];
+        };
+        /** ShotReferencePlanUpdateRequest */
+        "ShotReferencePlanUpdateRequest-Output": {
             /** Action Beats */
             action_beats?: components["schemas"]["ActionBeat"][];
             /** Interactions */
@@ -7400,6 +7760,46 @@ export interface operations {
             };
         };
     };
+    get_h3_capability_profile_api_short_drama_projects__project_id__providers_minimax_h3_capability_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3CapabilityProfileResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     add_reference_pack_entry_api_short_drama_projects__project_id__reference_packs_entries_post: {
         parameters: {
             query?: never;
@@ -7511,6 +7911,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectorAdviceResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    run_director_loop_api_short_drama_projects__project_id__shots__shot_id__director_loop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                shot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectorAdviceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectorLoopResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    decide_director_repair_api_short_drama_projects__project_id__shots__shot_id__director_repair_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                shot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectorRepairDecisionRequest-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
                 };
             };
             /** @description Client Error */
@@ -7680,7 +8170,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ShotReferencePlanUpdateRequest"];
+                "application/json": components["schemas"]["ShotReferencePlanUpdateRequest-Input"];
             };
         };
         responses: {

@@ -56,9 +56,12 @@ from short_drama.models import (
     WorkerDrainRequest,
     WorkerDrainResponse,
 )
+from short_drama.quality_learning import H3CapabilityProfileResponse
 from short_drama.reference_planner import (
     DirectorAdviceRequest,
     DirectorAdviceResponse,
+    DirectorLoopResponse,
+    DirectorRepairDecisionRequest,
     KeyframeBriefCompileRequest,
     KeyframeBriefCompileResponse,
     ReferencePackEntryCreateRequest,
@@ -142,6 +145,20 @@ def validate_language_provider_config(
     try:
         return service.validate_language_provider_credentials()
     except (WorkflowConflictError, ProviderOperationError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/providers/minimax-h3/capability-profile",
+    response_model=H3CapabilityProfileResponse,
+)
+def get_h3_capability_profile(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3CapabilityProfileResponse:
+    try:
+        return service.get_h3_capability_profile(project_id)
+    except ProjectNotFoundError as exc:
         raise _translate_error(exc) from exc
 
 
@@ -249,6 +266,27 @@ def get_director_advice(
         raise _translate_error(exc) from exc
 
 
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/director-loop",
+    response_model=DirectorLoopResponse,
+)
+def run_director_loop(
+    project_id: str,
+    shot_id: str,
+    request: DirectorAdviceRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> DirectorLoopResponse:
+    try:
+        return service.run_director_loop(project_id, shot_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
 @router.get("/providers/minimax-h3", response_model=H3ProviderConfigResponse)
 def get_h3_provider_config(
     service: ShortDramaService = Depends(get_short_drama_service),
@@ -298,6 +336,22 @@ def preview_h3_probe(
 ) -> H3CompilePreviewResponse:
     try:
         return service.preview_h3_probe(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/director-repair",
+    response_model=ProjectAggregate,
+)
+def decide_director_repair(
+    project_id: str,
+    shot_id: str,
+    request: DirectorRepairDecisionRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProjectAggregate:
+    try:
+        return service.decide_director_repair(project_id, shot_id, request)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 

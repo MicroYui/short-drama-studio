@@ -33,13 +33,22 @@ from short_drama.h3_models import (
 )
 from short_drama.models import (
     ActionBeat,
+    DirectorRepairDecision,
+    DirectorRepairStrategy,
     EvidencePurpose,
     EvidenceStatus,
+    Freshness,
+    QaFailureCategory,
+    QaIssue,
     QaStatus,
     SpatialInteractionConstraint,
     SurfaceAttachmentConstraint,
     TaskStatus,
     VideoGenerationRoute,
+)
+from short_drama.reference_planner import (
+    DirectorRepairDecisionRequest,
+    ShotPlanPatch,
 )
 from short_drama.providers.minimax_h3_client import H3SubmissionUnknown
 from short_drama.providers.minimax_h3_compiler import (
@@ -471,11 +480,12 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
 
     probe = service.enqueue_h3_probe(
         project_id,
-        H3ProbeRequest(
-            shot_id=shot.id,
-            route=VideoGenerationRoute.DIRECT,
-            purpose=EvidencePurpose.QUALITY_PROBE,
-        ),
+            H3ProbeRequest(
+                shot_id=shot.id,
+                route=VideoGenerationRoute.DIRECT,
+                purpose=EvidencePurpose.QUALITY_PROBE,
+                learning_objective="Verify the full H3 quality-review lifecycle.",
+            ),
     )
     assert probe.task.status == TaskStatus.QUEUED
     assert probe.task.resolution == "768P"
@@ -537,6 +547,73 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     service.repository.save_route_evidence(persisted_evidence)
     selected = service.select_take(take.id)
     assert next(item for item in selected.takes if item.id == take.id).is_selected is True
+
+
+def test_running_h3_output_is_stale_after_director_changes_shot_plan(
+    tmp_path: Path,
+) -> None:
+    fake = FakeH3Client()
+    fake.output_source = tmp_path / "provider" / "h3-5s.mp4"
+    _render_h3_output(fake.output_source)
+    service = _service(tmp_path, fake)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = project.document.shots[0]
+    probe = service.enqueue_h3_probe(
+        project_id,
+        H3ProbeRequest(shot_id=shot.id),
+    )
+    service.advance_task(probe.task.id)
+    acknowledged = service.advance_task(probe.task.id)
+    assert acknowledged.provider_task_id is not None
+    fake.set_status(acknowledged.provider_task_id, H3RemoteStatus.RUNNING)
+    assert service.advance_task(probe.task.id).status == TaskStatus.RUNNING
+
+    updated = service.decide_director_repair(
+        project_id,
+        shot.id,
+        DirectorRepairDecisionRequest(
+            decision=DirectorRepairDecision.APPLIED,
+            strategy=DirectorRepairStrategy.CHANGE_CAMERA,
+            reason="Use coverage that reduces the failed continuity requirements.",
+            shot_patch=ShotPlanPatch(camera="rear coverage"),
+        ),
+    )
+    current_shot = next(item for item in updated.document.shots if item.id == shot.id)
+    assert current_shot.revision == 2
+
+    fake.set_status(acknowledged.provider_task_id, H3RemoteStatus.SUCCEEDED)
+    assert service.advance_task(probe.task.id).status == TaskStatus.SUCCEEDED
+    take = next(
+        item for item in service.get_project(project_id).takes if item.task_id == probe.task.id
+    )
+    assert take.freshness == Freshness.STALE
+    reviewed = service.review_h3_take(
+        take.id,
+        H3TakeReviewRequest(
+            hard_gate_passed=False,
+            score=1.5,
+            notes="The actor turns their head back against the intended travel direction.",
+            issues=[
+                QaIssue(
+                    code="HUMAN_CHARACTER_ORIENTATION",
+                    severity="ERROR",
+                    message="Head, torso, and travel direction are inconsistent.",
+                    repair_layer="DIRECTOR_AGENT",
+                    category=QaFailureCategory.CHARACTER_ORIENTATION,
+                )
+            ],
+        ),
+    )
+    assert reviewed.take.qa_status == QaStatus.REJECTED
+    profile = service.get_h3_capability_profile(project_id)
+    orientation_risk = next(
+        item for item in profile.risks if item.id == "turn-and-crossing-orientation"
+    )
+    assert orientation_risk.observed_failure_count == 1
+    assert orientation_risk.evidence_take_ids == [take.id]
+    with pytest.raises(WorkflowConflictError, match="stale"):
+        service.select_take(take.id)
 
 
 def test_h3_submit_unknown_never_blindly_reposts(tmp_path: Path) -> None:

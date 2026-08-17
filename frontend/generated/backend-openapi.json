@@ -854,6 +854,68 @@
         "title": "CancelNoActiveGenerationResponse",
         "type": "object"
       },
+      "CapabilityRisk": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "evidence_take_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Take Ids",
+            "type": "array"
+          },
+          "failure_categories": {
+            "items": {
+              "$ref": "#/components/schemas/QaFailureCategory"
+            },
+            "title": "Failure Categories",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "observed_failure_count": {
+            "default": 0,
+            "title": "Observed Failure Count",
+            "type": "integer"
+          },
+          "recommended_strategies": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorRepairStrategy"
+            },
+            "title": "Recommended Strategies",
+            "type": "array"
+          },
+          "risk_level": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "title": "Risk Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "risk_level",
+          "failure_categories",
+          "recommended_strategies"
+        ],
+        "title": "CapabilityRisk",
+        "type": "object"
+      },
       "CapabilitySnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -1190,6 +1252,18 @@
             "title": "Requirement Ids",
             "type": "array"
           },
+          "take_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take Id"
+          },
           "user_direction": {
             "anyOf": [
               {
@@ -1217,6 +1291,10 @@
             "title": "Advisories",
             "type": "array"
           },
+          "capability_profile_version": {
+            "title": "Capability Profile Version",
+            "type": "string"
+          },
           "model": {
             "default": "gpt-5.6-sol",
             "title": "Model",
@@ -1228,10 +1306,45 @@
             "title": "Proceed Allowed",
             "type": "boolean"
           },
+          "proposed_repair": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectorRepairDecisionRequest-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "provider": {
             "default": "openai-compatible",
             "title": "Provider",
             "type": "string"
+          },
+          "qa_issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Qa Issue Codes",
+            "type": "array"
+          },
+          "recommended_strategy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DirectorRepairStrategy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repair_options": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorRepairOption"
+            },
+            "maxItems": 4,
+            "title": "Repair Options",
+            "type": "array"
           },
           "shot_id": {
             "title": "Shot Id",
@@ -1239,7 +1352,8 @@
           }
         },
         "required": [
-          "shot_id"
+          "shot_id",
+          "capability_profile_version"
         ],
         "title": "DirectorAdviceResponse",
         "type": "object"
@@ -1301,6 +1415,307 @@
           "OTHER"
         ],
         "title": "DirectorAdvisoryCategory",
+        "type": "string"
+      },
+      "DirectorLoopResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "advice": {
+            "$ref": "#/components/schemas/DirectorAdviceResponse"
+          },
+          "next_action": {
+            "enum": [
+              "REGENERATE_SHOT",
+              "AWAIT_USER",
+              "NO_CHANGE"
+            ],
+            "title": "Next Action",
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "repair_applied": {
+            "title": "Repair Applied",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "advice",
+          "repair_applied",
+          "next_action",
+          "project"
+        ],
+        "title": "DirectorLoopResponse",
+        "type": "object"
+      },
+      "DirectorRepairDecision": {
+        "enum": [
+          "APPLIED",
+          "IGNORED"
+        ],
+        "title": "DirectorRepairDecision",
+        "type": "string"
+      },
+      "DirectorRepairDecisionRequest-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/DirectorRepairDecision"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "reference_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotReferencePlanUpdateRequest-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shot_patch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotPlanPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_take_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Take Id"
+          },
+          "split_shots": {
+            "items": {
+              "$ref": "#/components/schemas/ReplacementShotDraft-Input"
+            },
+            "maxItems": 8,
+            "title": "Split Shots",
+            "type": "array"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/DirectorRepairStrategy"
+          }
+        },
+        "required": [
+          "decision",
+          "strategy",
+          "reason"
+        ],
+        "title": "DirectorRepairDecisionRequest",
+        "type": "object"
+      },
+      "DirectorRepairDecisionRequest-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/DirectorRepairDecision"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "reference_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotReferencePlanUpdateRequest-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shot_patch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotPlanPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_take_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Take Id"
+          },
+          "split_shots": {
+            "items": {
+              "$ref": "#/components/schemas/ReplacementShotDraft-Output"
+            },
+            "maxItems": 8,
+            "title": "Split Shots",
+            "type": "array"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/DirectorRepairStrategy"
+          }
+        },
+        "required": [
+          "decision",
+          "strategy",
+          "reason"
+        ],
+        "title": "DirectorRepairDecisionRequest",
+        "type": "object"
+      },
+      "DirectorRepairOption": {
+        "additionalProperties": false,
+        "properties": {
+          "dismissible": {
+            "const": true,
+            "default": true,
+            "title": "Dismissible",
+            "type": "boolean"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/DirectorRepairStrategy"
+          },
+          "summary": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "tradeoff": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Tradeoff",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy",
+          "summary",
+          "rationale",
+          "tradeoff"
+        ],
+        "title": "DirectorRepairOption",
+        "type": "object"
+      },
+      "DirectorRepairRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Shot Ids",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/DirectorRepairDecision"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Codes",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_shot_id": {
+            "title": "Source Shot Id",
+            "type": "string"
+          },
+          "source_take_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Take Id"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/DirectorRepairStrategy"
+          }
+        },
+        "required": [
+          "id",
+          "source_shot_id",
+          "strategy",
+          "decision",
+          "reason",
+          "created_at"
+        ],
+        "title": "DirectorRepairRecord",
+        "type": "object"
+      },
+      "DirectorRepairStrategy": {
+        "enum": [
+          "PROMPT_RETRY",
+          "CHANGE_KEYFRAME",
+          "SPLIT_SHOT",
+          "CHANGE_CAMERA"
+        ],
+        "title": "DirectorRepairStrategy",
         "type": "string"
       },
       "DownloadProgressCompleteResponse": {
@@ -2264,6 +2679,12 @@
             "title": "Input Script Version Id",
             "type": "string"
           },
+          "input_shot_revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Input Shot Revision",
+            "type": "integer"
+          },
           "mock_behavior": {
             "$ref": "#/components/schemas/MockBehavior",
             "default": "SUCCESS"
@@ -2459,6 +2880,57 @@
           "vramUsed"
         ],
         "title": "GpuTelemetry",
+        "type": "object"
+      },
+      "H3CapabilityProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "default": "MiniMax-H3",
+            "title": "Model",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "provider": {
+            "default": "minimax",
+            "title": "Provider",
+            "type": "string"
+          },
+          "regression_cases": {
+            "items": {
+              "$ref": "#/components/schemas/RegressionCase"
+            },
+            "title": "Regression Cases",
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityRisk"
+            },
+            "title": "Risks",
+            "type": "array"
+          },
+          "version": {
+            "default": "2026-08-17.1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "risks",
+          "regression_cases"
+        ],
+        "title": "H3CapabilityProfileResponse",
         "type": "object"
       },
       "H3CompilePreviewResponse": {
@@ -2717,6 +3189,18 @@
             ],
             "title": "Duration Seconds"
           },
+          "learning_objective": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Objective"
+          },
           "media_inputs": {
             "items": {
               "$ref": "#/components/schemas/H3MediaInput"
@@ -2740,6 +3224,18 @@
           "purpose": {
             "$ref": "#/components/schemas/EvidencePurpose",
             "default": "CONTRACT_SMOKE"
+          },
+          "regression_case_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regression Case Id"
           },
           "route": {
             "$ref": "#/components/schemas/VideoGenerationRoute",
@@ -2914,6 +3410,17 @@
               }
             ]
           },
+          "learning_objective": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Objective"
+          },
           "media_inputs": {
             "items": {
               "$ref": "#/components/schemas/H3MediaInput"
@@ -2945,6 +3452,17 @@
           },
           "purpose": {
             "$ref": "#/components/schemas/EvidencePurpose"
+          },
+          "regression_case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regression Case Id"
           },
           "request": {
             "anyOf": [
@@ -6919,6 +7437,13 @@
             "title": "Reference Plan",
             "type": "array"
           },
+          "repair_history": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorRepairRecord"
+            },
+            "title": "Repair History",
+            "type": "array"
+          },
           "script_versions": {
             "items": {
               "$ref": "#/components/schemas/ScriptVersion"
@@ -7233,9 +7758,28 @@
         "title": "QAReport",
         "type": "object"
       },
+      "QaFailureCategory": {
+        "enum": [
+          "TECHNICAL_MEDIA",
+          "SPATIAL_CONTINUITY",
+          "CONTACT_CONTINUITY",
+          "CHARACTER_ORIENTATION",
+          "COMPOSITION_QUALITY",
+          "IDENTITY_CONTINUITY",
+          "PROP_CONTINUITY",
+          "DIALOGUE_AUDIO",
+          "OTHER"
+        ],
+        "title": "QaFailureCategory",
+        "type": "string"
+      },
       "QaIssue": {
         "additionalProperties": false,
         "properties": {
+          "category": {
+            "$ref": "#/components/schemas/QaFailureCategory",
+            "default": "OTHER"
+          },
           "code": {
             "title": "Code",
             "type": "string"
@@ -7847,6 +8391,259 @@
         "title": "ReferenceSelection",
         "type": "object"
       },
+      "RegressionCase": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_repair_strategies": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorRepairStrategy"
+            },
+            "title": "Expected Repair Strategies",
+            "type": "array"
+          },
+          "failure_categories": {
+            "items": {
+              "$ref": "#/components/schemas/QaFailureCategory"
+            },
+            "title": "Failure Categories",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "learning_objective": {
+            "title": "Learning Objective",
+            "type": "string"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          },
+          "status": {
+            "const": "ACTIVE",
+            "default": "ACTIVE",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "scenario",
+          "learning_objective",
+          "failure_categories",
+          "expected_repair_strategies"
+        ],
+        "title": "RegressionCase",
+        "type": "object"
+      },
+      "ReplacementShotDraft-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_intent": {
+            "minLength": 1,
+            "title": "Audio Intent",
+            "type": "string"
+          },
+          "camera": {
+            "minLength": 1,
+            "title": "Camera",
+            "type": "string"
+          },
+          "continuity": {
+            "$ref": "#/components/schemas/ContinuityState"
+          },
+          "dialogue_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dialogue Line Ids",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "framing": {
+            "minLength": 1,
+            "title": "Framing",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "inherits_source_dependencies": {
+            "default": false,
+            "title": "Inherits Source Dependencies",
+            "type": "boolean"
+          },
+          "local_rework_risk": {
+            "minLength": 1,
+            "title": "Local Rework Risk",
+            "type": "string"
+          },
+          "merge_candidate": {
+            "default": false,
+            "title": "Merge Candidate",
+            "type": "boolean"
+          },
+          "narrative_purpose": {
+            "minLength": 1,
+            "title": "Narrative Purpose",
+            "type": "string"
+          },
+          "reference_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotReferencePlanUpdateRequest-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transition_out": {
+            "minLength": 1,
+            "title": "Transition Out",
+            "type": "string"
+          },
+          "visual": {
+            "minLength": 1,
+            "title": "Visual",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duration_seconds",
+          "narrative_purpose",
+          "visual",
+          "framing",
+          "camera",
+          "audio_intent",
+          "continuity",
+          "transition_out",
+          "local_rework_risk"
+        ],
+        "title": "ReplacementShotDraft",
+        "type": "object"
+      },
+      "ReplacementShotDraft-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_intent": {
+            "minLength": 1,
+            "title": "Audio Intent",
+            "type": "string"
+          },
+          "camera": {
+            "minLength": 1,
+            "title": "Camera",
+            "type": "string"
+          },
+          "continuity": {
+            "$ref": "#/components/schemas/ContinuityState"
+          },
+          "dialogue_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dialogue Line Ids",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "framing": {
+            "minLength": 1,
+            "title": "Framing",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "inherits_source_dependencies": {
+            "default": false,
+            "title": "Inherits Source Dependencies",
+            "type": "boolean"
+          },
+          "local_rework_risk": {
+            "minLength": 1,
+            "title": "Local Rework Risk",
+            "type": "string"
+          },
+          "merge_candidate": {
+            "default": false,
+            "title": "Merge Candidate",
+            "type": "boolean"
+          },
+          "narrative_purpose": {
+            "minLength": 1,
+            "title": "Narrative Purpose",
+            "type": "string"
+          },
+          "reference_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotReferencePlanUpdateRequest-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transition_out": {
+            "minLength": 1,
+            "title": "Transition Out",
+            "type": "string"
+          },
+          "visual": {
+            "minLength": 1,
+            "title": "Visual",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duration_seconds",
+          "narrative_purpose",
+          "visual",
+          "framing",
+          "camera",
+          "audio_intent",
+          "continuity",
+          "transition_out",
+          "local_rework_risk"
+        ],
+        "title": "ReplacementShotDraft",
+        "type": "object"
+      },
       "RetakeCancelledResponse": {
         "properties": {
           "status": {
@@ -8440,6 +9237,12 @@
             "title": "Project Id",
             "type": "string"
           },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
           "sequence": {
             "title": "Sequence",
             "type": "integer"
@@ -8474,7 +9277,192 @@
         "title": "ShotPlan",
         "type": "object"
       },
-      "ShotReferencePlanUpdateRequest": {
+      "ShotPlanPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_intent": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Intent"
+          },
+          "camera": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera"
+          },
+          "continuity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContinuityState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dialogue_line_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dialogue Line Ids"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "framing": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framing"
+          },
+          "local_rework_risk": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Rework Risk"
+          },
+          "merge_candidate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merge Candidate"
+          },
+          "narrative_purpose": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narrative Purpose"
+          },
+          "transition_out": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transition Out"
+          },
+          "visual": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visual"
+          }
+        },
+        "title": "ShotPlanPatch",
+        "type": "object"
+      },
+      "ShotReferencePlanUpdateRequest-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "action_beats": {
+            "items": {
+              "$ref": "#/components/schemas/ActionBeat"
+            },
+            "title": "Action Beats",
+            "type": "array"
+          },
+          "interactions": {
+            "items": {
+              "$ref": "#/components/schemas/SpatialInteractionConstraint"
+            },
+            "title": "Interactions",
+            "type": "array"
+          },
+          "max_reference_images": {
+            "default": 3,
+            "maximum": 9.0,
+            "minimum": 1.0,
+            "title": "Max Reference Images",
+            "type": "integer"
+          },
+          "planning_notes": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planning Notes"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRequirement"
+            },
+            "title": "Requirements",
+            "type": "array"
+          }
+        },
+        "title": "ShotReferencePlanUpdateRequest",
+        "type": "object"
+      },
+      "ShotReferencePlanUpdateRequest-Output": {
         "additionalProperties": false,
         "properties": {
           "action_beats": {
@@ -12573,6 +13561,58 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/providers/minimax-h3/capability-profile": {
+      "get": {
+        "operationId": "get_h3_capability_profile_api_short_drama_projects__project_id__providers_minimax_h3_capability_profile_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/H3CapabilityProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get H3 Capability Profile",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects/{project_id}/reference-packs/entries": {
       "post": {
         "operationId": "add_reference_pack_entry_api_short_drama_projects__project_id__reference_packs_entries_post",
@@ -12763,6 +13803,148 @@
           }
         },
         "summary": "Get Director Advice",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/director-loop": {
+      "post": {
+        "operationId": "run_director_loop_api_short_drama_projects__project_id__shots__shot_id__director_loop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectorAdviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorLoopResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Run Director Loop",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/director-repair": {
+      "post": {
+        "operationId": "decide_director_repair_api_short_drama_projects__project_id__shots__shot_id__director_repair_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectorRepairDecisionRequest-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Decide Director Repair",
         "tags": [
           "short-drama"
         ]
@@ -13008,7 +14190,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ShotReferencePlanUpdateRequest"
+                "$ref": "#/components/schemas/ShotReferencePlanUpdateRequest-Input"
               }
             }
           },

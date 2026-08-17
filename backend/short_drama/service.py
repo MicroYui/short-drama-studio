@@ -68,9 +68,13 @@ from short_drama.models import (
     AssetMediaType,
     AutoDraftResponse,
     CreateProjectRequest,
+    DirectorRepairDecision,
+    DirectorRepairRecord,
+    DirectorRepairStrategy,
     EnqueueRequest,
     EvidencePurpose,
     EvidenceStatus,
+    ExecutionPlanEntry,
     ExportRecord,
     Freshness,
     GenerationTask,
@@ -87,6 +91,7 @@ from short_drama.models import (
     ReferencePackEntry,
     ReferencePlanEntry,
     RouteEvidence,
+    RunMode,
     QaStatus,
     ReviseScriptLineRequest,
     ScriptVersion,
@@ -100,9 +105,16 @@ from short_drama.models import (
     VideoGenerationRoute,
     WorkerDrainResponse,
 )
+from short_drama.quality_learning import (
+    H3CapabilityProfileResponse,
+    build_h3_capability_profile,
+    known_regression_case,
+)
 from short_drama.reference_planner import (
     DirectorAdviceRequest,
     DirectorAdviceResponse,
+    DirectorLoopResponse,
+    DirectorRepairDecisionRequest,
     KeyframeBriefCompileRequest,
     KeyframeBriefCompileResponse,
     ReferencePackEntryCreateRequest,
@@ -444,32 +456,17 @@ class ShortDramaService:
     ) -> ProjectAggregate:
         with self._lock:
             document = self._require_project_document(project_id)
-            self._require_shot_in_document(document, shot_id)
-            for requirement in request.requirements:
-                self._require_asset_in_document(document, requirement.subject_asset_id)
-            for beat in request.action_beats:
-                self._require_asset_in_document(document, beat.actor_asset_id)
-            for interaction in request.interactions:
-                self._require_asset_in_document(document, interaction.actor_asset_id)
-                self._require_asset_in_document(document, interaction.target_asset_id)
-
+            shot = self._require_shot_in_document(document, shot_id)
             plan = self._require_reference_plan(document, shot_id)
-            plan.requirements = [item.model_copy(deep=True) for item in request.requirements]
-            plan.action_beats = [
-                item.model_copy(deep=True)
-                for item in sorted(request.action_beats, key=lambda item: item.order)
-            ]
-            plan.interactions = [item.model_copy(deep=True) for item in request.interactions]
-            plan.max_reference_images = request.max_reference_images
-            plan.planning_notes = (
-                request.planning_notes.strip() if request.planning_notes else None
-            )
-            plan.validation_notes = [
-                "Reference requirements are selected from approved semantic packs at preview time",
-                "Spatial interaction constraints are provider-neutral and apply to keyframe and video planning",
-                "Missing references, topology gaps, and split suggestions are non-blocking Director Agent advisories",
-            ]
-            document.project.updated_at = utc_now()
+            before = plan.model_dump(mode="json")
+            self._apply_reference_plan_update(document, shot_id, request)
+            now = utc_now()
+            if plan.model_dump(mode="json") != before:
+                shot.revision += 1
+                self.repository.mark_takes_stale(project_id, [shot_id])
+                self._invalidate_current_manifests(document)
+                document.project.stage = ProjectStage.PLANNED
+            document.project.updated_at = now
             self.repository.save_project(document)
             return self._aggregate(document)
 
@@ -515,6 +512,38 @@ class ShortDramaService:
         except ValueError as exc:
             raise WorkflowConflictError(str(exc)) from exc
 
+        shot_takes = [
+            take
+            for take in self.repository.list_takes_for_shot(project_id, shot_id)
+            if take.provider == "minimax" and take.model == "MiniMax-H3"
+        ]
+        if request.take_id is not None:
+            selected_take = next(
+                (take for take in shot_takes if take.id == request.take_id),
+                None,
+            )
+            if selected_take is None:
+                raise ArtifactNotFoundError(request.take_id)
+            qa_takes = [selected_take]
+        else:
+            qa_takes = [
+                take for take in shot_takes if take.qa_status == QaStatus.REJECTED
+            ][-5:]
+        qa_issues = [
+            issue.model_copy(deep=True)
+            for take in qa_takes
+            for issue in take.qa_report.issues
+        ]
+        reviewer_notes = [
+            f"{take.id}: {take.qa_report.reviewer_notes}"
+            for take in qa_takes
+            if take.qa_report.reviewer_notes
+        ]
+        capability_profile = build_h3_capability_profile(
+            self.repository.list_takes(project_id),
+            project_id=project_id,
+        )
+
         api_key = self.language_config.api_key()
         base_url = self.language_config.base_url()
         if not api_key and not is_loopback_openai_url(base_url):
@@ -525,6 +554,9 @@ class ShortDramaService:
             plan,
             preview,
             request,
+            qa_issues,
+            reviewer_notes,
+            capability_profile,
         )
         try:
             client = self.language_provider_factory(api_key, base_url)
@@ -540,6 +572,125 @@ class ShortDramaService:
         return DirectorAdviceResponse(
             shot_id=shot_id,
             advisories=payload.advisories,
+            repair_options=payload.repair_options,
+            recommended_strategy=payload.recommended_strategy,
+            proposed_repair=payload.proposed_repair,
+            capability_profile_version=capability_profile.version,
+            qa_issue_codes=list(dict.fromkeys(issue.code for issue in qa_issues)),
+        )
+
+    def get_h3_capability_profile(
+        self,
+        project_id: str,
+    ) -> H3CapabilityProfileResponse:
+        self._require_project_document(project_id)
+        return build_h3_capability_profile(
+            self.repository.list_takes(project_id),
+            project_id=project_id,
+        )
+
+    def decide_director_repair(
+        self,
+        project_id: str,
+        shot_id: str,
+        request: DirectorRepairDecisionRequest,
+    ) -> ProjectAggregate:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            shot = self._require_shot_in_document(document, shot_id)
+            if request.source_take_id is not None:
+                source_take = self.repository.get_take(request.source_take_id)
+                if (
+                    source_take is None
+                    or source_take.project_id != project_id
+                    or source_take.shot_id != shot_id
+                ):
+                    raise ArtifactNotFoundError(request.source_take_id)
+
+            now = utc_now()
+            affected_shot_ids = [shot_id]
+            if request.decision == DirectorRepairDecision.APPLIED:
+                if request.strategy == DirectorRepairStrategy.SPLIT_SHOT:
+                    affected_shot_ids = self._apply_shot_split(
+                        document,
+                        shot,
+                        request,
+                    )
+                else:
+                    patch = request.shot_patch
+                    if patch is not None:
+                        if patch.dialogue_line_ids is not None:
+                            self._validate_dialogue_line_ids(
+                                document,
+                                patch.dialogue_line_ids,
+                            )
+                        updates = patch.model_dump(exclude_none=True)
+                        for field_name, value in updates.items():
+                            setattr(shot, field_name, value)
+                    if request.reference_plan is not None:
+                        self._apply_reference_plan_update(
+                            document,
+                            shot_id,
+                            request.reference_plan,
+                        )
+                    shot.revision += 1
+                    self.repository.mark_takes_stale(project_id, [shot_id])
+                self._invalidate_current_manifests(document)
+                document.project.stage = ProjectStage.PLANNED
+
+            document.repair_history.append(
+                DirectorRepairRecord(
+                    id=f"director-repair-{uuid4().hex}",
+                    source_shot_id=shot_id,
+                    source_take_id=request.source_take_id,
+                    strategy=request.strategy,
+                    decision=request.decision,
+                    reason=request.reason.strip(),
+                    issue_codes=list(dict.fromkeys(request.issue_codes)),
+                    affected_shot_ids=affected_shot_ids,
+                    created_at=now,
+                )
+            )
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            return self._aggregate(document)
+
+    def run_director_loop(
+        self,
+        project_id: str,
+        shot_id: str,
+        request: DirectorAdviceRequest,
+    ) -> DirectorLoopResponse:
+        advice = self.get_director_advice(project_id, shot_id, request)
+        project = self.get_project(project_id)
+        if project.document.project.run_mode != RunMode.AUTO_DRAFT:
+            return DirectorLoopResponse(
+                advice=advice,
+                repair_applied=False,
+                next_action="AWAIT_USER",
+                project=project,
+            )
+        if advice.proposed_repair is None:
+            return DirectorLoopResponse(
+                advice=advice,
+                repair_applied=False,
+                next_action="NO_CHANGE",
+                project=project,
+            )
+        proposed = advice.proposed_repair.model_copy(
+            deep=True,
+            update={
+                "decision": DirectorRepairDecision.APPLIED,
+                "source_take_id": request.take_id,
+                "issue_codes": advice.qa_issue_codes,
+            },
+        )
+        updated = self.decide_director_repair(project_id, shot_id, proposed)
+        return DirectorLoopResponse(
+            advice=advice,
+            repair_applied=True,
+            next_action="REGENERATE_SHOT",
+            project=updated,
         )
 
     def create_asset(
@@ -735,6 +886,8 @@ class ShortDramaService:
                 prompt=prompt,
                 media_inputs=media_inputs,
                 purpose=request.purpose,
+                learning_objective=request.learning_objective,
+                regression_case_id=request.regression_case_id,
                 candidate_index=candidate_index,
                 attempt=1,
                 retry_of_task_id=None,
@@ -868,6 +1021,8 @@ class ShortDramaService:
                     prompt=run.prompt,
                     media_inputs=run.media_inputs,
                     purpose=run.purpose,
+                    learning_objective=run.learning_objective,
+                    regression_case_id=run.regression_case_id,
                     candidate_index=task.candidate_index,
                     attempt=task.attempt + 1,
                     retry_of_task_id=task.id,
@@ -1002,8 +1157,6 @@ class ShortDramaService:
                 raise ArtifactNotFoundError(take_id)
             if take.provider != "minimax" or take.model != "MiniMax-H3":
                 raise WorkflowConflictError("Only a MiniMax-H3 Take uses H3 route review")
-            if take.freshness != Freshness.CURRENT:
-                raise WorkflowConflictError("A stale H3 Take cannot be reviewed")
             evidence = self.repository.get_route_evidence_for_take(take_id)
             if evidence is None:
                 raise WorkflowConflictError(f"Route evidence for Take {take_id} is missing")
@@ -1268,6 +1421,11 @@ class ShortDramaService:
         shot = next((item for item in document.shots if item.id == request.shot_id), None)
         if shot is None:
             raise ArtifactNotFoundError(request.shot_id)
+        if (
+            request.regression_case_id is not None
+            and known_regression_case(request.regression_case_id) is None
+        ):
+            raise ArtifactNotFoundError(request.regression_case_id)
         prompt = (
             request.prompt_override.strip()
             if request.prompt_override is not None
@@ -1347,6 +1505,8 @@ class ShortDramaService:
         prompt: str,
         media_inputs: list[H3MediaInput],
         purpose: EvidencePurpose,
+        learning_objective: str | None,
+        regression_case_id: str | None,
         candidate_index: int,
         attempt: int,
         retry_of_task_id: str | None,
@@ -1354,6 +1514,7 @@ class ShortDramaService:
         now = utc_now()
         task_id = f"task-{uuid4().hex}"
         run_id = f"h3-run-{uuid4().hex}"
+        shot = self._require_shot_in_document(document, shot_id)
         normalized_request = {
             "provider": "minimax",
             "model": "MiniMax-H3",
@@ -1369,6 +1530,9 @@ class ShortDramaService:
             "candidate_index": candidate_index,
             "script_version_id": document.project.current_script_version_id,
             "bible_version_id": document.project.current_bible_version_id,
+            "shot_revision": shot.revision,
+            "learning_objective": learning_objective,
+            "regression_case_id": regression_case_id,
             "attempt": attempt,
         }
         fingerprint = hashlib.sha256(
@@ -1394,6 +1558,7 @@ class ShortDramaService:
             request_fingerprint=fingerprint,
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
+            input_shot_revision=shot.revision,
             requested_duration_seconds=float(duration_seconds),
             attempt=attempt,
             retry_of_task_id=retry_of_task_id,
@@ -1407,6 +1572,10 @@ class ShortDramaService:
             shot_id=shot_id,
             route=route,
             purpose=purpose,
+            learning_objective=(
+                learning_objective.strip() if learning_objective is not None else None
+            ),
+            regression_case_id=regression_case_id,
             prompt=prompt,
             media_inputs=[item.model_copy(deep=True) for item in media_inputs],
             pricing=self.h3_config.pricing_snapshot(),
@@ -1442,6 +1611,7 @@ class ShortDramaService:
     ) -> GenerationTask:
         now = utc_now()
         task_id = f"task-{uuid4().hex}"
+        shot = self._require_shot_in_document(document, shot_id)
         normalized_request = {
             "project_id": document.project.id,
             "shot_id": shot_id,
@@ -1449,6 +1619,7 @@ class ShortDramaService:
             "candidate_index": candidate_index,
             "script_version_id": document.project.current_script_version_id,
             "bible_version_id": document.project.current_bible_version_id,
+            "shot_revision": shot.revision,
             "requested_duration_seconds": requested_duration_seconds,
             "attempt": attempt,
         }
@@ -1468,6 +1639,7 @@ class ShortDramaService:
             request_fingerprint=fingerprint,
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
+            input_shot_revision=shot.revision,
             requested_duration_seconds=requested_duration_seconds,
             attempt=attempt,
             retry_of_task_id=retry_of_task_id,
@@ -1528,6 +1700,182 @@ class ShortDramaService:
             route_evidence=self.repository.list_route_evidence(document.project.id),
             progress=progress,
         )
+
+    def _apply_reference_plan_update(
+        self,
+        document: ProjectDocument,
+        shot_id: str,
+        request: ShotReferencePlanUpdateRequest,
+    ) -> None:
+        for requirement in request.requirements:
+            self._require_asset_in_document(document, requirement.subject_asset_id)
+        for beat in request.action_beats:
+            self._require_asset_in_document(document, beat.actor_asset_id)
+        for interaction in request.interactions:
+            self._require_asset_in_document(document, interaction.actor_asset_id)
+            self._require_asset_in_document(document, interaction.target_asset_id)
+
+        plan = self._require_reference_plan(document, shot_id)
+        plan.requirements = [item.model_copy(deep=True) for item in request.requirements]
+        plan.action_beats = [
+            item.model_copy(deep=True)
+            for item in sorted(request.action_beats, key=lambda item: item.order)
+        ]
+        plan.interactions = [item.model_copy(deep=True) for item in request.interactions]
+        plan.max_reference_images = request.max_reference_images
+        plan.planning_notes = (
+            request.planning_notes.strip() if request.planning_notes else None
+        )
+        plan.validation_notes = [
+            "Reference requirements are selected from approved semantic packs at preview time",
+            "Spatial interaction constraints are provider-neutral and apply to keyframe and video planning",
+            "Missing references, topology gaps, and split suggestions are non-blocking Director Agent advisories",
+        ]
+
+    def _apply_shot_split(
+        self,
+        document: ProjectDocument,
+        source_shot: ShotPlan,
+        request: DirectorRepairDecisionRequest,
+    ) -> list[str]:
+        shot_index = document.shots.index(source_shot)
+        execution_index = next(
+            (
+                index
+                for index, item in enumerate(document.execution_plan)
+                if item.shot_id == source_shot.id
+            ),
+            None,
+        )
+        reference_index = next(
+            (
+                index
+                for index, item in enumerate(document.reference_plan)
+                if item.shot_id == source_shot.id
+            ),
+            None,
+        )
+        if execution_index is None or reference_index is None:
+            raise WorkflowConflictError(
+                f"Shot {source_shot.id} is missing execution or reference dependencies"
+            )
+        source_execution = document.execution_plan[execution_index]
+        source_reference = document.reference_plan[reference_index]
+        existing_ids = {item.id for item in document.shots if item.id != source_shot.id}
+        replacement_ids: list[str] = []
+        replacement_shots: list[ShotPlan] = []
+        replacement_execution: list[ExecutionPlanEntry] = []
+        replacement_references: list[ReferencePlanEntry] = []
+
+        for draft in request.split_shots:
+            replacement_id = draft.id or f"{source_shot.id}-split-{uuid4().hex[:10]}"
+            if replacement_id in existing_ids or replacement_id in replacement_ids:
+                raise WorkflowConflictError(f"Duplicate replacement shot ID: {replacement_id}")
+            self._validate_dialogue_line_ids(document, draft.dialogue_line_ids)
+            replacement_ids.append(replacement_id)
+            replacement_shots.append(
+                ShotPlan(
+                    id=replacement_id,
+                    project_id=document.project.id,
+                    sequence=source_shot.sequence,
+                    duration_seconds=draft.duration_seconds,
+                    narrative_purpose=draft.narrative_purpose,
+                    visual=draft.visual,
+                    framing=draft.framing,
+                    camera=draft.camera,
+                    audio_intent=draft.audio_intent,
+                    dialogue_line_ids=list(draft.dialogue_line_ids),
+                    continuity=draft.continuity.model_copy(deep=True),
+                    transition_out=draft.transition_out,
+                    merge_candidate=draft.merge_candidate,
+                    local_rework_risk=draft.local_rework_risk,
+                    approval_status=ApprovalStatus.APPROVED,
+                    freshness=Freshness.CURRENT,
+                    revision=(source_shot.revision + 1 if replacement_id == source_shot.id else 1),
+                )
+            )
+            replacement_execution.append(
+                source_execution.model_copy(
+                    deep=True,
+                    update={
+                        "shot_id": replacement_id,
+                        "rationale": (
+                            f"{source_execution.rationale} | Director repair: "
+                            f"{request.reason.strip()}"
+                        ),
+                    },
+                )
+            )
+            replacement_references.append(
+                source_reference.model_copy(
+                    deep=True,
+                    update={"shot_id": replacement_id},
+                )
+            )
+
+        document.shots[shot_index : shot_index + 1] = replacement_shots
+        document.execution_plan[
+            execution_index : execution_index + 1
+        ] = replacement_execution
+        document.reference_plan[
+            reference_index : reference_index + 1
+        ] = replacement_references
+        for draft, replacement_id in zip(
+            request.split_shots,
+            replacement_ids,
+            strict=True,
+        ):
+            if draft.reference_plan is not None:
+                self._apply_reference_plan_update(
+                    document,
+                    replacement_id,
+                    draft.reference_plan,
+                )
+        for sequence, shot in enumerate(document.shots, start=1):
+            shot.sequence = sequence
+
+        dependency_target = next(
+            (
+                replacement_id
+                for draft, replacement_id in zip(
+                    request.split_shots,
+                    replacement_ids,
+                    strict=True,
+                )
+                if draft.inherits_source_dependencies
+            ),
+            replacement_ids[-1],
+        )
+        bible = next(
+            (
+                item
+                for item in document.bible_versions
+                if item.id == document.project.current_bible_version_id
+            ),
+            None,
+        )
+        if bible is None:
+            raise WorkflowConflictError("Project current ProjectBibleVersion is missing")
+        for prop in bible.props:
+            for state in prop.states:
+                if state.shot_id == source_shot.id:
+                    state.shot_id = dependency_target
+
+        self.repository.mark_takes_stale(document.project.id, [source_shot.id])
+        return replacement_ids
+
+    def _validate_dialogue_line_ids(
+        self,
+        document: ProjectDocument,
+        line_ids: list[str],
+    ) -> None:
+        if not line_ids:
+            return
+        script = self._current_script(document)
+        known = {line.id for line in script.lines}
+        unknown = sorted(set(line_ids) - known)
+        if unknown:
+            raise ArtifactNotFoundError(", ".join(unknown))
 
     def _asset_mutation_response(
         self,

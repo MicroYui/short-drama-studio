@@ -70,6 +70,15 @@ class H3ProbeRequest(DomainModel):
         max_length=12,
     )
     purpose: EvidencePurpose = EvidencePurpose.CONTRACT_SMOKE
+    learning_objective: str | None = Field(default=None, max_length=2000)
+    regression_case_id: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def require_quality_learning_objective(self) -> H3ProbeRequest:
+        if self.purpose == EvidencePurpose.QUALITY_PROBE:
+            if self.learning_objective is None or not self.learning_objective.strip():
+                raise ValueError("A QUALITY_PROBE requires a learning_objective")
+        return self
 
 
 class H3UrlValue(DomainModel):
@@ -190,6 +199,8 @@ class H3ProviderRun(DomainModel):
     shot_id: str
     route: VideoGenerationRoute
     purpose: EvidencePurpose
+    learning_objective: str | None = None
+    regression_case_id: str | None = None
     prompt: str
     media_inputs: list[H3MediaInput] = Field(default_factory=list[H3MediaInput])
     request: H3VideoRequest | None = None
@@ -234,6 +245,12 @@ class H3TakeReviewRequest(DomainModel):
     score: float = Field(ge=0.0, le=5.0)
     notes: str = Field(min_length=1)
     issues: list[QaIssue] = Field(default_factory=list[QaIssue])
+
+    @model_validator(mode="after")
+    def require_rejection_classification(self) -> H3TakeReviewRequest:
+        if not self.hard_gate_passed and not self.issues:
+            raise ValueError("A rejected H3 Take requires at least one classified QA issue")
+        return self
 
 
 class H3TaskActionResponse(DomainModel):

@@ -23,6 +23,7 @@ import {
   type AssetVersion,
   type GenerationTask,
   type H3CompilePreview,
+  type H3CapabilityProfile,
   type H3MediaInput,
   type H3MediaKind,
   type H3MediaRole,
@@ -30,6 +31,7 @@ import {
   type H3ProviderRun,
   type H3ProbeRequest,
   type ProjectAggregate,
+  type QaFailureCategory,
   type RouteEvidence,
   type Take,
   type VideoGenerationRoute,
@@ -90,6 +92,18 @@ const roleKinds: Record<H3MediaRole, H3MediaKind> = {
   reference_image: 'IMAGE',
   reference_video: 'VIDEO',
   reference_audio: 'AUDIO',
+}
+
+const failureCategoryLabels: Record<QaFailureCategory, string> = {
+  TECHNICAL_MEDIA: '技术媒体',
+  SPATIAL_CONTINUITY: '空间连续性',
+  CONTACT_CONTINUITY: '接触连续性',
+  CHARACTER_ORIENTATION: '人物朝向',
+  COMPOSITION_QUALITY: '构图质量',
+  IDENTITY_CONTINUITY: '身份连续性',
+  PROP_CONTINUITY: '道具连续性',
+  DIALOGUE_AUDIO: '对白与声音',
+  OTHER: '其他',
 }
 
 const statusLabels: Record<string, string> = {
@@ -305,6 +319,8 @@ export function H3LabPanel({
   const selectedShot = project.document.shots.find((shot) => shot.id === shotId) ?? project.document.shots[0]
   const [duration, setDuration] = useState(Math.ceil(selectedShot?.duration_seconds ?? 5))
   const [purpose, setPurpose] = useState<'CONTRACT_SMOKE' | 'QUALITY_PROBE'>('CONTRACT_SMOKE')
+  const [learningObjective, setLearningObjective] = useState('验证当前镜头的角色、空间、接触、朝向和构图能否稳定通过 QA，并决定是否需要调整编排。')
+  const [regressionCaseId, setRegressionCaseId] = useState('')
   const [promptOverride, setPromptOverride] = useState('')
   const [drafts, setDrafts] = useState<Record<H3MediaRole, SourceDraft[]>>({
     first_frame: [emptySourceDraft()],
@@ -314,6 +330,7 @@ export function H3LabPanel({
     reference_audio: [emptySourceDraft()],
   })
   const [config, setConfig] = useState<H3ProviderConfig | null>(null)
+  const [capabilityProfile, setCapabilityProfile] = useState<H3CapabilityProfile | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [runs, setRuns] = useState<H3ProviderRun[]>([])
   const [runsStatus, setRunsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -327,15 +344,17 @@ export function H3LabPanel({
   const [reviewScore, setReviewScore] = useState(4)
   const [reviewPassed, setReviewPassed] = useState(false)
   const [reviewNotes, setReviewNotes] = useState('')
+  const [reviewCategories, setReviewCategories] = useState<QaFailureCategory[]>([])
 
   useEffect(() => {
     if (selectedShot) setDuration(Math.ceil(selectedShot.duration_seconds))
   }, [selectedShot?.id])
 
   const refreshProviderData = useCallback(async () => {
-    const [configResult, runsResult] = await Promise.all([
+    const [configResult, runsResult, profileResult] = await Promise.all([
       ShortDramaApi.getH3Config(),
       ShortDramaApi.listH3Runs(project.document.project.id),
+      ShortDramaApi.getH3CapabilityProfile(project.document.project.id),
     ])
     if (configResult.ok) setConfig(configResult.data)
     else onError(configResult.error.message)
@@ -346,6 +365,8 @@ export function H3LabPanel({
       setRunsStatus('error')
       onError(runsResult.error.message)
     }
+    if (profileResult.ok) setCapabilityProfile(profileResult.data)
+    else onError(profileResult.error.message)
   }, [onError, project.document.project.id])
 
   useEffect(() => {
@@ -447,6 +468,8 @@ export function H3LabPanel({
     prompt_override: promptOverride.trim() || null,
     media_inputs: mediaInputs,
     purpose,
+    learning_objective: purpose === 'QUALITY_PROBE' ? learningObjective.trim() : null,
+    regression_case_id: regressionCaseId || null,
   })
 
   const run = async <T,>(label: string, action: () => Promise<ApiResult<T>>, success: (value: T) => void) => {
@@ -625,17 +648,32 @@ export function H3LabPanel({
     setReviewPassed(reviewTake.qa_report.hard_gate_passed)
     setReviewScore(reviewTake.qa_report.score)
     setReviewNotes(reviewTake.qa_report.reviewer_notes ?? '')
+    setReviewCategories(Array.from(new Set(
+      reviewTake.qa_report.issues.map((issue) => issue.category),
+    )))
   }, [reviewTake?.id])
 
+  const toggleReviewCategory = (category: QaFailureCategory) => {
+    setReviewCategories((current) => current.includes(category)
+      ? current.filter((item) => item !== category)
+      : [...current, category])
+  }
+
   const submitReview = () => {
-    if (!reviewTake || !reviewNotes.trim()) return
+    if (!reviewTake || !reviewNotes.trim() || (!reviewPassed && reviewCategories.length === 0)) return
     void run(
       '保存 H3 人工审片',
       () => ShortDramaApi.reviewH3Take(reviewTake.id, {
         hard_gate_passed: reviewPassed,
         score: reviewScore,
         notes: reviewNotes.trim(),
-        issues: [],
+        issues: reviewPassed ? [] : reviewCategories.map((category) => ({
+          code: `HUMAN_${category}`,
+          severity: 'ERROR',
+          message: reviewNotes.trim(),
+          repair_layer: 'DIRECTOR_AGENT',
+          category,
+        })),
       }),
       (result) => onProjectChange(result.project),
     )
@@ -753,6 +791,7 @@ export function H3LabPanel({
               <label><span className="mb-1.5 block text-xs text-zinc-500">时长（4–15 秒）</span><input className={inputClass} type="number" min={4} max={15} step={1} value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label>
               <label><span className="mb-1.5 block text-xs text-zinc-500">证据用途</span><select className={inputClass} value={purpose} onChange={(event) => setPurpose(event.target.value as 'CONTRACT_SMOKE' | 'QUALITY_PROBE')}><option value="CONTRACT_SMOKE">合同冒烟</option><option value="QUALITY_PROBE">质量探针</option></select></label>
             </div>
+            {purpose === 'QUALITY_PROBE' && <div className="grid gap-3 md:grid-cols-[1fr_280px]"><label><span className="mb-1.5 block text-xs text-zinc-500">本次实验要回答什么</span><textarea className={`${inputClass} min-h-20 resize-y text-xs leading-5`} value={learningObjective} onChange={(event) => setLearningObjective(event.target.value)} /></label><label><span className="mb-1.5 block text-xs text-zinc-500">回归案例（可选）</span><select className={inputClass} value={regressionCaseId} onChange={(event) => setRegressionCaseId(event.target.value)}><option value="">不绑定回归案例</option>{capabilityProfile?.regression_cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select><p className="mt-1.5 text-[11px] leading-4 text-zinc-600">质量探针必须明确学习目标；结果会进入能力画像和后续导演决策。</p></label></div>}
             <div>
               <span className="mb-2 block text-xs text-zinc-500">H3 路线</span>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -764,8 +803,8 @@ export function H3LabPanel({
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Prompt override（留空则由当前剧本、Bible、分镜与连续性自动编译）</span><textarea className={`${inputClass} min-h-24 resize-y leading-6`} value={promptOverride} onChange={(event) => setPromptOverride(event.target.value)} /></label>
             <div className="flex flex-wrap gap-2">
               <button className={secondaryButton} disabled={!shotId || busy !== null} onClick={compileWithGpt}><Sparkles className="h-3.5 w-3.5" />GPT-5.6-sol 编译（仅文本）</button>
-              <button className={secondaryButton} disabled={!shotId || !requiredInputsReady || busy !== null} onClick={compilePreview}><Eye className="h-3.5 w-3.5" />预览请求</button>
-              <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交{purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'} · 基础约 ${estimatedBaseCost(duration, config)}</button>
+              <button className={secondaryButton} disabled={!shotId || !requiredInputsReady || (purpose === 'QUALITY_PROBE' && !learningObjective.trim()) || busy !== null} onClick={compilePreview}><Eye className="h-3.5 w-3.5" />预览请求</button>
+              <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || (purpose === 'QUALITY_PROBE' && !learningObjective.trim()) || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交{purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'} · 基础约 ${estimatedBaseCost(duration, config)}</button>
             </div>
           </div>
           <div className="min-h-72 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
@@ -821,7 +860,7 @@ export function H3LabPanel({
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <div className="flex items-center justify-between"><div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><h3 className="font-medium text-white">真实 Take 人工审片</h3></div><span className="text-xs text-zinc-600">不自动通过</span></div>
-          {!reviewTake ? <p className="mt-4 rounded-lg border border-dashed border-zinc-800 py-16 text-center text-xs text-zinc-600">H3 输出下载后在这里审片</p> : <div className="mt-4 grid gap-4 sm:grid-cols-[190px_1fr]"><div><video key={reviewTake.id} className="aspect-[9/16] max-h-80 w-full rounded-lg bg-black object-contain" src={pathToFileUrl(reviewTake.media_path)} poster={pathToFileUrl(reviewTake.thumbnail_path)} controls preload="metadata" /><select className={`${inputClass} mt-2 py-2 text-xs`} value={reviewTake.id} onChange={(event) => setReviewTakeId(event.target.value)}>{h3Takes.map((take) => <option key={take.id} value={take.id}>镜头 {project.document.shots.find((shot) => shot.id === take.shot_id)?.sequence} · Take {take.candidate_index} · {take.qa_status}</option>)}</select></div><div><div className="flex flex-wrap gap-2"><Badge status={reviewTake.qa_status}>QA {reviewTake.qa_status}</Badge><Badge status={reviewEvidence?.technical_passed ? 'SUCCEEDED' : 'FAILED'}>技术门槛 {reviewEvidence?.technical_passed ? '通过' : '未通过'}</Badge><Badge status={reviewEvidence?.purpose === 'QUALITY_PROBE' ? 'SUCCEEDED' : 'ACKNOWLEDGED'}>{reviewEvidence?.purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'}</Badge></div><p className="mt-3 text-xs leading-5 text-zinc-500">逐项听看身份、服装、场景、道具、动作、画面瑕疵、锁定台词、说话人、声线、口型与音频。这里先记录单人硬门槛；正式路线结论仍需后续盲评样本。</p>{reviewEvidence?.purpose === 'CONTRACT_SMOKE' && <p className="mt-2 text-xs text-amber-300/80">合同冒烟只验证接口与媒体闭环，不能选入正式时间线。</p>}<label className="mt-3 flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={reviewPassed} onChange={(event) => setReviewPassed(event.target.checked)} />全部严重失败硬门槛通过</label><label className="mt-3 block"><span className="text-xs text-zinc-500">质量分：{reviewScore.toFixed(1)} / 5</span><input className="mt-2 w-full accent-blue-500" type="range" min={0} max={5} step={0.1} value={reviewScore} onChange={(event) => setReviewScore(Number(event.target.value))} /></label><textarea className={`${inputClass} mt-3 min-h-20 resize-y text-xs leading-5`} placeholder="必填：记录通过/失败的具体画面、台词、声线和口型证据" value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /><div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!reviewNotes.trim() || busy !== null} onClick={submitReview}>保存审片</button><button className={secondaryButton} disabled={reviewTake.qa_status !== 'PASSED' || reviewTake.is_selected || reviewEvidence?.purpose !== 'QUALITY_PROBE'} onClick={() => selectReviewedTake(reviewTake)}>{reviewTake.is_selected ? '已入选' : '选入时间线'}</button></div></div></div>}
+          {!reviewTake ? <p className="mt-4 rounded-lg border border-dashed border-zinc-800 py-16 text-center text-xs text-zinc-600">H3 输出下载后在这里审片</p> : <div className="mt-4 grid gap-4 sm:grid-cols-[190px_1fr]"><div><video key={reviewTake.id} className="aspect-[9/16] max-h-80 w-full rounded-lg bg-black object-contain" src={pathToFileUrl(reviewTake.media_path)} poster={pathToFileUrl(reviewTake.thumbnail_path)} controls preload="metadata" /><select className={`${inputClass} mt-2 py-2 text-xs`} value={reviewTake.id} onChange={(event) => setReviewTakeId(event.target.value)}>{h3Takes.map((take) => <option key={take.id} value={take.id}>镜头 {project.document.shots.find((shot) => shot.id === take.shot_id)?.sequence} · Take {take.candidate_index} · {take.qa_status}</option>)}</select></div><div><div className="flex flex-wrap gap-2"><Badge status={reviewTake.qa_status}>QA {reviewTake.qa_status}</Badge><Badge status={reviewEvidence?.technical_passed ? 'SUCCEEDED' : 'FAILED'}>技术门槛 {reviewEvidence?.technical_passed ? '通过' : '未通过'}</Badge><Badge status={reviewEvidence?.purpose === 'QUALITY_PROBE' ? 'SUCCEEDED' : 'ACKNOWLEDGED'}>{reviewEvidence?.purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'}</Badge></div><p className="mt-3 text-xs leading-5 text-zinc-500">逐项听看身份、服装、场景、道具、动作、画面瑕疵、锁定台词、说话人、声线、口型与音频。失败必须进入通用分类，供能力画像与导演 Agent 使用。</p>{reviewEvidence?.purpose === 'CONTRACT_SMOKE' && <p className="mt-2 text-xs text-amber-300/80">合同冒烟只验证接口与媒体闭环，不能选入正式时间线。</p>}<label className="mt-3 flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={reviewPassed} onChange={(event) => setReviewPassed(event.target.checked)} />全部严重失败硬门槛通过</label>{!reviewPassed && <div className="mt-3"><span className="text-xs text-zinc-500">失败分类（至少一项）</span><div className="mt-2 flex flex-wrap gap-2">{(Object.keys(failureCategoryLabels) as QaFailureCategory[]).map((category) => <button key={category} type="button" className={`rounded-full border px-2.5 py-1 text-[11px] ${reviewCategories.includes(category) ? 'border-amber-400/50 bg-amber-400/10 text-amber-200' : 'border-zinc-700 text-zinc-500'}`} onClick={() => toggleReviewCategory(category)}>{failureCategoryLabels[category]}</button>)}</div></div>}<label className="mt-3 block"><span className="text-xs text-zinc-500">质量分：{reviewScore.toFixed(1)} / 5</span><input className="mt-2 w-full accent-blue-500" type="range" min={0} max={5} step={0.1} value={reviewScore} onChange={(event) => setReviewScore(Number(event.target.value))} /></label><textarea className={`${inputClass} mt-3 min-h-20 resize-y text-xs leading-5`} placeholder="必填：记录通过/失败的具体画面、台词、声线和口型证据" value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /><div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!reviewNotes.trim() || (!reviewPassed && reviewCategories.length === 0) || busy !== null} onClick={submitReview}>保存审片</button><button className={secondaryButton} disabled={reviewTake.qa_status !== 'PASSED' || reviewTake.is_selected || reviewEvidence?.purpose !== 'QUALITY_PROBE'} onClick={() => selectReviewedTake(reviewTake)}>{reviewTake.is_selected ? '已入选' : '选入时间线'}</button></div></div></div>}
         </div>
       </section>
 

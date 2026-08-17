@@ -62,6 +62,30 @@ class QaStatus(StrEnum):
     REJECTED = "REJECTED"
 
 
+class QaFailureCategory(StrEnum):
+    TECHNICAL_MEDIA = "TECHNICAL_MEDIA"
+    SPATIAL_CONTINUITY = "SPATIAL_CONTINUITY"
+    CONTACT_CONTINUITY = "CONTACT_CONTINUITY"
+    CHARACTER_ORIENTATION = "CHARACTER_ORIENTATION"
+    COMPOSITION_QUALITY = "COMPOSITION_QUALITY"
+    IDENTITY_CONTINUITY = "IDENTITY_CONTINUITY"
+    PROP_CONTINUITY = "PROP_CONTINUITY"
+    DIALOGUE_AUDIO = "DIALOGUE_AUDIO"
+    OTHER = "OTHER"
+
+
+class DirectorRepairStrategy(StrEnum):
+    PROMPT_RETRY = "PROMPT_RETRY"
+    CHANGE_KEYFRAME = "CHANGE_KEYFRAME"
+    SPLIT_SHOT = "SPLIT_SHOT"
+    CHANGE_CAMERA = "CHANGE_CAMERA"
+
+
+class DirectorRepairDecision(StrEnum):
+    APPLIED = "APPLIED"
+    IGNORED = "IGNORED"
+
+
 class TakeAvailability(StrEnum):
     AVAILABLE = "AVAILABLE"
     MISSING = "MISSING"
@@ -377,6 +401,7 @@ class ShotPlan(DomainModel):
     local_rework_risk: str
     approval_status: ApprovalStatus
     freshness: Freshness
+    revision: int = Field(default=1, ge=1)
 
 
 class CapabilitySnapshot(DomainModel):
@@ -535,6 +560,18 @@ class TimelineManifest(DomainModel):
     created_at: str
 
 
+class DirectorRepairRecord(DomainModel):
+    id: str
+    source_shot_id: str
+    source_take_id: str | None = None
+    strategy: DirectorRepairStrategy
+    decision: DirectorRepairDecision
+    reason: str
+    issue_codes: list[str] = Field(default_factory=list[str])
+    affected_shot_ids: list[str] = Field(default_factory=list[str])
+    created_at: str
+
+
 class ProjectDocument(DomainModel):
     project: ProjectRecord
     script_versions: list[ScriptVersion]
@@ -545,6 +582,9 @@ class ProjectDocument(DomainModel):
     reference_plan: list[ReferencePlanEntry]
     manifests: list[TimelineManifest]
     reference_packs: list[ReferencePack] = Field(default_factory=list[ReferencePack])
+    repair_history: list[DirectorRepairRecord] = Field(
+        default_factory=list[DirectorRepairRecord]
+    )
 
 
 class GenerationTask(DomainModel):
@@ -563,6 +603,7 @@ class GenerationTask(DomainModel):
     request_fingerprint: str
     input_script_version_id: str
     input_bible_version_id: str
+    input_shot_revision: int = Field(default=1, ge=1)
     requested_duration_seconds: float
     attempt: int
     retry_of_task_id: str | None = None
@@ -581,6 +622,7 @@ class QaIssue(DomainModel):
     severity: str
     message: str
     repair_layer: str
+    category: QaFailureCategory = QaFailureCategory.OTHER
 
 
 class QAReport(DomainModel):

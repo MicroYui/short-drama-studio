@@ -33,13 +33,17 @@ export type LanguageProviderConfig = components['schemas']['LanguageProviderConf
 export type LanguagePromptCompileResponse = components['schemas']['LanguagePromptCompileResponse']
 export type ReferencePackEntryCreateRequest = components['schemas']['ReferencePackEntryCreateRequest']
 export type ReferencePackEntryMutationResponse = components['schemas']['ReferencePackEntryMutationResponse']
-export type ShotReferencePlanUpdateRequest = components['schemas']['ShotReferencePlanUpdateRequest']
+export type ShotReferencePlanUpdateRequest = components['schemas']['ShotReferencePlanUpdateRequest-Input']
 export type ReferencePlanPreviewRequest = components['schemas']['ReferencePlanPreviewRequest']
 export type ReferencePlanPreviewResponse = components['schemas']['ReferencePlanPreviewResponse']
 export type KeyframeBriefCompileRequest = components['schemas']['KeyframeBriefCompileRequest']
 export type KeyframeBriefCompileResponse = components['schemas']['KeyframeBriefCompileResponse']
 export type DirectorAdviceRequest = components['schemas']['DirectorAdviceRequest']
 export type DirectorAdviceResponse = components['schemas']['DirectorAdviceResponse']
+export type DirectorLoopResponse = components['schemas']['DirectorLoopResponse']
+export type DirectorRepairDecisionRequest = components['schemas']['DirectorRepairDecisionRequest-Input']
+export type H3CapabilityProfile = components['schemas']['H3CapabilityProfileResponse']
+export type QaFailureCategory = components['schemas']['QaFailureCategory']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -82,6 +86,9 @@ const updateShotReferencePlan = makeEndpointClient('/api/short-drama/projects/{p
 const previewShotReferencePlan = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/reference-plan/preview', 'post')
 const compileKeyframeBrief = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/keyframe-brief/compile', 'post')
 const getDirectorAdvice = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/director-advice', 'post')
+const runDirectorLoop = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/director-loop', 'post')
+const decideDirectorRepair = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/director-repair', 'post')
+const getH3CapabilityProfile = makeEndpointClient('/api/short-drama/projects/{project_id}/providers/minimax-h3/capability-profile', 'get')
 const createAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/assets', 'post')
 const importLocalAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-local', 'post')
 const importUrlAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-url', 'post')
@@ -237,6 +244,29 @@ export const ShortDramaApi = {
     body,
     undefined,
     shotPath(projectId, shotId, '/director-advice'),
+  ),
+  runDirectorLoop: (
+    projectId: string,
+    shotId: string,
+    body: DirectorAdviceRequest,
+  ) => runDirectorLoop(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/director-loop'),
+  ),
+  decideDirectorRepair: (
+    projectId: string,
+    shotId: string,
+    body: DirectorRepairDecisionRequest,
+  ) => decideDirectorRepair(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/director-repair'),
+  ),
+  getH3CapabilityProfile: (projectId: string) => getH3CapabilityProfile(
+    undefined,
+    undefined,
+    projectPath(projectId, '/providers/minimax-h3/capability-profile'),
   ),
   createAsset: (
     projectId: string,

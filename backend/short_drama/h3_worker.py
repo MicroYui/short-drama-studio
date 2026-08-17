@@ -21,6 +21,7 @@ from short_drama.models import (
     Freshness,
     GenerationTask,
     QAReport,
+    QaFailureCategory,
     QaIssue,
     QaStatus,
     RouteEvidence,
@@ -376,6 +377,7 @@ class PersistentH3Worker:
                     severity="ERROR",
                     message=f"Expected portrait 9:16, got {media.width}x{media.height}",
                     repair_layer="PROVIDER_RETRY",
+                    category=QaFailureCategory.TECHNICAL_MEDIA,
                 )
             )
         if not resolution_ok:
@@ -385,6 +387,7 @@ class PersistentH3Worker:
                     severity="ERROR",
                     message=f"Expected a 768P-class source, got {media.width}x{media.height}",
                     repair_layer="PROVIDER_RETRY",
+                    category=QaFailureCategory.TECHNICAL_MEDIA,
                 )
             )
         if not duration_ok:
@@ -397,6 +400,7 @@ class PersistentH3Worker:
                         f"got {media.duration_seconds:.2f}s"
                     ),
                     repair_layer="PROVIDER_RETRY",
+                    category=QaFailureCategory.TECHNICAL_MEDIA,
                 )
             )
         if not media.audio_present:
@@ -406,6 +410,7 @@ class PersistentH3Worker:
                     severity="ERROR",
                     message="H3 source has no audio stream",
                     repair_layer="AUDIO_ROUTE",
+                    category=QaFailureCategory.TECHNICAL_MEDIA,
                 )
             )
 
@@ -444,7 +449,7 @@ class PersistentH3Worker:
             availability=TakeAvailability.AVAILABLE,
             qa_status=QaStatus.PENDING,
             is_selected=False,
-            freshness=Freshness.CURRENT,
+            freshness=self._output_freshness(task),
             qa_report=report,
             created_at=now,
         )
@@ -470,6 +475,19 @@ class PersistentH3Worker:
         task.updated_at = now
         self.repository.save_task(task)
         return task
+
+    def _output_freshness(self, task: GenerationTask) -> Freshness:
+        document = self.repository.get_project(task.project_id)
+        if document is None:
+            return Freshness.STALE
+        shot = next((item for item in document.shots if item.id == task.shot_id), None)
+        if shot is None or shot.revision != task.input_shot_revision:
+            return Freshness.STALE
+        if task.input_script_version_id != document.project.current_script_version_id:
+            return Freshness.STALE
+        if task.input_bible_version_id != document.project.current_bible_version_id:
+            return Freshness.STALE
+        return Freshness.CURRENT
 
     def _upload_local_input(self, client: H3Client, media: H3MediaInput) -> H3UploadedInput:
         assert media.source.local_path is not None

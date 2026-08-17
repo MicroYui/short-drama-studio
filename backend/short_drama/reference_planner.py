@@ -15,9 +15,13 @@ from short_drama.models import (
     AssetKind,
     AssetMediaType,
     AssetVersion,
+    ContinuityState,
+    DirectorRepairDecision,
+    DirectorRepairStrategy,
     DomainModel,
     ProjectAggregate,
     ProjectDocument,
+    QaIssue,
     ReferenceAngle,
     ReferenceFraming,
     ReferencePack,
@@ -28,6 +32,7 @@ from short_drama.models import (
     ShotPlan,
     SpatialInteractionConstraint,
 )
+from short_drama.quality_learning import H3CapabilityProfileResponse
 
 
 class KeyframePosition(StrEnum):
@@ -110,6 +115,7 @@ class KeyframeBriefCompileRequest(ReferencePlanPreviewRequest):
 
 class DirectorAdviceRequest(ReferencePlanPreviewRequest):
     user_direction: str | None = Field(default=None, max_length=2000)
+    take_id: str | None = Field(default=None, max_length=200)
 
 
 class DirectorAdvisoryCategory(StrEnum):
@@ -131,18 +137,146 @@ class DirectorAdvisory(DomainModel):
     dismissible: Literal[True] = True
 
 
+class DirectorRepairOption(DomainModel):
+    strategy: DirectorRepairStrategy
+    summary: str = Field(min_length=1, max_length=1000)
+    rationale: str = Field(min_length=1, max_length=2000)
+    tradeoff: str = Field(min_length=1, max_length=1000)
+    recommended: bool = False
+    dismissible: Literal[True] = True
+
+
+class ShotPlanPatch(DomainModel):
+    duration_seconds: float | None = Field(default=None, gt=0)
+    narrative_purpose: str | None = Field(default=None, min_length=1)
+    visual: str | None = Field(default=None, min_length=1)
+    framing: str | None = Field(default=None, min_length=1)
+    camera: str | None = Field(default=None, min_length=1)
+    audio_intent: str | None = Field(default=None, min_length=1)
+    dialogue_line_ids: list[str] | None = None
+    continuity: ContinuityState | None = None
+    transition_out: str | None = Field(default=None, min_length=1)
+    merge_candidate: bool | None = None
+    local_rework_risk: str | None = Field(default=None, min_length=1)
+
+
+class ReplacementShotDraft(DomainModel):
+    id: str | None = Field(default=None, min_length=1, max_length=200)
+    duration_seconds: float = Field(gt=0)
+    narrative_purpose: str = Field(min_length=1)
+    visual: str = Field(min_length=1)
+    framing: str = Field(min_length=1)
+    camera: str = Field(min_length=1)
+    audio_intent: str = Field(min_length=1)
+    dialogue_line_ids: list[str] = Field(default_factory=list[str])
+    continuity: ContinuityState
+    transition_out: str = Field(min_length=1)
+    merge_candidate: bool = False
+    local_rework_risk: str = Field(min_length=1)
+    inherits_source_dependencies: bool = False
+    reference_plan: ShotReferencePlanUpdateRequest | None = None
+
+
+class DirectorRepairDecisionRequest(DomainModel):
+    decision: DirectorRepairDecision
+    strategy: DirectorRepairStrategy
+    reason: str = Field(min_length=1, max_length=4000)
+    source_take_id: str | None = Field(default=None, max_length=200)
+    issue_codes: list[str] = Field(default_factory=list[str], max_length=32)
+    shot_patch: ShotPlanPatch | None = None
+    reference_plan: ShotReferencePlanUpdateRequest | None = None
+    split_shots: list[ReplacementShotDraft] = Field(
+        default_factory=list[ReplacementShotDraft],
+        max_length=8,
+    )
+
+    @model_validator(mode="after")
+    def validate_repair_shape(self) -> DirectorRepairDecisionRequest:
+        if self.decision == DirectorRepairDecision.IGNORED:
+            return self
+        if self.strategy == DirectorRepairStrategy.SPLIT_SHOT:
+            if len(self.split_shots) < 2:
+                raise ValueError("Applying SPLIT_SHOT requires at least two replacement shots")
+            if self.shot_patch is not None:
+                raise ValueError("SPLIT_SHOT cannot also patch the original shot")
+            if sum(item.inherits_source_dependencies for item in self.split_shots) > 1:
+                raise ValueError(
+                    "At most one replacement shot may inherit source-shot dependencies"
+                )
+            return self
+        if self.split_shots:
+            raise ValueError("split_shots are only valid for the SPLIT_SHOT strategy")
+        if self.strategy == DirectorRepairStrategy.CHANGE_CAMERA:
+            if self.shot_patch is None or self.shot_patch.camera is None:
+                raise ValueError("Applying CHANGE_CAMERA requires a camera shot patch")
+        if self.strategy == DirectorRepairStrategy.CHANGE_KEYFRAME:
+            if self.shot_patch is None and self.reference_plan is None:
+                raise ValueError(
+                    "Applying CHANGE_KEYFRAME requires a shot or reference-plan change"
+                )
+        if self.strategy == DirectorRepairStrategy.PROMPT_RETRY:
+            if self.shot_patch is None:
+                raise ValueError(
+                    "Applying PROMPT_RETRY requires a shot patch that changes compiled intent"
+                )
+        return self
+
+
 class DirectorAdvicePayload(DomainModel):
     advisories: list[DirectorAdvisory] = Field(
         default_factory=list[DirectorAdvisory],
         max_length=12,
     )
+    repair_options: list[DirectorRepairOption] = Field(
+        default_factory=list[DirectorRepairOption],
+        max_length=4,
+    )
+    recommended_strategy: DirectorRepairStrategy | None = None
+    proposed_repair: DirectorRepairDecisionRequest | None = None
+
+    @model_validator(mode="after")
+    def validate_recommendation_contract(self) -> DirectorAdvicePayload:
+        recommended_options = [item for item in self.repair_options if item.recommended]
+        if len(recommended_options) > 1:
+            raise ValueError("Director Agent may recommend at most one repair option")
+        if self.recommended_strategy is None:
+            if recommended_options or self.proposed_repair is not None:
+                raise ValueError(
+                    "A recommended option or proposed repair requires recommended_strategy"
+                )
+            return self
+        if self.repair_options:
+            if not recommended_options:
+                raise ValueError(
+                    "recommended_strategy requires one matching recommended repair option"
+                )
+            if recommended_options[0].strategy != self.recommended_strategy:
+                raise ValueError(
+                    "The recommended repair option must match recommended_strategy"
+                )
+        if self.proposed_repair is None:
+            raise ValueError("recommended_strategy requires an executable proposed_repair")
+        if self.proposed_repair.strategy != self.recommended_strategy:
+            raise ValueError("proposed_repair strategy must match recommended_strategy")
+        if self.proposed_repair.decision != DirectorRepairDecision.APPLIED:
+            raise ValueError("proposed_repair must describe the APPLIED repair")
+        return self
 
 
 class DirectorAdviceResponse(DirectorAdvicePayload):
     provider: str = "openai-compatible"
     model: str = "gpt-5.6-sol"
     shot_id: str
+    capability_profile_version: str
+    qa_issue_codes: list[str] = Field(default_factory=list[str])
     proceed_allowed: Literal[True] = True
+
+
+class DirectorLoopResponse(DomainModel):
+    advice: DirectorAdviceResponse
+    repair_applied: bool
+    next_action: Literal["REGENERATE_SHOT", "AWAIT_USER", "NO_CHANGE"]
+    project: ProjectAggregate
 
 
 class ReferenceSelection(DomainModel):
@@ -666,15 +800,20 @@ def build_director_advice_input(
     plan: ReferencePlanEntry,
     preview: ReferencePlanPreviewResponse,
     request: DirectorAdviceRequest,
+    qa_issues: list[QaIssue],
+    reviewer_notes: list[str],
+    capability_profile: H3CapabilityProfileResponse,
 ) -> tuple[str, str]:
     assets = {item.id: item for item in document.assets}
     instructions = (
         "You are a film director agent advising a user who is producing a live-action "
         "vertical short drama. Return JSON only, matching the supplied schema. Evaluate "
         "the actual shot context; do not apply a fixed action-count or duration threshold. "
-        "You may recommend another reference, a simpler action, a different route, or a "
-        "shot split, but every item is optional and dismissible. Never claim that generation "
-        "is blocked or that the user must follow your advice. Use an empty advisories array "
+        "Compare prompt retry, keyframe replacement, shot split, and coverage-camera change "
+        "against the actual QA failure and provider capability profile. A prompt retry should "
+        "not be the default when prior evidence indicates a route or keyframe mismatch. Every "
+        "item is optional and dismissible. Never claim that generation is blocked or that the "
+        "user must follow your advice. Use an empty advisories array and repair_options array "
         "when no suggestion would materially improve quality."
     )
     payload = {
@@ -688,7 +827,36 @@ def build_director_advice_input(
                     "suggested_action": "optional concrete next action",
                     "dismissible": True,
                 }
-            ]
+            ],
+            "repair_options": [
+                {
+                    "strategy": "one of: "
+                    + " | ".join(item.value for item in DirectorRepairStrategy),
+                    "summary": "what would change",
+                    "rationale": "why it addresses the observed QA failure",
+                    "tradeoff": "quality, continuity, time, or cost tradeoff",
+                    "recommended": "boolean; at most one true",
+                    "dismissible": True,
+                }
+            ],
+            "recommended_strategy": "one strategy value or null",
+            "proposed_repair": {
+                "decision": "APPLIED",
+                "strategy": "same value as recommended_strategy",
+                "reason": "concise executable rationale",
+                "source_take_id": request.take_id,
+                "issue_codes": ["codes from qa_failures"],
+                "shot_patch": (
+                    "optional provider-neutral ShotPlan field patch; use null when unchanged"
+                ),
+                "reference_plan": (
+                    "optional complete provider-neutral reference-plan update; use null when unchanged"
+                ),
+                "split_shots": (
+                    "for SPLIT_SHOT only, at least two complete replacement shot drafts; "
+                    "otherwise an empty array"
+                ),
+            },
         },
         "shot": shot.model_dump(mode="json"),
         "reference_plan": plan.model_dump(mode="json"),
@@ -701,9 +869,31 @@ def build_director_advice_input(
         ],
         "uncovered_reference_preferences": preview.missing_requirement_ids,
         "planning_signals": preview.complexity.model_dump(mode="json"),
+        "qa_failures": [item.model_dump(mode="json") for item in qa_issues],
+        "reviewer_notes": reviewer_notes,
+        "provider_capability_profile": capability_profile.model_dump(mode="json"),
+        "repair_strategy_library": {
+            DirectorRepairStrategy.PROMPT_RETRY.value: (
+                "Regenerate with a materially revised prompt while keeping the current shot, "
+                "camera, and keyframe inputs."
+            ),
+            DirectorRepairStrategy.CHANGE_KEYFRAME.value: (
+                "Replace or repair one or more keyframes, then regenerate the same shot intent."
+            ),
+            DirectorRepairStrategy.SPLIT_SHOT.value: (
+                "Distribute competing action beats across multiple shots and update dependencies."
+            ),
+            DirectorRepairStrategy.CHANGE_CAMERA.value: (
+                "Keep the narrative beat but use a coverage angle that reduces hidden topology, "
+                "contact, or orientation requirements."
+            ),
+        },
         "user_direction": request.user_direction,
+        "run_mode": document.project.run_mode.value,
         "product_rule": (
-            "Advice never blocks generation. The user may ignore every recommendation."
+            "Advice never blocks generation. In AUTO_DRAFT, return an executable proposed_repair "
+            "for the recommended strategy so the workflow can continue without a user pause. In "
+            "GUIDED, the user may apply or ignore it. Never invent scene-specific schema fields."
         ),
     }
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
