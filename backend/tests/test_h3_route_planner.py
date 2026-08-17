@@ -344,6 +344,7 @@ def test_production_route_plan_api_supports_free_dry_run(client) -> None:
     assert compiled.status_code == 200, compiled.text
     plan = compiled.json()["plan"]
     assert plan["estimated_new_h3_seconds"] == 5
+    assert plan["estimated_cost_credits"] == 3.003541
     assert plan["decisions"][0]["action"] == "GENERATE"
 
     listed = client.get(

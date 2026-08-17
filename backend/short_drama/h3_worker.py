@@ -464,6 +464,7 @@ class PersistentH3Worker:
         run.output_url = url
         run.downloaded_path = str(destination.resolve())
         run.estimated_cost_usd = self._estimate_cost(run, remote)
+        run.estimated_cost_credits = self._estimate_billing_credits(run, remote)
         run.last_error_code = None
         run.last_error_message = None
         run.updated_at = now
@@ -581,15 +582,8 @@ class PersistentH3Worker:
 
     @staticmethod
     def _estimate_cost(run: H3ProviderRun, remote: H3RemoteTask) -> float:
+        output_seconds = PersistentH3Worker._billable_output_seconds(run, remote)
         usage = remote.usage
-        if usage is not None and usage.output_seconds is not None:
-            output_seconds = usage.output_seconds
-        elif remote.duration is not None:
-            output_seconds = remote.duration
-        elif run.request is not None:
-            output_seconds = run.request.duration
-        else:
-            output_seconds = 0
         input_video_seconds = (
             usage.input_seconds
             if usage is not None and usage.input_seconds is not None
@@ -607,6 +601,31 @@ class PersistentH3Worker:
             + additional_images * run.pricing.additional_image_each,
             4,
         )
+
+    @staticmethod
+    def _estimate_billing_credits(
+        run: H3ProviderRun,
+        remote: H3RemoteTask,
+    ) -> float:
+        return round(
+            PersistentH3Worker._billable_output_seconds(run, remote)
+            * run.pricing.billing_output_per_second,
+            6,
+        )
+
+    @staticmethod
+    def _billable_output_seconds(
+        run: H3ProviderRun,
+        remote: H3RemoteTask,
+    ) -> float:
+        usage = remote.usage
+        if usage is not None and usage.output_seconds is not None:
+            return usage.output_seconds
+        if remote.duration is not None:
+            return remote.duration
+        if run.request is not None:
+            return run.request.duration
+        return 0
 
     def _client(self) -> H3Client:
         api_key = self.config_store.api_key()

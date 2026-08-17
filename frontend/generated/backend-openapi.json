@@ -3506,6 +3506,26 @@
             "title": "Additional Image Each",
             "type": "number"
           },
+          "billing_output_per_second": {
+            "default": 0.60070822,
+            "title": "Billing Output Per Second",
+            "type": "number"
+          },
+          "billing_resolution": {
+            "default": "768P",
+            "title": "Billing Resolution",
+            "type": "string"
+          },
+          "billing_source_url": {
+            "default": "https://platform.acedata.cloud/api/v1/services/2add8a2a-3577-4a0f-8fd4-e08aaabe8290",
+            "title": "Billing Source Url",
+            "type": "string"
+          },
+          "billing_unit": {
+            "default": "ACE_CREDIT",
+            "title": "Billing Unit",
+            "type": "string"
+          },
           "captured_at": {
             "title": "Captured At",
             "type": "string"
@@ -3750,6 +3770,12 @@
             "title": "Decisions",
             "type": "array"
           },
+          "estimated_cost_credits": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Estimated Cost Credits",
+            "type": "number"
+          },
           "estimated_cost_usd": {
             "minimum": 0.0,
             "title": "Estimated Cost Usd",
@@ -3990,6 +4016,17 @@
               }
             ],
             "title": "Downloaded Path"
+          },
+          "estimated_cost_credits": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Credits"
           },
           "estimated_cost_usd": {
             "anyOf": [

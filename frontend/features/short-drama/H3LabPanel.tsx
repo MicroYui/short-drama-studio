@@ -284,8 +284,8 @@ function SourceInput({
   )
 }
 
-function estimatedBaseCost(duration: number, config: H3ProviderConfig | null): string {
-  const rate = config?.pricing.output_per_second ?? 0.08
+function estimatedBillingCredits(duration: number, config: H3ProviderConfig | null): string {
+  const rate = config?.pricing.billing_output_per_second ?? 0.60070822
   return (duration * rate).toFixed(2)
 }
 
@@ -728,6 +728,7 @@ export function H3LabPanel({
 
   const unknownTasks = project.tasks.filter((task) => task.provider === 'minimax' && task.status === 'SUBMIT_UNKNOWN')
   const totalCost = runs.reduce((sum, item) => sum + (item.estimated_cost_usd ?? 0), 0)
+  const totalCredits = runs.reduce((sum, item) => sum + (item.estimated_cost_credits ?? 0), 0)
   const latestProductionRoutePlan = productionRoutePlans[0]
   const productionGenerationCount = latestProductionRoutePlan?.decisions.filter((item) => item.action === 'GENERATE').length ?? 0
   const runsByTask = new Map(runs.map((run) => [run.task_id, run]))
@@ -763,7 +764,7 @@ export function H3LabPanel({
           </div>
           <div className="grid min-w-72 grid-cols-2 gap-3">
             <div className="rounded-xl border border-zinc-800 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-zinc-600">Provider runs</p><p className="mt-1 text-xl font-semibold text-white">{runs.length}</p></div>
-            <div className="rounded-xl border border-zinc-800 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-zinc-600">Recorded cost</p><p className="mt-1 text-xl font-semibold text-white">${totalCost.toFixed(2)}</p></div>
+            <div className="rounded-xl border border-zinc-800 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-wider text-zinc-600">Recorded estimate</p><p className="mt-1 text-xl font-semibold text-white">{totalCredits.toFixed(2)} credits</p><p className="mt-0.5 text-[10px] text-zinc-600">upstream ${totalCost.toFixed(2)}</p></div>
           </div>
         </div>
       </section>
@@ -789,7 +790,7 @@ export function H3LabPanel({
             <div className="flex flex-wrap items-center gap-2">
               <Badge status={latestProductionRoutePlan.status}>{latestProductionRoutePlan.status}</Badge>
               <span className="text-xs text-zinc-400">v{latestProductionRoutePlan.version} · {latestProductionRoutePlan.planner}</span>
-              <span className="text-xs text-zinc-500">新生成 {latestProductionRoutePlan.estimated_new_h3_seconds}s · 估算 ${latestProductionRoutePlan.estimated_cost_usd.toFixed(2)}</span>
+              <span className="text-xs text-zinc-500">新生成 {latestProductionRoutePlan.estimated_new_h3_seconds}s · AceData 约 {latestProductionRoutePlan.estimated_cost_credits.toFixed(2)} credits · 上游参考 ${latestProductionRoutePlan.estimated_cost_usd.toFixed(2)}</span>
             </div>
             {(latestProductionRoutePlan.warnings?.length ?? 0) > 0 && <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">{latestProductionRoutePlan.warnings?.map((warning) => <p key={warning} className="text-[11px] leading-5 text-amber-100/70">{warning}</p>)}</div>}
             <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
@@ -828,7 +829,7 @@ export function H3LabPanel({
             <button className={subtleButton} disabled={!config?.has_api_key || config.key_source === 'ENVIRONMENT' || busy !== null} onClick={clearKey}>清除本地 Key</button>
           </div>
           <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-5 text-zinc-500">
-            成本参考：按 MiniMax 官方费率估算 768P 输出 ${config?.pricing.output_per_second.toFixed(2) ?? '0.08'}/秒；AceData 实际扣费以平台账单为准，且不作为质量路线的优先级。
+            费用记录：AceData 当前公开 768P 费率约 {config?.pricing.billing_output_per_second.toFixed(8) ?? '0.60070822'} credits/秒；另保留 MiniMax 上游 ${config?.pricing.output_per_second.toFixed(2) ?? '0.08'}/秒参考。真实扣费仍以 AceData 账单为准，且不作为质量路线的优先级。
           </div>
         </div>
 
@@ -891,7 +892,7 @@ export function H3LabPanel({
             <div className="flex flex-wrap gap-2">
               <button className={secondaryButton} disabled={!shotId || busy !== null} onClick={compileWithGpt}><Sparkles className="h-3.5 w-3.5" />GPT-5.6-sol 编译（仅文本）</button>
               <button className={secondaryButton} disabled={!shotId || !requiredInputsReady || (purpose === 'QUALITY_PROBE' && !learningObjective.trim()) || busy !== null} onClick={compilePreview}><Eye className="h-3.5 w-3.5" />预览请求</button>
-              <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || (purpose === 'QUALITY_PROBE' && !learningObjective.trim()) || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交{purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'} · 基础约 ${estimatedBaseCost(duration, config)}</button>
+              <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || (purpose === 'QUALITY_PROBE' && !learningObjective.trim()) || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交{purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'} · 约 {estimatedBillingCredits(duration, config)} credits</button>
             </div>
           </div>
           <div className="min-h-72 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
@@ -909,7 +910,7 @@ export function H3LabPanel({
               const providerRun = runs.find((item) => item.task_id === task.id)
               const canAdvance = ['QUEUED', 'SUBMITTING', 'ACKNOWLEDGED', 'RUNNING'].includes(task.status)
               const wasRetried = retriedTaskIds.has(task.id)
-              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : providerRun.purpose === 'PRODUCTION' ? '正式制片' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{wasRetried ? '已保留历史并创建重试' : providerRun?.estimated_cost_usd !== null && providerRun?.estimated_cost_usd !== undefined ? `$${providerRun.estimated_cost_usd.toFixed(2)}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
+              return <div key={task.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-medium text-zinc-300">镜头 {project.document.shots.find((shot) => shot.id === task.shot_id)?.sequence} · {task.route} · Take {task.candidate_index}</p><p className="mt-1 text-[10px] text-zinc-600">{providerRun ? (providerRun.purpose === 'CONTRACT_SMOKE' ? '合同冒烟' : providerRun.purpose === 'PRODUCTION' ? '正式制片' : '质量探针') : '用途读取中'} · {providerTaskId(task)} · {task.request_fingerprint.slice(0, 12)}</p></div><Badge status={task.status}>{statusLabels[task.status] ?? task.status}</Badge></div>{task.error_message && <p className="mt-2 text-xs leading-5 text-amber-300/80">{task.error_message}</p>}<div className="mt-2 flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-zinc-600">{wasRetried ? '已保留历史并创建重试' : providerRun?.estimated_cost_credits !== null && providerRun?.estimated_cost_credits !== undefined ? `${providerRun.estimated_cost_credits.toFixed(2)} credits${providerRun.estimated_cost_usd !== null && providerRun.estimated_cost_usd !== undefined ? ` · $${providerRun.estimated_cost_usd.toFixed(2)}` : ''}` : '费用待结算'}</span><div className="flex gap-1">{canAdvance && <button className={subtleButton} disabled={polling} onClick={() => void advanceTask(task, true)}><Play className="h-3 w-3" />推进/轮询</button>}{task.status === 'OUTPUT_MISSING' && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'recover')}><RotateCcw className="h-3 w-3" />恢复输出</button>}{['FAILED', 'CANCELLED'].includes(task.status) && !wasRetried && <button className={subtleButton} onClick={() => taskAction(task, 'retry')}>保留历史并重试</button>}{['QUEUED', 'ACKNOWLEDGED'].includes(task.status) && <button className={`${subtleButton} text-red-300`} onClick={() => taskAction(task, 'cancel')}><Square className="h-3 w-3" />取消</button>}</div></div></div>
             })}
           </div>
           {unknownTasks.length > 0 && (

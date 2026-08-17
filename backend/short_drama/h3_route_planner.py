@@ -273,6 +273,10 @@ def build_h3_production_route_plan(
         decisions=decisions,
         estimated_new_h3_seconds=new_seconds,
         estimated_cost_usd=round(new_seconds * pricing.output_per_second, 6),
+        estimated_cost_credits=round(
+            new_seconds * pricing.billing_output_per_second,
+            6,
+        ),
         warnings=global_warnings,
         created_at=created_at,
         updated_at=created_at,

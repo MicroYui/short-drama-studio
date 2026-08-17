@@ -523,6 +523,7 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     run = service.repository.get_provider_run(probe.task.id)
     assert run is not None
     assert run.estimated_cost_usd == 0.4
+    assert run.estimated_cost_credits == 3.003541
     assert run.downloaded_path == take.media_path
 
     reviewed = service.review_h3_take(

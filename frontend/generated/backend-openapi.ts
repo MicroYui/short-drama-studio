@@ -2835,6 +2835,26 @@ export interface components {
              * @default 0.04
              */
             additional_image_each: number;
+            /**
+             * Billing Output Per Second
+             * @default 0.60070822
+             */
+            billing_output_per_second: number;
+            /**
+             * Billing Resolution
+             * @default 768P
+             */
+            billing_resolution: string;
+            /**
+             * Billing Source Url
+             * @default https://platform.acedata.cloud/api/v1/services/2add8a2a-3577-4a0f-8fd4-e08aaabe8290
+             */
+            billing_source_url: string;
+            /**
+             * Billing Unit
+             * @default ACE_CREDIT
+             */
+            billing_unit: string;
             /** Captured At */
             captured_at: string;
             /**
@@ -2943,6 +2963,11 @@ export interface components {
             created_at: string;
             /** Decisions */
             decisions: components["schemas"]["H3ShotRoutePlan"][];
+            /**
+             * Estimated Cost Credits
+             * @default 0
+             */
+            estimated_cost_credits: number;
             /** Estimated Cost Usd */
             estimated_cost_usd: number;
             /** Estimated New H3 Seconds */
@@ -3052,6 +3077,8 @@ export interface components {
             created_at: string;
             /** Downloaded Path */
             downloaded_path?: string | null;
+            /** Estimated Cost Credits */
+            estimated_cost_credits?: number | null;
             /** Estimated Cost Usd */
             estimated_cost_usd?: number | null;
             /** Id */

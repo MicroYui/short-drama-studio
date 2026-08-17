@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -152,17 +153,192 @@ def _strip_json_fence(value: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _locked_lines(input_text: str) -> list[tuple[str, str]]:
+_SCRIPT_METADATA_LABELS = {
+    "标题",
+    "片名",
+    "类型",
+    "题材",
+    "角色",
+    "人物",
+    "角色设定",
+    "人物设定",
+    "主要角色",
+    "登场人物",
+    "场景",
+    "地点",
+    "时间",
+    "核心道具",
+    "道具",
+    "要求",
+    "制作要求",
+    "镜头要求",
+    "备注",
+    "梗概",
+    "简介",
+}
+_ACTION_PREFIX_PATTERN = re.compile(
+    r"^([\u4e00-\u9fffA-Za-z·•_-]{2,12}?)(?="
+    r"右手|左手|抬|看|说|问|答|握|拿|走|转|坐|站|把|将|听|笑|低声|"
+    r"轻声|冷冷|突然|缓缓|盯|望|伸|推|拉|沉默|呼吸|皱眉|点头|摇头)"
+)
+
+
+def _split_label(source_line: str) -> tuple[str, str] | None:
+    label, separator, value = source_line.partition("：")
+    if not separator:
+        label, separator, value = source_line.partition(":")
+    if not separator:
+        return None
+    return label.strip(), value.strip()
+
+
+def _is_metadata_label(value: str) -> bool:
+    compact = re.sub(r"[\s.、()（）_-]", "", value)
+    return compact in _SCRIPT_METADATA_LABELS
+
+
+def _is_voiceover_prefix(value: str) -> bool:
+    if any(marker in value for marker in ("旁白", "画外", "内心", "传出", "声音响起")):
+        return True
+    return re.search(r"(?:录音(?:笔)?|电话|广播|设备).{0,8}(?:中|里|播放)", value) is not None
+
+
+def _declared_character_names(source_lines: list[str]) -> list[str]:
+    names: list[str] = []
+    for source_line in source_lines:
+        split = _split_label(source_line)
+        if split is None:
+            continue
+        label, value = split
+        if label in {"角色", "人物", "角色设定", "人物设定", "主要角色", "登场人物"}:
+            for match in re.finditer(
+                r"(?:^|[。；;])\s*([\u4e00-\u9fffA-Za-z·•_-]{2,16})\s*[，,]\s*"
+                r"(?:\d{1,2}\s*岁|男|女)",
+                value,
+            ):
+                names.append(match.group(1).strip())
+            if not names:
+                for item in re.split(r"[、/，,；;]", value):
+                    candidate = item.strip().split()[0] if item.strip() else ""
+                    if 1 < len(candidate) <= 16 and not _is_metadata_label(candidate):
+                        names.append(candidate)
+        elif (
+            1 < len(label) <= 16
+            and not _is_metadata_label(label)
+            and not any(character.isspace() for character in label)
+            and not _is_voiceover_prefix(label)
+        ):
+            names.append(label)
+    return list(dict.fromkeys(names))
+
+
+def _quoted_dialogue(source_line: str) -> tuple[str, str] | None:
+    for opening, closing in (("“", "”"), ("「", "」"), ("『", "』"), ('"', '"')):
+        start = source_line.find(opening)
+        end = source_line.rfind(closing)
+        if start >= 0 and end > start:
+            prefix = source_line[:start].rstrip("：:，, \t")
+            return prefix, source_line[start + len(opening) : end].strip()
+    return None
+
+
+def _mentioned_character(
+    value: str,
+    character_names: list[str],
+    *,
+    prefer_last: bool,
+) -> str | None:
+    mentions = [
+        (value.find(name), name)
+        for name in character_names
+        if value.find(name) >= 0
+    ]
+    if not mentions:
+        return None
+    return (max(mentions) if prefer_last else min(mentions))[1]
+
+
+def _voiceover_speaker(prefix: str, character_names: list[str]) -> str:
+    if "旁白" in prefix:
+        return "旁白"
+    name = _mentioned_character(prefix, character_names, prefer_last=True)
+    if name is None:
+        return "画外音"
+    if "录音笔" in prefix:
+        return f"录音笔中的{name}"
+    if "录音" in prefix:
+        return f"录音中的{name}"
+    if "电话" in prefix:
+        return f"电话中的{name}"
+    if "广播" in prefix:
+        return f"广播中的{name}"
+    if "内心" in prefix:
+        return f"{name}内心"
+    return f"画外音·{name}"
+
+
+def _dialogue_speaker(prefix: str, character_names: list[str]) -> str | None:
+    normalized = prefix.strip().lstrip("-—•0123456789.、 ")
+    split = _split_label(normalized)
+    if split is not None:
+        normalized = split[0]
+    if _is_metadata_label(normalized):
+        return None
+    if _is_voiceover_prefix(normalized):
+        return _voiceover_speaker(normalized, character_names)
+    known = _mentioned_character(normalized, character_names, prefer_last=False)
+    if known is not None:
+        return known
+    match = _ACTION_PREFIX_PATTERN.match(normalized)
+    if match is not None:
+        return match.group(1)
+    if 1 < len(normalized) <= 16 and not any(character.isspace() for character in normalized):
+        return normalized
+    return None
+
+
+def _locked_dialogue(input_text: str) -> list[PlannedDialogueLine]:
     source_lines = [line.strip() for line in input_text.splitlines() if line.strip()]
-    result: list[tuple[str, str]] = []
-    for source_line in source_lines or [input_text.strip()]:
-        speaker, separator, text = source_line.partition("：")
-        if not separator:
-            speaker, separator, text = source_line.partition(":")
-        if not separator:
-            speaker = "旁白"
-            text = source_line
-        result.append((speaker.strip() or "旁白", text.strip()))
+    character_names = _declared_character_names(source_lines)
+    result: list[PlannedDialogueLine] = []
+    for source_line in source_lines:
+        quoted = _quoted_dialogue(source_line)
+        if quoted is not None:
+            prefix, text = quoted
+            speaker = _dialogue_speaker(prefix, character_names)
+            if speaker is None or not text:
+                continue
+            audio_kind = (
+                AudioKind.VOICEOVER
+                if _is_voiceover_prefix(prefix)
+                else AudioKind.DIALOGUE
+            )
+            result.append(
+                PlannedDialogueLine(
+                    speaker=speaker,
+                    text=text,
+                    audio_kind=audio_kind,
+                )
+            )
+            continue
+        split = _split_label(source_line)
+        if split is None:
+            continue
+        label, text = split
+        speaker = _dialogue_speaker(label, character_names)
+        if speaker is None or not text:
+            continue
+        is_known_speaker = label in character_names or speaker in character_names
+        is_voiceover = _is_voiceover_prefix(label)
+        if not is_known_speaker and not is_voiceover and character_names:
+            continue
+        result.append(
+            PlannedDialogueLine(
+                speaker=speaker,
+                text=text.strip("“”\"' "),
+                audio_kind=(AudioKind.VOICEOVER if is_voiceover else AudioKind.DIALOGUE),
+            )
+        )
     return result
 
 
@@ -192,7 +368,11 @@ def _planner_image_urls(request: CreateProjectRequest) -> tuple[list[str], list[
 
 def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
     schema = ProductionPlan.model_json_schema()
-    locked = _locked_lines(request.input_text) if request.source_mode == SourceMode.SCRIPT_LOCKED else []
+    locked = (
+        _locked_dialogue(request.input_text)
+        if request.source_mode == SourceMode.SCRIPT_LOCKED
+        else []
+    )
     instructions = (
         "You are the lead writer, production designer, director, and continuity planner for a "
         "Mandarin live-action urban vertical short drama. Return JSON only and match the supplied "
@@ -219,7 +399,7 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         "project_name": request.name,
         "text_input": request.input_text.strip(),
         "locked_dialogue": [
-            {"speaker": speaker, "text": text} for speaker, text in locked
+            line.model_dump(mode="json") for line in locked
         ],
         "image_references": image_descriptions,
         "requirements": {
@@ -235,26 +415,80 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _planner_repair_prompt(
+    request: CreateProjectRequest,
+    invalid_output: str,
+    error: ValueError,
+) -> tuple[str, str]:
+    locked = (
+        _locked_dialogue(request.input_text)
+        if request.source_mode == SourceMode.SCRIPT_LOCKED
+        else []
+    )
+    instructions = (
+        "You are repairing a previously invalid production-plan JSON for a Mandarin live-action "
+        "vertical short drama. Return one complete corrected JSON object only and match the "
+        "supplied ProductionPlan schema exactly. Preserve the story and shot intent where valid. "
+        "Dialogue indices are strictly 1-based and may only reference the supplied lines. For "
+        "SCRIPT_LOCKED, lines must exactly match locked_dialogue in speaker, text, audio_kind, and "
+        "order. Characters must be actual human story characters present in the source script; "
+        "metadata labels, action descriptions, props, locations, devices, and voiceover sources "
+        "must never become character names. A recorded or off-screen voice is VOICEOVER, not an "
+        "extra visual character. Do not add fields outside the schema."
+    )
+    payload = {
+        "source_mode": request.source_mode.value,
+        "source_text": request.input_text.strip(),
+        "locked_dialogue": [line.model_dump(mode="json") for line in locked],
+        "validation_error": str(error),
+        "invalid_plan_json": invalid_output,
+        "output_schema": ProductionPlan.model_json_schema(),
+    }
+    return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 def _validate_locked_dialogue(request: CreateProjectRequest, plan: ProductionPlan) -> None:
     if request.source_mode != SourceMode.SCRIPT_LOCKED:
         return
-    expected = _locked_lines(request.input_text)
-    actual = [(line.speaker, line.text) for line in plan.lines]
+    expected_lines = _locked_dialogue(request.input_text)
+    if not expected_lines:
+        raise ValueError("Locked script did not contain recognizable dialogue")
+    expected = [
+        (line.speaker, line.text, line.audio_kind)
+        for line in expected_lines
+    ]
+    actual = [
+        (line.speaker, line.text, line.audio_kind)
+        for line in plan.lines
+    ]
     if actual != expected:
         raise ValueError("Planning model changed or omitted locked dialogue")
+    dialogue_speakers = {
+        line.speaker for line in expected_lines if line.audio_kind == AudioKind.DIALOGUE
+    }
+    character_names = {character.name for character in plan.characters}
+    missing = sorted(dialogue_speakers - character_names)
+    if missing:
+        raise ValueError(
+            "Planning model omitted speaking characters: " + ", ".join(missing)
+        )
+    invalid = sorted(
+        name
+        for name in character_names
+        if _is_metadata_label(name) or name not in request.input_text
+    )
+    if invalid:
+        raise ValueError(
+            "Planning model invented invalid locked-script characters: "
+            + ", ".join(invalid)
+        )
 
 
 def _fallback_plan(request: CreateProjectRequest) -> ProductionPlan:
     if request.source_mode == SourceMode.SCRIPT_LOCKED:
-        locked = _locked_lines(request.input_text)
-        lines = [
-            PlannedDialogueLine(
-                speaker=speaker,
-                text=text,
-                audio_kind=AudioKind.VOICEOVER if speaker == "旁白" else AudioKind.DIALOGUE,
-            )
-            for speaker, text in locked
-        ]
+        lines = _locked_dialogue(request.input_text)
+        if not lines:
+            raise ValueError("Locked script did not contain recognizable dialogue")
     else:
         lines = [
             PlannedDialogueLine(speaker="林岚", text="这件事，和你说的不一样。"),
@@ -263,7 +497,13 @@ def _fallback_plan(request: CreateProjectRequest) -> ProductionPlan:
             PlannedDialogueLine(speaker="顾川", text="是你自己。"),
             PlannedDialogueLine(speaker="林岚", text="可我从没来过这里。"),
         ]
-    speakers = list(dict.fromkeys(line.speaker for line in lines if line.speaker != "旁白"))
+    speakers = list(
+        dict.fromkeys(
+            line.speaker
+            for line in lines
+            if line.audio_kind == AudioKind.DIALOGUE and line.speaker != "旁白"
+        )
+    )
     while len(speakers) < 2:
         speakers.append("顾川" if speakers != ["顾川"] else "林岚")
     speakers = speakers[:3]
@@ -367,14 +607,7 @@ def create_production_plan(
             image_urls=image_urls,
             max_output_tokens=8000,
         )
-        plan = ProductionPlan.model_validate_json(_strip_json_fence(output))
-        _validate_locked_dialogue(request, plan)
-        return ProductionPlanningResult(
-            plan=plan,
-            planner="gpt-5.6-sol",
-            warnings=image_warnings,
-        )
-    except (LanguageProviderError, ValueError) as exc:
+    except LanguageProviderError as exc:
         return ProductionPlanningResult(
             plan=_fallback_plan(request),
             planner="deterministic-fallback-v1",
@@ -383,6 +616,50 @@ def create_production_plan(
                 f"GPT-5.6-sol 规划未通过，已自动回退：{exc}",
             ],
         )
+    try:
+        plan = ProductionPlan.model_validate_json(_strip_json_fence(output))
+        _validate_locked_dialogue(request, plan)
+        return ProductionPlanningResult(
+            plan=plan,
+            planner="gpt-5.6-sol",
+            warnings=image_warnings,
+        )
+    except ValueError as first_error:
+        repair_instructions, repair_input = _planner_repair_prompt(
+            request,
+            output,
+            first_error,
+        )
+        try:
+            repaired_output = client.generate_text(
+                instructions=repair_instructions,
+                input_text=repair_input,
+                image_urls=image_urls,
+                max_output_tokens=8000,
+            )
+            repaired_plan = ProductionPlan.model_validate_json(
+                _strip_json_fence(repaired_output)
+            )
+            _validate_locked_dialogue(request, repaired_plan)
+            return ProductionPlanningResult(
+                plan=repaired_plan,
+                planner="gpt-5.6-sol-repaired",
+                warnings=[
+                    *image_warnings,
+                    "GPT-5.6-sol 首次规划未通过结构校验，已自动修复后采用："
+                    + str(first_error),
+                ],
+            )
+        except (LanguageProviderError, ValueError) as repair_error:
+            return ProductionPlanningResult(
+                plan=_fallback_plan(request),
+                planner="deterministic-fallback-v1",
+                warnings=[
+                    *image_warnings,
+                    "GPT-5.6-sol 规划与一次自动修复均未通过，已使用本地回退："
+                    f"first={first_error}; repair={repair_error}",
+                ],
+            )
 
 
 def _asset(
@@ -412,7 +689,11 @@ def _asset(
                 source=AssetSourceRecord(
                     source_type=OriginType.AI_GENERATED,
                     source_label="自动制片规划",
-                    provider="openai-compatible" if planner == "gpt-5.6-sol" else "local",
+                    provider=(
+                        "openai-compatible"
+                        if planner.startswith("gpt-5.6-sol")
+                        else "local"
+                    ),
                     model=planner,
                     created_at=created_at,
                 ),
@@ -433,14 +714,7 @@ def build_project_document_from_plan(
 ) -> ProjectDocument:
     plan = planning.plan
     planned_lines = (
-        [
-            PlannedDialogueLine(
-                speaker=speaker,
-                text=text,
-                audio_kind=AudioKind.VOICEOVER if speaker == "旁白" else AudioKind.DIALOGUE,
-            )
-            for speaker, text in _locked_lines(request.input_text)
-        ]
+        _locked_dialogue(request.input_text)
         if request.source_mode == SourceMode.SCRIPT_LOCKED
         else plan.lines
     )
@@ -483,7 +757,11 @@ def build_project_document_from_plan(
     planned_characters = list(plan.characters)
     known_names = {character.name for character in planned_characters}
     for line in planned_lines:
-        if line.speaker != "旁白" and line.speaker not in known_names:
+        if (
+            line.audio_kind == AudioKind.DIALOGUE
+            and line.speaker != "旁白"
+            and line.speaker not in known_names
+        ):
             planned_characters.append(
                 PlannedCharacter(
                     name=line.speaker,

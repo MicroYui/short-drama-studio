@@ -206,6 +206,7 @@ class H3ProductionRoutePlan(DomainModel):
     decisions: list[H3ShotRoutePlan] = Field(min_length=1)
     estimated_new_h3_seconds: int = Field(ge=0)
     estimated_cost_usd: float = Field(ge=0.0)
+    estimated_cost_credits: float = Field(default=0.0, ge=0.0)
     warnings: list[str] = Field(default_factory=list[str], max_length=100)
     created_at: str
     updated_at: str
@@ -355,6 +356,13 @@ class H3PricingSnapshot(DomainModel):
     reference_audio_each: float = 0.0
     captured_at: str
     source_url: str = "https://platform.minimax.io/docs/guides/pricing-paygo#video"
+    billing_unit: str = "ACE_CREDIT"
+    billing_resolution: str = "768P"
+    billing_output_per_second: float = 0.60070822
+    billing_source_url: str = (
+        "https://platform.acedata.cloud/api/v1/services/"
+        "2add8a2a-3577-4a0f-8fd4-e08aaabe8290"
+    )
 
 
 class H3ProviderRun(DomainModel):
@@ -373,6 +381,7 @@ class H3ProviderRun(DomainModel):
     latest_remote_task: H3RemoteTask | None = None
     pricing: H3PricingSnapshot
     estimated_cost_usd: float | None = None
+    estimated_cost_credits: float | None = None
     output_url: str | None = None
     downloaded_path: str | None = None
     last_error_code: str | None = None
