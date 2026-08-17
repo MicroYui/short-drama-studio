@@ -13,6 +13,7 @@ from short_drama.models import (
     ApprovalStatus,
     Asset,
     AssetKind,
+    AssetMediaType,
     AssetVersion,
     DomainModel,
     ProjectAggregate,
@@ -85,6 +86,7 @@ class ReferencePlanPreviewRequest(DomainModel):
 class KeyframeBriefCompileRequest(ReferencePlanPreviewRequest):
     position: KeyframePosition
     start_after_action_beat_order: int | None = Field(default=None, ge=0)
+    primary_canvas_version_id: str | None = None
     extra_constraints: list[str] = Field(default_factory=list[str], max_length=32)
 
     @model_validator(mode="after")
@@ -95,6 +97,13 @@ class KeyframeBriefCompileRequest(ReferencePlanPreviewRequest):
         ):
             raise ValueError(
                 "start_after_action_beat_order is only valid for a START keyframe"
+            )
+        if (
+            self.primary_canvas_version_id is not None
+            and self.position == KeyframePosition.TOPOLOGY_REFERENCE
+        ):
+            raise ValueError(
+                "A topology reference cannot use a character/action continuity canvas"
             )
         return self
 
@@ -173,6 +182,7 @@ class KeyframeBriefCompileResponse(ReferencePlanPreviewResponse):
     position: KeyframePosition
     prompt: str
     input_version_ids: list[str]
+    primary_input_version_id: str | None = None
 
 
 _ROLES_BY_ASSET_KIND: dict[AssetKind, set[ReferenceRole]] = {
@@ -275,6 +285,12 @@ def preview_reference_plan(
             "Create or approve LOCATION_INTERACTION views for: "
             + ", ".join(complexity.missing_topology_anchors)
         )
+    if _has_competing_scene_geometry(selected):
+        warnings.append(
+            "A selected character reference contains embedded scene geometry while a separate "
+            "location reference is also selected. Prefer a background-neutral character view "
+            "or bake both into one shot-specific keyframe before video generation."
+        )
     return ReferencePlanPreviewResponse(
         shot_id=shot.id,
         selected=selected,
@@ -292,6 +308,11 @@ def compile_keyframe_brief(
 ) -> KeyframeBriefCompileResponse:
     preview = preview_reference_plan(document, shot, plan, request)
     start_boundary = request.start_after_action_beat_order
+    primary_canvas = (
+        _resolve_primary_canvas(document, request.primary_canvas_version_id)
+        if request.primary_canvas_version_id is not None
+        else None
+    )
     sorted_beats = sorted(plan.action_beats, key=lambda item: item.order)
     if start_boundary is not None:
         beat_orders = [item.order for item in sorted_beats]
@@ -305,14 +326,30 @@ def compile_keyframe_brief(
             )
 
     asset_index = {asset.id: asset for asset in document.assets}
-    reference_lines = [
+    selected_inputs = [
+        item
+        for item in preview.selected
+        if item.asset_version_id != request.primary_canvas_version_id
+    ]
+    reference_lines: list[str] = []
+    if primary_canvas is not None:
+        source_asset, source_version = primary_canvas
+        reference_lines.append(
+            "Image 1: PRIMARY EDIT CANVAS; "
+            f"source={source_asset.name} v{source_version.version}; preserve its exact camera, "
+            "crop, object instances, topology, handedness, and contact side."
+        )
+    reference_lines.extend(
         (
             f"Image {index}: {asset_index[item.subject_asset_id].name}; "
             f"role={item.role.value}; angle={item.angle.value}; "
             f"framing={item.framing.value}; use only for {item.description}."
         )
-        for index, item in enumerate(preview.selected, start=1)
-    ]
+        for index, item in enumerate(
+            selected_inputs,
+            start=2 if primary_canvas is not None else 1,
+        )
+    )
     beat_lines = [
         _format_action_beat(item, asset_index)
         for item in sorted_beats
@@ -358,6 +395,16 @@ def compile_keyframe_brief(
         + ("\n".join(reference_lines) if reference_lines else "No visual references supplied."),
         "FRAME INTENT:\n" + position_guidance,
     ]
+    if primary_canvas is not None:
+        sections.append(
+            "PRIMARY CANVAS LOCKS:\n"
+            "Image 1 is the authoritative physical frame, not an alternative visual reference. "
+            "Keep its camera position, lens, crop, background layout, number of object instances, "
+            "mechanical attachments, left/right orientation, actor handedness, and hand-to-object "
+            "contact side. Apply only the state changes required by FRAME INTENT and the declared "
+            "action beats. Later reference images may refine identity or appearance but must not "
+            "replace Image 1 geometry."
+        )
     if beat_lines and not is_topology_reference:
         if start_boundary is None:
             sections.append("ORDERED ACTION BEATS:\n" + "\n".join(beat_lines))
@@ -431,11 +478,18 @@ def compile_keyframe_brief(
             "specified target and state transition; unrelated anchors must not move."
         )
     )
+    input_version_ids: list[str] = []
+    if request.primary_canvas_version_id is not None:
+        input_version_ids.append(request.primary_canvas_version_id)
+    for item in selected_inputs:
+        if item.asset_version_id not in input_version_ids:
+            input_version_ids.append(item.asset_version_id)
     return KeyframeBriefCompileResponse(
         **preview.model_dump(),
         position=request.position,
         prompt="\n\n".join(sections),
-        input_version_ids=[item.asset_version_id for item in preview.selected],
+        input_version_ids=input_version_ids,
+        primary_input_version_id=request.primary_canvas_version_id,
     )
 
 
@@ -451,6 +505,22 @@ def _filtered_requirements(
     if unknown:
         raise ValueError("Unknown reference requirement IDs: " + ", ".join(unknown))
     return [item for item in plan.requirements if item.id in requested]
+
+
+def _resolve_primary_canvas(
+    document: ProjectDocument,
+    version_id: str,
+) -> tuple[Asset, AssetVersion]:
+    for asset in document.assets:
+        version = next((item for item in asset.versions if item.id == version_id), None)
+        if version is None:
+            continue
+        if version.media_type != AssetMediaType.IMAGE:
+            raise ValueError("Primary edit canvas must be an image AssetVersion")
+        if version.local_path is None and version.external_url is None:
+            raise ValueError("Primary edit canvas has no usable media")
+        return asset, version
+    raise ValueError(f"Unknown primary edit canvas AssetVersion: {version_id}")
 
 
 def _valid_pack_entries(
@@ -535,6 +605,12 @@ def _assess_complexity(
         )
     if not plan.interactions:
         observations.append("No explicit spatial interaction was declared for this shot.")
+    if _has_competing_scene_geometry(selected):
+        observations.append(
+            "A character reference embeds its own scene geometry while a separate location "
+            "reference is selected; independent video references may create duplicate or "
+            "drifting entrances, windows, counters, or other location structures."
+        )
     return ReferenceComplexityAssessment(
         duration_seconds=shot.duration_seconds,
         action_beat_count=len(plan.action_beats),
@@ -542,6 +618,26 @@ def _assess_complexity(
         missing_topology_anchors=sorted(set(missing_topology)),
         observations=observations,
     )
+
+
+def _has_competing_scene_geometry(selected: list[ReferenceSelection]) -> bool:
+    character_roles = {
+        ReferenceRole.CHARACTER_FACE,
+        ReferenceRole.CHARACTER_BODY,
+        ReferenceRole.CHARACTER_PROFILE,
+        ReferenceRole.CHARACTER_BACK,
+    }
+    location_roles = {
+        ReferenceRole.LOCATION_MASTER,
+        ReferenceRole.LOCATION_REVERSE,
+        ReferenceRole.LOCATION_INTERACTION,
+    }
+    character_embeds_scene = any(
+        item.role in character_roles and "background.scene_embedded" in item.tags
+        for item in selected
+    )
+    has_location_reference = any(item.role in location_roles for item in selected)
+    return character_embeds_scene and has_location_reference
 
 
 def build_director_advice_input(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from short_drama.models import (
     Asset,
@@ -86,6 +86,17 @@ class ImageProviderRequest(DomainModel):
     background: ImageBackground = ImageBackground.OPAQUE
     output_format: ImageOutputFormat = ImageOutputFormat.PNG
     input_version_ids: list[str] = Field(default_factory=list[str], max_length=16)
+    primary_input_version_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_primary_input(self) -> ImageProviderRequest:
+        if self.primary_input_version_id is None:
+            return self
+        if self.operation != ImageOperation.EDIT:
+            raise ValueError("Only image edits can declare a primary input")
+        if self.primary_input_version_id not in self.input_version_ids:
+            raise ValueError("Primary image input must also appear in input_version_ids")
+        return self
 
     @field_validator("size")
     @classmethod
@@ -110,10 +121,21 @@ class ImageTaskCreateRequest(DomainModel):
     descriptor: str = Field(min_length=1, max_length=4000)
     parent_version_id: str | None = None
     input_version_ids: list[str] = Field(default_factory=list[str], max_length=16)
+    primary_input_version_id: str | None = None
     size: str = "768x1344"
     quality: ImageQuality = ImageQuality.HIGH
     background: ImageBackground = ImageBackground.OPAQUE
     output_format: ImageOutputFormat = ImageOutputFormat.PNG
+
+    @model_validator(mode="after")
+    def validate_primary_input(self) -> ImageTaskCreateRequest:
+        if self.primary_input_version_id is None:
+            return self
+        if self.operation != ImageOperation.EDIT:
+            raise ValueError("Only image edits can declare a primary input")
+        if self.primary_input_version_id not in self.input_version_ids:
+            raise ValueError("Primary image input must also appear in input_version_ids")
+        return self
 
 
 class ImageTokenDetails(DomainModel):

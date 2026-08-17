@@ -3204,6 +3204,8 @@ export interface components {
             operation: components["schemas"]["ImageOperation"];
             /** @default png */
             output_format: components["schemas"]["ImageOutputFormat"];
+            /** Primary Input Version Id */
+            primary_input_version_id?: string | null;
             /** Prompt */
             prompt: string;
             /** @default high */
@@ -3233,6 +3235,8 @@ export interface components {
             output_format: components["schemas"]["ImageOutputFormat"];
             /** Parent Version Id */
             parent_version_id?: string | null;
+            /** Primary Input Version Id */
+            primary_input_version_id?: string | null;
             /** Prompt */
             prompt: string;
             /** @default high */
@@ -3352,6 +3356,8 @@ export interface components {
             /** Max Images */
             max_images?: number | null;
             position: components["schemas"]["KeyframePosition"];
+            /** Primary Canvas Version Id */
+            primary_canvas_version_id?: string | null;
             /** Requirement Ids */
             requirement_ids?: string[];
             /** Start After Action Beat Order */
@@ -3365,6 +3371,8 @@ export interface components {
             /** Missing Requirement Ids */
             missing_requirement_ids: string[];
             position: components["schemas"]["KeyframePosition"];
+            /** Primary Input Version Id */
+            primary_input_version_id?: string | null;
             /**
              * Proceed Allowed
              * @default true

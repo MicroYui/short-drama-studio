@@ -168,6 +168,18 @@ def test_generate_edit_cost_and_candidate_gate(tmp_path: Path) -> None:
     assert completed.project.document.assets[0].approved_version_id is None
     assert generated.local_path is not None and Path(generated.local_path).is_file()
 
+    support_path = tmp_path / "edit-support.png"
+    Image.new("RGB", (768, 1344), "#1e3a5f").save(support_path)
+    support = service.import_local_asset_version(
+        asset.project_id,
+        asset.id,
+        AssetImportLocalRequest(
+            local_path=str(support_path),
+            descriptor="secondary identity or style reference",
+            parent_version_id=generated.id,
+        ),
+    ).version
+
     edit = service.enqueue_image_task(
         asset.project_id,
         asset.id,
@@ -176,7 +188,8 @@ def test_generate_edit_cost_and_candidate_gate(tmp_path: Path) -> None:
             prompt="保持身份与服装，只增强真实皮肤和电影光线",
             descriptor="林夏修整候选",
             parent_version_id=generated.id,
-            input_version_ids=[generated.id],
+            input_version_ids=[support.id, generated.id],
+            primary_input_version_id=generated.id,
         ),
     )
     service.advance_image_task(edit.task.id)
@@ -184,6 +197,8 @@ def test_generate_edit_cost_and_candidate_gate(tmp_path: Path) -> None:
     assert edited.task.status == ImageTaskStatus.SUCCEEDED
     assert len(fake.calls) == 2
     assert fake.calls[1][1][0].asset_version_id == generated.id
+    assert fake.calls[1][1][1].asset_version_id == support.id
+    assert fake.calls[1][0].primary_input_version_id == generated.id
     assert fake.calls[1][1][0].image_url.startswith("data:image/png;base64,")
 
 

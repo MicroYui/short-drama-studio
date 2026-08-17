@@ -4876,6 +4876,17 @@
             "$ref": "#/components/schemas/ImageOutputFormat",
             "default": "png"
           },
+          "primary_input_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Input Version Id"
+          },
           "prompt": {
             "maxLength": 32000,
             "minLength": 1,
@@ -4947,6 +4958,17 @@
               }
             ],
             "title": "Parent Version Id"
+          },
+          "primary_input_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Input Version Id"
           },
           "prompt": {
             "maxLength": 32000,
@@ -5225,6 +5247,17 @@
           "position": {
             "$ref": "#/components/schemas/KeyframePosition"
           },
+          "primary_canvas_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Canvas Version Id"
+          },
           "requirement_ids": {
             "items": {
               "type": "string"
@@ -5274,6 +5307,17 @@
           },
           "position": {
             "$ref": "#/components/schemas/KeyframePosition"
+          },
+          "primary_input_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Input Version Id"
           },
           "proceed_allowed": {
             "const": true,

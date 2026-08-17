@@ -293,6 +293,7 @@ class AssetWorkbench:
             background=request.background,
             output_format=request.output_format,
             input_version_ids=request.input_version_ids,
+            primary_input_version_id=request.primary_input_version_id,
         )
         if (
             provider_request.background == ImageBackground.TRANSPARENT
@@ -387,6 +388,7 @@ class AssetWorkbench:
             descriptor=task.descriptor,
             parent_version_id=task.parent_version_id,
             input_version_ids=task.request.input_version_ids,
+            primary_input_version_id=task.request.primary_input_version_id,
             size=task.request.size,
             quality=task.request.quality,
             background=task.request.background,
@@ -556,7 +558,14 @@ class AssetWorkbench:
     ) -> list[ImageProviderInput]:
         document = self._require_project(task.project_id)
         result: list[ImageProviderInput] = []
-        for version_id in task.request.input_version_ids:
+        ordered_version_ids = list(task.request.input_version_ids)
+        primary_id = task.request.primary_input_version_id
+        if primary_id is not None:
+            ordered_version_ids = [
+                primary_id,
+                *(item for item in ordered_version_ids if item != primary_id),
+            ]
+        for version_id in ordered_version_ids:
             _asset, version = self._find_version(document, version_id)
             if version.external_url is not None:
                 image_url = version.external_url

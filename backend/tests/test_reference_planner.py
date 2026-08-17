@@ -95,7 +95,7 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
             "role": "CHARACTER_BODY",
             "angle": "THREE_QUARTER_RIGHT",
             "framing": "FULL_BODY",
-            "tags": ["canonical_outfit"],
+            "tags": ["canonical_outfit", "background.scene_embedded"],
             "description": "identity, body shape, and canonical outfit",
             "priority": 20,
         },
@@ -213,6 +213,11 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert body["complexity"]["missing_topology_anchors"] == [
         "entrance.primary_door"
     ]
+    assert any("background-neutral" in item for item in body["warnings"])
+    assert any(
+        "duplicate or drifting entrances" in item
+        for item in body["complexity"]["observations"]
+    )
 
     brief = client.post(
         f"/api/short-drama/projects/{project_id}/shots/{shot.id}/keyframe-brief/compile",
@@ -249,6 +254,44 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert "Other characters mentioned by broader continuity must remain off-screen" in start_prompt
     assert "State at this frame from completed beats" in start_prompt
     assert "Prop state in:" not in start_prompt
+
+    canvas_asset = service.create_asset(
+        project_id,
+        AssetCreateRequest(
+            kind=AssetKind.REFERENCE,
+            name="Previous approved frame",
+            descriptor="Primary physical canvas for a derived keyframe",
+        ),
+    ).asset
+    canvas_version = _approve_image(service, tmp_path, canvas_asset.id, "#111827")
+    end_brief = client.post(
+        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/keyframe-brief/compile",
+        json={
+            "position": "END",
+            "primary_canvas_version_id": canvas_version,
+        },
+    )
+    assert end_brief.status_code == 200, end_brief.text
+    end_body = end_brief.json()
+    assert end_body["primary_input_version_id"] == canvas_version
+    assert end_body["input_version_ids"][0] == canvas_version
+    assert len(end_body["input_version_ids"]) == len(set(end_body["input_version_ids"]))
+    assert "Image 1 is the authoritative physical frame" in end_body["prompt"]
+    assert "hand-to-object contact side" in end_body["prompt"]
+
+    selected_canvas = body["selected"][0]
+    duplicate_brief = client.post(
+        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/keyframe-brief/compile",
+        json={
+            "position": "END",
+            "requirement_ids": [selected_canvas["requirement_ids"][0]],
+            "primary_canvas_version_id": selected_canvas["asset_version_id"],
+        },
+    )
+    assert duplicate_brief.status_code == 200, duplicate_brief.text
+    duplicate_body = duplicate_brief.json()
+    assert duplicate_body["input_version_ids"] == [selected_canvas["asset_version_id"]]
+    assert "Image 2:" not in duplicate_body["prompt"]
 
     topology_asset = service.create_asset(
         project_id,

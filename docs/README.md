@@ -14,7 +14,7 @@
 
 首版运行在单用户、受信环境中，不设计注册、登录、账号体系、RBAC、多租户、团队成员或分享权限。生产流程中的“批准/确认”是内容状态，不是访问控制。外部模型 API 凭证只作为 Provider 配置处理。
 
-当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、供应商中立的 Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider 工程接入，以及 Phase 3 Azure GPT Image 2 资产生成/编辑与正式资产批准。Phase 4 已用固定资产执行多组 H3 Direct、Frame、Reference 实验并保存真实 Take、费用与人工 RouteEvidence：S01 F1、S02 Reference、S03 Reference、S05 F1 的首批五样本均通过，S04、S06 首条 Reference 候选也已通过；S08 原 F1 只有 3/5，定时修复版又出现“推右门却开左门”的空间因果失败。周衡左三分之四参考和便利店入口拓扑参考已获批准，S07 首条候选及 S08 新首尾关键帧已生成并进入人工确认。候选路线尚未达到至少 10 个有效样本的稳定性门槛，因此真人单集最终质量仍未宣告通过。
+当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、供应商中立的 Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider 工程接入，以及 Phase 3 Azure GPT Image 2 资产生成/编辑与正式资产批准。Phase 4 已用固定资产执行多组 H3 Direct、Frame、Reference 实验并保存真实 Take、费用与人工 RouteEvidence：S01 F1、S02 Reference、S03 Reference、S05 F1 的首批五样本均通过，S04、S06 首条 Reference 候选也已通过。S07 首条 Reference 因角色图与场景图竞争而出现第二入口，已被用户拒绝；新的单首帧 F1 候选抽帧未再出现该错误，等待完整播放审片。S08 原 F1 只有 3/5，定时修复版出现“推右门却开左门”，后续尾帧又出现额外把手、门体悬空和内外把手跳变。当前已增加可选主画布编辑，生成保留同一铰链与内侧把手的新尾帧，等待人工确认。候选路线尚未达到至少 10 个有效样本的稳定性门槛，因此真人单集最终质量仍未宣告通过。
 
 工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md) 和 [成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)。
 
@@ -88,6 +88,6 @@ H3 的首帧/尾帧角色与 reference image/video/audio 角色不能在同一�
 
 - 闭源平台结论主要来自官方页面与官方指南；按项目边界不登录、不调用，也不把其效果和价格纳入生产决策。
 - 开源结论基于 [固定 commit](sources.md)，没有安装全部依赖或运行其真实付费 Provider。
-- 当前已有固定资产下的多路线、多样本和人工审片证据，但主要通过路线仍只有首批 5 个有效样本，不能提前写成稳定默认路线；S03、S04、S06 已通过，导演 Agent 会建议 S08 补门体拓扑参考或拆镜但不阻止继续生成；S07 已生成待审片，S08 新关键帧待确认。
+- 当前已有固定资产下的多路线、多样本和人工审片证据，但主要通过路线仍只有首批 5 个有效样本，不能提前写成稳定默认路线；S03、S04、S06 已通过，导演 Agent 会建议避免带场景的角色图与独立场景图竞争、为 S08 补门体拓扑或拆镜，但不阻止继续生成；S07 新 F1 候选待审片，S08 新首帧与主画布尾帧待确认。
 - 代表样本中的普通话声音与口型总体可用，但跨镜声线稳定、严格逐字正确率和完整单集音画一致性仍需最终八镜成片验证。
 - 成本与配额高度时效化；本轮保留 `UNKNOWN` 并在实施时记录，但它们不是质量路线的主要决策因子。
