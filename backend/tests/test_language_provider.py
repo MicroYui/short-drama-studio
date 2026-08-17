@@ -19,6 +19,11 @@ from short_drama.language_models import (
 )
 from short_drama.h3_models import H3MediaInput, H3MediaKind, H3MediaRole, H3MediaSource
 from short_drama.models import VideoGenerationRoute
+from short_drama.models import (
+    ActionBeat,
+    SpatialInteractionConstraint,
+    SurfaceAttachmentConstraint,
+)
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderError,
     OpenAICompatibleLanguageClient,
@@ -412,6 +417,65 @@ def test_language_prompt_uses_visible_assets_and_previous_terminal_state() -> No
         "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
         "continuity_handoff": "从上一镜终态自然承接，但不得携入当前镜头未列出的可见资产。",
     }
+
+
+def test_language_prompt_includes_structured_physical_interactions() -> None:
+    from short_drama.fixture import build_dont_trust_me_fixture
+
+    document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    shot = next(item for item in document.shots if item.sequence == 8)
+    plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+    linxia = next(asset for asset in document.assets if asset.name == "林夏定妆")
+    store = next(asset for asset in document.assets if asset.name == "雨夜便利店")
+    plan.action_beats = [
+        ActionBeat(
+            order=1,
+            actor_asset_id=linxia.id,
+            action="用右手打开指定门体",
+            target_anchor="entrance.primary_door",
+        )
+    ]
+    plan.interactions = [
+        SpatialInteractionConstraint(
+            id="exit-door",
+            actor_asset_id=linxia.id,
+            effector="RIGHT_HAND",
+            action="打开",
+            target_asset_id=store.id,
+            target_anchor="entrance.primary_door",
+            start_state="关闭",
+            end_state="打开",
+            contact_anchor="entrance.primary_door.handle.interior",
+            contact_surface="entrance.primary_door.face.interior",
+            contact_persists=True,
+            rigid_attachments=[
+                SurfaceAttachmentConstraint(
+                    anchor="entrance.primary_door.handle.exterior",
+                    surface="entrance.primary_door.face.exterior",
+                )
+            ],
+        )
+    ]
+
+    instructions, input_text = build_language_prompt_input(
+        document,
+        shot,
+        route=VideoGenerationRoute.FRAME_FIRST_LAST,
+        duration_seconds=5,
+        source_prompt="baseline",
+    )
+    payload = json.loads(input_text)
+
+    assert "structured_action_plan 是导演 Agent" in instructions
+    assert payload["structured_action_plan"]["action_beats"][0]["actor"] == "林夏定妆"
+    interaction = payload["structured_action_plan"]["spatial_interactions"][0]
+    assert interaction["contact_persists"] is True
+    assert interaction["rigid_attachments"] == [
+        {
+            "anchor": "entrance.primary_door.handle.exterior",
+            "surface": "entrance.primary_door.face.exterior",
+        }
+    ]
 
 
 def test_language_prompt_filters_voiceover_character_but_keeps_current_prop_state() -> None:

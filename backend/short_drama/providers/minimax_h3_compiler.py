@@ -51,6 +51,7 @@ def build_h3_prompt(document: ProjectDocument, shot: ShotPlan) -> str:
     dialogue_text = "；".join(
         f'{line.speaker}用普通话说：“{line.spoken_text}”' for line in dialogue
     ) or "无对白，只保留计划中的环境声和动作声。"
+    structured_constraints = _format_structured_action_constraints(document, shot)
     prompt = (
         "真人都市悬疑短剧，电影级写实质感，9:16竖屏。"
         f"[Shot {shot.sequence}] 时长{math.ceil(shot.duration_seconds)}秒。"
@@ -62,6 +63,7 @@ def build_h3_prompt(document: ProjectDocument, shot: ShotPlan) -> str:
         f"连续性状态：开始时{shot.continuity.prop_state_in}；"
         f"结束时{shot.continuity.prop_state_out}。"
         f"声音：{shot.audio_intent}。{dialogue_text}"
+        f"{structured_constraints}"
         "只保持本镜头明确出现的人物、服装、场景、道具及左右手方向连续；"
         "不要主动加入本镜头未提及的角色或道具；"
         "禁止错误字幕、水印、画面内可读文字和无关对白。"
@@ -69,6 +71,64 @@ def build_h3_prompt(document: ProjectDocument, shot: ShotPlan) -> str:
     if len(prompt) > 7000:
         raise H3CapabilityError("Compiled H3 prompt exceeds 7000 characters")
     return prompt
+
+
+def _format_structured_action_constraints(
+    document: ProjectDocument,
+    shot: ShotPlan,
+) -> str:
+    plan = next(
+        (item for item in document.reference_plan if item.shot_id == shot.id),
+        None,
+    )
+    if plan is None or (not plan.action_beats and not plan.interactions):
+        return ""
+    asset_names = {asset.id: asset.name for asset in document.assets}
+    parts: list[str] = []
+    if plan.action_beats:
+        beats = "；".join(
+            (
+                f"{beat.order}.{asset_names.get(beat.actor_asset_id, beat.actor_asset_id)}"
+                f"{beat.action}"
+                + (f"，目标锚点{beat.target_anchor}" if beat.target_anchor else "")
+                + (
+                    f"，完成状态{beat.required_end_state}"
+                    if beat.required_end_state
+                    else ""
+                )
+            )
+            for beat in sorted(plan.action_beats, key=lambda item: item.order)
+        )
+        parts.append(f"动作节拍必须依序执行：{beats}。")
+    for interaction in plan.interactions:
+        attachments = "、".join(
+            f"{item.anchor}固定在{item.surface}"
+            for item in interaction.rigid_attachments
+        )
+        contact = ""
+        if interaction.contact_anchor is not None:
+            contact = f"接触点为{interaction.contact_anchor}"
+            if interaction.contact_surface is not None:
+                contact += f"，位于{interaction.contact_surface}"
+            if interaction.contact_persists:
+                contact += "，本镜头内保持接触，除非后续动作节拍明确改变该状态"
+            contact += "；"
+        unchanged = (
+            f"{','.join(interaction.unchanged_anchors)}保持不动；"
+            if interaction.unchanged_anchors
+            else ""
+        )
+        rigid = f"刚性附件：{attachments}；" if attachments else ""
+        parts.append(
+            "物理交互："
+            f"{asset_names.get(interaction.actor_asset_id, interaction.actor_asset_id)}"
+            f"以{interaction.effector}{interaction.action}"
+            f"{asset_names.get(interaction.target_asset_id, interaction.target_asset_id)}"
+            f"的{interaction.target_anchor}，状态从{interaction.start_state}到"
+            f"{interaction.end_state}；{contact}{rigid}{unchanged}"
+            "部件不得消失、换面、复制、脱离或漂移。"
+        )
+    return "".join(parts)
 
 
 def validate_h3_probe(

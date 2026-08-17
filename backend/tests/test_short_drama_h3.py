@@ -32,9 +32,12 @@ from short_drama.h3_models import (
     H3VideoRequest,
 )
 from short_drama.models import (
+    ActionBeat,
     EvidencePurpose,
     EvidenceStatus,
     QaStatus,
+    SpatialInteractionConstraint,
+    SurfaceAttachmentConstraint,
     TaskStatus,
     VideoGenerationRoute,
 )
@@ -231,6 +234,52 @@ def test_h3_prompt_only_constrains_assets_present_in_the_shot() -> None:
     assert "不要主动加入本镜头未提及的角色或道具" in dialogue_prompt
     assert "红色录音笔" in prop_prompt
     assert "连续性状态：开始时道具从周衡右手进入" in prop_prompt
+
+
+def test_h3_prompt_carries_structured_contact_and_rigid_attachments() -> None:
+    document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    shot = next(item for item in document.shots if item.sequence == 8)
+    plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+    linxia = next(asset for asset in document.assets if asset.name == "林夏定妆")
+    store = next(asset for asset in document.assets if asset.name == "雨夜便利店")
+    plan.action_beats = [
+        ActionBeat(
+            order=1,
+            actor_asset_id=linxia.id,
+            action="用右手打开指定门体",
+            target_anchor="entrance.primary_door",
+            required_end_state="指定门体打开",
+        )
+    ]
+    plan.interactions = [
+        SpatialInteractionConstraint(
+            id="exit-door",
+            actor_asset_id=linxia.id,
+            effector="RIGHT_HAND",
+            action="打开",
+            target_asset_id=store.id,
+            target_anchor="entrance.primary_door",
+            start_state="关闭",
+            end_state="打开",
+            unchanged_anchors=["entrance.fixed_panel"],
+            contact_anchor="entrance.primary_door.handle.interior",
+            contact_surface="entrance.primary_door.face.interior",
+            contact_persists=True,
+            rigid_attachments=[
+                SurfaceAttachmentConstraint(
+                    anchor="entrance.primary_door.handle.exterior",
+                    surface="entrance.primary_door.face.exterior",
+                )
+            ],
+        )
+    ]
+
+    prompt = build_h3_prompt(document, shot)
+
+    assert "动作节拍必须依序执行" in prompt
+    assert "本镜头内保持接触，除非后续动作节拍明确改变该状态" in prompt
+    assert "entrance.primary_door.handle.exterior固定在entrance.primary_door.face.exterior" in prompt
+    assert "部件不得消失、换面、复制、脱离或漂移" in prompt
 
 
 def test_h3_compiler_enforces_routes_before_network() -> None:
