@@ -31,6 +31,15 @@ export type ImageTaskCreateRequest = components['schemas']['ImageTaskCreateReque
 export type ImageProviderConfig = components['schemas']['ImageProviderConfigResponse']
 export type LanguageProviderConfig = components['schemas']['LanguageProviderConfigResponse']
 export type LanguagePromptCompileResponse = components['schemas']['LanguagePromptCompileResponse']
+export type ReferencePackEntryCreateRequest = components['schemas']['ReferencePackEntryCreateRequest']
+export type ReferencePackEntryMutationResponse = components['schemas']['ReferencePackEntryMutationResponse']
+export type ShotReferencePlanUpdateRequest = components['schemas']['ShotReferencePlanUpdateRequest']
+export type ReferencePlanPreviewRequest = components['schemas']['ReferencePlanPreviewRequest']
+export type ReferencePlanPreviewResponse = components['schemas']['ReferencePlanPreviewResponse']
+export type KeyframeBriefCompileRequest = components['schemas']['KeyframeBriefCompileRequest']
+export type KeyframeBriefCompileResponse = components['schemas']['KeyframeBriefCompileResponse']
+export type DirectorAdviceRequest = components['schemas']['DirectorAdviceRequest']
+export type DirectorAdviceResponse = components['schemas']['DirectorAdviceResponse']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -67,6 +76,11 @@ const getLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol
 const updateLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol', 'post')
 const validateLanguageConfig = makeEndpointClient('/api/short-drama/providers/gpt-sol/validate', 'post')
 const compileH3PromptWithLanguageModel = makeEndpointClient('/api/short-drama/projects/{project_id}/h3/prompt/compile', 'post')
+const addReferencePackEntry = makeEndpointClient('/api/short-drama/projects/{project_id}/reference-packs/entries', 'post')
+const updateShotReferencePlan = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/reference-plan', 'put')
+const previewShotReferencePlan = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/reference-plan/preview', 'post')
+const compileKeyframeBrief = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/keyframe-brief/compile', 'post')
+const getDirectorAdvice = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/director-advice', 'post')
 const createAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/assets', 'post')
 const importLocalAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-local', 'post')
 const importUrlAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-url', 'post')
@@ -92,6 +106,10 @@ function assetPath(projectId: string, assetId: string, suffix = ''): string {
 
 function imageTaskPath(taskId: string, action: string): string {
   return `/api/short-drama/image-tasks/${encodeURIComponent(taskId)}/${action}`
+}
+
+function shotPath(projectId: string, shotId: string, suffix = ''): string {
+  return projectPath(projectId, `/shots/${encodeURIComponent(shotId)}${suffix}`)
 }
 
 export const ShortDramaApi = {
@@ -171,6 +189,46 @@ export const ShortDramaApi = {
     body,
     undefined,
     projectPath(projectId, '/h3/prompt/compile'),
+  ),
+  addReferencePackEntry: (
+    projectId: string,
+    body: ReferencePackEntryCreateRequest,
+  ) => addReferencePackEntry(
+    body,
+    undefined,
+    projectPath(projectId, '/reference-packs/entries'),
+  ),
+  updateShotReferencePlan: (
+    projectId: string,
+    shotId: string,
+    body: ShotReferencePlanUpdateRequest,
+  ) => updateShotReferencePlan(body, undefined, shotPath(projectId, shotId, '/reference-plan')),
+  previewShotReferencePlan: (
+    projectId: string,
+    shotId: string,
+    body: ReferencePlanPreviewRequest,
+  ) => previewShotReferencePlan(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/reference-plan/preview'),
+  ),
+  compileKeyframeBrief: (
+    projectId: string,
+    shotId: string,
+    body: KeyframeBriefCompileRequest,
+  ) => compileKeyframeBrief(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/keyframe-brief/compile'),
+  ),
+  getDirectorAdvice: (
+    projectId: string,
+    shotId: string,
+    body: DirectorAdviceRequest,
+  ) => getDirectorAdvice(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/director-advice'),
   ),
   createAsset: (
     projectId: string,

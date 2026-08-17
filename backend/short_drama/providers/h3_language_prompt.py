@@ -22,17 +22,9 @@ route_media_bindings 描述本次路线实际绑定的媒体。first_frame 是�
 previous_shot_terminal_state 只用于承接上一镜的物理终态；不得把上一镜独有的人物、道具或事件带入当前镜头。
 把镜头写成单个连续镜头，按时间顺序明确起始状态、动作节拍、摄影机运动和结束状态。优先提高真人感、物理动作连续性、身份与道具稳定性、构图和运镜可执行性。
 动作和运镜不得超出 locked_shot 与 source_prompt 已明确规定的范围；不得自行添加开关门、人物进出场、镜头穿越门窗、道具交接或场景转换等大动作。
-遵守 production_rules 给出的动作节拍上限，并在镜头前后各保留 0.5 秒自然安全区；不要把关键动作或台词卡在第一帧或最后一帧。
+根据镜头意图、时长和已声明动作安排自然节奏；不要套用固定动作拍数阈值。若信息密度较高，仍忠实编译用户已经选择的镜头方案，不得擅自删动作或拆镜。除非锁定事实明确要求立即开始或压尾结束，否则给起止留出自然呼吸空间。
 对白必须逐字保留并明确普通话说话人；画外音时画面人物不得误开口。禁止字幕、水印、画面内可读文字、无关对白、切镜、瞬移和无动机越轴。
 最终提示词必须包含 9:16、精确时长，并控制在 7000 个字符以内。"""
-
-
-def _max_action_beats(duration_seconds: int) -> int:
-    if duration_seconds <= 3:
-        return 1
-    if duration_seconds <= 6:
-        return 2
-    return 3
 
 
 def _contains_name_or_core(text: str, name: str) -> bool:
@@ -236,9 +228,8 @@ def build_language_prompt_input(
         "previous_shot_terminal_state": _previous_shot_terminal_state(document, shot),
         "production_rules": {
             "route_selected_upstream": True,
-            "max_action_beats": _max_action_beats(duration_seconds),
-            "head_safety_seconds": 0.5,
-            "tail_safety_seconds": 0.5,
+            "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
+            "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
             "continuity_handoff": "从上一镜终态自然承接，但不得携入当前镜头未列出的可见资产。",
         },
         "locked_dialogue": [

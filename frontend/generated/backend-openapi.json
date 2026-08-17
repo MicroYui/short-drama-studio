@@ -1,6 +1,54 @@
 {
   "components": {
     "schemas": {
+      "ActionBeat": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_asset_id": {
+            "title": "Actor Asset Id",
+            "type": "string"
+          },
+          "order": {
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "required_end_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required End State"
+          },
+          "target_anchor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Anchor"
+          }
+        },
+        "required": [
+          "order",
+          "actor_asset_id",
+          "action"
+        ],
+        "title": "ActionBeat",
+        "type": "object"
+      },
       "ActiveDownloadResponse": {
         "properties": {
           "cp_ids": {
@@ -1117,6 +1165,143 @@
         ],
         "title": "DescribeCheckpointsResponse",
         "type": "object"
+      },
+      "DirectorAdviceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "max_images": {
+            "anyOf": [
+              {
+                "maximum": 9.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Images"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "user_direction": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Direction"
+          }
+        },
+        "title": "DirectorAdviceRequest",
+        "type": "object"
+      },
+      "DirectorAdviceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "advisories": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorAdvisory"
+            },
+            "maxItems": 12,
+            "title": "Advisories",
+            "type": "array"
+          },
+          "model": {
+            "default": "gpt-5.6-sol",
+            "title": "Model",
+            "type": "string"
+          },
+          "proceed_allowed": {
+            "const": true,
+            "default": true,
+            "title": "Proceed Allowed",
+            "type": "boolean"
+          },
+          "provider": {
+            "default": "openai-compatible",
+            "title": "Provider",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id"
+        ],
+        "title": "DirectorAdviceResponse",
+        "type": "object"
+      },
+      "DirectorAdvisory": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/DirectorAdvisoryCategory"
+          },
+          "dismissible": {
+            "const": true,
+            "default": true,
+            "title": "Dismissible",
+            "type": "boolean"
+          },
+          "message": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "suggested_action": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Action"
+          }
+        },
+        "required": [
+          "category",
+          "message",
+          "rationale"
+        ],
+        "title": "DirectorAdvisory",
+        "type": "object"
+      },
+      "DirectorAdvisoryCategory": {
+        "enum": [
+          "REFERENCE_GAP",
+          "TOPOLOGY",
+          "ACTION_COMPLEXITY",
+          "SPLIT_SHOT",
+          "CAMERA",
+          "CONTINUITY",
+          "ROUTE",
+          "OTHER"
+        ],
+        "title": "DirectorAdvisoryCategory",
+        "type": "string"
       },
       "DownloadProgressCompleteResponse": {
         "properties": {
@@ -4984,7 +5169,135 @@
         "title": "InstructionSection",
         "type": "object"
       },
+      "InteractionEffector": {
+        "enum": [
+          "LEFT_HAND",
+          "RIGHT_HAND",
+          "BOTH_HANDS",
+          "BODY",
+          "GAZE",
+          "NOT_APPLICABLE"
+        ],
+        "title": "InteractionEffector",
+        "type": "string"
+      },
       "JsonValue": {},
+      "KeyframeBriefCompileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "extra_constraints": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Extra Constraints",
+            "type": "array"
+          },
+          "max_images": {
+            "anyOf": [
+              {
+                "maximum": 9.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Images"
+          },
+          "position": {
+            "$ref": "#/components/schemas/KeyframePosition"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Requirement Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "KeyframeBriefCompileRequest",
+        "type": "object"
+      },
+      "KeyframeBriefCompileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "complexity": {
+            "$ref": "#/components/schemas/ReferenceComplexityAssessment"
+          },
+          "input_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Version Ids",
+            "type": "array"
+          },
+          "missing_requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Requirement Ids",
+            "type": "array"
+          },
+          "position": {
+            "$ref": "#/components/schemas/KeyframePosition"
+          },
+          "proceed_allowed": {
+            "const": true,
+            "default": true,
+            "title": "Proceed Allowed",
+            "type": "boolean"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "selected": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSelection"
+            },
+            "title": "Selected",
+            "type": "array"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shot_id",
+          "selected",
+          "missing_requirement_ids",
+          "warnings",
+          "complexity",
+          "position",
+          "prompt",
+          "input_version_ids"
+        ],
+        "title": "KeyframeBriefCompileResponse",
+        "type": "object"
+      },
+      "KeyframePosition": {
+        "enum": [
+          "TOPOLOGY_REFERENCE",
+          "START",
+          "END"
+        ],
+        "title": "KeyframePosition",
+        "type": "string"
+      },
       "LTXVideoGenerationModelSpecItem": {
         "properties": {
           "pipeline": {
@@ -6484,6 +6797,13 @@
           "project": {
             "$ref": "#/components/schemas/ProjectRecord"
           },
+          "reference_packs": {
+            "items": {
+              "$ref": "#/components/schemas/ReferencePack"
+            },
+            "title": "Reference Packs",
+            "type": "array"
+          },
           "reference_plan": {
             "items": {
               "$ref": "#/components/schemas/ReferencePlanEntry"
@@ -6843,6 +7163,19 @@
         "title": "QaStatus",
         "type": "string"
       },
+      "ReferenceAngle": {
+        "enum": [
+          "FRONT",
+          "THREE_QUARTER_LEFT",
+          "THREE_QUARTER_RIGHT",
+          "LEFT_PROFILE",
+          "RIGHT_PROFILE",
+          "BACK",
+          "NOT_APPLICABLE"
+        ],
+        "title": "ReferenceAngle",
+        "type": "string"
+      },
       "ReferenceBinding": {
         "additionalProperties": false,
         "properties": {
@@ -6872,9 +7205,246 @@
         "title": "ReferenceBinding",
         "type": "object"
       },
+      "ReferenceComplexityAssessment": {
+        "additionalProperties": false,
+        "properties": {
+          "action_beat_count": {
+            "title": "Action Beat Count",
+            "type": "integer"
+          },
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "interaction_count": {
+            "title": "Interaction Count",
+            "type": "integer"
+          },
+          "missing_topology_anchors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Topology Anchors",
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Observations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "duration_seconds",
+          "action_beat_count",
+          "interaction_count",
+          "missing_topology_anchors",
+          "observations"
+        ],
+        "title": "ReferenceComplexityAssessment",
+        "type": "object"
+      },
+      "ReferenceFraming": {
+        "enum": [
+          "FACE_CLOSE_UP",
+          "CLOSE_UP",
+          "MEDIUM",
+          "FULL_BODY",
+          "WIDE",
+          "DETAIL",
+          "NOT_APPLICABLE"
+        ],
+        "title": "ReferenceFraming",
+        "type": "string"
+      },
+      "ReferencePack": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ReferencePackEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "subject_asset_id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReferencePack",
+        "type": "object"
+      },
+      "ReferencePackEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "angle": {
+            "$ref": "#/components/schemas/ReferenceAngle",
+            "default": "NOT_APPLICABLE"
+          },
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "framing": {
+            "$ref": "#/components/schemas/ReferenceFraming",
+            "default": "NOT_APPLICABLE"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ReferenceRole"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "asset_version_id",
+          "role",
+          "description"
+        ],
+        "title": "ReferencePackEntry",
+        "type": "object"
+      },
+      "ReferencePackEntryCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "angle": {
+            "$ref": "#/components/schemas/ReferenceAngle",
+            "default": "NOT_APPLICABLE"
+          },
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "framing": {
+            "$ref": "#/components/schemas/ReferenceFraming",
+            "default": "NOT_APPLICABLE"
+          },
+          "priority": {
+            "default": 0,
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ReferenceRole"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subject_asset_id",
+          "asset_version_id",
+          "role",
+          "description"
+        ],
+        "title": "ReferencePackEntryCreateRequest",
+        "type": "object"
+      },
+      "ReferencePackEntryMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/ReferencePackEntry"
+          },
+          "pack": {
+            "$ref": "#/components/schemas/ReferencePack"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          }
+        },
+        "required": [
+          "pack",
+          "entry",
+          "project"
+        ],
+        "title": "ReferencePackEntryMutationResponse",
+        "type": "object"
+      },
       "ReferencePlanEntry": {
         "additionalProperties": false,
         "properties": {
+          "action_beats": {
+            "items": {
+              "$ref": "#/components/schemas/ActionBeat"
+            },
+            "title": "Action Beats",
+            "type": "array"
+          },
           "bindings": {
             "items": {
               "$ref": "#/components/schemas/ReferenceBinding"
@@ -6885,6 +7455,38 @@
           "capability_valid": {
             "title": "Capability Valid",
             "type": "boolean"
+          },
+          "interactions": {
+            "items": {
+              "$ref": "#/components/schemas/SpatialInteractionConstraint"
+            },
+            "title": "Interactions",
+            "type": "array"
+          },
+          "max_reference_images": {
+            "default": 3,
+            "maximum": 9.0,
+            "minimum": 1.0,
+            "title": "Max Reference Images",
+            "type": "integer"
+          },
+          "planning_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planning Notes"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRequirement"
+            },
+            "title": "Requirements",
+            "type": "array"
           },
           "shot_id": {
             "title": "Shot Id",
@@ -6905,6 +7507,236 @@
           "validation_notes"
         ],
         "title": "ReferencePlanEntry",
+        "type": "object"
+      },
+      "ReferencePlanPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "max_images": {
+            "anyOf": [
+              {
+                "maximum": 9.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Images"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Requirement Ids",
+            "type": "array"
+          }
+        },
+        "title": "ReferencePlanPreviewRequest",
+        "type": "object"
+      },
+      "ReferencePlanPreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "complexity": {
+            "$ref": "#/components/schemas/ReferenceComplexityAssessment"
+          },
+          "missing_requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Requirement Ids",
+            "type": "array"
+          },
+          "proceed_allowed": {
+            "const": true,
+            "default": true,
+            "title": "Proceed Allowed",
+            "type": "boolean"
+          },
+          "selected": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSelection"
+            },
+            "title": "Selected",
+            "type": "array"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shot_id",
+          "selected",
+          "missing_requirement_ids",
+          "warnings",
+          "complexity"
+        ],
+        "title": "ReferencePlanPreviewResponse",
+        "type": "object"
+      },
+      "ReferenceRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptable_roles": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRole"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Acceptable Roles",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "preferred_angles": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceAngle"
+            },
+            "maxItems": 8,
+            "title": "Preferred Angles",
+            "type": "array"
+          },
+          "preferred_framings": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceFraming"
+            },
+            "maxItems": 8,
+            "title": "Preferred Framings",
+            "type": "array"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "required_tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Required Tags",
+            "type": "array"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "subject_asset_id",
+          "acceptable_roles",
+          "purpose"
+        ],
+        "title": "ReferenceRequirement",
+        "type": "object"
+      },
+      "ReferenceRole": {
+        "enum": [
+          "CHARACTER_FACE",
+          "CHARACTER_BODY",
+          "CHARACTER_PROFILE",
+          "CHARACTER_BACK",
+          "LOCATION_MASTER",
+          "LOCATION_REVERSE",
+          "LOCATION_INTERACTION",
+          "PROP_PRODUCT",
+          "PROP_IN_HAND",
+          "PROP_STATE"
+        ],
+        "title": "ReferenceRole",
+        "type": "string"
+      },
+      "ReferenceSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "angle": {
+            "$ref": "#/components/schemas/ReferenceAngle"
+          },
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "framing": {
+            "$ref": "#/components/schemas/ReferenceFraming"
+          },
+          "pack_id": {
+            "title": "Pack Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ReferenceRole"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pack_id",
+          "entry_id",
+          "subject_asset_id",
+          "asset_version_id",
+          "role",
+          "angle",
+          "framing",
+          "tags",
+          "description",
+          "requirement_ids",
+          "score",
+          "reasons"
+        ],
+        "title": "ReferenceSelection",
         "type": "object"
       },
       "RetakeCancelledResponse": {
@@ -7534,6 +8366,53 @@
         "title": "ShotPlan",
         "type": "object"
       },
+      "ShotReferencePlanUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action_beats": {
+            "items": {
+              "$ref": "#/components/schemas/ActionBeat"
+            },
+            "title": "Action Beats",
+            "type": "array"
+          },
+          "interactions": {
+            "items": {
+              "$ref": "#/components/schemas/SpatialInteractionConstraint"
+            },
+            "title": "Interactions",
+            "type": "array"
+          },
+          "max_reference_images": {
+            "default": 3,
+            "maximum": 9.0,
+            "minimum": 1.0,
+            "title": "Max Reference Images",
+            "type": "integer"
+          },
+          "planning_notes": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planning Notes"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRequirement"
+            },
+            "title": "Requirements",
+            "type": "array"
+          }
+        },
+        "title": "ShotReferencePlanUpdateRequest",
+        "type": "object"
+      },
       "SourceMode": {
         "enum": [
           "IDEA_EXPANSION",
@@ -7541,6 +8420,62 @@
         ],
         "title": "SourceMode",
         "type": "string"
+      },
+      "SpatialInteractionConstraint": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_asset_id": {
+            "title": "Actor Asset Id",
+            "type": "string"
+          },
+          "effector": {
+            "$ref": "#/components/schemas/InteractionEffector"
+          },
+          "end_state": {
+            "title": "End State",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "start_state": {
+            "title": "Start State",
+            "type": "string"
+          },
+          "target_anchor": {
+            "title": "Target Anchor",
+            "type": "string"
+          },
+          "target_asset_id": {
+            "title": "Target Asset Id",
+            "type": "string"
+          },
+          "unchanged_anchors": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Unchanged Anchors",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "actor_asset_id",
+          "effector",
+          "action",
+          "target_asset_id",
+          "target_anchor",
+          "start_state",
+          "end_state"
+        ],
+        "title": "SpatialInteractionConstraint",
+        "type": "object"
       },
       "StatusMessage": {
         "additionalProperties": false,
@@ -11467,6 +12402,68 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/reference-packs/entries": {
+      "post": {
+        "operationId": "add_reference_pack_entry_api_short_drama_projects__project_id__reference_packs_entries_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferencePackEntryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferencePackEntryMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Add Reference Pack Entry",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects/{project_id}/script/revise-line": {
       "post": {
         "operationId": "revise_script_line_api_short_drama_projects__project_id__script_revise_line_post",
@@ -11524,6 +12521,77 @@
           }
         },
         "summary": "Revise Script Line",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/director-advice": {
+      "post": {
+        "operationId": "get_director_advice_api_short_drama_projects__project_id__shots__shot_id__director_advice_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectorAdviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorAdviceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Director Advice",
         "tags": [
           "short-drama"
         ]
@@ -11666,6 +12734,219 @@
           }
         },
         "summary": "Enqueue Gap Fill",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/keyframe-brief/compile": {
+      "post": {
+        "operationId": "compile_keyframe_brief_api_short_drama_projects__project_id__shots__shot_id__keyframe_brief_compile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyframeBriefCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyframeBriefCompileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Compile Keyframe Brief",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/reference-plan": {
+      "put": {
+        "operationId": "update_shot_reference_plan_api_short_drama_projects__project_id__shots__shot_id__reference_plan_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShotReferencePlanUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Update Shot Reference Plan",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/reference-plan/preview": {
+      "post": {
+        "operationId": "preview_shot_reference_plan_api_short_drama_projects__project_id__shots__shot_id__reference_plan_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferencePlanPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferencePlanPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Preview Shot Reference Plan",
         "tags": [
           "short-drama"
         ]

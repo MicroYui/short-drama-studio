@@ -408,9 +408,8 @@ def test_language_prompt_uses_visible_assets_and_previous_terminal_state() -> No
     }
     assert payload["production_rules"] == {
         "route_selected_upstream": True,
-        "max_action_beats": 3,
-        "head_safety_seconds": 0.5,
-        "tail_safety_seconds": 0.5,
+        "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
+        "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
         "continuity_handoff": "从上一镜终态自然承接，但不得携入当前镜头未列出的可见资产。",
     }
 

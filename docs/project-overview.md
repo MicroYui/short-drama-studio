@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟，以及 Phase 3 来源中立资产工作台、Azure GPT Image 2 生成/编辑链路和首批正式资产批准。Phase 4 已在固定资产下执行 Direct、Frame 与 Reference 真实质量实验：S01 建立镜头的批准双人首帧 F1、S02 长对白近景的 Reference、S05 道具落台的批准首帧 F1 均取得首批 5/5 人工硬门槛通过；S08 原 F1 只有 3/5，通过率不足以成为稳定默认路线。当前结果证明路线必须按镜头类型选择，但候选默认路线仍需扩展到至少 10 个有效样本，S03 与 S08 修复样本也仍待最终人工审片。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟，以及 Phase 3 来源中立资产工作台、Azure GPT Image 2 生成/编辑链路和首批正式资产批准。Phase 4 已在固定资产下执行 Direct、Frame 与 Reference 真实质量实验：S01 建立镜头的批准双人首帧 F1、S02 长对白近景的 Reference、S03 周衡反打 Reference、S05 道具落台的批准首帧 F1 均取得首批 5/5 人工硬门槛通过；S08 原 F1 只有 3/5，定时修复样本仍出现“推右门却开左门”。当前结果说明复杂物理交互应由导演 Agent 优先建议无歧义场景拓扑关键帧或拆镜，但这些建议不阻止用户继续原方案生成。
 
 ## 结论先行
 
@@ -43,9 +43,10 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 13. [Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)
 14. [Phase 3：来源中立资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)
 15. [Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)
+16. [成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)
 
 ## 当前边界
 
 - 已做：官方资料与开源源码审查、固定样片、架构和实验协议；LTX Desktop 基线；SQLite/API 短剧领域核心、可恢复 Mock Worker、多 Take、局部返工、TimelineManifest、字幕/音频占位、9:16 导出、QA 和桌面闭环；MiniMax-H3 768P Adapter 与真实异步媒体闭环；资产工作台、本地/链接导入、版本与批准、Azure GPT Image 2 生成/编辑、本地 GPT-5.6-sol 连接；林夏、周衡、便利店、录音笔及镜头关键帧正式版本；代表镜头多路线样本、人审 RouteEvidence、八镜头 GPT 提示词编译与无提交 H3 请求预检。
-- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：候选路线扩展到默认路线所需的 10 个有效样本，S03/S08 修复样本人审，S04/S06/S07 首批动态候选，以及真人单集最终时间线与成片质量验收。
-- 下一步：先审现有 S03 Reference 五样本和 S08 修复样本；再按信息增益补足 S01/S02/S05/S08 的稳定性或 GPT 编译提示对照，生成 S04/S06/S07 首批候选，最终只把 100% 通过镜头硬门槛的 Take 选入单集时间线。
+- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：候选路线扩展到默认路线所需的 10 个有效样本，S08 入口拓扑修正或拆镜，S04/S06/S07 首批动态候选，以及真人单集最终时间线与成片质量验收。
+- 下一步：默认先用成熟产品和开源实现中的参考资产包、镜头级选图和场景拓扑机制改善 S08 关键帧；用户可忽略该建议并继续原路线。随后生成 S04/S06/S07 首批候选，由用户决定哪些 Take 进入单集时间线。

@@ -55,6 +55,17 @@ from short_drama.models import (
     WorkerDrainRequest,
     WorkerDrainResponse,
 )
+from short_drama.reference_planner import (
+    DirectorAdviceRequest,
+    DirectorAdviceResponse,
+    KeyframeBriefCompileRequest,
+    KeyframeBriefCompileResponse,
+    ReferencePackEntryCreateRequest,
+    ReferencePackEntryMutationResponse,
+    ReferencePlanPreviewRequest,
+    ReferencePlanPreviewResponse,
+    ShotReferencePlanUpdateRequest,
+)
 from short_drama.service import (
     ArtifactNotFoundError,
     ProviderOperationError,
@@ -144,6 +155,90 @@ def compile_h3_prompt_with_language_model(
 ) -> LanguagePromptCompileResponse:
     try:
         return service.compile_h3_prompt_with_language_model(project_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/reference-packs/entries",
+    response_model=ReferencePackEntryMutationResponse,
+)
+def add_reference_pack_entry(
+    project_id: str,
+    request: ReferencePackEntryCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ReferencePackEntryMutationResponse:
+    try:
+        return service.add_reference_pack_entry(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.put(
+    "/projects/{project_id}/shots/{shot_id}/reference-plan",
+    response_model=ProjectAggregate,
+)
+def update_shot_reference_plan(
+    project_id: str,
+    shot_id: str,
+    request: ShotReferencePlanUpdateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProjectAggregate:
+    try:
+        return service.update_shot_reference_plan(project_id, shot_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/reference-plan/preview",
+    response_model=ReferencePlanPreviewResponse,
+)
+def preview_shot_reference_plan(
+    project_id: str,
+    shot_id: str,
+    request: ReferencePlanPreviewRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ReferencePlanPreviewResponse:
+    try:
+        return service.preview_shot_reference_plan(project_id, shot_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/keyframe-brief/compile",
+    response_model=KeyframeBriefCompileResponse,
+)
+def compile_keyframe_brief(
+    project_id: str,
+    shot_id: str,
+    request: KeyframeBriefCompileRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> KeyframeBriefCompileResponse:
+    try:
+        return service.compile_keyframe_brief(project_id, shot_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/director-advice",
+    response_model=DirectorAdviceResponse,
+)
+def get_director_advice(
+    project_id: str,
+    shot_id: str,
+    request: DirectorAdviceRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> DirectorAdviceResponse:
+    try:
+        return service.get_director_advice(project_id, shot_id, request)
     except (
         ProjectNotFoundError,
         ArtifactNotFoundError,

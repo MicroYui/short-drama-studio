@@ -61,6 +61,8 @@ from short_drama.language_models import (
 from short_drama.media import MockMediaRenderer, TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
+    Asset,
+    AssetKind,
     AssetVersion,
     AssetMediaType,
     AutoDraftResponse,
@@ -80,6 +82,9 @@ from short_drama.models import (
     ProjectDocument,
     ProjectListResponse,
     ProjectStage,
+    ReferencePack,
+    ReferencePackEntry,
+    ReferencePlanEntry,
     RouteEvidence,
     QaStatus,
     ReviseScriptLineRequest,
@@ -93,6 +98,22 @@ from short_drama.models import (
     TimelineVideoClip,
     VideoGenerationRoute,
     WorkerDrainResponse,
+)
+from short_drama.reference_planner import (
+    DirectorAdviceRequest,
+    DirectorAdviceResponse,
+    KeyframeBriefCompileRequest,
+    KeyframeBriefCompileResponse,
+    ReferencePackEntryCreateRequest,
+    ReferencePackEntryMutationResponse,
+    ReferencePlanPreviewRequest,
+    ReferencePlanPreviewResponse,
+    ShotReferencePlanUpdateRequest,
+    build_director_advice_input,
+    compile_keyframe_brief,
+    parse_director_advice,
+    preview_reference_plan,
+    role_is_compatible,
 )
 from short_drama.providers.h3_config import H3ProviderConfigStore
 from short_drama.providers.h3_language_prompt import (
@@ -325,6 +346,199 @@ class ShortDramaService:
             source_prompt=source_prompt,
             compiled_prompt=compiled_prompt,
             validation_notes=validation_notes,
+        )
+
+    def add_reference_pack_entry(
+        self,
+        project_id: str,
+        request: ReferencePackEntryCreateRequest,
+    ) -> ReferencePackEntryMutationResponse:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            subject = self._require_asset_in_document(document, request.subject_asset_id)
+            if subject.kind not in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}:
+                raise WorkflowConflictError(
+                    "Reference packs must belong to a character, location, or prop asset"
+                )
+            if not role_is_compatible(subject.kind, request.role):
+                raise WorkflowConflictError(
+                    f"Reference role {request.role.value} is incompatible with {subject.kind.value}"
+                )
+            _source_asset, source_version = self._find_asset_version(
+                document,
+                request.asset_version_id,
+            )
+            if (
+                _source_asset.approved_version_id != source_version.id
+                or source_version.approval_status != ApprovalStatus.APPROVED
+            ):
+                raise WorkflowConflictError(
+                    "Only an asset's current approved formal version can enter a reference pack"
+                )
+            if source_version.media_type != AssetMediaType.IMAGE:
+                raise WorkflowConflictError("Reference pack entries currently require image media")
+
+            now = utc_now()
+            pack_id = f"reference-pack-{subject.id}"
+            pack = next(
+                (item for item in document.reference_packs if item.id == pack_id),
+                None,
+            )
+            if pack is None:
+                pack = ReferencePack(
+                    id=pack_id,
+                    project_id=project_id,
+                    subject_asset_id=subject.id,
+                    name=f"{subject.name}参考包",
+                    created_at=now,
+                    updated_at=now,
+                )
+                document.reference_packs.append(pack)
+
+            normalized_tags = list(
+                dict.fromkeys(tag.strip() for tag in request.tags if tag.strip())
+            )
+            existing = next(
+                (
+                    item
+                    for item in pack.entries
+                    if item.asset_version_id == source_version.id
+                    and item.role == request.role
+                    and item.angle == request.angle
+                    and item.framing == request.framing
+                ),
+                None,
+            )
+            if existing is None:
+                entry = ReferencePackEntry(
+                    id=f"reference-entry-{uuid4().hex[:12]}",
+                    asset_version_id=source_version.id,
+                    role=request.role,
+                    angle=request.angle,
+                    framing=request.framing,
+                    tags=normalized_tags,
+                    description=request.description.strip(),
+                    priority=request.priority,
+                )
+                pack.entries.append(entry)
+            else:
+                existing.tags = normalized_tags
+                existing.description = request.description.strip()
+                existing.priority = request.priority
+                entry = existing
+            pack.updated_at = now
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            return ReferencePackEntryMutationResponse(
+                pack=pack,
+                entry=entry,
+                project=self._aggregate(document),
+            )
+
+    def update_shot_reference_plan(
+        self,
+        project_id: str,
+        shot_id: str,
+        request: ShotReferencePlanUpdateRequest,
+    ) -> ProjectAggregate:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            self._require_shot_in_document(document, shot_id)
+            for requirement in request.requirements:
+                self._require_asset_in_document(document, requirement.subject_asset_id)
+            for beat in request.action_beats:
+                self._require_asset_in_document(document, beat.actor_asset_id)
+            for interaction in request.interactions:
+                self._require_asset_in_document(document, interaction.actor_asset_id)
+                self._require_asset_in_document(document, interaction.target_asset_id)
+
+            plan = self._require_reference_plan(document, shot_id)
+            plan.requirements = [item.model_copy(deep=True) for item in request.requirements]
+            plan.action_beats = [
+                item.model_copy(deep=True)
+                for item in sorted(request.action_beats, key=lambda item: item.order)
+            ]
+            plan.interactions = [item.model_copy(deep=True) for item in request.interactions]
+            plan.max_reference_images = request.max_reference_images
+            plan.planning_notes = (
+                request.planning_notes.strip() if request.planning_notes else None
+            )
+            plan.validation_notes = [
+                "Reference requirements are selected from approved semantic packs at preview time",
+                "Spatial interaction constraints are provider-neutral and apply to keyframe and video planning",
+                "Missing references, topology gaps, and split suggestions are non-blocking Director Agent advisories",
+            ]
+            document.project.updated_at = utc_now()
+            self.repository.save_project(document)
+            return self._aggregate(document)
+
+    def preview_shot_reference_plan(
+        self,
+        project_id: str,
+        shot_id: str,
+        request: ReferencePlanPreviewRequest,
+    ) -> ReferencePlanPreviewResponse:
+        document = self._require_project_document(project_id)
+        shot = self._require_shot_in_document(document, shot_id)
+        plan = self._require_reference_plan(document, shot_id)
+        try:
+            return preview_reference_plan(document, shot, plan, request)
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def compile_keyframe_brief(
+        self,
+        project_id: str,
+        shot_id: str,
+        request: KeyframeBriefCompileRequest,
+    ) -> KeyframeBriefCompileResponse:
+        document = self._require_project_document(project_id)
+        shot = self._require_shot_in_document(document, shot_id)
+        plan = self._require_reference_plan(document, shot_id)
+        try:
+            return compile_keyframe_brief(document, shot, plan, request)
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def get_director_advice(
+        self,
+        project_id: str,
+        shot_id: str,
+        request: DirectorAdviceRequest,
+    ) -> DirectorAdviceResponse:
+        document = self._require_project_document(project_id)
+        shot = self._require_shot_in_document(document, shot_id)
+        plan = self._require_reference_plan(document, shot_id)
+        try:
+            preview = preview_reference_plan(document, shot, plan, request)
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+        api_key = self.language_config.api_key()
+        base_url = self.language_config.base_url()
+        if not api_key and not is_loopback_openai_url(base_url):
+            raise WorkflowConflictError("GPT-5.6-sol API key is not configured")
+        instructions, input_text = build_director_advice_input(
+            document,
+            shot,
+            plan,
+            preview,
+            request,
+        )
+        try:
+            client = self.language_provider_factory(api_key, base_url)
+            output_text = client.generate_text(
+                instructions=instructions,
+                input_text=input_text,
+            )
+            payload = parse_director_advice(output_text)
+        except LanguageProviderError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        except ValueError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        return DirectorAdviceResponse(
+            shot_id=shot_id,
+            advisories=payload.advisories,
         )
 
     def create_asset(
@@ -1362,6 +1576,41 @@ class ShortDramaService:
         if document is None:
             raise ProjectNotFoundError(project_id)
         return document
+
+    @staticmethod
+    def _require_asset_in_document(document: ProjectDocument, asset_id: str) -> Asset:
+        asset = next((item for item in document.assets if item.id == asset_id), None)
+        if asset is None:
+            raise ArtifactNotFoundError(asset_id)
+        return asset
+
+    @staticmethod
+    def _find_asset_version(
+        document: ProjectDocument,
+        version_id: str,
+    ) -> tuple[Asset, AssetVersion]:
+        for asset in document.assets:
+            version = next((item for item in asset.versions if item.id == version_id), None)
+            if version is not None:
+                return asset, version
+        raise ArtifactNotFoundError(version_id)
+
+    @staticmethod
+    def _require_shot_in_document(document: ProjectDocument, shot_id: str) -> ShotPlan:
+        shot = next((item for item in document.shots if item.id == shot_id), None)
+        if shot is None:
+            raise ArtifactNotFoundError(shot_id)
+        return shot
+
+    @staticmethod
+    def _require_reference_plan(
+        document: ProjectDocument,
+        shot_id: str,
+    ) -> ReferencePlanEntry:
+        plan = next((item for item in document.reference_plan if item.shot_id == shot_id), None)
+        if plan is None:
+            raise ArtifactNotFoundError(f"reference-plan:{shot_id}")
+        return plan
 
     def _require_task(self, task_id: str) -> GenerationTask:
         task = self.repository.get_task(task_id)

@@ -1,6 +1,6 @@
 # 来源与源码快照
 
-快照日期：2026-08-15。本清单优先记录官方资料和固定源码 commit。产品能力、模型接口、价格与仓库代码都会变化，进入实现前应重新核验。
+快照日期：2026-08-17。本清单优先记录官方资料和固定源码 commit。产品能力、模型接口、价格与仓库代码都会变化，进入实现前应重新核验。
 
 ## 1. 模型与 API 官方资料
 
@@ -56,6 +56,10 @@
 - 即梦：[官方主页](https://www.jimeng.com/)
 - 可灵：[VIDEO 3.0 用户指南](https://app.klingai.com/cn/quickstart/klingai-video-3-model-user-guide)
 - LTX Studio：[产品主页](https://website.ltx.studio/)、[完整工作流教程](https://ltx.io/blog/ltx-studio-tutorial)、[TV/Media workflow](https://ltx.io/studio/solution/tv-media-networks)、[Retake 教程](https://ltx.io/blog/retake-ai-directing-tool-ltx-studio)、[Elements 教程](https://ltx.io/blog/getting-started-with-elements)、[Retake API](https://docs.ltx.io/api-documentation/api-reference/async-video-generation/submit-retake)
+- LTX Studio 制作方法：[一致角色指南](https://ltx.io/blog/how-to-create-a-consistent-character)、[完整预视化流水线](https://ltx.io/blog/how-to-build-a-complete-pre-visualization-pipeline)
+- Google Flow：[Ingredients 与 Frames 帮助](https://support.google.com/flow/answer/16353334?hl=en)
+- Runway：[Gen-4 Image References](https://help.runwayml.com/hc/en-us/articles/40042718905875-Creating-with-Gen-4-Image-References)、[Image-to-Video Prompting Guide](https://help.runwayml.com/hc/en-us/articles/48324313115155-Image-to-Video-Prompting-Guide)
+- 可灵：[多图参考公开说明](https://kuaishou.gcs-web.com/zh-hant/news-releases/news-release-details/kuaishoukelingaituichuduotucankao-gongneng)
 - 纳逗 Pro：[业务页](https://www.iqiyi.com/common/aqynatoopro.html)、[发布说明](https://pages.iqiyi.com/m/scpr/63x0au29.html?qyc-pr=1)、[新功能说明](https://pages.iqiyi.com/m/scpr/63x0avkx.html?qyc-pr=1)
 
 公开产品资料中的效果描述标为 `PRODUCT-CLAIM`。由于这些产品不可用于本项目，本轮不安排登录、积分或平台实测。
@@ -71,6 +75,9 @@
 | Wind Comic | [ChrisChen667788/wind-comic](https://github.com/ChrisChen667788/wind-comic) | [`c83e1cf5e9b88fa8ac62bb737c79985a95243b8d`](https://github.com/ChrisChen667788/wind-comic/commit/c83e1cf5e9b88fa8ac62bb737c79985a95243b8d) | MIT |
 | LumenX | [alibaba/lumenx](https://github.com/alibaba/lumenx) | [`f2a02e23171447c939e7d8e1386b24d17049bbf1`](https://github.com/alibaba/lumenx/commit/f2a02e23171447c939e7d8e1386b24d17049bbf1) | MIT |
 | LTX Desktop | [Lightricks/LTX-Desktop](https://github.com/Lightricks/LTX-Desktop) | [`2ac57301af814f4fbdde2380c23e64e673860770`](https://github.com/Lightricks/LTX-Desktop/commit/2ac57301af814f4fbdde2380c23e64e673860770)（2026-08-14 上游快照） | Apache-2.0（应用代码） |
+| LocalMiniDrama | [xuanyustudio/LocalMiniDrama](https://github.com/xuanyustudio/LocalMiniDrama) | [`7b6c1a748e9e3013b88a902cfbfd31ec283da0d1`](https://github.com/xuanyustudio/LocalMiniDrama/commit/7b6c1a748e9e3013b88a902cfbfd31ec283da0d1) | MIT |
+| dramai | [hyyyyyyz/dramai](https://github.com/hyyyyyyz/dramai) | [`2ec38104380823aff711c96ed852d5f713b8ac5a`](https://github.com/hyyyyyyz/dramai/commit/2ec38104380823aff711c96ed852d5f713b8ac5a) | Apache-2.0 |
+| director_ai | [freestylefly/director_ai](https://github.com/freestylefly/director_ai) | [`dd812c756f0ee0533cd7d36042a16144ab1b1202`](https://github.com/freestylefly/director_ai/commit/dd812c756f0ee0533cd7d36042a16144ab1b1202) | 未发现 License 文件，不复用代码 |
 
 本轮为静态源码审查，没有安装全部依赖、运行全套测试或调用仓库配置的真实 Provider。License 取自对应快照的仓库声明；进入发布或 SaaS 集成前仍需按最终使用方式复核。
 

@@ -13,6 +13,9 @@
 | Wind Comic | `c83e1cf5` | MIT | 一句话、9:16、FFmpeg、字幕、音频、QA、预算模块丰富 | 系统面很宽；当前候选模型适配器过时或不完整 | 拆用成片/QA 模块，不宜直接全盘继承 |
 | LumenX | `f2a02e23` | MIT | Pipeline-first 产品、模型目录、候选工作台、TTS/合成 | Provider 契约偏现有模型；导出选项不完整 | 快速改造候选，不因已有某个模型适配器加分 |
 | LTX Desktop | `2ac5730`（2026-08-14 上游快照） | Apache-2.0（应用；权重另授权） | Electron 桌面壳、专业时间线、Take/Retake/Extend、补空隙、真实 FFmpeg 导出 | 缺少短剧语义模型；项目元数据与任务恢复较弱；Provider 强绑定 LTX；预览与导出能力不完全一致 | 已采用的桌面编辑底座 |
+| LocalMiniDrama | `7b6c1a7` | MIT | 从剧本到分镜图/视频的本地工作台、H3 V2、相邻尾帧接续、四宫格拆图经验 | 状态与 Provider contract 较松；部分模式会因无参考图而阻断；质量经验未形成通用 Agent | 参考镜头资产选择、面板拆分和顺序生成，不整仓替换底座 |
+| dramai | `2ec3810` | Apache-2.0 | 纯前端轻量闭环、结构化分镜、浏览器合成、SRT/剪映导出 | 任务恢复尚弱、音频不在产品内、当前 Provider 与本项目不同 | 参考低门槛创作流程与导出体验 |
+| director_ai | `dd812c7` | 未发现 License | 可观察导演式工作台 UI 和提示组织 | README 仍接近模板，授权不明确，源码成熟度不足 | 只作概念观察，不复用代码 |
 
 完整仓库链接见 [来源清单](sources.md)。
 
@@ -200,7 +203,7 @@
 
 本轮不只把这些项目作为灵感来源，而是把明确机制落进当前实现：
 
-- Toonflow：提示编译输入增加上一镜终态、每镜前后 0.5 秒安全区、按时长限制动作节拍，并把可见资产与项目资产库分开；
+- Toonflow：提示编译输入增加上一镜终态，并把可见资产与项目资产库分开；其动作密度和起止留白经验只作为导演 Agent 的动态建议，不复制成固定秒数或动作上限；
 - Toonflow 的模式边界：H3 路线由上游规划器确定，GPT 提示编译器不得自行把 Direct、Frame 或 Reference 改成另一条路线；
 - ViMax：继续分开保存首帧、尾帧、运动和声音意图；实际媒体绑定会携带 role、资产名、版本描述和用途进入提示编译，避免“知道用了参考图但不知道参考什么”；
 - ViMax：下一轮关键帧生成采用多候选后按人物身份、空间关系和目标描述筛选，不把单次最好看的图直接视为批准资产；
@@ -237,7 +240,23 @@ LTX Desktop 会实质改变原先的底座判断：**如果首版要做单用户
 
 但不建议原样采用。更合理的改法是保留 Electron、编辑器、媒体文件、Take/Retake/Gap Fill 与导出框架；用 SQLite/数据库替换 `localStorage` 项目真相源，重建短剧领域模型、持久化任务 Worker、供应商中立 Adapter 和一致的 TimelineManifest 导出。Jellyfish 的项目/准备度/任务语义可被吸收到这套核心里，不必同时运行两套控制面。
 
-## 9. 底座选择的候选方案
+## 9. 补充短剧项目：LocalMiniDrama、dramai、director_ai
+
+### LocalMiniDrama
+
+该项目已经包含 MiniMax-H3 V2 `/v2/video_generation`、首尾帧字段、相邻视频尾帧抽取后顺序传给下一镜等真实工程路径。更有价值的是它记录了一个失败后修正：把角色/场景 2×2 合图直接作为下游参考，会诱导图像模型复制宫格布局，也更难准确提取人物外观；修正路径是先拆分面板、优先单张干净角色图、过滤本镜头无关素材，并明确要求单张输出。
+
+这支持本项目采用“完整资产包留在项目层，调用时按镜头选择少量独立参考图”，而不是把固定三视图宫格塞给每条生成。LocalMiniDrama 的经典模式会在没有参考图时阻断视频，这一点不采用；本项目只把缺图作为可忽略的导演 Agent 建议。
+
+### dramai
+
+源码确认其浏览器内流程覆盖素材导入、结构化分镜、生图、生视频、FFmpeg.wasm 合成、SRT 和剪映草稿导出。它证明轻量产品也可以把“一句话到可编辑成片”的主要步骤呈现清楚，但当前任务恢复、音频和人物/场景参考深度不足以替代本项目桌面底座。
+
+### director_ai
+
+当前快照缺少明确 License，根 README 仍是 Vite 模板，不能据此宣称成熟实现。只保留 UI/交互观察价值，不复制代码，也不把其宣传当能力证据。
+
+## 10. 底座选择的候选方案
 
 ### A. LTX Desktop 桌面壳 + 自建短剧核心
 
@@ -263,7 +282,7 @@ LTX Desktop 会实质改变原先的底座判断：**如果首版要做单用户
 - 缺点：项目/资产/任务/UI 都需重建，容易重复造轮子；
 - 适合：现有底座改造成本高，且短名单媒体路线已经比较清楚时再考虑。
 
-## 10. 当前建议
+## 11. 当前建议
 
 不让底座选择被内置 LTX、GPT Image 或 H3 Adapter 左右。P008 已确认首版需要短剧生产时间线，A004 已确认本地桌面优先，A001 已确认只做 LTX Desktop 单候选 Mock 垂直切片：
 
@@ -273,7 +292,7 @@ LTX Desktop 会实质改变原先的底座判断：**如果首版要做单用户
 
 通过后直接收敛到 LTX Desktop 壳；只有发现无法合理隔离或替换的结构性阻碍时才回退 Jellyfish，不维护两个一次性原型。LumenX 降为备选；Wind Comic、Toonflow 和 ViMax 仍作为模块/规则来源。闭源平台不属于底座或执行器候选。
 
-## 11. 关键源码证据路径
+## 12. 关键源码证据路径
 
 以下链接均固定到本轮审查 commit，方便后续复核；它们比项目 README 更接近本章判断依据。
 
@@ -341,3 +360,15 @@ LTX Desktop 会实质改变原先的底座判断：**如果首版要做单用户
 - [导出视频滤镜图](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/electron/export/video-filter.ts)
 - [跨平台 CI](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/.github/workflows/ci.yml)
 - [应用 License 与模型权重提示](https://github.com/Lightricks/LTX-Desktop/blob/24a8440d7a424c283d7e6dd534cbf78549785090/NOTICES.md)
+
+### LocalMiniDrama
+
+- [MiniMax-H3 V2 adapter](https://github.com/xuanyustudio/LocalMiniDrama/blob/7b6c1a748e9e3013b88a902cfbfd31ec283da0d1/backend-node/src/services/videoClient.js)
+- [连贯帧顺序生成](https://github.com/xuanyustudio/LocalMiniDrama/blob/7b6c1a748e9e3013b88a902cfbfd31ec283da0d1/frontweb/src/views/FilmCreate.vue)
+- [分镜图宫格与角色一致性修正记录](https://github.com/xuanyustudio/LocalMiniDrama/blob/7b6c1a748e9e3013b88a902cfbfd31ec283da0d1/docs/plans/2026-03-14-storyboard-image-quality.md)
+
+### dramai 与 director_ai
+
+- [dramai 产品与工作流说明](https://github.com/hyyyyyyz/dramai/blob/2ec38104380823aff711c96ed852d5f713b8ac5a/README.md)
+- [dramai 架构文档](https://github.com/hyyyyyyz/dramai/blob/2ec38104380823aff711c96ed852d5f713b8ac5a/docs/ARCHITECTURE.md)
+- [director_ai 快照](https://github.com/freestylefly/director_ai/tree/dd812c756f0ee0533cd7d36042a16144ab1b1202)

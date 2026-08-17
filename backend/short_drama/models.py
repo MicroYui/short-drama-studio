@@ -90,6 +90,48 @@ class AssetMediaType(StrEnum):
     AUDIO = "AUDIO"
 
 
+class ReferenceRole(StrEnum):
+    CHARACTER_FACE = "CHARACTER_FACE"
+    CHARACTER_BODY = "CHARACTER_BODY"
+    CHARACTER_PROFILE = "CHARACTER_PROFILE"
+    CHARACTER_BACK = "CHARACTER_BACK"
+    LOCATION_MASTER = "LOCATION_MASTER"
+    LOCATION_REVERSE = "LOCATION_REVERSE"
+    LOCATION_INTERACTION = "LOCATION_INTERACTION"
+    PROP_PRODUCT = "PROP_PRODUCT"
+    PROP_IN_HAND = "PROP_IN_HAND"
+    PROP_STATE = "PROP_STATE"
+
+
+class ReferenceAngle(StrEnum):
+    FRONT = "FRONT"
+    THREE_QUARTER_LEFT = "THREE_QUARTER_LEFT"
+    THREE_QUARTER_RIGHT = "THREE_QUARTER_RIGHT"
+    LEFT_PROFILE = "LEFT_PROFILE"
+    RIGHT_PROFILE = "RIGHT_PROFILE"
+    BACK = "BACK"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class ReferenceFraming(StrEnum):
+    FACE_CLOSE_UP = "FACE_CLOSE_UP"
+    CLOSE_UP = "CLOSE_UP"
+    MEDIUM = "MEDIUM"
+    FULL_BODY = "FULL_BODY"
+    WIDE = "WIDE"
+    DETAIL = "DETAIL"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class InteractionEffector(StrEnum):
+    LEFT_HAND = "LEFT_HAND"
+    RIGHT_HAND = "RIGHT_HAND"
+    BOTH_HANDS = "BOTH_HANDS"
+    BODY = "BODY"
+    GAZE = "GAZE"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
 class OperationKind(StrEnum):
     GENERATE = "GENERATE"
     RETAKE = "RETAKE"
@@ -288,6 +330,27 @@ class Asset(DomainModel):
     versions: list[AssetVersion]
 
 
+class ReferencePackEntry(DomainModel):
+    id: str
+    asset_version_id: str
+    role: ReferenceRole
+    angle: ReferenceAngle = ReferenceAngle.NOT_APPLICABLE
+    framing: ReferenceFraming = ReferenceFraming.NOT_APPLICABLE
+    tags: list[str] = Field(default_factory=list[str], max_length=32)
+    description: str
+    priority: int = Field(default=0, ge=-100, le=100)
+
+
+class ReferencePack(DomainModel):
+    id: str
+    project_id: str
+    subject_asset_id: str
+    name: str
+    entries: list[ReferencePackEntry] = Field(default_factory=list[ReferencePackEntry])
+    created_at: str
+    updated_at: str
+
+
 class ContinuityState(DomainModel):
     character_positions: str
     eyeline: str
@@ -343,11 +406,57 @@ class ReferenceBinding(DomainModel):
     requirement: str
 
 
+class ReferenceRequirement(DomainModel):
+    id: str
+    subject_asset_id: str
+    acceptable_roles: list[ReferenceRole] = Field(min_length=1, max_length=8)
+    preferred_angles: list[ReferenceAngle] = Field(
+        default_factory=list[ReferenceAngle],
+        max_length=8,
+    )
+    preferred_framings: list[ReferenceFraming] = Field(
+        default_factory=list[ReferenceFraming],
+        max_length=8,
+    )
+    required_tags: list[str] = Field(default_factory=list[str], max_length=16)
+    purpose: str
+    required: bool = True
+
+
+class ActionBeat(DomainModel):
+    order: int = Field(ge=1, le=20)
+    actor_asset_id: str
+    action: str
+    target_anchor: str | None = None
+    required_end_state: str | None = None
+
+
+class SpatialInteractionConstraint(DomainModel):
+    id: str
+    actor_asset_id: str
+    effector: InteractionEffector
+    action: str
+    target_asset_id: str
+    target_anchor: str
+    start_state: str
+    end_state: str
+    unchanged_anchors: list[str] = Field(default_factory=list[str], max_length=16)
+
+
 class ReferencePlanEntry(DomainModel):
     shot_id: str
     bindings: list[ReferenceBinding]
     capability_valid: bool
     validation_notes: list[str]
+    requirements: list[ReferenceRequirement] = Field(
+        default_factory=list[ReferenceRequirement]
+    )
+    action_beats: list[ActionBeat] = Field(default_factory=list[ActionBeat])
+    interactions: list[SpatialInteractionConstraint] = Field(
+        default_factory=list[SpatialInteractionConstraint]
+    )
+    max_reference_images: int = Field(default=3, ge=1, le=9)
+    planning_notes: str | None = None
 
 
 class TimelineVideoClip(DomainModel):
@@ -421,6 +530,7 @@ class ProjectDocument(DomainModel):
     execution_plan: list[ExecutionPlanEntry]
     reference_plan: list[ReferencePlanEntry]
     manifests: list[TimelineManifest]
+    reference_packs: list[ReferencePack] = Field(default_factory=list[ReferencePack])
 
 
 class GenerationTask(DomainModel):
