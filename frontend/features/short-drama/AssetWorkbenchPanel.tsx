@@ -115,6 +115,8 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
   const [background, setBackground] = useState<'opaque' | 'transparent'>('opaque')
   const [selectedInputs, setSelectedInputs] = useState<string[]>([])
   const [primaryInputVersionId, setPrimaryInputVersionId] = useState('')
+  const [maskVersionId, setMaskVersionId] = useState('')
+  const [maskFeatherPixels, setMaskFeatherPixels] = useState(8)
   const [externalUrl, setExternalUrl] = useState('')
   const [externalMediaType, setExternalMediaType] = useState<AssetMediaType>('IMAGE')
   const [reviewNotes, setReviewNotes] = useState('符合角色、场景或道具设定，可作为后续 H3 正式参考。')
@@ -167,6 +169,8 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     setOperation('GENERATE')
     setSelectedInputs([])
     setPrimaryInputVersionId('')
+    setMaskVersionId('')
+    setMaskFeatherPixels(8)
   }, [asset?.id])
 
   const perform = async <T,>(label: string, action: () => Promise<ResultLike<T>>, onSuccess: (value: T) => void) => {
@@ -287,15 +291,21 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     if (!config?.can_generate) { onError('请先保存并验证 OpenAI API Key'); return }
     const parentVersionId = operation === 'EDIT' ? version?.id : null
     const inputVersionIds = operation === 'EDIT'
-      ? (selectedInputs.length ? selectedInputs : (version ? [version.id] : []))
+      ? (selectedInputs.length ? selectedInputs : (version && version.id !== maskVersionId ? [version.id] : []))
       : []
+    if (operation === 'EDIT' && !inputVersionIds.length) { onError('修整至少需要一张非蒙版输入图'); return }
+    const resolvedPrimaryInput = operation === 'EDIT'
+      ? (primaryInputVersionId || inputVersionIds[0] || null)
+      : null
     const body: ImageTaskCreateRequest = {
       operation,
       prompt,
       descriptor,
       parent_version_id: parentVersionId,
       input_version_ids: inputVersionIds,
-      primary_input_version_id: operation === 'EDIT' ? (primaryInputVersionId || null) : null,
+      primary_input_version_id: resolvedPrimaryInput,
+      mask_version_id: operation === 'EDIT' ? (maskVersionId || null) : null,
+      mask_feather_pixels: maskFeatherPixels,
       size,
       quality: 'high',
       background,
@@ -312,12 +322,22 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
   }
 
   const toggleEditInput = (versionId: string, checked: boolean) => {
+    if (checked && maskVersionId === versionId) setMaskVersionId('')
     const next = checked
       ? [...selectedInputs, versionId]
       : selectedInputs.filter((id) => id !== versionId)
     setSelectedInputs(next)
     if (checked && !primaryInputVersionId) setPrimaryInputVersionId(versionId)
     if (!checked && primaryInputVersionId === versionId) setPrimaryInputVersionId(next[0] ?? '')
+  }
+
+  const selectEditMask = (versionId: string) => {
+    const nextInputs = selectedInputs.filter((id) => id !== versionId)
+    setSelectedInputs(nextInputs)
+    setMaskVersionId(versionId)
+    if (!primaryInputVersionId || primaryInputVersionId === versionId) {
+      setPrimaryInputVersionId(nextInputs[0] ?? '')
+    }
   }
 
   const review = (decision: 'APPROVED' | 'REJECTED') => {
@@ -429,11 +449,11 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
             <div className="flex items-center justify-between"><div className="flex items-center gap-2"><WandSparkles className="h-4 w-4 text-violet-400" /><h3 className="text-sm font-medium text-white">GPT Image 2</h3></div><Badge tone={config?.can_generate ? 'green' : 'amber'}>{config?.can_generate ? 'Ready' : '未配置'}</Badge></div>
-            <div className="mt-3 grid grid-cols-2 gap-2"><button className={`${operation === 'GENERATE' ? primaryButton : secondaryButton} py-2`} onClick={() => { setOperation('GENERATE'); setSelectedInputs([]); setPrimaryInputVersionId('') }}>新生成</button><button className={`${operation === 'EDIT' ? primaryButton : secondaryButton} py-2`} onClick={() => { const initial = version.media_type === 'IMAGE' ? version.id : ''; setOperation('EDIT'); setSelectedInputs(initial ? [initial] : []); setPrimaryInputVersionId(initial) }}>修整/派生</button></div>
+            <div className="mt-3 grid grid-cols-2 gap-2"><button className={`${operation === 'GENERATE' ? primaryButton : secondaryButton} py-2`} onClick={() => { setOperation('GENERATE'); setSelectedInputs([]); setPrimaryInputVersionId(''); setMaskVersionId('') }}>新生成</button><button className={`${operation === 'EDIT' ? primaryButton : secondaryButton} py-2`} onClick={() => { const initial = version.media_type === 'IMAGE' ? version.id : ''; setOperation('EDIT'); setSelectedInputs(initial ? [initial] : []); setPrimaryInputVersionId(initial); setMaskVersionId('') }}>修整/派生</button></div>
             <label className="mt-3 block text-xs text-zinc-500">提示词</label><textarea className={`${field} mt-1 min-h-44 resize-y leading-5`} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
             <label className="mt-3 block text-xs text-zinc-500">候选说明</label><input className={`${field} mt-1`} value={descriptor} onChange={(event) => setDescriptor(event.target.value)} />
             <div className="mt-3 grid grid-cols-2 gap-2"><input className={field} value={size} onChange={(event) => setSize(event.target.value)} /><select className={field} value={background} onChange={(event) => setBackground(event.target.value as 'opaque' | 'transparent')}><option value="opaque">不透明背景</option><option value="transparent" disabled={azureImageEndpoint}>透明背景{azureImageEndpoint ? '（Azure 不支持）' : ''}</option></select></div>
-            {operation === 'EDIT' && <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-xs text-zinc-500">编辑输入（最多 16 张）</p><p className="mt-1 text-[11px] leading-5 text-zinc-700">需要保持某张图的机位、空间、对象数量或接触关系时，可将它指定为主画布；其他图片只补身份或外观。也可不指定。</p><label className="mt-2 flex cursor-pointer items-center gap-1 text-[10px] text-zinc-500"><input type="radio" name="primary-image-input" checked={!primaryInputVersionId} onChange={() => setPrimaryInputVersionId('')} />不指定主画布</label><div className="mt-2 max-h-44 space-y-1 overflow-y-auto">{imageVersions.map((item) => { const selected = selectedInputs.includes(item.version.id); return <div key={item.version.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-900"><label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"><input type="checkbox" checked={selected} onChange={(event) => toggleEditInput(item.version.id, event.target.checked)} /><span className="truncate">{item.asset.name} · v{item.version.version}</span></label>{selected && <label className="flex cursor-pointer items-center gap-1 text-[10px] text-blue-300"><input type="radio" name="primary-image-input" checked={primaryInputVersionId === item.version.id} onChange={() => setPrimaryInputVersionId(item.version.id)} />主画布</label>}</div> })}</div></div>}
+            {operation === 'EDIT' && <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-xs text-zinc-500">编辑输入（最多 16 张）</p><p className="mt-1 text-[11px] leading-5 text-zinc-700">主画布决定物理空间；可选 PNG 蒙版中透明区域允许生成，非透明区域会在返回后从主画布确定性恢复。蒙版与其他建议一样可不使用。</p><label className="mt-2 flex cursor-pointer items-center gap-1 text-[10px] text-zinc-500"><input type="radio" name="primary-image-input" checked={!primaryInputVersionId} onChange={() => setPrimaryInputVersionId('')} />不指定主画布</label><label className="mt-1 flex cursor-pointer items-center gap-1 text-[10px] text-zinc-500"><input type="radio" name="mask-image-input" checked={!maskVersionId} onChange={() => setMaskVersionId('')} />不使用蒙版</label><div className="mt-2 max-h-52 space-y-1 overflow-y-auto">{imageVersions.map((item) => { const selected = selectedInputs.includes(item.version.id); const maskEligible = item.version.mime_type === 'image/png' && Boolean(item.version.local_path); return <div key={item.version.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-900"><label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"><input type="checkbox" checked={selected} onChange={(event) => toggleEditInput(item.version.id, event.target.checked)} /><span className="truncate">{item.asset.name} · v{item.version.version}</span></label>{selected && <label className="flex cursor-pointer items-center gap-1 text-[10px] text-blue-300"><input type="radio" name="primary-image-input" checked={primaryInputVersionId === item.version.id} onChange={() => setPrimaryInputVersionId(item.version.id)} />主画布</label>}{maskEligible && <label className="flex cursor-pointer items-center gap-1 text-[10px] text-violet-300"><input type="radio" name="mask-image-input" checked={maskVersionId === item.version.id} onChange={() => selectEditMask(item.version.id)} />蒙版</label>}</div> })}</div>{maskVersionId && <label className="mt-2 flex items-center justify-between gap-3 text-[10px] text-zinc-500"><span>蒙版内侧羽化像素</span><input className="w-20 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-xs text-zinc-300" type="number" min={0} max={64} value={maskFeatherPixels} onChange={(event) => setMaskFeatherPixels(Math.min(64, Math.max(0, Number(event.target.value) || 0)))} /></label>}</div>}
             <button className={`${primaryButton} mt-4 w-full py-3`} onClick={createImage} disabled={Boolean(busy) || !prompt.trim() || !descriptor.trim()}>{busy?.includes('GPT Image') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{operation === 'EDIT' ? '生成修整候选' : '生成新候选'}</button>
           </section>
 

@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageChops, ImageFilter, UnidentifiedImageError
 
 from short_drama.image_models import (
     AssetCreateRequest,
@@ -82,6 +82,7 @@ _VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".aac", ".flac"}
 _MAX_LOCAL_ASSET_BYTES = 256 * 1024 * 1024
 _MAX_EDIT_IMAGE_BYTES = 20 * 1024 * 1024
+_MAX_EDIT_MASK_BYTES = 4 * 1024 * 1024
 
 
 class AssetWorkbench:
@@ -294,6 +295,8 @@ class AssetWorkbench:
             output_format=request.output_format,
             input_version_ids=request.input_version_ids,
             primary_input_version_id=request.primary_input_version_id,
+            mask_version_id=request.mask_version_id,
+            mask_feather_pixels=request.mask_feather_pixels,
         )
         if (
             provider_request.background == ImageBackground.TRANSPARENT
@@ -389,6 +392,8 @@ class AssetWorkbench:
             parent_version_id=task.parent_version_id,
             input_version_ids=task.request.input_version_ids,
             primary_input_version_id=task.request.primary_input_version_id,
+            mask_version_id=task.request.mask_version_id,
+            mask_feather_pixels=task.request.mask_feather_pixels,
             size=task.request.size,
             quality=task.request.quality,
             background=task.request.background,
@@ -479,6 +484,9 @@ class AssetWorkbench:
         task.updated_at = utc_now()
         self.repository.save_image_task(task)
         width, height = self._validate_output_image(staged)
+        if task.request.mask_version_id is not None:
+            self._apply_masked_composite(task, staged, width, height)
+            width, height = self._validate_output_image(staged)
         output_path = self._final_output_path(task, suffix)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         staged.replace(output_path)
@@ -486,6 +494,43 @@ class AssetWorkbench:
         task.updated_at = utc_now()
         self.repository.save_image_task(task)
         return output_path, width, height
+
+    def _apply_masked_composite(
+        self,
+        task: ImageGenerationTask,
+        generated_path: Path,
+        width: int,
+        height: int,
+    ) -> None:
+        document = self._require_project(task.project_id)
+        primary_id = task.request.primary_input_version_id or task.request.input_version_ids[0]
+        _primary_asset, primary = self._find_version(document, primary_id)
+        _mask_asset, mask = self._find_version(document, task.request.mask_version_id or "")
+        if primary.local_path is None or mask.local_path is None:
+            raise ValueError("Masked composite inputs are not locally available")
+        with Image.open(primary.local_path) as source_image:
+            source = source_image.convert("RGBA")
+        with Image.open(mask.local_path) as mask_image:
+            mask_alpha = mask_image.convert("RGBA").getchannel("A")
+        with Image.open(generated_path) as generated_image:
+            generated = generated_image.convert("RGBA")
+        if source.size != (width, height) or mask_alpha.size != (width, height):
+            raise ValueError("Masked composite dimensions do not match provider output")
+
+        editable = Image.eval(mask_alpha, lambda value: 255 - value)
+        if task.request.mask_feather_pixels:
+            softened = editable.filter(
+                ImageFilter.GaussianBlur(radius=task.request.mask_feather_pixels)
+            )
+            editable = ImageChops.multiply(editable, softened)
+        composite = Image.composite(generated, source, editable)
+        output_format = task.request.output_format.value
+        if output_format == "jpeg":
+            composite.convert("RGB").save(generated_path, format="JPEG", quality=95)
+        elif output_format == "webp":
+            composite.save(generated_path, format="WEBP", quality=95)
+        else:
+            composite.save(generated_path, format="PNG")
 
     def _finalize_image_version(
         self,
@@ -565,6 +610,8 @@ class AssetWorkbench:
                 primary_id,
                 *(item for item in ordered_version_ids if item != primary_id),
             ]
+        if task.request.mask_version_id is not None:
+            ordered_version_ids.append(task.request.mask_version_id)
         for version_id in ordered_version_ids:
             _asset, version = self._find_version(document, version_id)
             if version.external_url is not None:
@@ -616,6 +663,36 @@ class AssetWorkbench:
                 raise AssetWorkbenchConflict("GPT Image edit inputs must be images")
             if version.local_path is None and version.external_url is None:
                 raise AssetWorkbenchConflict("GPT Image edit input has no usable media")
+        if request.mask_version_id is not None:
+            _mask_asset, mask = self._find_version(document, request.mask_version_id)
+            if mask.media_type != AssetMediaType.IMAGE or mask.local_path is None:
+                raise AssetWorkbenchConflict(
+                    "Masked edits require a locally cached PNG mask AssetVersion"
+                )
+            mask_path = Path(mask.local_path)
+            if not mask_path.is_file():
+                raise AssetWorkbenchConflict("Edit mask file is missing")
+            mask_mime = mask.mime_type or mimetypes.guess_type(mask_path.name)[0]
+            if mask_mime != "image/png":
+                raise AssetWorkbenchConflict("Edit mask must be a PNG image")
+            if mask_path.stat().st_size >= _MAX_EDIT_MASK_BYTES:
+                raise AssetWorkbenchConflict("Edit mask must be smaller than 4 MB")
+            primary_id = request.primary_input_version_id or request.input_version_ids[0]
+            _primary_asset, primary = self._find_version(document, primary_id)
+            if primary.local_path is None:
+                raise AssetWorkbenchConflict(
+                    "Masked edits require the primary input to be locally cached"
+                )
+            if mask.width != primary.width or mask.height != primary.height:
+                raise AssetWorkbenchConflict(
+                    "Edit mask dimensions must match the primary input image"
+                )
+            for version_id in request.input_version_ids:
+                _input_asset, input_version = self._find_version(document, version_id)
+                if input_version.local_path is None:
+                    raise AssetWorkbenchConflict(
+                        "Masked edits require every visual input to be locally cached"
+                    )
         if parent_version_id is None:
             raise AssetWorkbenchConflict("Edit requires a parent version from the target asset")
         self._require_asset_version(target_asset, parent_version_id)

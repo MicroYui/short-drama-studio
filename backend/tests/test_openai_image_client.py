@@ -146,6 +146,54 @@ def test_edit_uses_high_fidelity_multi_image_inputs() -> None:
     assert session.calls[0][1] == "https://image.example.test/v1/images/edits"
 
 
+def test_azure_masked_edit_uses_multipart_and_applies_mask_to_primary() -> None:
+    session = FakeSession()
+    session.responses.append(FakeResponse(200, _success_payload()))
+    client = OpenAIImageClient(
+        api_key="azure-secret",
+        base_url=(
+            "https://resource.openai.azure.com/openai/deployments/gpt-image-2/"
+            "images/generations?api-version=2025-04-01-preview"
+        ),
+        session=session,  # type: ignore[arg-type]
+    )
+    request = ImageProviderRequest(
+        operation=ImageOperation.EDIT,
+        prompt="add the actor while preserving the door",
+        input_version_ids=["primary", "actor"],
+        primary_input_version_id="primary",
+        mask_version_id="mask",
+    )
+    encoded = base64.b64encode(b"png-bytes").decode("ascii")
+    inputs = [
+        ImageProviderInput(
+            asset_version_id="primary",
+            image_url=f"data:image/png;base64,{encoded}",
+        ),
+        ImageProviderInput(
+            asset_version_id="actor",
+            image_url=f"data:image/png;base64,{encoded}",
+        ),
+        ImageProviderInput(
+            asset_version_id="mask",
+            image_url=f"data:image/png;base64,{encoded}",
+        ),
+    ]
+
+    client.create(request, inputs)
+
+    call = session.calls[0]
+    assert call[0] == "POST"
+    assert call[1].endswith("/images/edits?api-version=2025-04-01-preview")
+    assert call[2]["headers"] == {"api-key": "azure-secret"}
+    assert "json" not in call[2]
+    assert call[2]["data"]["input_fidelity"] == "high"
+    files = call[2]["files"]
+    assert [item[0] for item in files] == ["image[]", "image[]", "mask"]
+    assert files[0][1][1] == b"png-bytes"
+    assert files[-1][1][2] == "image/png"
+
+
 def test_validation_and_error_classification() -> None:
     session = FakeSession()
     session.responses.append(FakeResponse(200, {"id": "gpt-image-2"}))

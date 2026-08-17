@@ -87,6 +87,8 @@ class ImageProviderRequest(DomainModel):
     output_format: ImageOutputFormat = ImageOutputFormat.PNG
     input_version_ids: list[str] = Field(default_factory=list[str], max_length=16)
     primary_input_version_id: str | None = None
+    mask_version_id: str | None = None
+    mask_feather_pixels: int = Field(default=8, ge=0, le=64)
 
     @model_validator(mode="after")
     def validate_primary_input(self) -> ImageProviderRequest:
@@ -96,6 +98,18 @@ class ImageProviderRequest(DomainModel):
             raise ValueError("Only image edits can declare a primary input")
         if self.primary_input_version_id not in self.input_version_ids:
             raise ValueError("Primary image input must also appear in input_version_ids")
+        if self.mask_version_id == self.primary_input_version_id:
+            raise ValueError("Edit mask must be separate from the primary image input")
+        return self
+
+    @model_validator(mode="after")
+    def validate_mask_input(self) -> ImageProviderRequest:
+        if self.mask_version_id is None:
+            return self
+        if self.operation != ImageOperation.EDIT:
+            raise ValueError("Only image edits can declare a mask input")
+        if self.mask_version_id in self.input_version_ids:
+            raise ValueError("Edit mask must not also be listed as a visual input")
         return self
 
     @field_validator("size")
@@ -122,6 +136,8 @@ class ImageTaskCreateRequest(DomainModel):
     parent_version_id: str | None = None
     input_version_ids: list[str] = Field(default_factory=list[str], max_length=16)
     primary_input_version_id: str | None = None
+    mask_version_id: str | None = None
+    mask_feather_pixels: int = Field(default=8, ge=0, le=64)
     size: str = "768x1344"
     quality: ImageQuality = ImageQuality.HIGH
     background: ImageBackground = ImageBackground.OPAQUE
@@ -135,6 +151,18 @@ class ImageTaskCreateRequest(DomainModel):
             raise ValueError("Only image edits can declare a primary input")
         if self.primary_input_version_id not in self.input_version_ids:
             raise ValueError("Primary image input must also appear in input_version_ids")
+        if self.mask_version_id == self.primary_input_version_id:
+            raise ValueError("Edit mask must be separate from the primary image input")
+        return self
+
+    @model_validator(mode="after")
+    def validate_mask_input(self) -> ImageTaskCreateRequest:
+        if self.mask_version_id is None:
+            return self
+        if self.operation != ImageOperation.EDIT:
+            raise ValueError("Only image edits can declare a mask input")
+        if self.mask_version_id in self.input_version_ids:
+            raise ValueError("Edit mask must not also be listed as a visual input")
         return self
 
 

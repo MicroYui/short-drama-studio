@@ -58,6 +58,8 @@ Phase 3 在现有 `ShortDramaService + SQLite + Product API + Electron` 主线�
 
 多图编辑还可选声明 `primary_input_version_id`。指定后，工作台将该图作为第一张输入，关键帧 brief 将它解释为需保留机位、空间布局、对象数量、机械连接、左右方向和手部接触面的主画布；其他输入只用于补充身份或外观。该字段不是所有编辑的强制规则，桌面端允许明确选择“不指定主画布”。
 
+局部编辑还可选声明本地 PNG `mask_version_id` 和 `mask_feather_pixels`。Azure 编辑按官方 multipart/form-data 合同发送多图与蒙版；透明像素表示允许修改的区域。由于供应商输出仍可能整体重绘，任务落盘前会将生成结果只合成回透明区，蒙版外从主画布逐像素恢复，羽化也只发生在可编辑区内部。桌面端可选择任意本地 PNG 版本作为蒙版，也可明确不使用。
+
 OpenAI 当前响应包含图像 Base64 和 token usage。费用记录按调用时快照估算：标准调用中图像输入 `$8/1M tokens`、文本输入 `$5/1M tokens`、图像输出 `$30/1M tokens`；同时保留原始 token 数，实际账单仍以 Provider 为准。
 
 Azure OpenAI 使用独立路由解析：用户可直接填写 `/openai/deployments/{deployment}/images/generations?api-version=...` 完整 endpoint，Adapter 保留部署名和查询参数，编辑时只把末尾切换为 `/images/edits`，并使用 `api-key` 而非 Bearer 头。GPT Image 的 Azure 官方文档要求 `2025-04-01-preview` 或更高版本；配置中更早的日期版本会在保存时升级到该最低版本。

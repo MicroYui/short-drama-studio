@@ -358,6 +358,11 @@ def compile_keyframe_brief(
         _format_interaction(item, asset_index)
         for item in plan.interactions
     ]
+    physical_topology_lines = [
+        line
+        for item in plan.interactions
+        if (line := _format_physical_topology_rule(item)) is not None
+    ]
     style = _current_style(document)
     position_guidance = _position_guidance(
         request.position,
@@ -401,9 +406,9 @@ def compile_keyframe_brief(
             "Image 1 is the authoritative physical frame, not an alternative visual reference. "
             "Keep its camera position, lens, crop, background layout, number of object instances, "
             "mechanical attachments, left/right orientation, actor handedness, and hand-to-object "
-            "contact side. Apply only the state changes required by FRAME INTENT and the declared "
-            "action beats. Later reference images may refine identity or appearance but must not "
-            "replace Image 1 geometry."
+            "contact side, including which physical surface owns each subpart. Apply only the "
+            "state changes required by FRAME INTENT and the declared action beats. Later reference "
+            "images may refine identity or appearance but must not replace Image 1 geometry."
         )
     if beat_lines and not is_topology_reference:
         if start_boundary is None:
@@ -440,6 +445,14 @@ def compile_keyframe_brief(
                 else "SPATIAL INTERACTIONS AND INVARIANTS:\n"
                 + "\n".join(interaction_lines)
             )
+        )
+    if physical_topology_lines and not is_topology_reference:
+        sections.append(
+            "RIGID ASSEMBLY AND CONTACT RULES:\n"
+            + "\n".join(physical_topology_lines)
+            + "\nVisibility may change only through normal perspective or occlusion. A declared "
+            "part must not disappear physically, migrate to another surface, swap with a "
+            "paired part, or detach from the moving target."
         )
     if not is_topology_reference:
         character_continuity = _character_continuity_lines(
@@ -587,13 +600,20 @@ def _assess_complexity(
     missing_topology: list[str] = []
     for interaction in plan.interactions:
         target_views = selected_by_subject.get(interaction.target_asset_id, [])
-        has_anchor = any(
-            item.role == ReferenceRole.LOCATION_INTERACTION
-            and interaction.target_anchor in item.tags
-            for item in target_views
-        )
-        if not has_anchor:
-            missing_topology.append(interaction.target_anchor)
+        topology_tokens = [interaction.target_anchor]
+        if interaction.contact_anchor is not None:
+            topology_tokens.append(interaction.contact_anchor)
+        if interaction.contact_surface is not None:
+            topology_tokens.append(interaction.contact_surface)
+        for attachment in interaction.rigid_attachments:
+            topology_tokens.extend((attachment.anchor, attachment.surface))
+        for token in dict.fromkeys(topology_tokens):
+            has_token = any(
+                item.role == ReferenceRole.LOCATION_INTERACTION and token in item.tags
+                for item in target_views
+            )
+            if not has_token:
+                missing_topology.append(token)
     if missing_topology:
         observations.append(
             "Declared interaction anchors without a matching approved "
@@ -729,10 +749,26 @@ def _format_interaction(
         if interaction.unchanged_anchors
         else ""
     )
+    contact = ""
+    if interaction.contact_anchor is not None:
+        contact = f"; exact contact anchor={interaction.contact_anchor}"
+        if interaction.contact_surface is not None:
+            contact += f" on surface={interaction.contact_surface}"
+        if interaction.contact_persists:
+            contact += "; keep the same effector on that exact anchor and surface until release"
+    attachments = (
+        "; rigid attachments="
+        + ", ".join(
+            f"{item.anchor} stays on {item.surface}"
+            for item in interaction.rigid_attachments
+        )
+        if interaction.rigid_attachments
+        else ""
+    )
     return (
         f"- {actor_name} uses {interaction.effector.value} to {interaction.action} "
         f"{target_name}:{interaction.target_anchor}; state "
-        f"{interaction.start_state} -> {interaction.end_state}{invariants}."
+        f"{interaction.start_state} -> {interaction.end_state}{contact}{attachments}{invariants}."
     )
 
 
@@ -748,11 +784,55 @@ def _format_topology_interaction(
         if interaction.unchanged_anchors
         else ""
     )
+    contact = ""
+    if interaction.contact_anchor is not None:
+        contact = f"; actionable contact={interaction.contact_anchor}"
+        if interaction.contact_surface is not None:
+            contact += f" on {interaction.contact_surface}"
+    attachments = (
+        "; show attached subparts on their owning surfaces="
+        + ", ".join(
+            f"{item.anchor} on {item.surface}"
+            for item in interaction.rigid_attachments
+        )
+        if interaction.rigid_attachments
+        else ""
+    )
     return (
         f"- Actionable target={target_name}:{interaction.target_anchor}; intended state "
         f"transition={interaction.start_state} -> {interaction.end_state}; make its handle, "
-        f"hinge/pivot/track, boundary, and opening path physically readable{invariants}."
+        f"hinge/pivot/track, boundary, and opening path physically readable{contact}"
+        f"{attachments}{invariants}."
     )
+
+
+def _format_physical_topology_rule(
+    interaction: SpatialInteractionConstraint,
+) -> str | None:
+    if not interaction.rigid_attachments and not interaction.contact_persists:
+        return None
+    parts: list[str] = []
+    if interaction.rigid_attachments:
+        parts.append(
+            "move "
+            + ", ".join(
+                f"{item.anchor} on {item.surface}"
+                for item in interaction.rigid_attachments
+            )
+            + f" as one rigid assembly with {interaction.target_anchor}"
+        )
+    if interaction.contact_persists:
+        anchor = interaction.contact_anchor or interaction.target_anchor
+        surface = (
+            f" on {interaction.contact_surface}"
+            if interaction.contact_surface is not None
+            else ""
+        )
+        parts.append(
+            f"keep {interaction.effector.value} continuously attached to {anchor}{surface} "
+            "without crossing through the object or transferring to another side"
+        )
+    return "- " + "; ".join(parts) + "."
 
 
 def _position_guidance(

@@ -431,6 +431,13 @@ class ActionBeat(DomainModel):
     required_end_state: str | None = None
 
 
+class SurfaceAttachmentConstraint(DomainModel):
+    """A named subpart that remains attached to one physical surface."""
+
+    anchor: str = Field(min_length=1, max_length=200)
+    surface: str = Field(min_length=1, max_length=200)
+
+
 class SpatialInteractionConstraint(DomainModel):
     id: str
     actor_asset_id: str
@@ -441,6 +448,13 @@ class SpatialInteractionConstraint(DomainModel):
     start_state: str
     end_state: str
     unchanged_anchors: list[str] = Field(default_factory=list[str], max_length=16)
+    contact_anchor: str | None = Field(default=None, min_length=1, max_length=200)
+    contact_surface: str | None = Field(default=None, min_length=1, max_length=200)
+    contact_persists: bool = False
+    rigid_attachments: list[SurfaceAttachmentConstraint] = Field(
+        default_factory=list[SurfaceAttachmentConstraint],
+        max_length=16,
+    )
 
 
 class ReferencePlanEntry(DomainModel):

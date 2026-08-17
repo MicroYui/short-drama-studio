@@ -3201,6 +3201,13 @@ export interface components {
             background: components["schemas"]["ImageBackground"];
             /** Input Version Ids */
             input_version_ids?: string[];
+            /**
+             * Mask Feather Pixels
+             * @default 8
+             */
+            mask_feather_pixels: number;
+            /** Mask Version Id */
+            mask_version_id?: string | null;
             operation: components["schemas"]["ImageOperation"];
             /** @default png */
             output_format: components["schemas"]["ImageOutputFormat"];
@@ -3229,6 +3236,13 @@ export interface components {
             descriptor: string;
             /** Input Version Ids */
             input_version_ids?: string[];
+            /**
+             * Mask Feather Pixels
+             * @default 8
+             */
+            mask_feather_pixels: number;
+            /** Mask Version Id */
+            mask_version_id?: string | null;
             /** @default GENERATE */
             operation: components["schemas"]["ImageOperation"];
             /** @default png */
@@ -4577,11 +4591,22 @@ export interface components {
             action: string;
             /** Actor Asset Id */
             actor_asset_id: string;
+            /** Contact Anchor */
+            contact_anchor?: string | null;
+            /**
+             * Contact Persists
+             * @default false
+             */
+            contact_persists: boolean;
+            /** Contact Surface */
+            contact_surface?: string | null;
             effector: components["schemas"]["InteractionEffector"];
             /** End State */
             end_state: string;
             /** Id */
             id: string;
+            /** Rigid Attachments */
+            rigid_attachments?: components["schemas"]["SurfaceAttachmentConstraint"][];
             /** Start State */
             start_state: string;
             /** Target Anchor */
@@ -4684,6 +4709,16 @@ export interface components {
             status: "success";
             /** Suggested Prompt */
             suggested_prompt: string;
+        };
+        /**
+         * SurfaceAttachmentConstraint
+         * @description A named subpart that remains attached to one physical surface.
+         */
+        SurfaceAttachmentConstraint: {
+            /** Anchor */
+            anchor: string;
+            /** Surface */
+            surface: string;
         };
         /** Take */
         Take: {

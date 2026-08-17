@@ -4869,6 +4869,24 @@
             "title": "Input Version Ids",
             "type": "array"
           },
+          "mask_feather_pixels": {
+            "default": 8,
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Mask Feather Pixels",
+            "type": "integer"
+          },
+          "mask_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Version Id"
+          },
           "operation": {
             "$ref": "#/components/schemas/ImageOperation"
           },
@@ -4939,6 +4957,24 @@
             "maxItems": 16,
             "title": "Input Version Ids",
             "type": "array"
+          },
+          "mask_feather_pixels": {
+            "default": 8,
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Mask Feather Pixels",
+            "type": "integer"
+          },
+          "mask_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Version Id"
           },
           "operation": {
             "$ref": "#/components/schemas/ImageOperation",
@@ -8504,6 +8540,37 @@
             "title": "Actor Asset Id",
             "type": "string"
           },
+          "contact_anchor": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Anchor"
+          },
+          "contact_persists": {
+            "default": false,
+            "title": "Contact Persists",
+            "type": "boolean"
+          },
+          "contact_surface": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Surface"
+          },
           "effector": {
             "$ref": "#/components/schemas/InteractionEffector"
           },
@@ -8514,6 +8581,14 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "rigid_attachments": {
+            "items": {
+              "$ref": "#/components/schemas/SurfaceAttachmentConstraint"
+            },
+            "maxItems": 16,
+            "title": "Rigid Attachments",
+            "type": "array"
           },
           "start_state": {
             "title": "Start State",
@@ -8775,6 +8850,30 @@
           "suggested_prompt"
         ],
         "title": "SuggestGapPromptResponse",
+        "type": "object"
+      },
+      "SurfaceAttachmentConstraint": {
+        "additionalProperties": false,
+        "description": "A named subpart that remains attached to one physical surface.",
+        "properties": {
+          "anchor": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Anchor",
+            "type": "string"
+          },
+          "surface": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "anchor",
+          "surface"
+        ],
+        "title": "SurfaceAttachmentConstraint",
         "type": "object"
       },
       "Take": {

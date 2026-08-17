@@ -191,6 +191,19 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
                     "start_state": "closed",
                     "end_state": "open outward",
                     "unchanged_anchors": ["entrance.fixed_panel"],
+                    "contact_anchor": "entrance.handle.interior",
+                    "contact_surface": "entrance.door_face.interior",
+                    "contact_persists": True,
+                    "rigid_attachments": [
+                        {
+                            "anchor": "entrance.handle.interior",
+                            "surface": "entrance.door_face.interior",
+                        },
+                        {
+                            "anchor": "entrance.handle.exterior",
+                            "surface": "entrance.door_face.exterior",
+                        },
+                    ],
                 }
             ],
             "max_reference_images": 3,
@@ -210,9 +223,13 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert body["complexity"]["action_beat_count"] == 4
     assert body["complexity"]["advisory_only"] is True
     assert body["proceed_allowed"] is True
-    assert body["complexity"]["missing_topology_anchors"] == [
-        "entrance.primary_door"
-    ]
+    assert set(body["complexity"]["missing_topology_anchors"]) == {
+        "entrance.primary_door",
+        "entrance.handle.interior",
+        "entrance.handle.exterior",
+        "entrance.door_face.interior",
+        "entrance.door_face.exterior",
+    }
     assert any("background-neutral" in item for item in body["warnings"])
     assert any(
         "duplicate or drifting entrances" in item
@@ -231,6 +248,8 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert brief_body["input_version_ids"] == [store_version]
     assert "entrance.primary_door" in brief_body["prompt"]
     assert "entrance.fixed_panel" in brief_body["prompt"]
+    assert "entrance.handle.interior on entrance.door_face.interior" in brief_body["prompt"]
+    assert "entrance.handle.exterior on entrance.door_face.exterior" in brief_body["prompt"]
     assert "Do not create a collage" in brief_body["prompt"]
     assert "environment topology plate" in brief_body["prompt"]
     assert "Show no people" in brief_body["prompt"]
@@ -278,6 +297,10 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert len(end_body["input_version_ids"]) == len(set(end_body["input_version_ids"]))
     assert "Image 1 is the authoritative physical frame" in end_body["prompt"]
     assert "hand-to-object contact side" in end_body["prompt"]
+    assert "RIGID ASSEMBLY AND CONTACT RULES" in end_body["prompt"]
+    assert "move entrance.handle.interior on entrance.door_face.interior" in end_body["prompt"]
+    assert "keep RIGHT_HAND continuously attached" in end_body["prompt"]
+    assert "must not disappear physically" in end_body["prompt"]
 
     selected_canvas = body["selected"][0]
     duplicate_brief = client.post(
@@ -314,7 +337,14 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
             "asset_version_id": topology_version,
             "role": "LOCATION_INTERACTION",
             "framing": "WIDE",
-            "tags": ["entrance.primary_door", "entrance.fixed_panel"],
+            "tags": [
+                "entrance.primary_door",
+                "entrance.fixed_panel",
+                "entrance.handle.interior",
+                "entrance.handle.exterior",
+                "entrance.door_face.interior",
+                "entrance.door_face.exterior",
+            ],
             "description": "unambiguous primary door and fixed adjacent panel",
             "priority": 50,
         },
