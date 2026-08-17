@@ -227,6 +227,10 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert "entrance.primary_door" in brief_body["prompt"]
     assert "entrance.fixed_panel" in brief_body["prompt"]
     assert "Do not create a collage" in brief_body["prompt"]
+    assert "environment topology plate" in brief_body["prompt"]
+    assert "Show no people" in brief_body["prompt"]
+    assert "ORDERED ACTION BEATS" not in brief_body["prompt"]
+    assert "Characters and eyeline" not in brief_body["prompt"]
 
     topology_asset = service.create_asset(
         project_id,

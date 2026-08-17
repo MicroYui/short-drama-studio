@@ -94,7 +94,10 @@ class H3VideoRequest(DomainModel):
 
 
 class H3CreateResponse(DomainModel):
+    model_config = ConfigDict(extra="ignore")
+
     task_id: str
+    trace_id: str | None = None
 
 
 class H3TaskError(DomainModel):

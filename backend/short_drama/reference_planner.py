@@ -300,32 +300,58 @@ def compile_keyframe_brief(
     style = _current_style(document)
     position_guidance = _position_guidance(request.position, plan)
     extra = [item.strip() for item in request.extra_constraints if item.strip()]
+    is_topology_reference = request.position == KeyframePosition.TOPOLOGY_REFERENCE
 
     sections = [
-        "Generate ONE single vertical 9:16 live-action cinematic still. "
-        "Do not create a collage, grid, split panel, turnaround sheet, caption, logo, "
-        "watermark, or readable signage.",
-        "LOCKED SHOT:\n"
-        f"Purpose: {shot.narrative_purpose}\n"
-        f"Visual: {shot.visual}\n"
-        f"Framing: {shot.framing}\n"
-        f"Camera: {shot.camera}",
+        (
+            "Generate ONE single vertical 9:16 live-action environment topology plate. "
+            "Show no people, body parts, carried props, character silhouettes, or reflections "
+            "of people. Do not create a collage, grid, split panel, turnaround sheet, caption, "
+            "logo, watermark, arrows, labels, or readable signage."
+            if is_topology_reference
+            else "Generate ONE single vertical 9:16 live-action cinematic still. "
+            "Do not create a collage, grid, split panel, turnaround sheet, caption, logo, "
+            "watermark, or readable signage."
+        ),
+        (
+            "LOCATION AND CAMERA CONTEXT:\n"
+            f"Framing: {shot.framing}\n"
+            f"Camera side: {shot.camera}\n"
+            "Use the shot only to identify which part of the location needs an unambiguous "
+            "interaction layout; do not render its characters or action."
+            if is_topology_reference
+            else "LOCKED SHOT:\n"
+            f"Purpose: {shot.narrative_purpose}\n"
+            f"Visual: {shot.visual}\n"
+            f"Framing: {shot.framing}\n"
+            f"Camera: {shot.camera}"
+        ),
         "REFERENCE IMAGE MAP:\n"
         + ("\n".join(reference_lines) if reference_lines else "No visual references supplied."),
         "FRAME INTENT:\n" + position_guidance,
     ]
-    if beat_lines:
+    if beat_lines and not is_topology_reference:
         sections.append("ORDERED ACTION BEATS:\n" + "\n".join(beat_lines))
     if interaction_lines:
         sections.append(
-            "SPATIAL INTERACTIONS AND INVARIANTS:\n" + "\n".join(interaction_lines)
+            (
+                "INTERACTION TOPOLOGY TO MAKE VISUALLY UNAMBIGUOUS:\n"
+                + "\n".join(
+                    _format_topology_interaction(item, asset_index)
+                    for item in plan.interactions
+                )
+                if is_topology_reference
+                else "SPATIAL INTERACTIONS AND INVARIANTS:\n"
+                + "\n".join(interaction_lines)
+            )
         )
-    sections.append(
-        "CONTINUITY:\n"
-        f"Characters and eyeline: {shot.continuity.character_positions}; {shot.continuity.eyeline}\n"
-        f"Prop state in: {shot.continuity.prop_state_in}\n"
-        f"Prop state out: {shot.continuity.prop_state_out}"
-    )
+    if not is_topology_reference:
+        sections.append(
+            "CONTINUITY:\n"
+            f"Characters and eyeline: {shot.continuity.character_positions}; {shot.continuity.eyeline}\n"
+            f"Prop state in: {shot.continuity.prop_state_in}\n"
+            f"Prop state out: {shot.continuity.prop_state_out}"
+        )
     if style:
         sections.append(
             "PROJECT LOOK:\n"
@@ -336,9 +362,15 @@ def compile_keyframe_brief(
     if extra:
         sections.append("EXTRA LOCKS:\n" + "\n".join(f"- {item}" for item in extra))
     sections.append(
-        "The result must remain one physically coherent space. Any hand, tool, door, "
-        "button, drawer, vehicle part, or other interacted object must visibly obey the "
-        "specified target and state transition; unrelated anchors must not move."
+        (
+            "The result must remain one physically coherent environment. Make the movable "
+            "target, its mechanical boundary, and every fixed neighboring anchor visually "
+            "distinct without depicting a person performing the action."
+            if is_topology_reference
+            else "The result must remain one physically coherent space. Any hand, tool, door, "
+            "button, drawer, vehicle part, or other interacted object must visibly obey the "
+            "specified target and state transition; unrelated anchors must not move."
+        )
     )
     return KeyframeBriefCompileResponse(
         **preview.model_dump(),
@@ -546,6 +578,25 @@ def _format_interaction(
         f"- {actor_name} uses {interaction.effector.value} to {interaction.action} "
         f"{target_name}:{interaction.target_anchor}; state "
         f"{interaction.start_state} -> {interaction.end_state}{invariants}."
+    )
+
+
+def _format_topology_interaction(
+    interaction: SpatialInteractionConstraint,
+    assets: dict[str, Asset],
+) -> str:
+    target = assets.get(interaction.target_asset_id)
+    target_name = target.name if target is not None else interaction.target_asset_id
+    invariants = (
+        "; visually separate fixed/invariant anchors="
+        + ", ".join(interaction.unchanged_anchors)
+        if interaction.unchanged_anchors
+        else ""
+    )
+    return (
+        f"- Actionable target={target_name}:{interaction.target_anchor}; intended state "
+        f"transition={interaction.start_state} -> {interaction.end_state}; make its handle, "
+        f"hinge/pivot/track, boundary, and opening path physically readable{invariants}."
     )
 
 

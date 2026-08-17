@@ -200,7 +200,9 @@ def _load(name: str) -> object:
 
 
 def test_acedata_h3_response_fixtures_parse() -> None:
-    assert H3CreateResponse.model_validate(_load("create_success.json")).task_id
+    create_response = H3CreateResponse.model_validate(_load("create_success.json"))
+    assert create_response.task_id
+    assert create_response.trace_id == "trace_7f8c2b1a"
     assert H3QueryResponse.model_validate(_load("query_queued.json")).task.status == "queued"
     assert H3QueryResponse.model_validate(_load("query_running.json")).task.status == "running"
     succeeded = H3QueryResponse.model_validate(_load("query_succeeded.json")).task
