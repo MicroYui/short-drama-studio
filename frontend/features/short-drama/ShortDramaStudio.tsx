@@ -15,6 +15,7 @@ import {
   Film,
   FlaskConical,
   FolderOpen,
+  ImagePlus,
   Layers3,
   Loader2,
   PanelTop,
@@ -22,16 +23,19 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  ScanSearch,
   Scissors,
   Sparkles,
   Square,
   Subtitles,
   WandSparkles,
   Workflow,
+  X,
 } from 'lucide-react'
 import { pathToFileUrl } from '../../lib/file-url'
 import {
   ShortDramaApi,
+  type CreativeInputImage,
   type ExportRecord,
   type GenerationTask,
   type ProjectAggregate,
@@ -160,6 +164,7 @@ function retriedTaskIds(tasks: GenerationTask[]): Set<string> {
 function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; onAutoDraft: () => void }) {
   const record = project.document.project
   const progress = project.progress
+  const latestRun = (project.document.autonomous_runs ?? []).at(-1)
   const stages = ['PLANNED', 'GENERATING', 'REVIEW', 'TIMELINE_READY', 'EXPORTED']
   const activeIndex = Math.max(0, stages.indexOf(record.stage))
   const superseded = retriedTaskIds(project.tasks)
@@ -173,21 +178,28 @@ function OverviewPanel({ project, onAutoDraft }: { project: ProjectAggregate; on
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 2 · Mock Core + H3</Badge>
+              <Badge tone="blue">Phase 5 · Autonomous Core</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
+              {latestRun && <Badge tone={latestRun.status === 'COMPLETE' ? 'green' : latestRun.status === 'FAILED' || latestRun.status === 'NEEDS_ATTENTION' ? 'amber' : 'blue'}>{latestRun.planner} · {latestRun.status}</Badge>}
             </div>
-            <h2 className="text-2xl font-semibold text-white">从策划工件到可播放成片的一键闭环</h2>
+            <h2 className="text-2xl font-semibold text-white">从任意输入到可播放成片的一键闭环</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-300">
-              Mock 继续提供无付费完整闭环；MiniMax-H3 768P 已作为唯一真实视频 Provider 接入同一任务、Take 与时间线核心。真实生成只在 H3 实验台显式提交，下载后必须人工审片才可入选。
+              四种输入、结构化规划、任务、Take、视频观察和时间线共享同一项目核心。当前按钮重跑无付费 Mock 草稿；MiniMax-H3 768P 的真实路线证据保留在同一工程中，尚未伪装成全真人自动成片。
             </p>
           </div>
           <button className={`${primaryButton} min-w-52 py-3`} onClick={onAutoDraft}>
             <WandSparkles className="h-4 w-4" />
-            生成完整 Mock 草稿
+            重新生成完整 Mock 草稿
           </button>
         </div>
       </section>
+
+      {latestRun && (latestRun.warnings?.length ?? 0) > 0 && (
+        <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <div className="flex gap-3"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /><div><p className="text-sm font-medium text-amber-100">自动运行提示</p><div className="mt-1 space-y-1">{latestRun.warnings?.map((warning) => <p key={warning} className="text-xs leading-5 text-zinc-400">{warning}</p>)}</div></div></div>
+        </section>
+      )}
 
       <section>
         <SectionTitle title="制片进度" description="阶段来自同一 SQLite 项目状态，不是另一套 workflow 画布。" />
@@ -411,12 +423,14 @@ function TakesPanel({
   onTaskAction,
   onCancel,
   onSelect,
+  onInspect,
 }: {
   project: ProjectAggregate
   onDrain: () => void
   onTaskAction: (task: GenerationTask, action: 'advance' | 'retry' | 'reconcile' | 'recover') => void
   onCancel: (task: GenerationTask) => void
   onSelect: (takeId: string) => void
+  onInspect: (takeId: string) => void
 }) {
   const [activeShotId, setActiveShotId] = useState(project.document.shots[0]?.id ?? '')
   const shot = project.document.shots.find((item) => item.id === activeShotId) ?? project.document.shots[0]
@@ -446,7 +460,11 @@ function TakesPanel({
           <div>
             <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {takes.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-zinc-700 py-16 text-center text-sm text-zinc-500">当前镜头还没有候选</div>}
-              {takes.map((take) => (
+              {takes.map((take) => {
+                const inspection = [...(project.video_inspections ?? [])]
+                  .reverse()
+                  .find((item) => item.take_id === take.id)
+                return (
                 <div key={take.id} className={`overflow-hidden rounded-xl border bg-zinc-900/70 ${take.is_selected ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-zinc-800'}`}>
                   <div className="relative aspect-[9/16] max-h-[420px] bg-black">
                     <video className="h-full w-full object-contain" src={pathToFileUrl(take.media_path)} poster={pathToFileUrl(take.thumbnail_path)} controls preload="metadata" />
@@ -466,9 +484,23 @@ function TakesPanel({
                     <button className={`mt-3 w-full ${take.is_selected ? secondaryButton : primaryButton}`} disabled={take.is_selected || take.freshness === 'STALE' || take.qa_status !== 'PASSED'} onClick={() => onSelect(take.id)}>
                       {take.is_selected ? <><Check className="h-3.5 w-3.5" />已入选时间线</> : '选用此 Take'}
                     </button>
+                    <button className={`${secondaryButton} mt-2 w-full`} onClick={() => onInspect(take.id)}>
+                      <ScanSearch className="h-3.5 w-3.5" />
+                      {inspection ? '重新抽帧检查' : '抽帧检查连续性'}
+                    </button>
+                    {inspection && (
+                      <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/70 p-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge tone={(inspection.issues?.length ?? 0) > 0 ? 'amber' : inspection.semantic_status === 'COMPLETE' ? 'green' : 'neutral'}>{inspection.semantic_status}</Badge>
+                          <span className="text-[10px] text-zinc-600">{inspection.samples.length} 帧</span>
+                        </div>
+                        <p className="mt-1.5 line-clamp-3 text-[11px] leading-4 text-zinc-500">{inspection.summary}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
           <aside className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
@@ -591,13 +623,15 @@ function QaPanel({ project }: { project: ProjectAggregate }) {
   const exported = currentExport(project)
   const currentTakes = project.takes.filter((take) => take.freshness === 'CURRENT')
   const hardPass = currentTakes.filter((take) => take.qa_report.hard_gate_passed).length
+  const videoInspections = project.video_inspections ?? []
   return (
     <div>
       <SectionTitle title="质量检查" description="Mock QA 只证明媒体、引用、时钟和导出正确；真人表演、身份、口型和观看意愿必须等真实 H3 样片与人工盲评。" />
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Metric label="当前 Take" value={currentTakes.length} detail="旧版本不丢失" />
         <Metric label="硬门槛" value={`${hardPass}/${currentTakes.length}`} detail="Mock 技术门槛" />
         <Metric label="失效 Take" value={project.progress.stale_takes} detail="仍可复现旧成片" />
+        <Metric label="视频观察" value={videoInspections.length} detail="适应性抽帧报告" />
         <Metric label="导出检查" value={exported ? `${exported.checks.filter((check) => check.passed).length}/${exported.checks.length}` : '—'} detail="FFmpeg 媒体合规" />
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
@@ -630,6 +664,23 @@ function QaPanel({ project }: { project: ProjectAggregate }) {
           )}
         </div>
       </div>
+      <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="flex items-center justify-between gap-3"><div><h3 className="font-medium text-white">视频观察工具</h3><p className="mt-1 text-xs text-zinc-500">长镜头按全时段覆盖与视觉变化抽帧；相邻入选镜头额外生成边界接触表。报告只提供证据和问题，不替用户决定。</p></div><Badge tone="blue">Agent Tool</Badge></div>
+        {videoInspections.length === 0 ? <p className="mt-8 text-center text-sm text-zinc-600">在候选页对任意 Take 运行“抽帧检查连续性”。</p> : (
+          <div className="mt-4 grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+            {[...videoInspections].reverse().slice(0, 6).map((inspection) => (
+              <div key={inspection.id} className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/70">
+                <img src={pathToFileUrl(inspection.contact_sheet_path)} className="aspect-video w-full object-cover object-top" alt={`${inspection.shot_id} 抽帧接触表`} />
+                <div className="p-3">
+                  <div className="flex items-center justify-between gap-2"><Badge tone={(inspection.issues?.length ?? 0) > 0 ? 'amber' : inspection.semantic_status === 'COMPLETE' ? 'green' : 'neutral'}>{inspection.semantic_status}</Badge><span className="text-[10px] text-zinc-600">{inspection.scopes.join(' + ')}</span></div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-400">{inspection.summary}</p>
+                  <div className="mt-2 flex items-center justify-between"><span className="text-[11px] text-zinc-600">{inspection.samples.length} 帧 · {inspection.issues?.length ?? 0} 个问题</span><button className={subtleButton} onClick={() => window.electronAPI.showItemInFolder({ filePath: inspection.contact_sheet_path })}><FolderOpen className="h-3 w-3" />文件</button></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
         <div className="flex gap-3"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" /><div><p className="text-sm font-medium text-amber-100">质量结论边界</p><p className="mt-1 text-xs leading-5 text-zinc-400">Mock 分数只证明工程链路。H3 实验台会保存真实 768P 输出与单人硬门槛审片；路线稳定性和最终质量仍需按固定五句台词、身份/道具连续性、声音、口型和至少三人盲评完成。</p></div></div>
       </div>
@@ -637,18 +688,55 @@ function QaPanel({ project }: { project: ProjectAggregate }) {
   )
 }
 
-function CreateProjectPanel({ onCreate, onFixture }: { onCreate: (name: string, mode: SourceMode, input: string, runMode: RunMode) => void; onFixture: () => void }) {
+function CreateProjectPanel({
+  onCreate,
+  onFixture,
+}: {
+  onCreate: (
+    name: string,
+    mode: SourceMode,
+    input: string,
+    runMode: RunMode,
+    images: CreativeInputImage[],
+  ) => void
+  onFixture: () => void
+}) {
   const [name, setName] = useState('新的都市短剧')
-  const [sourceMode, setSourceMode] = useState<SourceMode>('IDEA_EXPANSION')
+  const [sourceMode, setSourceMode] = useState<SourceMode>('AUTO_ORIGINAL')
   const [runMode, setRunMode] = useState<RunMode>('AUTO_DRAFT')
-  const [input, setInput] = useState('雨夜，一件不该出现的证物让两个人开始互相怀疑。')
+  const [input, setInput] = useState('')
+  const [imagePaths, setImagePaths] = useState<string[]>([])
+  const pickImages = async () => {
+    const paths = await window.electronAPI?.showOpenFileDialog({
+      title: '选择视觉种子',
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'heic', 'heif'] }],
+      properties: ['multiSelections'],
+    })
+    if (!paths?.length) return
+    setImagePaths((current) => [...new Set([...current, ...paths])].slice(0, 8))
+  }
+  const images: CreativeInputImage[] = imagePaths.map((localPath, index) => ({
+    local_path: localPath,
+    external_url: null,
+    descriptor: `用户提供的视觉种子 ${index + 1}：${localPath.split(/[\\/]/).at(-1) ?? '图片'}`,
+  }))
+  const requiresText = sourceMode === 'IDEA_EXPANSION' || sourceMode === 'SCRIPT_LOCKED'
+  const requiresImage = sourceMode === 'IMAGE_SEEDED'
+  const canSubmit = Boolean(name.trim()) && (!requiresText || Boolean(input.trim())) && (!requiresImage || images.length > 0)
+  const inputLabel = sourceMode === 'SCRIPT_LOCKED'
+    ? '锁定剧本'
+    : sourceMode === 'IDEA_EXPANSION'
+      ? '一句话创意'
+      : sourceMode === 'IMAGE_SEEDED'
+        ? '图片补充说明（可选）'
+        : '创作偏好（可选）'
   return (
     <div className="mx-auto flex h-full max-w-5xl items-center px-8 py-12">
       <div className="grid w-full gap-8 xl:grid-cols-[1fr_1.1fr]">
         <div className="flex flex-col justify-center">
           <Badge tone="blue">AI 短剧制片工作台</Badge>
-          <h1 className="mt-5 text-4xl font-semibold leading-tight text-white">从一句话或剧本，进入可编辑的完整制片闭环</h1>
-          <p className="mt-4 text-sm leading-7 text-zinc-400">供应商中立 Mock 闭环与 MiniMax-H3 768P 已共用同一项目核心；可先生成零成本 Mock 草稿，再在代表镜头上比较 Direct、Frame 与 Reference 的真实质量。</p>
+          <h1 className="mt-5 text-4xl font-semibold leading-tight text-white">不给素材、给几张图片、一句话或完整剧本，都进入同一制片闭环</h1>
+          <p className="mt-4 text-sm leading-7 text-zinc-400">AUTO_DRAFT 会自动完成策划、资产登记、分镜、候选、时间线与导出；GUIDED 保留可编辑停靠点。视频观察工具会抽取时间序列与镜头边界供 QA 和导演 Agent 使用。</p>
           <button className={`${secondaryButton} mt-8 w-fit px-5 py-3`} onClick={onFixture}><Clapperboard className="h-4 w-4 text-blue-400" />打开固定验收片《别相信我》</button>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-2xl">
@@ -656,13 +744,20 @@ function CreateProjectPanel({ onCreate, onFixture }: { onCreate: (name: string, 
           <div className="mt-5 space-y-4">
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">项目名</span><input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none focus:border-blue-500" /></label>
             <div className="grid grid-cols-2 gap-3">
-              <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">输入契约</span><select value={sourceMode} onChange={(event) => setSourceMode(event.target.value as SourceMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="IDEA_EXPANSION">一句话扩写</option><option value="SCRIPT_LOCKED">已有剧本锁定</option></select></label>
+              <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">输入契约</span><select value={sourceMode} onChange={(event) => setSourceMode(event.target.value as SourceMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_ORIGINAL">完全自动创作</option><option value="IMAGE_SEEDED">图片启发创作</option><option value="IDEA_EXPANSION">一句话扩写</option><option value="SCRIPT_LOCKED">已有剧本锁定</option></select></label>
               <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">运行模式</span><select value={runMode} onChange={(event) => setRunMode(event.target.value as RunMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_DRAFT">自动到底</option><option value="GUIDED">可停靠引导</option></select></label>
             </div>
-            <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">{sourceMode === 'IDEA_EXPANSION' ? '一句话创意' : '锁定剧本'}</span><textarea value={input} onChange={(event) => setInput(event.target.value)} className="min-h-36 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm leading-6 text-zinc-200 outline-none focus:border-blue-500" /></label>
-            <button className={`${primaryButton} w-full py-3`} disabled={!name.trim() || !input.trim()} onClick={() => onCreate(name.trim(), sourceMode, input.trim(), runMode)}><Plus className="h-4 w-4" />建立结构化项目</button>
+            <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">{inputLabel}</span><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder={requiresText ? '请输入内容' : '可以留空，让 Agent 自行创作'} className="min-h-28 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm leading-6 text-zinc-200 outline-none focus:border-blue-500" /></label>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div><p className="text-xs font-medium text-zinc-300">视觉种子</p><p className="mt-1 text-[11px] text-zinc-600">可与任意输入模式组合，最多 8 张。</p></div>
+                <button type="button" className={secondaryButton} onClick={() => void pickImages()}><ImagePlus className="h-3.5 w-3.5" />选择图片</button>
+              </div>
+              {imagePaths.length > 0 && <div className="mt-3 space-y-1.5">{imagePaths.map((path) => <div key={path} className="flex items-center justify-between gap-3 rounded-lg bg-zinc-900 px-2.5 py-2"><span className="truncate text-[11px] text-zinc-400">{path.split(/[\\/]/).at(-1)}</span><button type="button" className="text-zinc-600 hover:text-red-300" onClick={() => setImagePaths((current) => current.filter((item) => item !== path))}><X className="h-3.5 w-3.5" /></button></div>)}</div>}
+            </div>
+            <button className={`${primaryButton} w-full py-3`} disabled={!canSubmit} onClick={() => onCreate(name.trim(), sourceMode, input.trim(), runMode, images)}><WandSparkles className="h-4 w-4" />{runMode === 'AUTO_DRAFT' ? '一键生成并导出完整草稿' : '建立可编辑制片项目'}</button>
           </div>
-          <p className="mt-4 text-center text-[11px] text-zinc-600">当前 Planner 仍以固定 fixture 验证结构；已有剧本的原文、口播文和字幕文会分开保存。</p>
+          <p className="mt-4 text-center text-[11px] text-zinc-600">没有配置 GPT 时使用本地可复现策划回退；真实质量结论不会由 Mock 冒充。</p>
         </div>
       </div>
     </div>
@@ -744,17 +839,46 @@ export function ShortDramaStudio() {
     void loadProjects()
   })
 
-  const createProject = (name: string, sourceMode: SourceMode, inputText: string, runMode: RunMode) => void perform(
-    '建立项目',
-    () => ShortDramaApi.createProject({ name, source_mode: sourceMode, input_text: inputText, run_mode: runMode }),
-    (data) => {
-      setProject(data)
-      setActiveProjectId(data.document.project.id)
-      setShowCreate(false)
-      setTab('overview')
-      void loadProjects()
-    },
-  )
+  const createProject = (
+    name: string,
+    sourceMode: SourceMode,
+    inputText: string,
+    runMode: RunMode,
+    images: CreativeInputImage[],
+  ) => {
+    const request = {
+      name,
+      source_mode: sourceMode,
+      input_text: inputText,
+      input_images: images,
+      run_mode: runMode,
+    }
+    if (runMode === 'AUTO_DRAFT') {
+      void perform(
+        '自动策划、生成并导出完整草稿',
+        () => ShortDramaApi.createAutonomousDraft({ ...request, render_export: true }),
+        (data) => {
+          setProject(data.project)
+          setActiveProjectId(data.project.document.project.id)
+          setShowCreate(false)
+          setTab('timeline')
+          void loadProjects()
+        },
+      )
+      return
+    }
+    void perform(
+      '建立可编辑制片项目',
+      () => ShortDramaApi.createProject(request),
+      (data) => {
+        setProject(data)
+        setActiveProjectId(data.document.project.id)
+        setShowCreate(false)
+        setTab('overview')
+        void loadProjects()
+      },
+    )
+  }
 
   const autoDraft = () => {
     if (!activeProjectId) return
@@ -812,6 +936,18 @@ export function ShortDramaStudio() {
 
   const selectTake = (takeId: string) => void perform('切换入选 Take', () => ShortDramaApi.selectTake(takeId), setProject)
 
+  const inspectTake = (takeId: string) => void perform(
+    '抽帧检查镜内与镜间连续性',
+    () => ShortDramaApi.inspectTakeVideo(takeId, {
+      previous_take_id: null,
+      include_previous_boundary: true,
+      semantic_review: true,
+      max_frames: 14,
+      review_focus: null,
+    }),
+    (data) => setProject(data.project),
+  )
+
   const reviseLine = (line: ScriptLine, spoken: string, subtitle: string) => {
     if (!activeProjectId) return
     void perform('创建新剧本版本并局部失效', () => ShortDramaApi.reviseScriptLine(activeProjectId, { line_id: line.id, spoken_text: spoken, subtitle_text: subtitle, change_reason: '工作台台词修改' }), setProject)
@@ -845,7 +981,7 @@ export function ShortDramaStudio() {
     if (tab === 'assets') return <AssetWorkbenchPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
     if (tab === 'shots') return <ShotsPanel project={project} onGenerate={generateShot} onRework={localRework} />
     if (tab === 'h3') return <H3LabPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
-    if (tab === 'takes') return <TakesPanel project={project} onDrain={drain} onTaskAction={handleTaskAction} onCancel={cancelTask} onSelect={selectTake} />
+    if (tab === 'takes') return <TakesPanel project={project} onDrain={drain} onTaskAction={handleTaskAction} onCancel={cancelTask} onSelect={selectTake} onInspect={inspectTake} />
     if (tab === 'timeline') return <TimelinePanel project={project} onBuild={buildManifest} onExport={exportProject} />
     return <QaPanel project={project} />
   }, [project, tab])
@@ -864,7 +1000,7 @@ export function ShortDramaStudio() {
             {projects.map((item) => (
               <button key={item.id} onClick={() => void loadProject(item.id)} className={`w-full rounded-lg px-3 py-2.5 text-left transition ${activeProjectId === item.id && !showCreate ? 'bg-blue-500/10 text-white ring-1 ring-blue-500/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'}`}>
                 <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-medium">{item.name}</span><ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-600" /></div>
-                <div className="mt-1 flex items-center gap-1.5"><span className="text-[10px] text-zinc-600">{stageLabels[item.stage] ?? item.stage}</span><span className="text-zinc-800">·</span><span className="text-[10px] text-zinc-600">{item.source_mode === 'SCRIPT_LOCKED' ? '剧本' : '创意'}</span></div>
+                <div className="mt-1 flex items-center gap-1.5"><span className="text-[10px] text-zinc-600">{stageLabels[item.stage] ?? item.stage}</span><span className="text-zinc-800">·</span><span className="text-[10px] text-zinc-600">{item.source_mode === 'SCRIPT_LOCKED' ? '剧本' : item.source_mode === 'IMAGE_SEEDED' ? '图片' : item.source_mode === 'AUTO_ORIGINAL' ? '自动' : '创意'}</span></div>
               </button>
             ))}
           </div>

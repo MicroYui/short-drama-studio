@@ -251,6 +251,7 @@ PoC 的 H3 `GenerationTask` 固定请求 768P；原始 Take 不被交付缩放�
 - Provider Adapters：只接入实验证明需要的图像、视频、音频或口型能力；
 - Task Worker：由 Electron 管理的独立本地 Python 进程，从 SQLite 任务表领取提交、轮询、回调、下载和恢复任务；本地 GPU 默认单任务，云端并发按 Provider capability 配置；
 - Media Processor：FFmpeg/ffprobe、抽帧、转码、混音和字幕；
+- Video Observation Tools：媒体探测、适应性抽帧、接触表、镜内连续性和相邻镜头边界观察；输出证据与通用 QA 问题，不直接决定修复策略；
 - QA：规则、可选 STT、模型视觉审阅和人工评分；
 - Route Evidence Registry：保存已验证的默认路线和适用条件；
 - Storage：SQLite WAL 保存项目、版本、任务、Take、QA 与时间线元数据；本地项目目录保存原始素材、生成结果、缓存、渲染与导出，数据库记录路径、版本和校验值；
@@ -276,25 +277,33 @@ P008 已确认短剧生产时间线，A004 已确认本地桌面优先，因此�
 
 导入 LTX Desktop，跑通原始构建、测试与桌面打包，记录上游已有问题。
 
-### Phase 1–3：统一核心与 Mock 闭环
+### Phase 1：统一核心与 Mock 闭环
 
 建立 SQLite/API 领域核心与固定 fixture，实现持久化 Worker、可注入失败的 Mock Provider、恢复和失效传播；再把 Gen Space、Take/Retake/Extend/Gap Fill、时间线和导出接到统一核心，完整通过 Mock 切片。只有出现已经定义的结构性失败才回退 Jellyfish，不并行维护两个原型。
+
+### Phase 2：H3 Provider
+
+只接 MiniMax-H3，固定 768P，完成能力校验、持久化异步提交、轮询、下载、恢复与真实合同冒烟。
+
+### Phase 3：资产与 GPT Image
+
+实现上传、链接与本地素材导入、版本批准、GPT Image 生成与编辑，并验证下游 H3 动态质量。
 
 ### Phase 4：H3 视觉与镜头分组
 
 只接 MiniMax-H3，固定 768P，完成能力校验和任务恢复，执行 Direct、Frame、Reference、Context-IR 与镜头分组实验。
 
-### Phase 5：资产与 GPT Image
+### Phase 5：无人值守运行器与视频观察
 
-实现上传、素材导入、GPT Image 生成与编辑，并执行下游 H3 动态质量实验。
+把空输入、图片、一句话和锁定剧本归一为同一生产请求；实现 `AutonomousRun`、结构化规划、本地回退、一键 Mock 闭环、适应性抽帧、镜内/镜间观察，以及观察报告到 Director Agent 的可忽略建议链路。
 
 ### Phase 6：声音、字幕与口型
 
 先验证 H3 原生声音，再依据失败证据接参考音频、TTS/STT 或外部口型，完成字幕和音画验收。
 
-### Phase 7：自动成片与完整验收
+### Phase 7：真实自动成片与完整验收
 
-接入 GPT-5.6-sol 的规划、审片、路线选择和局部重试，完成三次独立 `AUTO_DRAFT` 与人工盲评。
+把已验证的 H3 路线、必要图像与声音能力接入无人值守运行器，完成三次独立真实 `AUTO_DRAFT` 与人工盲评。
 
 ### Phase 8：证据驱动增强
 

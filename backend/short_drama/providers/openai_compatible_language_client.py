@@ -17,7 +17,14 @@ class LanguageProviderError(RuntimeError):
 class LanguageProviderClient(Protocol):
     def validate_credentials(self) -> None: ...
 
-    def generate_text(self, *, instructions: str, input_text: str) -> str: ...
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str: ...
 
 
 LanguageProviderClientFactory = Callable[[str, str], LanguageProviderClient]
@@ -73,7 +80,28 @@ class OpenAICompatibleLanguageClient:
         self._raise_error(response)
         self._validate_model_identity(response)
 
-    def generate_text(self, *, instructions: str, input_text: str) -> str:
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        input_payload: object = input_text
+        if image_urls:
+            input_payload = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": input_text},
+                        *(
+                            {"type": "input_image", "image_url": image_url}
+                            for image_url in image_urls
+                        ),
+                    ],
+                }
+            ]
         try:
             response = self.session.post(
                 f"{self.base_url}/responses",
@@ -81,9 +109,9 @@ class OpenAICompatibleLanguageClient:
                 json={
                     "model": self.model,
                     "instructions": instructions,
-                    "input": input_text,
+                    "input": input_payload,
                     "reasoning": {"effort": "low"},
-                    "max_output_tokens": 2200,
+                    "max_output_tokens": max_output_tokens,
                 },
                 timeout=self.generation_timeout_seconds,
             )

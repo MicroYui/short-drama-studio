@@ -17,7 +17,7 @@ from short_drama.asset_workbench import (
     ImageProviderFactory,
     default_image_provider_factory,
 )
-from short_drama.fixture import build_dont_trust_me_fixture, build_project_document
+from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
     H3MediaInput,
@@ -46,6 +46,7 @@ from short_drama.image_models import (
     AssetImportLocalRequest,
     AssetImportUrlRequest,
     AssetMutationResponse,
+    AssetReviewDecision,
     AssetReviewRequest,
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
@@ -59,7 +60,7 @@ from short_drama.language_models import (
     LanguageProviderConfigResponse,
     LanguageProviderConfigUpdate,
 )
-from short_drama.media import MockMediaRenderer, TimelineExporter
+from short_drama.media import MediaGenerationError, MockMediaRenderer, TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
     Asset,
@@ -67,6 +68,11 @@ from short_drama.models import (
     AssetVersion,
     AssetMediaType,
     AutoDraftResponse,
+    AutonomousDraftCreateRequest,
+    AutonomousDraftResponse,
+    AutonomousRunRecord,
+    AutonomousRunStatus,
+    AutonomousRunStep,
     CreateProjectRequest,
     DirectorRepairDecision,
     DirectorRepairRecord,
@@ -89,6 +95,7 @@ from short_drama.models import (
     ProjectStage,
     ReferencePack,
     ReferencePackEntry,
+    ReferenceBinding,
     ReferencePlanEntry,
     RouteEvidence,
     RunMode,
@@ -96,6 +103,7 @@ from short_drama.models import (
     ReviseScriptLineRequest,
     ScriptVersion,
     ShotPlan,
+    SourceMode,
     SubtitleCue,
     Take,
     TaskStatus,
@@ -103,7 +111,14 @@ from short_drama.models import (
     TimelineManifest,
     TimelineVideoClip,
     VideoGenerationRoute,
+    VideoInspectionRequest,
+    VideoInspectionResponse,
     WorkerDrainResponse,
+)
+from short_drama.production_planner import (
+    ProductionPlanningResult,
+    build_project_document_from_plan,
+    create_production_plan,
 )
 from short_drama.quality_learning import (
     H3CapabilityProfileResponse,
@@ -151,6 +166,7 @@ from short_drama.providers.openai_compatible_language_client import (
     is_loopback_openai_url,
 )
 from short_drama.repository import ShortDramaRepository
+from short_drama.video_inspection import VideoInspector
 from short_drama.worker import InvalidTaskTransition, PersistentMockWorker, utc_now
 
 
@@ -193,6 +209,7 @@ class ShortDramaService:
         self.workspace_root = workspace_root
         self.media_renderer = MockMediaRenderer(workspace_root)
         self.exporter = TimelineExporter(workspace_root)
+        self.video_inspector = VideoInspector(workspace_root)
         self.worker = PersistentMockWorker(self.repository, self.media_renderer)
         self.h3_config = H3ProviderConfigStore(
             database_path.parent / "short-drama-provider-settings.json"
@@ -233,18 +250,235 @@ class ShortDramaService:
             return self.get_project(fixture.project.id)
 
     def create_project(self, request: CreateProjectRequest) -> ProjectAggregate:
+        project, _planning = self._create_planned_project(request)
+        self._import_creative_input_images(project.document.project.id, request)
+        return self.get_project(project.document.project.id)
+
+    def create_autonomous_draft(
+        self,
+        request: AutonomousDraftCreateRequest,
+    ) -> AutonomousDraftResponse:
+        create_request = CreateProjectRequest.model_validate(
+            request.model_dump(exclude={"render_export"})
+        )
+        project, planning = self._create_planned_project(create_request)
+        project_id = project.document.project.id
+        now = utc_now()
+        run = AutonomousRunRecord(
+            id=f"autonomous-run-{uuid4().hex}",
+            project_id=project_id,
+            status=AutonomousRunStatus.RUNNING,
+            current_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
+            completed_steps=[
+                AutonomousRunStep.NORMALIZE_INPUT,
+                AutonomousRunStep.PLAN,
+            ],
+            planner=planning.planner,
+            warnings=list(planning.warnings),
+            created_at=now,
+            updated_at=now,
+        )
         with self._lock:
-            project_id = f"project-{uuid4().hex[:12]}"
-            document = build_project_document(
-                project_id=project_id,
-                name=request.name.strip(),
-                source_mode=request.source_mode,
-                input_text=request.input_text,
-                run_mode=request.run_mode,
-                created_at=utc_now(),
-            )
+            document = self._require_project_document(project_id)
+            document.autonomous_runs.append(run)
             self.repository.save_project(document)
-            return self._aggregate(document)
+        try:
+            self._import_creative_input_images(project_id, create_request)
+            self._advance_autonomous_run(
+                project_id,
+                run.id,
+                completed_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
+                next_step=AutonomousRunStep.GENERATE,
+            )
+            result = self._execute_auto_draft(
+                project_id,
+                render_export=request.render_export,
+                autonomous_run_id=run.id,
+            )
+        except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
+            self._finish_autonomous_run(
+                project_id,
+                run.id,
+                status=AutonomousRunStatus.NEEDS_ATTENTION,
+                error_message=str(exc),
+            )
+            raise
+        except Exception as exc:
+            self._finish_autonomous_run(
+                project_id,
+                run.id,
+                status=AutonomousRunStatus.FAILED,
+                error_message=str(exc),
+            )
+            raise
+        completed = self._require_autonomous_run(project_id, run.id)
+        return AutonomousDraftResponse(
+            project=result.project,
+            export=result.export,
+            run=completed,
+        )
+
+    def _create_planned_project(
+        self,
+        request: CreateProjectRequest,
+    ) -> tuple[ProjectAggregate, ProductionPlanningResult]:
+        api_key = self.language_config.api_key()
+        base_url = self.language_config.base_url()
+        client = (
+            self.language_provider_factory(api_key, base_url)
+            if api_key or is_loopback_openai_url(base_url)
+            else None
+        )
+        planning = create_production_plan(request, client)
+        project_id = f"project-{uuid4().hex[:12]}"
+        created_at = utc_now()
+        document = build_project_document_from_plan(
+            project_id=project_id,
+            request=request,
+            planning=planning,
+            created_at=created_at,
+        )
+        with self._lock:
+            self.repository.save_project(document)
+            return self._aggregate(document), planning
+
+    def _import_creative_input_images(
+        self,
+        project_id: str,
+        request: CreateProjectRequest,
+    ) -> None:
+        imported_versions: list[tuple[str, str]] = []
+        for index, image in enumerate(request.input_images, start=1):
+            source_name = (
+                Path(image.local_path).stem
+                if image.local_path is not None
+                else f"网络参考图 {index}"
+            )
+            created = self.create_asset(
+                project_id,
+                AssetCreateRequest(
+                    kind=AssetKind.REFERENCE,
+                    name=f"输入视觉种子 {index} · {source_name}"[:120],
+                    descriptor=image.descriptor,
+                ),
+            )
+            if image.local_path is not None:
+                imported = self.import_local_asset_version(
+                    project_id,
+                    created.asset.id,
+                    AssetImportLocalRequest(
+                        local_path=image.local_path,
+                        descriptor=image.descriptor,
+                    ),
+                )
+            else:
+                assert image.external_url is not None
+                imported = self.import_url_asset_version(
+                    project_id,
+                    created.asset.id,
+                    AssetImportUrlRequest(
+                        external_url=image.external_url,
+                        descriptor=image.descriptor,
+                        media_type=AssetMediaType.IMAGE,
+                    ),
+                )
+            self.review_asset_version(
+                project_id,
+                created.asset.id,
+                imported.version.id,
+                AssetReviewRequest(
+                    decision=AssetReviewDecision.APPROVED,
+                    notes="用户直接提供的输入图片，自动草稿可作为视觉种子使用。",
+                ),
+            )
+            imported_versions.append((imported.version.id, image.descriptor))
+        if imported_versions:
+            with self._lock:
+                document = self._require_project_document(project_id)
+                requirement = (
+                    "REQUIRED"
+                    if request.source_mode == SourceMode.IMAGE_SEEDED
+                    else "OPTIONAL"
+                )
+                for plan in document.reference_plan:
+                    known_targets = {binding.target_id for binding in plan.bindings}
+                    for version_id, descriptor in imported_versions:
+                        if version_id in known_targets:
+                            continue
+                        plan.bindings.append(
+                            ReferenceBinding(
+                                kind=AssetKind.REFERENCE.value,
+                                target_id=version_id,
+                                purpose=f"用户提供的跨镜视觉种子：{descriptor}",
+                                requirement=requirement,
+                            )
+                        )
+                document.project.updated_at = utc_now()
+                self.repository.save_project(document)
+
+    def _require_autonomous_run(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> AutonomousRunRecord:
+        document = self._require_project_document(project_id)
+        run = next((item for item in document.autonomous_runs if item.id == run_id), None)
+        if run is None:
+            raise ArtifactNotFoundError(run_id)
+        return run
+
+    def _advance_autonomous_run(
+        self,
+        project_id: str,
+        run_id: str,
+        *,
+        completed_step: AutonomousRunStep,
+        next_step: AutonomousRunStep,
+    ) -> AutonomousRunRecord:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            run = next((item for item in document.autonomous_runs if item.id == run_id), None)
+            if run is None:
+                raise ArtifactNotFoundError(run_id)
+            if completed_step not in run.completed_steps:
+                run.completed_steps.append(completed_step)
+            run.status = AutonomousRunStatus.RUNNING
+            run.current_step = next_step
+            run.error_message = None
+            run.updated_at = utc_now()
+            self.repository.save_project(document)
+            return run
+
+    def _finish_autonomous_run(
+        self,
+        project_id: str,
+        run_id: str,
+        *,
+        status: AutonomousRunStatus,
+        error_message: str | None = None,
+        export_id: str | None = None,
+        completed_steps: list[AutonomousRunStep] | None = None,
+    ) -> AutonomousRunRecord:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            run = next((item for item in document.autonomous_runs if item.id == run_id), None)
+            if run is None:
+                raise ArtifactNotFoundError(run_id)
+            for step in completed_steps or []:
+                if step not in run.completed_steps:
+                    run.completed_steps.append(step)
+            run.status = status
+            run.error_message = error_message
+            run.export_id = export_id or run.export_id
+            now = utc_now()
+            run.updated_at = now
+            if status == AutonomousRunStatus.COMPLETE:
+                run.current_step = AutonomousRunStep.COMPLETE
+                if AutonomousRunStep.COMPLETE not in run.completed_steps:
+                    run.completed_steps.append(AutonomousRunStep.COMPLETE)
+                run.completed_at = now
+            self.repository.save_project(document)
+            return run
 
     def delete_project(self, project_id: str) -> bool:
         return self.repository.delete_project(project_id)
@@ -512,11 +746,7 @@ class ShortDramaService:
         except ValueError as exc:
             raise WorkflowConflictError(str(exc)) from exc
 
-        shot_takes = [
-            take
-            for take in self.repository.list_takes_for_shot(project_id, shot_id)
-            if take.provider == "minimax" and take.model == "MiniMax-H3"
-        ]
+        shot_takes = self.repository.list_takes_for_shot(project_id, shot_id)
         if request.take_id is not None:
             selected_take = next(
                 (take for take in shot_takes if take.id == request.take_id),
@@ -539,6 +769,22 @@ class ShortDramaService:
             for take in qa_takes
             if take.qa_report.reviewer_notes
         ]
+        if request.inspection_id is not None:
+            inspection = self.repository.get_video_inspection(request.inspection_id)
+            if (
+                inspection is None
+                or inspection.project_id != project_id
+                or inspection.shot_id != shot_id
+            ):
+                raise ArtifactNotFoundError(request.inspection_id)
+            if request.take_id is not None and inspection.take_id != request.take_id:
+                raise WorkflowConflictError(
+                    "Director advice Take and video inspection do not refer to the same output"
+                )
+            qa_issues.extend(issue.model_copy(deep=True) for issue in inspection.issues)
+            reviewer_notes.append(
+                f"{inspection.id}: {inspection.summary}"
+            )
         capability_profile = build_h3_capability_profile(
             self.repository.list_takes(project_id),
             project_id=project_id,
@@ -1146,6 +1392,70 @@ class ShortDramaService:
             self.repository.save_project(document)
             return self._aggregate(document)
 
+    def inspect_take_video(
+        self,
+        take_id: str,
+        request: VideoInspectionRequest,
+    ) -> VideoInspectionResponse:
+        take = self.repository.get_take(take_id)
+        if take is None:
+            raise ArtifactNotFoundError(take_id)
+        document = self._require_project_document(take.project_id)
+        shot = self._require_shot_in_document(document, take.shot_id)
+
+        previous_take: Take | None = None
+        previous_shot: ShotPlan | None = None
+        if request.previous_take_id is not None:
+            candidate = self.repository.get_take(request.previous_take_id)
+            if candidate is None or candidate.project_id != take.project_id:
+                raise ArtifactNotFoundError(request.previous_take_id)
+            previous_take = candidate
+            previous_shot = self._require_shot_in_document(document, candidate.shot_id)
+        elif request.include_previous_boundary:
+            previous_shot = max(
+                (item for item in document.shots if item.sequence < shot.sequence),
+                key=lambda item: item.sequence,
+                default=None,
+            )
+            if previous_shot is not None:
+                previous_take = next(
+                    (
+                        item
+                        for item in reversed(
+                            self.repository.list_takes_for_shot(
+                                take.project_id,
+                                previous_shot.id,
+                            )
+                        )
+                        if item.is_selected and item.freshness == Freshness.CURRENT
+                    ),
+                    None,
+                )
+                if previous_take is None:
+                    previous_shot = None
+
+        language_client = None
+        if request.semantic_review:
+            api_key = self.language_config.api_key()
+            base_url = self.language_config.base_url()
+            if api_key or is_loopback_openai_url(base_url):
+                language_client = self.language_provider_factory(api_key, base_url)
+        report = self.video_inspector.inspect_video(
+            document=document,
+            shot=shot,
+            take=take,
+            previous_shot=previous_shot,
+            previous_take=previous_take,
+            request=request,
+            language_client=language_client,
+            created_at=utc_now(),
+        )
+        self.repository.save_video_inspection(report)
+        return VideoInspectionResponse(
+            report=report,
+            project=self.get_project(take.project_id),
+        )
+
     def review_h3_take(
         self,
         take_id: str,
@@ -1397,7 +1707,43 @@ class ShortDramaService:
             return export
 
     def auto_draft(self, project_id: str, render_export: bool) -> AutoDraftResponse:
-        with self._lock:
+        document = self._require_project_document(project_id)
+        resumable = next(
+            (
+                run
+                for run in reversed(document.autonomous_runs)
+                if run.status
+                in {AutonomousRunStatus.RUNNING, AutonomousRunStatus.NEEDS_ATTENTION}
+            ),
+            None,
+        )
+        run_id = resumable.id if resumable is not None else None
+        try:
+            return self._execute_auto_draft(
+                project_id,
+                render_export=render_export,
+                autonomous_run_id=run_id,
+            )
+        except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
+            if run_id is not None:
+                self._finish_autonomous_run(
+                    project_id,
+                    run_id,
+                    status=AutonomousRunStatus.NEEDS_ATTENTION,
+                    error_message=str(exc),
+                )
+            raise
+
+    def _execute_auto_draft(
+        self,
+        project_id: str,
+        *,
+        render_export: bool,
+        autonomous_run_id: str | None,
+    ) -> AutoDraftResponse:
+        repair_round = 0
+        max_repair_rounds = 2
+        while True:
             self.enqueue(project_id, EnqueueRequest())
             drain_result = self.drain(project_id, max_steps=5000)
             if drain_result.remaining_runnable > 0:
@@ -1407,9 +1753,148 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "AUTO_DRAFT stopped at actionable task failures; reconcile, recover, or retry them first"
                 )
-            self.rebuild_manifest(project_id)
-            export = self.export_project(project_id, rebuild_manifest=False) if render_export else None
-            return AutoDraftResponse(project=self.get_project(project_id), export=export)
+            if autonomous_run_id is not None:
+                self._advance_autonomous_run(
+                    project_id,
+                    autonomous_run_id,
+                    completed_step=AutonomousRunStep.GENERATE,
+                    next_step=AutonomousRunStep.QA_AND_REPAIR,
+                )
+
+            self._select_best_current_takes(project_id)
+            aggregate = self.get_project(project_id)
+            missing_selected = [
+                shot.id
+                for shot in aggregate.document.shots
+                if not any(
+                    take.shot_id == shot.id
+                    and take.is_selected
+                    and take.freshness == Freshness.CURRENT
+                    and take.qa_status == QaStatus.PASSED
+                    for take in aggregate.takes
+                )
+            ]
+            if not missing_selected:
+                break
+            if repair_round >= max_repair_rounds:
+                raise WorkflowConflictError(
+                    "AUTO_DRAFT exhausted Director repair rounds for: "
+                    + ", ".join(missing_selected)
+                )
+            repaired = self._run_autonomous_director_repairs(
+                project_id,
+                missing_selected,
+            )
+            if not repaired:
+                raise WorkflowConflictError(
+                    "AUTO_DRAFT needs a passed Take or an executable Director repair for: "
+                    + ", ".join(missing_selected)
+                )
+            repair_round += 1
+            if autonomous_run_id is not None:
+                self._advance_autonomous_run(
+                    project_id,
+                    autonomous_run_id,
+                    completed_step=AutonomousRunStep.QA_AND_REPAIR,
+                    next_step=AutonomousRunStep.GENERATE,
+                )
+        if autonomous_run_id is not None:
+            self._advance_autonomous_run(
+                project_id,
+                autonomous_run_id,
+                completed_step=AutonomousRunStep.QA_AND_REPAIR,
+                next_step=AutonomousRunStep.TIMELINE,
+            )
+
+        self.rebuild_manifest(project_id)
+        export: ExportRecord | None = None
+        if render_export:
+            if autonomous_run_id is not None:
+                self._advance_autonomous_run(
+                    project_id,
+                    autonomous_run_id,
+                    completed_step=AutonomousRunStep.TIMELINE,
+                    next_step=AutonomousRunStep.EXPORT,
+                )
+            export = self.export_project(project_id, rebuild_manifest=False)
+        if autonomous_run_id is not None:
+            completed_steps = [AutonomousRunStep.TIMELINE]
+            if export is not None:
+                completed_steps.append(AutonomousRunStep.EXPORT)
+            self._finish_autonomous_run(
+                project_id,
+                autonomous_run_id,
+                status=AutonomousRunStatus.COMPLETE,
+                export_id=export.id if export is not None else None,
+                completed_steps=completed_steps,
+            )
+        return AutoDraftResponse(project=self.get_project(project_id), export=export)
+
+    def _run_autonomous_director_repairs(
+        self,
+        project_id: str,
+        shot_ids: list[str],
+    ) -> bool:
+        project = self.get_project(project_id)
+        if project.document.project.run_mode != RunMode.AUTO_DRAFT:
+            return False
+        reports = project.video_inspections
+        applied = False
+        for shot_id in shot_ids:
+            candidates = [
+                take
+                for take in project.takes
+                if take.shot_id == shot_id and take.freshness == Freshness.CURRENT
+            ]
+            if not candidates:
+                continue
+            source_take = max(
+                candidates,
+                key=lambda take: (take.qa_report.score, take.created_at, take.id),
+            )
+            inspection = next(
+                (
+                    report
+                    for report in reversed(reports)
+                    if report.take_id == source_take.id
+                ),
+                None,
+            )
+            result = self.run_director_loop(
+                project_id,
+                shot_id,
+                DirectorAdviceRequest(
+                    take_id=source_take.id,
+                    inspection_id=inspection.id if inspection is not None else None,
+                    user_direction=(
+                        "Continue the autonomous draft. Preserve the narrative purpose and only "
+                        "apply a repair that addresses observed QA evidence."
+                    ),
+                ),
+            )
+            applied = result.repair_applied or applied
+        return applied
+
+    def _select_best_current_takes(self, project_id: str) -> None:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            takes = self.repository.list_takes(project_id)
+            for shot in document.shots:
+                candidates = [
+                    take
+                    for take in takes
+                    if take.shot_id == shot.id
+                    and take.freshness == Freshness.CURRENT
+                    and take.qa_status == QaStatus.PASSED
+                ]
+                if not candidates:
+                    continue
+                best = max(
+                    candidates,
+                    key=lambda take: (take.qa_report.score, -take.candidate_index),
+                )
+                if not best.is_selected:
+                    self.repository.select_take(best.id)
 
     def _resolve_h3_probe(
         self,
@@ -1698,6 +2183,7 @@ class ShortDramaService:
             takes=takes,
             exports=exports,
             route_evidence=self.repository.list_route_evidence(document.project.id),
+            video_inspections=self.repository.list_video_inspections(document.project.id),
             progress=progress,
         )
 

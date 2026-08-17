@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟，以及 Phase 3 来源中立资产工作台、Azure GPT Image 2 生成/编辑链路和首批正式资产批准。Phase 4 已在固定资产下执行 Direct、Frame 与 Reference 真实质量实验：S01、S02、S03、S05 的候选路线取得首批 5/5 人工硬门槛通过；S04、S06 与 S07 新 F1 也已由用户完整播放通过。S08 拆成“转身并拉开”与“店外背影离开”两个覆盖镜头后，用户完整播放连续片段并按“整体可用、允许轻微瑕疵”通过，两条 Take 均以 `4.0/5.0` 写入 `RouteEvidence` 并选入时间线；旧 S09 v9 则因异常回头姿态保持 `STALE + REJECTED`。本轮已把结果沉淀为通用 QA 分类、H3 能力画像、Director 修复策略、回归案例和旧 Take 退出正式时间线的闭环，没有新增门或区域穿越专用字段。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟、Phase 3 来源中立资产工作台与 Azure GPT Image 2，以及 Phase 4 固定资产下的 Direct、Frame、Reference 与通用 Director 修复实验。Phase 5 已实现空输入、图片、一句话和锁定剧本的统一规划入口、`AUTO_DRAFT` 无人值守 Mock 闭环，以及媒体探测、适应性抽帧、长镜头镜内观察和相邻镜头边界观察工具。观察结果进入通用 QA 分类与 Director Agent，不新增门或区域穿越专用字段。
 
 ## 结论先行
 
@@ -44,9 +44,10 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 14. [Phase 3：来源中立资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)
 15. [Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)
 16. [成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)
+17. [Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md)
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、架构和实验协议；LTX Desktop 基线；SQLite/API 短剧领域核心、可恢复 Mock Worker、多 Take、局部返工、TimelineManifest、字幕/音频占位、9:16 导出、QA 和桌面闭环；MiniMax-H3 768P Adapter 与真实异步媒体闭环；资产工作台、本地/链接导入、版本与批准、Azure GPT Image 2 生成/编辑、本地 GPT-5.6-sol 连接；林夏、周衡、便利店、录音笔及镜头关键帧正式版本；代表镜头多路线样本、人审 RouteEvidence、通用 Director 修复闭环，以及 S08+S09 连续片段验收。当前 9 镜混合时间线已生成并完成本地技术导出：55.34 秒、1080×1920、30 fps、含音轨，字幕版与无字幕版检查全部通过；其中前 7 镜仍是 Mock 占位，不能冒充真人完整成片。
-- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：空输入/图片输入的归一化和全程自动运行器、候选路线扩展到默认路线所需的 10 个有效样本，以及全部镜头使用真实生成媒体后的真人单集成片质量验收。
-- 下一步：把规划、资产补全、生成、通用 QA、Director 修复、候选选择和时间线导出接入默认 `AUTO_DRAFT`，先用 Mock 与既有真实证据验证无人值守状态机，再按明确实验目标补充必要的 H3 生成，使用户只需查看一个或少量完整最终版。
+- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；代表镜头多路线、人审 RouteEvidence、通用 Director 修复；四种输入归一化、`AutonomousRun`、一键 Mock 草稿，以及可持久化的视频观察报告。当前 9 镜混合时间线为 55.34 秒且技术导出通过，但前 7 镜仍是 Mock 占位，不能冒充真人完整成片。
+- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：让无人值守运行器按镜头自动执行真实 H3/图像/声音路线、候选路线扩展到默认路线所需的有效样本，以及全部镜头使用真实媒体后的真人单集质量验收。
+- 下一步：让 Route Planner 使用现有 H3 能力画像和 VideoInspection 报告选择真实执行路线，在不新增样片特化规则的前提下完成一轮真实单集 `AUTO_DRAFT`。

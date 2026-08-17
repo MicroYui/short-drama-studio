@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import imageio_ffmpeg
+from PIL import Image
 
 from short_drama.media import TimelineExporter
 from short_drama.models import (
@@ -205,6 +206,103 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
     finally:
         connection.close()
     assert journal_mode == "wal"
+
+
+def test_empty_and_image_inputs_share_the_same_planning_contract(
+    client,
+    tmp_path: Path,
+) -> None:
+    empty = client.post(
+        "/api/short-drama/projects",
+        json={
+            "source_mode": "AUTO_ORIGINAL",
+            "input_text": "",
+            "run_mode": "GUIDED",
+        },
+    )
+    assert empty.status_code == 200, empty.text
+    empty_body = empty.json()
+    assert empty_body["document"]["project"]["source_mode"] == "AUTO_ORIGINAL"
+    assert empty_body["document"]["project"]["name"]
+    assert len(empty_body["document"]["shots"]) == 8
+
+    image_path = tmp_path / "visual-seed.png"
+    Image.new("RGB", (96, 128), "#2d415b").save(image_path)
+    seeded = client.post(
+        "/api/short-drama/projects",
+        json={
+            "name": "图片输入",
+            "source_mode": "IMAGE_SEEDED",
+            "input_text": "保留冷蓝夜景与人物剪影关系。",
+            "input_images": [
+                {
+                    "local_path": str(image_path),
+                    "descriptor": "冷蓝夜景中的两个人物剪影",
+                }
+            ],
+            "run_mode": "GUIDED",
+        },
+    )
+    assert seeded.status_code == 200, seeded.text
+    body = seeded.json()
+    reference_asset = next(
+        asset
+        for asset in body["document"]["assets"]
+        if asset["kind"] == "REFERENCE"
+    )
+    version = reference_asset["versions"][-1]
+    assert version["media_type"] == "IMAGE"
+    assert version["approval_status"] == "APPROVED"
+    assert Path(version["local_path"]).is_file()
+    assert all(
+        any(
+            binding["target_id"] == version["id"]
+            and binding["requirement"] == "REQUIRED"
+            for binding in plan["bindings"]
+        )
+        for plan in body["document"]["reference_plan"]
+    )
+
+
+def test_autonomous_create_runs_to_manifest_without_user_stops(client) -> None:
+    response = client.post(
+        "/api/short-drama/projects/autonomous-draft",
+        json={
+            "source_mode": "AUTO_ORIGINAL",
+            "input_text": "",
+            "run_mode": "AUTO_DRAFT",
+            "render_export": False,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "COMPLETE"
+    assert body["run"]["current_step"] == "COMPLETE"
+    assert body["run"]["planner"] == "deterministic-fallback-v1"
+    assert body["project"]["progress"]["shots_with_selected_take"] == 8
+    assert body["project"]["progress"]["manifest_ready"] is True
+    assert body["export"] is None
+
+
+def test_locked_script_preserves_more_than_ten_dialogue_lines(client) -> None:
+    lines = [f"角色{i % 2 + 1}：第{i}句锁定对白。" for i in range(1, 13)]
+    response = client.post(
+        "/api/short-drama/projects",
+        json={
+            "name": "长对白锁定剧本",
+            "source_mode": "SCRIPT_LOCKED",
+            "input_text": "\n".join(lines),
+            "run_mode": "GUIDED",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    script_lines = response.json()["document"]["script_versions"][0]["lines"]
+    assert len(script_lines) == 12
+    assert [item["original_text"] for item in script_lines] == [
+        f"第{i}句锁定对白。" for i in range(1, 13)
+    ]
 
 
 def test_worker_handles_cancel_retry_reconcile_and_missing_output(client, test_state) -> None:

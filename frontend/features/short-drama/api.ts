@@ -44,9 +44,13 @@ export type DirectorLoopResponse = components['schemas']['DirectorLoopResponse']
 export type DirectorRepairDecisionRequest = components['schemas']['DirectorRepairDecisionRequest-Input']
 export type H3CapabilityProfile = components['schemas']['H3CapabilityProfileResponse']
 export type QaFailureCategory = components['schemas']['QaFailureCategory']
+export type CreativeInputImage = components['schemas']['CreativeInputImage']
+export type VideoInspectionReport = components['schemas']['VideoInspectionReport']
+export type VideoInspectionRequest = components['schemas']['VideoInspectionRequest']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
+const createAutonomousDraft = makeEndpointClient('/api/short-drama/projects/autonomous-draft', 'post')
 const initializeFixture = makeEndpointClient('/api/short-drama/fixtures/dont-trust-me', 'post')
 const getProject = makeEndpointClient('/api/short-drama/projects/{project_id}', 'get')
 const autoDraft = makeEndpointClient('/api/short-drama/projects/{project_id}/auto-draft', 'post')
@@ -56,6 +60,7 @@ const rebuildManifest = makeEndpointClient('/api/short-drama/projects/{project_i
 const exportProject = makeEndpointClient('/api/short-drama/projects/{project_id}/export', 'post')
 const reviseScriptLine = makeEndpointClient('/api/short-drama/projects/{project_id}/script/revise-line', 'post')
 const selectTake = makeEndpointClient('/api/short-drama/takes/{take_id}/select', 'post')
+const inspectTakeVideo = makeEndpointClient('/api/short-drama/takes/{take_id}/inspect-video', 'post')
 const advanceTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/advance', 'post')
 const cancelTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/cancel', 'post')
 const retryTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/retry', 'post')
@@ -123,6 +128,7 @@ function shotPath(projectId: string, shotId: string, suffix = ''): string {
 export const ShortDramaApi = {
   listProjects: () => listProjects(),
   createProject,
+  createAutonomousDraft,
   initializeFixture: () => initializeFixture(),
   getProject: (projectId: string) => getProject(undefined, undefined, projectPath(projectId)),
   autoDraft: (projectId: string, renderExport = true) => (
@@ -145,6 +151,13 @@ export const ShortDramaApi = {
   ) => reviseScriptLine(body, undefined, projectPath(projectId, '/script/revise-line')),
   selectTake: (takeId: string) => (
     selectTake(undefined, undefined, `/api/short-drama/takes/${encodeURIComponent(takeId)}/select`)
+  ),
+  inspectTakeVideo: (takeId: string, body: VideoInspectionRequest) => (
+    inspectTakeVideo(
+      body,
+      undefined,
+      `/api/short-drama/takes/${encodeURIComponent(takeId)}/inspect-video`,
+    )
   ),
   advanceTask: (taskId: string) => advanceTask(undefined, undefined, taskPath(taskId, 'advance')),
   cancelTask: (taskId: string) => cancelTask(undefined, undefined, taskPath(taskId, 'cancel')),

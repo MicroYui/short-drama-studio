@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DomainModel(BaseModel):
@@ -14,6 +14,8 @@ class DomainModel(BaseModel):
 
 
 class SourceMode(StrEnum):
+    AUTO_ORIGINAL = "AUTO_ORIGINAL"
+    IMAGE_SEEDED = "IMAGE_SEEDED"
     IDEA_EXPANSION = "IDEA_EXPANSION"
     SCRIPT_LOCKED = "SCRIPT_LOCKED"
 
@@ -21,6 +23,24 @@ class SourceMode(StrEnum):
 class RunMode(StrEnum):
     AUTO_DRAFT = "AUTO_DRAFT"
     GUIDED = "GUIDED"
+
+
+class AutonomousRunStatus(StrEnum):
+    RUNNING = "RUNNING"
+    COMPLETE = "COMPLETE"
+    NEEDS_ATTENTION = "NEEDS_ATTENTION"
+    FAILED = "FAILED"
+
+
+class AutonomousRunStep(StrEnum):
+    NORMALIZE_INPUT = "NORMALIZE_INPUT"
+    PLAN = "PLAN"
+    IMPORT_INPUT_ASSETS = "IMPORT_INPUT_ASSETS"
+    GENERATE = "GENERATE"
+    QA_AND_REPAIR = "QA_AND_REPAIR"
+    TIMELINE = "TIMELINE"
+    EXPORT = "EXPORT"
+    COMPLETE = "COMPLETE"
 
 
 class ApprovalStatus(StrEnum):
@@ -72,6 +92,24 @@ class QaFailureCategory(StrEnum):
     PROP_CONTINUITY = "PROP_CONTINUITY"
     DIALOGUE_AUDIO = "DIALOGUE_AUDIO"
     OTHER = "OTHER"
+
+
+class VideoInspectionScope(StrEnum):
+    INTRA_SHOT = "INTRA_SHOT"
+    SHOT_BOUNDARY = "SHOT_BOUNDARY"
+
+
+class SemanticReviewStatus(StrEnum):
+    NOT_REQUESTED = "NOT_REQUESTED"
+    UNAVAILABLE = "UNAVAILABLE"
+    COMPLETE = "COMPLETE"
+    FAILED = "FAILED"
+
+
+class ObservationConfidence(StrEnum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
 
 
 class DirectorRepairStrategy(StrEnum):
@@ -207,6 +245,18 @@ class AudioKind(StrEnum):
     EFFECT = "EFFECT"
 
 
+class CreativeInputImage(DomainModel):
+    local_path: str | None = Field(default=None, min_length=1, max_length=8192)
+    external_url: str | None = Field(default=None, min_length=1, max_length=8192)
+    descriptor: str = Field(default="用户提供的视觉种子", min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_one_source(self) -> CreativeInputImage:
+        if (self.local_path is None) == (self.external_url is None):
+            raise ValueError("Exactly one of local_path or external_url is required")
+        return self
+
+
 class ProjectRecord(DomainModel):
     id: str
     name: str
@@ -216,6 +266,10 @@ class ProjectRecord(DomainModel):
     aspect_ratio: str = "9:16"
     target_duration_seconds: float = 50.0
     input_text: str
+    input_images: list[CreativeInputImage] = Field(
+        default_factory=list[CreativeInputImage],
+        max_length=8,
+    )
     stage: ProjectStage
     current_script_version_id: str
     current_bible_version_id: str
@@ -572,6 +626,23 @@ class DirectorRepairRecord(DomainModel):
     created_at: str
 
 
+class AutonomousRunRecord(DomainModel):
+    id: str
+    project_id: str
+    status: AutonomousRunStatus
+    current_step: AutonomousRunStep
+    completed_steps: list[AutonomousRunStep] = Field(
+        default_factory=list[AutonomousRunStep]
+    )
+    planner: str
+    warnings: list[str] = Field(default_factory=list[str])
+    error_message: str | None = None
+    export_id: str | None = None
+    created_at: str
+    updated_at: str
+    completed_at: str | None = None
+
+
 class ProjectDocument(DomainModel):
     project: ProjectRecord
     script_versions: list[ScriptVersion]
@@ -584,6 +655,9 @@ class ProjectDocument(DomainModel):
     reference_packs: list[ReferencePack] = Field(default_factory=list[ReferencePack])
     repair_history: list[DirectorRepairRecord] = Field(
         default_factory=list[DirectorRepairRecord]
+    )
+    autonomous_runs: list[AutonomousRunRecord] = Field(
+        default_factory=list[AutonomousRunRecord]
     )
 
 
@@ -638,6 +712,31 @@ class QAReport(DomainModel):
     created_at: str
 
 
+class VideoFrameSample(DomainModel):
+    source_take_id: str
+    timestamp_seconds: float = Field(ge=0.0)
+    image_path: str
+    reasons: list[str] = Field(min_length=1, max_length=8)
+    visual_change_score: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class VideoObservation(DomainModel):
+    start_seconds: float | None = Field(default=None, ge=0.0)
+    end_seconds: float | None = Field(default=None, ge=0.0)
+    description: str = Field(min_length=1, max_length=2000)
+    confidence: ObservationConfidence
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> VideoObservation:
+        if (
+            self.start_seconds is not None
+            and self.end_seconds is not None
+            and self.end_seconds < self.start_seconds
+        ):
+            raise ValueError("Video observation end_seconds must not precede start_seconds")
+        return self
+
+
 class Take(DomainModel):
     id: str
     project_id: str
@@ -687,6 +786,31 @@ class TechnicalCheck(DomainModel):
     detail: str
 
 
+class VideoInspectionReport(DomainModel):
+    id: str
+    project_id: str
+    shot_id: str
+    take_id: str
+    previous_take_id: str | None = None
+    scopes: list[VideoInspectionScope] = Field(min_length=1, max_length=2)
+    duration_seconds: float = Field(gt=0.0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    fps: float = Field(gt=0.0)
+    audio_present: bool
+    samples: list[VideoFrameSample] = Field(min_length=2, max_length=32)
+    contact_sheet_path: str
+    boundary_contact_sheet_path: str | None = None
+    technical_checks: list[TechnicalCheck]
+    semantic_status: SemanticReviewStatus
+    semantic_model: str | None = None
+    observations: list[VideoObservation] = Field(default_factory=list[VideoObservation])
+    issues: list[QaIssue] = Field(default_factory=list[QaIssue])
+    summary: str = Field(min_length=1, max_length=3000)
+    warnings: list[str] = Field(default_factory=list[str])
+    created_at: str
+
+
 class ExportRecord(DomainModel):
     id: str
     project_id: str
@@ -720,6 +844,9 @@ class ProjectAggregate(DomainModel):
     takes: list[Take]
     exports: list[ExportRecord]
     route_evidence: list[RouteEvidence] = Field(default_factory=list[RouteEvidence])
+    video_inspections: list[VideoInspectionReport] = Field(
+        default_factory=list[VideoInspectionReport]
+    )
     progress: ProgressSummary
 
 
@@ -728,10 +855,42 @@ class ProjectListResponse(DomainModel):
 
 
 class CreateProjectRequest(DomainModel):
-    name: str = Field(min_length=1, max_length=120)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
     source_mode: SourceMode
-    input_text: str = Field(min_length=1)
+    input_text: str = Field(default="", max_length=50000)
+    input_images: list[CreativeInputImage] = Field(
+        default_factory=list[CreativeInputImage],
+        max_length=8,
+    )
     run_mode: RunMode = RunMode.AUTO_DRAFT
+
+    @model_validator(mode="after")
+    def validate_input_contract(self) -> CreateProjectRequest:
+        text = self.input_text.strip()
+        if self.source_mode in {SourceMode.IDEA_EXPANSION, SourceMode.SCRIPT_LOCKED} and not text:
+            raise ValueError(f"{self.source_mode.value} requires input_text")
+        if self.source_mode == SourceMode.IMAGE_SEEDED and not self.input_images:
+            raise ValueError("IMAGE_SEEDED requires at least one input image")
+        return self
+
+
+class VideoInspectionRequest(DomainModel):
+    previous_take_id: str | None = Field(default=None, max_length=200)
+    include_previous_boundary: bool = True
+    semantic_review: bool = True
+    max_frames: int = Field(default=14, ge=6, le=24)
+    review_focus: str | None = Field(default=None, max_length=2000)
+
+
+class AutonomousDraftCreateRequest(CreateProjectRequest):
+    run_mode: RunMode = RunMode.AUTO_DRAFT
+    render_export: bool = True
+
+    @model_validator(mode="after")
+    def require_auto_mode(self) -> AutonomousDraftCreateRequest:
+        if self.run_mode != RunMode.AUTO_DRAFT:
+            raise ValueError("Autonomous draft creation requires AUTO_DRAFT")
+        return self
 
 
 class EnqueueRequest(DomainModel):
@@ -785,6 +944,15 @@ class AutoDraftRequest(DomainModel):
 class AutoDraftResponse(DomainModel):
     project: ProjectAggregate
     export: ExportRecord | None
+
+
+class AutonomousDraftResponse(AutoDraftResponse):
+    run: AutonomousRunRecord
+
+
+class VideoInspectionResponse(DomainModel):
+    report: VideoInspectionReport
+    project: ProjectAggregate
 
 
 class StatusMessage(DomainModel):

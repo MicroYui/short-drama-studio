@@ -23,6 +23,9 @@ from short_drama.models import (
     DirectorRepairStrategy,
     EnqueueRequest,
     Freshness,
+    QaFailureCategory,
+    QaIssue,
+    QaStatus,
     RunMode,
 )
 from short_drama.reference_planner import (
@@ -49,7 +52,15 @@ class FakeDirectorLanguageProvider:
     def validate_credentials(self) -> None:
         return None
 
-    def generate_text(self, *, instructions: str, input_text: str) -> str:
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        del image_urls, max_output_tokens
         self.generations.append((instructions, input_text))
         return self.output_text
 
@@ -514,6 +525,83 @@ def test_auto_draft_director_loop_applies_executable_repair(tmp_path: Path) -> N
     assert updated_shot["camera"] == "fixed rear coverage angle"
     assert updated_shot["revision"] == 2
     assert body["project"]["document"]["repair_history"][-1]["decision"] == "APPLIED"
+
+
+def test_auto_draft_repairs_rejected_takes_and_regenerates_without_user_pause(
+    tmp_path: Path,
+) -> None:
+    fake = FakeDirectorLanguageProvider(
+        """{
+          "advisories": [],
+          "repair_options": [
+            {
+              "strategy": "CHANGE_CAMERA",
+              "summary": "Use simpler coverage.",
+              "rationale": "It addresses the observed orientation failure.",
+              "tradeoff": "The new angle reveals less facial detail.",
+              "recommended": true,
+              "dismissible": true
+            }
+          ],
+          "recommended_strategy": "CHANGE_CAMERA",
+          "proposed_repair": {
+            "decision": "APPLIED",
+            "strategy": "CHANGE_CAMERA",
+            "reason": "Use stable rear coverage while preserving the narrative beat.",
+            "issue_codes": ["AUTO_ORIENTATION_FAILURE"],
+            "shot_patch": {"camera": "stable rear coverage"},
+            "split_shots": []
+          }
+        }"""
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _api_key, _base_url: fake,
+    )
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    initial = service.auto_draft(project_id, render_export=False).project
+    shot = initial.document.shots[-1]
+    rejected_ids: list[str] = []
+    for take in [item for item in initial.takes if item.shot_id == shot.id]:
+        rejected_ids.append(take.id)
+        take.qa_status = QaStatus.REJECTED
+        take.qa_report.status = QaStatus.REJECTED
+        take.qa_report.hard_gate_passed = False
+        take.qa_report.score = 2.0
+        take.qa_report.issues = [
+            QaIssue(
+                code="AUTO_ORIENTATION_FAILURE",
+                severity="HIGH",
+                message="The character orientation visibly conflicts with the shot intent.",
+                repair_layer="DIRECTOR",
+                category=QaFailureCategory.CHARACTER_ORIENTATION,
+            )
+        ]
+        take.is_selected = False
+        service.repository.save_take(take)
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+
+    repaired = service.auto_draft(project_id, render_export=False).project
+
+    repaired_shot = next(item for item in repaired.document.shots if item.id == shot.id)
+    assert repaired_shot.camera == "stable rear coverage"
+    assert repaired_shot.revision == 2
+    assert repaired.document.repair_history[-1].decision == DirectorRepairDecision.APPLIED
+    old_takes = [item for item in repaired.takes if item.id in rejected_ids]
+    assert all(item.freshness == Freshness.STALE for item in old_takes)
+    current = [
+        item
+        for item in repaired.takes
+        if item.shot_id == shot.id and item.freshness == Freshness.CURRENT
+    ]
+    assert len(current) == 2
+    assert sum(item.is_selected for item in current) == 1
+    assert repaired.progress.manifest_ready is True
+    assert len(fake.generations) == 1
 
 
 def test_director_recommendation_and_executable_repair_must_match() -> None:

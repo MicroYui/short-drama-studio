@@ -41,6 +41,8 @@ from short_drama.media import MediaGenerationError
 from short_drama.models import (
     AutoDraftRequest,
     AutoDraftResponse,
+    AutonomousDraftCreateRequest,
+    AutonomousDraftResponse,
     CreateProjectRequest,
     EnqueueRequest,
     ExportRecord,
@@ -53,6 +55,8 @@ from short_drama.models import (
     StatusMessage,
     TaskActionResponse,
     TimelineManifest,
+    VideoInspectionRequest,
+    VideoInspectionResponse,
     WorkerDrainRequest,
     WorkerDrainResponse,
 )
@@ -443,6 +447,17 @@ def create_project(
     return service.create_project(request)
 
 
+@router.post("/projects/autonomous-draft", response_model=AutonomousDraftResponse)
+def create_autonomous_draft(
+    request: AutonomousDraftCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AutonomousDraftResponse:
+    try:
+        return service.create_autonomous_draft(request)
+    except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
+        raise _translate_error(exc) from exc
+
+
 @router.post("/projects/{project_id}/assets", response_model=AssetMutationResponse)
 def create_asset(
     project_id: str,
@@ -731,6 +746,23 @@ def select_take(
     try:
         return service.select_take(take_id)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/takes/{take_id}/inspect-video", response_model=VideoInspectionResponse)
+def inspect_take_video(
+    take_id: str,
+    request: VideoInspectionRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> VideoInspectionResponse:
+    try:
+        return service.inspect_take_video(take_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        MediaGenerationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 

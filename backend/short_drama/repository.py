@@ -20,6 +20,7 @@ from short_drama.models import (
     RouteEvidence,
     Take,
     TaskStatus,
+    VideoInspectionReport,
 )
 
 
@@ -167,6 +168,17 @@ class ShortDramaRepository:
                     ON image_tasks(project_id, asset_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_image_tasks_project_status
                     ON image_tasks(project_id, status, created_at);
+
+                CREATE TABLE IF NOT EXISTS video_inspections (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    shot_id TEXT NOT NULL,
+                    take_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_video_inspections_project_shot
+                    ON video_inspections(project_id, shot_id, created_at);
                 """
             )
             task_columns = {
@@ -189,6 +201,9 @@ class ShortDramaRepository:
             )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(4, datetime('now'))"
             )
 
     def save_project(self, document: ProjectDocument) -> None:
@@ -659,6 +674,49 @@ class ShortDramaRepository:
                 (project_id,),
             ).fetchall()
         return [RouteEvidence.model_validate_json(cast(str, row["record_json"])) for row in rows]
+
+    def save_video_inspection(self, report: VideoInspectionReport) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO video_inspections(
+                    id, project_id, shot_id, take_id, created_at, record_json
+                ) VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET record_json = excluded.record_json
+                """,
+                (
+                    report.id,
+                    report.project_id,
+                    report.shot_id,
+                    report.take_id,
+                    report.created_at,
+                    report.model_dump_json(),
+                ),
+            )
+
+    def get_video_inspection(self, report_id: str) -> VideoInspectionReport | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM video_inspections WHERE id = ?",
+                (report_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return VideoInspectionReport.model_validate_json(cast(str, row["record_json"]))
+
+    def list_video_inspections(self, project_id: str) -> list[VideoInspectionReport]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM video_inspections
+                WHERE project_id = ? ORDER BY created_at ASC, id ASC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            VideoInspectionReport.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]
 
     def save_image_task(self, task: ImageGenerationTask) -> None:
         with self._lock, self._connection() as connection:

@@ -199,6 +199,36 @@ def test_language_client_generates_with_responses_api_and_reads_nested_text() ->
     ]
 
 
+def test_language_client_sends_multimodal_responses_input() -> None:
+    session = FakeSession(FakeResponse(200, {"output_text": "结构化计划"}))
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        session=session,  # type: ignore[arg-type]
+    )
+
+    result = client.generate_text(
+        instructions="读取视觉种子",
+        input_text="生成短剧计划",
+        image_urls=["data:image/jpeg;base64,AAAA", "https://example.test/seed.png"],
+        max_output_tokens=4000,
+    )
+
+    assert result == "结构化计划"
+    payload = session.post_calls[0][1]["json"]
+    assert payload["max_output_tokens"] == 4000
+    assert payload["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "生成短剧计划"},
+                {"type": "input_image", "image_url": "data:image/jpeg;base64,AAAA"},
+                {"type": "input_image", "image_url": "https://example.test/seed.png"},
+            ],
+        }
+    ]
+
+
 def test_language_client_rejects_generation_without_output_text() -> None:
     client = OpenAICompatibleLanguageClient(
         api_key="",
@@ -218,7 +248,15 @@ class FakeLanguageProvider:
     def validate_credentials(self) -> None:
         self.validations += 1
 
-    def generate_text(self, *, instructions: str, input_text: str) -> str:
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        del image_urls, max_output_tokens
         self.generations.append((instructions, input_text))
         return self.output_text
 

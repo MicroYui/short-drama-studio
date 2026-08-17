@@ -14,9 +14,9 @@
 
 首版运行在单用户、受信环境中，不设计注册、登录、账号体系、RBAC、多租户、团队成员或分享权限。生产流程中的“批准/确认”是内容状态，不是访问控制。外部模型 API 凭证只作为 Provider 配置处理。
 
-当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、供应商中立的 Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider 工程接入，以及 Phase 3 Azure GPT Image 2 资产生成/编辑与正式资产批准。Phase 4 已用固定资产执行多组 H3 Direct、Frame、Reference 实验并保存真实 Take、费用与人工 RouteEvidence：S01 F1、S02 Reference、S03 Reference、S05 F1 的首批五样本均通过，S04、S06 首条 Reference 与 S07 新 F1 也已通过。S08 原 F1 只有 3/5；新 F2 虽通过自动技术门槛，但用户因人物僵硬、画面观感差和离店方向错误而拒绝。导演计划已在既有文本字段内由“推门”修正为“拉门、转身、跨向店外”，没有新增门或区域穿越专用模型；当前默认建议拆为“拉门转身”与“跨门离店”两镜。候选路线尚未达到至少 10 个有效样本的稳定性门槛，因此真人单集最终质量仍未宣告通过。
+当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider、Phase 3 Azure GPT Image 2 资产工作台，以及 Phase 4 H3 Direct、Frame、Reference 与通用 Director 修复实验。S08 最终拆为两个覆盖镜头并由用户按整体可用标准通过，旧异常 Take 已退出正式时间线。Phase 5 已实现四种输入归一化、`AutonomousRun`、一键 Mock 草稿，以及 Agent 可调用的媒体探测、适应性抽帧、长镜头镜内观察和相邻镜头边界观察。候选路线尚未达到稳定默认路线门槛，因此真人单集最终质量仍未宣告通过。
 
-工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md) 和 [成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)。
+工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)、[成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md) 和 [Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md)。
 
 ## 证据等级
 
@@ -88,6 +88,7 @@ H3 的首帧/尾帧角色与 reference image/video/audio 角色不能在同一�
 
 - 闭源平台结论主要来自官方页面与官方指南；按项目边界不登录、不调用，也不把其效果和价格纳入生产决策。
 - 开源结论基于 [固定 commit](sources.md)，没有安装全部依赖或运行其真实付费 Provider。
-- 当前已有固定资产下的多路线、多样本和人工审片证据，但主要通过路线仍只有首批 5 个有效样本，不能提前写成稳定默认路线；S03、S04、S06、S07 已通过，导演 Agent 会建议避免带场景的角色图与独立场景图竞争、为复杂交互换尾帧或拆镜，但不阻止继续生成；S08 v9 驱动的 F2 已被用户拒绝，等待确认是否采用两镜方案。
+- 当前已有固定资产下的多路线、多样本和人工审片证据，但仍不足以把某条路线提前写成所有镜头的稳定默认；S08 两镜覆盖方案已经通过，原单镜失败沉淀为能力画像、通用 QA、Director 修复策略和回归案例。
+- 视频观察工具已经能生成长镜头时间序列和相邻镜头边界证据，但模型审片的真实召回率、漏报率以及修复后自动收敛仍是 `UNKNOWN`。
 - 代表样本中的普通话声音与口型总体可用，但跨镜声线稳定、严格逐字正确率和完整单集音画一致性仍需最终八镜成片验证。
 - 成本与配额高度时效化；本轮保留 `UNKNOWN` 并在实施时记录，但它们不是质量路线的主要决策因子。
