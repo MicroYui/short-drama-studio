@@ -386,8 +386,10 @@ Director Agent 当前默认建议拆成“拉门转身”与“跨门离店”�
 
 | 镜头 | Task | 任务结果 | 系统处理 |
 | --- | --- | --- | --- |
-| S08 转身并拉开 | `task-956648db143e429ab45f1cf55e4d116c` | H3 / `768×1344` / 5.17 秒 / 24 fps / 含音轨 | `CURRENT + PENDING`；20 帧执行者预审未见错把手侧、错门体、不转头或左手录音笔漂移，待完整播放人工结论 |
+| S08 转身并拉开 | `task-956648db143e429ab45f1cf55e4d116c` | H3 / `768×1344` / 5.17 秒 / 24 fps / 含音轨 | `CURRENT + PASSED + SELECTED`；用户完整播放连续片段后按整体可用通过，`RouteEvidence=REVIEWED / 4.0`，不再为轻微瑕疵重生成 |
 | S09 旧 v9 回头关键帧 | `task-d7433e7fc4e946dbbe975e2cbd08be8c` | Provider 成功返回 | 镜头已修订至 revision 2，故自动 `STALE + REJECTED`、不入选；失败归类为人物朝向与构图质量，只留作能力画像/回归证据 |
-| S09 店外正后方 v5 | `task-4850cd838ba14e27a1a2c790caed3778` | H3 / `768×1344` / 5.17 秒 / 24 fps / 含音轨 | `CURRENT + PENDING`；绑定 `complex-contact-turn-boundary-crossing-v1`。20 帧预审中人物全程背向走远，头部、躯干与脚步同向，左手红色录音笔持续可见，未表现门体 |
+| S09 店外正后方 v5 | `task-4850cd838ba14e27a1a2c790caed3778` | H3 / `768×1344` / 5.17 秒 / 24 fps / 含音轨 | `CURRENT + PASSED + SELECTED`；绑定 `complex-contact-turn-boundary-crossing-v1`。用户确认背向走远、未回头及左手道具连续性整体可用，`RouteEvidence=REVIEWED / 4.0` |
 
-S08 与新 S09 已按正式 cut 顺序合成 10.22 秒连续审片片段：`reviews/phase4-s08-s09-repair-loop/S08-S09-repair-sequence.mp4`。提交新 S09 的意义是验证通用修复闭环是否在相邻镜头中同时保持朝向、道具和覆盖连续性，不是人工把 v9 换成另一个样片。两个 Take 的正式人工硬门槛结论仍待完整播放确认。
+S08 与新 S09 已按正式 cut 顺序合成 10.22 秒连续审片片段：`reviews/phase4-s08-s09-repair-loop/S08-S09-repair-sequence.mp4`。提交新 S09 的意义是验证通用修复闭环是否在相邻镜头中同时保持朝向、道具和覆盖连续性，不是人工把 v9 换成另一个样片。用户已完整播放并确认两条 Take 通过；验收采用“整体可用、允许轻微瑕疵”，不继续为单镜细节消耗额度。
+
+两条 Take 选入后，当前 9 镜头均有 `CURRENT + PASSED + selected` 媒体，`TimelineManifest v3` 总时长 55.34 秒。首次导出暴露了一个通用异构素材问题：Mock Take 为 30 fps / 48 kHz，H3 Take 为 24 fps / 32 kHz，直接使用 concat demuxer 会在格式切换处截断。导出器已改为先在同一 FFmpeg filter graph 中统一分辨率、帧率、像素格式、声道和采样率，再拼接；真实混合时间线的无字幕版与字幕版均通过 1080×1920、30 fps、音轨和 55.34 秒时长检查。该导出只证明工作流与混合媒体技术闭环，前 7 镜仍为 Mock 占位，不作为真人整集成片证据。

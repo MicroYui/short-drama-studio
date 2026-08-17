@@ -358,17 +358,56 @@ class TimelineExporter:
         manifest_path.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
         spec = manifest.output_spec
+        # Concat demuxing assumes identical stream parameters and can silently truncate when
+        # provider media changes frame rate, resolution, codec profile, or audio sample rate.
+        input_args = [
+            argument
+            for clip in manifest.video_clips
+            for argument in ("-i", clip.media_path)
+        ]
+        filter_parts: list[str] = []
+        concat_inputs: list[str] = []
+        for index, clip in enumerate(manifest.video_clips):
+            source_in = f"{clip.source_in_seconds:.6f}"
+            duration = f"{clip.duration_seconds:.6f}"
+            filter_parts.extend(
+                [
+                    (
+                        f"[{index}:v:0]"
+                        f"tpad=stop_mode=clone:stop_duration={duration},"
+                        f"trim=start={source_in}:duration={duration},"
+                        "setpts=PTS-STARTPTS,"
+                        f"scale={spec.width}:{spec.height}:flags=lanczos,"
+                        f"setsar=1,fps={spec.fps},format={spec.pixel_format}"
+                        f"[video{index}]"
+                    ),
+                    (
+                        f"[{index}:a:0]"
+                        f"apad=pad_dur={duration},"
+                        f"atrim=start={source_in}:duration={duration},"
+                        "asetpts=PTS-STARTPTS,"
+                        f"aresample={spec.audio_sample_rate},"
+                        "aformat=channel_layouts=stereo"
+                        f"[audio{index}]"
+                    ),
+                ]
+            )
+            concat_inputs.extend((f"[video{index}]", f"[audio{index}]"))
+        filter_parts.append(
+            "".join(concat_inputs)
+            + f"concat=n={len(manifest.video_clips)}:v=1:a=1[video][audio]"
+        )
+
         _run_ffmpeg(
             [
                 "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                str(concat_path),
-                "-vf",
-                f"scale={spec.width}:{spec.height}:flags=lanczos,setsar=1",
+                *input_args,
+                "-filter_complex",
+                ";".join(filter_parts),
+                "-map",
+                "[video]",
+                "-map",
+                "[audio]",
                 "-r",
                 str(spec.fps),
                 "-fps_mode",

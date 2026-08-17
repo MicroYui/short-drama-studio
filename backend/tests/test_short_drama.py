@@ -3,9 +3,22 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 from pathlib import Path
 
-from short_drama.models import EnqueueRequest, TaskStatus
+import imageio_ffmpeg
+
+from short_drama.media import TimelineExporter
+from short_drama.models import (
+    ApprovalStatus,
+    EnqueueRequest,
+    Freshness,
+    OutputSpec,
+    TaskStatus,
+    TimelineAudioClip,
+    TimelineManifest,
+    TimelineVideoClip,
+)
 from short_drama.service import ShortDramaService
 
 
@@ -13,6 +26,123 @@ def _initialize_fixture(client):
     response = client.post("/api/short-drama/fixtures/dont-trust-me")
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _render_export_source(
+    path: Path,
+    *,
+    size: str,
+    fps: int,
+    audio_sample_rate: int,
+    duration_seconds: float,
+) -> None:
+    executable = imageio_ffmpeg.get_ffmpeg_exe()
+    duration = f"{duration_seconds:.3f}"
+    result = subprocess.run(
+        [
+            executable,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=0x273447:s={size}:r={fps}:d={duration}",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency=220:sample_rate={audio_sample_rate}:duration={duration}",
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ar",
+            str(audio_sample_rate),
+            "-ac",
+            "2",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_timeline_export_normalizes_heterogeneous_take_media(tmp_path: Path) -> None:
+    first_path = tmp_path / "mock-like.mp4"
+    second_path = tmp_path / "h3-like.mp4"
+    _render_export_source(
+        first_path,
+        size="432x768",
+        fps=30,
+        audio_sample_rate=48000,
+        duration_seconds=1.0,
+    )
+    _render_export_source(
+        second_path,
+        size="768x1344",
+        fps=24,
+        audio_sample_rate=32000,
+        duration_seconds=1.0,
+    )
+    video_clips = [
+        TimelineVideoClip(
+            id=f"video-{index}",
+            shot_id=f"shot-{index}",
+            take_id=f"take-{index}",
+            media_path=str(path),
+            start_seconds=float(index - 1),
+            source_in_seconds=0.0,
+            duration_seconds=1.0,
+            transition_in="none",
+            transition_out="none",
+        )
+        for index, path in enumerate((first_path, second_path), start=1)
+    ]
+    audio_clips = [
+        TimelineAudioClip(
+            id=f"audio-{index}",
+            shot_id=clip.shot_id,
+            take_id=clip.take_id,
+            media_path=clip.media_path,
+            start_seconds=clip.start_seconds,
+            duration_seconds=clip.duration_seconds,
+            gain_db=0.0,
+            role="MODEL_NATIVE_TEST",
+        )
+        for index, clip in enumerate(video_clips, start=1)
+    ]
+    manifest = TimelineManifest(
+        id="heterogeneous-manifest-v1",
+        project_id="heterogeneous-project",
+        version=1,
+        script_version_id="script-v1",
+        bible_version_id="bible-v1",
+        video_clips=video_clips,
+        audio_clips=audio_clips,
+        subtitle_cues=[],
+        output_spec=OutputSpec(),
+        duration_seconds=2.0,
+        approval_status=ApprovalStatus.DRAFT,
+        freshness=Freshness.CURRENT,
+        created_at="2026-08-17T00:00:00Z",
+    )
+
+    export = TimelineExporter(tmp_path / "workspace").render(
+        manifest,
+        "2026-08-17T00:00:01Z",
+    )
+
+    assert all(check.passed for check in export.checks), export.checks
+    assert Path(export.clean_video_path).is_file()
+    assert Path(export.subtitled_video_path).is_file()
 
 
 def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state) -> None:
