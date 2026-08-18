@@ -23,6 +23,7 @@ from short_drama.asset_inspection import (
     build_keyframe_correction_prompt,
     inspect_asset_image,
 )
+from short_drama.audio_inspection import AudioInspector, AudioSemanticService
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
@@ -91,6 +92,9 @@ from short_drama.language_models import (
 from short_drama.media import MediaGenerationError, MockMediaRenderer, TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
+    AudioInspectionReport,
+    AudioInspectionRequest,
+    AudioInspectionResponse,
     Asset,
     AssetKind,
     AssetVersion,
@@ -291,12 +295,15 @@ class ShortDramaService:
         h3_client_factory: H3ClientFactory | None = None,
         image_provider_factory: ImageProviderFactory | None = None,
         language_provider_factory: LanguageProviderClientFactory | None = None,
+        audio_semantic_service: AudioSemanticService | None = None,
     ) -> None:
         self.repository = ShortDramaRepository(database_path)
         self.workspace_root = workspace_root
         self.media_renderer = MockMediaRenderer(workspace_root)
         self.exporter = TimelineExporter(workspace_root)
         self.video_inspector = VideoInspector(workspace_root)
+        self.audio_inspector = AudioInspector(workspace_root)
+        self.audio_semantic_service = audio_semantic_service
         self.worker = PersistentMockWorker(self.repository, self.media_renderer)
         self.h3_config = H3ProviderConfigStore(
             database_path.parent / "short-drama-provider-settings.json"
@@ -696,11 +703,21 @@ class ShortDramaService:
             return self._advance_real_qa_and_repair(project_id, run_id)
         if run.current_step == AutonomousRunStep.TIMELINE:
             self.rebuild_manifest(project_id)
+            self._advance_autonomous_run(
+                project_id,
+                run_id,
+                completed_step=AutonomousRunStep.TIMELINE,
+                next_step=AutonomousRunStep.AUDIO_QA,
+            )
+            return True, False
+        if run.current_step == AutonomousRunStep.AUDIO_QA:
+            report = self._ensure_current_manifest_audio_inspection(project_id)
+            self._record_autonomous_audio_findings(project_id, run_id, report)
             if run.render_export:
                 self._advance_autonomous_run(
                     project_id,
                     run_id,
-                    completed_step=AutonomousRunStep.TIMELINE,
+                    completed_step=AutonomousRunStep.AUDIO_QA,
                     next_step=AutonomousRunStep.EXPORT,
                 )
             else:
@@ -708,7 +725,7 @@ class ShortDramaService:
                     project_id,
                     run_id,
                     status=AutonomousRunStatus.COMPLETE,
-                    completed_steps=[AutonomousRunStep.TIMELINE],
+                    completed_steps=[AutonomousRunStep.AUDIO_QA],
                 )
             return True, False
         if run.current_step == AutonomousRunStep.EXPORT:
@@ -1669,9 +1686,9 @@ class ShortDramaService:
             )
         notes = (
             f"AUTO_DRAFT visual candidate judge: {report.summary} "
-            "Audio-stream presence was checked; transcript, speaker identity, and cross-shot "
-            "voice identity remain outside this automated visual decision and require final "
-            "episode review or a future STT/voice tool. User override remains allowed."
+            "Audio-stream presence was checked here; transcript, expected-speaker metadata, "
+            "cross-shot voice continuity, signal quality, and subtitle timing are evaluated by "
+            "the post-timeline AudioInspection step. User override remains allowed."
         )
         self.review_h3_take(
             take.id,
@@ -2124,6 +2141,58 @@ class ShortDramaService:
             qa_issues.extend(issue.model_copy(deep=True) for issue in inspection.issues)
             reviewer_notes.append(
                 f"{inspection.id}: {inspection.summary}"
+            )
+        if request.audio_inspection_id is not None:
+            audio_inspection = self.repository.get_audio_inspection(
+                request.audio_inspection_id
+            )
+            if (
+                audio_inspection is None
+                or audio_inspection.project_id != project_id
+            ):
+                raise ArtifactNotFoundError(request.audio_inspection_id)
+            shot_clip_inspections = [
+                item
+                for item in audio_inspection.clip_inspections
+                if item.shot_id == shot_id
+            ]
+            shot_dialogue_checks = [
+                item
+                for item in audio_inspection.dialogue_checks
+                if item.shot_id == shot_id
+            ]
+            if not shot_clip_inspections and not shot_dialogue_checks:
+                raise WorkflowConflictError(
+                    "Director advice audio inspection has no evidence for this shot"
+                )
+            if request.take_id is not None and not any(
+                item.take_id == request.take_id
+                for item in [*shot_clip_inspections, *shot_dialogue_checks]
+            ):
+                raise WorkflowConflictError(
+                    "Director advice Take and audio inspection do not refer to the same output"
+                )
+            qa_issues.extend(
+                issue.model_copy(deep=True)
+                for item in shot_clip_inspections
+                for issue in item.issues
+            )
+            qa_issues.extend(
+                issue.model_copy(deep=True)
+                for item in shot_dialogue_checks
+                for issue in item.issues
+            )
+            relevant_speakers = {
+                item.expected_speaker for item in shot_dialogue_checks
+            }
+            qa_issues.extend(
+                issue.model_copy(deep=True)
+                for issue in audio_inspection.issues
+                if issue.code == "VOICE_CONTINUITY_REVIEW"
+                and any(speaker in issue.message for speaker in relevant_speakers)
+            )
+            reviewer_notes.append(
+                f"{audio_inspection.id}: {audio_inspection.summary}"
             )
         capability_profile = build_h3_capability_profile(
             self.repository.list_takes(project_id),
@@ -3048,6 +3117,80 @@ class ShortDramaService:
             project=self.get_project(take.project_id),
         )
 
+    def inspect_current_manifest_audio(
+        self,
+        project_id: str,
+        request: AudioInspectionRequest,
+    ) -> AudioInspectionResponse:
+        document = self._require_project_document(project_id)
+        manifest = self._current_manifest(document)
+        report = self.audio_inspector.inspect_manifest(
+            document=document,
+            manifest=manifest,
+            request=request,
+            semantic_service=self.audio_semantic_service,
+            created_at=utc_now(),
+        )
+        self.repository.save_audio_inspection(report)
+        return AudioInspectionResponse(
+            report=report,
+            project=self.get_project(project_id),
+        )
+
+    def _ensure_current_manifest_audio_inspection(
+        self,
+        project_id: str,
+    ) -> AudioInspectionReport:
+        document = self._require_project_document(project_id)
+        manifest = self._current_manifest(document)
+        existing = [
+            item
+            for item in self.repository.list_audio_inspections(project_id)
+            if item.manifest_id == manifest.id
+        ]
+        if existing:
+            latest = existing[-1]
+            if (
+                latest.semantic_status == SemanticReviewStatus.COMPLETE
+                or self.audio_semantic_service is None
+            ):
+                return latest
+        return self.inspect_current_manifest_audio(
+            project_id,
+            AudioInspectionRequest(
+                semantic_review=True,
+                speaker_continuity=True,
+            ),
+        ).report
+
+    def _record_autonomous_audio_findings(
+        self,
+        project_id: str,
+        run_id: str,
+        report: AudioInspectionReport,
+    ) -> None:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            run = next(
+                (item for item in document.autonomous_runs if item.id == run_id),
+                None,
+            )
+            if run is None:
+                raise ArtifactNotFoundError(run_id)
+            prefix = f"Audio QA {report.id}:"
+            run.warnings = [item for item in run.warnings if not item.startswith(prefix)]
+            severe = sum(
+                issue.severity.upper()
+                in {"ERROR", "HIGH", "MAJOR", "CRITICAL", "FATAL"}
+                for issue in report.issues
+            )
+            run.warnings.append(
+                f"{prefix} semantic={report.semantic_status.value}, "
+                f"severe_issues={severe}. {report.summary}"
+            )
+            run.updated_at = utc_now()
+            self.repository.save_project(document)
+
     def review_h3_take(
         self,
         take_id: str,
@@ -3399,18 +3542,32 @@ class ShortDramaService:
             )
 
         self.rebuild_manifest(project_id)
+        if autonomous_run_id is not None:
+            self._advance_autonomous_run(
+                project_id,
+                autonomous_run_id,
+                completed_step=AutonomousRunStep.TIMELINE,
+                next_step=AutonomousRunStep.AUDIO_QA,
+            )
+        audio_report = self._ensure_current_manifest_audio_inspection(project_id)
+        if autonomous_run_id is not None:
+            self._record_autonomous_audio_findings(
+                project_id,
+                autonomous_run_id,
+                audio_report,
+            )
         export: ExportRecord | None = None
         if render_export:
             if autonomous_run_id is not None:
                 self._advance_autonomous_run(
                     project_id,
                     autonomous_run_id,
-                    completed_step=AutonomousRunStep.TIMELINE,
+                    completed_step=AutonomousRunStep.AUDIO_QA,
                     next_step=AutonomousRunStep.EXPORT,
                 )
             export = self.export_project(project_id, rebuild_manifest=False)
         if autonomous_run_id is not None:
-            completed_steps = [AutonomousRunStep.TIMELINE]
+            completed_steps = [AutonomousRunStep.AUDIO_QA]
             if export is not None:
                 completed_steps.append(AutonomousRunStep.EXPORT)
             self._finish_autonomous_run(
@@ -3776,6 +3933,7 @@ class ShortDramaService:
             exports=exports,
             route_evidence=self.repository.list_route_evidence(document.project.id),
             video_inspections=self.repository.list_video_inspections(document.project.id),
+            audio_inspections=self.repository.list_audio_inspections(document.project.id),
             progress=progress,
         )
 

@@ -52,6 +52,8 @@ export type QaFailureCategory = components['schemas']['QaFailureCategory']
 export type CreativeInputImage = components['schemas']['CreativeInputImage']
 export type VideoInspectionReport = components['schemas']['VideoInspectionReport']
 export type VideoInspectionRequest = components['schemas']['VideoInspectionRequest']
+export type AudioInspectionReport = components['schemas']['AudioInspectionReport']
+export type AudioInspectionRequest = components['schemas']['AudioInspectionRequest']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -67,6 +69,7 @@ const exportProject = makeEndpointClient('/api/short-drama/projects/{project_id}
 const reviseScriptLine = makeEndpointClient('/api/short-drama/projects/{project_id}/script/revise-line', 'post')
 const selectTake = makeEndpointClient('/api/short-drama/takes/{take_id}/select', 'post')
 const inspectTakeVideo = makeEndpointClient('/api/short-drama/takes/{take_id}/inspect-video', 'post')
+const inspectProjectAudio = makeEndpointClient('/api/short-drama/projects/{project_id}/inspect-audio', 'post')
 const advanceTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/advance', 'post')
 const cancelTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/cancel', 'post')
 const retryTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/retry', 'post')
@@ -176,6 +179,13 @@ export const ShortDramaApi = {
       body,
       undefined,
       `/api/short-drama/takes/${encodeURIComponent(takeId)}/inspect-video`,
+    )
+  ),
+  inspectProjectAudio: (projectId: string, body: AudioInspectionRequest) => (
+    inspectProjectAudio(
+      body,
+      undefined,
+      projectPath(projectId, '/inspect-audio'),
     )
   ),
   advanceTask: (taskId: string) => advanceTask(undefined, undefined, taskPath(taskId, 'advance')),

@@ -47,6 +47,7 @@ class AutonomousRunStep(StrEnum):
     GENERATE = "GENERATE"
     QA_AND_REPAIR = "QA_AND_REPAIR"
     TIMELINE = "TIMELINE"
+    AUDIO_QA = "AUDIO_QA"
     EXPORT = "EXPORT"
     COMPLETE = "COMPLETE"
 
@@ -112,6 +113,12 @@ class SemanticReviewStatus(StrEnum):
     UNAVAILABLE = "UNAVAILABLE"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
+
+
+class AudioContinuityAssessment(StrEnum):
+    PASSED = "PASSED"
+    REVIEW = "REVIEW"
+    UNKNOWN = "UNKNOWN"
 
 
 class ObservationConfidence(StrEnum):
@@ -826,6 +833,124 @@ class VideoInspectionReport(DomainModel):
     created_at: str
 
 
+class AudioTimeRange(DomainModel):
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(ge=0.0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> AudioTimeRange:
+        if self.end_seconds < self.start_seconds:
+            raise ValueError("Audio time range end must not precede start")
+        return self
+
+
+class AudioSignalMetrics(DomainModel):
+    duration_seconds: float = Field(ge=0.0)
+    sample_rate_hz: int = Field(gt=0)
+    channels: int = Field(gt=0)
+    peak_dbfs: float
+    rms_dbfs: float
+    clipped_sample_ratio: float = Field(ge=0.0, le=1.0)
+    silent_window_ratio: float = Field(ge=0.0, le=1.0)
+    leading_silence_seconds: float = Field(ge=0.0)
+    trailing_silence_seconds: float = Field(ge=0.0)
+    speech_intervals: list[AudioTimeRange] = Field(
+        default_factory=list[AudioTimeRange],
+        max_length=128,
+    )
+
+
+class AudioClipInspection(DomainModel):
+    clip_id: str
+    shot_id: str
+    take_id: str
+    media_path: str
+    timeline_start_seconds: float = Field(ge=0.0)
+    expected_duration_seconds: float = Field(gt=0.0)
+    extracted_audio_path: str | None = None
+    metrics: AudioSignalMetrics | None = None
+    technical_checks: list[TechnicalCheck] = Field(default_factory=list[TechnicalCheck])
+    issues: list[QaIssue] = Field(default_factory=list[QaIssue])
+
+
+class DialogueAudioCheck(DomainModel):
+    cue_id: str
+    script_line_id: str
+    shot_id: str
+    take_id: str
+    expected_speaker: str
+    expected_text: str
+    cue_start_seconds: float = Field(ge=0.0)
+    cue_end_seconds: float = Field(ge=0.0)
+    extracted_audio_path: str | None = None
+    transcription_status: SemanticReviewStatus
+    transcript_text: str | None = None
+    normalized_expected: str
+    normalized_transcript: str | None = None
+    exact_match: bool | None = None
+    character_error_rate: float | None = Field(default=None, ge=0.0)
+    speech_coverage_ratio: float | None = Field(default=None, ge=0.0, le=1.0)
+    provider: str | None = None
+    model: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    issues: list[QaIssue] = Field(default_factory=list[QaIssue])
+
+    @model_validator(mode="after")
+    def validate_cue_order(self) -> DialogueAudioCheck:
+        if self.cue_end_seconds < self.cue_start_seconds:
+            raise ValueError("Dialogue cue end must not precede start")
+        return self
+
+
+class SpeakerVoiceContinuityCheck(DomainModel):
+    speaker: str
+    voice_identity: str | None = None
+    script_line_ids: list[str] = Field(default_factory=list[str])
+    comparison_count: int = Field(ge=0)
+    minimum_same_speaker_similarity: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+    )
+    median_same_speaker_similarity: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+    )
+    maximum_other_speaker_similarity: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+    )
+    assessment: AudioContinuityAssessment
+    detail: str
+
+
+class AudioInspectionReport(DomainModel):
+    id: str
+    project_id: str
+    manifest_id: str
+    source_script_version_id: str
+    semantic_status: SemanticReviewStatus
+    semantic_provider: str | None = None
+    transcription_model: str | None = None
+    speaker_model: str | None = None
+    clip_inspections: list[AudioClipInspection] = Field(
+        default_factory=list[AudioClipInspection]
+    )
+    dialogue_checks: list[DialogueAudioCheck] = Field(
+        default_factory=list[DialogueAudioCheck]
+    )
+    speaker_checks: list[SpeakerVoiceContinuityCheck] = Field(
+        default_factory=list[SpeakerVoiceContinuityCheck]
+    )
+    technical_checks: list[TechnicalCheck] = Field(default_factory=list[TechnicalCheck])
+    issues: list[QaIssue] = Field(default_factory=list[QaIssue])
+    summary: str = Field(min_length=1, max_length=4000)
+    warnings: list[str] = Field(default_factory=list[str])
+    created_at: str
+
+
 class ExportRecord(DomainModel):
     id: str
     project_id: str
@@ -862,6 +987,9 @@ class ProjectAggregate(DomainModel):
     video_inspections: list[VideoInspectionReport] = Field(
         default_factory=list[VideoInspectionReport]
     )
+    audio_inspections: list[AudioInspectionReport] = Field(
+        default_factory=list[AudioInspectionReport]
+    )
     progress: ProgressSummary
 
 
@@ -895,6 +1023,12 @@ class VideoInspectionRequest(DomainModel):
     semantic_review: bool = True
     max_frames: int = Field(default=14, ge=6, le=24)
     review_focus: str | None = Field(default=None, max_length=2000)
+
+
+class AudioInspectionRequest(DomainModel):
+    semantic_review: bool = True
+    speaker_continuity: bool = True
+    dialogue_padding_seconds: float = Field(default=0.35, ge=0.0, le=1.5)
 
 
 class AutonomousDraftCreateRequest(CreateProjectRequest):
@@ -972,6 +1106,11 @@ class AutonomousDraftResponse(AutoDraftResponse):
 
 class VideoInspectionResponse(DomainModel):
     report: VideoInspectionReport
+    project: ProjectAggregate
+
+
+class AudioInspectionResponse(DomainModel):
+    report: AudioInspectionReport
     project: ProjectAggregate
 
 

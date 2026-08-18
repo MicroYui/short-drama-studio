@@ -12,6 +12,7 @@ from typing import cast
 from short_drama.h3_models import H3ProductionRoutePlan, H3ProviderRun, H3UploadedInput
 from short_drama.image_models import ImageGenerationTask, ImageTaskStatus
 from short_drama.models import (
+    AudioInspectionReport,
     EvidenceStatus,
     ExportRecord,
     Freshness,
@@ -180,6 +181,16 @@ class ShortDramaRepository:
                 CREATE INDEX IF NOT EXISTS idx_video_inspections_project_shot
                     ON video_inspections(project_id, shot_id, created_at);
 
+                CREATE TABLE IF NOT EXISTS audio_inspections (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    manifest_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_audio_inspections_project_manifest
+                    ON audio_inspections(project_id, manifest_id, created_at);
+
                 CREATE TABLE IF NOT EXISTS h3_route_plans (
                     id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -221,6 +232,9 @@ class ShortDramaRepository:
             )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(6, datetime('now'))"
             )
 
     def save_project(self, document: ProjectDocument) -> None:
@@ -732,6 +746,48 @@ class ShortDramaRepository:
             ).fetchall()
         return [
             VideoInspectionReport.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]
+
+    def save_audio_inspection(self, report: AudioInspectionReport) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO audio_inspections(
+                    id, project_id, manifest_id, created_at, record_json
+                ) VALUES(?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET record_json = excluded.record_json
+                """,
+                (
+                    report.id,
+                    report.project_id,
+                    report.manifest_id,
+                    report.created_at,
+                    report.model_dump_json(),
+                ),
+            )
+
+    def get_audio_inspection(self, report_id: str) -> AudioInspectionReport | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM audio_inspections WHERE id = ?",
+                (report_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return AudioInspectionReport.model_validate_json(cast(str, row["record_json"]))
+
+    def list_audio_inspections(self, project_id: str) -> list[AudioInspectionReport]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM audio_inspections
+                WHERE project_id = ? ORDER BY created_at ASC, id ASC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            AudioInspectionReport.model_validate_json(cast(str, row["record_json"]))
             for row in rows
         ]
 

@@ -638,19 +638,32 @@ function TimelinePanel({ project, onBuild, onExport }: { project: ProjectAggrega
   )
 }
 
-function QaPanel({ project }: { project: ProjectAggregate }) {
+function QaPanel({
+  project,
+  onInspectAudio,
+}: {
+  project: ProjectAggregate
+  onInspectAudio: () => void
+}) {
   const exported = currentExport(project)
   const currentTakes = project.takes.filter((take) => take.freshness === 'CURRENT')
   const hardPass = currentTakes.filter((take) => take.qa_report.hard_gate_passed).length
   const videoInspections = project.video_inspections ?? []
+  const audioInspections = project.audio_inspections ?? []
+  const latestAudio = audioInspections.at(-1)
+  const latestAudioClips = latestAudio?.clip_inspections ?? []
+  const latestDialogueChecks = latestAudio?.dialogue_checks ?? []
+  const latestSpeakerChecks = latestAudio?.speaker_checks ?? []
+  const latestAudioIssues = latestAudio?.issues ?? []
   return (
     <div>
       <SectionTitle title="质量检查" description="Mock QA 只证明媒体、引用、时钟和导出正确；真人表演、身份、口型和观看意愿必须等真实 H3 样片与人工盲评。" />
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="当前 Take" value={currentTakes.length} detail="旧版本不丢失" />
         <Metric label="硬门槛" value={`${hardPass}/${currentTakes.length}`} detail="Mock 技术门槛" />
         <Metric label="失效 Take" value={project.progress.stale_takes} detail="仍可复现旧成片" />
         <Metric label="视频观察" value={videoInspections.length} detail="适应性抽帧报告" />
+        <Metric label="音频 QA" value={audioInspections.length} detail="对白、声线与字幕" />
         <Metric label="导出检查" value={exported ? `${exported.checks.filter((check) => check.passed).length}/${exported.checks.length}` : '—'} detail="FFmpeg 媒体合规" />
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
@@ -697,6 +710,30 @@ function QaPanel({ project }: { project: ProjectAggregate }) {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+      <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h3 className="font-medium text-white">音频与对白检查工具</h3><p className="mt-1 text-xs leading-5 text-zinc-500">逐镜提取原生音轨，检查静音、削波、时长与字幕时间；可用语音服务时再核对锁定对白和跨镜声线。结果是 Director 可忽略建议。</p></div>
+          <button className={secondaryButton} disabled={!currentManifest(project)} onClick={onInspectAudio}><FileAudio className="h-4 w-4" />重新检查当前时间线</button>
+        </div>
+        {!latestAudio ? <p className="mt-8 text-center text-sm text-zinc-600">生成时间线后可运行 AudioInspection；AUTO_DRAFT 会在导出前自动执行。</p> : (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+              <div className="flex flex-wrap items-center gap-2"><Badge tone={latestAudio.semantic_status === 'COMPLETE' ? 'green' : latestAudio.semantic_status === 'FAILED' ? 'amber' : 'neutral'}>{latestAudio.semantic_status}</Badge><span className="text-[11px] text-zinc-600">{latestAudioClips.length} 音轨 · {latestDialogueChecks.length} 句对白 · {latestAudioIssues.length} 个问题</span></div>
+              <p className="mt-2 text-xs leading-5 text-zinc-400">{latestAudio.summary}</p>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {latestDialogueChecks.map((check) => (
+                <div key={check.cue_id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                  <div className="flex items-center justify-between gap-2"><span className="text-xs font-medium text-zinc-300">{check.expected_speaker}</span><Badge tone={check.exact_match === true ? 'green' : check.exact_match === false ? 'amber' : 'neutral'}>{check.exact_match === true ? '逐字一致' : check.exact_match === false ? `CER ${(check.character_error_rate ?? 0).toFixed(3)}` : check.transcription_status}</Badge></div>
+                  <p className="mt-2 text-xs text-zinc-400">锁定：{check.expected_text}</p>
+                  <p className="mt-1 text-xs text-zinc-500">识别：{check.transcript_text ?? '暂无 STT 结果'}</p>
+                </div>
+              ))}
+            </div>
+            {latestSpeakerChecks.length > 0 && <div className="grid gap-2 md:grid-cols-2">{latestSpeakerChecks.map((check) => <div key={check.speaker} className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2.5"><div className="flex items-center justify-between"><span className="text-xs font-medium text-zinc-300">{check.speaker} · {check.voice_identity ?? '未命名声线'}</span><Badge tone={check.assessment === 'PASSED' ? 'green' : check.assessment === 'REVIEW' ? 'amber' : 'neutral'}>{check.assessment}</Badge></div><p className="mt-1 text-[11px] leading-5 text-zinc-600">{check.detail}</p></div>)}</div>}
           </div>
         )}
       </div>
@@ -1018,6 +1055,19 @@ export function ShortDramaStudio() {
     (data) => setProject(data.project),
   )
 
+  const inspectAudio = () => {
+    if (!activeProjectId) return
+    void perform(
+      '检查对白、声线与字幕时间',
+      () => ShortDramaApi.inspectProjectAudio(activeProjectId, {
+        semantic_review: true,
+        speaker_continuity: true,
+        dialogue_padding_seconds: 0.35,
+      }),
+      (data) => setProject(data.project),
+    )
+  }
+
   const reviseLine = (line: ScriptLine, spoken: string, subtitle: string) => {
     if (!activeProjectId) return
     void perform('创建新剧本版本并局部失效', () => ShortDramaApi.reviseScriptLine(activeProjectId, { line_id: line.id, spoken_text: spoken, subtitle_text: subtitle, change_reason: '工作台台词修改' }), setProject)
@@ -1053,7 +1103,7 @@ export function ShortDramaStudio() {
     if (tab === 'h3') return <H3LabPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
     if (tab === 'takes') return <TakesPanel project={project} onDrain={drain} onTaskAction={handleTaskAction} onCancel={cancelTask} onSelect={selectTake} onInspect={inspectTake} />
     if (tab === 'timeline') return <TimelinePanel project={project} onBuild={buildManifest} onExport={exportProject} />
-    return <QaPanel project={project} />
+    return <QaPanel project={project} onInspectAudio={inspectAudio} />
   }, [project, tab])
 
   const shouldShowCreate = showCreate || !project

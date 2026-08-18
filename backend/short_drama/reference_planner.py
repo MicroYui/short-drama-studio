@@ -117,6 +117,7 @@ class DirectorAdviceRequest(ReferencePlanPreviewRequest):
     user_direction: str | None = Field(default=None, max_length=2000)
     take_id: str | None = Field(default=None, max_length=200)
     inspection_id: str | None = Field(default=None, max_length=200)
+    audio_inspection_id: str | None = Field(default=None, max_length=200)
 
 
 class DirectorAdvisoryCategory(StrEnum):
@@ -127,6 +128,7 @@ class DirectorAdvisoryCategory(StrEnum):
     CAMERA = "CAMERA"
     CONTINUITY = "CONTINUITY"
     ROUTE = "ROUTE"
+    AUDIO = "AUDIO"
     OTHER = "OTHER"
 
 

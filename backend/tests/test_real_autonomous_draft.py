@@ -497,12 +497,16 @@ def test_real_autonomous_draft_resumes_and_exports_without_shot_by_shot_input(
     assert "PLAN_ROUTES" in {
         step.value for step in response.run.completed_steps
     }
+    assert "AUDIO_QA" in {
+        step.value for step in response.run.completed_steps
+    }
     assert response.export is not None
     assert Path(response.export.subtitled_video_path).is_file()
     selected = [item for item in response.project.takes if item.is_selected]
     assert len(selected) == len(response.project.document.shots)
     assert {item.provider for item in selected} == {"minimax"}
     assert response.project.video_inspections
+    assert response.project.audio_inspections
     later_shot_ids = {
         item.id for item in response.project.document.shots if item.sequence > 1
     }

@@ -14,9 +14,9 @@
 
 首版运行在单用户、受信环境中，不设计注册、登录、账号体系、RBAC、多租户、团队成员或分享权限。生产流程中的“批准/确认”是内容状态，不是访问控制。外部模型 API 凭证只作为 Provider 配置处理。
 
-当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider、Phase 3 Azure GPT Image 2 资产工作台，以及 Phase 4 H3 Direct、Frame、Reference 与通用 Director 修复实验。S08 最终拆为两个覆盖镜头并由用户按整体可用标准通过，旧异常 Take 已退出正式时间线。Phase 5 已实现四种输入归一化、`AutonomousRun`、一键 Mock 草稿和长镜头/镜间观察工具。Phase 6 已实现证据优先的 H3 制片路线 Agent，不新增 H3 请求地复用 9 条已通过真实 Take，自动完成 9 镜观察、57.13 秒全 H3 TimelineManifest 和 1080×1920 技术导出。Phase 7 已把资产准备、H3 异步候选、视频观察、通用 QA、Director 有界修复、Take 选择和导出串为可恢复的真人 `AUTO_DRAFT`。Phase 8 已在真实 GPT Image 2、GPT-5.6-sol 和 H3 768P 下完成第一次 9 镜、54.31 秒无人值守单集；技术 QA 全部通过，用户已按本轮整体可用标准暂时通过最终成片。E007 仍缺逐字声音 QA、另外两次独立运行和三人盲评。
+当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线、Phase 1 Mock 垂直切片、Phase 2 MiniMax-H3 768P Provider、Phase 3 Azure GPT Image 2 资产工作台，以及 Phase 4 H3 Direct、Frame、Reference 与通用 Director 修复实验。S08 最终拆为两个覆盖镜头并由用户按整体可用标准通过，旧异常 Take 已退出正式时间线。Phase 5 已实现四种输入归一化、`AutonomousRun`、一键 Mock 草稿和长镜头/镜间观察工具。Phase 6 已实现证据优先的 H3 制片路线 Agent，不新增 H3 请求地复用 9 条已通过真实 Take，自动完成 9 镜观察、57.13 秒全 H3 TimelineManifest 和 1080×1920 技术导出。Phase 7 已把资产准备、H3 异步候选、视频观察、通用 QA、Director 有界修复、Take 选择和导出串为可恢复的真人 `AUTO_DRAFT`。Phase 8 已在真实 GPT Image 2、GPT-5.6-sol 和 H3 768P 下完成第一次 9 镜、54.31 秒无人值守单集；技术 QA 全部通过，用户已按本轮整体可用标准暂时通过最终成片。Phase 9 已把音轨、字幕时间、锁定对白和跨镜声线做成 Provider 中立工具并接入 `AUTO_DRAFT`；对 Phase 8 成片的真实复检得到 9/9 音轨技术通过、5/5 归一化后逐字一致、两名角色声线检查通过。E007 仍缺另外两次独立运行和三人盲评。
 
-工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)、[成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)、[Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md)、[Phase 6：真实 H3 制片路线与整集复用闭环](16-phase6-real-route-planner.md)、[Phase 7：从零真人 AUTO_DRAFT](17-phase7-real-autonomous-draft.md) 和 [Phase 8：首次真实无人值守 AUTO_DRAFT](18-phase8-real-autonomous-validation.md)。
+工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)、[成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)、[Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md)、[Phase 6：真实 H3 制片路线与整集复用闭环](16-phase6-real-route-planner.md)、[Phase 7：从零真人 AUTO_DRAFT](17-phase7-real-autonomous-draft.md)、[Phase 8：首次真实无人值守 AUTO_DRAFT](18-phase8-real-autonomous-validation.md) 和 [Phase 9：自动音频、对白与声线 QA](19-phase9-audio-dialogue-qa.md)。
 
 ## 证据等级
 
@@ -52,10 +52,10 @@
 
 MiniMax 官方资料显示 H3 是原生视听模型，支持 4–15 秒、768P/2K、9:16，以及图片/视频/音频参考。官方 Prompt Guide 还提供稳定说话人编号、原语言对白和多镜头时间描述。当前视频生成只接 H3，不讨论其他视频模型候选；但 H3 内部仍要实测 Direct、Frame、Reference、原生音频和外部音频路线，不能把“唯一可用”误写成“所有能力已验证”。原生音频应先作为基线，不默认叠加外部 TTS。
 
-但以下能力仍为 `UNKNOWN`：
+Phase 9 已证明 Phase 8 这一部成片的五句锁定对白在繁简体、标点归一化后为 5/5 一致，两名角色的跨镜声线相对一致性也通过。以下跨剧本、跨运行或更复杂条件仍为 `UNKNOWN`：
 
-- 中文对白能否逐字、逐标点稳定复现；
-- 同一角色能否跨多个独立任务保持声线；
+- 中文对白能否在不同剧本、语速和独立运行中稳定逐字复现；
+- 同一角色能否跨更多独立任务和项目保持声线；
 - 多人对话是否稳定分配给正确角色；
 - 参考音频究竟是直接复用、声线参考，还是两者都可稳定控制；
 - 口型在正脸、侧脸、快速台词和多说话人场景下的质量；
@@ -90,5 +90,5 @@ H3 的首帧/尾帧角色与 reference image/video/audio 角色不能在同一�
 - 开源结论基于 [固定 commit](sources.md)，没有安装全部依赖或运行其真实付费 Provider。
 - 当前已有固定资产下的多路线、多样本和人工审片证据，但仍不足以把某条路线提前写成所有镜头的稳定默认；S08 两镜覆盖方案已经通过，原单镜失败沉淀为能力画像、通用 QA、Director 修复策略和回归案例。
 - 视频观察工具已在真实单集生成长镜头时间序列和相邻镜头边界证据，并发现整片总览中的身份漂移、画外道具误入和边界状态问题；跨项目召回率、漏报率和默认阈值仍是 `UNKNOWN`。
-- 代表样本中的普通话声音与口型总体可用，但跨镜声线稳定、严格逐字正确率和完整单集音画一致性仍需最终八镜成片验证。
+- Phase 8 完整单集已由自动音频工具验证 9/9 音轨技术通过、5/5 归一化后逐字一致和两名角色跨镜声线通过；口型、主观表演、环境声以及跨三次独立运行的稳定性仍需 E007 人工盲评与后续样本验证。
 - 成本与配额高度时效化；本轮保留 `UNKNOWN` 并在实施时记录，但它们不是质量路线的主要决策因子。

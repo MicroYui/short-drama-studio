@@ -20,6 +20,7 @@ from starlette.responses import Response as StarletteResponse
 
 from _routes._errors import HTTPError, build_http_error_response
 from _routes.short_drama import router as short_drama_router
+from short_drama.audio_inspection import TransformersAudioSemanticService
 from short_drama.deps import init_short_drama_service
 from short_drama.service import ShortDramaService
 
@@ -56,6 +57,20 @@ OUTPUTS_DIR = APP_DATA_DIR / "outputs" / "short-drama-projects"
 SERVICE = ShortDramaService(
     database_path=APP_DATA_DIR / "short-drama.sqlite3",
     workspace_root=OUTPUTS_DIR,
+    audio_semantic_service=TransformersAudioSemanticService(
+        transcription_model=os.environ.get(
+            "SHORT_DRAMA_TRANSCRIPTION_MODEL",
+            "openai/whisper-small",
+        ),
+        speaker_model=(
+            os.environ.get(
+                "SHORT_DRAMA_SPEAKER_MODEL",
+                "microsoft/wavlm-base-plus-sv",
+            ).strip()
+            or None
+        ),
+        device=os.environ.get("SHORT_DRAMA_AUDIO_DEVICE", "auto"),
+    ),
 )
 init_short_drama_service(SERVICE)
 

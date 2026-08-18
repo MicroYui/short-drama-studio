@@ -1067,6 +1067,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/inspect-audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect Project Audio */
+        post: operations["inspect_project_audio_api_short_drama_projects__project_id__inspect_audio_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/manifest/rebuild": {
         parameters: {
             query?: never;
@@ -1836,11 +1853,125 @@ export interface components {
             /** Width */
             width?: number | null;
         };
+        /** AudioClipInspection */
+        AudioClipInspection: {
+            /** Clip Id */
+            clip_id: string;
+            /** Expected Duration Seconds */
+            expected_duration_seconds: number;
+            /** Extracted Audio Path */
+            extracted_audio_path?: string | null;
+            /** Issues */
+            issues?: components["schemas"]["QaIssue"][];
+            /** Media Path */
+            media_path: string;
+            metrics?: components["schemas"]["AudioSignalMetrics"] | null;
+            /** Shot Id */
+            shot_id: string;
+            /** Take Id */
+            take_id: string;
+            /** Technical Checks */
+            technical_checks?: components["schemas"]["TechnicalCheck"][];
+            /** Timeline Start Seconds */
+            timeline_start_seconds: number;
+        };
+        /**
+         * AudioContinuityAssessment
+         * @enum {string}
+         */
+        AudioContinuityAssessment: "PASSED" | "REVIEW" | "UNKNOWN";
+        /** AudioInspectionReport */
+        AudioInspectionReport: {
+            /** Clip Inspections */
+            clip_inspections?: components["schemas"]["AudioClipInspection"][];
+            /** Created At */
+            created_at: string;
+            /** Dialogue Checks */
+            dialogue_checks?: components["schemas"]["DialogueAudioCheck"][];
+            /** Id */
+            id: string;
+            /** Issues */
+            issues?: components["schemas"]["QaIssue"][];
+            /** Manifest Id */
+            manifest_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Semantic Provider */
+            semantic_provider?: string | null;
+            semantic_status: components["schemas"]["SemanticReviewStatus"];
+            /** Source Script Version Id */
+            source_script_version_id: string;
+            /** Speaker Checks */
+            speaker_checks?: components["schemas"]["SpeakerVoiceContinuityCheck"][];
+            /** Speaker Model */
+            speaker_model?: string | null;
+            /** Summary */
+            summary: string;
+            /** Technical Checks */
+            technical_checks?: components["schemas"]["TechnicalCheck"][];
+            /** Transcription Model */
+            transcription_model?: string | null;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** AudioInspectionRequest */
+        AudioInspectionRequest: {
+            /**
+             * Dialogue Padding Seconds
+             * @default 0.35
+             */
+            dialogue_padding_seconds: number;
+            /**
+             * Semantic Review
+             * @default true
+             */
+            semantic_review: boolean;
+            /**
+             * Speaker Continuity
+             * @default true
+             */
+            speaker_continuity: boolean;
+        };
+        /** AudioInspectionResponse */
+        AudioInspectionResponse: {
+            project: components["schemas"]["ProjectAggregate"];
+            report: components["schemas"]["AudioInspectionReport"];
+        };
         /**
          * AudioKind
          * @enum {string}
          */
         AudioKind: "DIALOGUE" | "VOICEOVER" | "AMBIENCE" | "BREATH" | "EFFECT";
+        /** AudioSignalMetrics */
+        AudioSignalMetrics: {
+            /** Channels */
+            channels: number;
+            /** Clipped Sample Ratio */
+            clipped_sample_ratio: number;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Leading Silence Seconds */
+            leading_silence_seconds: number;
+            /** Peak Dbfs */
+            peak_dbfs: number;
+            /** Rms Dbfs */
+            rms_dbfs: number;
+            /** Sample Rate Hz */
+            sample_rate_hz: number;
+            /** Silent Window Ratio */
+            silent_window_ratio: number;
+            /** Speech Intervals */
+            speech_intervals?: components["schemas"]["AudioTimeRange"][];
+            /** Trailing Silence Seconds */
+            trailing_silence_seconds: number;
+        };
+        /** AudioTimeRange */
+        AudioTimeRange: {
+            /** End Seconds */
+            end_seconds: number;
+            /** Start Seconds */
+            start_seconds: number;
+        };
         /** AuthorSpec */
         AuthorSpec: {
             /**
@@ -1963,7 +2094,7 @@ export interface components {
          * AutonomousRunStep
          * @enum {string}
          */
-        AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "PREPARE_ASSETS" | "PLAN_ROUTES" | "PREPARE_SHOT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "EXPORT" | "COMPLETE";
+        AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "PREPARE_ASSETS" | "PLAN_ROUTES" | "PREPARE_SHOT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "AUDIO_QA" | "EXPORT" | "COMPLETE";
         /** CancelCancellingResponse */
         CancelCancellingResponse: {
             /** Id */
@@ -2129,8 +2260,52 @@ export interface components {
             /** Checkpoints */
             checkpoints: components["schemas"]["CheckpointDescriptor"][];
         };
+        /** DialogueAudioCheck */
+        DialogueAudioCheck: {
+            /** Character Error Rate */
+            character_error_rate?: number | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Cue End Seconds */
+            cue_end_seconds: number;
+            /** Cue Id */
+            cue_id: string;
+            /** Cue Start Seconds */
+            cue_start_seconds: number;
+            /** Exact Match */
+            exact_match?: boolean | null;
+            /** Expected Speaker */
+            expected_speaker: string;
+            /** Expected Text */
+            expected_text: string;
+            /** Extracted Audio Path */
+            extracted_audio_path?: string | null;
+            /** Issues */
+            issues?: components["schemas"]["QaIssue"][];
+            /** Model */
+            model?: string | null;
+            /** Normalized Expected */
+            normalized_expected: string;
+            /** Normalized Transcript */
+            normalized_transcript?: string | null;
+            /** Provider */
+            provider?: string | null;
+            /** Script Line Id */
+            script_line_id: string;
+            /** Shot Id */
+            shot_id: string;
+            /** Speech Coverage Ratio */
+            speech_coverage_ratio?: number | null;
+            /** Take Id */
+            take_id: string;
+            /** Transcript Text */
+            transcript_text?: string | null;
+            transcription_status: components["schemas"]["SemanticReviewStatus"];
+        };
         /** DirectorAdviceRequest */
         DirectorAdviceRequest: {
+            /** Audio Inspection Id */
+            audio_inspection_id?: string | null;
             /** Inspection Id */
             inspection_id?: string | null;
             /** Max Images */
@@ -2193,7 +2368,7 @@ export interface components {
          * DirectorAdvisoryCategory
          * @enum {string}
          */
-        DirectorAdvisoryCategory: "REFERENCE_GAP" | "TOPOLOGY" | "ACTION_COMPLEXITY" | "SPLIT_SHOT" | "CAMERA" | "CONTINUITY" | "ROUTE" | "OTHER";
+        DirectorAdvisoryCategory: "REFERENCE_GAP" | "TOPOLOGY" | "ACTION_COMPLEXITY" | "SPLIT_SHOT" | "CAMERA" | "CONTINUITY" | "ROUTE" | "AUDIO" | "OTHER";
         /** DirectorLoopResponse */
         DirectorLoopResponse: {
             advice: components["schemas"]["DirectorAdviceResponse"];
@@ -4608,6 +4783,8 @@ export interface components {
         };
         /** ProjectAggregate */
         ProjectAggregate: {
+            /** Audio Inspections */
+            audio_inspections?: components["schemas"]["AudioInspectionReport"][];
             document: components["schemas"]["ProjectDocument"];
             /** Exports */
             exports: components["schemas"]["ExportRecord"][];
@@ -5464,6 +5641,26 @@ export interface components {
             target_asset_id: string;
             /** Unchanged Anchors */
             unchanged_anchors?: string[];
+        };
+        /** SpeakerVoiceContinuityCheck */
+        SpeakerVoiceContinuityCheck: {
+            assessment: components["schemas"]["AudioContinuityAssessment"];
+            /** Comparison Count */
+            comparison_count: number;
+            /** Detail */
+            detail: string;
+            /** Maximum Other Speaker Similarity */
+            maximum_other_speaker_similarity?: number | null;
+            /** Median Same Speaker Similarity */
+            median_same_speaker_similarity?: number | null;
+            /** Minimum Same Speaker Similarity */
+            minimum_same_speaker_similarity?: number | null;
+            /** Script Line Ids */
+            script_line_ids?: string[];
+            /** Speaker */
+            speaker: string;
+            /** Voice Identity */
+            voice_identity?: string | null;
         };
         /** StatusMessage */
         StatusMessage: {
@@ -8507,6 +8704,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageTaskListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_project_audio_api_short_drama_projects__project_id__inspect_audio_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AudioInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioInspectionResponse"];
                 };
             };
             /** @description Client Error */

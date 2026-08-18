@@ -741,6 +741,252 @@
         "title": "AssetVersion",
         "type": "object"
       },
+      "AudioClipInspection": {
+        "additionalProperties": false,
+        "properties": {
+          "clip_id": {
+            "title": "Clip Id",
+            "type": "string"
+          },
+          "expected_duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Duration Seconds",
+            "type": "number"
+          },
+          "extracted_audio_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Audio Path"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/QaIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "media_path": {
+            "title": "Media Path",
+            "type": "string"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioSignalMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "take_id": {
+            "title": "Take Id",
+            "type": "string"
+          },
+          "technical_checks": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalCheck"
+            },
+            "title": "Technical Checks",
+            "type": "array"
+          },
+          "timeline_start_seconds": {
+            "minimum": 0.0,
+            "title": "Timeline Start Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "clip_id",
+          "shot_id",
+          "take_id",
+          "media_path",
+          "timeline_start_seconds",
+          "expected_duration_seconds"
+        ],
+        "title": "AudioClipInspection",
+        "type": "object"
+      },
+      "AudioContinuityAssessment": {
+        "enum": [
+          "PASSED",
+          "REVIEW",
+          "UNKNOWN"
+        ],
+        "title": "AudioContinuityAssessment",
+        "type": "string"
+      },
+      "AudioInspectionReport": {
+        "additionalProperties": false,
+        "properties": {
+          "clip_inspections": {
+            "items": {
+              "$ref": "#/components/schemas/AudioClipInspection"
+            },
+            "title": "Clip Inspections",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dialogue_checks": {
+            "items": {
+              "$ref": "#/components/schemas/DialogueAudioCheck"
+            },
+            "title": "Dialogue Checks",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/QaIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "semantic_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Provider"
+          },
+          "semantic_status": {
+            "$ref": "#/components/schemas/SemanticReviewStatus"
+          },
+          "source_script_version_id": {
+            "title": "Source Script Version Id",
+            "type": "string"
+          },
+          "speaker_checks": {
+            "items": {
+              "$ref": "#/components/schemas/SpeakerVoiceContinuityCheck"
+            },
+            "title": "Speaker Checks",
+            "type": "array"
+          },
+          "speaker_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Model"
+          },
+          "summary": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "technical_checks": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicalCheck"
+            },
+            "title": "Technical Checks",
+            "type": "array"
+          },
+          "transcription_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcription Model"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "manifest_id",
+          "source_script_version_id",
+          "semantic_status",
+          "summary",
+          "created_at"
+        ],
+        "title": "AudioInspectionReport",
+        "type": "object"
+      },
+      "AudioInspectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dialogue_padding_seconds": {
+            "default": 0.35,
+            "maximum": 1.5,
+            "minimum": 0.0,
+            "title": "Dialogue Padding Seconds",
+            "type": "number"
+          },
+          "semantic_review": {
+            "default": true,
+            "title": "Semantic Review",
+            "type": "boolean"
+          },
+          "speaker_continuity": {
+            "default": true,
+            "title": "Speaker Continuity",
+            "type": "boolean"
+          }
+        },
+        "title": "AudioInspectionRequest",
+        "type": "object"
+      },
+      "AudioInspectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "report": {
+            "$ref": "#/components/schemas/AudioInspectionReport"
+          }
+        },
+        "required": [
+          "report",
+          "project"
+        ],
+        "title": "AudioInspectionResponse",
+        "type": "object"
+      },
       "AudioKind": {
         "enum": [
           "DIALOGUE",
@@ -751,6 +997,98 @@
         ],
         "title": "AudioKind",
         "type": "string"
+      },
+      "AudioSignalMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "exclusiveMinimum": 0.0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "clipped_sample_ratio": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Clipped Sample Ratio",
+            "type": "number"
+          },
+          "duration_seconds": {
+            "minimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "leading_silence_seconds": {
+            "minimum": 0.0,
+            "title": "Leading Silence Seconds",
+            "type": "number"
+          },
+          "peak_dbfs": {
+            "title": "Peak Dbfs",
+            "type": "number"
+          },
+          "rms_dbfs": {
+            "title": "Rms Dbfs",
+            "type": "number"
+          },
+          "sample_rate_hz": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sample Rate Hz",
+            "type": "integer"
+          },
+          "silent_window_ratio": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Silent Window Ratio",
+            "type": "number"
+          },
+          "speech_intervals": {
+            "items": {
+              "$ref": "#/components/schemas/AudioTimeRange"
+            },
+            "maxItems": 128,
+            "title": "Speech Intervals",
+            "type": "array"
+          },
+          "trailing_silence_seconds": {
+            "minimum": 0.0,
+            "title": "Trailing Silence Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "duration_seconds",
+          "sample_rate_hz",
+          "channels",
+          "peak_dbfs",
+          "rms_dbfs",
+          "clipped_sample_ratio",
+          "silent_window_ratio",
+          "leading_silence_seconds",
+          "trailing_silence_seconds"
+        ],
+        "title": "AudioSignalMetrics",
+        "type": "object"
+      },
+      "AudioTimeRange": {
+        "additionalProperties": false,
+        "properties": {
+          "end_seconds": {
+            "minimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "start_seconds": {
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "AudioTimeRange",
+        "type": "object"
       },
       "AuthorSpec": {
         "properties": {
@@ -1079,6 +1417,7 @@
           "GENERATE",
           "QA_AND_REPAIR",
           "TIMELINE",
+          "AUDIO_QA",
           "EXPORT",
           "COMPLETE"
         ],
@@ -1546,9 +1885,192 @@
         "title": "DescribeCheckpointsResponse",
         "type": "object"
       },
+      "DialogueAudioCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "character_error_rate": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Character Error Rate"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "cue_end_seconds": {
+            "minimum": 0.0,
+            "title": "Cue End Seconds",
+            "type": "number"
+          },
+          "cue_id": {
+            "title": "Cue Id",
+            "type": "string"
+          },
+          "cue_start_seconds": {
+            "minimum": 0.0,
+            "title": "Cue Start Seconds",
+            "type": "number"
+          },
+          "exact_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exact Match"
+          },
+          "expected_speaker": {
+            "title": "Expected Speaker",
+            "type": "string"
+          },
+          "expected_text": {
+            "title": "Expected Text",
+            "type": "string"
+          },
+          "extracted_audio_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Audio Path"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/QaIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "normalized_expected": {
+            "title": "Normalized Expected",
+            "type": "string"
+          },
+          "normalized_transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Transcript"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "script_line_id": {
+            "title": "Script Line Id",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "speech_coverage_ratio": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech Coverage Ratio"
+          },
+          "take_id": {
+            "title": "Take Id",
+            "type": "string"
+          },
+          "transcript_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Text"
+          },
+          "transcription_status": {
+            "$ref": "#/components/schemas/SemanticReviewStatus"
+          }
+        },
+        "required": [
+          "cue_id",
+          "script_line_id",
+          "shot_id",
+          "take_id",
+          "expected_speaker",
+          "expected_text",
+          "cue_start_seconds",
+          "cue_end_seconds",
+          "transcription_status",
+          "normalized_expected"
+        ],
+        "title": "DialogueAudioCheck",
+        "type": "object"
+      },
       "DirectorAdviceRequest": {
         "additionalProperties": false,
         "properties": {
+          "audio_inspection_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Inspection Id"
+          },
           "inspection_id": {
             "anyOf": [
               {
@@ -1742,6 +2264,7 @@
           "CAMERA",
           "CONTINUITY",
           "ROUTE",
+          "AUDIO",
           "OTHER"
         ],
         "title": "DirectorAdvisoryCategory",
@@ -8284,6 +8807,13 @@
       "ProjectAggregate": {
         "additionalProperties": false,
         "properties": {
+          "audio_inspections": {
+            "items": {
+              "$ref": "#/components/schemas/AudioInspectionReport"
+            },
+            "title": "Audio Inspections",
+            "type": "array"
+          },
           "document": {
             "$ref": "#/components/schemas/ProjectDocument"
           },
@@ -10660,6 +11190,92 @@
           "end_state"
         ],
         "title": "SpatialInteractionConstraint",
+        "type": "object"
+      },
+      "SpeakerVoiceContinuityCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment": {
+            "$ref": "#/components/schemas/AudioContinuityAssessment"
+          },
+          "comparison_count": {
+            "minimum": 0.0,
+            "title": "Comparison Count",
+            "type": "integer"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "maximum_other_speaker_similarity": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": -1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Other Speaker Similarity"
+          },
+          "median_same_speaker_similarity": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": -1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Same Speaker Similarity"
+          },
+          "minimum_same_speaker_similarity": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": -1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Same Speaker Similarity"
+          },
+          "script_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Script Line Ids",
+            "type": "array"
+          },
+          "speaker": {
+            "title": "Speaker",
+            "type": "string"
+          },
+          "voice_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Identity"
+          }
+        },
+        "required": [
+          "speaker",
+          "comparison_count",
+          "assessment",
+          "detail"
+        ],
+        "title": "SpeakerVoiceContinuityCheck",
         "type": "object"
       },
       "StatusMessage": {
@@ -15179,6 +15795,68 @@
           }
         },
         "summary": "List Image Tasks",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/inspect-audio": {
+      "post": {
+        "operationId": "inspect_project_audio_api_short_drama_projects__project_id__inspect_audio_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudioInspectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioInspectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Inspect Project Audio",
         "tags": [
           "short-drama"
         ]

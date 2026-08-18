@@ -44,6 +44,8 @@ from short_drama.language_models import (
 )
 from short_drama.media import MediaGenerationError
 from short_drama.models import (
+    AudioInspectionRequest,
+    AudioInspectionResponse,
     AutoDraftRequest,
     AutoDraftResponse,
     AutonomousDraftCreateRequest,
@@ -830,6 +832,26 @@ def inspect_take_video(
 ) -> VideoInspectionResponse:
     try:
         return service.inspect_take_video(take_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        MediaGenerationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/inspect-audio",
+    response_model=AudioInspectionResponse,
+)
+def inspect_project_audio(
+    project_id: str,
+    request: AudioInspectionRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AudioInspectionResponse:
+    try:
+        return service.inspect_current_manifest_audio(project_id, request)
     except (
         ProjectNotFoundError,
         ArtifactNotFoundError,
