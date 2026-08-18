@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟、Phase 3 来源中立资产工作台与 Azure GPT Image 2，以及 Phase 4 固定资产下的 Direct、Frame、Reference 与通用 Director 修复实验。Phase 5 已实现空输入、图片、一句话和锁定剧本的统一规划入口、`AUTO_DRAFT` 无人值守 Mock 闭环和通用视频观察工具。Phase 6 已把这些工具接入证据优先的 H3 制片路线，自动复用 9 条已通过真实 Take、生成镜内/镜间观察，并完成 57.13 秒全 H3 时间线与技术导出。Phase 7 已实现从核心资产准备到 H3 异步生成、抽帧观察、Director 有界修复、Take 选择和导出的可恢复真人 `AUTO_DRAFT`。Phase 8 已使用真实 GPT Image 2、GPT-5.6-sol 和 H3 768P 完成第一次 9 镜、54.31 秒无人值守单集导出，并把关键帧身份对照、可见生成参考、画外提示投影和视频观察沉淀为通用能力。观察结果进入通用 QA 分类与 Director Agent，不新增门或区域穿越专用字段。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1 供应商中立 Mock 短剧闭环、Phase 2 MiniMax-H3 768P Provider 真实合同冒烟、Phase 3 来源中立资产工作台与 Azure GPT Image 2，以及 Phase 4 固定资产下的 Direct、Frame、Reference 与通用 Director 修复实验。Phase 5 已实现空输入、图片、一句话和锁定剧本的统一规划入口、`AUTO_DRAFT` 无人值守 Mock 闭环和通用视频观察工具。Phase 6 已把这些工具接入证据优先的 H3 制片路线，自动复用 9 条已通过真实 Take、生成镜内/镜间观察，并完成 57.13 秒全 H3 时间线与技术导出。Phase 7 已实现从核心资产准备到 H3 异步生成、抽帧观察、Director 有界修复、Take 选择和导出的可恢复真人 `AUTO_DRAFT`。Phase 8 已使用真实 GPT Image 2、GPT-5.6-sol 和 H3 768P 完成第一次 9 镜、54.31 秒无人值守单集导出，并由用户按本轮整体可用标准暂时通过。关键帧身份对照、可见生成参考、画外提示投影和视频观察已沉淀为通用能力；观察结果进入通用 QA 分类与 Director Agent，不新增门或区域穿越专用字段。
 
 ## 结论先行
 
@@ -52,5 +52,5 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 ## 当前边界
 
 - 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；代表镜头多路线、人审 RouteEvidence、通用 Director 修复；四种输入归一化、`AutonomousRun`、视频观察报告、证据优先 Route Planner，以及真实 Provider 下从锁定剧本到 9 镜、54.31 秒完整成片的第一次无人值守闭环。
-- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：自动 STT/说话人/跨镜声线检查；跨项目默认路线样本门槛；整集人工观看验收和 E007 的另外两次独立闭环/盲评。
-- 下一步：人工完整观看 `manifest-v3`，补齐逐字对白、说话人和跨镜声线 QA；随后按 E007 再执行两次独立真实 `AUTO_DRAFT` 和三人盲评。
+- 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。尚未完成：自动 STT/说话人/跨镜声线检查；跨项目默认路线样本门槛；E007 的另外两次独立闭环和三人盲评。
+- 下一步：补齐逐字对白、说话人和跨镜声线 QA；随后按 E007 再执行两次独立真实 `AUTO_DRAFT` 和三人盲评。

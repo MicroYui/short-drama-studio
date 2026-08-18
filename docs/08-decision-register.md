@@ -108,7 +108,7 @@
 - 2026-08-17：Phase 5 已完成四种输入归一化、`AutonomousRun`、适应性抽帧、镜内/镜间接触表、语义观察和观察结果到 Director Agent 的通用连接。观察结论是可忽略建议，不把单一样片的门、方向或动作词固化成底层领域字段；详见 [Phase 5 实施记录](15-phase5-autonomous-runner-and-video-observation.md)。
 - 2026-08-17：Phase 6 已完成证据优先的 H3 制片路线。系统在不新增 H3 请求的情况下自动复用 9 条当前版本、非合同冒烟且人工通过的真实 Take，运行逐镜和镜间观察，重建 57.13 秒全 H3 `TimelineManifest`，并完成 1080×1920 带/无字幕技术导出。该结果证明复用型真实执行闭环，不代表 E007 已完成；仍需从零项目的三次独立 `AUTO_DRAFT`、整集人工观看和匿名盲评。详见 [Phase 6 实施记录](16-phase6-real-route-planner.md)。
 - 2026-08-17：Phase 7 已完成可恢复的真人 `AUTO_DRAFT` 第一闭环。离线 Fake Provider 从空输入完成核心资产生成与语义检查、镜头关键帧、H3 异步候选、进程重建恢复、镜内/镜间观察、自动候选裁判、Director 有界修复、Take 选择、TimelineManifest 和导出；通用构图失败会使旧 Take 失效、自动修改镜头意图并重新规划，缺少配置时则持久化为 `NEEDS_ATTENTION`，不会回退 Mock。后端全量 641 项测试、Pyright、TypeScript 和 Vite 生产构建通过。该结果是工程闭环证据，不是新项目真实画面、对白或声线质量证据；详见 [Phase 7 实施记录](17-phase7-real-autonomous-draft.md)。
-- 2026-08-18：Phase 8 完成第一次真实从零真人 `AUTO_DRAFT`。锁定剧本在真实 GPT Image 2、GPT-5.6-sol 和 MiniMax-H3 768P 下自动得到 9/9 已选 Take、35 份视频观察、54.31 秒 `manifest-v3` 成片和全部通过的技术导出。真实运行修复了关键帧主参考选择、批准资产身份对照、生成/QA 参考分离、画外状态提示投影和画外证据判定等通用缺口；最终 S04 没有身份漂移或道具误入，仅保留中等级景别建议。该结果只完成 E007 的第一次独立运行，完整观看、逐字声音 QA、另外两次运行和三人盲评仍待执行；详见 [Phase 8 实施记录](18-phase8-real-autonomous-validation.md)。
+- 2026-08-18：Phase 8 完成第一次真实从零真人 `AUTO_DRAFT`。锁定剧本在真实 GPT Image 2、GPT-5.6-sol 和 MiniMax-H3 768P 下自动得到 9/9 已选 Take、35 份视频观察、54.31 秒 `manifest-v3` 成片和全部通过的技术导出。真实运行修复了关键帧主参考选择、批准资产身份对照、生成/QA 参考分离、画外状态提示投影和画外证据判定等通用缺口；最终 S04 没有身份漂移或道具误入，仅保留中等级景别建议。用户已按本轮整体可用标准将成片暂时通过，从锁定剧本到最终人工验收的 Phase 8 流程因此闭环。E007 仍待逐字声音 QA、另外两次独立运行和三人盲评；详见 [Phase 8 实施记录](18-phase8-real-autonomous-validation.md)。
 
 ## 对话顺序
 
