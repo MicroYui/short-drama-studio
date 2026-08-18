@@ -10,6 +10,7 @@ from short_drama.production_planner import (
     _locked_dialogue,
     build_project_document_from_plan,
     create_production_plan,
+    refresh_lightweight_reference_plans,
 )
 
 
@@ -140,3 +141,28 @@ def test_invalid_language_plan_gets_one_structured_repair() -> None:
         for shot in planning.plan.shots
         for index in shot.dialogue_line_indices
     )
+
+
+def test_lightweight_reference_enrichment_uses_declared_shot_intent() -> None:
+    request = _request()
+    planning = create_production_plan(request, None)
+    document = build_project_document_from_plan(
+        project_id="project-lightweight-reference",
+        request=request,
+        planning=planning,
+        created_at="2026-08-17T00:00:00Z",
+    )
+    shot = next(item for item in document.shots if item.sequence == 5)
+    plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+    prop = next(item for item in document.assets if item.kind.value == "PROP")
+    prop_version_ids = {item.id for item in prop.versions}
+    plan.bindings = [
+        item for item in plan.bindings if item.target_id not in prop_version_ids
+    ]
+    plan.max_reference_images = 3
+
+    changed = refresh_lightweight_reference_plans(document)
+
+    assert changed is True
+    assert any(item.target_id == prop.current_version_id for item in plan.bindings)
+    assert plan.max_reference_images >= len(plan.bindings)

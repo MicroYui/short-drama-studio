@@ -414,6 +414,16 @@ def preview_reference_plan(
             )
         )
 
+    if not requirements and not request.requirement_ids:
+        binding_selected, binding_missing, binding_warnings = _binding_selections(
+            document,
+            plan,
+            max_images=max_images,
+        )
+        selected.extend(binding_selected)
+        missing.extend(binding_missing)
+        warnings.extend(binding_warnings)
+
     complexity = _assess_complexity(shot, plan, selected)
     if complexity.missing_topology_anchors:
         warnings.append(
@@ -433,6 +443,91 @@ def preview_reference_plan(
         warnings=warnings,
         complexity=complexity,
     )
+
+
+def _binding_selections(
+    document: ProjectDocument,
+    plan: ReferencePlanEntry,
+    *,
+    max_images: int,
+) -> tuple[list[ReferenceSelection], list[str], list[str]]:
+    version_index = {
+        version.id: (asset, version)
+        for asset in document.assets
+        for version in asset.versions
+    }
+    defaults = {
+        AssetKind.CHARACTER: (
+            ReferenceRole.CHARACTER_BODY,
+            ReferenceAngle.FRONT,
+            ReferenceFraming.FULL_BODY,
+        ),
+        AssetKind.LOCATION: (
+            ReferenceRole.LOCATION_MASTER,
+            ReferenceAngle.NOT_APPLICABLE,
+            ReferenceFraming.WIDE,
+        ),
+        AssetKind.PROP: (
+            ReferenceRole.PROP_PRODUCT,
+            ReferenceAngle.NOT_APPLICABLE,
+            ReferenceFraming.DETAIL,
+        ),
+        AssetKind.REFERENCE: (
+            ReferenceRole.LOCATION_MASTER,
+            ReferenceAngle.NOT_APPLICABLE,
+            ReferenceFraming.WIDE,
+        ),
+    }
+    selected: list[ReferenceSelection] = []
+    missing: list[str] = []
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for index, binding in enumerate(plan.bindings, start=1):
+        binding_id = f"binding-{index}"
+        resolved = version_index.get(binding.target_id)
+        required = binding.requirement.strip().upper() == "REQUIRED"
+        if resolved is None:
+            if required:
+                missing.append(binding_id)
+            warnings.append(f"{binding_id}: referenced AssetVersion is unavailable")
+            continue
+        asset, version = resolved
+        if (
+            version.id in seen
+            or asset.approved_version_id != version.id
+            or version.approval_status != ApprovalStatus.APPROVED
+            or version.media_type != AssetMediaType.IMAGE
+            or (version.local_path is None and version.external_url is None)
+        ):
+            if version.id not in seen and required:
+                missing.append(binding_id)
+            if version.id not in seen:
+                warnings.append(f"{binding_id}: approved visual media is unavailable")
+            continue
+        if len(selected) >= max_images:
+            if required:
+                missing.append(binding_id)
+            warnings.append(f"{binding_id}: reference limit {max_images} reached")
+            continue
+        role, angle, framing = defaults[asset.kind]
+        selected.append(
+            ReferenceSelection(
+                pack_id=f"lightweight-binding:{asset.id}",
+                entry_id=f"lightweight-binding:{plan.shot_id}:{index}",
+                subject_asset_id=asset.id,
+                asset_version_id=version.id,
+                role=role,
+                angle=angle,
+                framing=framing,
+                tags=[],
+                description=binding.purpose,
+                requirement_ids=[binding_id],
+                score=1000 - index,
+                reasons=["approved provider-neutral ReferenceBinding"],
+            )
+        )
+        seen.add(version.id)
+    return selected, missing, warnings
 
 
 def compile_keyframe_brief(
@@ -913,6 +1008,29 @@ def parse_director_advice(output_text: str) -> DirectorAdvicePayload:
         return DirectorAdvicePayload.model_validate_json(text)
     except ValueError as exc:
         raise ValueError("Director Agent returned invalid advisory JSON") from exc
+
+
+def build_director_advice_repair_input(
+    *,
+    original_input: str,
+    invalid_output: str,
+    validation_error: ValueError,
+) -> tuple[str, str]:
+    instructions = (
+        "You are repairing a previously invalid JSON response from a film director agent. "
+        "Return one complete corrected JSON object only and match the supplied schema exactly. "
+        "Preserve valid recommendations and the original narrative intent. Do not introduce a "
+        "new scene-specific field, mandatory gate, or non-dismissible instruction. When a "
+        "recommended strategy is present, its proposed_repair must be executable, use the same "
+        "strategy, and keep decision=APPLIED."
+    )
+    payload = {
+        "validation_error": str(validation_error),
+        "invalid_director_json": invalid_output,
+        "original_director_context": json.loads(original_input),
+        "output_schema": DirectorAdvicePayload.model_json_schema(),
+    }
+    return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def _format_action_beat(beat: ActionBeat, assets: dict[str, Asset]) -> str:

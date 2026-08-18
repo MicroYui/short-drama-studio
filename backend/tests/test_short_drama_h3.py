@@ -33,6 +33,7 @@ from short_drama.h3_models import (
 )
 from short_drama.models import (
     ActionBeat,
+    AssetKind,
     DirectorRepairDecision,
     DirectorRepairStrategy,
     EvidencePurpose,
@@ -41,6 +42,8 @@ from short_drama.models import (
     QaFailureCategory,
     QaIssue,
     QaStatus,
+    ReferenceRequirement,
+    ReferenceRole,
     SpatialInteractionConstraint,
     SurfaceAttachmentConstraint,
     TaskStatus,
@@ -243,6 +246,41 @@ def test_h3_prompt_only_constrains_assets_present_in_the_shot() -> None:
     assert "不要主动加入本镜头未提及的角色或道具" in dialogue_prompt
     assert "红色录音笔" in prop_prompt
     assert "连续性状态：开始时道具从周衡右手进入" in prop_prompt
+
+
+def test_h3_prompt_omits_hidden_prop_state_from_generation_projection() -> None:
+    document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    shot = next(item for item in document.shots if item.sequence == 4)
+    plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+    lin = next(
+        item
+        for item in document.assets
+        if item.kind == AssetKind.CHARACTER and "林夏" in item.name
+    )
+    location = next(item for item in document.assets if item.kind == AssetKind.LOCATION)
+    plan.requirements = [
+        ReferenceRequirement(
+            id="lin-visible",
+            subject_asset_id=lin.id,
+            acceptable_roles=[ReferenceRole.CHARACTER_FACE],
+            purpose="The lead is visible.",
+        ),
+        ReferenceRequirement(
+            id="location-visible",
+            subject_asset_id=location.id,
+            acceptable_roles=[ReferenceRole.LOCATION_MASTER],
+            purpose="The location is visible.",
+        ),
+    ]
+    shot.continuity.prop_state_in = "录音笔在画外且灯灭"
+    shot.continuity.prop_state_out = "录音笔仍未放下"
+    shot.continuity.action_out = "周衡准备放下录音笔"
+    shot.continuity.eyeline = "林夏直视周衡，不看录音笔"
+
+    prompt = build_h3_prompt(document, shot)
+
+    assert "录音笔" not in prompt
+    assert "画面只呈现参考计划中的可见主体" in prompt
 
 
 def test_h3_prompt_carries_structured_contact_and_rigid_attachments() -> None:
@@ -649,6 +687,62 @@ def test_h3_submit_unknown_never_blindly_reposts(tmp_path: Path) -> None:
     ) == 1
     assert len(fake.submitted_requests) == 1
     assert resolved.project.route_evidence[0].status == EvidenceStatus.AWAITING_OUTPUT
+
+
+def test_h3_duplicate_local_task_reuses_acknowledged_submission_before_post(
+    tmp_path: Path,
+) -> None:
+    fake = FakeH3Client()
+    service = _service(tmp_path, fake)
+    project = service.initialize_fixture()
+    probe = service.enqueue_h3_probe(
+        project.document.project.id,
+        H3ProbeRequest(shot_id=project.document.shots[0].id),
+    )
+    assert service.advance_task(probe.task.id).status == TaskStatus.SUBMITTING
+    acknowledged = service.advance_task(probe.task.id)
+    assert acknowledged.status == TaskStatus.ACKNOWLEDGED
+    assert acknowledged.provider_task_id == "remote-1"
+    assert len(fake.submitted_requests) == 1
+
+    original_run = service.repository.get_provider_run(probe.task.id)
+    original_evidence = service.repository.get_route_evidence_for_task(probe.task.id)
+    assert original_run is not None
+    assert original_evidence is not None
+    duplicate_task = probe.task.model_copy(
+        deep=True,
+        update={
+            "id": "task-local-duplicate",
+            "provider_run_id": "h3-run-local-duplicate",
+            "status": TaskStatus.QUEUED,
+            "provider_task_id": None,
+            "submitted_at": None,
+            "started_at": None,
+            "finished_at": None,
+        },
+    )
+    duplicate_run = original_run.model_copy(
+        deep=True,
+        update={"id": "h3-run-local-duplicate", "task_id": duplicate_task.id},
+    )
+    duplicate_evidence = original_evidence.model_copy(
+        deep=True,
+        update={
+            "id": "evidence-local-duplicate",
+            "task_id": duplicate_task.id,
+            "status": EvidenceStatus.AWAITING_OUTPUT,
+        },
+    )
+    service.repository.save_task(duplicate_task)
+    service.repository.save_provider_run(duplicate_run)
+    service.repository.save_route_evidence(duplicate_evidence)
+
+    assert service.advance_task(duplicate_task.id).status == TaskStatus.SUBMITTING
+    reused = service.advance_task(duplicate_task.id)
+
+    assert reused.status == TaskStatus.ACKNOWLEDGED
+    assert reused.provider_task_id == acknowledged.provider_task_id
+    assert len(fake.submitted_requests) == 1
 
 
 def test_interrupted_prepare_can_be_explicitly_resolved_as_not_submitted(

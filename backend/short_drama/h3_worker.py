@@ -230,6 +230,23 @@ class PersistentH3Worker:
         if run.request is None:
             raise InvalidTaskTransition("H3 task has no compiled request")
         now = utc_now()
+        existing_provider_task_id = self.repository.find_provider_submission(
+            task.request_fingerprint
+        )
+        if existing_provider_task_id is not None:
+            task.provider_task_id = existing_provider_task_id
+            task.status = TaskStatus.ACKNOWLEDGED
+            task.submitted_at = task.submitted_at or now
+            task.error_code = None
+            task.error_message = None
+            task.updated_at = now
+            run.last_error_code = None
+            run.last_error_message = None
+            run.updated_at = now
+            self.repository.save_provider_run(run)
+            self.repository.save_task(task)
+            self._set_evidence_status(task.id, EvidenceStatus.AWAITING_OUTPUT)
+            return task
         try:
             provider_task_id = self._client().submit(run.request)
         except H3DefiniteRequestError as exc:

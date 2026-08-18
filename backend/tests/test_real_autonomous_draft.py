@@ -27,15 +27,24 @@ from short_drama.image_models import (
     ImageUsage,
 )
 from short_drama.language_models import LanguageProviderConfigUpdate
+from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.models import (
+    AssetKind,
     AutonomousDraftCreateRequest,
     AutonomousExecutionTarget,
     AutonomousRunAdvanceRequest,
     AutonomousRunStatus,
+    ReferenceRequirement,
+    ReferenceRole,
     SourceMode,
 )
 from short_drama.providers.image_provider import ImageProviderInput, ImageProviderResult
-from short_drama.service import ShortDramaService
+from short_drama.providers.openai_compatible_language_client import LanguageProviderError
+from short_drama.service import (
+    ShortDramaService,
+    _filter_generation_reference_versions,
+    _order_keyframe_reference_versions,
+)
 
 
 class FakeImageProvider:
@@ -65,15 +74,98 @@ class FakeImageProvider:
         )
 
 
+def test_keyframe_reference_order_uses_reference_plan_subject_priority() -> None:
+    document = build_dont_trust_me_fixture("2026-08-17T00:00:00Z")
+    lin = next(
+        item
+        for item in document.assets
+        if item.kind == AssetKind.CHARACTER and "林夏" in item.name
+    )
+    location = next(item for item in document.assets if item.kind == AssetKind.LOCATION)
+    prop = next(item for item in document.assets if item.kind == AssetKind.PROP)
+    plan = next(
+        item for item in document.reference_plan if item.shot_id.endswith("shot-04")
+    ).model_copy(
+        deep=True,
+        update={
+            "requirements": [
+                ReferenceRequirement(
+                    id="face-lock",
+                    subject_asset_id=lin.id,
+                    acceptable_roles=[ReferenceRole.CHARACTER_FACE],
+                    purpose="Preserve the approved lead identity for a close-up.",
+                )
+            ]
+        },
+    )
+
+    ordered = _order_keyframe_reference_versions(
+        [
+            (location, location.versions[-1]),
+            (prop, prop.versions[-1]),
+            (lin, lin.versions[-1]),
+        ],
+        plan,
+        [],
+    )
+
+    assert ordered[0][0].id == lin.id
+
+
+def test_generation_references_exclude_continuity_only_assets() -> None:
+    document = build_dont_trust_me_fixture("2026-08-17T00:00:00Z")
+    lin = next(
+        item
+        for item in document.assets
+        if item.kind == AssetKind.CHARACTER and "林夏" in item.name
+    )
+    location = next(item for item in document.assets if item.kind == AssetKind.LOCATION)
+    prop = next(item for item in document.assets if item.kind == AssetKind.PROP)
+    plan = next(
+        item for item in document.reference_plan if item.shot_id.endswith("shot-04")
+    ).model_copy(
+        deep=True,
+        update={
+            "requirements": [
+                ReferenceRequirement(
+                    id="face-lock",
+                    subject_asset_id=lin.id,
+                    acceptable_roles=[ReferenceRole.CHARACTER_FACE],
+                    purpose="The character is visible in this shot.",
+                ),
+                ReferenceRequirement(
+                    id="location-lock",
+                    subject_asset_id=location.id,
+                    acceptable_roles=[ReferenceRole.LOCATION_MASTER],
+                    purpose="The location is visible in this shot.",
+                ),
+            ]
+        },
+    )
+
+    filtered = _filter_generation_reference_versions(
+        [
+            (lin, lin.versions[-1]),
+            (location, location.versions[-1]),
+            (prop, prop.versions[-1]),
+        ],
+        plan,
+    )
+
+    assert [asset.id for asset, _version in filtered] == [lin.id, location.id]
+
+
 class FakeLanguageClient:
     def __init__(
         self,
         *,
         reject_first_asset: bool = False,
         repair_first_shot: bool = False,
+        fail_video_reviews: int = 0,
     ) -> None:
         self.reject_first_asset = reject_first_asset
         self.repair_first_shot = repair_first_shot
+        self.fail_video_reviews = fail_video_reviews
         self.asset_review_calls = 0
         self.director_calls = 0
 
@@ -136,6 +228,9 @@ class FakeLanguageClient:
                 }
             )
         if "video observation tool" in instructions:
+            if self.fail_video_reviews > 0:
+                self.fail_video_reviews -= 1
+                raise LanguageProviderError("simulated transient model overload")
             payload = json.loads(input_text)
             if self.repair_first_shot and payload["current_shot"]["sequence"] == 1:
                 return json.dumps(
@@ -144,7 +239,7 @@ class FakeLanguageClient:
                         "issues": [
                             {
                                 "code": "VISIBLE_COMPOSITION_FAILURE",
-                                "severity": "HIGH",
+                                "severity": "MAJOR",
                                 "message": "The sampled composition visibly contradicts the declared shot intent.",
                                 "repair_layer": "DIRECTOR",
                                 "category": "COMPOSITION_QUALITY",
@@ -268,6 +363,37 @@ class AutoCompletingH3Client:
             _render_h3_video(source, duration)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
+
+
+class FailFirstH3Client(AutoCompletingH3Client):
+    def __init__(self, cache_root: Path) -> None:
+        super().__init__(cache_root)
+        self.failed_remote_id: str | None = None
+
+    def query(self, task_id: str) -> H3RemoteTask:
+        if self.failed_remote_id is None:
+            self.failed_remote_id = task_id
+        if task_id == self.failed_remote_id:
+            task = self.remote_tasks[task_id]
+            task.status = H3RemoteStatus.FAILED
+            return task.model_copy(deep=True)
+        return super().query(task_id)
+
+
+class SlowFirstH3Client(AutoCompletingH3Client):
+    def __init__(self, cache_root: Path) -> None:
+        super().__init__(cache_root)
+        self.slow_remote_id: str | None = None
+
+    def query(self, task_id: str) -> H3RemoteTask:
+        if self.slow_remote_id is None:
+            self.slow_remote_id = task_id
+        if task_id == self.slow_remote_id:
+            self.query_counts[task_id] += 1
+            task = self.remote_tasks[task_id]
+            task.status = H3RemoteStatus.RUNNING
+            return task.model_copy(deep=True)
+        return super().query(task_id)
 
 
 def _render_h3_video(path: Path, duration: int) -> None:
@@ -476,6 +602,137 @@ def test_real_autonomous_draft_retries_a_rejected_visual_asset_once(
         first_character.id,
     )
     assert sorted(item.attempt for item in tasks) == [1, 2]
+
+
+def test_real_autonomous_draft_creates_only_one_retry_for_a_failed_h3_task(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient()
+    h3 = FailFirstH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    response = service.create_autonomous_draft(
+        AutonomousDraftCreateRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            input_text="",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=False,
+        )
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+
+    failed_task_id: str | None = None
+    for _ in range(180):
+        response = service.advance_autonomous_run(
+            response.project.document.project.id,
+            response.run.id,
+            AutonomousRunAdvanceRequest(max_actions=40),
+        )
+        failed = next(
+            (task for task in response.project.tasks if task.status.value == "FAILED"),
+            None,
+        )
+        if failed is not None:
+            failed_task_id = failed.id
+            children = [
+                task
+                for task in response.project.tasks
+                if task.retry_of_task_id == failed_task_id
+            ]
+            if children:
+                break
+
+    assert failed_task_id is not None
+    for _ in range(6):
+        response = service.advance_autonomous_run(
+            response.project.document.project.id,
+            response.run.id,
+            AutonomousRunAdvanceRequest(max_actions=5),
+        )
+    children = [
+        task
+        for task in response.project.tasks
+        if task.retry_of_task_id == failed_task_id
+    ]
+    assert len(children) == 1
+
+
+def test_real_autonomous_draft_rotates_polling_past_a_slow_h3_task(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient()
+    h3 = SlowFirstH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    response = service.create_autonomous_draft(
+        AutonomousDraftCreateRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            input_text="",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=False,
+        )
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+
+    for _ in range(180):
+        response = service.advance_autonomous_run(
+            response.project.document.project.id,
+            response.run.id,
+            AutonomousRunAdvanceRequest(max_actions=40),
+        )
+        polled = [count for count in h3.query_counts.values() if count > 0]
+        if len(polled) >= 2:
+            break
+
+    assert h3.slow_remote_id is not None
+    assert h3.query_counts[h3.slow_remote_id] >= 1
+    assert len([count for count in h3.query_counts.values() if count > 0]) >= 2
+
+
+def test_real_autonomous_draft_retries_transient_semantic_review_failure(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient(fail_video_reviews=1)
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    response = service.create_autonomous_draft(
+        AutonomousDraftCreateRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            input_text="",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=False,
+        )
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+
+    for _ in range(240):
+        response = service.advance_autonomous_run(
+            response.project.document.project.id,
+            response.run.id,
+            AutonomousRunAdvanceRequest(max_actions=40),
+        )
+        if response.run.status == AutonomousRunStatus.COMPLETE:
+            break
+
+    assert response.run.status == AutonomousRunStatus.COMPLETE
+    failed = [
+        report
+        for report in response.project.video_inspections
+        if report.semantic_status.value == "FAILED"
+    ]
+    assert len(failed) == 1
+    assert any(
+        report.take_id == failed[0].take_id
+        and report.semantic_status.value == "COMPLETE"
+        for report in response.project.video_inspections
+    )
 
 
 def test_real_autonomous_draft_repairs_rejected_video_and_replans(

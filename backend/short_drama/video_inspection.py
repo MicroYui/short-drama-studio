@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import math
+import mimetypes
 import shutil
 import subprocess
 import tempfile
@@ -18,11 +19,16 @@ from pydantic import Field
 
 from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
 from short_drama.models import (
+    ApprovalStatus,
+    Asset,
+    AssetMediaType,
+    AssetVersion,
     DomainModel,
     ObservationConfidence,
     ProjectDocument,
     QaFailureCategory,
     QaIssue,
+    ReferencePlanEntry,
     SemanticReviewStatus,
     ShotPlan,
     Take,
@@ -98,7 +104,80 @@ def _strip_json_fence(value: str) -> str:
 
 def _image_data_url(path: Path) -> str:
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:image/jpeg;base64,{encoded}"
+    mime_type = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+    return f"data:{mime_type};base64,{encoded}"
+
+
+def _semantic_reference_images(
+    document: ProjectDocument,
+    reference_plan: ReferencePlanEntry | None,
+) -> list[tuple[str, str]]:
+    if reference_plan is None:
+        return []
+    plan = reference_plan
+    asset_by_id = {asset.id: asset for asset in document.assets}
+    version_index = {
+        version.id: (asset, version)
+        for asset in document.assets
+        for version in asset.versions
+    }
+    subject_ids = {
+        requirement.subject_asset_id for requirement in plan.requirements
+    }
+    subject_ids.update(beat.actor_asset_id for beat in plan.action_beats)
+    for interaction in plan.interactions:
+        subject_ids.add(interaction.actor_asset_id)
+        subject_ids.add(interaction.target_asset_id)
+
+    candidates: list[tuple[Asset, AssetVersion]] = []
+    for binding in plan.bindings:
+        resolved = version_index.get(binding.target_id)
+        if resolved is not None:
+            candidates.append(resolved)
+    for asset_id in subject_ids:
+        asset = asset_by_id.get(asset_id)
+        if asset is None or asset.approved_version_id is None:
+            continue
+        version = next(
+            (
+                item
+                for item in asset.versions
+                if item.id == asset.approved_version_id
+            ),
+            None,
+        )
+        if version is not None:
+            candidates.append((asset, version))
+
+    result: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for asset, version in candidates:
+        if (
+            version.id in seen
+            or version.approval_status != ApprovalStatus.APPROVED
+            or version.media_type != AssetMediaType.IMAGE
+        ):
+            continue
+        url: str | None = None
+        if version.local_path is not None:
+            path = Path(version.local_path).expanduser().resolve()
+            if path.is_file() and path.stat().st_size > 0:
+                url = _image_data_url(path)
+        elif version.external_url is not None:
+            url = version.external_url
+        if url is None:
+            continue
+        result.append(
+            (
+                f"{asset.kind.value} canonical reference: {asset.name}; "
+                f"approved version={version.id}; descriptor={version.descriptor}",
+                url,
+            )
+        )
+        seen.add(version.id)
+        if len(result) >= 8:
+            break
+    return result
 
 
 class VideoInspector:
@@ -550,9 +629,40 @@ class VideoInspector:
             "continuity state, Bible, or user focus. Sparse frames cannot prove that an action never "
             "happened; lower confidence or omit the issue. Report an issue only when visible evidence "
             "conflicts with declared intent or with chronological state. The report is advisory input "
-            "to another Agent, never a hard gate and never a repair decision. Use stable generic QA "
-            "categories rather than scene-specific fields."
+            "to another Agent, never a hard gate and never a repair decision. Use only LOW, MEDIUM, "
+            "HIGH, or CRITICAL for issue severity, and use stable generic QA categories rather than "
+            "scene-specific fields. When canonical asset references are supplied, compare visible "
+            "character identity, hair, wardrobe, location geometry, and prop appearance against "
+            "the relevant reference; report clear drift, but do not require details that are hidden "
+            "or too small to judge."
         )
+        reference_images = _semantic_reference_images(document, reference_plan)
+        image_map: list[dict[str, object]] = [
+            {
+                "index": 1,
+                "role": "CURRENT_TAKE_TIMELINE",
+                "description": "chronological adaptive samples from the current take",
+            }
+        ]
+        next_image_index = 2
+        if boundary_sheet is not None:
+            image_map.append(
+                {
+                    "index": next_image_index,
+                    "role": "SHOT_BOUNDARY",
+                    "description": "previous-shot end followed by current-shot start",
+                }
+            )
+            next_image_index += 1
+        for label, _url in reference_images:
+            image_map.append(
+                {
+                    "index": next_image_index,
+                    "role": "CANONICAL_ASSET_REFERENCE",
+                    "description": label,
+                }
+            )
+            next_image_index += 1
         payload = {
             "output_schema": SemanticVideoReview.model_json_schema(),
             "current_shot": shot.model_dump(mode="json"),
@@ -576,6 +686,7 @@ class VideoInspector:
             "allowed_issue_categories": [item.value for item in QaFailureCategory],
             "confidence_values": [item.value for item in ObservationConfidence],
             "review_focus": request.review_focus,
+            "image_map": image_map,
             "notes": (
                 "Frame labels are chronological within each sheet. VISUAL_CHANGE marks locally "
                 "large image change, not an error by itself."
@@ -584,6 +695,7 @@ class VideoInspector:
         image_urls = [_image_data_url(contact_sheet)]
         if boundary_sheet is not None:
             image_urls.append(_image_data_url(boundary_sheet))
+        image_urls.extend(url for _label, url in reference_images)
         output = client.generate_text(
             instructions=instructions,
             input_text=json.dumps(payload, ensure_ascii=False, indent=2),

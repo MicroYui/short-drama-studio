@@ -153,6 +153,7 @@ from short_drama.production_planner import (
     ProductionPlanningResult,
     build_project_document_from_plan,
     create_production_plan,
+    refresh_lightweight_reference_plans,
 )
 from short_drama.quality_learning import (
     H3CapabilityProfileResponse,
@@ -160,6 +161,7 @@ from short_drama.quality_learning import (
     known_regression_case,
 )
 from short_drama.reference_planner import (
+    build_director_advice_repair_input,
     DirectorAdviceRequest,
     DirectorAdviceResponse,
     DirectorLoopResponse,
@@ -226,6 +228,56 @@ _TERMINAL_TASK_STATUSES = {
     TaskStatus.FAILED,
     TaskStatus.CANCELLED,
 }
+_MAX_AUTONOMOUS_IMAGE_ATTEMPTS = 3
+_MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS = 3
+
+
+def _order_keyframe_reference_versions(
+    bound: list[tuple[Asset, AssetVersion]],
+    reference_plan: ReferencePlanEntry,
+    preferred_version_ids: list[str],
+) -> list[tuple[Asset, AssetVersion]]:
+    """Keep the Agent/reference-plan priority when choosing an image-edit anchor."""
+
+    by_version_id = {version.id: (asset, version) for asset, version in bound}
+    by_asset_id = {asset.id: (asset, version) for asset, version in bound}
+    ordered: list[tuple[Asset, AssetVersion]] = []
+    seen: set[str] = set()
+
+    def append(candidate: tuple[Asset, AssetVersion] | None) -> None:
+        if candidate is None or candidate[1].id in seen:
+            return
+        ordered.append(candidate)
+        seen.add(candidate[1].id)
+
+    for version_id in preferred_version_ids:
+        append(by_version_id.get(version_id))
+    for requirement in reference_plan.requirements:
+        append(by_asset_id.get(requirement.subject_asset_id))
+    for binding in reference_plan.bindings:
+        append(by_version_id.get(binding.target_id))
+    for candidate in bound:
+        append(candidate)
+    return ordered
+
+
+def _filter_generation_reference_versions(
+    bound: list[tuple[Asset, AssetVersion]],
+    reference_plan: ReferencePlanEntry,
+) -> list[tuple[Asset, AssetVersion]]:
+    """Exclude continuity-only assets that the Agent did not plan to show in this shot."""
+
+    subject_ids = {
+        requirement.subject_asset_id for requirement in reference_plan.requirements
+    }
+    subject_ids.update(beat.actor_asset_id for beat in reference_plan.action_beats)
+    for interaction in reference_plan.interactions:
+        subject_ids.add(interaction.actor_asset_id)
+        subject_ids.add(interaction.target_asset_id)
+    if not subject_ids:
+        return bound
+    filtered = [item for item in bound if item[0].id in subject_ids]
+    return filtered or bound
 
 
 class ShortDramaService:
@@ -734,14 +786,14 @@ class ShortDramaService:
                         self.repository.save_project(refreshed)
                     return True, False
                 if version.approval_status == ApprovalStatus.REJECTED:
-                    if latest.attempt >= 2:
+                    if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
                         raise WorkflowConflictError(
                             f"Automatic visual asset retries exhausted for {asset.name}"
                         )
                     self._enqueue_base_asset_image(document, asset, latest)
                     return True, False
             if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
-                if latest.attempt >= 2:
+                if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
                     raise WorkflowConflictError(
                         f"Image task retries exhausted for {asset.name}: {latest.error_message or latest.status.value}"
                     )
@@ -891,7 +943,18 @@ class ShortDramaService:
                         self.repository.save_h3_route_plan(plan)
                         return True, False
                     if version.approval_status == ApprovalStatus.REJECTED:
-                        if latest.attempt >= 2:
+                        if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
+                            if self._fallback_failed_keyframe_preparation(
+                                document=self._require_project_document(project_id),
+                                plan=plan,
+                                decision=decision,
+                                failed_preparation=preparation,
+                                reason=(
+                                    f"Automatic keyframe review rejected {latest.attempt} "
+                                    "candidate(s)."
+                                ),
+                            ):
+                                return True, False
                             raise WorkflowConflictError(
                                 f"Automatic keyframe retries exhausted for shot {shot.sequence}"
                             )
@@ -907,7 +970,18 @@ class ShortDramaService:
                         self.repository.save_h3_route_plan(plan)
                         return True, False
                 if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
-                    if latest.attempt >= 2:
+                    if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
+                        if self._fallback_failed_keyframe_preparation(
+                            document=self._require_project_document(project_id),
+                            plan=plan,
+                            decision=decision,
+                            failed_preparation=preparation,
+                            reason=(
+                                f"Keyframe provider task failed or was cancelled "
+                                f"{latest.attempt} time(s)."
+                            ),
+                        ):
+                            return True, False
                         raise WorkflowConflictError(
                             f"Keyframe task retries exhausted for shot {shot.sequence}"
                         )
@@ -945,6 +1019,89 @@ class ShortDramaService:
         self.repository.save_h3_route_plan(plan)
         return True, False
 
+    def _fallback_failed_keyframe_preparation(
+        self,
+        *,
+        document: ProjectDocument,
+        plan: H3ProductionRoutePlan,
+        decision: H3ShotRoutePlan,
+        failed_preparation: H3RouteAssetPreparation,
+        reason: str,
+    ) -> bool:
+        reference_plan = self._require_reference_plan(document, decision.shot_id)
+        bound = _filter_generation_reference_versions(
+            self._approved_bound_image_versions(document, decision.shot_id),
+            reference_plan,
+        )
+        media_inputs = [
+            self._h3_image_input(
+                document,
+                version.id,
+                H3MediaRole.REFERENCE_IMAGE,
+            )
+            for _asset, version in bound[:9]
+        ]
+        if not media_inputs:
+            return False
+        try:
+            validate_h3_probe(
+                route=VideoGenerationRoute.REFERENCE,
+                prompt=decision.prompt,
+                duration_seconds=decision.duration_seconds,
+                media_inputs=media_inputs,
+            )
+        except H3CapabilityError:
+            return False
+
+        failed_preparation.status = H3RouteAssetPreparationStatus.REJECTED
+        fallback_warning = (
+            f"{reason} The advisory keyframe route was replaced with approved visual "
+            "references so AUTO_DRAFT can continue; the user may override this route."
+        )
+        failed_preparation.review_summary = " ".join(
+            item
+            for item in [failed_preparation.review_summary, fallback_warning]
+            if item
+        )
+        decision.route = VideoGenerationRoute.REFERENCE
+        decision.media_inputs = media_inputs
+        decision.missing_inputs = []
+        decision.readiness = H3ShotRouteReadiness.READY_WITH_WARNINGS
+        decision.rationale = (
+            "Shot-specific keyframe preparation did not converge within the bounded automatic "
+            "retries. Continue with approved references for subjects the reference plan expects "
+            "to be visible, while retaining stricter continuity QA; this is an overridable "
+            "Director fallback."
+        )
+        decision.warnings = list(
+            dict.fromkeys(
+                [
+                    *(
+                        warning
+                        for warning in decision.warnings
+                        if "needs an approved start frame" not in warning.lower()
+                        and "起始帧" not in warning
+                    ),
+                    fallback_warning,
+                ]
+            )
+        )
+        plan.status = (
+            H3RoutePlanStatus.READY
+            if all(
+                item.readiness
+                in {
+                    H3ShotRouteReadiness.READY,
+                    H3ShotRouteReadiness.READY_WITH_WARNINGS,
+                }
+                for item in plan.decisions
+            )
+            else H3RoutePlanStatus.PARTIAL
+        )
+        plan.updated_at = utc_now()
+        self.repository.save_h3_route_plan(plan)
+        return True
+
     def _create_keyframe_asset(
         self,
         document: ProjectDocument,
@@ -952,20 +1109,24 @@ class ShortDramaService:
         decision: H3ShotRoutePlan,
         preparation: H3RouteAssetPreparation,
     ) -> None:
-        bound = self._approved_bound_image_versions(document, decision.shot_id)
+        reference_plan = self._require_reference_plan(document, decision.shot_id)
+        bound = _filter_generation_reference_versions(
+            self._approved_bound_image_versions(document, decision.shot_id),
+            reference_plan,
+        )
         if not bound:
             raise WorkflowConflictError(
                 f"Shot {decision.shot_sequence} has no approved visual base for keyframe editing"
             )
-        primary_asset, primary_version = min(
+        ordered = _order_keyframe_reference_versions(
             bound,
-            key=lambda item: {
-                AssetKind.LOCATION: 0,
-                AssetKind.CHARACTER: 1,
-                AssetKind.PROP: 2,
-                AssetKind.REFERENCE: 3,
-            }[item[0].kind],
+            reference_plan,
+            preparation.input_version_ids,
         )
+        primary_asset, primary_version = ordered[0]
+        preparation.input_version_ids = [
+            version.id for _asset, version in ordered[:16]
+        ]
         created = self.create_asset(
             document.project.id,
             AssetCreateRequest(
@@ -1025,15 +1186,63 @@ class ShortDramaService:
         )
         if parent is None:
             raise WorkflowConflictError("Keyframe asset has no visual parent")
-        bound = self._approved_bound_image_versions(refreshed, shot.id)
+        reference_plan = self._require_reference_plan(refreshed, shot.id)
+        bound = _filter_generation_reference_versions(
+            self._approved_bound_image_versions(refreshed, shot.id),
+            reference_plan,
+        )
+        ordered = _order_keyframe_reference_versions(
+            bound,
+            reference_plan,
+            preparation.input_version_ids,
+        )
+        if not ordered:
+            raise WorkflowConflictError("Keyframe asset has no approved visual references")
+        primary_asset, primary_version = ordered[0]
         input_ids = list(
             dict.fromkeys(
-                [parent.id, *(version.id for _asset, version in bound)]
+                [
+                    parent.id,
+                    *(
+                        version.id
+                        for _asset, version in ordered
+                        if version.id != primary_version.id
+                    ),
+                ]
             )
         )[:16]
-        prompt = build_keyframe_correction_prompt(
-            preparation,
-            preparation.review_summary if previous is not None else None,
+        reference_lines = [
+            (
+                "Image 1: PRIMARY EDIT INPUT copied exactly from the approved "
+                f"{primary_asset.kind.value} reference '{primary_asset.name}'. "
+                + self._keyframe_primary_reference_lock(primary_asset.kind)
+            ),
+            *[
+                (
+                    f"Image {index}: approved {asset.kind.value} reference "
+                    f"'{asset.name}'; use it only to preserve that subject's visible "
+                    "identity, appearance, geometry, or topology where requested by the shot."
+                )
+                for index, (asset, _version) in enumerate(
+                    (
+                        item
+                        for item in ordered
+                        if item[1].id != primary_version.id
+                    ),
+                    start=2,
+                )
+            ],
+        ]
+        prompt = (
+            build_keyframe_correction_prompt(
+                preparation,
+                preparation.review_summary if previous is not None else None,
+            )
+            + "\n\nACTUAL EDIT INPUT MAP:\n"
+            + "\n".join(reference_lines)
+            + "\nDo not blend different actors or replace the primary subject with a face "
+            "from another reference. Reference-sheet or turnaround layouts must be transformed "
+            "into the single cinematic frame requested above, never reproduced as a collage."
         )
         try:
             return self.asset_workbench.enqueue_image_task(
@@ -1070,6 +1279,13 @@ class ShortDramaService:
         asset = self._require_asset_in_document(document, asset_id)
         version = self._find_asset_version(document, version_id)[1]
         client = self._require_language_client()
+        canonical_references: list[tuple[Asset, AssetVersion]] = []
+        if shot is not None:
+            canonical_references = _order_keyframe_reference_versions(
+                self._approved_bound_image_versions(document, shot.id),
+                self._require_reference_plan(document, shot.id),
+                preparation.input_version_ids if preparation is not None else [],
+            )
         try:
             review = inspect_asset_image(
                 document=document,
@@ -1078,11 +1294,12 @@ class ShortDramaService:
                 client=client,
                 shot=shot,
                 preparation=preparation,
+                canonical_references=canonical_references,
             )
         except (LanguageProviderError, ValueError) as exc:
             raise ProviderOperationError(str(exc)) from exc
         severe = any(
-            issue.severity.upper() in {"ERROR", "HIGH", "CRITICAL"}
+            issue.severity.upper() in {"ERROR", "HIGH", "MAJOR", "CRITICAL", "FATAL"}
             for issue in review.issues
         )
         approved = review.recommended and review.score >= 3.5 and not severe
@@ -1108,6 +1325,25 @@ class ShortDramaService:
             ),
         )
         return review, approved
+
+    @staticmethod
+    def _keyframe_primary_reference_lock(kind: AssetKind) -> str:
+        if kind == AssetKind.CHARACTER:
+            return (
+                "Preserve the exact face identity, hair, wardrobe, and body appearance; "
+                "change only pose, crop, camera, and scene composition required by the shot."
+            )
+        if kind == AssetKind.LOCATION:
+            return (
+                "Preserve the location's topology, fixed anchors, materials, and lighting logic; "
+                "change only the camera framing required by the shot."
+            )
+        if kind == AssetKind.PROP:
+            return (
+                "Preserve the prop's exact shape, color, component placement, and material; "
+                "change only pose and placement required by the shot."
+            )
+        return "Preserve its approved visual facts while applying only the requested shot change."
 
     def _advance_real_video_generation(
         self,
@@ -1139,45 +1375,105 @@ class ShortDramaService:
             )
             return True, False
         plan = self.repository.get_h3_route_plan(plan.id) or plan
+        all_project_tasks = self.repository.list_tasks(project_id)
+        retry_children: dict[str, list[GenerationTask]] = {}
+        for task in all_project_tasks:
+            if task.retry_of_task_id is not None:
+                retry_children.setdefault(task.retry_of_task_id, []).append(task)
+        plan_changed = False
+        for decision in plan.decisions:
+            planned_ids = set(decision.task_ids)
+            for parent_id in list(decision.task_ids):
+                children = retry_children.get(parent_id, [])
+                if not children:
+                    continue
+                earliest = min(children, key=lambda item: (item.created_at, item.id))
+                if earliest.id not in planned_ids:
+                    decision.task_ids.append(earliest.id)
+                    planned_ids.add(earliest.id)
+                    plan_changed = True
+        if plan_changed:
+            plan.updated_at = utc_now()
+            self.repository.save_h3_route_plan(plan)
+            return True, False
+
         task_ids = [task_id for item in plan.decisions for task_id in item.task_ids]
         tasks = [self._require_task(task_id) for task_id in task_ids]
-        for task in tasks:
-            if task.status in {TaskStatus.QUEUED, TaskStatus.SUBMITTING}:
-                self.advance_task(task.id)
-                return True, False
-            if task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}:
-                advanced = self.advance_task(task.id)
-                waiting = advanced.status in {
-                    TaskStatus.ACKNOWLEDGED,
-                    TaskStatus.RUNNING,
-                }
-                if waiting:
-                    self._set_autonomous_waiting(
-                        project_id,
-                        run_id,
-                        "MiniMax-H3 tasks are still running; the desktop will continue polling.",
-                    )
-                return True, waiting
-            if task.status == TaskStatus.OUTPUT_MISSING:
-                self.recover_task_output(task.id)
-                return True, False
-            if task.status == TaskStatus.SUBMIT_UNKNOWN:
+        pending_submission = next(
+            (
+                task
+                for task in tasks
+                if task.status in {TaskStatus.QUEUED, TaskStatus.SUBMITTING}
+            ),
+            None,
+        )
+        if pending_submission is not None:
+            self.advance_task(pending_submission.id)
+            return True, False
+
+        missing_output = next(
+            (task for task in tasks if task.status == TaskStatus.OUTPUT_MISSING),
+            None,
+        )
+        if missing_output is not None:
+            self.recover_task_output(missing_output.id)
+            return True, False
+
+        unknown_submission = next(
+            (task for task in tasks if task.status == TaskStatus.SUBMIT_UNKNOWN),
+            None,
+        )
+        if unknown_submission is not None:
+            raise WorkflowConflictError(
+                f"H3 task {unknown_submission.id} submission is unknown; reconcile it before continuing"
+            )
+
+        failed = next(
+            (
+                task
+                for task in tasks
+                if task.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}
+                and task.id not in retry_children
+            ),
+            None,
+        )
+        if failed is not None:
+            if failed.attempt >= 2:
                 raise WorkflowConflictError(
-                    f"H3 task {task.id} submission is unknown; reconcile it before continuing"
+                    f"H3 retries exhausted for shot {failed.shot_id}: "
+                    f"{failed.error_message or failed.status.value}"
                 )
-            if task.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
-                if task.attempt >= 2:
-                    raise WorkflowConflictError(
-                        f"H3 retries exhausted for shot {task.shot_id}: {task.error_message or task.status.value}"
-                    )
-                retry = self.retry_task(task.id)
-                decision = next(
-                    item for item in plan.decisions if item.shot_id == task.shot_id
+            retry = self.retry_task(failed.id)
+            decision = next(
+                item for item in plan.decisions if item.shot_id == failed.shot_id
+            )
+            decision.task_ids.append(retry.id)
+            plan.updated_at = utc_now()
+            self.repository.save_h3_route_plan(plan)
+            return True, False
+
+        running = min(
+            (
+                task
+                for task in tasks
+                if task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}
+            ),
+            key=lambda item: (item.updated_at, item.created_at, item.id),
+            default=None,
+        )
+        if running is not None:
+            advanced = self.advance_task(running.id)
+            waiting = advanced.status in {
+                TaskStatus.ACKNOWLEDGED,
+                TaskStatus.RUNNING,
+            }
+            if waiting:
+                self._set_autonomous_waiting(
+                    project_id,
+                    run_id,
+                    "MiniMax-H3 tasks are still running; the desktop will continue polling.",
                 )
-                decision.task_ids.append(retry.id)
-                plan.updated_at = utc_now()
-                self.repository.save_h3_route_plan(plan)
-                return True, False
+            return True, waiting
         self._advance_autonomous_run(
             project_id,
             run_id,
@@ -1239,8 +1535,31 @@ class ShortDramaService:
             else:
                 report = existing
             if report.semantic_status != SemanticReviewStatus.COMPLETE:
+                refreshed = self.get_project(project_id)
+                failed_attempts = sum(
+                    1
+                    for item in refreshed.video_inspections
+                    if item.take_id == take.id
+                    and item.semantic_status
+                    in {
+                        SemanticReviewStatus.FAILED,
+                        SemanticReviewStatus.UNAVAILABLE,
+                    }
+                )
+                if failed_attempts < _MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS:
+                    self._set_autonomous_waiting(
+                        project_id,
+                        run_id,
+                        (
+                            f"Semantic review for Take {take.id} was temporarily unavailable; "
+                            f"AUTO_DRAFT will retry ({failed_attempts}/"
+                            f"{_MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS})."
+                        ),
+                    )
+                    return True, True
                 raise WorkflowConflictError(
-                    f"Semantic video review is unavailable for Take {take.id}"
+                    f"Semantic video review remained unavailable for Take {take.id} "
+                    f"after {_MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS} attempts"
                 )
             self._apply_automatic_h3_review(take, report)
             self._select_best_current_takes(project_id)
@@ -1319,15 +1638,24 @@ class ShortDramaService:
         severe = [
             issue
             for issue in report.issues
-            if issue.severity.upper() in {"ERROR", "HIGH", "CRITICAL"}
+            if issue.severity.upper()
+            in {"ERROR", "HIGH", "MAJOR", "CRITICAL", "FATAL"}
         ]
         passed = evidence.technical_passed is True and not severe
         medium_count = sum(
-            issue.severity.upper() in {"WARN", "WARNING", "MEDIUM"}
+            issue.severity.upper() in {"WARN", "WARNING", "MEDIUM", "MODERATE"}
             for issue in report.issues
         )
-        low_count = sum(issue.severity.upper() == "LOW" for issue in report.issues)
-        score = max(0.0, min(5.0, 4.6 - medium_count * 0.45 - low_count * 0.2))
+        low_count = sum(
+            issue.severity.upper() in {"LOW", "MINOR"} for issue in report.issues
+        )
+        score = max(
+            0.0,
+            min(
+                5.0,
+                4.6 - len(severe) * 1.2 - medium_count * 0.45 - low_count * 0.2,
+            ),
+        )
         issues = list(report.issues)
         if not passed and not issues:
             issues.append(
@@ -1822,11 +2150,27 @@ class ShortDramaService:
                 instructions=instructions,
                 input_text=input_text,
             )
-            payload = parse_director_advice(output_text)
         except LanguageProviderError as exc:
             raise ProviderOperationError(str(exc)) from exc
-        except ValueError as exc:
-            raise ProviderOperationError(str(exc)) from exc
+        try:
+            payload = parse_director_advice(output_text)
+        except ValueError as first_error:
+            repair_instructions, repair_input = build_director_advice_repair_input(
+                original_input=input_text,
+                invalid_output=output_text,
+                validation_error=first_error,
+            )
+            try:
+                repaired_output = client.generate_text(
+                    instructions=repair_instructions,
+                    input_text=repair_input,
+                )
+                payload = parse_director_advice(repaired_output)
+            except (LanguageProviderError, ValueError) as repair_error:
+                raise ProviderOperationError(
+                    "Director Agent JSON and one automatic repair were invalid: "
+                    f"first={first_error}; repair={repair_error}"
+                ) from repair_error
         return DirectorAdviceResponse(
             shot_id=shot_id,
             advisories=payload.advisories,
@@ -1852,7 +2196,11 @@ class ShortDramaService:
         project_id: str,
         request: H3ProductionRoutePlanRequest,
     ) -> H3ProductionRoutePlanResponse:
-        document = self._require_project_document(project_id)
+        with self._lock:
+            document = self._require_project_document(project_id)
+            if refresh_lightweight_reference_plans(document):
+                document.project.updated_at = utc_now()
+                self.repository.save_project(document)
         language_client = None
         if request.use_language_agent:
             api_key = self.language_config.api_key()

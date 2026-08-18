@@ -7,6 +7,7 @@ from pathlib import Path
 
 import imageio_ffmpeg
 import pytest
+from PIL import Image
 
 from short_drama.h3_models import (
     H3ProductionRouteExecuteRequest,
@@ -18,6 +19,10 @@ from short_drama.h3_models import (
     H3ShotRouteReadiness,
 )
 from short_drama.models import (
+    AssetMediaType,
+    DirectorRepairDecision,
+    DirectorRepairRecord,
+    DirectorRepairStrategy,
     EvidencePurpose,
     EvidenceStatus,
     Freshness,
@@ -206,6 +211,7 @@ def test_route_plan_compiles_long_take_observation_and_advisory_asset_briefs(
     document = project.document
     shot = next(item for item in document.shots if item.sequence == 3)
     shot.duration_seconds = 15.0
+    shot.local_rework_risk = "中；长镜头动作与构图需要导演权衡"
     service.repository.save_project(document)
 
     compiled = service.compile_h3_production_route_plan(
@@ -228,6 +234,125 @@ def test_route_plan_compiles_long_take_observation_and_advisory_asset_briefs(
     assert decision.asset_preparations
     assert all(item.advisory_only for item in decision.asset_preparations)
     assert decision.override_allowed is True
+
+
+def test_lightweight_bindings_become_executable_reference_candidate(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    for index, asset in enumerate(document.assets, start=1):
+        image_path = tmp_path / f"approved-reference-{index}.png"
+        Image.new("RGB", (768, 1344), f"#{index:02x}3344").save(image_path)
+        version = asset.versions[0]
+        version.media_type = AssetMediaType.IMAGE
+        version.local_path = str(image_path)
+        asset.approved_version_id = version.id
+    shot = next(item for item in document.shots if item.sequence == 2)
+    shot.local_rework_risk = "低；稳定对话近景"
+    service.repository.save_project(document)
+
+    compiled = service.compile_h3_production_route_plan(
+        document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+
+    assert decision.route == VideoGenerationRoute.REFERENCE
+    assert decision.media_inputs
+    assert all(item.asset_version_id is not None for item in decision.media_inputs)
+
+
+def test_failed_advisory_keyframe_can_fall_back_to_approved_references(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    for index, asset in enumerate(document.assets, start=1):
+        image_path = tmp_path / f"fallback-reference-{index}.png"
+        Image.new("RGB", (768, 1344), f"#{index:02x}5566").save(image_path)
+        version = asset.versions[0]
+        version.media_type = AssetMediaType.IMAGE
+        version.local_path = str(image_path)
+        asset.approved_version_id = version.id
+    shot = next(item for item in document.shots if item.sequence == 3)
+    shot.local_rework_risk = "中；关键帧建议可被替代"
+    service.repository.save_project(document)
+    compiled = service.compile_h3_production_route_plan(
+        document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+    preparation = decision.asset_preparations[0]
+    persisted_document = service.repository.get_project(document.project.id)
+    assert persisted_document is not None
+
+    changed = service._fallback_failed_keyframe_preparation(
+        document=persisted_document,
+        plan=compiled.plan,
+        decision=decision,
+        failed_preparation=preparation,
+        reason="Three keyframe candidates failed semantic review.",
+    )
+
+    assert changed is True
+    assert decision.route == VideoGenerationRoute.REFERENCE
+    assert decision.readiness == H3ShotRouteReadiness.READY_WITH_WARNINGS
+    assert decision.media_inputs
+    assert decision.override_allowed is True
+    assert "user may override" in decision.warnings[-1]
+    assert all("起始帧" not in warning for warning in decision.warnings)
+
+
+def test_applied_change_keyframe_repair_is_executed_by_next_route_plan(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    for index, asset in enumerate(document.assets, start=1):
+        image_path = tmp_path / f"repair-reference-{index}.png"
+        Image.new("RGB", (768, 1344), f"#{index:02x}6677").save(image_path)
+        version = asset.versions[0]
+        version.media_type = AssetMediaType.IMAGE
+        version.local_path = str(image_path)
+        asset.approved_version_id = version.id
+    shot = next(item for item in document.shots if item.sequence == 2)
+    shot.local_rework_risk = "低；稳定对话近景"
+    shot.revision += 1
+    document.repair_history.append(
+        DirectorRepairRecord(
+            id="director-repair-change-keyframe",
+            source_shot_id=shot.id,
+            strategy=DirectorRepairStrategy.CHANGE_KEYFRAME,
+            decision=DirectorRepairDecision.APPLIED,
+            reason="Replace the failed visual anchor before regenerating.",
+            affected_shot_ids=[shot.id],
+            created_at=NOW,
+        )
+    )
+    service.repository.save_project(document)
+
+    compiled = service.compile_h3_production_route_plan(
+        document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+
+    assert decision.route == VideoGenerationRoute.FRAME_FIRST
+    assert decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
+    assert decision.asset_preparations[0].role.value == "first_frame"
 
 
 def test_route_execution_invokes_intra_shot_and_boundary_observation_tools(

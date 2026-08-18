@@ -29,6 +29,8 @@ from short_drama.h3_models import (
 from short_drama.models import (
     ApprovalStatus,
     AssetMediaType,
+    DirectorRepairDecision,
+    DirectorRepairStrategy,
     DomainModel,
     EvidencePurpose,
     EvidenceStatus,
@@ -152,6 +154,7 @@ def build_h3_production_route_plan(
         ))
         risk_ids, qa_focus = _shot_risks(shot, reference_plan, evidence, takes)
         risks_by_shot[shot.id] = (risk_ids, qa_focus)
+        applied_repair_strategy = _applied_director_strategy(document, shot.id)
         candidates_by_shot[shot.id] = _build_candidates(
             document=document,
             shot=shot,
@@ -164,6 +167,7 @@ def build_h3_production_route_plan(
             evidence_by_take=evidence_by_take,
             inspections_by_take=inspections_by_take,
             prepared_media_inputs=(prepared_media_inputs or {}).get(shot.id, []),
+            applied_repair_strategy=applied_repair_strategy,
         )
 
     agent_choices: dict[str, _AgentRouteChoice] = {}
@@ -209,6 +213,32 @@ def build_h3_production_route_plan(
                 chosen.rationale = agent_choice.rationale
                 choice_warnings.extend(agent_choice.warnings)
                 choice_focus.extend(agent_choice.qa_focus_categories)
+
+        applied_repair_strategy = _applied_director_strategy(document, shot.id)
+        if (
+            applied_repair_strategy == DirectorRepairStrategy.CHANGE_KEYFRAME
+            and chosen.action == H3ShotRouteAction.GENERATE
+            and chosen.route
+            not in {
+                VideoGenerationRoute.FRAME_FIRST,
+                VideoGenerationRoute.FRAME_FIRST_LAST,
+            }
+        ):
+            frame_candidates = [
+                item
+                for item in candidates
+                if item.route
+                in {
+                    VideoGenerationRoute.FRAME_FIRST,
+                    VideoGenerationRoute.FRAME_FIRST_LAST,
+                }
+            ]
+            if frame_candidates:
+                chosen = _fallback_candidate(frame_candidates)
+                choice_warnings.append(
+                    "The latest applied Director repair is CHANGE_KEYFRAME, so AUTO_DRAFT "
+                    "will execute a frame-controlled route. The user may override the repair."
+                )
 
         risk_ids, risk_focus = risks_by_shot[shot.id]
         focus = list(dict.fromkeys([*risk_focus, *choice_focus]))
@@ -316,6 +346,7 @@ def _build_candidates(
     evidence_by_take: dict[str, RouteEvidence],
     inspections_by_take: dict[str, list[VideoInspectionReport]],
     prepared_media_inputs: list[H3MediaInput],
+    applied_repair_strategy: DirectorRepairStrategy | None,
 ) -> list[_RouteCandidate]:
     del tasks, inspections_by_take
     duration, duration_warnings, supported = _duration_for_h3(shot.duration_seconds)
@@ -417,7 +448,15 @@ def _build_candidates(
                 )
             )
 
-    preparations = _asset_preparations(document, shot, reference_plan)
+    keyframe_repair_applied = (
+        applied_repair_strategy == DirectorRepairStrategy.CHANGE_KEYFRAME
+    )
+    preparations = _asset_preparations(
+        document,
+        shot,
+        reference_plan,
+        force_start=keyframe_repair_applied,
+    )
     start_preparation = next(
         (item for item in preparations if item.role == H3MediaRole.FIRST_FRAME),
         None,
@@ -446,7 +485,7 @@ def _build_candidates(
                         "interaction or local rework risk benefits from stronger composition and "
                         "continuity control. The user may still override this recommendation."
                     ),
-                    quality_score=600.0,
+                    quality_score=900.0 if keyframe_repair_applied else 600.0,
                     warnings=[
                         *duration_warnings,
                         "The recommended Frame-first route needs an approved start frame before submission.",
@@ -482,7 +521,7 @@ def _build_candidates(
                             "composition, action readiness, and continuity without constraining "
                             "the terminal performance with a last frame."
                         ),
-                        quality_score=650.0,
+                        quality_score=950.0 if keyframe_repair_applied else 650.0,
                         warnings=duration_warnings,
                         preparations=[selected_preparation],
                     )
@@ -709,8 +748,15 @@ def _asset_preparations(
     document: ProjectDocument,
     shot: ShotPlan,
     plan: ReferencePlanEntry,
+    *,
+    force_start: bool = False,
 ) -> list[H3RouteAssetPreparation]:
-    if shot.local_rework_risk not in {"高", "HIGH", "high"} and not plan.interactions:
+    risk_level = _declared_risk_level(shot.local_rework_risk)
+    if (
+        not force_start
+        and risk_level not in {"MEDIUM", "HIGH"}
+        and not plan.interactions
+    ):
         return []
     result: list[H3RouteAssetPreparation] = []
     try:
@@ -783,7 +829,7 @@ def _shot_risks(
         )
     if len(plan.action_beats) >= 2:
         categories.append(QaFailureCategory.CHARACTER_ORIENTATION)
-    if shot.local_rework_risk in {"高", "HIGH", "high"}:
+    if _declared_risk_level(shot.local_rework_risk) == "HIGH":
         categories.append(QaFailureCategory.COMPOSITION_QUALITY)
     failed_take_ids = {
         item.take_id
@@ -836,6 +882,35 @@ def _inspection_policy(
     )
 
 
+def _declared_risk_level(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized.startswith(("高", "high")):
+        return "HIGH"
+    if normalized.startswith(("中", "medium", "moderate")):
+        return "MEDIUM"
+    if normalized.startswith(("低", "low")):
+        return "LOW"
+    return "UNKNOWN"
+
+
+def _applied_director_strategy(
+    document: ProjectDocument,
+    shot_id: str,
+) -> DirectorRepairStrategy | None:
+    return next(
+        (
+            record.strategy
+            for record in reversed(document.repair_history)
+            if record.decision == DirectorRepairDecision.APPLIED
+            and (
+                record.source_shot_id == shot_id
+                or shot_id in record.affected_shot_ids
+            )
+        ),
+        None,
+    )
+
+
 def _duration_for_h3(duration_seconds: float) -> tuple[int, list[str], bool]:
     rounded = math.ceil(duration_seconds)
     if rounded > 15:
@@ -871,6 +946,8 @@ def _choose_with_language_agent(
         "compare empirical route evidence, approved visual bindings, action complexity, and QA "
         "risk. Recommendations and warnings are advisory and dismissible. Long shots require "
         "temporal and boundary observation; do not claim sparse frames prove an action absent."
+        " When an applied Director repair strategy is supplied, choose a candidate that actually "
+        "executes that repair unless a current-version reviewed Take is being reused."
     )
     payload = {
         "output_schema": _AgentRouteChoices.model_json_schema(),
@@ -892,6 +969,12 @@ def _choose_with_language_agent(
                 "qa_focus_categories": [
                     item.value for item in risks_by_shot[shot.id][1]
                 ],
+                "applied_director_repair_strategy": (
+                    strategy.value
+                    if (strategy := _applied_director_strategy(document, shot.id))
+                    is not None
+                    else None
+                ),
                 "candidates": [
                     {
                         "id": candidate.id,
@@ -903,6 +986,10 @@ def _choose_with_language_agent(
                         "evidence_ids": candidate.evidence_ids,
                         "media_roles": [
                             item.role.value for item in candidate.media_inputs
+                        ],
+                        "media_assets": [
+                            _media_input_label(document, item)
+                            for item in candidate.media_inputs
                         ],
                         "warnings": candidate.warnings,
                         "missing_inputs": candidate.missing_inputs,
@@ -925,6 +1012,30 @@ def _choose_with_language_agent(
     if set(choices) != expected:
         raise ValueError("Route agent must return exactly one choice for every requested shot")
     return choices
+
+
+def _media_input_label(
+    document: ProjectDocument,
+    media_input: H3MediaInput,
+) -> dict[str, str | None]:
+    asset = next(
+        (
+            candidate
+            for candidate in document.assets
+            if any(
+                version.id == media_input.asset_version_id
+                for version in candidate.versions
+            )
+        ),
+        None,
+    )
+    return {
+        "role": media_input.role.value,
+        "asset_version_id": media_input.asset_version_id,
+        "asset_id": asset.id if asset is not None else None,
+        "asset_name": asset.name if asset is not None else None,
+        "asset_kind": asset.kind.value if asset is not None else None,
+    }
 
 
 def _strip_json_fence(value: str) -> str:

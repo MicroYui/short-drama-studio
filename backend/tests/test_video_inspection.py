@@ -6,12 +6,20 @@ import subprocess
 from pathlib import Path
 
 import imageio_ffmpeg
+from PIL import Image
 
 from short_drama.language_models import LanguageProviderConfigUpdate
-from short_drama.models import EnqueueRequest, VideoInspectionRequest
+from short_drama.fixture import build_dont_trust_me_fixture
+from short_drama.models import (
+    ApprovalStatus,
+    AssetMediaType,
+    EnqueueRequest,
+    ReferenceBinding,
+    VideoInspectionRequest,
+)
 from short_drama.reference_planner import DirectorAdviceRequest
 from short_drama.service import ShortDramaService
-from short_drama.video_inspection import VideoInspector
+from short_drama.video_inspection import VideoInspector, _semantic_reference_images
 
 
 class FakeInspectionLanguageProvider:
@@ -93,6 +101,39 @@ def test_adaptive_sampling_covers_a_long_shot_without_frame_by_frame_decode(
     assert samples[-1].timestamp_seconds >= 17.0
     assert any("VISUAL_CHANGE" in sample.reasons for sample in samples)
     assert all(Path(sample.image_path).is_file() for sample in samples)
+
+
+def test_semantic_review_includes_approved_bound_asset_references(tmp_path: Path) -> None:
+    document = build_dont_trust_me_fixture("2026-08-17T00:00:00Z")
+    plan = document.reference_plan[0]
+    asset = document.assets[0]
+    image_path = tmp_path / "canonical-character.png"
+    Image.new("RGB", (96, 160), (40, 60, 80)).save(image_path)
+    approved = asset.versions[-1].model_copy(
+        deep=True,
+        update={
+            "id": "approved-canonical-character",
+            "media_type": AssetMediaType.IMAGE,
+            "local_path": str(image_path),
+            "approval_status": ApprovalStatus.APPROVED,
+        },
+    )
+    asset.versions.append(approved)
+    asset.approved_version_id = approved.id
+    plan.bindings.append(
+        ReferenceBinding(
+            kind="character",
+            target_id=approved.id,
+            purpose="canonical identity comparison",
+            requirement="preserve the approved character identity",
+        )
+    )
+
+    references = _semantic_reference_images(document, plan)
+
+    assert len(references) == 1
+    assert "CHARACTER canonical reference" in references[0][0]
+    assert references[0][1].startswith("data:image/png;base64,")
 
 
 def test_inspection_persists_intra_shot_and_boundary_evidence(client) -> None:
@@ -230,4 +271,6 @@ def test_semantic_observation_flows_into_optional_director_advice(
     assert fake.generations[0][2] is not None
     assert len(fake.generations[0][2] or []) == 1
     assert "Sparse frames cannot prove" in fake.generations[0][0]
+    assert "Use only LOW, MEDIUM, HIGH, or CRITICAL" in fake.generations[0][0]
+    assert "canonical asset references" in fake.generations[0][0]
     assert "AUTO_IDENTITY_DRIFT" in fake.generations[1][1]

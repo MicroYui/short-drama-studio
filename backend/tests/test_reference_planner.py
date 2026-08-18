@@ -45,8 +45,10 @@ def _service(tmp_path: Path) -> ShortDramaService:
 
 
 class FakeDirectorLanguageProvider:
-    def __init__(self, output_text: str) -> None:
-        self.output_text = output_text
+    def __init__(self, output_text: str | list[str]) -> None:
+        self.output_texts = (
+            list(output_text) if isinstance(output_text, list) else [output_text]
+        )
         self.generations: list[tuple[str, str]] = []
 
     def validate_credentials(self) -> None:
@@ -62,7 +64,9 @@ class FakeDirectorLanguageProvider:
     ) -> str:
         del image_urls, max_output_tokens
         self.generations.append((instructions, input_text))
-        return self.output_text
+        if not self.output_texts:
+            raise AssertionError("Unexpected Director Agent generation")
+        return self.output_texts.pop(0)
 
 
 def _client(service: ShortDramaService) -> TestClient:
@@ -469,6 +473,44 @@ def test_director_agent_recommends_without_creating_a_generation_gate(
     assert "Advice never blocks generation" in input_text
     assert '"provider_capability_profile"' in input_text
     assert '"repair_strategy_library"' in input_text
+
+
+def test_director_agent_repairs_invalid_json_once(tmp_path: Path) -> None:
+    fake = FakeDirectorLanguageProvider(
+        [
+            "not-json",
+            """{
+              "advisories": [],
+              "repair_options": [],
+              "recommended_strategy": null,
+              "proposed_repair": null
+            }""",
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _api_key, _base_url: fake,
+    )
+    project = service.initialize_fixture()
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    client = _client(service)
+    shot = project.document.shots[0]
+
+    advice = client.post(
+        f"/api/short-drama/projects/{project.document.project.id}/shots/{shot.id}/director-advice",
+        json={},
+    )
+
+    assert advice.status_code == 200, advice.text
+    assert advice.json()["advisories"] == []
+    assert len(fake.generations) == 2
+    repair_instructions, repair_input = fake.generations[1]
+    assert "repairing a previously invalid JSON response" in repair_instructions
+    assert '"invalid_director_json": "not-json"' in repair_input
+    assert '"original_director_context"' in repair_input
 
 
 def test_auto_draft_director_loop_applies_executable_repair(tmp_path: Path) -> None:

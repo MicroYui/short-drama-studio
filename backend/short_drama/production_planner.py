@@ -977,7 +977,7 @@ def build_project_document_from_plan(
         created_at=created_at,
         updated_at=created_at,
     )
-    return ProjectDocument(
+    document = ProjectDocument(
         project=project,
         script_versions=[script],
         bible_versions=[bible],
@@ -987,3 +987,146 @@ def build_project_document_from_plan(
         reference_plan=reference_plan,
         manifests=[],
     )
+    refresh_lightweight_reference_plans(document)
+    return document
+
+
+def refresh_lightweight_reference_plans(document: ProjectDocument) -> bool:
+    """Keep simple AUTO_DRAFT bindings useful without overwriting advanced plans.
+
+    The first autonomous planning pass intentionally emits a lightweight, provider-neutral
+    ReferenceBinding list.  Later route planning can enrich that list from the already-declared
+    shot intent, while structured requirements/action beats/interactions remain authoritative.
+    """
+
+    lines_by_id = {
+        line.id: line
+        for script in document.script_versions
+        if script.id == document.project.current_script_version_id
+        for line in script.lines
+    }
+    assets_by_version = {
+        version.id: asset
+        for asset in document.assets
+        for version in asset.versions
+    }
+    location_count = sum(asset.kind == AssetKind.LOCATION for asset in document.assets)
+    changed = False
+
+    for shot in document.shots:
+        plan = next(
+            (item for item in document.reference_plan if item.shot_id == shot.id),
+            None,
+        )
+        if plan is None or plan.requirements or plan.action_beats or plan.interactions:
+            continue
+
+        dialogue = [
+            lines_by_id[line_id]
+            for line_id in shot.dialogue_line_ids
+            if line_id in lines_by_id
+        ]
+        context = "\n".join(
+            [
+                shot.narrative_purpose,
+                shot.visual,
+                shot.framing,
+                shot.camera,
+                shot.audio_intent,
+                shot.continuity.character_positions,
+                shot.continuity.eyeline,
+                shot.continuity.prop_state_in,
+                shot.continuity.prop_state_out,
+                shot.continuity.action_in,
+                shot.continuity.action_out,
+                *(f"{line.speaker}：{line.spoken_text}" for line in dialogue),
+            ]
+        )
+        speakers = {line.speaker.removeprefix("录音笔中的") for line in dialogue}
+        existing_by_asset: dict[str, ReferenceBinding] = {}
+        unresolved: list[ReferenceBinding] = []
+        for binding in plan.bindings:
+            asset = assets_by_version.get(binding.target_id)
+            if asset is None:
+                unresolved.append(binding.model_copy(deep=True))
+                continue
+            existing_by_asset.setdefault(asset.id, binding)
+
+        selected_assets: list[Asset] = []
+        for asset in document.assets:
+            if asset.id in existing_by_asset or _asset_relevant_to_shot(
+                asset,
+                context=context,
+                speakers=speakers,
+                location_count=location_count,
+            ):
+                selected_assets.append(asset)
+
+        bindings: list[ReferenceBinding] = []
+        for asset in selected_assets:
+            existing = existing_by_asset.get(asset.id)
+            target_id = asset.approved_version_id or asset.current_version_id
+            bindings.append(
+                ReferenceBinding(
+                    kind=asset.kind.value,
+                    target_id=target_id,
+                    purpose=(
+                        existing.purpose
+                        if existing is not None
+                        else "自动补全的当前镜头身份、空间或道具连续性参考"
+                    ),
+                    requirement=(
+                        existing.requirement
+                        if existing is not None
+                        else "REQUIRED"
+                    ),
+                )
+            )
+        bindings.extend(unresolved)
+        max_images = min(9, max(plan.max_reference_images, len(bindings), 1))
+        before = [item.model_dump(mode="json") for item in plan.bindings]
+        after = [item.model_dump(mode="json") for item in bindings]
+        if before != after or plan.max_reference_images != max_images:
+            plan.bindings = bindings
+            plan.max_reference_images = max_images
+            changed = True
+    return changed
+
+
+def _asset_relevant_to_shot(
+    asset: Asset,
+    *,
+    context: str,
+    speakers: set[str],
+    location_count: int,
+) -> bool:
+    if asset.kind == AssetKind.REFERENCE:
+        return False
+    subject = asset.name.removesuffix("定妆").strip()
+    if asset.kind == AssetKind.CHARACTER:
+        return subject in speakers or _canonical_name_matches(subject, context)
+    if asset.kind == AssetKind.LOCATION and location_count == 1:
+        return True
+    return _canonical_name_matches(subject, context)
+
+
+def _canonical_name_matches(name: str, context: str) -> bool:
+    canonical = "".join(character.lower() for character in name if character.isalnum())
+    haystack = "".join(character.lower() for character in context if character.isalnum())
+    if not canonical:
+        return False
+    if canonical in haystack:
+        return True
+    if len(canonical) <= 2:
+        return False
+    threshold = min(4, max(3, (len(canonical) + 1) // 2))
+    previous = [0] * (len(haystack) + 1)
+    longest = 0
+    for left in canonical:
+        current = [0]
+        for index, right in enumerate(haystack, start=1):
+            length = previous[index - 1] + 1 if left == right else 0
+            current.append(length)
+            longest = max(longest, length)
+        previous = current
+    return longest >= threshold
