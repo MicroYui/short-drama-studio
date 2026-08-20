@@ -1305,6 +1305,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{source_project_id}/autonomous-repeats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Autonomous Repeat */
+        post: operations["create_autonomous_repeat_api_short_drama_projects__source_project_id__autonomous_repeats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/providers/gpt-image": {
         parameters: {
             query?: never;
@@ -2031,6 +2048,16 @@ export interface components {
          * @enum {string}
          */
         AutonomousExecutionTarget: "MOCK" | "REAL_H3";
+        /** AutonomousRepeatCreateRequest */
+        AutonomousRepeatCreateRequest: {
+            /** Name */
+            name?: string | null;
+            /**
+             * Render Export
+             * @default true
+             */
+            render_export: boolean;
+        };
         /** AutonomousRunAdvanceRequest */
         AutonomousRunAdvanceRequest: {
             /**
@@ -9321,6 +9348,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskActionResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_autonomous_repeat_api_short_drama_projects__source_project_id__autonomous_repeats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutonomousRepeatCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutonomousDraftResponse"];
                 };
             };
             /** @description Client Error */

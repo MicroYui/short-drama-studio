@@ -272,5 +272,7 @@ def test_semantic_observation_flows_into_optional_director_advice(
     assert len(fake.generations[0][2] or []) == 1
     assert "Sparse frames cannot prove" in fake.generations[0][0]
     assert "Use only LOW, MEDIUM, HIGH, or CRITICAL" in fake.generations[0][0]
+    assert "Calibrate severity by the consequence for the finished story" in fake.generations[0][0]
+    assert "Do not promote a secondary deviation to HIGH" in fake.generations[0][0]
     assert "canonical asset references" in fake.generations[0][0]
     assert "AUTO_IDENTITY_DRIFT" in fake.generations[1][1]

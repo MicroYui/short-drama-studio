@@ -575,6 +575,55 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     assert reviewed.take.qa_status == QaStatus.PASSED
     assert reviewed.take.is_selected is False
     assert reviewed.evidence.status == EvidenceStatus.REVIEWED
+    first_rejection = service.review_h3_take(
+        take.id,
+        H3TakeReviewRequest(
+            hard_gate_passed=False,
+            score=2.8,
+            notes="The first semantic review found a composition issue.",
+            issues=[
+                QaIssue(
+                    code="OLD_COMPOSITION_ISSUE",
+                    severity="HIGH",
+                    message="This issue is superseded by the next semantic review.",
+                    repair_layer="SHOT_COMPOSITION",
+                    category=QaFailureCategory.COMPOSITION_QUALITY,
+                )
+            ],
+        ),
+    )
+    assert [item.code for item in first_rejection.take.qa_report.issues] == [
+        "OLD_COMPOSITION_ISSUE"
+    ]
+    second_rejection = service.review_h3_take(
+        take.id,
+        H3TakeReviewRequest(
+            hard_gate_passed=False,
+            score=3.1,
+            notes="The current semantic review replaces the superseded issue list.",
+            issues=[
+                QaIssue(
+                    code="CURRENT_FRAMING_ISSUE",
+                    severity="MEDIUM",
+                    message="Only the current framing deviation remains visible.",
+                    repair_layer="SHOT_COMPOSITION",
+                    category=QaFailureCategory.COMPOSITION_QUALITY,
+                )
+            ],
+        ),
+    )
+    assert [item.code for item in second_rejection.take.qa_report.issues] == [
+        "CURRENT_FRAMING_ISSUE"
+    ]
+    reviewed = service.review_h3_take(
+        take.id,
+        H3TakeReviewRequest(
+            hard_gate_passed=True,
+            score=4.6,
+            notes="The latest review passes and clears superseded semantic issues.",
+        ),
+    )
+    assert reviewed.take.qa_report.issues == []
     persisted_evidence = service.repository.get_route_evidence_for_take(take.id)
     assert persisted_evidence is not None
     assert persisted_evidence.purpose == EvidencePurpose.QUALITY_PROBE
@@ -615,11 +664,17 @@ def test_running_h3_output_is_stale_after_director_changes_shot_plan(
             decision=DirectorRepairDecision.APPLIED,
             strategy=DirectorRepairStrategy.CHANGE_CAMERA,
             reason="Use coverage that reduces the failed continuity requirements.",
-            shot_patch=ShotPlanPatch(camera="rear coverage"),
+            shot_patch=ShotPlanPatch(
+                camera="rear coverage",
+                continuity=shot.continuity.model_copy(
+                    update={"eyeline": "rear coverage eyeline"}
+                ),
+            ),
         ),
     )
     current_shot = next(item for item in updated.document.shots if item.id == shot.id)
     assert current_shot.revision == 2
+    assert current_shot.continuity.eyeline == "rear coverage eyeline"
 
     fake.set_status(acknowledged.provider_task_id, H3RemoteStatus.SUCCEEDED)
     assert service.advance_task(probe.task.id).status == TaskStatus.SUCCEEDED

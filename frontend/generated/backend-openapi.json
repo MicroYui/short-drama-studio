@@ -1248,6 +1248,31 @@
         "title": "AutonomousExecutionTarget",
         "type": "string"
       },
+      "AutonomousRepeatCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "render_export": {
+            "default": true,
+            "title": "Render Export",
+            "type": "boolean"
+          }
+        },
+        "title": "AutonomousRepeatCreateRequest",
+        "type": "object"
+      },
       "AutonomousRunAdvanceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16724,6 +16749,68 @@
           }
         },
         "summary": "Enqueue Retake",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{source_project_id}/autonomous-repeats": {
+      "post": {
+        "operationId": "create_autonomous_repeat_api_short_drama_projects__source_project_id__autonomous_repeats_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_project_id",
+            "required": true,
+            "schema": {
+              "title": "Source Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutonomousRepeatCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutonomousDraftResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Autonomous Repeat",
         "tags": [
           "short-drama"
         ]

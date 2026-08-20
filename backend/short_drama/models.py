@@ -1043,6 +1043,11 @@ class AutonomousDraftCreateRequest(CreateProjectRequest):
         return self
 
 
+class AutonomousRepeatCreateRequest(DomainModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    render_export: bool = True
+
+
 class EnqueueRequest(DomainModel):
     shot_ids: list[str] | None = None
     candidate_count: int = Field(default=2, ge=1, le=4)

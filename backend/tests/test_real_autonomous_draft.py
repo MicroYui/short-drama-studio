@@ -29,11 +29,15 @@ from short_drama.image_models import (
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.models import (
+    ApprovalStatus,
     AssetKind,
+    AssetMediaType,
     AutonomousDraftCreateRequest,
     AutonomousExecutionTarget,
+    AutonomousRepeatCreateRequest,
     AutonomousRunAdvanceRequest,
     AutonomousRunStatus,
+    Freshness,
     ReferenceRequirement,
     ReferenceRole,
     SourceMode,
@@ -452,6 +456,64 @@ def _service(
     )
     service.update_h3_config(H3ProviderConfigUpdate(api_key="h3-key"))
     return service
+
+
+def test_repeat_run_reuses_approved_preproduction_but_starts_new_generation(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient()
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    source = service.initialize_fixture()
+    asset_path = tmp_path / "approved-core.png"
+    Image.new("RGB", (768, 1344), (40, 60, 80)).save(asset_path)
+    source_document = source.document
+    for asset in source_document.assets:
+        if asset.kind not in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}:
+            continue
+        version = asset.versions[-1].model_copy(
+            deep=True,
+            update={
+                "media_type": AssetMediaType.IMAGE,
+                "local_path": str(asset_path),
+                "approval_status": ApprovalStatus.APPROVED,
+                "freshness": Freshness.CURRENT,
+            },
+        )
+        asset.versions = [version]
+        asset.current_version_id = version.id
+        asset.approved_version_id = version.id
+    service.repository.save_project(source_document)
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+
+    repeated = service.create_autonomous_repeat(
+        source.document.project.id,
+        AutonomousRepeatCreateRequest(name="固定制片包独立重复 2"),
+    )
+
+    assert repeated.project.document.project.id != source.document.project.id
+    assert repeated.run.status == AutonomousRunStatus.RUNNING
+    assert repeated.run.current_step.value in {"PREPARE_SHOT_ASSETS", "GENERATE"}
+    assert repeated.project.tasks == []
+    assert repeated.project.takes == []
+    assert repeated.project.document.manifests == []
+    assert repeated.run.planner.startswith("fixed-preproduction-repeat:")
+    source_versions = {
+        asset.name: asset.approved_version_id
+        for asset in service.get_project(source.document.project.id).document.assets
+        if asset.kind in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}
+    }
+    repeat_versions = {
+        asset.name: asset.approved_version_id
+        for asset in repeated.project.document.assets
+    }
+    assert repeat_versions == source_versions
+    assert {
+        item.id for item in repeated.project.document.shots
+    }.isdisjoint({item.id for item in source.document.shots})
 
 
 def test_real_autonomous_draft_resumes_and_exports_without_shot_by_shot_input(

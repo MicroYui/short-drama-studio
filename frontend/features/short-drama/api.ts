@@ -54,10 +54,12 @@ export type VideoInspectionReport = components['schemas']['VideoInspectionReport
 export type VideoInspectionRequest = components['schemas']['VideoInspectionRequest']
 export type AudioInspectionReport = components['schemas']['AudioInspectionReport']
 export type AudioInspectionRequest = components['schemas']['AudioInspectionRequest']
+export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRepeatCreateRequest']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
 const createAutonomousDraft = makeEndpointClient('/api/short-drama/projects/autonomous-draft', 'post')
+const createAutonomousRepeat = makeEndpointClient('/api/short-drama/projects/{source_project_id}/autonomous-repeats', 'post')
 const advanceAutonomousRun = makeEndpointClient('/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance', 'post')
 const initializeFixture = makeEndpointClient('/api/short-drama/fixtures/dont-trust-me', 'post')
 const getProject = makeEndpointClient('/api/short-drama/projects/{project_id}', 'get')
@@ -141,6 +143,14 @@ export const ShortDramaApi = {
   listProjects: () => listProjects(),
   createProject,
   createAutonomousDraft,
+  createAutonomousRepeat: (
+    sourceProjectId: string,
+    body: AutonomousRepeatCreateRequest,
+  ) => createAutonomousRepeat(
+    body,
+    undefined,
+    projectPath(sourceProjectId, '/autonomous-repeats'),
+  ),
   advanceAutonomousRun: (projectId: string, runId: string, maxActions = 24) => (
     advanceAutonomousRun(
       { max_actions: maxActions },

@@ -27,6 +27,8 @@ from short_drama.models import (
     EvidenceStatus,
     Freshness,
     QAReport,
+    QaFailureCategory,
+    QaIssue,
     QaStatus,
     Take,
     TakeAvailability,
@@ -34,7 +36,14 @@ from short_drama.models import (
     VideoGenerationRoute,
 )
 from short_drama.providers.minimax_h3_compiler import build_h3_prompt
-from short_drama.service import ShortDramaService, WorkflowConflictError
+from short_drama.service import (
+    ShortDramaService,
+    WorkflowConflictError,
+    _BOUNDED_BEST_EFFORT_CHECK,
+    _can_receive_bounded_best_effort_waiver,
+    _prioritize_keyframe_canvas,
+    _scope_keyframe_reference_versions,
+)
 
 
 NOW = "2026-08-17T12:00:00+00:00"
@@ -353,6 +362,141 @@ def test_applied_change_keyframe_repair_is_executed_by_next_route_plan(
     assert decision.route == VideoGenerationRoute.FRAME_FIRST
     assert decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
     assert decision.asset_preparations[0].role.value == "first_frame"
+
+
+def test_applied_change_camera_repair_prepares_matching_frame_control(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    shot = next(item for item in document.shots if item.sequence == 2)
+    shot.local_rework_risk = "低；稳定对话近景"
+    shot.camera = "fixed tighter single coverage"
+    shot.revision += 1
+    document.repair_history.append(
+        DirectorRepairRecord(
+            id="director-repair-change-camera",
+            source_shot_id=shot.id,
+            strategy=DirectorRepairStrategy.CHANGE_CAMERA,
+            decision=DirectorRepairDecision.APPLIED,
+            reason="Use a different coverage design after the previous route failed.",
+            affected_shot_ids=[shot.id],
+            created_at=NOW,
+        )
+    )
+    service.repository.save_project(document)
+
+    compiled = service.compile_h3_production_route_plan(
+        document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+
+    assert decision.route == VideoGenerationRoute.FRAME_FIRST
+    assert decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
+    assert decision.asset_preparations[0].role.value == "first_frame"
+    assert decision.override_allowed is True
+
+
+def test_keyframe_reference_scope_and_primary_canvas_follow_route_and_framing(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    lin = next(item for item in document.assets if item.name == "林夏定妆")
+    zhou = next(item for item in document.assets if item.name == "周衡定妆")
+    location = next(item for item in document.assets if item.kind.value == "LOCATION")
+    prop = next(item for item in document.assets if item.kind.value == "PROP")
+    bound = [
+        (lin, lin.versions[0]),
+        (zhou, zhou.versions[0]),
+        (location, location.versions[0]),
+        (prop, prop.versions[0]),
+    ]
+    shot_one = next(item for item in document.shots if item.sequence == 1)
+    shot_four = next(item for item in document.shots if item.sequence == 4)
+    shot_five = next(item for item in document.shots if item.sequence == 5)
+    plan = next(item for item in document.reference_plan if item.shot_id == shot_one.id)
+
+    scoped = _scope_keyframe_reference_versions(
+        bound,
+        plan,
+        [lin.versions[0].id, location.versions[0].id],
+    )
+
+    assert [version.id for _asset, version in scoped] == [
+        lin.versions[0].id,
+        location.versions[0].id,
+    ]
+    assert _prioritize_keyframe_canvas(bound, shot_one)[0][0].kind.value == "LOCATION"
+    assert _prioritize_keyframe_canvas(bound, shot_four)[0][0].kind.value == "CHARACTER"
+    assert _prioritize_keyframe_canvas(bound, shot_five)[0][0].kind.value == "PROP"
+
+
+def test_bounded_best_effort_keeps_rejected_qa_visible_but_allows_timeline(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    video = tmp_path / "best-effort.mp4"
+    _render_video(video)
+    takes = [
+        _persist_passed_h3_take(
+            service,
+            shot_id=shot.id,
+            media_path=video,
+            selected=True,
+        )
+        for shot in project.document.shots
+    ]
+    best_effort = takes[0]
+    best_effort.qa_status = QaStatus.REJECTED
+    best_effort.qa_report.status = QaStatus.REJECTED
+    best_effort.qa_report.hard_gate_passed = False
+    best_effort.qa_report.score = 2.95
+    best_effort.qa_report.issues = [
+        QaIssue(
+            code="PROP_APPEARANCE_REFERENCE_DRIFT",
+            severity="HIGH",
+            message="The prop appearance drifted but remained singular and correctly held.",
+            repair_layer="PROP_ASSET",
+            category=QaFailureCategory.PROP_CONTINUITY,
+        )
+    ]
+    evidence = service.repository.get_route_evidence_for_take(best_effort.id)
+    assert evidence is not None
+    evidence.hard_gate_passed = False
+    service.repository.save_route_evidence(evidence)
+
+    assert _can_receive_bounded_best_effort_waiver(best_effort, evidence) is True
+    best_effort.qa_report.checks.append(_BOUNDED_BEST_EFFORT_CHECK)
+    service.repository.save_take(best_effort)
+
+    manifest = service.rebuild_manifest(project.document.project.id)
+
+    assert len(manifest.video_clips) == len(project.document.shots)
+    aggregate = service.get_project(project.document.project.id)
+    persisted = next(item for item in aggregate.takes if item.id == best_effort.id)
+    assert persisted.qa_status == QaStatus.REJECTED
+    assert persisted.qa_report.hard_gate_passed is False
+    assert aggregate.progress.shots_with_selected_take == len(project.document.shots)
+
+    best_effort.qa_report.checks.remove(_BOUNDED_BEST_EFFORT_CHECK)
+    best_effort.qa_report.issues = [
+        QaIssue(
+            code="CHARACTER_REFERENCE_DRIFT",
+            severity="HIGH",
+            message="The lead identity drifted from the approved character asset.",
+            repair_layer="CHARACTER_GENERATION",
+            category=QaFailureCategory.IDENTITY_CONTINUITY,
+        )
+    ]
+    assert _can_receive_bounded_best_effort_waiver(best_effort, evidence) is False
 
 
 def test_route_execution_invokes_intra_shot_and_boundary_observation_tools(

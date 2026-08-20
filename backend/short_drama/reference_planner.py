@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import Field, model_validator
 
@@ -17,6 +17,7 @@ from short_drama.models import (
     AssetVersion,
     ContinuityState,
     DirectorRepairDecision,
+    DirectorRepairRecord,
     DirectorRepairStrategy,
     DomainModel,
     ProjectAggregate,
@@ -415,6 +416,57 @@ def preview_reference_plan(
                 reasons=reasons,
             )
         )
+
+    if requirements and len(selected) < max_images:
+        binding_selected, binding_missing, binding_warnings = _binding_selections(
+            document,
+            plan,
+            max_images=max(1, len(plan.bindings)),
+        )
+        requirements_by_subject = {
+            requirement.subject_asset_id: requirement
+            for requirement in requirements
+        }
+        ordered_bindings = sorted(
+            binding_selected,
+            key=lambda item: (
+                item.subject_asset_id not in requirements_by_subject,
+                next(
+                    (
+                        index
+                        for index, requirement in enumerate(requirements)
+                        if requirement.subject_asset_id == item.subject_asset_id
+                    ),
+                    len(requirements),
+                ),
+                -item.score,
+            ),
+        )
+        selected_version_ids = {item.asset_version_id for item in selected}
+        for fallback in ordered_bindings:
+            if len(selected) >= max_images:
+                break
+            if fallback.asset_version_id in selected_version_ids:
+                continue
+            requirement = requirements_by_subject.get(fallback.subject_asset_id)
+            if requirement is not None:
+                fallback.requirement_ids = [requirement.id]
+                fallback.reasons.append(
+                    "approved binding used as a coarse fallback because no matching semantic "
+                    "reference-pack entry is available"
+                )
+                warnings.append(
+                    f"{requirement.id}: using an approved core asset as a coarse visual fallback; "
+                    "the requested role, angle, or framing remains advisory"
+                )
+            else:
+                fallback.reasons.append(
+                    "approved binding supplements the shot-specific visual context"
+                )
+            selected.append(fallback)
+            selected_version_ids.add(fallback.asset_version_id)
+        missing.extend(item for item in binding_missing if item not in missing)
+        warnings.extend(item for item in binding_warnings if item not in warnings)
 
     if not requirements and not request.requirement_ids:
         binding_selected, binding_missing, binding_warnings = _binding_selections(
@@ -901,6 +953,7 @@ def build_director_advice_input(
     qa_issues: list[QaIssue],
     reviewer_notes: list[str],
     capability_profile: H3CapabilityProfileResponse,
+    prior_repairs: list[DirectorRepairRecord],
 ) -> tuple[str, str]:
     assets = {item.id: item for item in document.assets}
     instructions = (
@@ -909,10 +962,14 @@ def build_director_advice_input(
         "the actual shot context; do not apply a fixed action-count or duration threshold. "
         "Compare prompt retry, keyframe replacement, shot split, and coverage-camera change "
         "against the actual QA failure and provider capability profile. A prompt retry should "
-        "not be the default when prior evidence indicates a route or keyframe mismatch. Every "
-        "item is optional and dismissible. Never claim that generation is blocked or that the "
-        "user must follow your advice. Use an empty advisories array and repair_options array "
-        "when no suggestion would materially improve quality."
+        "not be the default when prior evidence indicates a route or keyframe mismatch. Treat "
+        "prior applied repairs followed by another failed QA result as causal evidence. Do not "
+        "repeat an ineffective strategy for the same failure family unless the new proposal "
+        "materially changes its actual inputs and explains why that change should work; prefer "
+        "another strategy from the repair library when appropriate. Every item is optional and "
+        "dismissible. Never claim that generation is blocked or that the user must follow your "
+        "advice. Use an empty advisories array and repair_options array when no suggestion would "
+        "materially improve quality."
     )
     payload = {
         "output_schema": {
@@ -948,7 +1005,10 @@ def build_director_advice_input(
                     "optional provider-neutral ShotPlan field patch; use null when unchanged"
                 ),
                 "reference_plan": (
-                    "optional complete provider-neutral reference-plan update; use null when unchanged"
+                    "optional update object containing only requirements, action_beats, "
+                    "interactions, max_reference_images, and planning_notes; never return "
+                    "shot_id, bindings, capability_valid, or validation_notes; use null when "
+                    "unchanged"
                 ),
                 "split_shots": (
                     "for SPLIT_SHOT only, at least two complete replacement shot drafts; "
@@ -969,6 +1029,9 @@ def build_director_advice_input(
         "planning_signals": preview.complexity.model_dump(mode="json"),
         "qa_failures": [item.model_dump(mode="json") for item in qa_issues],
         "reviewer_notes": reviewer_notes,
+        "prior_repairs": [
+            item.model_dump(mode="json") for item in prior_repairs
+        ],
         "provider_capability_profile": capability_profile.model_dump(mode="json"),
         "repair_strategy_library": {
             DirectorRepairStrategy.PROMPT_RETRY.value: (
@@ -1007,9 +1070,32 @@ def parse_director_advice(output_text: str) -> DirectorAdvicePayload:
             lines = lines[:-1]
         text = "\n".join(lines).strip()
     try:
-        return DirectorAdvicePayload.model_validate_json(text)
+        payload = cast(object, json.loads(text))
+        if isinstance(payload, dict):
+            payload_object = cast(dict[str, object], payload)
+            proposed_repair = payload_object.get("proposed_repair")
+            if isinstance(proposed_repair, dict):
+                repair_object = cast(dict[str, object], proposed_repair)
+                reference_plan = repair_object.get("reference_plan")
+                if isinstance(reference_plan, dict):
+                    reference_plan_object = cast(dict[str, object], reference_plan)
+                    # The model sometimes copies read-only fields from the current
+                    # ReferencePlanEntry into the smaller update object. Dropping only
+                    # those known envelope fields is lossless; all other unknown fields
+                    # remain schema errors and are sent through the bounded repair pass.
+                    for field_name in (
+                        "shot_id",
+                        "bindings",
+                        "capability_valid",
+                        "validation_notes",
+                    ):
+                        reference_plan_object.pop(field_name, None)
+        return DirectorAdvicePayload.model_validate(payload)
     except ValueError as exc:
-        raise ValueError("Director Agent returned invalid advisory JSON") from exc
+        detail = " ".join(str(exc).split())[:2000]
+        raise ValueError(
+            "Director Agent returned invalid advisory JSON: " + detail
+        ) from exc
 
 
 def build_director_advice_repair_input(

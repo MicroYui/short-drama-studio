@@ -6,7 +6,9 @@ import hashlib
 import json
 import math
 import threading
+from copy import deepcopy
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 from short_drama.asset_workbench import (
@@ -102,6 +104,7 @@ from short_drama.models import (
     AutoDraftResponse,
     AutonomousExecutionTarget,
     AutonomousDraftCreateRequest,
+    AutonomousRepeatCreateRequest,
     AutonomousDraftResponse,
     AutonomousRunAdvanceRequest,
     AutonomousRunRecord,
@@ -124,6 +127,7 @@ from short_drama.models import (
     OutputSpec,
     ProgressSummary,
     ProjectAggregate,
+    ProjectBibleVersion,
     ProjectDocument,
     ProjectListResponse,
     ProjectStage,
@@ -143,6 +147,7 @@ from short_drama.models import (
     SourceMode,
     SubtitleCue,
     Take,
+    TakeAvailability,
     TaskStatus,
     TimelineAudioClip,
     TimelineManifest,
@@ -234,6 +239,63 @@ _TERMINAL_TASK_STATUSES = {
 }
 _MAX_AUTONOMOUS_IMAGE_ATTEMPTS = 3
 _MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS = 3
+_BOUNDED_BEST_EFFORT_CHECK = "bounded-auto-draft-best-effort-waiver"
+
+
+def _take_is_timeline_eligible(take: Take) -> bool:
+    return take.qa_status == QaStatus.PASSED or (
+        _BOUNDED_BEST_EFFORT_CHECK in take.qa_report.checks
+    )
+
+
+def _can_receive_bounded_best_effort_waiver(
+    take: Take,
+    evidence: RouteEvidence | None,
+) -> bool:
+    if (
+        take.freshness != Freshness.CURRENT
+        or take.availability != TakeAvailability.AVAILABLE
+        or take.qa_status != QaStatus.REJECTED
+        or take.qa_report.score < 2.5
+        or _BOUNDED_BEST_EFFORT_CHECK in take.qa_report.checks
+        or evidence is None
+        or evidence.technical_passed is not True
+        or evidence.purpose == EvidencePurpose.CONTRACT_SMOKE
+    ):
+        return False
+    high_issues: list[QaIssue] = []
+    for issue in take.qa_report.issues:
+        severity = issue.severity.upper()
+        if severity in {"ERROR", "CRITICAL", "FATAL"}:
+            return False
+        if severity in {"HIGH", "MAJOR"}:
+            high_issues.append(issue)
+    if len(high_issues) > 1:
+        return False
+    non_waivable_categories = {
+        QaFailureCategory.TECHNICAL_MEDIA,
+        QaFailureCategory.CONTACT_CONTINUITY,
+        QaFailureCategory.SPATIAL_CONTINUITY,
+        QaFailureCategory.CHARACTER_ORIENTATION,
+        QaFailureCategory.IDENTITY_CONTINUITY,
+    }
+    for issue in high_issues:
+        if issue.category in non_waivable_categories:
+            return False
+        if issue.category == QaFailureCategory.PROP_CONTINUITY and any(
+            token in issue.code.upper()
+            for token in (
+                "DUPLICAT",
+                "STATE",
+                "CONTACT",
+                "HAND",
+                "MISSING",
+                "ORIENTATION",
+                "TOPOLOGY",
+            )
+        ):
+            return False
+    return True
 
 
 def _order_keyframe_reference_versions(
@@ -265,6 +327,54 @@ def _order_keyframe_reference_versions(
     return ordered
 
 
+def _scope_keyframe_reference_versions(
+    bound: list[tuple[Asset, AssetVersion]],
+    reference_plan: ReferencePlanEntry,
+    preferred_version_ids: list[str],
+) -> list[tuple[Asset, AssetVersion]]:
+    """Use the route-selected visual inputs consistently across keyframe stages."""
+
+    preferred = set(preferred_version_ids)
+    selected = [item for item in bound if item[1].id in preferred]
+    return selected or _filter_generation_reference_versions(bound, reference_plan)
+
+
+def _prioritize_keyframe_canvas(
+    ordered: list[tuple[Asset, AssetVersion]],
+    shot: ShotPlan,
+) -> list[tuple[Asset, AssetVersion]]:
+    """Choose a composition-friendly edit canvas from the selected references."""
+
+    framing = shot.framing.lower()
+    if any(
+        token in framing
+        for token in ("道具", "手部", "物件", "产品", "insert", "product", "detail")
+    ):
+        preferred_kind = AssetKind.PROP
+    elif any(
+        token in framing
+        for token in ("双人", "多人", "群像", "全景", "远景", "wide", "two-shot", "master")
+    ):
+        preferred_kind = AssetKind.LOCATION
+    elif any(
+        token in framing
+        for token in ("面部", "胸像", "单人", "近景", "特写", "portrait", "close-up")
+    ):
+        preferred_kind = AssetKind.CHARACTER
+    else:
+        character_count = sum(asset.kind == AssetKind.CHARACTER for asset, _ in ordered)
+        preferred_kind = (
+            AssetKind.LOCATION if character_count > 1 else AssetKind.CHARACTER
+        )
+    primary = next(
+        (item for item in ordered if item[0].kind == preferred_kind),
+        None,
+    )
+    if primary is None:
+        return ordered
+    return [primary, *(item for item in ordered if item[1].id != primary[1].id)]
+
+
 def _filter_generation_reference_versions(
     bound: list[tuple[Asset, AssetVersion]],
     reference_plan: ReferencePlanEntry,
@@ -282,6 +392,27 @@ def _filter_generation_reference_versions(
         return bound
     filtered = [item for item in bound if item[0].id in subject_ids]
     return filtered or bound
+
+
+def _remap_exact_identifiers(
+    value: object,
+    identifier_map: dict[str, str],
+) -> object:
+    """Remap domain identifiers without rewriting paths, prompts, or prose substrings."""
+
+    if isinstance(value, str):
+        return identifier_map.get(value, value)
+    if isinstance(value, list):
+        return [
+            _remap_exact_identifiers(item, identifier_map)
+            for item in cast(list[object], value)
+        ]
+    if isinstance(value, dict):
+        return {
+            key: _remap_exact_identifiers(item, identifier_map)
+            for key, item in cast(dict[str, object], value).items()
+        }
+    return value
 
 
 class ShortDramaService:
@@ -422,6 +553,268 @@ class ShortDramaService:
             project=result.project,
             export=result.export,
             run=completed,
+        )
+
+    def create_autonomous_repeat(
+        self,
+        source_project_id: str,
+        request: AutonomousRepeatCreateRequest,
+    ) -> AutonomousDraftResponse:
+        """Start an independent generation run from one approved preproduction package."""
+
+        source = self._require_project_document(source_project_id)
+        source_script = next(
+            (
+                item
+                for item in source.script_versions
+                if item.id == source.project.current_script_version_id
+            ),
+            None,
+        )
+        source_bible = next(
+            (
+                item
+                for item in source.bible_versions
+                if item.id == source.project.current_bible_version_id
+            ),
+            None,
+        )
+        if source_script is None or source_bible is None:
+            raise WorkflowConflictError(
+                "The source project has no current approved script and ProjectBible"
+            )
+        if (
+            source_script.approval_status != ApprovalStatus.APPROVED
+            or source_bible.approval_status != ApprovalStatus.APPROVED
+        ):
+            raise WorkflowConflictError(
+                "The source script and ProjectBible must be approved before a repeat run"
+            )
+        if not source.shots or any(
+            item.approval_status != ApprovalStatus.APPROVED
+            or item.freshness != Freshness.CURRENT
+            for item in source.shots
+        ):
+            raise WorkflowConflictError(
+                "The source project needs a complete current approved shot plan"
+            )
+
+        source_assets = [
+            item
+            for item in source.assets
+            if item.kind in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}
+        ]
+        approved_assets: list[tuple[Asset, AssetVersion]] = []
+        for asset in source_assets:
+            approved = self._approved_image_version(asset)
+            if approved is None:
+                raise WorkflowConflictError(
+                    f"The source preproduction package lacks an approved image for {asset.name}"
+                )
+            if approved.local_path is not None:
+                path = Path(approved.local_path).expanduser().resolve()
+                if not path.is_file() or path.stat().st_size == 0:
+                    raise WorkflowConflictError(
+                        f"The approved source asset is unavailable: {asset.name}"
+                    )
+            approved_assets.append((asset, approved))
+        if not approved_assets:
+            raise WorkflowConflictError(
+                "The source preproduction package has no approved core visual assets"
+            )
+
+        project_id = f"project-{uuid4().hex[:12]}"
+        now = utc_now()
+        identifier_map: dict[str, str] = {
+            source.project.id: project_id,
+            source_script.id: f"{project_id}-script-v1",
+            source_bible.id: f"{project_id}-bible-v1",
+        }
+        identifier_map.update(
+            {
+                line.id: f"{project_id}-line-{index:02d}"
+                for index, line in enumerate(source_script.lines, start=1)
+            }
+        )
+        identifier_map.update(
+            {
+                scene.id: f"{project_id}-scene-{index:02d}"
+                for index, scene in enumerate(source_script.structured_scenes, start=1)
+            }
+        )
+        identifier_map.update(
+            {
+                shot.id: f"{project_id}-shot-{shot.sequence:02d}"
+                for shot in source.shots
+            }
+        )
+        identifier_map.update(
+            {
+                asset.id: f"{project_id}-asset-{asset.kind.value.lower()}-{index:02d}"
+                for index, (asset, _approved) in enumerate(approved_assets, start=1)
+            }
+        )
+
+        script = ScriptVersion.model_validate(
+            _remap_exact_identifiers(source_script.model_dump(mode="python"), identifier_map)
+        )
+        script.version = 1
+        script.parent_version_id = None
+        script.change_reason = (
+            f"Fixed preproduction repeat of {source_project_id}"
+        )
+        bible = ProjectBibleVersion.model_validate(
+            _remap_exact_identifiers(source_bible.model_dump(mode="python"), identifier_map)
+        )
+        bible.version = 1
+        bible.parent_version_id = None
+        shots = [
+            ShotPlan.model_validate(
+                _remap_exact_identifiers(item.model_dump(mode="python"), identifier_map)
+            )
+            for item in source.shots
+        ]
+        assets = [
+            Asset(
+                id=identifier_map[asset.id],
+                project_id=project_id,
+                kind=asset.kind,
+                name=asset.name,
+                current_version_id=approved.id,
+                approved_version_id=approved.id,
+                versions=[
+                    approved.model_copy(
+                        deep=True,
+                        update={"parent_version_id": None},
+                    )
+                ],
+            )
+            for asset, approved in approved_assets
+        ]
+        retained_version_ids = {
+            version.id for asset in assets for version in asset.versions
+        }
+        retained_asset_ids = {asset.id for asset in assets}
+        execution_plan = [
+            ExecutionPlanEntry.model_validate(
+                _remap_exact_identifiers(item.model_dump(mode="python"), identifier_map)
+            )
+            for item in source.execution_plan
+            if item.shot_id in identifier_map
+        ]
+        reference_plan: list[ReferencePlanEntry] = []
+        for source_plan in source.reference_plan:
+            if source_plan.shot_id not in identifier_map:
+                continue
+            plan = ReferencePlanEntry.model_validate(
+                _remap_exact_identifiers(
+                    source_plan.model_dump(mode="python"),
+                    identifier_map,
+                )
+            )
+            plan.bindings = [
+                item
+                for item in plan.bindings
+                if item.target_id in retained_version_ids
+            ]
+            plan.requirements = [
+                item
+                for item in plan.requirements
+                if item.subject_asset_id in retained_asset_ids
+            ]
+            plan.action_beats = [
+                item
+                for item in plan.action_beats
+                if item.actor_asset_id in retained_asset_ids
+            ]
+            plan.interactions = [
+                item
+                for item in plan.interactions
+                if item.actor_asset_id in retained_asset_ids
+                and item.target_asset_id in retained_asset_ids
+            ]
+            reference_plan.append(plan)
+
+        latest_applied_by_shot: dict[str, DirectorRepairRecord] = {}
+        for record in source.repair_history:
+            if record.decision == DirectorRepairDecision.APPLIED:
+                latest_applied_by_shot[record.source_shot_id] = record
+        inherited_repairs: list[DirectorRepairRecord] = []
+        for source_shot_id, record in latest_applied_by_shot.items():
+            mapped_source_shot_id = identifier_map.get(source_shot_id)
+            if mapped_source_shot_id is None:
+                continue
+            inherited_repairs.append(
+                DirectorRepairRecord(
+                    id=f"director-repair-{uuid4().hex}",
+                    source_shot_id=mapped_source_shot_id,
+                    strategy=record.strategy,
+                    decision=record.decision,
+                    reason=f"Inherited approved preproduction decision: {record.reason}",
+                    issue_codes=list(record.issue_codes),
+                    affected_shot_ids=[
+                        identifier_map[item]
+                        for item in record.affected_shot_ids
+                        if item in identifier_map
+                    ],
+                    created_at=now,
+                )
+            )
+
+        run = AutonomousRunRecord(
+            id=f"autonomous-run-{uuid4().hex}",
+            project_id=project_id,
+            status=AutonomousRunStatus.RUNNING,
+            current_step=AutonomousRunStep.PLAN_ROUTES,
+            completed_steps=[
+                AutonomousRunStep.NORMALIZE_INPUT,
+                AutonomousRunStep.PLAN,
+                AutonomousRunStep.IMPORT_INPUT_ASSETS,
+                AutonomousRunStep.PREPARE_ASSETS,
+            ],
+            planner=f"fixed-preproduction-repeat:{source_project_id}",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=request.render_export,
+            warnings=[
+                "This run reuses the source project's approved script, ProjectBible, shot plan, "
+                "and core asset media; keyframes, H3 tasks, Takes, QA, timeline, and export are new."
+            ],
+            created_at=now,
+            updated_at=now,
+        )
+        project = source.project.model_copy(
+            deep=True,
+            update={
+                "id": project_id,
+                "name": request.name or f"{source.project.name} · 独立重复",
+                "run_mode": RunMode.AUTO_DRAFT,
+                "stage": ProjectStage.PLANNED,
+                "current_script_version_id": script.id,
+                "current_bible_version_id": bible.id,
+                "current_manifest_id": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        document = ProjectDocument(
+            project=project,
+            script_versions=[script],
+            bible_versions=[bible],
+            assets=assets,
+            shots=shots,
+            execution_plan=execution_plan,
+            reference_plan=reference_plan,
+            manifests=[],
+            reference_packs=[],
+            repair_history=inherited_repairs,
+            autonomous_runs=[run],
+        )
+        with self._lock:
+            self.repository.save_project(document)
+        return self.advance_autonomous_run(
+            project_id,
+            run.id,
+            AutonomousRunAdvanceRequest(max_actions=1),
         )
 
     def _create_planned_project(
@@ -1046,9 +1439,10 @@ class ShortDramaService:
         reason: str,
     ) -> bool:
         reference_plan = self._require_reference_plan(document, decision.shot_id)
-        bound = _filter_generation_reference_versions(
+        bound = _scope_keyframe_reference_versions(
             self._approved_bound_image_versions(document, decision.shot_id),
             reference_plan,
+            failed_preparation.input_version_ids,
         )
         media_inputs = [
             self._h3_image_input(
@@ -1127,18 +1521,23 @@ class ShortDramaService:
         preparation: H3RouteAssetPreparation,
     ) -> None:
         reference_plan = self._require_reference_plan(document, decision.shot_id)
-        bound = _filter_generation_reference_versions(
+        shot = self._require_shot_in_document(document, decision.shot_id)
+        bound = _scope_keyframe_reference_versions(
             self._approved_bound_image_versions(document, decision.shot_id),
             reference_plan,
+            preparation.input_version_ids,
         )
         if not bound:
             raise WorkflowConflictError(
                 f"Shot {decision.shot_sequence} has no approved visual base for keyframe editing"
             )
-        ordered = _order_keyframe_reference_versions(
-            bound,
-            reference_plan,
-            preparation.input_version_ids,
+        ordered = _prioritize_keyframe_canvas(
+            _order_keyframe_reference_versions(
+                bound,
+                reference_plan,
+                preparation.input_version_ids,
+            ),
+            shot,
         )
         primary_asset, primary_version = ordered[0]
         preparation.input_version_ids = [
@@ -1204,14 +1603,18 @@ class ShortDramaService:
         if parent is None:
             raise WorkflowConflictError("Keyframe asset has no visual parent")
         reference_plan = self._require_reference_plan(refreshed, shot.id)
-        bound = _filter_generation_reference_versions(
+        bound = _scope_keyframe_reference_versions(
             self._approved_bound_image_versions(refreshed, shot.id),
             reference_plan,
-        )
-        ordered = _order_keyframe_reference_versions(
-            bound,
-            reference_plan,
             preparation.input_version_ids,
+        )
+        ordered = _prioritize_keyframe_canvas(
+            _order_keyframe_reference_versions(
+                bound,
+                reference_plan,
+                preparation.input_version_ids,
+            ),
+            shot,
         )
         if not ordered:
             raise WorkflowConflictError("Keyframe asset has no approved visual references")
@@ -1298,10 +1701,21 @@ class ShortDramaService:
         client = self._require_language_client()
         canonical_references: list[tuple[Asset, AssetVersion]] = []
         if shot is not None:
-            canonical_references = _order_keyframe_reference_versions(
-                self._approved_bound_image_versions(document, shot.id),
-                self._require_reference_plan(document, shot.id),
-                preparation.input_version_ids if preparation is not None else [],
+            reference_plan = self._require_reference_plan(document, shot.id)
+            preferred_version_ids = (
+                preparation.input_version_ids if preparation is not None else []
+            )
+            canonical_references = _prioritize_keyframe_canvas(
+                _order_keyframe_reference_versions(
+                    _scope_keyframe_reference_versions(
+                        self._approved_bound_image_versions(document, shot.id),
+                        reference_plan,
+                        preferred_version_ids,
+                    ),
+                    reference_plan,
+                    preferred_version_ids,
+                ),
+                shot,
             )
         try:
             review = inspect_asset_image(
@@ -1604,7 +2018,7 @@ class ShortDramaService:
                 take.shot_id == shot.id
                 and take.is_selected
                 and take.freshness == Freshness.CURRENT
-                and take.qa_status == QaStatus.PASSED
+                and _take_is_timeline_eligible(take)
                 for take in aggregate.takes
             )
         ]
@@ -1620,6 +2034,36 @@ class ShortDramaService:
             )
             return True, False
         if run.repair_round >= run.max_repair_rounds:
+            waived_take_ids = self._apply_bounded_best_effort_waivers(
+                project_id,
+                run_id,
+                missing,
+            )
+            if waived_take_ids:
+                self._select_best_current_takes(project_id)
+                refreshed = self.get_project(project_id)
+                missing = [
+                    shot.id
+                    for shot in refreshed.document.shots
+                    if not any(
+                        take.shot_id == shot.id
+                        and take.is_selected
+                        and take.freshness == Freshness.CURRENT
+                        and _take_is_timeline_eligible(take)
+                        for take in refreshed.takes
+                    )
+                ]
+                if not missing:
+                    plan.status = H3RoutePlanStatus.COMPLETE
+                    plan.updated_at = utc_now()
+                    self.repository.save_h3_route_plan(plan)
+                    self._advance_autonomous_run(
+                        project_id,
+                        run_id,
+                        completed_step=AutonomousRunStep.QA_AND_REPAIR,
+                        next_step=AutonomousRunStep.TIMELINE,
+                    )
+                    return True, False
             raise WorkflowConflictError(
                 "REAL_H3 AUTO_DRAFT exhausted Director repair rounds for: "
                 + ", ".join(missing)
@@ -2198,6 +2642,15 @@ class ShortDramaService:
             self.repository.list_takes(project_id),
             project_id=project_id,
         )
+        prior_repairs = [
+            record.model_copy(deep=True)
+            for record in document.repair_history
+            if record.decision == DirectorRepairDecision.APPLIED
+            and (
+                record.source_shot_id == shot_id
+                or shot_id in record.affected_shot_ids
+            )
+        ]
 
         api_key = self.language_config.api_key()
         base_url = self.language_config.base_url()
@@ -2212,12 +2665,14 @@ class ShortDramaService:
             qa_issues,
             reviewer_notes,
             capability_profile,
+            prior_repairs,
         )
         try:
             client = self.language_provider_factory(api_key, base_url)
             output_text = client.generate_text(
                 instructions=instructions,
                 input_text=input_text,
+                max_output_tokens=3600,
             )
         except LanguageProviderError as exc:
             raise ProviderOperationError(str(exc)) from exc
@@ -2233,6 +2688,7 @@ class ShortDramaService:
                 repaired_output = client.generate_text(
                     instructions=repair_instructions,
                     input_text=repair_input,
+                    max_output_tokens=3600,
                 )
                 payload = parse_director_advice(repaired_output)
             except (LanguageProviderError, ValueError) as repair_error:
@@ -2531,9 +2987,10 @@ class ShortDramaService:
                                 document,
                                 patch.dialogue_line_ids,
                             )
-                        updates = patch.model_dump(exclude_none=True)
-                        for field_name, value in updates.items():
-                            setattr(shot, field_name, value)
+                        for field_name in patch.model_fields_set:
+                            value = getattr(patch, field_name)
+                            if value is not None:
+                                setattr(shot, field_name, deepcopy(value))
                     if request.reference_plan is not None:
                         self._apply_reference_plan_update(
                             document,
@@ -3212,7 +3669,14 @@ class ShortDramaService:
 
             now = utc_now()
             status = QaStatus.PASSED if request.hard_gate_passed else QaStatus.REJECTED
-            merged_issues = {issue.code: issue for issue in take.qa_report.issues}
+            # A review request represents the current semantic judgment. Keep durable
+            # media failures from the worker, but do not let superseded visual issues
+            # accumulate forever across a reinspection of the same Take.
+            merged_issues = {
+                issue.code: issue
+                for issue in take.qa_report.issues
+                if issue.category == QaFailureCategory.TECHNICAL_MEDIA
+            }
             merged_issues.update({issue.code: issue for issue in request.issues})
             take.qa_status = status
             take.qa_report.status = status
@@ -3336,7 +3800,7 @@ class ShortDramaService:
                 if (
                     take.is_selected
                     and take.freshness == Freshness.CURRENT
-                    and take.qa_status == QaStatus.PASSED
+                    and _take_is_timeline_eligible(take)
                 ):
                     selected_by_shot[take.shot_id] = take
             missing = [shot.id for shot in document.shots if shot.id not in selected_by_shot]
@@ -3505,7 +3969,7 @@ class ShortDramaService:
                     take.shot_id == shot.id
                     and take.is_selected
                     and take.freshness == Freshness.CURRENT
-                    and take.qa_status == QaStatus.PASSED
+                    and _take_is_timeline_eligible(take)
                     for take in aggregate.takes
                 )
             ]
@@ -3617,7 +4081,9 @@ class ShortDramaService:
                     inspection_id=inspection.id if inspection is not None else None,
                     user_direction=(
                         "Continue the autonomous draft. Preserve the narrative purpose and only "
-                        "apply a repair that addresses observed QA evidence."
+                        "apply a repair that addresses observed QA evidence. Compare prior applied "
+                        "repairs with the latest QA result; when the same failure remains, prefer a "
+                        "materially different strategy unless the actual inputs will change."
                     ),
                 ),
             )
@@ -3634,16 +4100,103 @@ class ShortDramaService:
                     for take in takes
                     if take.shot_id == shot.id
                     and take.freshness == Freshness.CURRENT
-                    and take.qa_status == QaStatus.PASSED
+                    and _take_is_timeline_eligible(take)
                 ]
                 if not candidates:
                     continue
                 best = max(
                     candidates,
-                    key=lambda take: (take.qa_report.score, -take.candidate_index),
+                    key=lambda take: (
+                        take.qa_status == QaStatus.PASSED,
+                        take.qa_report.score,
+                        -take.candidate_index,
+                    ),
                 )
                 if not best.is_selected:
                     self.repository.select_take(best.id)
+
+    def _apply_bounded_best_effort_waivers(
+        self,
+        project_id: str,
+        run_id: str,
+        shot_ids: list[str],
+    ) -> list[str]:
+        waived_take_ids: list[str] = []
+        with self._lock:
+            document = self._require_project_document(project_id)
+            run = next(
+                (item for item in document.autonomous_runs if item.id == run_id),
+                None,
+            )
+            if run is None:
+                raise ArtifactNotFoundError(run_id)
+            takes = self.repository.list_takes(project_id)
+            evidence_by_take = {
+                item.take_id: item
+                for item in self.repository.list_route_evidence(project_id)
+                if item.take_id is not None
+            }
+            now = utc_now()
+            for shot_id in shot_ids:
+                candidates = [
+                    take
+                    for take in takes
+                    if take.shot_id == shot_id
+                    and _can_receive_bounded_best_effort_waiver(
+                        take,
+                        evidence_by_take.get(take.id),
+                    )
+                ]
+                if not candidates:
+                    continue
+                best = max(
+                    candidates,
+                    key=lambda take: (
+                        take.qa_report.score,
+                        -sum(
+                            issue.severity.upper() in {"HIGH", "MAJOR"}
+                            for issue in take.qa_report.issues
+                        ),
+                        -take.candidate_index,
+                    ),
+                )
+                if _BOUNDED_BEST_EFFORT_CHECK not in best.qa_report.checks:
+                    best.qa_report.checks.append(_BOUNDED_BEST_EFFORT_CHECK)
+                issue_codes = [item.code for item in best.qa_report.issues]
+                waiver_note = (
+                    "AUTO_DRAFT bounded best-effort timeline waiver after "
+                    f"{run.repair_round} repair round(s); QA remains REJECTED and unresolved "
+                    "issues remain visible: "
+                    + (", ".join(issue_codes) if issue_codes else "none")
+                )
+                best.qa_report.reviewer_notes = " ".join(
+                    item
+                    for item in [best.qa_report.reviewer_notes, waiver_note]
+                    if item
+                )
+                self.repository.save_take(best)
+                self.repository.select_take(best.id)
+                evidence = evidence_by_take.get(best.id)
+                if evidence is not None:
+                    evidence.notes = " ".join(
+                        item
+                        for item in [evidence.notes, waiver_note]
+                        if item
+                    )
+                    self.repository.save_route_evidence(evidence)
+                warning = (
+                    f"Bounded best-effort selected {best.id} for {shot_id}; QA remains "
+                    f"REJECTED with hard_gate_passed=false. Unresolved: "
+                    + (", ".join(issue_codes) if issue_codes else "none")
+                )
+                if warning not in run.warnings:
+                    run.warnings.append(warning)
+                waived_take_ids.append(best.id)
+            if waived_take_ids:
+                run.updated_at = now
+                document.project.updated_at = now
+                self.repository.save_project(document)
+        return waived_take_ids
 
     def _resolve_h3_probe(
         self,
@@ -3891,7 +4444,7 @@ class ShortDramaService:
             for take in takes
             if take.is_selected
             and take.freshness == Freshness.CURRENT
-            and take.qa_status == QaStatus.PASSED
+            and _take_is_timeline_eligible(take)
         }
         current_manifest = next(
             (

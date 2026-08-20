@@ -110,6 +110,7 @@
 - 2026-08-17：Phase 7 已完成可恢复的真人 `AUTO_DRAFT` 第一闭环。离线 Fake Provider 从空输入完成核心资产生成与语义检查、镜头关键帧、H3 异步候选、进程重建恢复、镜内/镜间观察、自动候选裁判、Director 有界修复、Take 选择、TimelineManifest 和导出；通用构图失败会使旧 Take 失效、自动修改镜头意图并重新规划，缺少配置时则持久化为 `NEEDS_ATTENTION`，不会回退 Mock。后端全量 641 项测试、Pyright、TypeScript 和 Vite 生产构建通过。该结果是工程闭环证据，不是新项目真实画面、对白或声线质量证据；详见 [Phase 7 实施记录](17-phase7-real-autonomous-draft.md)。
 - 2026-08-18：Phase 8 完成第一次真实从零真人 `AUTO_DRAFT`。锁定剧本在真实 GPT Image 2、GPT-5.6-sol 和 MiniMax-H3 768P 下自动得到 9/9 已选 Take、35 份视频观察、54.31 秒 `manifest-v3` 成片和全部通过的技术导出。真实运行修复了关键帧主参考选择、批准资产身份对照、生成/QA 参考分离、画外状态提示投影和画外证据判定等通用缺口；最终 S04 没有身份漂移或道具误入，仅保留中等级景别建议。用户已按本轮整体可用标准将成片暂时通过，从锁定剧本到最终人工验收的 Phase 8 流程因此闭环。E007 仍待逐字声音 QA、另外两次独立运行和三人盲评；详见 [Phase 8 实施记录](18-phase8-real-autonomous-validation.md)。
 - 2026-08-18：Phase 9 已把音轨提取、信号诊断、字幕时间、锁定对白转写和跨镜声线比较实现为 Provider 中立的 `AudioInspection`，并接入 `AUTO_DRAFT`、SQLite、Product API、QA 工作台和 Director 建议。使用现有 Phase 8 `manifest-v3` 复检而未新增 H3 请求，得到 9/9 音轨技术通过、5/5 繁简体与标点归一化后逐字一致、林夏和周衡声线检查均通过，问题/告警为 0。该结果完成本片 E004 音频证据，但不把单次结果外推为跨剧本稳定率；E007 仍待另外两次独立运行和三人盲评。详见 [Phase 9 实施记录](19-phase9-audio-dialogue-qa.md)。
+- 2026-08-20：Phase 10 新增固定前期制片包的独立重复入口，并以真实 GPT Image 2、GPT-5.6-sol 和 MiniMax-H3 768P 再执行 Run 2 / Run 3。两次都自动完成关键帧、H3 候选、长镜头/镜间抽帧、Director 有界修复、9/9 选 Take、`TimelineManifest`、音频 QA 和 54.31 秒 1080×1920/30fps 导出；五句锁定对白和林夏/周衡跨镜声线均通过自动检查。加上 Phase 8 Run 1，三版已生成匿名盲评包；自动结果中至少 2/3 没有高严重度入选问题。E007 尚未最终通过，剩余至少三人匿名盲评与最终片选择。详见 [Phase 10 实施记录](20-phase10-independent-repeats-and-blind-review.md)。
 
 ## 对话顺序
 

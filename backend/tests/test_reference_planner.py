@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -26,13 +27,21 @@ from short_drama.models import (
     QaFailureCategory,
     QaIssue,
     QaStatus,
+    ReferenceAngle,
+    ReferenceBinding,
+    ReferenceFraming,
+    ReferenceRequirement,
+    ReferenceRole,
     RunMode,
 )
 from short_drama.reference_planner import (
+    DirectorAdviceRequest,
     DirectorRepairDecisionRequest,
+    ReferencePlanPreviewRequest,
     ReferencePackEntryCreateRequest,
     ReplacementShotDraft,
     parse_director_advice,
+    preview_reference_plan,
 )
 from short_drama.service import ShortDramaService, WorkflowConflictError
 
@@ -249,6 +258,8 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert body["missing_requirement_ids"] == []
     assert body["complexity"]["action_beat_count"] == 4
     assert body["complexity"]["advisory_only"] is True
+
+
     assert body["proceed_allowed"] is True
     assert set(body["complexity"]["missing_topology_anchors"]) == {
         "entrance.primary_door",
@@ -392,6 +403,89 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     )
     assert location_selection["role"] == "LOCATION_INTERACTION"
     assert location_selection["asset_version_id"] == topology_version
+
+
+def test_semantic_requirement_uses_approved_core_binding_as_coarse_fallback(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = next(item for item in project.document.shots if item.sequence == 4)
+    lin_asset = next(
+        item
+        for item in project.document.assets
+        if item.kind == AssetKind.CHARACTER and item.name == "林夏定妆"
+    )
+    location_asset = next(
+        item for item in project.document.assets if item.kind == AssetKind.LOCATION
+    )
+    lin_version_id = _approve_image(service, tmp_path, lin_asset.id, "#d6d3d1")
+    location_version_id = _approve_image(
+        service,
+        tmp_path,
+        location_asset.id,
+        "#1e3a5f",
+    )
+    document = service.repository.get_project(project_id)
+    assert document is not None
+    plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+    plan.bindings = [
+        ReferenceBinding(
+            kind=AssetKind.CHARACTER.value,
+            target_id=lin_version_id,
+            purpose="Approved Lin Xia identity anchor.",
+            requirement="REQUIRED",
+        ),
+        ReferenceBinding(
+            kind=AssetKind.LOCATION.value,
+            target_id=location_version_id,
+            purpose="Approved store look anchor.",
+            requirement="REQUIRED",
+        ),
+    ]
+    plan.requirements = [
+        ReferenceRequirement(
+            id="lin-face",
+            subject_asset_id=lin_asset.id,
+            acceptable_roles=[ReferenceRole.CHARACTER_FACE],
+            preferred_angles=[ReferenceAngle.FRONT],
+            preferred_framings=[ReferenceFraming.FACE_CLOSE_UP],
+            purpose="Preserve Lin Xia identity in a tight single.",
+            required=True,
+        ),
+        ReferenceRequirement(
+            id="store-look",
+            subject_asset_id=location_asset.id,
+            acceptable_roles=[ReferenceRole.LOCATION_MASTER],
+            preferred_angles=[ReferenceAngle.NOT_APPLICABLE],
+            preferred_framings=[ReferenceFraming.WIDE],
+            purpose="Preserve the approved store lighting and palette.",
+            required=True,
+        ),
+    ]
+    service.repository.save_project(document)
+
+    preview = preview_reference_plan(
+        document,
+        shot,
+        plan,
+        ReferencePlanPreviewRequest(max_images=2),
+    )
+
+    assert [item.asset_version_id for item in preview.selected] == [
+        lin_version_id,
+        location_version_id,
+    ]
+    assert preview.missing_requirement_ids == ["lin-face", "store-look"]
+    assert any(
+        warning.startswith("lin-face: using an approved core asset")
+        for warning in preview.warnings
+    )
+    assert any(
+        warning.startswith("store-look: using an approved core asset")
+        for warning in preview.warnings
+    )
 
 
 def test_director_agent_recommends_without_creating_a_generation_gate(
@@ -569,6 +663,65 @@ def test_auto_draft_director_loop_applies_executable_repair(tmp_path: Path) -> N
     assert body["project"]["document"]["repair_history"][-1]["decision"] == "APPLIED"
 
 
+def test_director_agent_receives_prior_applied_repairs_as_strategy_evidence(
+    tmp_path: Path,
+) -> None:
+    output = """{
+      "advisories": [],
+      "repair_options": [
+        {
+          "strategy": "CHANGE_CAMERA",
+          "summary": "Use a simpler coverage angle.",
+          "rationale": "It reduces the observed orientation risk.",
+          "tradeoff": "The face is less prominent.",
+          "recommended": true,
+          "dismissible": true
+        }
+      ],
+      "recommended_strategy": "CHANGE_CAMERA",
+      "proposed_repair": {
+        "decision": "APPLIED",
+        "strategy": "CHANGE_CAMERA",
+        "reason": "Use stable coverage while preserving the narrative beat.",
+        "issue_codes": ["HUMAN_CHARACTER_ORIENTATION"],
+        "shot_patch": {"camera": "stable rear coverage"},
+        "split_shots": []
+      }
+    }"""
+    fake = FakeDirectorLanguageProvider([output, output])
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _api_key, _base_url: fake,
+    )
+    project = service.initialize_fixture()
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    project_id = project.document.project.id
+    shot = next(item for item in project.document.shots if item.sequence == 8)
+
+    first = service.run_director_loop(
+        project_id,
+        shot.id,
+        request=DirectorAdviceRequest(),
+    )
+    assert first.repair_applied is True
+    service.get_director_advice(project_id, shot.id, DirectorAdviceRequest())
+
+    assert len(fake.generations) == 2
+    instructions, input_text = fake.generations[1]
+    assert "Do not repeat an ineffective strategy" in instructions
+    payload = json.loads(input_text)
+    prior_repairs = payload["prior_repairs"]
+    assert len(prior_repairs) == 1
+    assert prior_repairs[0]["id"] == first.project.document.repair_history[-1].id
+    assert prior_repairs[0]["source_shot_id"] == shot.id
+    assert prior_repairs[0]["strategy"] == "CHANGE_CAMERA"
+    assert prior_repairs[0]["decision"] == "APPLIED"
+    assert prior_repairs[0]["affected_shot_ids"] == [shot.id]
+
+
 def test_auto_draft_repairs_rejected_takes_and_regenerates_without_user_pause(
     tmp_path: Path,
 ) -> None:
@@ -670,6 +823,49 @@ def test_director_recommendation_and_executable_repair_must_match() -> None:
               }
             }"""
         )
+
+
+def test_director_parser_discards_known_read_only_reference_plan_fields() -> None:
+    parsed = parse_director_advice(
+        """{
+          "advisories": [],
+          "repair_options": [
+            {
+              "strategy": "CHANGE_KEYFRAME",
+              "summary": "Replace the boundary frame.",
+              "rationale": "The observed boundary state is not supported.",
+              "tradeoff": "One image preparation is added.",
+              "recommended": true,
+              "dismissible": true
+            }
+          ],
+          "recommended_strategy": "CHANGE_KEYFRAME",
+          "proposed_repair": {
+            "decision": "APPLIED",
+            "strategy": "CHANGE_KEYFRAME",
+            "reason": "Use a matching boundary keyframe.",
+            "shot_patch": null,
+            "reference_plan": {
+              "shot_id": "read-only-shot-id",
+              "bindings": [],
+              "capability_valid": true,
+              "validation_notes": ["read-only"],
+              "requirements": [],
+              "action_beats": [],
+              "interactions": [],
+              "max_reference_images": 3,
+              "planning_notes": "Prepare a matching start frame."
+            },
+            "split_shots": []
+          }
+        }"""
+    )
+
+    assert parsed.proposed_repair is not None
+    assert parsed.proposed_repair.reference_plan is not None
+    assert parsed.proposed_repair.reference_plan.planning_notes == (
+        "Prepare a matching start frame."
+    )
 
 
 def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(

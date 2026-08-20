@@ -216,7 +216,11 @@ def build_h3_production_route_plan(
 
         applied_repair_strategy = _applied_director_strategy(document, shot.id)
         if (
-            applied_repair_strategy == DirectorRepairStrategy.CHANGE_KEYFRAME
+            applied_repair_strategy
+            in {
+                DirectorRepairStrategy.CHANGE_KEYFRAME,
+                DirectorRepairStrategy.CHANGE_CAMERA,
+            }
             and chosen.action == H3ShotRouteAction.GENERATE
             and chosen.route
             not in {
@@ -236,8 +240,9 @@ def build_h3_production_route_plan(
             if frame_candidates:
                 chosen = _fallback_candidate(frame_candidates)
                 choice_warnings.append(
-                    "The latest applied Director repair is CHANGE_KEYFRAME, so AUTO_DRAFT "
-                    "will execute a frame-controlled route. The user may override the repair."
+                    "The latest applied Director repair changes the keyframe or camera, so "
+                    "AUTO_DRAFT will execute it with a matching frame-controlled route. The "
+                    "user may override the repair."
                 )
 
         risk_ids, risk_focus = risks_by_shot[shot.id]
@@ -448,14 +453,18 @@ def _build_candidates(
                 )
             )
 
-    keyframe_repair_applied = (
-        applied_repair_strategy == DirectorRepairStrategy.CHANGE_KEYFRAME
+    frame_control_repair_applied = (
+        applied_repair_strategy
+        in {
+            DirectorRepairStrategy.CHANGE_KEYFRAME,
+            DirectorRepairStrategy.CHANGE_CAMERA,
+        }
     )
     preparations = _asset_preparations(
         document,
         shot,
         reference_plan,
-        force_start=keyframe_repair_applied,
+        force_start=frame_control_repair_applied,
     )
     start_preparation = next(
         (item for item in preparations if item.role == H3MediaRole.FIRST_FRAME),
@@ -485,7 +494,7 @@ def _build_candidates(
                         "interaction or local rework risk benefits from stronger composition and "
                         "continuity control. The user may still override this recommendation."
                     ),
-                    quality_score=900.0 if keyframe_repair_applied else 600.0,
+                    quality_score=900.0 if frame_control_repair_applied else 600.0,
                     warnings=[
                         *duration_warnings,
                         "The recommended Frame-first route needs an approved start frame before submission.",
@@ -521,7 +530,7 @@ def _build_candidates(
                             "composition, action readiness, and continuity without constraining "
                             "the terminal performance with a last frame."
                         ),
-                        quality_score=950.0 if keyframe_repair_applied else 650.0,
+                        quality_score=950.0 if frame_control_repair_applied else 650.0,
                         warnings=duration_warnings,
                         preparations=[selected_preparation],
                     )
