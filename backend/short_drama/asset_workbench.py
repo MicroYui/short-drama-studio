@@ -5,11 +5,13 @@ from __future__ import annotations
 import base64
 import mimetypes
 import shutil
+import subprocess
 import threading
 from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
 
+import imageio_ffmpeg
 from PIL import Image, ImageChops, ImageFilter, UnidentifiedImageError
 
 from short_drama.image_models import (
@@ -40,6 +42,7 @@ from short_drama.models import (
     OriginType,
     ProjectDocument,
 )
+from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
 from short_drama.providers.image_config import ImageProviderConfigStore
 from short_drama.providers.image_provider import (
     ImageProvider,
@@ -80,7 +83,10 @@ def default_image_provider_factory(api_key: str, base_url: str) -> ImageProvider
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".aac", ".flac"}
+_VOICE_UPLOAD_EXTENSIONS = {*_AUDIO_EXTENSIONS, ".ogg", ".webm"}
 _MAX_LOCAL_ASSET_BYTES = 256 * 1024 * 1024
+_MAX_VOICE_UPLOAD_BYTES = 32 * 1024 * 1024
+_MAX_H3_AUDIO_BYTES = 15 * 1024 * 1024
 _MAX_EDIT_IMAGE_BYTES = 20 * 1024 * 1024
 _MAX_EDIT_MASK_BYTES = 4 * 1024 * 1024
 
@@ -238,6 +244,163 @@ class AssetWorkbench:
             )
             self._append_version(document, asset, version)
             return version
+
+    def import_voice_reference_bytes(
+        self,
+        project_id: str,
+        *,
+        asset_id: str | None,
+        asset_name: str,
+        descriptor: str,
+        filename: str,
+        data: bytes,
+    ) -> AssetVersion:
+        """Normalize one uploaded/recorded clip into an approved H3 WAV asset."""
+
+        if not data or len(data) > _MAX_VOICE_UPLOAD_BYTES:
+            raise AssetWorkbenchConflict(
+                "Voice reference upload must be between 1 byte and 32 MB"
+            )
+        suffix = Path(filename).suffix.lower()
+        if suffix not in _VOICE_UPLOAD_EXTENSIONS:
+            raise AssetWorkbenchConflict(
+                "Voice reference must be WAV, MP3, M4A, AAC, FLAC, OGG, or WEBM"
+            )
+        normalized_descriptor = descriptor.strip()
+        if not normalized_descriptor or len(normalized_descriptor) > 4000:
+            raise AssetWorkbenchConflict(
+                "Voice reference descriptor must be between 1 and 4000 characters"
+            )
+
+        with self._lock:
+            document = self._require_project(project_id)
+            asset = self._require_asset(document, asset_id) if asset_id else None
+            if asset is not None and asset.kind != AssetKind.REFERENCE:
+                raise AssetWorkbenchConflict(
+                    "A character voice reference must use a REFERENCE asset"
+                )
+            next_version = self._next_version_number(asset) if asset is not None else 1
+            resolved_asset_id = asset.id if asset is not None else f"asset-{uuid4().hex[:12]}"
+            expected_current_version_id = (
+                asset.current_version_id if asset is not None else None
+            )
+        version_id = f"asset-version-{uuid4().hex[:12]}"
+        directory = self._asset_directory(project_id, resolved_asset_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        source_path = directory / f".{version_id}-upload{suffix}"
+        output_path = directory / f"v{next_version}-{version_id}.wav"
+        try:
+            source_path.write_bytes(data)
+            duration = 0.0
+            result = subprocess.run(
+                [
+                    imageio_ffmpeg.get_ffmpeg_exe(),
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-i",
+                    str(source_path),
+                    "-vn",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "48000",
+                    "-c:a",
+                    "pcm_s16le",
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                detail = result.stderr.strip() or "uploaded audio could not be decoded"
+                raise AssetWorkbenchConflict(detail)
+            metadata = probe_media_with_ffmpeg(output_path)
+            duration = float(metadata["duration"])
+            if metadata["audio"] != "present":
+                raise AssetWorkbenchConflict("Voice reference contains no audio stream")
+            if duration < 2.0 or duration > 15.0:
+                raise AssetWorkbenchConflict(
+                    "MiniMax-H3 voice reference must be between 2 and 15 seconds"
+                )
+            if output_path.stat().st_size > _MAX_H3_AUDIO_BYTES:
+                raise AssetWorkbenchConflict(
+                    "Normalized MiniMax-H3 voice reference exceeds 15 MB"
+                )
+        except AssetWorkbenchConflict:
+            output_path.unlink(missing_ok=True)
+            raise
+        except (MediaGenerationError, OSError, ValueError) as exc:
+            output_path.unlink(missing_ok=True)
+            raise AssetWorkbenchConflict(str(exc)) from exc
+        finally:
+            source_path.unlink(missing_ok=True)
+
+        now = utc_now()
+        version = AssetVersion(
+            id=version_id,
+            version=next_version,
+            origin_type=OriginType.UPLOAD,
+            descriptor=normalized_descriptor,
+            media_type=AssetMediaType.AUDIO,
+            local_path=str(output_path),
+            mime_type="audio/wav",
+            duration_seconds=duration,
+            file_size_bytes=output_path.stat().st_size,
+            source=AssetSourceRecord(
+                source_type=OriginType.UPLOAD,
+                source_label="用户上传或录制的角色声线参考",
+                original_filename=Path(filename).name,
+                created_at=now,
+            ),
+            approval_status=ApprovalStatus.APPROVED,
+            freshness=Freshness.CURRENT,
+            created_at=now,
+        )
+        try:
+            with self._lock:
+                document = self._require_project(project_id)
+                asset = self._require_asset(document, asset_id) if asset_id else None
+                if asset is not None and (
+                    asset.kind != AssetKind.REFERENCE
+                    or asset.current_version_id != expected_current_version_id
+                ):
+                    raise AssetWorkbenchConflict(
+                        "Voice reference asset changed while the upload was being normalized; retry"
+                    )
+                if asset is None and any(
+                    item.id == resolved_asset_id for item in document.assets
+                ):
+                    raise AssetWorkbenchConflict(
+                        "Voice reference asset was created concurrently; retry"
+                    )
+                if asset is None:
+                    asset = Asset(
+                        id=resolved_asset_id,
+                        project_id=project_id,
+                        kind=AssetKind.REFERENCE,
+                        name=asset_name.strip(),
+                        current_version_id=version.id,
+                        approved_version_id=version.id,
+                        versions=[version],
+                    )
+                    document.assets.append(asset)
+                else:
+                    for existing in asset.versions:
+                        if existing.approval_status == ApprovalStatus.APPROVED:
+                            existing.approval_status = ApprovalStatus.SUPERSEDED
+                            existing.freshness = Freshness.STALE
+                    asset.versions.append(version)
+                    asset.current_version_id = version.id
+                    asset.approved_version_id = version.id
+                document.project.updated_at = now
+                self.repository.save_project(document)
+                return version
+        except Exception:
+            output_path.unlink(missing_ok=True)
+            raise
 
     def review_version(
         self,

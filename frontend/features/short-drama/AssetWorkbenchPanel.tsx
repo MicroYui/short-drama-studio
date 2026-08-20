@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AudioLines,
   Check,
   CircleX,
   FileUp,
@@ -26,6 +27,7 @@ import {
   type LanguageProviderConfig,
   type ProjectAggregate,
 } from './api'
+import { VoiceReferencePanel } from './VoiceReferencePanel'
 
 const primaryButton = 'inline-flex items-center justify-center gap-2 rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-40'
 const secondaryButton = 'inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40'
@@ -378,10 +380,17 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
         <div>
           <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 3 · Asset Workbench</Badge><Badge>GPT Image 2</Badge><Badge>候选需人工批准</Badge></div>
           <h2 className="mt-3 text-xl font-semibold text-white">来源中立的正式资产生产</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">上传、外部链接、AI 新生成和 AI 修整共用 AssetVersion。只有带可用媒体且人工批准的版本才会成为后续 H3 Frame/Reference 的正式输入。</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">上传、外部链接、AI 新生成和 AI 修整共用 AssetVersion。视觉候选经批准后进入 H3；角色声线上传会在格式与时长校验后直接绑定为可选输入。</p>
         </div>
         <button className={secondaryButton} onClick={() => setShowCreate((value) => !value)}><Plus className="h-4 w-4" />新建资产</button>
       </section>
+
+      <VoiceReferencePanel
+        project={project}
+        onProjectChange={onProjectChange}
+        onError={onError}
+        onNotice={onNotice}
+      />
 
       <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
         <div className="grid gap-3 xl:grid-cols-[170px_minmax(260px,1fr)_minmax(220px,0.8fr)_auto_auto] xl:items-end">
@@ -426,7 +435,13 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
         <section className="min-w-0 space-y-5">
           <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
             <div className="flex min-h-[460px] items-center justify-center bg-[#050608] p-4">
-              {previewUrl && version.media_type === 'IMAGE' ? <img src={previewUrl} alt={asset.name} className="max-h-[620px] max-w-full rounded-lg object-contain shadow-2xl" /> : <div className="text-center"><ImageIcon className="mx-auto h-10 w-10 text-zinc-700" /><p className="mt-3 text-sm text-zinc-500">当前版本还没有可预览图像</p><p className="mt-1 text-xs text-zinc-700">可上传、导入 URL 或使用 GPT Image 2</p></div>}
+              {previewUrl && version.media_type === 'IMAGE'
+                ? <img src={previewUrl} alt={asset.name} className="max-h-[620px] max-w-full rounded-lg object-contain shadow-2xl" />
+                : previewUrl && version.media_type === 'AUDIO'
+                  ? <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-950 p-5"><AudioLines className="mx-auto h-10 w-10 text-cyan-400" /><p className="mt-3 text-center text-sm text-zinc-300">{asset.name}</p><audio className="mt-4 w-full" controls preload="metadata" src={previewUrl} /></div>
+                  : previewUrl && version.media_type === 'VIDEO'
+                    ? <video src={previewUrl} controls className="max-h-[620px] max-w-full rounded-lg object-contain shadow-2xl" />
+                    : <div className="text-center"><ImageIcon className="mx-auto h-10 w-10 text-zinc-700" /><p className="mt-3 text-sm text-zinc-500">当前版本还没有可预览媒体</p><p className="mt-1 text-xs text-zinc-700">可上传、导入 URL 或使用对应生成工具</p></div>}
             </div>
             <div className="border-t border-zinc-800 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium text-white">{asset.name}</h3><p className="mt-1 text-xs text-zinc-500">v{version.version} · {version.origin_type} · {version.media_type}{version.width && version.height ? ` · ${version.width}×${version.height}` : ''}</p></div><div className="flex gap-2"><Badge tone={statusTone(version.approval_status)}>{version.approval_status}</Badge>{asset.approved_version_id === version.id && <Badge tone="green">正式版本</Badge>}</div></div><p className="mt-3 text-sm leading-6 text-zinc-300">{version.descriptor}</p>{version.source && <p className="mt-2 text-xs text-zinc-600">来源：{version.source.source_label}{version.source.model ? ` · ${version.source.model}` : ''}{version.parent_version_id ? ` · 派生自 v${asset.versions.find((item) => item.id === version.parent_version_id)?.version ?? '?'}` : ''}</p>}</div>
           </div>
@@ -447,7 +462,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
             <button className={`${subtleButton} mt-2`} onClick={importUrl}><Link className="h-3.5 w-3.5" />导入外部链接</button>
           </section>
 
-          <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+          {version.media_type !== 'AUDIO' && <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
             <div className="flex items-center justify-between"><div className="flex items-center gap-2"><WandSparkles className="h-4 w-4 text-violet-400" /><h3 className="text-sm font-medium text-white">GPT Image 2</h3></div><Badge tone={config?.can_generate ? 'green' : 'amber'}>{config?.can_generate ? 'Ready' : '未配置'}</Badge></div>
             <div className="mt-3 grid grid-cols-2 gap-2"><button className={`${operation === 'GENERATE' ? primaryButton : secondaryButton} py-2`} onClick={() => { setOperation('GENERATE'); setSelectedInputs([]); setPrimaryInputVersionId(''); setMaskVersionId('') }}>新生成</button><button className={`${operation === 'EDIT' ? primaryButton : secondaryButton} py-2`} onClick={() => { const initial = version.media_type === 'IMAGE' ? version.id : ''; setOperation('EDIT'); setSelectedInputs(initial ? [initial] : []); setPrimaryInputVersionId(initial); setMaskVersionId('') }}>修整/派生</button></div>
             <label className="mt-3 block text-xs text-zinc-500">提示词</label><textarea className={`${field} mt-1 min-h-44 resize-y leading-5`} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
@@ -455,7 +470,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
             <div className="mt-3 grid grid-cols-2 gap-2"><input className={field} value={size} onChange={(event) => setSize(event.target.value)} /><select className={field} value={background} onChange={(event) => setBackground(event.target.value as 'opaque' | 'transparent')}><option value="opaque">不透明背景</option><option value="transparent" disabled={azureImageEndpoint}>透明背景{azureImageEndpoint ? '（Azure 不支持）' : ''}</option></select></div>
             {operation === 'EDIT' && <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-xs text-zinc-500">编辑输入（最多 16 张）</p><p className="mt-1 text-[11px] leading-5 text-zinc-700">主画布决定物理空间；可选 PNG 蒙版中透明区域允许生成，非透明区域会在返回后从主画布确定性恢复。蒙版与其他建议一样可不使用。</p><label className="mt-2 flex cursor-pointer items-center gap-1 text-[10px] text-zinc-500"><input type="radio" name="primary-image-input" checked={!primaryInputVersionId} onChange={() => setPrimaryInputVersionId('')} />不指定主画布</label><label className="mt-1 flex cursor-pointer items-center gap-1 text-[10px] text-zinc-500"><input type="radio" name="mask-image-input" checked={!maskVersionId} onChange={() => setMaskVersionId('')} />不使用蒙版</label><div className="mt-2 max-h-52 space-y-1 overflow-y-auto">{imageVersions.map((item) => { const selected = selectedInputs.includes(item.version.id); const maskEligible = item.version.mime_type === 'image/png' && Boolean(item.version.local_path); return <div key={item.version.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-900"><label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"><input type="checkbox" checked={selected} onChange={(event) => toggleEditInput(item.version.id, event.target.checked)} /><span className="truncate">{item.asset.name} · v{item.version.version}</span></label>{selected && <label className="flex cursor-pointer items-center gap-1 text-[10px] text-blue-300"><input type="radio" name="primary-image-input" checked={primaryInputVersionId === item.version.id} onChange={() => setPrimaryInputVersionId(item.version.id)} />主画布</label>}{maskEligible && <label className="flex cursor-pointer items-center gap-1 text-[10px] text-violet-300"><input type="radio" name="mask-image-input" checked={maskVersionId === item.version.id} onChange={() => selectEditMask(item.version.id)} />蒙版</label>}</div> })}</div>{maskVersionId && <label className="mt-2 flex items-center justify-between gap-3 text-[10px] text-zinc-500"><span>蒙版内侧羽化像素</span><input className="w-20 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-right text-xs text-zinc-300" type="number" min={0} max={64} value={maskFeatherPixels} onChange={(event) => setMaskFeatherPixels(Math.min(64, Math.max(0, Number(event.target.value) || 0)))} /></label>}</div>}
             <button className={`${primaryButton} mt-4 w-full py-3`} onClick={createImage} disabled={Boolean(busy) || !prompt.trim() || !descriptor.trim()}>{busy?.includes('GPT Image') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{operation === 'EDIT' ? '生成修整候选' : '生成新候选'}</button>
-          </section>
+          </section>}
 
           <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
             <h3 className="text-sm font-medium text-white">人工审片</h3><textarea className={`${field} mt-3 min-h-20 resize-y`} value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} /><div className="mt-3 grid grid-cols-2 gap-2"><button className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40" disabled={!previewUrl || version.approval_status === 'APPROVED'} onClick={() => review('APPROVED')}><Check className="h-4 w-4" />批准</button><button className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-500/20" disabled={version.approval_status === 'REJECTED'} onClick={() => review('REJECTED')}><CircleX className="h-4 w-4" />拒绝</button></div>

@@ -913,6 +913,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/characters/{character_id}/voice-reference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Character Voice Reference */
+        put: operations["update_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/characters/{character_id}/voice-reference/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Character Voice Reference */
+        post: operations["upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/enqueue": {
         parameters: {
             query?: never;
@@ -1842,6 +1876,8 @@ export interface components {
             created_at: string;
             /** Descriptor */
             descriptor: string;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
             /** External Url */
             external_url?: string | null;
             /** File Size Bytes */
@@ -2122,6 +2158,16 @@ export interface components {
          * @enum {string}
          */
         AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "PREPARE_ASSETS" | "PLAN_ROUTES" | "PREPARE_SHOT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "AUDIO_QA" | "EXPORT" | "COMPLETE";
+        /** Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post */
+        Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post: {
+            /** Descriptor */
+            descriptor: string;
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** CancelCancellingResponse */
         CancelCancellingResponse: {
             /** Id */
@@ -2878,6 +2924,11 @@ export interface components {
              * @default 1
              */
             input_shot_revision: number;
+            /**
+             * Input Voice Reference Revision
+             * @default 0
+             */
+            input_voice_reference_revision: number;
             /** @default SUCCESS */
             mock_behavior: components["schemas"]["MockBehavior"];
             /** Model */
@@ -3182,6 +3233,11 @@ export interface components {
             input_bible_version_id: string;
             /** Input Script Version Id */
             input_script_version_id: string;
+            /**
+             * Input Voice Reference Revision
+             * @default 0
+             */
+            input_voice_reference_revision: number;
             /**
              * Model
              * @default MiniMax-H3
@@ -4870,6 +4926,8 @@ export interface components {
             script_versions: components["schemas"]["ScriptVersion"][];
             /** Shots */
             shots: components["schemas"]["ShotPlan"][];
+            /** Voice References */
+            voice_references?: components["schemas"]["VoiceReferenceBinding"][];
         };
         /** ProjectListResponse */
         ProjectListResponse: {
@@ -4914,6 +4972,11 @@ export interface components {
             target_duration_seconds: number;
             /** Updated At */
             updated_at: string;
+            /**
+             * Voice Reference Revision
+             * @default 0
+             */
+            voice_reference_revision: number;
         };
         /**
          * ProjectStage
@@ -6055,6 +6118,29 @@ export interface components {
             end_seconds?: number | null;
             /** Start Seconds */
             start_seconds?: number | null;
+        };
+        /** VoiceReferenceBinding */
+        VoiceReferenceBinding: {
+            /** Asset Id */
+            asset_id: string;
+            /** Character Id */
+            character_id: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** VoiceReferenceMutationResponse */
+        VoiceReferenceMutationResponse: {
+            asset?: components["schemas"]["Asset"] | null;
+            binding?: components["schemas"]["VoiceReferenceBinding"] | null;
+            project: components["schemas"]["ProjectAggregate"];
+            version?: components["schemas"]["AssetVersion"] | null;
+        };
+        /** VoiceReferenceUpdateRequest */
+        VoiceReferenceUpdateRequest: {
+            /** Asset Id */
+            asset_id?: string | null;
         };
         /** WorkerDrainRequest */
         WorkerDrainRequest: {
@@ -8300,6 +8386,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutonomousDraftResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    update_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                character_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceReferenceUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceReferenceMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                character_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceReferenceMutationResponse"];
                 };
             };
             /** @description Client Error */

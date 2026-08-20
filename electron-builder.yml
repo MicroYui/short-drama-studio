@@ -60,6 +60,8 @@ nsis:
 
 mac:
   hardenedRuntime: true
+  extendInfo:
+    NSMicrophoneUsageDescription: Short Drama Studio uses the microphone only when you record an optional character voice reference.
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
   notarize: true

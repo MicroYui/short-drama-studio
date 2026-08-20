@@ -305,6 +305,7 @@ def build_h3_production_route_plan(
         planner=planner,
         input_script_version_id=document.project.current_script_version_id,
         input_bible_version_id=document.project.current_bible_version_id,
+        input_voice_reference_revision=document.project.voice_reference_revision,
         decisions=decisions,
         estimated_new_h3_seconds=new_seconds,
         estimated_cost_usd=round(new_seconds * pricing.output_per_second, 6),
@@ -326,6 +327,8 @@ def validate_route_plan_freshness(
         raise RoutePlanningError("Route plan uses an outdated script version")
     if plan.input_bible_version_id != document.project.current_bible_version_id:
         raise RoutePlanningError("Route plan uses an outdated project Bible")
+    if plan.input_voice_reference_revision != document.project.voice_reference_revision:
+        raise RoutePlanningError("Route plan uses outdated character voice references")
     revision_by_shot = {item.id: item.revision for item in document.shots}
     stale = [
         item.shot_id
@@ -638,12 +641,19 @@ def _reference_candidate(
                 asset_version_id=selected.asset_version_id,
             )
         )
+    voice_references, voice_warnings = _voice_reference_inputs(
+        document=document,
+        shot=shot,
+        approved_inputs=approved_inputs,
+    )
+    inputs.extend(item for _character_name, item in voice_references)
     if not inputs:
         return None
+    compiled_prompt = _append_voice_reference_guidance(prompt, voice_references)
     try:
         validate_h3_probe(
             route=VideoGenerationRoute.REFERENCE,
-            prompt=prompt,
+            prompt=compiled_prompt,
             duration_seconds=duration,
             media_inputs=inputs,
         )
@@ -651,23 +661,171 @@ def _reference_candidate(
         return None
     readiness = (
         H3ShotRouteReadiness.READY_WITH_WARNINGS
-        if preview.missing_requirement_ids or preview.warnings
+        if preview.missing_requirement_ids or preview.warnings or voice_warnings
         else H3ShotRouteReadiness.READY
     )
     return _RouteCandidate(
         id=f"reference:{shot.id}",
         action=H3ShotRouteAction.GENERATE,
         route=VideoGenerationRoute.REFERENCE,
-        prompt=prompt,
+        prompt=compiled_prompt,
         duration_seconds=duration,
         media_inputs=inputs,
         rationale=(
-            "Bind the best approved reference-pack entries selected for the current shot."
+            "Bind the best approved reference-pack entries selected for the current shot"
+            + (
+                " and the optional character voice reference supplied by the user."
+                if voice_references
+                else "."
+            )
         ),
-        quality_score=500.0 - len(preview.missing_requirement_ids) * 50.0,
-        warnings=list(preview.warnings),
+        quality_score=(
+            (850.0 if voice_references else 500.0)
+            - len(preview.missing_requirement_ids) * 50.0
+        ),
+        warnings=list(
+            dict.fromkeys(
+                [
+                    *preview.warnings,
+                    *voice_warnings,
+                    *(
+                        [
+                            "Using custom voice input selects H3 Reference mode; it cannot be "
+                            "combined with first/last-frame roles in the same request."
+                        ]
+                        if voice_references
+                        else []
+                    ),
+                ]
+            )
+        ),
         missing_inputs=list(preview.missing_requirement_ids),
         readiness=readiness,
+    )
+
+
+def _voice_reference_inputs(
+    *,
+    document: ProjectDocument,
+    shot: ShotPlan,
+    approved_inputs: dict[str, tuple[AssetMediaType, H3MediaSource]],
+) -> tuple[list[tuple[str, H3MediaInput]], list[str]]:
+    if not document.voice_references or not shot.dialogue_line_ids:
+        return [], []
+    script = next(
+        (
+            item
+            for item in document.script_versions
+            if item.id == document.project.current_script_version_id
+        ),
+        None,
+    )
+    bible = next(
+        (
+            item
+            for item in document.bible_versions
+            if item.id == document.project.current_bible_version_id
+        ),
+        None,
+    )
+    if script is None or bible is None:
+        return [], []
+    lines = {item.id: item for item in script.lines}
+    bindings = {item.character_id: item for item in document.voice_references}
+    assets = {item.id: item for item in document.assets}
+    resolved: list[tuple[str, H3MediaInput]] = []
+    warnings: list[str] = []
+    seen_characters: set[str] = set()
+    total_audio_seconds = 0.0
+    for line_id in shot.dialogue_line_ids:
+        line = lines.get(line_id)
+        if line is None:
+            continue
+        character = max(
+            (
+                item
+                for item in bible.characters
+                if item.name == line.speaker or item.name in line.speaker
+            ),
+            key=lambda item: len(item.name),
+            default=None,
+        )
+        if character is None or character.id in seen_characters:
+            continue
+        binding = bindings.get(character.id)
+        if binding is None:
+            continue
+        if len(resolved) >= 3:
+            warnings.append(
+                "This shot has more than three supplied character voice references; H3 accepts "
+                "three reference-audio clips, so later speakers keep native voice generation."
+            )
+            break
+        asset = assets.get(binding.asset_id)
+        approved_version_id = asset.approved_version_id if asset is not None else None
+        approved = (
+            approved_inputs.get(approved_version_id)
+            if approved_version_id is not None
+            else None
+        )
+        if asset is None or approved is None or approved[0] != AssetMediaType.AUDIO:
+            warnings.append(
+                f"Voice reference for {character.name} is unavailable; native H3 voice remains usable."
+            )
+            continue
+        approved_version = next(
+            (
+                item
+                for item in asset.versions
+                if item.id == approved_version_id
+            ),
+            None,
+        )
+        duration_seconds = (
+            approved_version.duration_seconds
+            if approved_version is not None
+            else None
+        )
+        if (
+            duration_seconds is not None
+            and total_audio_seconds + duration_seconds > 15.0
+        ):
+            warnings.append(
+                "Supplied character voice references exceed H3's 15-second combined audio "
+                f"limit; {character.name} keeps native voice generation in this shot."
+            )
+            continue
+        _media_type, source = approved
+        resolved.append(
+            (
+                character.name,
+                H3MediaInput(
+                    kind=H3MediaKind.AUDIO,
+                    role=H3MediaRole.REFERENCE_AUDIO,
+                    source=source.model_copy(deep=True),
+                    asset_version_id=approved_version_id,
+                ),
+            )
+        )
+        total_audio_seconds += duration_seconds or 0.0
+        seen_characters.add(character.id)
+    return resolved, warnings
+
+
+def _append_voice_reference_guidance(
+    prompt: str,
+    voice_references: list[tuple[str, H3MediaInput]],
+) -> str:
+    if not voice_references:
+        return prompt
+    mapping = "；".join(
+        f"<Audio {index}>只作为角色{character_name}的声线、音色与说话方式参考"
+        for index, (character_name, _media) in enumerate(voice_references, start=1)
+    )
+    return (
+        f"{prompt} 声线参考：{mapping}。"
+        "不要复制参考音频中的原台词、环境声、背景音乐或节拍；"
+        "本镜头仍只说前述锁定台词，并保持原定说话人。"
     )
 
 
@@ -706,6 +864,8 @@ def _task_matches(
         task.input_script_version_id == document.project.current_script_version_id
         and task.input_bible_version_id == document.project.current_bible_version_id
         and task.input_shot_revision == shot.revision
+        and task.input_voice_reference_revision
+        == document.project.voice_reference_revision
     )
 
 
@@ -955,6 +1115,9 @@ def _choose_with_language_agent(
         "compare empirical route evidence, approved visual bindings, action complexity, and QA "
         "risk. Recommendations and warnings are advisory and dismissible. Long shots require "
         "temporal and boundary observation; do not claim sparse frames prove an action absent."
+        " When the user supplied a character voice reference for a speaking shot, normally "
+        "prefer the ready candidate carrying reference_audio unless an applied Director repair "
+        "or stronger frame-control need outweighs it."
         " When an applied Director repair strategy is supplied, choose a candidate that actually "
         "executes that repair unless a current-version reviewed Take is being reused."
     )

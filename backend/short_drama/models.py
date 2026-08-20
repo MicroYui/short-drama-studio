@@ -286,6 +286,7 @@ class ProjectRecord(DomainModel):
         default_factory=list[CreativeInputImage],
         max_length=8,
     )
+    voice_reference_revision: int = Field(default=0, ge=0)
     stage: ProjectStage
     current_script_version_id: str
     current_bible_version_id: str
@@ -404,6 +405,7 @@ class AssetVersion(DomainModel):
     mime_type: str | None = None
     width: int | None = None
     height: int | None = None
+    duration_seconds: float | None = Field(default=None, gt=0.0)
     file_size_bytes: int | None = None
     parent_version_id: str | None = None
     image_task_id: str | None = None
@@ -441,6 +443,13 @@ class ReferencePack(DomainModel):
     subject_asset_id: str
     name: str
     entries: list[ReferencePackEntry] = Field(default_factory=list[ReferencePackEntry])
+    created_at: str
+    updated_at: str
+
+
+class VoiceReferenceBinding(DomainModel):
+    character_id: str
+    asset_id: str
     created_at: str
     updated_at: str
 
@@ -675,6 +684,9 @@ class ProjectDocument(DomainModel):
     reference_plan: list[ReferencePlanEntry]
     manifests: list[TimelineManifest]
     reference_packs: list[ReferencePack] = Field(default_factory=list[ReferencePack])
+    voice_references: list[VoiceReferenceBinding] = Field(
+        default_factory=list[VoiceReferenceBinding]
+    )
     repair_history: list[DirectorRepairRecord] = Field(
         default_factory=list[DirectorRepairRecord]
     )
@@ -700,6 +712,7 @@ class GenerationTask(DomainModel):
     input_script_version_id: str
     input_bible_version_id: str
     input_shot_revision: int = Field(default=1, ge=1)
+    input_voice_reference_revision: int = Field(default=0, ge=0)
     requested_duration_seconds: float
     attempt: int
     retry_of_task_id: str | None = None

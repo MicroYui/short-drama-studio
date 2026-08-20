@@ -110,6 +110,7 @@ from short_drama.models import (
     AutonomousRunRecord,
     AutonomousRunStatus,
     AutonomousRunStep,
+    CharacterProfile,
     CreateProjectRequest,
     DirectorRepairDecision,
     DirectorRepairRecord,
@@ -156,6 +157,7 @@ from short_drama.models import (
     VideoInspectionReport,
     VideoInspectionRequest,
     VideoInspectionResponse,
+    VoiceReferenceBinding,
     WorkerDrainResponse,
 )
 from short_drama.production_planner import (
@@ -213,6 +215,10 @@ from short_drama.providers.openai_compatible_language_client import (
 )
 from short_drama.repository import ShortDramaRepository
 from short_drama.video_inspection import VideoInspector
+from short_drama.voice_models import (
+    VoiceReferenceMutationResponse,
+    VoiceReferenceUpdateRequest,
+)
 from short_drama.worker import InvalidTaskTransition, PersistentMockWorker, utc_now
 
 
@@ -622,6 +628,17 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "The source preproduction package has no approved core visual assets"
             )
+        copied_voice_reference_count = 0
+        voice_asset_ids = {item.asset_id for item in source.voice_references}
+        for asset in source.assets:
+            if asset.id not in voice_asset_ids:
+                continue
+            try:
+                approved_voice = self._require_approved_voice_audio(asset)
+            except WorkflowConflictError:
+                continue
+            approved_assets.append((asset, approved_voice))
+            copied_voice_reference_count += 1
 
         project_id = f"project-{uuid4().hex[:12]}"
         now = utc_now()
@@ -734,6 +751,16 @@ class ShortDramaService:
                 and item.target_asset_id in retained_asset_ids
             ]
             reference_plan.append(plan)
+        voice_references = [
+            VoiceReferenceBinding.model_validate(
+                _remap_exact_identifiers(
+                    item.model_dump(mode="python"),
+                    identifier_map,
+                )
+            )
+            for item in source.voice_references
+            if item.asset_id in identifier_map
+        ]
 
         latest_applied_by_shot: dict[str, DirectorRepairRecord] = {}
         for record in source.repair_history:
@@ -777,7 +804,14 @@ class ShortDramaService:
             render_export=request.render_export,
             warnings=[
                 "This run reuses the source project's approved script, ProjectBible, shot plan, "
-                "and core asset media; keyframes, H3 tasks, Takes, QA, timeline, and export are new."
+                "and core asset media; keyframes, H3 tasks, Takes, QA, timeline, and export are new.",
+                *(
+                    [
+                        f"Copied {copied_voice_reference_count} optional character voice reference(s)."
+                    ]
+                    if copied_voice_reference_count
+                    else []
+                ),
             ],
             created_at=now,
             updated_at=now,
@@ -806,6 +840,7 @@ class ShortDramaService:
             reference_plan=reference_plan,
             manifests=[],
             reference_packs=[],
+            voice_references=voice_references,
             repair_history=inherited_repairs,
             autonomous_runs=[run],
         )
@@ -2184,6 +2219,39 @@ class ShortDramaService:
         )
 
     @staticmethod
+    def _require_approved_voice_audio(asset: Asset) -> AssetVersion:
+        if asset.kind != AssetKind.REFERENCE or asset.approved_version_id is None:
+            raise WorkflowConflictError(
+                "A character voice reference needs an approved REFERENCE audio asset"
+            )
+        version = next(
+            (
+                item
+                for item in asset.versions
+                if item.id == asset.approved_version_id
+                and item.approval_status == ApprovalStatus.APPROVED
+                and item.media_type == AssetMediaType.AUDIO
+                and (item.local_path is not None or item.external_url is not None)
+            ),
+            None,
+        )
+        if version is None:
+            raise WorkflowConflictError(
+                "A character voice reference needs an approved audio version"
+            )
+        if version.local_path is not None:
+            path = Path(version.local_path).expanduser().resolve()
+            if not path.is_file() or path.suffix.lower() not in {".wav", ".mp3"}:
+                raise WorkflowConflictError(
+                    "Local MiniMax-H3 voice references must be available WAV or MP3 files"
+                )
+            if path.stat().st_size > 15 * 1024 * 1024:
+                raise WorkflowConflictError(
+                    "MiniMax-H3 voice reference exceeds 15 MB"
+                )
+        return version
+
+    @staticmethod
     def _rebind_asset_references(
         document: ProjectDocument,
         asset: Asset,
@@ -3118,6 +3186,135 @@ class ShortDramaService:
         except AssetWorkbenchConflict as exc:
             raise WorkflowConflictError(str(exc)) from exc
 
+    def update_character_voice_reference(
+        self,
+        project_id: str,
+        character_id: str,
+        request: VoiceReferenceUpdateRequest,
+    ) -> VoiceReferenceMutationResponse:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            character = self._require_current_character(document, character_id)
+            existing = next(
+                (
+                    item
+                    for item in document.voice_references
+                    if item.character_id == character.id
+                ),
+                None,
+            )
+            now = utc_now()
+            if request.asset_id is None:
+                if existing is not None:
+                    document.voice_references.remove(existing)
+                    document.project.voice_reference_revision += 1
+                    document.project.updated_at = now
+                    self.repository.save_project(document)
+                return self._voice_reference_mutation_response(
+                    project_id,
+                    character.id,
+                )
+
+            asset = self._require_asset_in_document(document, request.asset_id)
+            self._require_approved_voice_audio(asset)
+            changed = existing is None or existing.asset_id != asset.id
+            if existing is None:
+                document.voice_references.append(
+                    VoiceReferenceBinding(
+                        character_id=character.id,
+                        asset_id=asset.id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            elif changed:
+                existing.asset_id = asset.id
+                existing.updated_at = now
+            if changed:
+                document.project.voice_reference_revision += 1
+                document.project.updated_at = now
+                self.repository.save_project(document)
+        return self._voice_reference_mutation_response(project_id, character_id)
+
+    def upload_character_voice_reference(
+        self,
+        project_id: str,
+        character_id: str,
+        *,
+        filename: str,
+        descriptor: str,
+        data: bytes,
+    ) -> VoiceReferenceMutationResponse:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            character = self._require_current_character(document, character_id)
+            existing = next(
+                (
+                    item
+                    for item in document.voice_references
+                    if item.character_id == character.id
+                ),
+                None,
+            )
+            target_asset_id = existing.asset_id if existing is not None else None
+            character_name = character.name
+        try:
+            version = self.asset_workbench.import_voice_reference_bytes(
+                project_id,
+                asset_id=target_asset_id,
+                asset_name=f"{character_name}声线参考",
+                descriptor=descriptor,
+                filename=filename,
+                data=data,
+            )
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+        with self._lock:
+            document = self._require_project_document(project_id)
+            character = self._require_current_character(document, character_id)
+            asset = next(
+                (
+                    candidate
+                    for candidate in document.assets
+                    if any(item.id == version.id for item in candidate.versions)
+                ),
+                None,
+            )
+            if asset is None:
+                raise ArtifactNotFoundError(version.id)
+            now = utc_now()
+            binding = next(
+                (
+                    item
+                    for item in document.voice_references
+                    if item.character_id == character.id
+                ),
+                None,
+            )
+            if binding is None:
+                document.voice_references.append(
+                    VoiceReferenceBinding(
+                        character_id=character.id,
+                        asset_id=asset.id,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            else:
+                binding.asset_id = asset.id
+                binding.updated_at = now
+            document.project.voice_reference_revision += 1
+            document.project.updated_at = now
+            self.repository.save_project(document)
+        return self._voice_reference_mutation_response(
+            project_id,
+            character_id,
+            version_id=version.id,
+        )
+
     def enqueue_image_task(
         self,
         project_id: str,
@@ -3374,6 +3571,14 @@ class ShortDramaService:
             retry_run: H3ProviderRun | None = None
             retry_evidence: RouteEvidence | None = None
             if task.provider == "minimax":
+                if (
+                    task.input_voice_reference_revision
+                    != document.project.voice_reference_revision
+                ):
+                    raise WorkflowConflictError(
+                        "Character voice references changed after this task; compile a new H3 "
+                        "production route plan instead of retrying stale media inputs"
+                    )
                 run = self.repository.get_provider_run(task.id)
                 if run is None:
                     raise WorkflowConflictError(f"H3 provider run for task {task.id} is missing")
@@ -4318,6 +4523,7 @@ class ShortDramaService:
             "script_version_id": document.project.current_script_version_id,
             "bible_version_id": document.project.current_bible_version_id,
             "shot_revision": shot.revision,
+            "voice_reference_revision": document.project.voice_reference_revision,
             "learning_objective": learning_objective,
             "regression_case_id": regression_case_id,
             "attempt": attempt,
@@ -4346,6 +4552,7 @@ class ShortDramaService:
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
             input_shot_revision=shot.revision,
+            input_voice_reference_revision=document.project.voice_reference_revision,
             requested_duration_seconds=float(duration_seconds),
             attempt=attempt,
             retry_of_task_id=retry_of_task_id,
@@ -4407,6 +4614,7 @@ class ShortDramaService:
             "script_version_id": document.project.current_script_version_id,
             "bible_version_id": document.project.current_bible_version_id,
             "shot_revision": shot.revision,
+            "voice_reference_revision": document.project.voice_reference_revision,
             "requested_duration_seconds": requested_duration_seconds,
             "attempt": attempt,
         }
@@ -4427,6 +4635,7 @@ class ShortDramaService:
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
             input_shot_revision=shot.revision,
+            input_voice_reference_revision=document.project.voice_reference_revision,
             requested_duration_seconds=requested_duration_seconds,
             attempt=attempt,
             retry_of_task_id=retry_of_task_id,
@@ -4684,6 +4893,68 @@ class ShortDramaService:
                     project=project,
                 )
         raise ArtifactNotFoundError(version_id)
+
+    def _voice_reference_mutation_response(
+        self,
+        project_id: str,
+        character_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> VoiceReferenceMutationResponse:
+        project = self.get_project(project_id)
+        binding = next(
+            (
+                item
+                for item in project.document.voice_references
+                if item.character_id == character_id
+            ),
+            None,
+        )
+        if binding is None:
+            return VoiceReferenceMutationResponse(project=project)
+        asset = self._require_asset_in_document(project.document, binding.asset_id)
+        version = next(
+            (item for item in asset.versions if item.id == version_id),
+            None,
+        )
+        if version is None and asset.approved_version_id is not None:
+            version = next(
+                (
+                    item
+                    for item in asset.versions
+                    if item.id == asset.approved_version_id
+                ),
+                None,
+            )
+        return VoiceReferenceMutationResponse(
+            binding=binding,
+            asset=asset,
+            version=version,
+            project=project,
+        )
+
+    @staticmethod
+    def _require_current_character(
+        document: ProjectDocument,
+        character_id: str,
+    ) -> CharacterProfile:
+        bible = next(
+            (
+                item
+                for item in document.bible_versions
+                if item.id == document.project.current_bible_version_id
+            ),
+            None,
+        )
+        if bible is None:
+            raise WorkflowConflictError("Project current ProjectBibleVersion is missing")
+        character = next(
+            (item for item in bible.characters if item.id == character_id),
+            None,
+        )
+        if character is None:
+            raise ArtifactNotFoundError(character_id)
+        return character
 
     def _refresh_project_stage(self, project_id: str) -> None:
         with self._lock:

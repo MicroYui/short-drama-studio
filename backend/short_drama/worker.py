@@ -166,6 +166,17 @@ class PersistentMockWorker:
             task.updated_at = now
             self.repository.save_task(task)
             return task
+        if (
+            task.input_voice_reference_revision
+            != document.project.voice_reference_revision
+        ):
+            task.status = TaskStatus.CANCELLED
+            task.error_code = "VOICE_REFERENCE_SUPERSEDED"
+            task.error_message = "角色声线参考已更新；旧任务不再生成正式候选。"
+            task.finished_at = now
+            task.updated_at = now
+            self.repository.save_task(task)
+            return task
         script = next(
             (item for item in document.script_versions if item.id == task.input_script_version_id),
             None,
@@ -252,6 +263,11 @@ class PersistentMockWorker:
         if task.input_bible_version_id != document.project.current_bible_version_id:
             return Freshness.STALE
         if task.input_shot_revision != shot.revision:
+            return Freshness.STALE
+        if (
+            task.input_voice_reference_revision
+            != document.project.voice_reference_revision
+        ):
             return Freshness.STALE
         return Freshness.CURRENT
 

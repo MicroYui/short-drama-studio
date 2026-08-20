@@ -55,6 +55,9 @@ export type VideoInspectionRequest = components['schemas']['VideoInspectionReque
 export type AudioInspectionReport = components['schemas']['AudioInspectionReport']
 export type AudioInspectionRequest = components['schemas']['AudioInspectionRequest']
 export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRepeatCreateRequest']
+export type VoiceReferenceBinding = components['schemas']['VoiceReferenceBinding']
+export type VoiceReferenceMutationResponse = components['schemas']['VoiceReferenceMutationResponse']
+export type VoiceReferenceUpdateRequest = components['schemas']['VoiceReferenceUpdateRequest']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -111,6 +114,8 @@ const getH3CapabilityProfile = makeEndpointClient('/api/short-drama/projects/{pr
 const createAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/assets', 'post')
 const importLocalAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-local', 'post')
 const importUrlAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/import-url', 'post')
+const updateCharacterVoiceReference = makeEndpointClient('/api/short-drama/projects/{project_id}/characters/{character_id}/voice-reference', 'put')
+const uploadCharacterVoiceReference = makeEndpointClient('/api/short-drama/projects/{project_id}/characters/{character_id}/voice-reference/upload', 'post')
 const reviewAssetVersion = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/versions/{version_id}/review', 'post')
 const enqueueImageTask = makeEndpointClient('/api/short-drama/projects/{project_id}/assets/{asset_id}/image-tasks', 'post')
 const listImageTasks = makeEndpointClient('/api/short-drama/projects/{project_id}/image-tasks', 'get')
@@ -137,6 +142,10 @@ function imageTaskPath(taskId: string, action: string): string {
 
 function shotPath(projectId: string, shotId: string, suffix = ''): string {
   return projectPath(projectId, `/shots/${encodeURIComponent(shotId)}${suffix}`)
+}
+
+function characterPath(projectId: string, characterId: string, suffix = ''): string {
+  return projectPath(projectId, `/characters/${encodeURIComponent(characterId)}${suffix}`)
 }
 
 export const ShortDramaApi = {
@@ -359,6 +368,30 @@ export const ShortDramaApi = {
     assetId: string,
     body: components['schemas']['AssetImportUrlRequest'],
   ) => importUrlAssetVersion(body, undefined, assetPath(projectId, assetId, '/versions/import-url')),
+  updateCharacterVoiceReference: (
+    projectId: string,
+    characterId: string,
+    assetId: string | null,
+  ) => updateCharacterVoiceReference(
+    { asset_id: assetId },
+    undefined,
+    characterPath(projectId, characterId, '/voice-reference'),
+  ),
+  uploadCharacterVoiceReference: (
+    projectId: string,
+    characterId: string,
+    file: File,
+    descriptor: string,
+  ) => {
+    const body = new FormData()
+    body.append('file', file)
+    body.append('descriptor', descriptor)
+    return uploadCharacterVoiceReference(
+      undefined,
+      { body },
+      characterPath(projectId, characterId, '/voice-reference/upload'),
+    )
+  },
   reviewAssetVersion: (
     projectId: string,
     assetId: string,

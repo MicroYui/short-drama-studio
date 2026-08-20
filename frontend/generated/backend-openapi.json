@@ -601,6 +601,18 @@
             "title": "Descriptor",
             "type": "string"
           },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
           "external_url": {
             "anyOf": [
               {
@@ -1448,6 +1460,25 @@
         ],
         "title": "AutonomousRunStep",
         "type": "string"
+      },
+      "Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post": {
+        "properties": {
+          "descriptor": {
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "descriptor"
+        ],
+        "title": "Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post",
+        "type": "object"
       },
       "CancelCancellingResponse": {
         "properties": {
@@ -3564,6 +3595,12 @@
             "title": "Input Shot Revision",
             "type": "integer"
           },
+          "input_voice_reference_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Input Voice Reference Revision",
+            "type": "integer"
+          },
           "mock_behavior": {
             "$ref": "#/components/schemas/MockBehavior",
             "default": "SUCCESS"
@@ -4356,6 +4393,12 @@
           "input_script_version_id": {
             "title": "Input Script Version Id",
             "type": "string"
+          },
+          "input_voice_reference_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Input Voice Reference Revision",
+            "type": "integer"
           },
           "model": {
             "default": "MiniMax-H3",
@@ -9042,6 +9085,13 @@
             },
             "title": "Shots",
             "type": "array"
+          },
+          "voice_references": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceReferenceBinding"
+            },
+            "title": "Voice References",
+            "type": "array"
           }
         },
         "required": [
@@ -9147,6 +9197,12 @@
           "updated_at": {
             "title": "Updated At",
             "type": "string"
+          },
+          "voice_reference_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Voice Reference Revision",
+            "type": "integer"
           }
         },
         "required": [
@@ -12298,6 +12354,98 @@
         "title": "VideoObservation",
         "type": "object"
       },
+      "VoiceReferenceBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "character_id": {
+            "title": "Character Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "character_id",
+          "asset_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "VoiceReferenceBinding",
+        "type": "object"
+      },
+      "VoiceReferenceMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Asset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "binding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceReferenceBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "title": "VoiceReferenceMutationResponse",
+        "type": "object"
+      },
+      "VoiceReferenceUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          }
+        },
+        "title": "VoiceReferenceUpdateRequest",
+        "type": "object"
+      },
       "WorkerDrainRequest": {
         "additionalProperties": false,
         "properties": {
@@ -15207,6 +15355,148 @@
           }
         },
         "summary": "Advance Autonomous Run",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/characters/{character_id}/voice-reference": {
+      "put": {
+        "operationId": "update_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "character_id",
+            "required": true,
+            "schema": {
+              "title": "Character Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceReferenceUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceReferenceMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Update Character Voice Reference",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/characters/{character_id}/voice-reference/upload": {
+      "post": {
+        "operationId": "upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "character_id",
+            "required": true,
+            "schema": {
+              "title": "Character Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceReferenceMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Upload Character Voice Reference",
         "tags": [
           "short-drama"
         ]

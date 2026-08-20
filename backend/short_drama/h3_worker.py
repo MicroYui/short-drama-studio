@@ -505,6 +505,11 @@ class PersistentH3Worker:
             return Freshness.STALE
         if task.input_bible_version_id != document.project.current_bible_version_id:
             return Freshness.STALE
+        if (
+            task.input_voice_reference_revision
+            != document.project.voice_reference_revision
+        ):
+            return Freshness.STALE
         return Freshness.CURRENT
 
     def _upload_local_input(self, client: H3Client, media: H3MediaInput) -> H3UploadedInput:

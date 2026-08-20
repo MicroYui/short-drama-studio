@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from _routes._errors import HTTPError
 from short_drama.h3_models import (
@@ -91,6 +91,10 @@ from short_drama.service import (
 )
 from short_drama.deps import get_short_drama_service
 from short_drama.service import ShortDramaService
+from short_drama.voice_models import (
+    VoiceReferenceMutationResponse,
+    VoiceReferenceUpdateRequest,
+)
 
 
 router = APIRouter(prefix="/api/short-drama", tags=["short-drama"])
@@ -595,6 +599,49 @@ def import_url_asset_version(
 ) -> AssetMutationResponse:
     try:
         return service.import_url_asset_version(project_id, asset_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.put(
+    "/projects/{project_id}/characters/{character_id}/voice-reference",
+    response_model=VoiceReferenceMutationResponse,
+)
+def update_character_voice_reference(
+    project_id: str,
+    character_id: str,
+    request: VoiceReferenceUpdateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> VoiceReferenceMutationResponse:
+    try:
+        return service.update_character_voice_reference(
+            project_id,
+            character_id,
+            request,
+        )
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/characters/{character_id}/voice-reference/upload",
+    response_model=VoiceReferenceMutationResponse,
+)
+async def upload_character_voice_reference(
+    project_id: str,
+    character_id: str,
+    file: UploadFile = File(...),
+    descriptor: str = Form(...),
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> VoiceReferenceMutationResponse:
+    try:
+        return service.upload_character_voice_reference(
+            project_id,
+            character_id,
+            filename=file.filename or "voice-reference.webm",
+            descriptor=descriptor,
+            data=await file.read(),
+        )
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 

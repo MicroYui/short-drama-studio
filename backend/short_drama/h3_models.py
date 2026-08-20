@@ -203,6 +203,7 @@ class H3ProductionRoutePlan(DomainModel):
     planner: str
     input_script_version_id: str
     input_bible_version_id: str
+    input_voice_reference_revision: int = Field(default=0, ge=0)
     decisions: list[H3ShotRoutePlan] = Field(min_length=1)
     estimated_new_h3_seconds: int = Field(ge=0)
     estimated_cost_usd: float = Field(ge=0.0)
