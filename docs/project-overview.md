@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–9 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片和自动音频 QA 闭环。Phase 10 已新增固定前期制片包的独立重复入口，再完成两次真实 `AUTO_DRAFT`；三次锁定《别相信我》运行全部自动到达 9 镜时间线和 54.31 秒 1080×1920 导出。用户随后以汇总定性评价替代 CSV，选择 C（Phase 8 Run 1）为当前最终版。Phase 11 已把用户上传或录制的人声作为可选角色资产接入 H3 Reference 路线，无输入时仍用 H3 原生声音。连续性状态、按需核心资产、长镜头/镜间抽帧、选 Take、音频字幕和直接拼接导出都在同一可恢复流程中；这些仍是通用 Agent 工具，没有增加门或区域穿越专用字段。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12 已实现跨项目资产目录、场景 Master Wide、同源派生视图、逐镜覆盖检查与 `ReferencePlan` 选择，并将照片生成和登记封装为 Asset Agent Tools。连续性状态、按需资产、长镜头/镜间抽帧、选 Take、音频字幕和直接拼接导出都在同一可恢复流程中，没有增加样片专用字段。
 
 ## 结论先行
 
@@ -51,9 +51,10 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 21. [Phase 9：自动音频、对白与声线 QA](19-phase9-audio-dialogue-qa.md)
 22. [Phase 10：独立重复、连续性收敛与三版盲评](20-phase10-independent-repeats-and-blind-review.md)
 23. [Phase 11：可选角色声线输入](21-phase11-optional-character-voice-input.md)
+24. [Phase 12：跨剧本资产 Agent 与同源场景视图](22-phase12-cross-script-asset-agent.md)
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、音频/对白/声线检查、自动选 Take 和直接拼接导出；可选角色声线上传、录制、试听、绑定及 H3 `reference_audio` 自动路由；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片。
+- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、音频/对白/声线检查、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片。
 - 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。本阶段不新增声音 QA。尚未完成：跨项目默认路线样本门槛；复杂多人对白、参考声线的真实稳定性，以及声音来源语义的自动验证。
-- 下一步：继续验证参考声线对真实 H3 成片的质量增益与稳定性；声音来源语义保持已知缺口，除非后续重新决定，否则不扩展联合声音 QA。
+- 下一步：基于已完成的跨剧本闭环扩大题材、人数和空间样本，评估资产目录召回与复用收益，同时继续改善 H3 构图收紧、长镜头节拍和小道具稳定性；本阶段不新增声音 QA。

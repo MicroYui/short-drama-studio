@@ -25,6 +25,17 @@ from short_drama.asset_inspection import (
     build_keyframe_correction_prompt,
     inspect_asset_image,
 )
+from short_drama.asset_catalog import (
+    AssetCatalogImportRequest,
+    AssetCatalogSearchRequest,
+    AssetCatalogSearchResponse,
+    AssetCoverageResponse,
+    ReferenceViewNeed,
+    build_reference_view_prompt,
+    ensure_base_reference_pack_entries,
+    missing_reference_views,
+    search_asset_catalog,
+)
 from short_drama.audio_inspection import AudioInspector, AudioSemanticService
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
@@ -134,6 +145,7 @@ from short_drama.models import (
     ProjectStage,
     ReferencePack,
     ReferencePackEntry,
+    ReferenceRole,
     ReferenceBinding,
     ReferencePlanEntry,
     RouteEvidence,
@@ -245,13 +257,39 @@ _TERMINAL_TASK_STATUSES = {
 }
 _MAX_AUTONOMOUS_IMAGE_ATTEMPTS = 3
 _MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS = 3
+_DIRECTOR_ADVICE_MAX_OUTPUT_TOKENS = 7200
 _BOUNDED_BEST_EFFORT_CHECK = "bounded-auto-draft-best-effort-waiver"
+_REFERENCE_VIEW_MARKER_PREFIX = "AUTO_REFERENCE_VIEW:"
+_REFERENCE_VIEW_SKIP_PREFIX = "reference-view-skipped:"
 
 
 def _take_is_timeline_eligible(take: Take) -> bool:
     return take.qa_status == QaStatus.PASSED or (
         _BOUNDED_BEST_EFFORT_CHECK in take.qa_report.checks
     )
+
+
+def _timeline_clip_window(shot: ShotPlan, take: Take) -> tuple[float, float]:
+    """Fit provider media to the Director's shot duration without freezing frames.
+
+    H3 can return a longer clip than requested. Dialogue shots keep their opening so
+    speech is not entered mid-line. Silent action shots whose continuity state changes
+    keep the resolved tail, which is usually the edit-safe portion containing the
+    declared action-out state.
+    """
+
+    if take.operation in {OperationKind.EXTEND, OperationKind.GAP_FILL}:
+        return 0.0, take.duration_seconds
+
+    clip_duration = min(shot.duration_seconds, take.duration_seconds)
+    overrun = max(0.0, take.duration_seconds - clip_duration)
+    has_resolved_action = (
+        shot.continuity.action_in.strip() != shot.continuity.action_out.strip()
+        or shot.continuity.prop_state_in.strip() != shot.continuity.prop_state_out.strip()
+    )
+    preserve_tail = not shot.dialogue_line_ids and has_resolved_action
+    source_in_seconds = overrun if preserve_tail else 0.0
+    return source_in_seconds, clip_duration
 
 
 def _can_receive_bounded_best_effort_waiver(
@@ -334,15 +372,89 @@ def _order_keyframe_reference_versions(
 
 
 def _scope_keyframe_reference_versions(
+    document: ProjectDocument,
     bound: list[tuple[Asset, AssetVersion]],
     reference_plan: ReferencePlanEntry,
     preferred_version_ids: list[str],
 ) -> list[tuple[Asset, AssetVersion]]:
-    """Use the route-selected visual inputs consistently across keyframe stages."""
+    """Keep route preferences without dropping a visible subject's identity anchor."""
 
-    preferred = set(preferred_version_ids)
-    selected = [item for item in bound if item[1].id in preferred]
-    return selected or _filter_generation_reference_versions(bound, reference_plan)
+    if not bound:
+        return []
+
+    subject_by_version_id: dict[str, str] = {}
+    for pack in document.reference_packs:
+        for entry in pack.entries:
+            subject_by_version_id[entry.asset_version_id] = pack.subject_asset_id
+    for asset, version in bound:
+        subject_by_version_id.setdefault(version.id, asset.id)
+
+    preferred_order = {
+        version_id: index for index, version_id in enumerate(preferred_version_ids)
+    }
+    preferred = sorted(
+        (item for item in bound if item[1].id in preferred_order),
+        key=lambda item: preferred_order[item[1].id],
+    )
+    candidates = [*preferred, *(item for item in bound if item not in preferred)]
+
+    required_subject_ids: list[str] = []
+
+    def require(subject_id: str) -> None:
+        if subject_id not in required_subject_ids:
+            required_subject_ids.append(subject_id)
+
+    for requirement in reference_plan.requirements:
+        if requirement.required:
+            require(requirement.subject_asset_id)
+    for beat in reference_plan.action_beats:
+        require(beat.actor_asset_id)
+    for interaction in reference_plan.interactions:
+        require(interaction.actor_asset_id)
+        require(interaction.target_asset_id)
+    for requirement in reference_plan.requirements:
+        require(requirement.subject_asset_id)
+
+    limit = max(1, reference_plan.max_reference_images)
+    if not required_subject_ids:
+        if preferred:
+            return preferred[:limit]
+        return _filter_generation_reference_versions(bound, reference_plan)[:limit]
+
+    selected: list[tuple[Asset, AssetVersion]] = []
+    seen_versions: set[str] = set()
+
+    def append(candidate: tuple[Asset, AssetVersion] | None) -> None:
+        if (
+            candidate is None
+            or candidate[1].id in seen_versions
+            or len(selected) >= limit
+        ):
+            return
+        selected.append(candidate)
+        seen_versions.add(candidate[1].id)
+
+    # Reserve one best available reference per visible/required subject. Several
+    # specialised location or prop views must not consume the whole provider input
+    # budget while character identity anchors silently disappear.
+    for subject_id in required_subject_ids:
+        append(
+            next(
+                (
+                    item
+                    for item in candidates
+                    if subject_by_version_id.get(item[1].id) == subject_id
+                ),
+                None,
+            )
+        )
+
+    # Use remaining capacity for the Agent's higher-resolution semantic views.
+    for candidate in preferred:
+        append(candidate)
+    for candidate in _filter_generation_reference_versions(bound, reference_plan):
+        append(candidate)
+    return selected
 
 
 def _prioritize_keyframe_canvas(
@@ -472,6 +584,99 @@ class ShortDramaService:
         return ProjectListResponse(
             projects=[document.project for document in self.repository.list_projects()]
         )
+
+    def search_asset_catalog(
+        self,
+        request: AssetCatalogSearchRequest,
+        *,
+        current_project_id: str | None = None,
+    ) -> AssetCatalogSearchResponse:
+        if current_project_id is not None:
+            self._require_project_document(current_project_id)
+        return search_asset_catalog(
+            self.repository.list_projects(),
+            current_project_id=current_project_id,
+            request=request,
+        )
+
+    def inspect_asset_coverage(self, project_id: str) -> AssetCoverageResponse:
+        document = self._require_project_document(project_id)
+        missing = missing_reference_views(document)
+        return AssetCoverageResponse(
+            project_id=project_id,
+            ready=not missing,
+            missing_views=missing,
+        )
+
+    def import_catalog_asset(
+        self,
+        project_id: str,
+        request: AssetCatalogImportRequest,
+    ) -> AssetMutationResponse:
+        target_document = self._require_project_document(project_id)
+        source_document = self._require_project_document(request.source_project_id)
+        source_asset = self._require_asset_in_document(
+            source_document,
+            request.source_asset_id,
+        )
+        source_version = next(
+            (
+                item
+                for item in source_asset.versions
+                if item.id == request.source_version_id
+            ),
+            None,
+        )
+        if source_version is None:
+            raise ArtifactNotFoundError(request.source_version_id)
+        if (
+            source_asset.approved_version_id != source_version.id
+            or source_version.approval_status != ApprovalStatus.APPROVED
+            or source_version.media_type != AssetMediaType.IMAGE
+        ):
+            raise WorkflowConflictError(
+                "Only a current approved catalog image can be imported"
+            )
+        target_asset: Asset
+        if request.target_asset_id is None:
+            created = self.asset_workbench.create_asset(
+                project_id,
+                AssetCreateRequest(
+                    kind=source_asset.kind,
+                    name=request.name or source_asset.name,
+                    descriptor=request.descriptor or source_version.descriptor,
+                ),
+            )
+            target_document = self._require_project_document(project_id)
+            target_asset = next(
+                item
+                for item in target_document.assets
+                if item.current_version_id == created.id
+            )
+        else:
+            target_asset = self._require_asset_in_document(
+                target_document,
+                request.target_asset_id,
+            )
+            if (
+                target_asset.kind != AssetKind.REFERENCE
+                and target_asset.kind != source_asset.kind
+            ):
+                raise WorkflowConflictError(
+                    "Catalog source kind does not match the target asset"
+                )
+        version = self.asset_workbench.clone_catalog_image(
+            project_id,
+            target_asset.id,
+            source_project_id=source_document.project.id,
+            source_asset_id=source_asset.id,
+            source_asset_name=source_asset.name,
+            source_version=source_version,
+            descriptor=request.descriptor or source_version.descriptor,
+        )
+        refreshed = self.get_project(project_id)
+        asset = next(item for item in refreshed.document.assets if item.id == target_asset.id)
+        return AssetMutationResponse(asset=asset, version=version, project=refreshed)
 
     def initialize_fixture(self) -> ProjectAggregate:
         with self._lock:
@@ -1191,9 +1396,47 @@ class ShortDramaService:
                     self.repository.save_project(document)
                     return True, False
                 continue
+            imported_candidate = next(
+                (
+                    version
+                    for version in reversed(asset.versions)
+                    if version.media_type == AssetMediaType.IMAGE
+                    and version.image_task_id is None
+                    and version.approval_status == ApprovalStatus.DRAFT
+                    and (
+                        version.local_path is not None
+                        or version.external_url is not None
+                    )
+                ),
+                None,
+            )
+            if imported_candidate is not None:
+                _review, approved_by_agent = self._review_generated_asset(
+                    project_id=project_id,
+                    asset_id=asset.id,
+                    version_id=imported_candidate.id,
+                )
+                if approved_by_agent:
+                    refreshed = self._require_project_document(project_id)
+                    refreshed_asset = self._require_asset_in_document(
+                        refreshed,
+                        asset.id,
+                    )
+                    approved_version = self._approved_image_version(refreshed_asset)
+                    assert approved_version is not None
+                    self._rebind_asset_references(
+                        refreshed,
+                        refreshed_asset,
+                        approved_version,
+                    )
+                    refreshed.project.updated_at = utc_now()
+                    self.repository.save_project(refreshed)
+                return True, False
             tasks = self.asset_workbench.list_image_tasks(project_id, asset.id)
             latest = max(tasks, key=lambda item: item.created_at, default=None)
             if latest is None:
+                if self._try_catalog_asset_reuse(document, asset):
+                    return True, False
                 self._enqueue_base_asset_image(document, asset, None)
                 return True, False
             if latest.status in {ImageTaskStatus.QUEUED, ImageTaskStatus.SUBMITTING}:
@@ -1244,6 +1487,14 @@ class ShortDramaService:
                     )
                 self._enqueue_base_asset_image(document, asset, latest)
                 return True, False
+        now = utc_now()
+        if ensure_base_reference_pack_entries(document, now=now):
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            return True, False
+        reference_result = self._advance_reference_pack_preparation(project_id, run_id)
+        if reference_result is not None:
+            return reference_result
         self._advance_autonomous_run(
             project_id,
             run_id,
@@ -1260,11 +1511,14 @@ class ShortDramaService:
     ) -> ImageGenerationTask:
         prompt = build_base_asset_prompt(document, asset)
         if previous is not None:
-            previous_version = self._find_asset_version(
-                self._require_project_document(document.project.id),
-                previous.output_version_id,
-            )[1]
-            if previous_version.review_notes:
+            try:
+                previous_version = self._find_asset_version(
+                    self._require_project_document(document.project.id),
+                    previous.output_version_id,
+                )[1]
+            except ArtifactNotFoundError:
+                previous_version = None
+            if previous_version is not None and previous_version.review_notes:
                 prompt += (
                     "\n\n上一候选未通过制片检查。仅修复以下问题，不改变资产身份："
                     + previous_version.review_notes
@@ -1296,6 +1550,367 @@ class ShortDramaService:
         except AssetWorkbenchConflict as exc:
             raise WorkflowConflictError(str(exc)) from exc
 
+    def _try_catalog_asset_reuse(self, document: ProjectDocument, asset: Asset) -> bool:
+        canonical_name = self._canonical_asset_name(asset.name)
+        if not canonical_name:
+            return False
+        canonical_roles = {
+            AssetKind.CHARACTER: [ReferenceRole.CHARACTER_BODY],
+            AssetKind.LOCATION: [ReferenceRole.LOCATION_MASTER],
+            AssetKind.PROP: [ReferenceRole.PROP_PRODUCT],
+        }.get(asset.kind, [])
+        if not canonical_roles:
+            return False
+        tried_sources = {
+            version.source.source_uri
+            for version in asset.versions
+            if version.source is not None and version.source.source_uri is not None
+        }
+        response = search_asset_catalog(
+            self.repository.list_projects(),
+            current_project_id=document.project.id,
+            request=AssetCatalogSearchRequest(
+                query=asset.name,
+                kinds=[asset.kind],
+                roles=canonical_roles,
+                include_current_project=False,
+                limit=20,
+            ),
+        )
+        candidate = next(
+            (
+                item
+                for item in response.candidates
+                if self._canonical_asset_name(item.subject_asset_name) == canonical_name
+                and (
+                    f"short-drama://projects/{item.source_project_id}/assets/"
+                    f"{item.subject_asset_id}/versions/{item.asset_version_id}"
+                )
+                not in tried_sources
+            ),
+            None,
+        )
+        if candidate is None:
+            return False
+        source_document = self._require_project_document(candidate.source_project_id)
+        source_asset, source_version = self._find_asset_version(
+            source_document,
+            candidate.asset_version_id,
+        )
+        self.asset_workbench.clone_catalog_image(
+            document.project.id,
+            asset.id,
+            source_project_id=source_document.project.id,
+            source_asset_id=source_asset.id,
+            source_asset_name=source_asset.name,
+            source_version=source_version,
+            descriptor=(
+                f"复用资产库中的已批准母版候选：{source_version.descriptor}"
+            ),
+        )
+        return True
+
+    @staticmethod
+    def _canonical_asset_name(value: str) -> str:
+        return "".join(character.lower() for character in value if character.isalnum())
+
+    def _advance_reference_pack_preparation(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> tuple[bool, bool] | None:
+        document = self._require_project_document(project_id)
+        run = self._require_autonomous_run(project_id, run_id)
+        for need in missing_reference_views(document):
+            key = self._reference_view_key(need)
+            skip_prefix = f"{_REFERENCE_VIEW_SKIP_PREFIX}{key}:"
+            if any(warning.startswith(skip_prefix) for warning in run.warnings):
+                continue
+            subject = self._require_asset_in_document(
+                document,
+                need.subject_asset_id,
+            )
+            root = self._find_asset_version(
+                document,
+                need.lineage_root_version_id,
+            )[1]
+            marker = f"{_REFERENCE_VIEW_MARKER_PREFIX}{key}"
+            target = next(
+                (
+                    asset
+                    for asset in document.assets
+                    if asset.kind == AssetKind.REFERENCE
+                    and any(marker in version.descriptor for version in asset.versions)
+                ),
+                None,
+            )
+            descriptor = self._reference_view_descriptor(subject, need, marker)
+            if target is None:
+                created = self.create_asset(
+                    project_id,
+                    AssetCreateRequest(
+                        kind=AssetKind.REFERENCE,
+                        name=f"{subject.name}·{need.role.value}",
+                        descriptor=descriptor,
+                    ),
+                )
+                self.asset_workbench.clone_catalog_image(
+                    project_id,
+                    created.asset.id,
+                    source_project_id=project_id,
+                    source_asset_id=subject.id,
+                    source_asset_name=subject.name,
+                    source_version=root,
+                    descriptor=descriptor,
+                )
+                return True, False
+
+            approved = self._approved_image_version(target)
+            if approved is not None:
+                self._register_reference_view(project_id, subject, approved, need)
+                return True, False
+
+            tasks = self.asset_workbench.list_image_tasks(project_id, target.id)
+            latest = max(tasks, key=lambda item: item.created_at, default=None)
+            if latest is None:
+                self._enqueue_reference_view_image(
+                    document,
+                    target,
+                    subject,
+                    need,
+                    previous=None,
+                )
+                return True, False
+            if latest.status in {ImageTaskStatus.QUEUED, ImageTaskStatus.SUBMITTING}:
+                self.advance_image_task(latest.id)
+                return True, False
+            if latest.status == ImageTaskStatus.OUTPUT_MISSING:
+                self.recover_image_task_output(latest.id)
+                return True, False
+            if latest.status == ImageTaskStatus.SUBMIT_UNKNOWN:
+                raise WorkflowConflictError(
+                    f"Image task {latest.id} has an unknown submission result; reconcile it before continuing"
+                )
+            if latest.status == ImageTaskStatus.SUCCEEDED:
+                refreshed = self._require_project_document(project_id)
+                output = self._find_asset_version(
+                    refreshed,
+                    latest.output_version_id,
+                )[1]
+                if output.approval_status == ApprovalStatus.DRAFT:
+                    refreshed_subject = self._require_asset_in_document(
+                        refreshed,
+                        subject.id,
+                    )
+                    refreshed_root = self._find_asset_version(
+                        refreshed,
+                        need.lineage_root_version_id,
+                    )[1]
+                    _review, approved_by_agent = self._review_generated_asset(
+                        project_id=project_id,
+                        asset_id=target.id,
+                        version_id=output.id,
+                        canonical_references_override=[
+                            (refreshed_subject, refreshed_root)
+                        ],
+                    )
+                    if approved_by_agent:
+                        self._register_reference_view(
+                            project_id,
+                            refreshed_subject,
+                            self._find_asset_version(
+                                self._require_project_document(project_id),
+                                output.id,
+                            )[1],
+                            need,
+                        )
+                    return True, False
+                if output.approval_status == ApprovalStatus.APPROVED:
+                    self._register_reference_view(project_id, subject, output, need)
+                    return True, False
+                if output.approval_status == ApprovalStatus.REJECTED:
+                    if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
+                        self._skip_reference_view(
+                            project_id,
+                            run_id,
+                            key,
+                            subject,
+                            latest.error_message or output.review_notes or "review rejected",
+                        )
+                        return True, False
+                    self._enqueue_reference_view_image(
+                        document,
+                        target,
+                        subject,
+                        need,
+                        previous=latest,
+                    )
+                    return True, False
+            if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
+                if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
+                    self._skip_reference_view(
+                        project_id,
+                        run_id,
+                        key,
+                        subject,
+                        latest.error_message or latest.status.value,
+                    )
+                    return True, False
+                self._enqueue_reference_view_image(
+                    document,
+                    target,
+                    subject,
+                    need,
+                    previous=latest,
+                )
+                return True, False
+        return None
+
+    @staticmethod
+    def _reference_view_key(need: ReferenceViewNeed) -> str:
+        payload = json.dumps(
+            {
+                "subject": need.subject_asset_id,
+                "role": need.role.value,
+                "angle": need.angle.value,
+                "framing": need.framing.value,
+                "tags": need.tags,
+                "root": need.lineage_root_version_id,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
+    def _reference_view_descriptor(
+        subject: Asset,
+        need: ReferenceViewNeed,
+        marker: str,
+    ) -> str:
+        tags = "、".join(need.tags) if need.tags else "无额外标签"
+        return (
+            f"{marker}\n从 {subject.name} 当前母版派生的同源参考视图；"
+            f"角色={need.role.value}；角度={need.angle.value}；"
+            f"景别={need.framing.value}；标签={tags}；用途={need.purpose}"
+        )
+
+    def _enqueue_reference_view_image(
+        self,
+        document: ProjectDocument,
+        target: Asset,
+        subject: Asset,
+        need: ReferenceViewNeed,
+        *,
+        previous: ImageGenerationTask | None,
+    ) -> ImageGenerationTask:
+        refreshed = self._require_project_document(document.project.id)
+        refreshed_target = self._require_asset_in_document(refreshed, target.id)
+        seed = next(
+            (
+                version
+                for version in reversed(refreshed_target.versions)
+                if version.media_type == AssetMediaType.IMAGE
+                and version.image_task_id is None
+                and (
+                    version.local_path is not None
+                    or version.external_url is not None
+                )
+            ),
+            None,
+        )
+        if seed is None:
+            raise WorkflowConflictError("Derived reference asset has no canonical seed image")
+        prompt = build_reference_view_prompt(refreshed, subject, need)
+        if previous is not None:
+            try:
+                previous_output = self._find_asset_version(
+                    refreshed,
+                    previous.output_version_id,
+                )[1]
+            except ArtifactNotFoundError:
+                previous_output = None
+            if previous_output is not None and previous_output.review_notes:
+                prompt += (
+                    "\n\n上一候选未通过制片检查。仅修复以下问题，"
+                    "不改变母版身份或空间几何："
+                    + previous_output.review_notes
+                )
+        try:
+            return self.asset_workbench.enqueue_image_task(
+                refreshed.project.id,
+                refreshed_target.id,
+                ImageTaskCreateRequest(
+                    operation=ImageOperation.EDIT,
+                    prompt=prompt,
+                    descriptor=self._reference_view_descriptor(
+                        subject,
+                        need,
+                        f"{_REFERENCE_VIEW_MARKER_PREFIX}{self._reference_view_key(need)}",
+                    ),
+                    parent_version_id=seed.id,
+                    input_version_ids=[seed.id],
+                    primary_input_version_id=seed.id,
+                ),
+                attempt=(previous.attempt + 1 if previous is not None else 1),
+                retry_of_task_id=previous.id if previous is not None else None,
+            )
+        except AssetProviderConfigurationError as exc:
+            raise WorkflowConflictError(
+                "请先在资产页配置 GPT Image 2 的 URL 和 API Key，再继续参考视图派生。"
+            ) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def _register_reference_view(
+        self,
+        project_id: str,
+        subject: Asset,
+        approved: AssetVersion,
+        need: ReferenceViewNeed,
+    ) -> None:
+        self.add_reference_pack_entry(
+            project_id,
+            ReferencePackEntryCreateRequest(
+                subject_asset_id=subject.id,
+                asset_version_id=approved.id,
+                lineage_root_version_id=need.lineage_root_version_id,
+                role=need.role,
+                angle=need.angle,
+                framing=need.framing,
+                tags=need.tags,
+                description=(
+                    f"同源母版派生视图，用于镜头 "
+                    + "、".join(need.shot_ids)
+                    + f"：{need.purpose}"
+                ),
+                priority=80,
+            ),
+        )
+
+    def _skip_reference_view(
+        self,
+        project_id: str,
+        run_id: str,
+        key: str,
+        subject: Asset,
+        reason: str,
+    ) -> None:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            run = next((item for item in document.autonomous_runs if item.id == run_id), None)
+            if run is None:
+                raise ArtifactNotFoundError(run_id)
+            warning = (
+                f"{_REFERENCE_VIEW_SKIP_PREFIX}{key}: {subject.name} 的可选派生视图"
+                f"未在限定重试内收敛，已继续使用母版与现有参考；{reason}"
+            )
+            if warning not in run.warnings:
+                run.warnings.append(warning)
+            run.updated_at = utc_now()
+            document.project.updated_at = run.updated_at
+            self.repository.save_project(document)
+
     def _advance_shot_asset_preparation(
         self,
         project_id: str,
@@ -1310,6 +1925,10 @@ class ShortDramaService:
         document = self._require_project_document(project_id)
         for decision in sorted(plan.decisions, key=lambda item: item.shot_sequence):
             if decision.readiness != H3ShotRouteReadiness.NEEDS_ASSET:
+                if self._refresh_rejected_keyframe_fallback(document, decision):
+                    plan.updated_at = utc_now()
+                    self.repository.save_h3_route_plan(plan)
+                    return True, False
                 continue
             shot = self._require_shot_in_document(document, decision.shot_id)
             for preparation in decision.asset_preparations:
@@ -1473,32 +2092,18 @@ class ShortDramaService:
         failed_preparation: H3RouteAssetPreparation,
         reason: str,
     ) -> bool:
-        reference_plan = self._require_reference_plan(document, decision.shot_id)
-        bound = _scope_keyframe_reference_versions(
-            self._approved_bound_image_versions(document, decision.shot_id),
-            reference_plan,
-            failed_preparation.input_version_ids,
+        built = self._build_keyframe_fallback_inputs(
+            document,
+            decision,
+            failed_preparation,
         )
-        media_inputs = [
-            self._h3_image_input(
-                document,
-                version.id,
-                H3MediaRole.REFERENCE_IMAGE,
-            )
-            for _asset, version in bound[:9]
-        ]
-        if not media_inputs:
+        if built is None:
             return False
-        try:
-            validate_h3_probe(
-                route=VideoGenerationRoute.REFERENCE,
-                prompt=decision.prompt,
-                duration_seconds=decision.duration_seconds,
-                media_inputs=media_inputs,
-            )
-        except H3CapabilityError:
-            return False
+        bound, media_inputs = built
 
+        failed_preparation.input_version_ids = [
+            version.id for _asset, version in bound
+        ]
         failed_preparation.status = H3RouteAssetPreparationStatus.REJECTED
         fallback_warning = (
             f"{reason} The advisory keyframe route was replaced with approved visual "
@@ -1510,7 +2115,11 @@ class ShortDramaService:
             if item
         )
         decision.route = VideoGenerationRoute.REFERENCE
-        decision.media_inputs = media_inputs
+        decision.media_inputs = [
+            item
+            for item in decision.media_inputs
+            if item.role != H3MediaRole.REFERENCE_IMAGE
+        ] + media_inputs
         decision.missing_inputs = []
         decision.readiness = H3ShotRouteReadiness.READY_WITH_WARNINGS
         decision.rationale = (
@@ -1548,6 +2157,87 @@ class ShortDramaService:
         self.repository.save_h3_route_plan(plan)
         return True
 
+    def _build_keyframe_fallback_inputs(
+        self,
+        document: ProjectDocument,
+        decision: H3ShotRoutePlan,
+        failed_preparation: H3RouteAssetPreparation,
+    ) -> tuple[list[tuple[Asset, AssetVersion]], list[H3MediaInput]] | None:
+        reference_plan = self._require_reference_plan(document, decision.shot_id)
+        bound = _scope_keyframe_reference_versions(
+            document,
+            self._approved_bound_image_versions(document, decision.shot_id),
+            reference_plan,
+            failed_preparation.input_version_ids,
+        )
+        media_inputs = [
+            self._h3_image_input(
+                document,
+                version.id,
+                H3MediaRole.REFERENCE_IMAGE,
+            )
+            for _asset, version in bound[:9]
+        ]
+        if not media_inputs:
+            return None
+        try:
+            validate_h3_probe(
+                route=VideoGenerationRoute.REFERENCE,
+                prompt=decision.prompt,
+                duration_seconds=decision.duration_seconds,
+                media_inputs=media_inputs,
+            )
+        except H3CapabilityError:
+            return None
+        return bound, media_inputs
+
+    def _refresh_rejected_keyframe_fallback(
+        self,
+        document: ProjectDocument,
+        decision: H3ShotRoutePlan,
+    ) -> bool:
+        """Reconcile persisted fallbacks after the Agent's reference selection evolves."""
+
+        if decision.route != VideoGenerationRoute.REFERENCE:
+            return False
+        failed_preparation = next(
+            (
+                item
+                for item in decision.asset_preparations
+                if item.status == H3RouteAssetPreparationStatus.REJECTED
+            ),
+            None,
+        )
+        if failed_preparation is None:
+            return False
+        built = self._build_keyframe_fallback_inputs(
+            document,
+            decision,
+            failed_preparation,
+        )
+        if built is None:
+            return False
+        bound, media_inputs = built
+        new_version_ids = [version.id for _asset, version in bound]
+        current_reference_ids = [
+            item.asset_version_id
+            for item in decision.media_inputs
+            if item.role == H3MediaRole.REFERENCE_IMAGE
+            and item.asset_version_id is not None
+        ]
+        if (
+            current_reference_ids == new_version_ids
+            and failed_preparation.input_version_ids == new_version_ids
+        ):
+            return False
+        failed_preparation.input_version_ids = new_version_ids
+        decision.media_inputs = [
+            item
+            for item in decision.media_inputs
+            if item.role != H3MediaRole.REFERENCE_IMAGE
+        ] + media_inputs
+        return True
+
     def _create_keyframe_asset(
         self,
         document: ProjectDocument,
@@ -1558,6 +2248,7 @@ class ShortDramaService:
         reference_plan = self._require_reference_plan(document, decision.shot_id)
         shot = self._require_shot_in_document(document, decision.shot_id)
         bound = _scope_keyframe_reference_versions(
+            document,
             self._approved_bound_image_versions(document, decision.shot_id),
             reference_plan,
             preparation.input_version_ids,
@@ -1639,6 +2330,7 @@ class ShortDramaService:
             raise WorkflowConflictError("Keyframe asset has no visual parent")
         reference_plan = self._require_reference_plan(refreshed, shot.id)
         bound = _scope_keyframe_reference_versions(
+            refreshed,
             self._approved_bound_image_versions(refreshed, shot.id),
             reference_plan,
             preparation.input_version_ids,
@@ -1729,12 +2421,13 @@ class ShortDramaService:
         version_id: str,
         shot: ShotPlan | None = None,
         preparation: H3RouteAssetPreparation | None = None,
+        canonical_references_override: list[tuple[Asset, AssetVersion]] | None = None,
     ) -> tuple[SemanticAssetReview, bool]:
         document = self._require_project_document(project_id)
         asset = self._require_asset_in_document(document, asset_id)
         version = self._find_asset_version(document, version_id)[1]
         client = self._require_language_client()
-        canonical_references: list[tuple[Asset, AssetVersion]] = []
+        canonical_references = list(canonical_references_override or [])
         if shot is not None:
             reference_plan = self._require_reference_plan(document, shot.id)
             preferred_version_ids = (
@@ -1743,6 +2436,7 @@ class ShortDramaService:
             canonical_references = _prioritize_keyframe_canvas(
                 _order_keyframe_reference_versions(
                     _scope_keyframe_reference_versions(
+                        document,
                         self._approved_bound_image_versions(document, shot.id),
                         reference_plan,
                         preferred_version_ids,
@@ -2274,6 +2968,30 @@ class ShortDramaService:
         plan = self._require_reference_plan(document, shot_id)
         result: list[tuple[Asset, AssetVersion]] = []
         seen: set[str] = set()
+        shot = self._require_shot_in_document(document, shot_id)
+        preview = preview_reference_plan(
+            document,
+            shot,
+            plan,
+            ReferencePlanPreviewRequest(),
+        )
+        for selection in preview.selected:
+            try:
+                asset, version = self._find_asset_version(
+                    document,
+                    selection.asset_version_id,
+                )
+            except ArtifactNotFoundError:
+                continue
+            if (
+                version.id in seen
+                or version.approval_status != ApprovalStatus.APPROVED
+                or version.media_type != AssetMediaType.IMAGE
+                or (version.local_path is None and version.external_url is None)
+            ):
+                continue
+            seen.add(version.id)
+            result.append((asset, version))
         for binding in plan.bindings:
             try:
                 asset, version = self._find_asset_version(document, binding.target_id)
@@ -2493,6 +3211,21 @@ class ShortDramaService:
                 )
             if source_version.media_type != AssetMediaType.IMAGE:
                 raise WorkflowConflictError("Reference pack entries currently require image media")
+            if request.lineage_root_version_id is not None:
+                _root_asset, root_version = self._find_asset_version(
+                    document,
+                    request.lineage_root_version_id,
+                )
+                if (
+                    root_version.media_type != AssetMediaType.IMAGE
+                    or (
+                        root_version.local_path is None
+                        and root_version.external_url is None
+                    )
+                ):
+                    raise WorkflowConflictError(
+                        "Reference-pack lineage root must be a usable image"
+                    )
 
             now = utc_now()
             pack_id = f"reference-pack-{subject.id}"
@@ -2529,6 +3262,7 @@ class ShortDramaService:
                 entry = ReferencePackEntry(
                     id=f"reference-entry-{uuid4().hex[:12]}",
                     asset_version_id=source_version.id,
+                    lineage_root_version_id=request.lineage_root_version_id,
                     role=request.role,
                     angle=request.angle,
                     framing=request.framing,
@@ -2538,6 +3272,7 @@ class ShortDramaService:
                 )
                 pack.entries.append(entry)
             else:
+                existing.lineage_root_version_id = request.lineage_root_version_id
                 existing.tags = normalized_tags
                 existing.description = request.description.strip()
                 existing.priority = request.priority
@@ -2740,7 +3475,7 @@ class ShortDramaService:
             output_text = client.generate_text(
                 instructions=instructions,
                 input_text=input_text,
-                max_output_tokens=3600,
+                max_output_tokens=_DIRECTOR_ADVICE_MAX_OUTPUT_TOKENS,
             )
         except LanguageProviderError as exc:
             raise ProviderOperationError(str(exc)) from exc
@@ -2756,7 +3491,7 @@ class ShortDramaService:
                 repaired_output = client.generate_text(
                     instructions=repair_instructions,
                     input_text=repair_input,
-                    max_output_tokens=3600,
+                    max_output_tokens=_DIRECTOR_ADVICE_MAX_OUTPUT_TOKENS,
                 )
                 payload = parse_director_advice(repaired_output)
             except (LanguageProviderError, ValueError) as repair_error:
@@ -4024,6 +4759,7 @@ class ShortDramaService:
             cursor = 0.0
             for shot in sorted(document.shots, key=lambda item: item.sequence):
                 take = selected_by_shot[shot.id]
+                source_in_seconds, clip_duration = _timeline_clip_window(shot, take)
                 video_clips.append(
                     TimelineVideoClip(
                         id=f"video-{shot.id}-{take.id}",
@@ -4031,8 +4767,8 @@ class ShortDramaService:
                         take_id=take.id,
                         media_path=take.media_path,
                         start_seconds=cursor,
-                        source_in_seconds=0.0,
-                        duration_seconds=take.duration_seconds,
+                        source_in_seconds=source_in_seconds,
+                        duration_seconds=clip_duration,
                         transition_in="none",
                         transition_out=shot.transition_out,
                     )
@@ -4044,7 +4780,7 @@ class ShortDramaService:
                         take_id=take.id,
                         media_path=take.media_path,
                         start_seconds=cursor,
-                        duration_seconds=take.duration_seconds,
+                        duration_seconds=clip_duration,
                         gain_db=0.0,
                         role=(
                             "MODEL_NATIVE_H3"
@@ -4055,11 +4791,11 @@ class ShortDramaService:
                 )
                 lines = [line_by_id[line_id] for line_id in shot.dialogue_line_ids if line_id in line_by_id]
                 if lines:
-                    usable_duration = max(0.5, take.duration_seconds - 1.0)
+                    usable_duration = max(0.5, clip_duration - 1.0)
                     cue_duration = usable_duration / len(lines)
                     for index, line in enumerate(lines):
                         cue_start = cursor + 0.5 + cue_duration * index
-                        cue_end = min(cursor + take.duration_seconds - 0.25, cue_start + cue_duration)
+                        cue_end = min(cursor + clip_duration - 0.25, cue_start + cue_duration)
                         subtitle_cues.append(
                             SubtitleCue(
                                 id=f"subtitle-{shot.id}-{line.id}",
@@ -4070,7 +4806,7 @@ class ShortDramaService:
                                 speaker=line.speaker,
                             )
                         )
-                cursor += take.duration_seconds
+                cursor += clip_duration
             manifest = TimelineManifest(
                 id=f"{project_id}-manifest-v{version}",
                 project_id=project_id,
@@ -4705,21 +5441,54 @@ class ShortDramaService:
         shot_id: str,
         request: ShotReferencePlanUpdateRequest,
     ) -> None:
-        for requirement in request.requirements:
-            self._require_asset_in_document(document, requirement.subject_asset_id)
-        for beat in request.action_beats:
-            self._require_asset_in_document(document, beat.actor_asset_id)
-        for interaction in request.interactions:
-            self._require_asset_in_document(document, interaction.actor_asset_id)
-            self._require_asset_in_document(document, interaction.target_asset_id)
+        requirements = [
+            item.model_copy(
+                deep=True,
+                update={
+                    "subject_asset_id": self._resolve_asset_or_version_id(
+                        document,
+                        item.subject_asset_id,
+                    )
+                },
+            )
+            for item in request.requirements
+        ]
+        action_beats = [
+            item.model_copy(
+                deep=True,
+                update={
+                    "actor_asset_id": self._resolve_asset_or_version_id(
+                        document,
+                        item.actor_asset_id,
+                    )
+                },
+            )
+            for item in request.action_beats
+        ]
+        interactions = [
+            item.model_copy(
+                deep=True,
+                update={
+                    "actor_asset_id": self._resolve_asset_or_version_id(
+                        document,
+                        item.actor_asset_id,
+                    ),
+                    "target_asset_id": self._resolve_asset_or_version_id(
+                        document,
+                        item.target_asset_id,
+                    ),
+                },
+            )
+            for item in request.interactions
+        ]
 
         plan = self._require_reference_plan(document, shot_id)
-        plan.requirements = [item.model_copy(deep=True) for item in request.requirements]
+        plan.requirements = requirements
         plan.action_beats = [
             item.model_copy(deep=True)
-            for item in sorted(request.action_beats, key=lambda item: item.order)
+            for item in sorted(action_beats, key=lambda item: item.order)
         ]
-        plan.interactions = [item.model_copy(deep=True) for item in request.interactions]
+        plan.interactions = interactions
         plan.max_reference_images = request.max_reference_images
         plan.planning_notes = (
             request.planning_notes.strip() if request.planning_notes else None
@@ -5013,6 +5782,20 @@ class ShortDramaService:
         if asset is None:
             raise ArtifactNotFoundError(asset_id)
         return asset
+
+    @staticmethod
+    def _resolve_asset_or_version_id(
+        document: ProjectDocument,
+        candidate_id: str,
+    ) -> str:
+        """Accept an Agent-selected asset version anywhere an asset subject is required."""
+
+        for asset in document.assets:
+            if asset.id == candidate_id:
+                return asset.id
+            if any(version.id == candidate_id for version in asset.versions):
+                return asset.id
+        raise ArtifactNotFoundError(candidate_id)
 
     @staticmethod
     def _find_asset_version(

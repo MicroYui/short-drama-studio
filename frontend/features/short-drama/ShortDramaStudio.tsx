@@ -189,14 +189,14 @@ function OverviewPanel({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 7 · Real AUTO_DRAFT</Badge>
+              <Badge tone="blue">Phase 12 · Cross-script AUTO_DRAFT</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
               {latestRun && <Badge tone={latestRun.status === 'COMPLETE' ? 'green' : latestRun.status === 'FAILED' || latestRun.status === 'NEEDS_ATTENTION' ? 'amber' : 'blue'}>{latestRun.planner} · {latestRun.status}</Badge>}
             </div>
             <h2 className="text-2xl font-semibold text-white">从任意输入到可播放成片的一键闭环</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-300">
-              四种输入、资产准备、H3 路线、异步任务、长镜头抽帧、镜间连续性、Director 有界返工和时间线共享同一可恢复状态。真实运行会自动轮询；只有配置缺失、提交结果未知或重试耗尽才需要介入。
+              四种输入、Agent 管理的同源资产包、H3 路线、异步任务、长镜头抽帧、镜间连续性、Director 有界返工和时间线共享同一可恢复状态。真实运行会自动轮询；只有配置缺失、提交结果未知或重试耗尽才需要介入。
             </p>
           </div>
           <div className="flex min-w-56 flex-col gap-2">

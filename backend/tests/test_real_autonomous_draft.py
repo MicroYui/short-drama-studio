@@ -54,13 +54,15 @@ from short_drama.service import (
 class FakeImageProvider:
     def __init__(self) -> None:
         self.calls = 0
+        self.operations: list[str] = []
 
     def validate_credentials(self) -> None:
         pass
 
     def create(self, request, inputs: list[ImageProviderInput]) -> ImageProviderResult:
-        del request, inputs
+        del inputs
         self.calls += 1
+        self.operations.append(request.operation.value)
         buffer = BytesIO()
         color = (30 + self.calls * 17) % 255
         Image.new("RGB", (768, 1344), (color, 80, 120)).save(buffer, format="PNG")
@@ -583,6 +585,21 @@ def test_real_autonomous_draft_resumes_and_exports_without_shot_by_shot_input(
         if item.kind.value in {"CHARACTER", "LOCATION", "PROP"}
     ]
     assert all(item.approved_version_id for item in core_assets)
+    assert "EDIT" in image.operations
+    derived_assets = [
+        item
+        for item in response.project.document.assets
+        if item.kind == AssetKind.REFERENCE
+        and any(
+            "AUTO_REFERENCE_VIEW:" in version.descriptor
+            for version in item.versions
+        )
+    ]
+    assert derived_assets
+    assert all(item.approved_version_id for item in derived_assets)
+    assert service.inspect_asset_coverage(
+        response.project.document.project.id
+    ).ready
     plans = service.repository.list_h3_route_plans(response.project.document.project.id)
     assert any(
         preparation.approved_version_id is not None

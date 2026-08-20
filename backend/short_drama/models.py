@@ -429,6 +429,7 @@ class Asset(DomainModel):
 class ReferencePackEntry(DomainModel):
     id: str
     asset_version_id: str
+    lineage_root_version_id: str | None = None
     role: ReferenceRole
     angle: ReferenceAngle = ReferenceAngle.NOT_APPLICABLE
     framing: ReferenceFraming = ReferenceFraming.NOT_APPLICABLE
@@ -663,7 +664,7 @@ class AutonomousRunRecord(DomainModel):
     execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
     route_plan_id: str | None = None
     repair_round: int = Field(default=0, ge=0, le=10)
-    max_repair_rounds: int = Field(default=2, ge=0, le=5)
+    max_repair_rounds: int = Field(default=3, ge=0, le=5)
     render_export: bool = True
     waiting_reason: str | None = None
     warnings: list[str] = Field(default_factory=list[str])

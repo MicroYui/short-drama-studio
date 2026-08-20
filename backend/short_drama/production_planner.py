@@ -34,8 +34,12 @@ from short_drama.models import (
     ProjectRecord,
     ProjectStage,
     PropProfile,
+    ReferenceAngle,
     ReferenceBinding,
+    ReferenceFraming,
     ReferencePlanEntry,
+    ReferenceRequirement,
+    ReferenceRole,
     ScriptLine,
     ScriptVersion,
     ShotPlan,
@@ -85,8 +89,26 @@ class PlannedStyle(DomainModel):
     forbidden: list[str] = Field(default_factory=list[str], max_length=12)
 
 
+class PlannedReferenceNeed(DomainModel):
+    """Provider-neutral visual coverage requested by the planning Agent."""
+
+    subject_name: str = Field(min_length=1, max_length=120)
+    acceptable_roles: list[ReferenceRole] = Field(min_length=1, max_length=4)
+    preferred_angles: list[ReferenceAngle] = Field(
+        default_factory=list[ReferenceAngle],
+        max_length=4,
+    )
+    preferred_framings: list[ReferenceFraming] = Field(
+        default_factory=list[ReferenceFraming],
+        max_length=4,
+    )
+    tags: list[str] = Field(default_factory=list[str], max_length=12)
+    purpose: str = Field(min_length=1, max_length=500)
+    required: bool = True
+
+
 class PlannedShot(DomainModel):
-    duration_seconds: float = Field(ge=4.0, le=10.0)
+    duration_seconds: float = Field(ge=4.0, le=15.0)
     narrative_purpose: str = Field(min_length=1, max_length=500)
     visual: str = Field(min_length=1, max_length=1200)
     framing: str = Field(min_length=1, max_length=200)
@@ -102,6 +124,10 @@ class PlannedShot(DomainModel):
     transition_out: str = Field(min_length=1, max_length=120)
     merge_candidate: bool = False
     local_rework_risk: str = Field(min_length=1, max_length=120)
+    reference_needs: list[PlannedReferenceNeed] = Field(
+        default_factory=list[PlannedReferenceNeed],
+        max_length=12,
+    )
 
 
 class ProductionPlan(DomainModel):
@@ -131,6 +157,24 @@ class ProductionPlan(DomainModel):
         )
         if invalid:
             raise ValueError(f"Shot dialogue indices are out of range: {invalid}")
+        known_subjects = (
+            {item.name for item in self.characters}
+            | {item.name for item in self.locations}
+            | {item.name for item in self.props}
+        )
+        unknown_subjects = sorted(
+            {
+                need.subject_name
+                for shot in self.shots
+                for need in shot.reference_needs
+                if need.subject_name not in known_subjects
+            }
+        )
+        if unknown_subjects:
+            raise ValueError(
+                "Reference needs use unknown production subjects: "
+                + ", ".join(unknown_subjects)
+            )
         return self
 
 
@@ -377,13 +421,20 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         "You are the lead writer, production designer, director, and continuity planner for a "
         "Mandarin live-action urban vertical short drama. Return JSON only and match the supplied "
         "schema exactly. Produce one coherent 45-60 second episode with 6-10 executable shots. "
+        "Individual shots may be 4-15 seconds. When the story supports it, use one 12-15 second "
+        "continuous performance or movement shot with a simple spatial path and restrained action; "
+        "do not stretch every shot or combine several risky contacts merely to fill 15 seconds. "
         "Use strong cause-and-effect, a clear hook, escalating information, natural performance, "
         "and a final turn. Keep character, wardrobe, location geometry, props, screen direction, "
         "eyelines, and action states continuous across shots. Avoid difficult multi-contact actions "
         "when the same narrative beat can be covered with simpler shots. Do not add fields outside "
         "the schema. For SCRIPT_LOCKED, preserve every supplied speaker and dialogue line verbatim "
         "and in order; only plan production around them. Images are visual references, not proof of "
-        "facts that are not actually visible."
+        "facts that are not actually visible. For every shot, populate reference_needs using only "
+        "declared character, location, and prop names. Request the smallest useful coverage: a "
+        "location Master Wide plus only the reverse, interaction zone, character angle, framing, or "
+        "prop state that this shot actually needs. Use stable semantic tags for named location zones "
+        "and states so an asset manager can retrieve or derive matching views."
     )
     image_descriptions = [
         {
@@ -407,8 +458,10 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
             "language": "普通话中文",
             "aspect_ratio": "9:16",
             "duration_seconds": "45-60",
+            "shot_duration_seconds": "4-15; prefer one justified 12-15 second continuous shot",
             "dialogue_lines": "prefer 3-6 unless the locked script requires otherwise",
             "shots": "6-10",
+            "reference_needs": "minimal per-shot character/location/prop coverage",
         },
         "output_schema": schema,
     }
@@ -705,6 +758,115 @@ def _asset(
     )
 
 
+def _default_reference_needs(
+    *,
+    plan: ProductionPlan,
+    shot: PlannedShot,
+    line_speakers: set[str],
+) -> list[PlannedReferenceNeed]:
+    """Build a small deterministic pack request when the planning Agent omits one."""
+
+    context = "\n".join(
+        (
+            shot.narrative_purpose,
+            shot.visual,
+            shot.framing,
+            shot.camera,
+            shot.character_positions,
+            shot.prop_state_in,
+            shot.prop_state_out,
+            shot.action_in,
+            shot.action_out,
+        )
+    )
+    lowered = context.lower()
+    close_up = any(token in lowered for token in ("特写", "近景", "close-up", "close up"))
+    profile = any(token in lowered for token in ("侧面", "侧脸", "profile", "三分之四"))
+    moving = shot.duration_seconds >= 12 or any(
+        token in lowered
+        for token in ("跟拍", "跟随", "行走", "走廊", "track", "dolly", "移动")
+    )
+    needs: list[PlannedReferenceNeed] = []
+    for character in plan.characters:
+        if character.name not in context and character.name not in line_speakers:
+            continue
+        if close_up:
+            roles = [ReferenceRole.CHARACTER_FACE, ReferenceRole.CHARACTER_PROFILE]
+            framings = [ReferenceFraming.FACE_CLOSE_UP, ReferenceFraming.CLOSE_UP]
+        else:
+            roles = [ReferenceRole.CHARACTER_BODY, ReferenceRole.CHARACTER_PROFILE]
+            framings = [ReferenceFraming.FULL_BODY if moving else ReferenceFraming.MEDIUM]
+        angles = (
+            [ReferenceAngle.THREE_QUARTER_LEFT, ReferenceAngle.LEFT_PROFILE]
+            if profile
+            else [ReferenceAngle.FRONT, ReferenceAngle.THREE_QUARTER_LEFT]
+        )
+        needs.append(
+            PlannedReferenceNeed(
+                subject_name=character.name,
+                acceptable_roles=roles,
+                preferred_angles=angles,
+                preferred_framings=framings,
+                tags=["identity", "wardrobe"],
+                purpose=(
+                    "长时移动表演中的身份、服装和全身比例连续"
+                    if moving
+                    else "当前景别和机位中的角色身份与服装连续"
+                ),
+            )
+        )
+
+    for location in plan.locations:
+        if len(plan.locations) > 1 and location.name not in context:
+            continue
+        matched_views = [
+            view for view in location.key_views if view and view in context
+        ]
+        interaction_view = moving or any(
+            token in lowered
+            for token in ("入口", "出口", "过道", "门口", "进入", "离开", "揭晓", "反打")
+        )
+        needs.append(
+            PlannedReferenceNeed(
+                subject_name=location.name,
+                acceptable_roles=(
+                    [ReferenceRole.LOCATION_INTERACTION, ReferenceRole.LOCATION_MASTER]
+                    if interaction_view
+                    else [ReferenceRole.LOCATION_MASTER]
+                ),
+                preferred_framings=[ReferenceFraming.WIDE],
+                tags=(matched_views[:3] or (["continuous-path"] if moving else ["master"])),
+                purpose=(
+                    "保持连续运动路径、空间轴线和镜头终点一致"
+                    if moving
+                    else "保持当前镜头的空间布局、轴线和灯光一致"
+                ),
+            )
+        )
+
+    for prop in plan.props:
+        if prop.name not in context:
+            continue
+        stateful = any(
+            token in lowered
+            for token in ("手持", "拿", "放", "交", "佩戴", "取下", "状态", "亮", "打开")
+        )
+        needs.append(
+            PlannedReferenceNeed(
+                subject_name=prop.name,
+                acceptable_roles=(
+                    [ReferenceRole.PROP_STATE, ReferenceRole.PROP_IN_HAND]
+                    if stateful
+                    else [ReferenceRole.PROP_PRODUCT]
+                ),
+                preferred_framings=[ReferenceFraming.DETAIL],
+                tags=["state"] if stateful else ["neutral"],
+                purpose="保持道具外观、尺度以及镜头前后状态一致",
+            )
+        )
+    return needs
+
+
 def build_project_document_from_plan(
     *,
     project_id: str,
@@ -932,8 +1094,13 @@ def build_project_document_from_plan(
         asset.name: asset.versions[0].id
         for asset in assets
     }
+    subject_assets = {
+        asset.name.removesuffix("定妆"): asset
+        for asset in assets
+        if asset.kind in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}
+    }
     reference_plan: list[ReferencePlanEntry] = []
-    for shot in shots:
+    for shot, planned_shot in zip(shots, plan.shots, strict=True):
         line_speakers = {
             line.speaker for line in lines if line.id in shot.dialogue_line_ids
         }
@@ -954,12 +1121,44 @@ def build_project_document_from_plan(
                         requirement="REQUIRED" if asset.kind != AssetKind.PROP else "OPTIONAL",
                     )
                 )
+        planned_needs = planned_shot.reference_needs or _default_reference_needs(
+            plan=plan,
+            shot=planned_shot,
+            line_speakers=line_speakers,
+        )
+        requirements: list[ReferenceRequirement] = []
+        for index, need in enumerate(planned_needs, start=1):
+            subject = subject_assets.get(need.subject_name)
+            if subject is None:
+                continue
+            requirements.append(
+                ReferenceRequirement(
+                    id=f"{shot.id}-reference-{index:02d}",
+                    subject_asset_id=subject.id,
+                    acceptable_roles=list(need.acceptable_roles),
+                    preferred_angles=list(need.preferred_angles),
+                    preferred_framings=list(need.preferred_framings),
+                    required_tags=list(dict.fromkeys(need.tags)),
+                    purpose=need.purpose,
+                    required=need.required,
+                )
+            )
         reference_plan.append(
             ReferencePlanEntry(
                 shot_id=shot.id,
                 bindings=bindings,
                 capability_valid=True,
-                validation_notes=["Mock 阶段保存供应商中立绑定；真实 Provider 提交前重新校验"],
+                validation_notes=[
+                    "Mock 阶段保存供应商中立绑定；真实 Provider 提交前重新校验",
+                    "逐镜资产需求由规划 Agent 给出；缺失时使用通用启发式回退",
+                ],
+                requirements=requirements,
+                max_reference_images=min(9, max(3, len(requirements))),
+                planning_notes=(
+                    "asset-manager:gpt-planned"
+                    if planned_shot.reference_needs
+                    else "asset-manager:deterministic-fallback"
+                ),
             )
         )
 
@@ -1018,7 +1217,7 @@ def refresh_lightweight_reference_plans(document: ProjectDocument) -> bool:
             (item for item in document.reference_plan if item.shot_id == shot.id),
             None,
         )
-        if plan is None or plan.requirements or plan.action_beats or plan.interactions:
+        if plan is None:
             continue
 
         dialogue = [
@@ -1053,13 +1252,21 @@ def refresh_lightweight_reference_plans(document: ProjectDocument) -> bool:
             existing_by_asset.setdefault(asset.id, binding)
 
         selected_assets: list[Asset] = []
+        requested_asset_ids = {
+            requirement.subject_asset_id for requirement in plan.requirements
+        }
         for asset in document.assets:
-            if asset.id in existing_by_asset or _asset_relevant_to_shot(
-                asset,
-                context=context,
-                speakers=speakers,
-                location_count=location_count,
-            ):
+            relevant = (
+                asset.id in requested_asset_ids
+                if plan.requirements
+                else _asset_relevant_to_shot(
+                    asset,
+                    context=context,
+                    speakers=speakers,
+                    location_count=location_count,
+                )
+            )
+            if asset.id in existing_by_asset or relevant:
                 selected_assets.append(asset)
 
         bindings: list[ReferenceBinding] = []

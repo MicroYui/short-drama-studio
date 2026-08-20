@@ -656,6 +656,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/asset-agent/tools/search-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search Asset Catalog */
+        post: operations["search_asset_catalog_api_short_drama_asset_agent_tools_search_assets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/fixtures/dont-trust-me": {
         parameters: {
             query?: never;
@@ -789,6 +806,40 @@ export interface paths {
         post?: never;
         /** Delete Project */
         delete: operations["delete_project_api_short_drama_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/asset-agent/tools/import-asset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Catalog Asset */
+        post: operations["import_catalog_asset_api_short_drama_projects__project_id__asset_agent_tools_import_asset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/asset-agent/tools/inspect-coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect Asset Coverage */
+        get: operations["inspect_asset_coverage_api_short_drama_projects__project_id__asset_agent_tools_inspect_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1796,6 +1847,94 @@ export interface components {
             /** Versions */
             versions: components["schemas"]["AssetVersion"][];
         };
+        /** AssetCatalogCandidate */
+        AssetCatalogCandidate: {
+            angle: components["schemas"]["ReferenceAngle"];
+            asset_kind: components["schemas"]["AssetKind"];
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Descriptor */
+            descriptor: string;
+            /** External Url */
+            external_url?: string | null;
+            framing: components["schemas"]["ReferenceFraming"];
+            /** Lineage Root Version Id */
+            lineage_root_version_id?: string | null;
+            /** Local Path */
+            local_path?: string | null;
+            /** Reasons */
+            reasons: string[];
+            role: components["schemas"]["ReferenceRole"];
+            /** Same Project */
+            same_project: boolean;
+            /** Score */
+            score: number;
+            /** Source Project Id */
+            source_project_id: string;
+            /** Source Project Name */
+            source_project_name: string;
+            /** Subject Asset Id */
+            subject_asset_id: string;
+            /** Subject Asset Name */
+            subject_asset_name: string;
+            /** Tags */
+            tags: string[];
+        };
+        /** AssetCatalogImportRequest */
+        AssetCatalogImportRequest: {
+            /** Descriptor */
+            descriptor?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Source Asset Id */
+            source_asset_id: string;
+            /** Source Project Id */
+            source_project_id: string;
+            /** Source Version Id */
+            source_version_id: string;
+            /** Target Asset Id */
+            target_asset_id?: string | null;
+        };
+        /** AssetCatalogSearchRequest */
+        AssetCatalogSearchRequest: {
+            /**
+             * Include Current Project
+             * @default true
+             */
+            include_current_project: boolean;
+            /** Kinds */
+            kinds?: components["schemas"]["AssetKind"][];
+            /**
+             * Limit
+             * @default 12
+             */
+            limit: number;
+            /**
+             * Query
+             * @default
+             */
+            query: string;
+            /** Roles */
+            roles?: components["schemas"]["ReferenceRole"][];
+            /** Tags */
+            tags?: string[];
+        };
+        /** AssetCatalogSearchResponse */
+        AssetCatalogSearchResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["AssetCatalogCandidate"][];
+            /** Query */
+            query: string;
+        };
+        /** AssetCoverageResponse */
+        AssetCoverageResponse: {
+            /** Missing Views */
+            missing_views: components["schemas"]["ReferenceViewNeed"][];
+            /** Project Id */
+            project_id: string;
+            /** Ready */
+            ready: boolean;
+        };
         /** AssetCreateRequest */
         AssetCreateRequest: {
             /** Descriptor */
@@ -2121,7 +2260,7 @@ export interface components {
             id: string;
             /**
              * Max Repair Rounds
-             * @default 2
+             * @default 3
              */
             max_repair_rounds: number;
             /** Planner */
@@ -5138,6 +5277,8 @@ export interface components {
             framing: components["schemas"]["ReferenceFraming"];
             /** Id */
             id: string;
+            /** Lineage Root Version Id */
+            lineage_root_version_id?: string | null;
             /**
              * Priority
              * @default 0
@@ -5157,6 +5298,8 @@ export interface components {
             description: string;
             /** @default NOT_APPLICABLE */
             framing: components["schemas"]["ReferenceFraming"];
+            /** Lineage Root Version Id */
+            lineage_root_version_id?: string | null;
             /**
              * Priority
              * @default 0
@@ -5260,6 +5403,8 @@ export interface components {
             /** Entry Id */
             entry_id: string;
             framing: components["schemas"]["ReferenceFraming"];
+            /** Lineage Root Version Id */
+            lineage_root_version_id?: string | null;
             /** Pack Id */
             pack_id: string;
             /** Reasons */
@@ -5269,6 +5414,24 @@ export interface components {
             role: components["schemas"]["ReferenceRole"];
             /** Score */
             score: number;
+            /** Subject Asset Id */
+            subject_asset_id: string;
+            /** Tags */
+            tags: string[];
+        };
+        /** ReferenceViewNeed */
+        ReferenceViewNeed: {
+            angle: components["schemas"]["ReferenceAngle"];
+            framing: components["schemas"]["ReferenceFraming"];
+            /** Lineage Root Version Id */
+            lineage_root_version_id: string;
+            /** Purpose */
+            purpose: string;
+            /** Requirement Ids */
+            requirement_ids: string[];
+            role: components["schemas"]["ReferenceRole"];
+            /** Shot Ids */
+            shot_ids: string[];
             /** Subject Asset Id */
             subject_asset_id: string;
             /** Tags */
@@ -7694,6 +7857,50 @@ export interface operations {
             };
         };
     };
+    search_asset_catalog_api_short_drama_asset_agent_tools_search_assets_post: {
+        parameters: {
+            query?: {
+                current_project_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetCatalogSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetCatalogSearchResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     initialize_dont_trust_me_fixture_api_short_drama_fixtures_dont_trust_me_post: {
         parameters: {
             query?: never;
@@ -8072,6 +8279,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusMessage"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    import_catalog_asset_api_short_drama_projects__project_id__asset_agent_tools_import_asset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetCatalogImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_asset_coverage_api_short_drama_projects__project_id__asset_agent_tools_inspect_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetCoverageResponse"];
                 };
             };
             /** @description Client Error */

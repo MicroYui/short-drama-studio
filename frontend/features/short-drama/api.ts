@@ -58,6 +58,10 @@ export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRep
 export type VoiceReferenceBinding = components['schemas']['VoiceReferenceBinding']
 export type VoiceReferenceMutationResponse = components['schemas']['VoiceReferenceMutationResponse']
 export type VoiceReferenceUpdateRequest = components['schemas']['VoiceReferenceUpdateRequest']
+export type AssetCatalogSearchRequest = components['schemas']['AssetCatalogSearchRequest']
+export type AssetCatalogSearchResponse = components['schemas']['AssetCatalogSearchResponse']
+export type AssetCatalogImportRequest = components['schemas']['AssetCatalogImportRequest']
+export type AssetCoverageResponse = components['schemas']['AssetCoverageResponse']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
@@ -123,6 +127,9 @@ const advanceImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_
 const cancelImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/cancel', 'post')
 const retryImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/retry', 'post')
 const recoverImageTaskOutput = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/recover-output', 'post')
+const searchAssets = makeEndpointClient('/api/short-drama/asset-agent/tools/search-assets', 'post')
+const inspectAssetCoverage = makeEndpointClient('/api/short-drama/projects/{project_id}/asset-agent/tools/inspect-coverage', 'get')
+const importCatalogAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/asset-agent/tools/import-asset', 'post')
 
 function projectPath(projectId: string, suffix = ''): string {
   return `/api/short-drama/projects/${encodeURIComponent(projectId)}${suffix}`
@@ -423,6 +430,32 @@ export const ShortDramaApi = {
   ),
   recoverImageTaskOutput: (taskId: string) => (
     recoverImageTaskOutput(undefined, undefined, imageTaskPath(taskId, 'recover-output'))
+  ),
+  searchAssets: (
+    body: AssetCatalogSearchRequest,
+    currentProjectId?: string,
+  ) => {
+    const query = currentProjectId
+      ? `?current_project_id=${encodeURIComponent(currentProjectId)}`
+      : ''
+    return searchAssets(
+      body,
+      undefined,
+      `/api/short-drama/asset-agent/tools/search-assets${query}`,
+    )
+  },
+  inspectAssetCoverage: (projectId: string) => inspectAssetCoverage(
+    undefined,
+    undefined,
+    projectPath(projectId, '/asset-agent/tools/inspect-coverage'),
+  ),
+  importCatalogAsset: (
+    projectId: string,
+    body: AssetCatalogImportRequest,
+  ) => importCatalogAsset(
+    body,
+    undefined,
+    projectPath(projectId, '/asset-agent/tools/import-asset'),
   ),
   localRework: (
     projectId: string,

@@ -36,29 +36,28 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         for item in document.bible_versions
         if item.id == document.project.current_bible_version_id
     )
-    descriptor = asset.versions[-1].descriptor
+    descriptor = _canonical_base_descriptor(document, asset)
     shared = (
         "真人都市短剧制片参考资产，写实电影质感，真实皮肤和材质，9:16 竖图，"
         "纯视觉内容，不要任何文字、标签、水印、品牌名或界面元素。"
     )
     if asset.kind == AssetKind.CHARACTER:
         layout = (
-            "生成同一位真人、同一发型、同一妆容和同一套完整服装的制片参考板。"
-            "画面同时清楚展示正面全身、四分之三角度、侧面轮廓和脸部近景；"
-            "各视图必须是同一个人，比例自然，背景简洁，不做漫画设定图。"
+            "生成一张单幅、正面略带四分之三角度的真人全身身份母版。"
+            "完整展示同一人的脸、发型、妆容、体型、鞋子和整套服装；比例自然，"
+            "均匀柔光，背景干净中性。不要宫格、拼贴、多人物、转面图或漫画设定图。"
         )
     elif asset.kind == AssetKind.LOCATION:
         layout = (
-            "生成同一个真实空间的制片参考板，以空场建立视角、反打视角和互动方向为主。"
-            "如需展示尺度，只允许无身份特征的远景站位轮廓，不要生成完整角色定妆。"
-            "门窗、柜台、桌椅、通道和主要光源在各视图中的拓扑必须一致，空间可拍摄。"
+            "生成一张单幅空场 Master Wide，完整、清楚地交代同一个真实空间的总布局、"
+            "摄影轴线、入口、出口、通道、门窗、桌椅和主要光源。空间必须可拍摄且几何"
+            "关系无歧义。不要人物、分镜宫格、拼贴、多个互相冲突的机位或平面图标签。"
         )
     elif asset.kind == AssetKind.PROP:
         layout = (
-            "生成同一个真实道具的纯产品制片参考板，包含正反面、两侧、顶部、底部和关键细节。"
-            "所有视图中的形状、颜色、按钮、接口、指示灯位置和材质必须完全一致。"
-            "最多增加一只匿名、裁切到手腕的中性手掌表示尺度；不要出现完整人物、交接动作、"
-            "房间、柜台、商品背景或剧情场景，不要自动添加文字、商标或额外部件。"
+            "生成一张单幅、三分之四角度的纯产品母版，清楚展示真实尺度、形状、颜色、"
+            "按钮、接口、指示灯位置和材质。背景干净中性；不要出现完整人物、交接动作、"
+            "房间、柜台、商品背景或剧情场景。不要宫格、拼贴、文字、商标或额外部件。"
         )
     else:
         layout = "生成一张可供后续镜头构图使用的清晰写实视觉参考图。"
@@ -67,6 +66,50 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         f"全片风格：{bible.style.cinematography}；{bible.style.color}；{bible.style.texture}。\n"
         f"禁止：{'；'.join(bible.style.forbidden)}。"
     )
+
+
+def _canonical_base_descriptor(document: ProjectDocument, asset: Asset) -> str:
+    """Remove shot-state prose from the canonical image-master request."""
+
+    bible = next(
+        item
+        for item in document.bible_versions
+        if item.id == document.project.current_bible_version_id
+    )
+    if asset.kind == AssetKind.CHARACTER:
+        profile = next(
+            (
+                item
+                for item in bible.characters
+                if item.name == asset.name or item.name in asset.name
+            ),
+            None,
+        )
+        if profile is not None:
+            return f"{profile.appearance}；{profile.wardrobe}"
+    if asset.kind == AssetKind.LOCATION:
+        profile = next(
+            (
+                item
+                for item in bible.locations
+                if item.name == asset.name or item.name in asset.name
+            ),
+            None,
+        )
+        if profile is not None:
+            return f"{profile.layout}；{profile.lighting}；{profile.palette}"
+    if asset.kind == AssetKind.PROP:
+        profile = next(
+            (
+                item
+                for item in bible.props
+                if item.name == asset.name or item.name in asset.name
+            ),
+            None,
+        )
+        if profile is not None:
+            return profile.appearance
+    return asset.versions[-1].descriptor
 
 
 def build_keyframe_correction_prompt(

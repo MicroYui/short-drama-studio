@@ -43,7 +43,11 @@ from short_drama.reference_planner import (
     parse_director_advice,
     preview_reference_plan,
 )
-from short_drama.service import ShortDramaService, WorkflowConflictError
+from short_drama.service import (
+    ShortDramaService,
+    WorkflowConflictError,
+    _scope_keyframe_reference_versions,
+)
 
 
 def _service(tmp_path: Path) -> ShortDramaService:
@@ -59,6 +63,7 @@ class FakeDirectorLanguageProvider:
             list(output_text) if isinstance(output_text, list) else [output_text]
         )
         self.generations: list[tuple[str, str]] = []
+        self.max_output_token_requests: list[int] = []
 
     def validate_credentials(self) -> None:
         return None
@@ -71,8 +76,9 @@ class FakeDirectorLanguageProvider:
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
-        del image_urls, max_output_tokens
+        del image_urls
         self.generations.append((instructions, input_text))
+        self.max_output_token_requests.append(max_output_tokens)
         if not self.output_texts:
             raise AssertionError("Unexpected Director Agent generation")
         return self.output_texts.pop(0)
@@ -488,6 +494,160 @@ def test_semantic_requirement_uses_approved_core_binding_as_coarse_fallback(
     )
 
 
+def test_keyframe_scope_preserves_one_reference_per_required_subject(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = next(item for item in project.document.shots if item.sequence == 4)
+    character = next(
+        item
+        for item in project.document.assets
+        if item.kind == AssetKind.CHARACTER and item.name == "林夏定妆"
+    )
+    location = next(
+        item for item in project.document.assets if item.kind == AssetKind.LOCATION
+    )
+    character_version_id = _approve_image(
+        service,
+        tmp_path,
+        character.id,
+        "#d6d3d1",
+    )
+    location_version_id = _approve_image(
+        service,
+        tmp_path,
+        location.id,
+        "#1e3a5f",
+    )
+
+    master_asset = service.create_asset(
+        project_id,
+        AssetCreateRequest(
+            kind=AssetKind.REFERENCE,
+            name="Location master derivative",
+            descriptor="Same-source location master view",
+        ),
+    ).asset
+    master_version_id = _approve_image(
+        service,
+        tmp_path,
+        master_asset.id,
+        "#334155",
+    )
+    interaction_asset = service.create_asset(
+        project_id,
+        AssetCreateRequest(
+            kind=AssetKind.REFERENCE,
+            name="Location interaction derivative",
+            descriptor="Same-source location interaction view",
+        ),
+    ).asset
+    interaction_version_id = _approve_image(
+        service,
+        tmp_path,
+        interaction_asset.id,
+        "#475569",
+    )
+    for request in (
+        ReferencePackEntryCreateRequest(
+            subject_asset_id=location.id,
+            asset_version_id=master_version_id,
+            role=ReferenceRole.LOCATION_MASTER,
+            framing=ReferenceFraming.WIDE,
+            description="Approved master view",
+        ),
+        ReferencePackEntryCreateRequest(
+            subject_asset_id=location.id,
+            asset_version_id=interaction_version_id,
+            role=ReferenceRole.LOCATION_INTERACTION,
+            framing=ReferenceFraming.MEDIUM,
+            tags=["meeting_table"],
+            description="Approved interaction view",
+        ),
+    ):
+        service.add_reference_pack_entry(project_id, request)
+
+    document = service.repository.get_project(project_id)
+    assert document is not None
+    plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+    plan.bindings = [
+        ReferenceBinding(
+            kind=AssetKind.LOCATION.value,
+            target_id=location_version_id,
+            purpose="Approved location identity anchor.",
+            requirement="REQUIRED",
+        ),
+        ReferenceBinding(
+            kind=AssetKind.CHARACTER.value,
+            target_id=character_version_id,
+            purpose="Approved character identity anchor.",
+            requirement="REQUIRED",
+        ),
+    ]
+    plan.requirements = [
+        ReferenceRequirement(
+            id="location-master",
+            subject_asset_id=location.id,
+            acceptable_roles=[ReferenceRole.LOCATION_MASTER],
+            purpose="Preserve the location master.",
+            required=True,
+        ),
+        ReferenceRequirement(
+            id="location-interaction",
+            subject_asset_id=location.id,
+            acceptable_roles=[ReferenceRole.LOCATION_INTERACTION],
+            preferred_framings=[ReferenceFraming.MEDIUM],
+            required_tags=["meeting_table"],
+            purpose="Preserve interaction geometry.",
+            required=True,
+        ),
+        ReferenceRequirement(
+            id="character-identity",
+            subject_asset_id=character.id,
+            acceptable_roles=[ReferenceRole.CHARACTER_FACE],
+            purpose="Preserve the visible character identity.",
+            required=True,
+        ),
+    ]
+    plan.max_reference_images = 2
+    service.repository.save_project(document)
+
+    document = service.repository.get_project(project_id)
+    assert document is not None
+    plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+    preview = preview_reference_plan(
+        document,
+        shot,
+        plan,
+        ReferencePlanPreviewRequest(),
+    )
+    assert len(preview.selected) == 2
+    assert {item.subject_asset_id for item in preview.selected} == {
+        location.id,
+        character.id,
+    }
+    assert character_version_id in {
+        item.asset_version_id for item in preview.selected
+    }
+    bound = service._approved_bound_image_versions(document, shot.id)
+    scoped = _scope_keyframe_reference_versions(
+        document,
+        bound,
+        plan,
+        [master_version_id, interaction_version_id],
+    )
+
+    scoped_ids = [version.id for _asset, version in scoped]
+    assert len(scoped_ids) == 2
+    assert character_version_id in scoped_ids
+    assert any(
+        version_id in scoped_ids
+        for version_id in (master_version_id, interaction_version_id)
+    )
+
+
 def test_director_agent_recommends_without_creating_a_generation_gate(
     tmp_path: Path,
 ) -> None:
@@ -601,6 +761,7 @@ def test_director_agent_repairs_invalid_json_once(tmp_path: Path) -> None:
     assert advice.status_code == 200, advice.text
     assert advice.json()["advisories"] == []
     assert len(fake.generations) == 2
+    assert fake.max_output_token_requests == [7200, 7200]
     repair_instructions, repair_input = fake.generations[1]
     assert "repairing a previously invalid JSON response" in repair_instructions
     assert '"invalid_director_json": "not-json"' in repair_input
@@ -661,6 +822,71 @@ def test_auto_draft_director_loop_applies_executable_repair(tmp_path: Path) -> N
     assert updated_shot["camera"] == "fixed rear coverage angle"
     assert updated_shot["revision"] == 2
     assert body["project"]["document"]["repair_history"][-1]["decision"] == "APPLIED"
+
+
+def test_director_reference_plan_normalizes_asset_version_ids(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = project.document.shots[0]
+    character = next(
+        item for item in project.document.assets if item.kind == AssetKind.CHARACTER
+    )
+    location = next(
+        item for item in project.document.assets if item.kind == AssetKind.LOCATION
+    )
+    character_version_id = character.versions[-1].id
+    location_version_id = location.versions[-1].id
+
+    result = service.decide_director_repair(
+        project_id,
+        shot.id,
+        DirectorRepairDecisionRequest.model_validate(
+            {
+                "decision": "APPLIED",
+                "strategy": "CHANGE_KEYFRAME",
+                "reason": "Use the exact versions selected by the Director as subjects.",
+                "reference_plan": {
+                    "requirements": [
+                        {
+                            "id": "director-character-reference",
+                            "subject_asset_id": character_version_id,
+                            "acceptable_roles": ["CHARACTER_BODY"],
+                            "purpose": "Preserve the selected character identity.",
+                        }
+                    ],
+                    "action_beats": [
+                        {
+                            "order": 1,
+                            "actor_asset_id": character_version_id,
+                            "action": "enter frame",
+                        }
+                    ],
+                    "interactions": [
+                        {
+                            "id": "director-location-interaction",
+                            "actor_asset_id": character_version_id,
+                            "effector": "BODY",
+                            "action": "stand in",
+                            "target_asset_id": location_version_id,
+                            "target_anchor": "interaction zone",
+                            "start_state": "outside",
+                            "end_state": "inside",
+                        }
+                    ],
+                    "max_reference_images": 3,
+                },
+            }
+        ),
+    )
+
+    plan = next(
+        item for item in result.document.reference_plan if item.shot_id == shot.id
+    )
+    assert plan.requirements[0].subject_asset_id == character.id
+    assert plan.action_beats[0].actor_asset_id == character.id
+    assert plan.interactions[0].actor_asset_id == character.id
+    assert plan.interactions[0].target_asset_id == location.id
 
 
 def test_director_agent_receives_prior_applied_repairs_as_strategy_evidence(
@@ -866,6 +1092,70 @@ def test_director_parser_discards_known_read_only_reference_plan_fields() -> Non
     assert parsed.proposed_repair.reference_plan.planning_notes == (
         "Prepare a matching start frame."
     )
+
+
+def test_director_parser_normalizes_persisted_fields_from_split_shots() -> None:
+    continuity = {
+        "character_positions": "The characters remain on the established axis.",
+        "eyeline": "They maintain the established eyeline.",
+        "prop_state_in": "The badge begins with the employee.",
+        "prop_state_out": "The badge ends with the director.",
+        "action_in": "The request has just been spoken.",
+        "action_out": "The handoff is complete.",
+    }
+    replacement_base = {
+        "project_id": "read-only-project",
+        "sequence": 1,
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 1,
+        "duration_seconds": 2.5,
+        "narrative_purpose": "Separate the dialogue from the handoff.",
+        "visual": "Hold on the two characters without completing the handoff.",
+        "framing": "stable two-shot",
+        "camera": "fixed coverage",
+        "audio_intent": "preserve the locked dialogue",
+        "dialogue_line_ids": [],
+        "continuity": continuity,
+        "transition_out": "straight cut",
+        "merge_candidate": False,
+        "local_rework_risk": "low",
+        "inherits_source_dependencies": True,
+    }
+    payload = {
+        "advisories": [],
+        "repair_options": [
+            {
+                "strategy": "SPLIT_SHOT",
+                "summary": "Separate the risky action.",
+                "rationale": "The observed handoff reverses state.",
+                "tradeoff": "Adds one edit.",
+                "recommended": True,
+                "dismissible": True,
+            }
+        ],
+        "recommended_strategy": "SPLIT_SHOT",
+        "proposed_repair": {
+            "decision": "APPLIED",
+            "strategy": "SPLIT_SHOT",
+            "reason": "Put dialogue and object transfer in separate shots.",
+            "split_shots": [
+                replacement_base,
+                {
+                    **replacement_base,
+                    "sequence": 2,
+                    "visual": "Show only the completed badge state.",
+                },
+            ],
+        },
+    }
+
+    parsed = parse_director_advice(json.dumps(payload))
+
+    assert parsed.proposed_repair is not None
+    assert len(parsed.proposed_repair.split_shots) == 2
+    assert parsed.proposed_repair.split_shots[0].inherits_source_dependencies is False
+    assert parsed.proposed_repair.split_shots[1].inherits_source_dependencies is True
 
 
 def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(

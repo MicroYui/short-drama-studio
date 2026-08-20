@@ -342,6 +342,279 @@
         "title": "Asset",
         "type": "object"
       },
+      "AssetCatalogCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "angle": {
+            "$ref": "#/components/schemas/ReferenceAngle"
+          },
+          "asset_kind": {
+            "$ref": "#/components/schemas/AssetKind"
+          },
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "descriptor": {
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "external_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Url"
+          },
+          "framing": {
+            "$ref": "#/components/schemas/ReferenceFraming"
+          },
+          "lineage_root_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Root Version Id"
+          },
+          "local_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Path"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ReferenceRole"
+          },
+          "same_project": {
+            "title": "Same Project",
+            "type": "boolean"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "source_project_id": {
+            "title": "Source Project Id",
+            "type": "string"
+          },
+          "source_project_name": {
+            "title": "Source Project Name",
+            "type": "string"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          },
+          "subject_asset_name": {
+            "title": "Subject Asset Name",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_project_id",
+          "source_project_name",
+          "subject_asset_id",
+          "subject_asset_name",
+          "asset_kind",
+          "asset_version_id",
+          "descriptor",
+          "role",
+          "angle",
+          "framing",
+          "tags",
+          "same_project",
+          "score",
+          "reasons"
+        ],
+        "title": "AssetCatalogCandidate",
+        "type": "object"
+      },
+      "AssetCatalogImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "descriptor": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descriptor"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          },
+          "source_project_id": {
+            "title": "Source Project Id",
+            "type": "string"
+          },
+          "source_version_id": {
+            "title": "Source Version Id",
+            "type": "string"
+          },
+          "target_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Asset Id"
+          }
+        },
+        "required": [
+          "source_project_id",
+          "source_asset_id",
+          "source_version_id"
+        ],
+        "title": "AssetCatalogImportRequest",
+        "type": "object"
+      },
+      "AssetCatalogSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "include_current_project": {
+            "default": true,
+            "title": "Include Current Project",
+            "type": "boolean"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/AssetKind"
+            },
+            "maxItems": 4,
+            "title": "Kinds",
+            "type": "array"
+          },
+          "limit": {
+            "default": 12,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Query",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRole"
+            },
+            "maxItems": 12,
+            "title": "Roles",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "title": "AssetCatalogSearchRequest",
+        "type": "object"
+      },
+      "AssetCatalogSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCatalogCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "candidates"
+        ],
+        "title": "AssetCatalogSearchResponse",
+        "type": "object"
+      },
+      "AssetCoverageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "missing_views": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceViewNeed"
+            },
+            "title": "Missing Views",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "project_id",
+          "ready",
+          "missing_views"
+        ],
+        "title": "AssetCoverageResponse",
+        "type": "object"
+      },
       "AssetCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1358,7 +1631,7 @@
             "type": "string"
           },
           "max_repair_rounds": {
-            "default": 2,
+            "default": 3,
             "maximum": 5.0,
             "minimum": 0.0,
             "title": "Max Repair Rounds",
@@ -9634,6 +9907,17 @@
             "title": "Id",
             "type": "string"
           },
+          "lineage_root_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Root Version Id"
+          },
           "priority": {
             "default": 0,
             "maximum": 100.0,
@@ -9682,6 +9966,17 @@
           "framing": {
             "$ref": "#/components/schemas/ReferenceFraming",
             "default": "NOT_APPLICABLE"
+          },
+          "lineage_root_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Root Version Id"
           },
           "priority": {
             "default": 0,
@@ -9986,6 +10281,17 @@
           "framing": {
             "$ref": "#/components/schemas/ReferenceFraming"
           },
+          "lineage_root_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Root Version Id"
+          },
           "pack_id": {
             "title": "Pack Id",
             "type": "string"
@@ -10038,6 +10344,66 @@
           "reasons"
         ],
         "title": "ReferenceSelection",
+        "type": "object"
+      },
+      "ReferenceViewNeed": {
+        "additionalProperties": false,
+        "properties": {
+          "angle": {
+            "$ref": "#/components/schemas/ReferenceAngle"
+          },
+          "framing": {
+            "$ref": "#/components/schemas/ReferenceFraming"
+          },
+          "lineage_root_version_id": {
+            "title": "Lineage Root Version Id",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ReferenceRole"
+          },
+          "shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shot Ids",
+            "type": "array"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subject_asset_id",
+          "requirement_ids",
+          "shot_ids",
+          "role",
+          "angle",
+          "framing",
+          "tags",
+          "purpose",
+          "lineage_root_version_id"
+        ],
+        "title": "ReferenceViewNeed",
         "type": "object"
       },
       "RegressionCase": {
@@ -14380,6 +14746,75 @@
         ]
       }
     },
+    "/api/short-drama/asset-agent/tools/search-assets": {
+      "post": {
+        "operationId": "search_asset_catalog_api_short_drama_asset_agent_tools_search_assets_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "current_project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Current Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetCatalogSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetCatalogSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Search Asset Catalog",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/fixtures/dont-trust-me": {
       "post": {
         "operationId": "initialize_dont_trust_me_fixture_api_short_drama_fixtures_dont_trust_me_post",
@@ -14867,6 +15302,120 @@
           }
         },
         "summary": "Get Project",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/asset-agent/tools/import-asset": {
+      "post": {
+        "operationId": "import_catalog_asset_api_short_drama_projects__project_id__asset_agent_tools_import_asset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetCatalogImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Import Catalog Asset",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/asset-agent/tools/inspect-coverage": {
+      "get": {
+        "operationId": "inspect_asset_coverage_api_short_drama_projects__project_id__asset_agent_tools_inspect_coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetCoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Inspect Asset Coverage",
         "tags": [
           "short-drama"
         ]

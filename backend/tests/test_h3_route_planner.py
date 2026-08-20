@@ -26,6 +26,7 @@ from short_drama.models import (
     EvidencePurpose,
     EvidenceStatus,
     Freshness,
+    OperationKind,
     QAReport,
     QaFailureCategory,
     QaIssue,
@@ -43,6 +44,7 @@ from short_drama.service import (
     _can_receive_bounded_best_effort_waiver,
     _prioritize_keyframe_canvas,
     _scope_keyframe_reference_versions,
+    _timeline_clip_window,
 )
 
 
@@ -212,6 +214,49 @@ def test_route_plan_reuses_reviewed_h3_takes_and_builds_real_manifest(
     assert {item.provider for item in selected} == {"minimax"}
 
 
+def test_timeline_clip_window_respects_director_duration_and_preserves_action_end(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    action_shot = project.document.shots[0].model_copy(deep=True)
+    action_shot.duration_seconds = 2.5
+    action_shot.dialogue_line_ids = []
+    action_shot.continuity.action_in = "The prop is still worn."
+    action_shot.continuity.action_out = "The prop is held by the other character."
+    action_take = _persist_passed_h3_take(
+        service,
+        shot_id=action_shot.id,
+        media_path=tmp_path / "unused-action.mp4",
+    )
+    action_take.duration_seconds = 4.46
+
+    source_in, duration = _timeline_clip_window(action_shot, action_take)
+
+    assert source_in == pytest.approx(1.96)
+    assert duration == 2.5
+
+    dialogue_shot = project.document.shots[1].model_copy(deep=True)
+    dialogue_shot.duration_seconds = 2.5
+    dialogue_take = action_take.model_copy(
+        update={"shot_id": dialogue_shot.id},
+        deep=True,
+    )
+
+    source_in, duration = _timeline_clip_window(dialogue_shot, dialogue_take)
+
+    assert source_in == 0.0
+    assert duration == 2.5
+
+    extended_take = dialogue_take.model_copy(
+        update={"operation": OperationKind.EXTEND},
+        deep=True,
+    )
+    source_in, duration = _timeline_clip_window(dialogue_shot, extended_take)
+    assert source_in == 0.0
+    assert duration == 4.46
+
+
 def test_route_plan_compiles_long_take_observation_and_advisory_asset_briefs(
     tmp_path: Path,
 ) -> None:
@@ -319,6 +364,27 @@ def test_failed_advisory_keyframe_can_fall_back_to_approved_references(
     assert decision.override_allowed is True
     assert "user may override" in decision.warnings[-1]
     assert all("起始帧" not in warning for warning in decision.warnings)
+    expected_reference_ids = [
+        item.asset_version_id
+        for item in decision.media_inputs
+        if item.asset_version_id is not None
+    ]
+    assert preparation.input_version_ids == expected_reference_ids
+
+    decision.media_inputs = []
+    assert service._refresh_rejected_keyframe_fallback(
+        persisted_document,
+        decision,
+    ) is True
+    assert [
+        item.asset_version_id
+        for item in decision.media_inputs
+        if item.asset_version_id is not None
+    ] == expected_reference_ids
+    assert service._refresh_rejected_keyframe_fallback(
+        persisted_document,
+        decision,
+    ) is False
 
 
 def test_applied_change_keyframe_repair_is_executed_by_next_route_plan(
@@ -424,6 +490,7 @@ def test_keyframe_reference_scope_and_primary_canvas_follow_route_and_framing(
     plan = next(item for item in document.reference_plan if item.shot_id == shot_one.id)
 
     scoped = _scope_keyframe_reference_versions(
+        document,
         bound,
         plan,
         [lin.versions[0].id, location.versions[0].id],

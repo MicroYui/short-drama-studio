@@ -245,6 +245,87 @@ class AssetWorkbench:
             self._append_version(document, asset, version)
             return version
 
+    def clone_catalog_image(
+        self,
+        project_id: str,
+        target_asset_id: str,
+        *,
+        source_project_id: str,
+        source_asset_id: str,
+        source_asset_name: str,
+        source_version: AssetVersion,
+        descriptor: str,
+    ) -> AssetVersion:
+        """Copy one approved catalog image into a target asset as a draft version."""
+
+        if source_version.media_type != AssetMediaType.IMAGE:
+            raise AssetWorkbenchConflict("Only image assets can be cloned from the catalog")
+        if source_version.local_path is None and source_version.external_url is None:
+            raise AssetWorkbenchConflict("Catalog image has no usable media")
+        source_uri = (
+            f"short-drama://projects/{source_project_id}/assets/{source_asset_id}/"
+            f"versions/{source_version.id}"
+        )
+        with self._lock:
+            document = self._require_project(project_id)
+            target = self._require_asset(document, target_asset_id)
+            number = self._next_version_number(target)
+            version_id = f"asset-version-{uuid4().hex[:12]}"
+            local_path: str | None = None
+            external_url = source_version.external_url
+            mime_type = source_version.mime_type
+            width = source_version.width
+            height = source_version.height
+            file_size_bytes = source_version.file_size_bytes
+            original_filename: str | None = None
+            if source_version.local_path is not None:
+                source_path = Path(source_version.local_path).expanduser().resolve()
+                if not source_path.is_file():
+                    raise AssetWorkbenchConflict(
+                        f"Catalog source file is missing: {source_path}"
+                    )
+                suffix = source_path.suffix.lower() or ".png"
+                destination = self._asset_directory(project_id, target_asset_id) / (
+                    f"v{number}-{version_id}{suffix}"
+                )
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination)
+                local_path = str(destination)
+                external_url = None
+                mime_type = mime_type or mimetypes.guess_type(destination.name)[0]
+                width, height = self._image_dimensions(
+                    destination,
+                    AssetMediaType.IMAGE,
+                )
+                file_size_bytes = destination.stat().st_size
+                original_filename = source_path.name
+            now = utc_now()
+            version = AssetVersion(
+                id=version_id,
+                version=number,
+                origin_type=OriginType.LIBRARY_IMPORT,
+                descriptor=descriptor.strip(),
+                media_type=AssetMediaType.IMAGE,
+                local_path=local_path,
+                external_url=external_url,
+                mime_type=mime_type,
+                width=width,
+                height=height,
+                file_size_bytes=file_size_bytes,
+                source=AssetSourceRecord(
+                    source_type=OriginType.LIBRARY_IMPORT,
+                    source_label=f"资产库复用：{source_asset_name}",
+                    source_uri=source_uri,
+                    original_filename=original_filename,
+                    created_at=now,
+                ),
+                approval_status=ApprovalStatus.DRAFT,
+                freshness=Freshness.CURRENT,
+                created_at=now,
+            )
+            self._append_version(document, target, version)
+            return version
+
     def import_voice_reference_bytes(
         self,
         project_id: str,

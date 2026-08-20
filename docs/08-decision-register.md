@@ -54,6 +54,7 @@
 | A010 | `LOCKED` | 当前只复用 LTX Desktop 的 Apache 应用代码、编辑壳和媒体能力，不集成、分发或评估 LTX 模型权重；视频生成只接 H3，未来若重新开放模型扩展再单独复核权重 License、硬件和质量 | A002、M001 |
 | A011 | `LOCKED` | 视频探测、适应性抽帧、镜内时间序列和相邻镜头边界检查作为 Agent 可调用的通用工具；观察只报告可见证据，Director 给出可覆盖建议，不把建议变成硬门，也不新增单一样片或门场景专用字段 | A006、A008、P007 |
 | A012 | `LOCKED` | 真人 `AUTO_DRAFT` 在同一 SQLite/API 核心上采用有限推进和自动轮询，复用现有资产/H3 任务、Take、QA 和 TimelineManifest；仅配置缺失、提交未知或重试耗尽进入 `NEEDS_ATTENTION`，应用重启后可继续 | A005、A008、P007 |
+| A013 | `LOCKED` | 视觉资产以 Agent 管理、Tool 执行：结构化分镜需求驱动目录搜索、覆盖检查、同源派生、语义审查、登记和逐镜 ReferencePlan；场景先建 Master Wide，必要时再派生局部视图，三视图不是固定前置。这些是可忽略的 Agent 选择，不是用户硬审批门 | A006、A008、P007、P010 |
 
 ## C. 图像、视频、音频与后期路线
 
@@ -113,6 +114,7 @@
 - 2026-08-20：Phase 10 新增固定前期制片包的独立重复入口，并以真实 GPT Image 2、GPT-5.6-sol 和 MiniMax-H3 768P 再执行 Run 2 / Run 3。两次都自动完成关键帧、H3 候选、长镜头/镜间抽帧、Director 有界修复、9/9 选 Take、`TimelineManifest`、音频 QA 和 54.31 秒 1080×1920/30fps 导出；五句锁定对白和林夏/周衡跨镜声线均通过自动检查。加上 Phase 8 Run 1，三版已生成匿名盲评包；自动结果中至少 2/3 没有高严重度入选问题。E007 尚未最终通过，剩余至少三人匿名盲评与最终片选择。详见 [Phase 10 实施记录](20-phase10-independent-repeats-and-blind-review.md)。
 - 2026-08-20：用户选择不填写数值 CSV，直接提交三版完整观看后的汇总定性结论：A 的首镜有竖向接缝造成局部空间不连续；B 的录音笔播放被错误表现为女主本人说话，属于声音来源语义失败；C 未发现明确严重问题，并选为当前最终版。本轮产品验收据此完成，至少 2/3 未被判为整片严重失败；没有收集三名独立评审、维度分数或继续观看意愿，因此不宣称完成三人评分 benchmark。B 的问题保留为通用已知缺口，不增加录音笔专用字段。详见 [Phase 10 实施记录](20-phase10-independent-repeats-and-blind-review.md)。
 - 2026-08-20：Phase 11 将可上传或麦克风录制的 2–15 秒角色人声规范化为 H3 可用 WAV，并以项目级可选绑定接入资产工作台、独立重复和 Route Planner。实际有该角色台词的镜头可自动选择带 `reference_audio` 的 Reference 候选；未绑定时继续使用 H3 原生声音，Frame 修复路线也可因画面质量不采用声线输入。声线版本会使旧路线与旧任务产物失效。用户明确本阶段只支持输入，不新增声音 QA；详见 [Phase 11 实施记录](21-phase11-optional-character-voice-input.md)。
+- 2026-08-20：Phase 12 已实现跨项目资产目录、分镜结构化 `reference_needs`、场景 Master Wide、同源 GPT Image 派生、母版系谱、资产覆盖检查和逐镜 `ReferencePlan`，并将搜索、导入和覆盖检查暴露为 Product API。真实《明天别来了》运行生成 4 个资产包、18 个登记视图和 36 个 H3 768P Take，Director 自动拆分高风险交接镜头，最终形成 8 个入选 Take、6 条锁定字幕和 58.00 秒成片。详见 [Phase 12 实施记录](22-phase12-cross-script-asset-agent.md)。
 
 ## 对话顺序
 

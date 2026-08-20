@@ -5,6 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from _routes._errors import HTTPError
+from short_drama.asset_catalog import (
+    AssetCatalogImportRequest,
+    AssetCatalogSearchRequest,
+    AssetCatalogSearchResponse,
+    AssetCoverageResponse,
+)
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
     H3NotSubmittedResolutionRequest,
@@ -110,6 +116,53 @@ def _translate_error(error: Exception) -> HTTPError:
     if isinstance(error, MediaGenerationError):
         return HTTPError(500, str(error), code="SHORT_DRAMA_MEDIA_FAILED")
     return HTTPError(500, str(error), code="SHORT_DRAMA_INTERNAL_ERROR")
+
+
+@router.post(
+    "/asset-agent/tools/search-assets",
+    response_model=AssetCatalogSearchResponse,
+)
+def search_asset_catalog(
+    request: AssetCatalogSearchRequest,
+    current_project_id: str | None = None,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetCatalogSearchResponse:
+    try:
+        return service.search_asset_catalog(
+            request,
+            current_project_id=current_project_id,
+        )
+    except ProjectNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/asset-agent/tools/inspect-coverage",
+    response_model=AssetCoverageResponse,
+)
+def inspect_asset_coverage(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetCoverageResponse:
+    try:
+        return service.inspect_asset_coverage(project_id)
+    except ProjectNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/asset-agent/tools/import-asset",
+    response_model=AssetMutationResponse,
+)
+def import_catalog_asset(
+    project_id: str,
+    request: AssetCatalogImportRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetMutationResponse:
+    try:
+        return service.import_catalog_asset(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
 
 
 @router.get("/providers/gpt-image", response_model=ImageProviderConfigResponse)

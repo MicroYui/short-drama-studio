@@ -18,6 +18,7 @@ import { pathToFileUrl } from '../../lib/file-url'
 import {
   ShortDramaApi,
   type Asset,
+  type AssetCoverageResponse,
   type AssetKind,
   type AssetMediaType,
   type AssetVersion,
@@ -75,23 +76,14 @@ function versionUrl(version: AssetVersion | undefined): string | null {
 }
 
 function defaultPrompt(asset: Asset): string {
-  if (asset.name.includes('林夏')) {
-    return '真人都市悬疑短剧角色定妆照。中国女性，28岁，短黑发，米白色风衣，真实自然皮肤，克制但警觉的眼神，身形与五官稳定清晰。冷白便利店顶灯与微弱蓝色雨夜反光，电影级写实摄影，竖屏9:16，半身到全身构图，手部自然。背景简洁，无文字、无水印、无logo，不要动漫感，不要过度磨皮，不要多个人物。'
-  }
-  if (asset.name.includes('周衡')) {
-    return '真人都市悬疑短剧角色定妆照。中国男性，32岁，深灰色西装，左眉有一道清晰但克制的浅疤，表面平静、掌控谈话节奏，真实自然皮肤与布料。冷白便利店顶灯和蓝色雨夜反光，电影级写实摄影，竖屏9:16，半身到全身构图，身份特征稳定。背景简洁，无文字、无水印、无logo，不要动漫感，不要夸张伤疤，不要多个人物。'
-  }
-  if (asset.name.includes('便利店')) {
-    return '真人都市悬疑短剧的雨夜便利店空间锚点，竖屏9:16。冷白顶灯，玻璃门明确位于画面右侧，收银台位于左后方，两个人物后续可以隔柜台对峙；门外蓝色霓虹与雨水反光，湿玻璃、货架和柜台空间关系真实清楚，冷青灰白色调，红色道具将是唯一高饱和点。电影级写实摄影，无人物。所有店招、价签和包装文字为空白或不可见，绝不生成乱码、品牌、logo或水印。'
-  }
-  if (asset.name.includes('录音笔')) {
-    return '用于真人都市悬疑短剧的红色旧录音笔产品参考图。紧凑的长方形便携录音设备，磨损红色金属外壳，顶部只有一个很小的状态指示灯，细小录音孔和少量物理按键，比例适合单手握持。必须像录音笔，绝对不要天线、对讲机轮廓、大扬声器网格、军事设备或手机。无文字、无品牌、无logo、无水印，完整物体居中，真实产品摄影，深灰色无缝中性背景。'
-  }
-  return `真人都市短剧的高质量写实参考素材：${currentVersion(asset).descriptor}。构图清晰，主体稳定，无文字、无logo、无水印。`
+  const descriptor = currentVersion(asset).descriptor
+  if (asset.kind === 'CHARACTER') return `基于以下设定生成一张单幅真人全身身份母版：${descriptor}。正面略带四分之三角度，完整展示脸、发型、体型、鞋和整套服装，背景干净中性，竖屏9:16。不要宫格、拼贴、多人、文字、logo或水印。`
+  if (asset.kind === 'LOCATION') return `基于以下设定生成一张单幅真人空场 Master Wide：${descriptor}。清楚交代总布局、摄影轴线、入口、出口、通道、门窗、桌椅和主光源，竖屏9:16。不要人物、拼贴、多个冲突机位、文字、logo或水印。`
+  if (asset.kind === 'PROP') return `基于以下设定生成一张单幅三分之四角度产品母版：${descriptor}。清楚展示真实尺度、形状、颜色、部件数量和材质，背景干净中性。不要完整人物、场景、额外部件、文字、logo或水印。`
+  return `真人都市短剧的高质量写实参考素材：${descriptor}。保持所有已批准身份与空间关系，单幅构图，无文字、logo或水印。`
 }
 
 function defaultDescriptor(asset: Asset): string {
-  if (asset.name.includes('录音笔')) return '红色旧录音笔清洁产品参考，明确排除对讲机外形'
   return `${asset.name} · GPT Image 2 首批可审片候选`
 }
 
@@ -105,6 +97,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
   const [selectedVersionId, setSelectedVersionId] = useState('')
   const [config, setConfig] = useState<ImageProviderConfig | null>(null)
   const [languageConfig, setLanguageConfig] = useState<LanguageProviderConfig | null>(null)
+  const [coverage, setCoverage] = useState<AssetCoverageResponse | null>(null)
   const [tasks, setTasks] = useState<ImageGenerationTask[]>([])
   const [apiKey, setApiKey] = useState('')
   const [imageBaseUrl, setImageBaseUrl] = useState('https://api.openai.com/v1')
@@ -135,6 +128,11 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
       .filter((item) => item.version.media_type === 'IMAGE' && Boolean(item.version.local_path || item.version.external_url)),
     [project],
   )
+  const referencePacks = project.document.reference_packs ?? []
+  const referenceEntryCount = useMemo(
+    () => referencePacks.reduce((sum, pack) => sum + (pack.entries ?? []).length, 0),
+    [project.document.reference_packs],
+  )
 
   const loadConfig = async () => {
     const result = await ShortDramaApi.getImageConfig()
@@ -156,9 +154,16 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     setTasks(result.data.tasks)
   }
 
+  const loadCoverage = async () => {
+    const result = await ShortDramaApi.inspectAssetCoverage(projectId)
+    if (!result.ok) { onError(result.error.message); return }
+    setCoverage(result.data)
+  }
+
   useEffect(() => { void loadConfig() }, [])
   useEffect(() => { void loadLanguageConfig() }, [])
   useEffect(() => { void loadTasks() }, [projectId, asset?.id])
+  useEffect(() => { void loadCoverage() }, [projectId, referenceEntryCount])
   useEffect(() => {
     if (!asset) return
     const active = currentVersion(asset)
@@ -378,9 +383,9 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     <div className="space-y-6">
       <section className="flex flex-col gap-4 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-zinc-950 to-cyan-500/5 p-5 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 3 · Asset Workbench</Badge><Badge>GPT Image 2</Badge><Badge>候选需人工批准</Badge></div>
-          <h2 className="mt-3 text-xl font-semibold text-white">来源中立的正式资产生产</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">上传、外部链接、AI 新生成和 AI 修整共用 AssetVersion。视觉候选经批准后进入 H3；角色声线上传会在格式与时长校验后直接绑定为可选输入。</p>
+          <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 12 · Asset Agent</Badge><Badge>GPT Image 2</Badge><Badge>同源母版谱系</Badge></div>
+          <h2 className="mt-3 text-xl font-semibold text-white">Agent 管理的可复用制片资产包</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">上传、跨项目资产库、GPT Image 新生成和同母版派生共用 AssetVersion。AUTO_DRAFT 会按镜头需求检索最小参考集，只补齐缺失视图；建议可忽略，不形成用户审批门。</p>
         </div>
         <button className={secondaryButton} onClick={() => setShowCreate((value) => !value)}><Plus className="h-4 w-4" />新建资产</button>
       </section>
@@ -391,6 +396,29 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
         onError={onError}
         onNotice={onNotice}
       />
+
+      <section className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-cyan-300" /><h3 className="text-sm font-medium text-cyan-100">资产 Agent tools</h3></div>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">search_assets → inspect_asset_coverage → ensure_asset_view → review_and_register → select_shot_references</p>
+          </div>
+          <button className={subtleButton} onClick={() => void loadCoverage()}><RefreshCw className="h-3.5 w-3.5" />刷新覆盖</button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">资产包</p><p className="mt-1 text-lg font-semibold text-white">{referencePacks.length}</p></div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">已登记视图</p><p className="mt-1 text-lg font-semibold text-white">{referenceEntryCount}</p></div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">待补覆盖</p><p className={`mt-1 text-lg font-semibold ${coverage?.ready ? 'text-emerald-300' : 'text-amber-300'}`}>{coverage ? coverage.missing_views.length : '—'}</p></div>
+        </div>
+        {coverage && coverage.missing_views.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {coverage.missing_views.slice(0, 6).map((need) => {
+              const subject = project.document.assets.find((item) => item.id === need.subject_asset_id)
+              return <Badge key={`${need.subject_asset_id}-${need.role}-${need.angle}-${need.framing}`} tone="amber">{subject?.name ?? need.subject_asset_id} · {need.role} · {need.framing}</Badge>
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
         <div className="grid gap-3 xl:grid-cols-[170px_minmax(260px,1fr)_minmax(220px,0.8fr)_auto_auto] xl:items-end">

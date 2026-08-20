@@ -46,6 +46,7 @@ class ReferencePackEntryCreateRequest(DomainModel):
     subject_asset_id: str
     asset_version_id: str
     role: ReferenceRole
+    lineage_root_version_id: str | None = None
     angle: ReferenceAngle = ReferenceAngle.NOT_APPLICABLE
     framing: ReferenceFraming = ReferenceFraming.NOT_APPLICABLE
     tags: list[str] = Field(default_factory=list[str], max_length=32)
@@ -288,6 +289,7 @@ class ReferenceSelection(DomainModel):
     entry_id: str
     subject_asset_id: str
     asset_version_id: str
+    lineage_root_version_id: str | None = None
     role: ReferenceRole
     angle: ReferenceAngle
     framing: ReferenceFraming
@@ -384,9 +386,23 @@ def preview_reference_plan(
             and set(requirement.required_tags).issubset(entry.tags)
             and all(item.entry_id != entry.id for item in selected)
         ]
+        preferred_lineages = {
+            item.lineage_root_version_id
+            for item in selected
+            if item.subject_asset_id == requirement.subject_asset_id
+            and item.lineage_root_version_id is not None
+        }
         ranked = sorted(
             (
-                (_entry_score(requirement, entry), pack, entry)
+                (
+                    _entry_score(
+                        requirement,
+                        entry,
+                        preferred_lineages=preferred_lineages,
+                    ),
+                    pack,
+                    entry,
+                )
                 for pack, entry in candidates
             ),
             key=lambda item: (-item[0][0], item[2].id),
@@ -406,6 +422,7 @@ def preview_reference_plan(
                 entry_id=entry.id,
                 subject_asset_id=pack.subject_asset_id,
                 asset_version_id=entry.asset_version_id,
+                lineage_root_version_id=entry.lineage_root_version_id,
                 role=entry.role,
                 angle=entry.angle,
                 framing=entry.framing,
@@ -478,6 +495,16 @@ def preview_reference_plan(
         missing.extend(binding_missing)
         warnings.extend(binding_warnings)
 
+    if requirements:
+        _ensure_required_subject_coverage(
+            document=document,
+            plan=plan,
+            requirements=requirements,
+            selected=selected,
+            max_images=max_images,
+            warnings=warnings,
+        )
+
     complexity = _assess_complexity(shot, plan, selected)
     if complexity.missing_topology_anchors:
         warnings.append(
@@ -497,6 +524,85 @@ def preview_reference_plan(
         warnings=warnings,
         complexity=complexity,
     )
+
+
+def _ensure_required_subject_coverage(
+    *,
+    document: ProjectDocument,
+    plan: ReferencePlanEntry,
+    requirements: list[ReferenceRequirement],
+    selected: list[ReferenceSelection],
+    max_images: int,
+    warnings: list[str],
+) -> None:
+    """Reserve one approved reference for every visible subject before extra views."""
+
+    required_subject_ids: list[str] = []
+
+    def require(subject_id: str) -> None:
+        if subject_id not in required_subject_ids:
+            required_subject_ids.append(subject_id)
+
+    for requirement in requirements:
+        if requirement.required:
+            require(requirement.subject_asset_id)
+    for beat in plan.action_beats:
+        require(beat.actor_asset_id)
+    for interaction in plan.interactions:
+        require(interaction.actor_asset_id)
+        require(interaction.target_asset_id)
+    for requirement in requirements:
+        require(requirement.subject_asset_id)
+
+    bindings, _binding_missing, _binding_warnings = _binding_selections(
+        document,
+        plan,
+        max_images=max(1, len(plan.bindings)),
+    )
+    binding_by_subject = {item.subject_asset_id: item for item in bindings}
+    counts: dict[str, int] = {}
+    for item in selected:
+        counts[item.subject_asset_id] = counts.get(item.subject_asset_id, 0) + 1
+
+    for subject_id in required_subject_ids:
+        if counts.get(subject_id, 0) > 0:
+            continue
+        fallback = binding_by_subject.get(subject_id)
+        if fallback is None:
+            continue
+        requirement = next(
+            (item for item in requirements if item.subject_asset_id == subject_id),
+            None,
+        )
+        if requirement is not None:
+            fallback.requirement_ids = [requirement.id]
+        fallback.reasons.append(
+            "approved core asset reserved to prevent specialised views for another subject "
+            "from consuming the whole provider input budget"
+        )
+        if len(selected) < max_images:
+            selected.append(fallback)
+        else:
+            replaceable = [
+                (index, item)
+                for index, item in enumerate(selected)
+                if counts.get(item.subject_asset_id, 0) > 1
+            ]
+            if not replaceable:
+                continue
+            replace_index, replaced = min(
+                replaceable,
+                key=lambda item: (item[1].score, -item[0]),
+            )
+            selected[replace_index] = fallback
+            counts[replaced.subject_asset_id] -= 1
+        counts[subject_id] = counts.get(subject_id, 0) + 1
+        warning = (
+            f"{requirement.id if requirement is not None else subject_id}: using an approved "
+            "core asset to preserve per-subject visual coverage within the reference limit"
+        )
+        if warning not in warnings:
+            warnings.append(warning)
 
 
 def _binding_selections(
@@ -570,6 +676,9 @@ def _binding_selections(
                 entry_id=f"lightweight-binding:{plan.shot_id}:{index}",
                 subject_asset_id=asset.id,
                 asset_version_id=version.id,
+                lineage_root_version_id=(
+                    version.id if asset.kind == AssetKind.LOCATION else None
+                ),
                 role=role,
                 angle=angle,
                 framing=framing,
@@ -823,6 +932,7 @@ def _resolve_primary_canvas(
 def _valid_pack_entries(
     document: ProjectDocument,
 ) -> list[tuple[ReferencePack, ReferencePackEntry]]:
+    subjects = {asset.id: asset for asset in document.assets}
     approved_versions: dict[str, AssetVersion] = {}
     for asset in document.assets:
         for version in asset.versions:
@@ -837,12 +947,20 @@ def _valid_pack_entries(
         for pack in document.reference_packs
         for entry in pack.entries
         if entry.asset_version_id in approved_versions
+        and (
+            entry.lineage_root_version_id is None
+            or subjects.get(pack.subject_asset_id) is not None
+            and subjects[pack.subject_asset_id].approved_version_id
+            == entry.lineage_root_version_id
+        )
     ]
 
 
 def _entry_score(
     requirement: ReferenceRequirement,
     entry: ReferencePackEntry,
+    *,
+    preferred_lineages: set[str],
 ) -> tuple[int, list[str]]:
     score = entry.priority
     reasons = [f"priority {entry.priority}"]
@@ -864,6 +982,13 @@ def _entry_score(
         tag_score = len(requirement.required_tags) * 10
         score += tag_score
         reasons.append(f"required tags +{tag_score}")
+    if (
+        preferred_lineages
+        and entry.lineage_root_version_id is not None
+        and entry.lineage_root_version_id in preferred_lineages
+    ):
+        score += 40
+        reasons.append("same canonical master lineage +40")
     return score, reasons
 
 
@@ -1054,7 +1179,9 @@ def build_director_advice_input(
         "product_rule": (
             "Advice never blocks generation. In AUTO_DRAFT, return an executable proposed_repair "
             "for the recommended strategy so the workflow can continue without a user pause. In "
-            "GUIDED, the user may apply or ignore it. Never invent scene-specific schema fields."
+            "GUIDED, the user may apply or ignore it. Never invent scene-specific schema fields. "
+            "Keep the JSON concise: at most three advisories, at most four repair options, omit "
+            "unchanged optional fields, and keep each prose field under 300 characters."
         ),
     }
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
@@ -1090,6 +1217,34 @@ def parse_director_advice(output_text: str) -> DirectorAdvicePayload:
                         "validation_notes",
                     ):
                         reference_plan_object.pop(field_name, None)
+                split_shots = repair_object.get("split_shots")
+                if isinstance(split_shots, list):
+                    replacement_objects = [
+                        cast(dict[str, object], item)
+                        for item in cast(list[object], split_shots)
+                        if isinstance(item, dict)
+                    ]
+                    for replacement in replacement_objects:
+                        # ReplacementShotDraft is an authoring payload, not a copied
+                        # persisted ShotPlan. Ignore the known storage envelope fields.
+                        for field_name in (
+                            "project_id",
+                            "sequence",
+                            "approval_status",
+                            "freshness",
+                            "revision",
+                        ):
+                            replacement.pop(field_name, None)
+                    inherited = [
+                        item
+                        for item in replacement_objects
+                        if item.get("inherits_source_dependencies") is True
+                    ]
+                    if len(inherited) > 1:
+                        # Downstream continuity belongs to the final temporal fragment.
+                        # Earlier fragments remain internal to the replacement sequence.
+                        for replacement in inherited[:-1]:
+                            replacement["inherits_source_dependencies"] = False
         return DirectorAdvicePayload.model_validate(payload)
     except ValueError as exc:
         detail = " ".join(str(exc).split())[:2000]
@@ -1110,7 +1265,9 @@ def build_director_advice_repair_input(
         "Preserve valid recommendations and the original narrative intent. Do not introduce a "
         "new scene-specific field, mandatory gate, or non-dismissible instruction. When a "
         "recommended strategy is present, its proposed_repair must be executable, use the same "
-        "strategy, and keep decision=APPLIED."
+        "strategy, and keep decision=APPLIED. Keep the corrected JSON concise: omit unchanged "
+        "optional fields and keep every prose field under 300 characters. For SPLIT_SHOT, emit "
+        "authoring fields only and let only the final replacement inherit source dependencies."
     )
     payload = {
         "validation_error": str(validation_error),
