@@ -14,7 +14,7 @@
 
 首版运行在单用户、受信环境中，不设计注册、登录、账号体系、RBAC、多租户、团队成员或分享权限。生产流程中的“批准/确认”是内容状态，不是访问控制。外部模型 API 凭证只作为 Provider 配置处理。
 
-当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线，以及 Phase 1–9 的 Mock、H3 768P、GPT Image 2、Director、无人值守单集和音频 QA 闭环。Phase 10 已从同一锁定《别相信我》制片包再完成两次独立真人 `AUTO_DRAFT`：两次均自动到达 9 镜时间线、音频 QA 和 54.31 秒 1080×1920 成片导出。三次运行已组成匿名盲评包；E007 的工程前置条件已完成，最终结论只剩至少三人盲评。关键帧、镜内/镜间抽帧、音频检查、选 Take、`TimelineManifest`、字幕和直接拼接导出现在都已在同一自动流程中。
+当前已经完成调研、实验设计、首轮架构决策、LTX Desktop Phase 0 基线，以及 Phase 1–9 的 Mock、H3 768P、GPT Image 2、Director、无人值守单集和音频 QA 闭环。Phase 10 已从同一锁定《别相信我》制片包再完成两次独立真人 `AUTO_DRAFT`：两次均自动到达 9 镜时间线、音频 QA 和 54.31 秒 1080×1920 成片导出。用户以三版完整观看后的定性汇总结论替代数值 CSV，并选择 C（Phase 8 Run 1）为当前最终版；这完成了本轮产品验收，但不冒充三人评分 benchmark。关键帧、镜内/镜间抽帧、音频检查、选 Take、`TimelineManifest`、字幕和直接拼接导出现在都已在同一自动流程中。
 
 工程实施状态见 [Phase 0：LTX Desktop 上游基线](09-phase0-upstream-baseline.md)、[Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)、[Phase 2：MiniMax-H3 768P Provider 与真实证据门](11-phase2-minimax-h3-provider.md)、[Phase 3：资产工作台与 GPT Image 2](12-phase3-asset-workbench.md)、[Phase 4：H3 视觉路线质量实验](13-phase4-h3-visual-route-experiment.md)、[成熟 AI 短剧制作法与参考资产包](14-mature-production-workflow-and-reference-packs.md)、[Phase 5：无人值守运行器与视频观察工具](15-phase5-autonomous-runner-and-video-observation.md)、[Phase 6：真实 H3 制片路线与整集复用闭环](16-phase6-real-route-planner.md)、[Phase 7：从零真人 AUTO_DRAFT](17-phase7-real-autonomous-draft.md)、[Phase 8：首次真实无人值守 AUTO_DRAFT](18-phase8-real-autonomous-validation.md)、[Phase 9：自动音频、对白与声线 QA](19-phase9-audio-dialogue-qa.md) 和 [Phase 10：独立重复、连续性收敛与三版盲评](20-phase10-independent-repeats-and-blind-review.md)。
 
@@ -90,5 +90,5 @@ H3 的首帧/尾帧角色与 reference image/video/audio 角色不能在同一�
 - 开源结论基于 [固定 commit](sources.md)，没有安装全部依赖或运行其真实付费 Provider。
 - 当前已有固定资产下的多路线、多样本和人工审片证据，但仍不足以把某条路线提前写成所有镜头的稳定默认；S08 两镜覆盖方案已经通过，原单镜失败沉淀为能力画像、通用 QA、Director 修复策略和回归案例。
 - 视频观察工具已在真实单集生成长镜头时间序列和相邻镜头边界证据，并发现整片总览中的身份漂移、画外道具误入和边界状态问题；跨项目召回率、漏报率和默认阈值仍是 `UNKNOWN`。
-- 三次锁定剧本运行都已导出，Run 2 / Run 3 的音轨、五句锁定对白和两名角色跨镜声线也均通过自动检查；口型、主观表演、环境声和观看意愿仍需 E007 三人盲评，跨剧本与同版本稳定率仍为 `UNKNOWN`。
+- 三次锁定剧本运行都已导出，Run 2 / Run 3 的音轨、五句锁定对白和两名角色跨镜声线也均通过自动检查；用户定性验收指出 A 有首镜空间接缝，B 把录音笔播放错误表现为女主本人说话，C 无明确严重问题并成为当前最终版。该结果同时证明纯音频检查会漏掉声音来源语义；跨剧本与同版本稳定率仍为 `UNKNOWN`。
 - 成本与配额高度时效化；本轮保留 `UNKNOWN` 并在实施时记录，但它们不是质量路线的主要决策因子。
