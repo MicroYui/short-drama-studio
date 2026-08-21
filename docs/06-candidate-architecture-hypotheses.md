@@ -350,6 +350,10 @@ Planner 不再硬限定 6–10 镜，Director 也不使用固定动作数、固�
 
 PlanningRun 不是新的工作流画布或微服务。它只是 SQLite/API 核心中的一个前置长任务状态机；语言模型调用期间不持有全局锁，前端通过阶段和场次进度自动轮询。规划阶段不调用 GPT Image 或 H3。
 
+### Phase 16：跨剧本审稿历史
+
+每轮 `EpisodeOutline` 和 `ScriptReviewReport` 以独立 PlanningRun artifact 保存，不随轮询重复返回。Product API 可读取单个 run 的完整历史，也可检索跨项目摘要。对比只描述各轮报告的问题数、严重度和类别名变化，不把它们当作剧本得分或答案键。最新轮比上一轮报告更多问题时，Director Agent 只给出可忽略的版本比较建议，不阻断后续规划。
+
 ## 12. 当前不做
 
 - 不调用或依赖即梦、可灵、LTX Studio、纳逗 Pro；

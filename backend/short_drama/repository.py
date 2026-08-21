@@ -17,6 +17,8 @@ from short_drama.models import (
     ExportRecord,
     Freshness,
     GenerationTask,
+    PlanningOutlineSnapshot,
+    PlanningReviewSnapshot,
     PlanningRunRecord,
     ProjectDocument,
     RouteEvidence,
@@ -214,6 +216,17 @@ class ShortDramaRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_planning_runs_status_updated
                     ON planning_runs(status, updated_at);
+
+                CREATE TABLE IF NOT EXISTS planning_run_artifacts (
+                    run_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    artifact_json TEXT NOT NULL,
+                    PRIMARY KEY(run_id, kind, sequence)
+                );
+                CREATE INDEX IF NOT EXISTS idx_planning_run_artifacts_run_kind
+                    ON planning_run_artifacts(run_id, kind, sequence);
                 """
             )
             task_columns = {
@@ -249,6 +262,9 @@ class ShortDramaRepository:
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(7, datetime('now'))"
             )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(8, datetime('now'))"
+            )
 
     def save_planning_run(self, run: PlanningRunRecord) -> None:
         with self._lock, self._connection() as connection:
@@ -282,6 +298,84 @@ class ShortDramaRepository:
             PlanningRunRecord.model_validate_json(cast(str, row["record_json"]))
             for row in rows
         ]
+
+    def save_planning_outline_snapshot(
+        self,
+        run_id: str,
+        snapshot: PlanningOutlineSnapshot,
+    ) -> None:
+        self._save_planning_artifact(
+            run_id,
+            "OUTLINE",
+            snapshot.revision_round,
+            snapshot.created_at,
+            snapshot.model_dump_json(),
+        )
+
+    def list_planning_outline_snapshots(
+        self,
+        run_id: str,
+    ) -> list[PlanningOutlineSnapshot]:
+        return [
+            PlanningOutlineSnapshot.model_validate_json(value)
+            for value in self._list_planning_artifacts(run_id, "OUTLINE")
+        ]
+
+    def save_planning_review_snapshot(
+        self,
+        run_id: str,
+        snapshot: PlanningReviewSnapshot,
+    ) -> None:
+        self._save_planning_artifact(
+            run_id,
+            "REVIEW",
+            snapshot.review_round,
+            snapshot.created_at,
+            snapshot.model_dump_json(),
+        )
+
+    def list_planning_review_snapshots(
+        self,
+        run_id: str,
+    ) -> list[PlanningReviewSnapshot]:
+        return [
+            PlanningReviewSnapshot.model_validate_json(value)
+            for value in self._list_planning_artifacts(run_id, "REVIEW")
+        ]
+
+    def _save_planning_artifact(
+        self,
+        run_id: str,
+        kind: str,
+        sequence: int,
+        created_at: str,
+        artifact_json: str,
+    ) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO planning_run_artifacts(
+                    run_id, kind, sequence, created_at, artifact_json
+                ) VALUES(?, ?, ?, ?, ?)
+                ON CONFLICT(run_id, kind, sequence) DO UPDATE SET
+                    created_at = excluded.created_at,
+                    artifact_json = excluded.artifact_json
+                """,
+                (run_id, kind, sequence, created_at, artifact_json),
+            )
+
+    def _list_planning_artifacts(self, run_id: str, kind: str) -> list[str]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT artifact_json
+                FROM planning_run_artifacts
+                WHERE run_id = ? AND kind = ?
+                ORDER BY sequence ASC
+                """,
+                (run_id, kind),
+            ).fetchall()
+        return [cast(str, row["artifact_json"]) for row in rows]
 
     def save_project(self, document: ProjectDocument) -> None:
         project = document.project

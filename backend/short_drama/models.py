@@ -73,6 +73,14 @@ class PlanningRunStep(StrEnum):
     COMPLETE = "COMPLETE"
 
 
+class ScriptQualityTrend(StrEnum):
+    NOT_COMPARABLE = "NOT_COMPARABLE"
+    FEWER_REPORTED_ISSUES = "FEWER_REPORTED_ISSUES"
+    MIXED_REPORTED_ISSUES = "MIXED_REPORTED_ISSUES"
+    MORE_REPORTED_ISSUES = "MORE_REPORTED_ISSUES"
+    UNCHANGED_REPORTED_ISSUES = "UNCHANGED_REPORTED_ISSUES"
+
+
 class ApprovalStatus(StrEnum):
     DRAFT = "DRAFT"
     APPROVED = "APPROVED"
@@ -366,6 +374,74 @@ class ScriptReviewReport(DomainModel):
     requires_revision: bool = False
 
 
+class PlanningOutlineSnapshot(DomainModel):
+    revision_round: int = Field(ge=0, le=2)
+    outline_json: str
+    source: str = Field(min_length=1, max_length=240)
+    created_at: str
+
+
+class PlanningReviewSnapshot(DomainModel):
+    review_round: int = Field(ge=1, le=3)
+    revision_round: int = Field(ge=0, le=2)
+    report: ScriptReviewReport
+    created_at: str
+
+
+class ScriptQualityRoundSummary(DomainModel):
+    review_round: int = Field(ge=1, le=3)
+    revision_round: int = Field(ge=0, le=2)
+    total_issues: int = Field(ge=0)
+    high_issues: int = Field(ge=0)
+    medium_issues: int = Field(ge=0)
+    low_issues: int = Field(ge=0)
+    requires_revision: bool
+    categories: list[str] = Field(default_factory=list[str], max_length=30)
+
+
+class ScriptQualityComparison(DomainModel):
+    run_id: str
+    project_id: str | None = None
+    project_name: str
+    production_profile: ProductionProfile
+    source_mode: SourceMode
+    target_duration_seconds: float
+    rounds: list[ScriptQualityRoundSummary] = Field(
+        default_factory=list[ScriptQualityRoundSummary],
+        max_length=3,
+    )
+    trend: ScriptQualityTrend
+    total_issue_delta: int | None = None
+    high_issue_delta: int | None = None
+    latest_total_issue_delta: int | None = None
+    latest_high_issue_delta: int | None = None
+    latest_report_regression_risk: bool = False
+    persistent_category_labels: list[str] = Field(default_factory=list[str], max_length=30)
+    category_labels_no_longer_reported: list[str] = Field(
+        default_factory=list[str], max_length=30
+    )
+    newly_reported_category_labels: list[str] = Field(
+        default_factory=list[str], max_length=30
+    )
+    advisory_summary: str = Field(min_length=1, max_length=1200)
+
+
+class ScriptQualityHistoryResponse(DomainModel):
+    comparison: ScriptQualityComparison
+    outline_snapshots: list[PlanningOutlineSnapshot] = Field(
+        default_factory=list[PlanningOutlineSnapshot],
+        max_length=3,
+    )
+    review_snapshots: list[PlanningReviewSnapshot] = Field(
+        default_factory=list[PlanningReviewSnapshot],
+        max_length=3,
+    )
+
+
+class ScriptQualityCatalogResponse(DomainModel):
+    evaluations: list[ScriptQualityComparison]
+
+
 class ScriptVersion(DomainModel):
     id: str
     project_id: str
@@ -377,6 +453,7 @@ class ScriptVersion(DomainModel):
     lines: list[ScriptLine]
     structured_scenes: list[StructuredScene]
     review_report: ScriptReviewReport | None = None
+    planning_run_id: str | None = None
     approval_status: ApprovalStatus
     freshness: Freshness
     parent_version_id: str | None = None

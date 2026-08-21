@@ -67,6 +67,8 @@ from short_drama.models import (
     PlanningRunCreateRequest,
     PlanningRunListResponse,
     PlanningRunResponse,
+    ScriptQualityCatalogResponse,
+    ScriptQualityHistoryResponse,
     ProjectAggregate,
     ProjectListResponse,
     ReviseScriptLineRequest,
@@ -588,6 +590,27 @@ def advance_planning_run(
         return service.advance_planning_run(run_id)
     except (ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/planning-runs/{run_id}/script-quality",
+    response_model=ScriptQualityHistoryResponse,
+)
+def get_planning_run_script_quality(
+    run_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ScriptQualityHistoryResponse:
+    try:
+        return service.get_planning_run_script_quality(run_id)
+    except ArtifactNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get("/script-quality", response_model=ScriptQualityCatalogResponse)
+def list_script_quality_evaluations(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ScriptQualityCatalogResponse:
+    return service.list_script_quality_evaluations()
 
 
 @router.post("/projects", response_model=ProjectAggregate)

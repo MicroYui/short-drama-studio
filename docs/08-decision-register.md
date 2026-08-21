@@ -121,6 +121,7 @@
 - 2026-08-21：Phase 13 已在项目创建、持久化、独立重复、Planner、Director 和桌面创建页贯通 `GENERAL_VIDEO / DOUYIN_SHORT_DRAMA`。两套策略共用同一 Agent Runtime；旧项目默认按抖音短剧读取。规划 Schema 移除固定 6–10 镜限制并允许无对白，仍保留 45–60 秒交付目标和 H3 单段 4–15 秒技术边界。本阶段只做本地/Fake Provider 工程验证，未调用付费生成资源。详见 [Phase 13 实施记录](23-phase13-production-profiles.md)。
 - 2026-08-21：Phase 14 已将新项目改为 15 秒到 30 分钟任意目标时长，抖音短剧默认 5 分钟并保留可选快捷值。超过 90 秒时由 Story Architect 生成整集与场次契约，Script Critic 开放式审阅并可触发最多两轮自动修订，再由 Scene Director 逐场展开并传递上一场实际连续性状态；审阅建议持久化且可忽略。两次 5 分钟真实语言探针只检查剧本，未调用 GPT Image 2 或 MiniMax-H3；第二次实际完成一轮审阅修订并在复审中继续暴露证物逻辑问题，因此没有把单样本写成稳定质量结论。详见 [Phase 14 实施记录](24-phase14-long-form-multi-agent-planning.md)。
 - 2026-08-21：Phase 15 已把长篇 Story Architect、Script Critic、有界修订和逐场 Scene Director 从一次同步创建拆为 SQLite 持久化 `PlanningRun`。前端展示当前节点与场次进度，重启后自动发现未完成 run，错误只重试当前节点；短片同步创建保持兼容。120 秒真实 GPT-5.6-sol 探针在第 1 场后重建 Service，仍完成 3 场、16 镜和 8 句原样锁定台词；最终 Critic 仍保留 6 项建议，因此只证明可恢复检查闭环，不宣称剧本质量通过。真实探针同时促使单场校验前移“参考需求必须引用整集资产契约”，并修复说明标题、说话动作和对话对象被误识别为说话人的问题。运行结束时图像、视频与 Provider task 均为 0，未调用 GPT Image 或 MiniMax-H3。详见 [Phase 15 实施记录](25-phase15-recoverable-long-form-planning.md)。
+- 2026-08-21：Phase 16 已将每轮 `EpisodeOutline` 和 `ScriptReviewReport` 作为独立 PlanningRun artifact 持久化，新增单 run 详细历史和跨项目剧本评测 API，桌面剧本页显示三轮修订轨迹。数量变化只作描述，不作剧本分数或强制门；最新轮比上一轮报告更多问题时，Director Agent 只建议比较版本。220 秒 IDEA_EXPANSION、470 秒 AUTO_ORIGINAL 和同输入策略复跑的三个真实 GPT-5.6-sol 样本均保存 3 份大纲与 3 份审稿，并在 Scene Director 前停止，未调用 GPT Image 或 MiniMax-H3。结果显示修订报告可非单调变化，因此不声称“最新版必然最好”或稳定质量提升。详见 [Phase 16 实施记录](26-phase16-script-quality-history.md)。
 
 ## 对话顺序
 

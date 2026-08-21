@@ -59,6 +59,8 @@ export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRep
 export type PlanningRunCreateRequest = components['schemas']['PlanningRunCreateRequest']
 export type PlanningRunRecord = components['schemas']['PlanningRunRecord']
 export type PlanningRunResponse = components['schemas']['PlanningRunResponse']
+export type ScriptQualityHistoryResponse = components['schemas']['ScriptQualityHistoryResponse']
+export type ScriptQualityCatalogResponse = components['schemas']['ScriptQualityCatalogResponse']
 export type VoiceReferenceBinding = components['schemas']['VoiceReferenceBinding']
 export type VoiceReferenceMutationResponse = components['schemas']['VoiceReferenceMutationResponse']
 export type VoiceReferenceUpdateRequest = components['schemas']['VoiceReferenceUpdateRequest']
@@ -72,6 +74,8 @@ const listPlanningRuns = makeEndpointClient('/api/short-drama/planning-runs', 'g
 const createPlanningRun = makeEndpointClient('/api/short-drama/planning-runs', 'post')
 const getPlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}', 'get')
 const advancePlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/advance', 'post')
+const getPlanningRunScriptQuality = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/script-quality', 'get')
+const listScriptQualityEvaluations = makeEndpointClient('/api/short-drama/script-quality', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
 const createAutonomousDraft = makeEndpointClient('/api/short-drama/projects/autonomous-draft', 'post')
 const createAutonomousRepeat = makeEndpointClient('/api/short-drama/projects/{source_project_id}/autonomous-repeats', 'post')
@@ -177,6 +181,12 @@ export const ShortDramaApi = {
     undefined,
     `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/advance`,
   ),
+  getPlanningRunScriptQuality: (runId: string) => getPlanningRunScriptQuality(
+    undefined,
+    undefined,
+    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/script-quality`,
+  ),
+  listScriptQualityEvaluations: () => listScriptQualityEvaluations(),
   createProject,
   createAutonomousDraft,
   createAutonomousRepeat: (

@@ -16,6 +16,7 @@ from short_drama.models import (
     PlanningRunCreateRequest,
     PlanningRunStatus,
     PlanningRunStep,
+    ReviseScriptLineRequest,
     RunMode,
     ScriptReviewIssue,
     ScriptReviewReport,
@@ -37,10 +38,12 @@ class StagedLanguageClient:
         *,
         revision_rounds_required: int = 0,
         fail_scene_once: int | None = None,
+        review_issue_counts: list[int] | None = None,
     ) -> None:
         self.outline = _fallback_episode_outline(request)
         self.revision_rounds_required = revision_rounds_required
         self.fail_scene_once = fail_scene_once
+        self.review_issue_counts = review_issue_counts
         self.critic_calls = 0
         self.revision_calls = 0
         self.scene_calls: list[int] = []
@@ -73,7 +76,18 @@ class StagedLanguageClient:
         del image_urls, max_output_tokens
         if "independent script-critic Agent" in instructions:
             self.critic_calls += 1
-            requires_revision = self.critic_calls <= self.revision_rounds_required
+            issue_count = (
+                self.review_issue_counts[
+                    min(self.critic_calls - 1, len(self.review_issue_counts) - 1)
+                ]
+                if self.review_issue_counts
+                else int(self.critic_calls <= self.revision_rounds_required)
+            )
+            requires_revision = (
+                issue_count > 0
+                if self.review_issue_counts is not None
+                else self.critic_calls <= self.revision_rounds_required
+            )
             return ScriptReviewReport(
                 summary=(
                     "因果链需要一次修订。"
@@ -81,19 +95,20 @@ class StagedLanguageClient:
                     else "剧本可继续进入逐场规划。"
                 ),
                 strengths=["悬念线持续推进"],
-                issues=(
-                    [
-                        ScriptReviewIssue(
-                            category="CAUSAL_LOGIC",
-                            severity=ScriptReviewSeverity.HIGH,
-                            scene_sequences=[1, len(self.outline.scenes)],
-                            observation="开场与结尾因果尚未闭合。",
-                            recommendation="明确规则并回收开场事件。",
-                        )
-                    ]
-                    if requires_revision
-                    else []
-                ),
+                issues=[
+                    ScriptReviewIssue(
+                        category=f"CAUSAL_LOGIC_{index + 1}",
+                        severity=(
+                            ScriptReviewSeverity.HIGH
+                            if index == 0
+                            else ScriptReviewSeverity.MEDIUM
+                        ),
+                        scene_sequences=[1, len(self.outline.scenes)],
+                        observation=f"第 {index + 1} 项因果尚未闭合。",
+                        recommendation="明确规则并回收开场事件。",
+                    )
+                    for index in range(issue_count)
+                ],
                 requires_revision=requires_revision,
             ).model_dump_json()
         if "revising an episode" in instructions:
@@ -186,6 +201,32 @@ def test_long_form_planning_advances_one_agent_stage_or_scene_at_a_time(
     assert service.repository.list_provider_runs(
         completed.project.document.project.id
     ) == []
+    assert [
+        snapshot.revision_round
+        for snapshot in service.repository.list_planning_outline_snapshots(
+            started.run.id
+        )
+    ] == [0]
+    assert [
+        snapshot.review_round
+        for snapshot in service.repository.list_planning_review_snapshots(
+            started.run.id
+        )
+    ] == [1]
+    assert completed.project.document.script_versions[0].planning_run_id == started.run.id
+    first_line = completed.project.document.script_versions[0].lines[0]
+    revised_project = service.revise_script_line(
+        completed.project.document.project.id,
+        ReviseScriptLineRequest(
+            line_id=first_line.id,
+            spoken_text=first_line.spoken_text,
+            subtitle_text=first_line.subtitle_text,
+            change_reason="确认手动版本仍可追溯规划审稿轨迹",
+        ),
+    )
+    revised_script = revised_project.document.script_versions[-1]
+    assert revised_script.planning_run_id == started.run.id
+    assert revised_script.review_report == completed.project.document.script_versions[0].review_report
 
 
 def test_planning_run_persists_revision_and_scene_progress_across_restart(
@@ -218,6 +259,13 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     assert language.scene_inputs[1]["previous_actual_handoff"]["known_facts"][-1] == (
         "staged-scene-1-complete"
     )
+    history = restarted.get_planning_run_script_quality(run.id)
+    assert [item.revision_round for item in history.outline_snapshots] == [0, 1]
+    assert [item.review_round for item in history.review_snapshots] == [1, 2]
+    assert [item.total_issues for item in history.comparison.rounds] == [1, 0]
+    assert history.comparison.trend.value == "FEWER_REPORTED_ISSUES"
+    assert history.comparison.total_issue_delta == -1
+    assert history.comparison.high_issue_delta == -1
 
 
 def test_transient_scene_failure_keeps_the_same_local_retry_point(
@@ -242,6 +290,31 @@ def test_transient_scene_failure_keeps_the_same_local_retry_point(
     assert retried.run.next_scene_sequence == 3
     assert len(retried.run.directed_scene_json) == 2
     assert language.scene_calls.count(2) == 2
+
+
+def test_latest_review_regression_is_advisory_and_does_not_block(
+    tmp_path: Path,
+) -> None:
+    request = _request(260)
+    language = StagedLanguageClient(
+        request,
+        revision_rounds_required=2,
+        review_issue_counts=[4, 2, 3],
+    )
+    service = _service(tmp_path, language)
+    completed = _finish(
+        service,
+        service.create_planning_run(request).run.id,
+    )
+
+    history = service.get_planning_run_script_quality(completed.run.id)
+    assert [item.total_issues for item in history.comparison.rounds] == [4, 2, 3]
+    assert history.comparison.total_issue_delta == -1
+    assert history.comparison.latest_total_issue_delta == 1
+    assert history.comparison.latest_high_issue_delta == 0
+    assert history.comparison.latest_report_regression_risk is True
+    assert completed.run.status == PlanningRunStatus.COMPLETE
+    assert any("建议比较最近两版" in item for item in completed.run.warnings)
 
 
 def test_planning_run_api_can_finish_with_local_script_only_fallback(
@@ -274,6 +347,9 @@ def test_planning_run_api_can_finish_with_local_script_only_fallback(
 
         listed = client.get("/api/short-drama/planning-runs")
         restored = client.get(f"/api/short-drama/planning-runs/{run_id}")
+        quality = client.get(
+            f"/api/short-drama/planning-runs/{run_id}/script-quality"
+        )
 
     assert listed.status_code == 200
     assert listed.json()["runs"][0]["id"] == run_id
@@ -285,6 +361,9 @@ def test_planning_run_api_can_finish_with_local_script_only_fallback(
         "未配置" in warning
         for warning in restored.json()["run"]["warnings"]
     )
+    assert quality.status_code == 200
+    assert quality.json()["comparison"]["rounds"] == []
+    assert quality.json()["comparison"]["trend"] == "NOT_COMPARABLE"
 
 
 def test_auto_mode_planning_stops_before_image_or_h3_generation(
@@ -316,3 +395,65 @@ def test_auto_mode_planning_stops_before_image_or_h3_generation(
     assert service.repository.list_provider_runs(
         completed.project.document.project.id
     ) == []
+
+
+def test_script_quality_api_compares_multiple_custom_duration_runs(
+    tmp_path: Path,
+) -> None:
+    requests = [
+        PlanningRunCreateRequest(
+            name="180 秒都市误会",
+            source_mode=SourceMode.IDEA_EXPANSION,
+            input_text="婚礼当天，女主发现新郎只是替别人出席。",
+            target_duration_seconds=180,
+            run_mode=RunMode.GUIDED,
+        ),
+        PlanningRunCreateRequest(
+            name="430 秒职场悬疑",
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=430,
+            run_mode=RunMode.GUIDED,
+        ),
+        PlanningRunCreateRequest(
+            name="900 秒家庭反转",
+            source_mode=SourceMode.IDEA_EXPANSION,
+            input_text="父亲的遗嘱要求三个子女在旧屋共住一夜才能继承遗产。",
+            target_duration_seconds=900,
+            run_mode=RunMode.GUIDED,
+        ),
+    ]
+    run_ids: list[str] = []
+    for request in requests:
+        language = StagedLanguageClient(request, revision_rounds_required=1)
+        service = _service(tmp_path, language)
+        run = service.create_planning_run(request).run
+        completed = _finish(service, run.id)
+        assert completed.project is not None
+        run_ids.append(run.id)
+
+    service = _service(tmp_path, StagedLanguageClient(requests[-1]))
+    app = FastAPI()
+    app.include_router(short_drama_router)
+    app.dependency_overrides[get_short_drama_service] = lambda: service
+    with TestClient(app) as client:
+        catalog = client.get("/api/short-drama/script-quality")
+        detail = client.get(
+            f"/api/short-drama/planning-runs/{run_ids[1]}/script-quality"
+        )
+
+    assert catalog.status_code == 200, catalog.text
+    evaluations = catalog.json()["evaluations"]
+    assert {item["target_duration_seconds"] for item in evaluations} == {
+        180.0,
+        430.0,
+        900.0,
+    }
+    assert all(item["trend"] == "FEWER_REPORTED_ISSUES" for item in evaluations)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["comparison"]["target_duration_seconds"] == 430.0
+    assert [
+        item["revision_round"] for item in detail.json()["outline_snapshots"]
+    ] == [0, 1]
+    assert [
+        item["review_round"] for item in detail.json()["review_snapshots"]
+    ] == [1, 2]

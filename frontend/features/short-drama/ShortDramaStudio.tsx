@@ -46,6 +46,7 @@ import {
   type ProductionProfile,
   type RunMode,
   type ScriptLine,
+  type ScriptQualityHistoryResponse,
   type ShotPlan,
   type SourceMode,
   type Take,
@@ -109,6 +110,14 @@ const planningStepLabels: Record<PlanningRunRecord['current_step'], string> = {
   SCENE_DIRECTOR: 'Scene Director · 逐场分镜',
   FINALIZE: '汇总剧本与制片计划',
   COMPLETE: '剧本规划完成',
+}
+
+const scriptQualityTrendLabels: Record<ScriptQualityHistoryResponse['comparison']['trend'], string> = {
+  NOT_COMPARABLE: '仅一轮，无法比较',
+  FEWER_REPORTED_ISSUES: '末轮报告问题更少',
+  MIXED_REPORTED_ISSUES: '报告变化混合',
+  MORE_REPORTED_ISSUES: '末轮报告问题更多',
+  UNCHANGED_REPORTED_ISSUES: '报告数量未变',
 }
 
 function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red' }) {
@@ -206,7 +215,7 @@ function OverviewPanel({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 15 · Recoverable Multi-Agent</Badge>
+              <Badge tone="blue">Phase 16 · Script Quality History</Badge>
               <Badge tone="green">{productionProfileLabels[record.production_profile ?? 'DOUYIN_SHORT_DRAMA']}</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
@@ -355,10 +364,31 @@ function ScriptLineEditor({ line, onSave }: { line: ScriptLine; onSave: (line: S
 function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevise: (line: ScriptLine, spoken: string, subtitle: string) => void }) {
   const projectRecord = project.document.project
   const script = project.document.script_versions.find((item) => item.id === projectRecord.current_script_version_id) ?? project.document.script_versions.at(-1)
+  const planningRunId = script?.planning_run_id ?? null
+  const [qualityHistory, setQualityHistory] = useState<ScriptQualityHistoryResponse | null>(null)
+  const [qualityError, setQualityError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setQualityHistory(null)
+    setQualityError(null)
+    if (!planningRunId) return () => { cancelled = true }
+    void ShortDramaApi.getPlanningRunScriptQuality(planningRunId).then((result) => {
+      if (cancelled) return
+      if (result.ok) setQualityHistory(result.data)
+      else setQualityError(result.error.message)
+    })
+    return () => { cancelled = true }
+  }, [planningRunId])
   if (!script) return null
   const review = script.review_report
   const reviewStrengths = review?.strengths ?? []
   const reviewIssues = review?.issues ?? []
+  const qualityRounds = qualityHistory?.comparison.rounds ?? []
+  const persistentQualityLabels = qualityHistory?.comparison.persistent_category_labels ?? []
+  const absentQualityLabels = qualityHistory?.comparison.category_labels_no_longer_reported ?? []
+  const newQualityLabels = qualityHistory?.comparison.newly_reported_category_labels ?? []
+  const latestTotalIssueDelta = qualityHistory?.comparison.latest_total_issue_delta ?? 0
+  const latestHighIssueDelta = qualityHistory?.comparison.latest_high_issue_delta ?? 0
   return (
     <div>
       <SectionTitle
@@ -371,6 +401,37 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
         <Metric label="语言" value={projectRecord.language} detail="首版正式验收普通话中文" />
         <Metric label="版本" value={project.document.script_versions.length} detail="旧版本和旧成片均保留" />
       </div>
+      {qualityHistory && qualityRounds.length > 0 && (
+        <section className="mb-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-white">Script Critic 修订效果轨迹</h3>
+              <p className="mt-1 max-w-4xl text-xs leading-5 text-zinc-400">{qualityHistory.comparison.advisory_summary}</p>
+            </div>
+            <Badge tone={qualityHistory.comparison.latest_report_regression_risk ? 'amber' : 'blue'}>{scriptQualityTrendLabels[qualityHistory.comparison.trend]}</Badge>
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            {qualityRounds.map((round) => (
+              <div key={round.review_round} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-zinc-300">{round.revision_round === 0 ? '初稿审阅' : `第 ${round.revision_round} 轮修订后`}</p>
+                  <span className="text-[10px] text-zinc-600">Review {round.review_round}</span>
+                </div>
+                <p className="mt-2 text-lg font-semibold text-white">{round.total_issues} <span className="text-xs font-normal text-zinc-500">项报告问题</span></p>
+                <div className="mt-2 flex flex-wrap gap-1.5"><Badge tone={round.high_issues > 0 ? 'red' : 'neutral'}>HIGH {round.high_issues}</Badge><Badge tone={round.medium_issues > 0 ? 'amber' : 'neutral'}>MEDIUM {round.medium_issues}</Badge><Badge>LOW {round.low_issues}</Badge></div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 lg:grid-cols-3">
+            <div className="rounded-lg bg-zinc-950/50 p-3"><p className="text-[11px] font-medium text-zinc-400">首末轮均报告</p><p className="mt-1 text-[11px] leading-5 text-zinc-600">{persistentQualityLabels.join('、') || '无同名类别'}</p></div>
+            <div className="rounded-lg bg-zinc-950/50 p-3"><p className="text-[11px] font-medium text-zinc-400">末轮未再报告</p><p className="mt-1 text-[11px] leading-5 text-zinc-600">{absentQualityLabels.join('、') || '无'}</p></div>
+            <div className="rounded-lg bg-zinc-950/50 p-3"><p className="text-[11px] font-medium text-zinc-400">末轮新报告</p><p className="mt-1 text-[11px] leading-5 text-zinc-600">{newQualityLabels.join('、') || '无'}</p></div>
+          </div>
+          {qualityHistory.comparison.latest_report_regression_risk && <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-100">最近一轮相比上一轮的报告变化：总数 {latestTotalIssueDelta >= 0 ? '+' : ''}{latestTotalIssueDelta}，HIGH {latestHighIssueDelta >= 0 ? '+' : ''}{latestHighIssueDelta}。Director Agent 会建议比较最近两版，但不会替用户做强制选择。</p>}
+          <p className="mt-3 text-[11px] leading-5 text-zinc-600">这是跨轮审稿描述，不是自动打分或通过门；用户可继续修改，也可忽略建议。</p>
+        </section>
+      )}
+      {qualityError && <p className="mb-5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">暂时无法读取审稿轨迹：{qualityError}</p>}
       {review && (
         <section className={`mb-5 rounded-xl border p-4 ${review.requires_revision ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
           <div className="flex items-start justify-between gap-3">
@@ -851,7 +912,7 @@ function PlanningRunPanel({
         <div className="border-b border-zinc-800/80 p-6 sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 15 · Recoverable Planning</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
+              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 16 · Recoverable Script Review</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
               <h1 className="mt-4 text-2xl font-semibold text-white">{run.request.name ?? '新短剧'}正在进行剧本规划</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">当前阶段只处理故事结构、因果、对白、场次和连续性规划，不调用 GPT Image 或 MiniMax-H3。每个 Agent 阶段和每个场次完成后都会保存，关闭应用后也能从当前节点继续。</p>
             </div>

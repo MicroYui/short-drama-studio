@@ -810,6 +810,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/planning-runs/{run_id}/script-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Planning Run Script Quality */
+        get: operations["get_planning_run_script_quality_api_short_drama_planning_runs__run_id__script_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects": {
         parameters: {
             query?: never;
@@ -1575,6 +1592,23 @@ export interface paths {
         put?: never;
         /** Validate H3 Provider Config */
         post: operations["validate_h3_provider_config_api_short_drama_providers_minimax_h3_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/script-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Script Quality Evaluations */
+        get: operations["list_script_quality_evaluations_api_short_drama_script_quality_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5031,6 +5065,27 @@ export interface components {
              */
             width: number;
         };
+        /** PlanningOutlineSnapshot */
+        PlanningOutlineSnapshot: {
+            /** Created At */
+            created_at: string;
+            /** Outline Json */
+            outline_json: string;
+            /** Revision Round */
+            revision_round: number;
+            /** Source */
+            source: string;
+        };
+        /** PlanningReviewSnapshot */
+        PlanningReviewSnapshot: {
+            /** Created At */
+            created_at: string;
+            report: components["schemas"]["ScriptReviewReport"];
+            /** Review Round */
+            review_round: number;
+            /** Revision Round */
+            revision_round: number;
+        };
         /**
          * PlanningRunCreateRequest
          * @description Persisted long-form planning request before a project document exists.
@@ -5843,6 +5898,80 @@ export interface components {
             /** Subtitle Text */
             subtitle_text: string;
         };
+        /** ScriptQualityCatalogResponse */
+        ScriptQualityCatalogResponse: {
+            /** Evaluations */
+            evaluations: components["schemas"]["ScriptQualityComparison"][];
+        };
+        /** ScriptQualityComparison */
+        ScriptQualityComparison: {
+            /** Advisory Summary */
+            advisory_summary: string;
+            /** Category Labels No Longer Reported */
+            category_labels_no_longer_reported?: string[];
+            /** High Issue Delta */
+            high_issue_delta?: number | null;
+            /** Latest High Issue Delta */
+            latest_high_issue_delta?: number | null;
+            /**
+             * Latest Report Regression Risk
+             * @default false
+             */
+            latest_report_regression_risk: boolean;
+            /** Latest Total Issue Delta */
+            latest_total_issue_delta?: number | null;
+            /** Newly Reported Category Labels */
+            newly_reported_category_labels?: string[];
+            /** Persistent Category Labels */
+            persistent_category_labels?: string[];
+            production_profile: components["schemas"]["ProductionProfile"];
+            /** Project Id */
+            project_id?: string | null;
+            /** Project Name */
+            project_name: string;
+            /** Rounds */
+            rounds?: components["schemas"]["ScriptQualityRoundSummary"][];
+            /** Run Id */
+            run_id: string;
+            source_mode: components["schemas"]["SourceMode"];
+            /** Target Duration Seconds */
+            target_duration_seconds: number;
+            /** Total Issue Delta */
+            total_issue_delta?: number | null;
+            trend: components["schemas"]["ScriptQualityTrend"];
+        };
+        /** ScriptQualityHistoryResponse */
+        ScriptQualityHistoryResponse: {
+            comparison: components["schemas"]["ScriptQualityComparison"];
+            /** Outline Snapshots */
+            outline_snapshots?: components["schemas"]["PlanningOutlineSnapshot"][];
+            /** Review Snapshots */
+            review_snapshots?: components["schemas"]["PlanningReviewSnapshot"][];
+        };
+        /** ScriptQualityRoundSummary */
+        ScriptQualityRoundSummary: {
+            /** Categories */
+            categories?: string[];
+            /** High Issues */
+            high_issues: number;
+            /** Low Issues */
+            low_issues: number;
+            /** Medium Issues */
+            medium_issues: number;
+            /** Requires Revision */
+            requires_revision: boolean;
+            /** Review Round */
+            review_round: number;
+            /** Revision Round */
+            revision_round: number;
+            /** Total Issues */
+            total_issues: number;
+        };
+        /**
+         * ScriptQualityTrend
+         * @enum {string}
+         */
+        ScriptQualityTrend: "NOT_COMPARABLE" | "FEWER_REPORTED_ISSUES" | "MIXED_REPORTED_ISSUES" | "MORE_REPORTED_ISSUES" | "UNCHANGED_REPORTED_ISSUES";
         /** ScriptReviewIssue */
         ScriptReviewIssue: {
             /** Category */
@@ -5890,6 +6019,8 @@ export interface components {
             original_text: string;
             /** Parent Version Id */
             parent_version_id?: string | null;
+            /** Planning Run Id */
+            planning_run_id?: string | null;
             /** Project Id */
             project_id: string;
             review_report?: components["schemas"]["ScriptReviewReport"] | null;
@@ -8494,6 +8625,46 @@ export interface operations {
             };
         };
     };
+    get_planning_run_script_quality_api_short_drama_planning_runs__run_id__script_quality_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptQualityHistoryResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     list_projects_api_short_drama_projects_get: {
         parameters: {
             query?: never;
@@ -10646,6 +10817,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["H3ProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_script_quality_evaluations_api_short_drama_script_quality_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptQualityCatalogResponse"];
                 };
             };
             /** @description Client Error */

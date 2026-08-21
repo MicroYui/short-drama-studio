@@ -737,7 +737,14 @@ def _outline_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         "without receiving the whole prior screenplay. Each scene contract must state its story "
         "purpose, locations, dialogue assignment, and compact continuity input/output including "
         "character state, prop state, known facts, and open questions. Keep the causal question "
-        "chain alive across scenes without adding beats mechanically. Every dialogue line belongs "
+        "chain alive across scenes without adding beats mechanically. The final causal mechanism "
+        "must retrospectively explain the strongest opening anomaly itself, not merely a nearby "
+        "event. Establish any technical, institutional, or procedural capability before the plot "
+        "depends on it; simplify the mechanism when a grounded explanation would otherwise require "
+        "invented powers. Causality needed by the audience must appear in shootable scene actions, "
+        "props, screens, or dialogue rather than only in hidden continuity notes. Rebalance scene "
+        "duration when a scene contains too many distinct conclusions or too little playable action. "
+        "Every dialogue line belongs "
         "to exactly one scene and indices are 1-based. For SCRIPT_LOCKED, copy every supplied "
         "speaker, text, audio_kind, and order verbatim. A recorded voice is VOICEOVER and need not "
         "become a visible character. Use only declared location names in scene contracts. Do not "
@@ -833,7 +840,14 @@ def _story_revision_prompt(
         "Return one complete EpisodeOutline JSON object only. Preserve working creative choices and "
         "apply only review findings that are supported by the outline. Resolve causal contradictions, "
         "unmotivated choices, or missing setup/payoff at episode and scene-contract level; do not add "
-        "shots, camera directions, fixed beat counts, or mechanical twists. Every dialogue line must "
+        "shots, camera directions, fixed beat counts, or mechanical twists. Treat HIGH findings as "
+        "structural repair candidates: change the underlying setup, rule, motive, or consequence "
+        "instead of only adding an explanation. Confirm that the final mechanism exactly pays off the "
+        "strongest opening anomaly, that pivotal choices have a visible benefit or constraint, and that "
+        "technical or institutional actions use capabilities already established in the story. Do not "
+        "move missing causality into continuity metadata; required evidence must remain visible in the "
+        "scene contracts. Reduce or redistribute information when a scene cannot plausibly communicate "
+        "its assigned conclusions within its duration. Every dialogue line must "
         "still belong to exactly one scene. For SCRIPT_LOCKED, preserve every supplied speaker, text, "
         "audio_kind, and order verbatim. "
         f"Profile: {profile.label}. Writer policy: {profile.writer} Do not add fields outside the schema."
@@ -2114,6 +2128,7 @@ def build_project_document_from_plan(
     request: CreateProjectRequest,
     planning: ProductionPlanningResult,
     created_at: str,
+    planning_run_id: str | None = None,
 ) -> ProjectDocument:
     plan = planning.plan
     planned_lines = (
@@ -2190,6 +2205,7 @@ def build_project_document_from_plan(
             if planning.review_report is not None
             else None
         ),
+        planning_run_id=planning_run_id,
         approval_status=ApprovalStatus.APPROVED,
         freshness=Freshness.CURRENT,
         created_at=created_at,

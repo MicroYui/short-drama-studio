@@ -9100,6 +9100,71 @@
         "title": "OutputSpec",
         "type": "object"
       },
+      "PlanningOutlineSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "outline_json": {
+            "title": "Outline Json",
+            "type": "string"
+          },
+          "revision_round": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          },
+          "source": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_round",
+          "outline_json",
+          "source",
+          "created_at"
+        ],
+        "title": "PlanningOutlineSnapshot",
+        "type": "object"
+      },
+      "PlanningReviewSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ScriptReviewReport"
+          },
+          "review_round": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Review Round",
+            "type": "integer"
+          },
+          "revision_round": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "review_round",
+          "revision_round",
+          "report",
+          "created_at"
+        ],
+        "title": "PlanningReviewSnapshot",
+        "type": "object"
+      },
       "PlanningRunCreateRequest": {
         "additionalProperties": false,
         "description": "Persisted long-form planning request before a project document exists.",
@@ -11385,6 +11450,258 @@
         "title": "ScriptLine",
         "type": "object"
       },
+      "ScriptQualityCatalogResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptQualityComparison"
+            },
+            "title": "Evaluations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "evaluations"
+        ],
+        "title": "ScriptQualityCatalogResponse",
+        "type": "object"
+      },
+      "ScriptQualityComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_summary": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Advisory Summary",
+            "type": "string"
+          },
+          "category_labels_no_longer_reported": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Category Labels No Longer Reported",
+            "type": "array"
+          },
+          "high_issue_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High Issue Delta"
+          },
+          "latest_high_issue_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest High Issue Delta"
+          },
+          "latest_report_regression_risk": {
+            "default": false,
+            "title": "Latest Report Regression Risk",
+            "type": "boolean"
+          },
+          "latest_total_issue_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Total Issue Delta"
+          },
+          "newly_reported_category_labels": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Newly Reported Category Labels",
+            "type": "array"
+          },
+          "persistent_category_labels": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Persistent Category Labels",
+            "type": "array"
+          },
+          "production_profile": {
+            "$ref": "#/components/schemas/ProductionProfile"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptQualityRoundSummary"
+            },
+            "maxItems": 3,
+            "title": "Rounds",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source_mode": {
+            "$ref": "#/components/schemas/SourceMode"
+          },
+          "target_duration_seconds": {
+            "title": "Target Duration Seconds",
+            "type": "number"
+          },
+          "total_issue_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Issue Delta"
+          },
+          "trend": {
+            "$ref": "#/components/schemas/ScriptQualityTrend"
+          }
+        },
+        "required": [
+          "run_id",
+          "project_name",
+          "production_profile",
+          "source_mode",
+          "target_duration_seconds",
+          "trend",
+          "advisory_summary"
+        ],
+        "title": "ScriptQualityComparison",
+        "type": "object"
+      },
+      "ScriptQualityHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "comparison": {
+            "$ref": "#/components/schemas/ScriptQualityComparison"
+          },
+          "outline_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningOutlineSnapshot"
+            },
+            "maxItems": 3,
+            "title": "Outline Snapshots",
+            "type": "array"
+          },
+          "review_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningReviewSnapshot"
+            },
+            "maxItems": 3,
+            "title": "Review Snapshots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "comparison"
+        ],
+        "title": "ScriptQualityHistoryResponse",
+        "type": "object"
+      },
+      "ScriptQualityRoundSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Categories",
+            "type": "array"
+          },
+          "high_issues": {
+            "minimum": 0.0,
+            "title": "High Issues",
+            "type": "integer"
+          },
+          "low_issues": {
+            "minimum": 0.0,
+            "title": "Low Issues",
+            "type": "integer"
+          },
+          "medium_issues": {
+            "minimum": 0.0,
+            "title": "Medium Issues",
+            "type": "integer"
+          },
+          "requires_revision": {
+            "title": "Requires Revision",
+            "type": "boolean"
+          },
+          "review_round": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Review Round",
+            "type": "integer"
+          },
+          "revision_round": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          },
+          "total_issues": {
+            "minimum": 0.0,
+            "title": "Total Issues",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "review_round",
+          "revision_round",
+          "total_issues",
+          "high_issues",
+          "medium_issues",
+          "low_issues",
+          "requires_revision"
+        ],
+        "title": "ScriptQualityRoundSummary",
+        "type": "object"
+      },
+      "ScriptQualityTrend": {
+        "enum": [
+          "NOT_COMPARABLE",
+          "FEWER_REPORTED_ISSUES",
+          "MIXED_REPORTED_ISSUES",
+          "MORE_REPORTED_ISSUES",
+          "UNCHANGED_REPORTED_ISSUES"
+        ],
+        "title": "ScriptQualityTrend",
+        "type": "string"
+      },
       "ScriptReviewIssue": {
         "additionalProperties": false,
         "properties": {
@@ -11522,6 +11839,17 @@
               }
             ],
             "title": "Parent Version Id"
+          },
+          "planning_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planning Run Id"
           },
           "project_id": {
             "title": "Project Id",
@@ -15815,6 +16143,58 @@
         ]
       }
     },
+    "/api/short-drama/planning-runs/{run_id}/script-quality": {
+      "get": {
+        "operationId": "get_planning_run_script_quality_api_short_drama_planning_runs__run_id__script_quality_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptQualityHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Planning Run Script Quality",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects": {
       "get": {
         "operationId": "list_projects_api_short_drama_projects_get",
@@ -18835,6 +19215,47 @@
           }
         },
         "summary": "Validate H3 Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/script-quality": {
+      "get": {
+        "operationId": "list_script_quality_evaluations_api_short_drama_script_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptQualityCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Script Quality Evaluations",
         "tags": [
           "short-drama"
         ]

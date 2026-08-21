@@ -137,6 +137,8 @@ from short_drama.models import (
     MockBehavior,
     OperationKind,
     OutputSpec,
+    PlanningOutlineSnapshot,
+    PlanningReviewSnapshot,
     PlanningRunCreateRequest,
     PlanningRunListResponse,
     PlanningRunRecord,
@@ -160,6 +162,12 @@ from short_drama.models import (
     QaIssue,
     QaStatus,
     ReviseScriptLineRequest,
+    ScriptQualityCatalogResponse,
+    ScriptQualityComparison,
+    ScriptQualityHistoryResponse,
+    ScriptQualityRoundSummary,
+    ScriptQualityTrend,
+    ScriptReviewSeverity,
     ScriptVersion,
     SemanticReviewStatus,
     ShotPlan,
@@ -605,6 +613,28 @@ class ShortDramaService:
     def get_planning_run(self, run_id: str) -> PlanningRunResponse:
         return self._planning_run_response(self._require_planning_run(run_id))
 
+    def get_planning_run_script_quality(
+        self,
+        run_id: str,
+    ) -> ScriptQualityHistoryResponse:
+        run = self._require_planning_run(run_id)
+        outlines = self.repository.list_planning_outline_snapshots(run_id)
+        reviews = self.repository.list_planning_review_snapshots(run_id)
+        return ScriptQualityHistoryResponse(
+            comparison=self._script_quality_comparison(run, reviews),
+            outline_snapshots=outlines,
+            review_snapshots=reviews,
+        )
+
+    def list_script_quality_evaluations(self) -> ScriptQualityCatalogResponse:
+        evaluations: list[ScriptQualityComparison] = []
+        for run in self.repository.list_planning_runs():
+            reviews = self.repository.list_planning_review_snapshots(run.id)
+            if not reviews:
+                continue
+            evaluations.append(self._script_quality_comparison(run, reviews))
+        return ScriptQualityCatalogResponse(evaluations=evaluations)
+
     def create_planning_run(
         self,
         request: PlanningRunCreateRequest,
@@ -664,6 +694,15 @@ class ShortDramaService:
             run.outline_source = architecture.source
             run.total_scenes = len(architecture.outline.scenes)
             run.warnings.extend(architecture.warnings)
+            self.repository.save_planning_outline_snapshot(
+                run.id,
+                PlanningOutlineSnapshot(
+                    revision_round=0,
+                    outline_json=run.outline_json,
+                    source=architecture.source,
+                    created_at=utc_now(),
+                ),
+            )
             self._complete_planning_step(
                 run,
                 PlanningRunStep.STORY_ARCHITECT,
@@ -676,6 +715,15 @@ class ShortDramaService:
             critique = review_story_outline(request, outline, client)
             if critique.report is not None:
                 run.review_report = critique.report
+                self.repository.save_planning_review_snapshot(
+                    run.id,
+                    PlanningReviewSnapshot(
+                        review_round=run.revision_round + 1,
+                        revision_round=run.revision_round,
+                        report=critique.report,
+                        created_at=utc_now(),
+                    ),
+                )
             run.critic_used = run.critic_used or critique.used
             run.warnings.extend(critique.warnings)
             if (
@@ -686,6 +734,7 @@ class ShortDramaService:
                 next_step = PlanningRunStep.STORY_REVISION
             else:
                 self._append_remaining_review_warning(run)
+                self._append_latest_review_regression_warning(run)
                 next_step = PlanningRunStep.SCENE_DIRECTOR
             self._complete_planning_step(
                 run,
@@ -710,6 +759,17 @@ class ShortDramaService:
             if revision.revised:
                 run.outline_json = revision.outline.model_dump_json()
                 run.revision_round += 1
+                self.repository.save_planning_outline_snapshot(
+                    run.id,
+                    PlanningOutlineSnapshot(
+                        revision_round=run.revision_round,
+                        outline_json=run.outline_json,
+                        source=(
+                            f"Story Architect revision {run.revision_round}"
+                        ),
+                        created_at=utc_now(),
+                    ),
+                )
                 next_step = PlanningRunStep.SCRIPT_CRITIC
             else:
                 self._append_remaining_review_warning(run)
@@ -783,6 +843,7 @@ class ShortDramaService:
                 request=request,
                 planning=planning,
                 created_at=utc_now(),
+                planning_run_id=run.id,
             )
             with self._lock:
                 self.repository.save_project(document)
@@ -837,6 +898,37 @@ class ShortDramaService:
         if warning not in run.warnings:
             run.warnings.append(warning)
 
+    def _append_latest_review_regression_warning(
+        self,
+        run: PlanningRunRecord,
+    ) -> None:
+        reviews = self.repository.list_planning_review_snapshots(run.id)
+        if len(reviews) < 2:
+            return
+        previous = reviews[-2].report
+        latest = reviews[-1].report
+        previous_high = sum(
+            issue.severity == ScriptReviewSeverity.HIGH
+            for issue in previous.issues
+        )
+        latest_high = sum(
+            issue.severity == ScriptReviewSeverity.HIGH
+            for issue in latest.issues
+        )
+        total_increased = len(latest.issues) > len(previous.issues)
+        high_increased = latest_high > previous_high
+        if not total_increased and not high_increased:
+            return
+        warning = (
+            "最近一轮复审较上一轮报告了更多问题"
+            f"（总数 {len(previous.issues)}→{len(latest.issues)}，"
+            f"HIGH {previous_high}→{latest_high}）。"
+            "Director Agent 建议比较最近两版大纲后再决定；"
+            "这不会阻断后续规划，用户也可忽略。"
+        )
+        if warning not in run.warnings:
+            run.warnings.append(warning)
+
     @staticmethod
     def _planning_outline(run: PlanningRunRecord) -> EpisodeOutline:
         if run.outline_json is None:
@@ -865,6 +957,133 @@ class ShortDramaService:
                 lock = threading.Lock()
                 self._planning_run_locks[run_id] = lock
             return lock
+
+    @staticmethod
+    def _script_quality_comparison(
+        run: PlanningRunRecord,
+        reviews: list[PlanningReviewSnapshot],
+    ) -> ScriptQualityComparison:
+        rounds = [
+            ScriptQualityRoundSummary(
+                review_round=snapshot.review_round,
+                revision_round=snapshot.revision_round,
+                total_issues=len(snapshot.report.issues),
+                high_issues=sum(
+                    issue.severity == ScriptReviewSeverity.HIGH
+                    for issue in snapshot.report.issues
+                ),
+                medium_issues=sum(
+                    issue.severity == ScriptReviewSeverity.MEDIUM
+                    for issue in snapshot.report.issues
+                ),
+                low_issues=sum(
+                    issue.severity == ScriptReviewSeverity.LOW
+                    for issue in snapshot.report.issues
+                ),
+                requires_revision=snapshot.report.requires_revision,
+                categories=list(
+                    dict.fromkeys(issue.category for issue in snapshot.report.issues)
+                ),
+            )
+            for snapshot in reviews
+        ]
+        if not rounds:
+            trend = ScriptQualityTrend.NOT_COMPARABLE
+            total_delta: int | None = None
+            high_delta: int | None = None
+            persistent: list[str] = []
+            absent: list[str] = []
+            newly_reported: list[str] = []
+            latest_total_delta: int | None = None
+            latest_high_delta: int | None = None
+            latest_regression_risk = False
+            advisory = (
+                "当前没有可用的语义审稿报告；结构校验结果不能替代 "
+                "Script Critic 的剧本质量建议。"
+            )
+        elif len(rounds) == 1:
+            trend = ScriptQualityTrend.NOT_COMPARABLE
+            total_delta = None
+            high_delta = None
+            persistent = []
+            absent = []
+            newly_reported = []
+            latest_total_delta = None
+            latest_high_delta = None
+            latest_regression_risk = False
+            advisory = (
+                "当前只有一轮独立审稿，尚不能比较修订前后变化；"
+                "报告仍是可忽略建议，不构成剧本通过门槛。"
+            )
+        else:
+            initial = rounds[0]
+            latest = rounds[-1]
+            total_delta = latest.total_issues - initial.total_issues
+            high_delta = latest.high_issues - initial.high_issues
+            initial_categories = set(initial.categories)
+            latest_categories = set(latest.categories)
+            persistent = sorted(initial_categories & latest_categories)
+            absent = sorted(initial_categories - latest_categories)
+            newly_reported = sorted(latest_categories - initial_categories)
+            previous = rounds[-2]
+            latest_total_delta = latest.total_issues - previous.total_issues
+            latest_high_delta = latest.high_issues - previous.high_issues
+            latest_regression_risk = (
+                latest_total_delta > 0 or latest_high_delta > 0
+            )
+            if total_delta == 0 and high_delta == 0:
+                trend = ScriptQualityTrend.UNCHANGED_REPORTED_ISSUES
+            elif (
+                total_delta < 0
+                and high_delta <= 0
+            ) or (
+                high_delta < 0
+                and total_delta <= 0
+            ):
+                trend = ScriptQualityTrend.FEWER_REPORTED_ISSUES
+            elif (
+                total_delta > 0
+                and high_delta >= 0
+            ) or (
+                high_delta > 0
+                and total_delta >= 0
+            ):
+                trend = ScriptQualityTrend.MORE_REPORTED_ISSUES
+            else:
+                trend = ScriptQualityTrend.MIXED_REPORTED_ISSUES
+            advisory = (
+                f"独立审稿报告从 {initial.total_issues} 项变为 "
+                f"{latest.total_issues} 项，高严重度从 "
+                f"{initial.high_issues} 项变为 {latest.high_issues} 项。"
+                "这只描述 Critic 各轮报告的变化；类别名消失不等于问题已解决，"
+                "新类别也可能是复审发现了更具体的问题。"
+            )
+            if latest_regression_risk:
+                advisory += (
+                    f" 最近一轮相比上一轮：总数 "
+                    f"{latest_total_delta:+d}，HIGH {latest_high_delta:+d}；"
+                    "Director Agent 应建议比较最近两版，不应因为轮次更新"
+                    "就默认最新版更好。"
+                )
+        return ScriptQualityComparison(
+            run_id=run.id,
+            project_id=run.project_id,
+            project_name=run.request.name or "未命名剧本",
+            production_profile=run.request.production_profile,
+            source_mode=run.request.source_mode,
+            target_duration_seconds=run.request.resolved_target_duration_seconds(),
+            rounds=rounds,
+            trend=trend,
+            total_issue_delta=total_delta,
+            high_issue_delta=high_delta,
+            latest_total_issue_delta=latest_total_delta,
+            latest_high_issue_delta=latest_high_delta,
+            latest_report_regression_risk=latest_regression_risk,
+            persistent_category_labels=persistent,
+            category_labels_no_longer_reported=absent,
+            newly_reported_category_labels=newly_reported,
+            advisory_summary=advisory,
+        )
 
     def search_asset_catalog(
         self,
@@ -5005,6 +5224,12 @@ class ShortDramaService:
                 subtitle_text="\n".join(line.subtitle_text for line in next_lines),
                 lines=next_lines,
                 structured_scenes=[scene.model_copy(deep=True) for scene in current.structured_scenes],
+                review_report=(
+                    current.review_report.model_copy(deep=True)
+                    if current.review_report is not None
+                    else None
+                ),
+                planning_run_id=current.planning_run_id,
                 approval_status=ApprovalStatus.APPROVED,
                 freshness=Freshness.CURRENT,
                 parent_version_id=current.id,
