@@ -31,6 +31,7 @@ from short_drama.models import (
     OriginType,
     ProjectBibleVersion,
     ProjectDocument,
+    ProductionProfile,
     ProjectRecord,
     ProjectStage,
     PropProfile,
@@ -47,6 +48,7 @@ from short_drama.models import (
     StructuredScene,
     StyleProfile,
 )
+from short_drama.production_profiles import production_profile_policy
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
     LanguageProviderError,
@@ -134,12 +136,15 @@ class ProductionPlan(DomainModel):
     title: str = Field(min_length=1, max_length=120)
     scene_heading: str = Field(min_length=1, max_length=200)
     scene_summary: str = Field(min_length=1, max_length=1000)
-    lines: list[PlannedDialogueLine] = Field(min_length=1, max_length=40)
+    lines: list[PlannedDialogueLine] = Field(
+        default_factory=list[PlannedDialogueLine],
+        max_length=40,
+    )
     characters: list[PlannedCharacter] = Field(min_length=1, max_length=4)
     locations: list[PlannedLocation] = Field(min_length=1, max_length=3)
     props: list[PlannedProp] = Field(default_factory=list[PlannedProp], max_length=4)
     style: PlannedStyle
-    shots: list[PlannedShot] = Field(min_length=6, max_length=10)
+    shots: list[PlannedShot] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
     def validate_timeline(self) -> ProductionPlan:
@@ -412,20 +417,21 @@ def _planner_image_urls(request: CreateProjectRequest) -> tuple[list[str], list[
 
 def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
     schema = ProductionPlan.model_json_schema()
+    profile = production_profile_policy(request.production_profile)
     locked = (
         _locked_dialogue(request.input_text)
         if request.source_mode == SourceMode.SCRIPT_LOCKED
         else []
     )
     instructions = (
-        "You are the lead writer, production designer, director, and continuity planner for a "
-        "Mandarin live-action urban vertical short drama. Return JSON only and match the supplied "
-        "schema exactly. Produce one coherent 45-60 second episode with 6-10 executable shots. "
-        "Individual shots may be 4-15 seconds. When the story supports it, use one 12-15 second "
-        "continuous performance or movement shot with a simple spatial path and restrained action; "
-        "do not stretch every shot or combine several risky contacts merely to fill 15 seconds. "
-        "Use strong cause-and-effect, a clear hook, escalating information, natural performance, "
-        "and a final turn. Keep character, wardrobe, location geometry, props, screen direction, "
+        "You are the lead writer, production designer, production planner, and continuity planner "
+        "for a Mandarin live-action vertical video. Return JSON only and match the supplied schema "
+        f"exactly. The active production profile is {profile.label}. Writer policy: "
+        f"{profile.writer} Production-planner policy: {profile.planner} Produce one coherent "
+        "45-60 second video. Individual generated segments may be 4-15 seconds because of the "
+        "current video-provider contract; choose shot count and duration from the material rather "
+        "than a fixed formula. Do not stretch a shot or combine several risky contacts merely to "
+        "fill 15 seconds. Keep character, wardrobe, location geometry, props, screen direction, "
         "eyelines, and action states continuous across shots. Avoid difficult multi-contact actions "
         "when the same narrative beat can be covered with simpler shots. Do not add fields outside "
         "the schema. For SCRIPT_LOCKED, preserve every supplied speaker and dialogue line verbatim "
@@ -447,6 +453,7 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
     ]
     payload = {
         "source_mode": request.source_mode.value,
+        "production_profile": request.production_profile.value,
         "project_name": request.name,
         "text_input": request.input_text.strip(),
         "locked_dialogue": [
@@ -454,13 +461,13 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         ],
         "image_references": image_descriptions,
         "requirements": {
-            "medium": "真人都市短剧",
+            "medium": profile.label,
             "language": "普通话中文",
             "aspect_ratio": "9:16",
             "duration_seconds": "45-60",
-            "shot_duration_seconds": "4-15; prefer one justified 12-15 second continuous shot",
-            "dialogue_lines": "prefer 3-6 unless the locked script requires otherwise",
-            "shots": "6-10",
+            "shot_duration_seconds": "4-15 provider boundary; no preferred duration",
+            "dialogue_lines": "follow the material; silence is valid; preserve locked dialogue",
+            "shots": "choose the smallest coherent executable set; no fixed count",
             "reference_needs": "minimal per-shot character/location/prop coverage",
         },
         "output_schema": schema,
@@ -473,6 +480,7 @@ def _planner_repair_prompt(
     invalid_output: str,
     error: ValueError,
 ) -> tuple[str, str]:
+    profile = production_profile_policy(request.production_profile)
     locked = (
         _locked_dialogue(request.input_text)
         if request.source_mode == SourceMode.SCRIPT_LOCKED
@@ -480,17 +488,20 @@ def _planner_repair_prompt(
     )
     instructions = (
         "You are repairing a previously invalid production-plan JSON for a Mandarin live-action "
-        "vertical short drama. Return one complete corrected JSON object only and match the "
+        "vertical video. Return one complete corrected JSON object only and match the "
         "supplied ProductionPlan schema exactly. Preserve the story and shot intent where valid. "
         "Dialogue indices are strictly 1-based and may only reference the supplied lines. For "
         "SCRIPT_LOCKED, lines must exactly match locked_dialogue in speaker, text, audio_kind, and "
         "order. Characters must be actual human story characters present in the source script; "
         "metadata labels, action descriptions, props, locations, devices, and voiceover sources "
         "must never become character names. A recorded or off-screen voice is VOICEOVER, not an "
-        "extra visual character. Do not add fields outside the schema."
+        "extra visual character. Preserve the active creative policy while repairing structure. "
+        f"Writer policy: {profile.writer} Production-planner policy: {profile.planner} Do not add "
+        "fields outside the schema."
     )
     payload = {
         "source_mode": request.source_mode.value,
+        "production_profile": request.production_profile.value,
         "source_text": request.input_text.strip(),
         "locked_dialogue": [line.model_dump(mode="json") for line in locked],
         "validation_error": str(error),
@@ -537,7 +548,125 @@ def _validate_locked_dialogue(request: CreateProjectRequest, plan: ProductionPla
         )
 
 
+def _fallback_general_plan(request: CreateProjectRequest) -> ProductionPlan:
+    actor = "林岚"
+    premise = request.input_text.strip()
+    if not premise and request.source_mode == SourceMode.IMAGE_SEEDED:
+        premise = "人物在用户提供的视觉空间里度过一段安静但有方向变化的清晨。"
+    if not premise:
+        premise = "清晨，一名都市青年在窗边整理思绪，并在光线变化中作出一个平静决定。"
+    shots = [
+        PlannedShot(
+            duration_seconds=12.0,
+            narrative_purpose="建立人物、空间和清晨的观察节奏",
+            visual=f"清晨城市室内大全景，{actor}在窗边安静停留，环境细节自然进入画面",
+            framing="大全景",
+            camera="稳定机位缓慢推近，不急于切换",
+            audio_intent="城市远声、室内底噪和自然呼吸，无对白",
+            character_positions=f"{actor}位于窗边画面右侧",
+            eyeline="视线朝向窗外，不建立虚构对话关系",
+            prop_state_in="桌面与窗边保持简洁，无叙事道具变化",
+            prop_state_out="空间关系保持不变，人物注意力转向室内",
+            action_in="人物静观窗外",
+            action_out="人物缓慢收回视线",
+            transition_out="自然切",
+            merge_candidate=True,
+            local_rework_risk="低",
+        ),
+        PlannedShot(
+            duration_seconds=15.0,
+            narrative_purpose="用连续表演呈现情绪从迟疑到松弛的变化",
+            visual=f"中景连续跟随{actor}从窗边走到桌旁，停下整理衣袖并轻轻呼气",
+            framing="中景",
+            camera="克制侧向跟随，路径简单，保持人物完整动作",
+            audio_intent="脚步、衣料摩擦、呼吸和持续环境声，无对白",
+            character_positions=f"{actor}从画面右侧移动到中央桌旁",
+            eyeline="视线由窗外转向桌面，方向连续",
+            prop_state_in="桌面保持空净",
+            prop_state_out="桌面保持空净",
+            action_in="人物刚收回视线",
+            action_out="人物在桌旁站稳并放松肩膀",
+            transition_out="动作切",
+            merge_candidate=False,
+            local_rework_risk="低",
+        ),
+        PlannedShot(
+            duration_seconds=12.0,
+            narrative_purpose="让光线和人物微表情承担情绪信息",
+            visual=f"{actor}近景，晨光逐渐变暖，人物看向室内后露出很轻的释然表情",
+            framing="近景",
+            camera="固定近景，仅做几乎不可察觉的靠近",
+            audio_intent="环境声稍降，保留呼吸与远处车辆声，无对白",
+            character_positions=f"{actor}保持在桌旁，背景窗线稳定",
+            eyeline="视线保持向室内同一锚点",
+            prop_state_in="无道具状态变化",
+            prop_state_out="无道具状态变化",
+            action_in="人物刚刚站稳",
+            action_out="人物情绪由迟疑转为平静",
+            transition_out="视线切",
+            merge_candidate=True,
+            local_rework_risk="低",
+        ),
+        PlannedShot(
+            duration_seconds=11.0,
+            narrative_purpose="以小幅决定动作结束观察段落",
+            visual=f"回到稍宽中景，{actor}拉开椅子坐下，晨光留在空白墙面上，画面自然停留",
+            framing="中景",
+            camera="稳定机位，动作完成后留出短暂余韵",
+            audio_intent="椅脚轻响、城市底噪和室内空气声，无对白",
+            character_positions=f"{actor}从桌旁站姿转为坐姿，空间轴线不变",
+            eyeline="视线落在桌面，不新增画外人物",
+            prop_state_in="椅子位于桌边",
+            prop_state_out="椅子被拉开后人物坐下",
+            action_in="人物已恢复平静",
+            action_out="人物坐定，段落完成",
+            transition_out="淡出",
+            merge_candidate=False,
+            local_rework_risk="低",
+        ),
+    ]
+    return ProductionPlan(
+        title=request.name or "清晨留白",
+        scene_heading="内景·城市窗边·清晨",
+        scene_summary=premise,
+        lines=[],
+        characters=[
+            PlannedCharacter(
+                name=actor,
+                age=28,
+                appearance="真实自然的都市青年，面部特征清晰且易于跨镜保持",
+                wardrobe="低饱和浅灰针织上衣与深色长裤，全片保持一致",
+                performance="克制自然，以视线、呼吸、肩颈和微表情完成变化",
+                voice_identity="S1",
+            )
+        ],
+        locations=[
+            PlannedLocation(
+                name="清晨城市窗边",
+                layout="单一室内空间，窗位于画面侧面，桌椅构成简单行动路径",
+                lighting="柔和冷晨光逐渐转暖",
+                palette="浅灰、米白与低饱和蓝色",
+                key_views=["空间建立", f"{actor}窗边中景", f"{actor}近景"],
+            )
+        ],
+        props=[],
+        style=PlannedStyle(
+            genre="都市生活观察",
+            cinematography="9:16 写实电影感，允许留白和连续表演，运镜克制",
+            color="低饱和清晨色调，光线缓慢变暖",
+            texture="真实皮肤、自然布料和柔和窗光",
+            forbidden=["动漫化", "过度磨皮", "无动机快切", "强造冲突", "无因果物体运动"],
+        ),
+        shots=shots,
+    )
+
+
 def _fallback_plan(request: CreateProjectRequest) -> ProductionPlan:
+    if (
+        request.production_profile == ProductionProfile.GENERAL_VIDEO
+        and request.source_mode != SourceMode.SCRIPT_LOCKED
+    ):
+        return _fallback_general_plan(request)
     if request.source_mode == SourceMode.SCRIPT_LOCKED:
         lines = _locked_dialogue(request.input_text)
         if not lines:
@@ -1167,6 +1296,7 @@ def build_project_document_from_plan(
         name=(request.name or plan.title).strip(),
         source_mode=request.source_mode,
         run_mode=request.run_mode,
+        production_profile=request.production_profile,
         target_duration_seconds=sum(shot.duration_seconds for shot in shots),
         input_text=request.input_text,
         input_images=[image.model_copy(deep=True) for image in request.input_images],

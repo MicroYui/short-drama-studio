@@ -25,6 +25,11 @@ class RunMode(StrEnum):
     GUIDED = "GUIDED"
 
 
+class ProductionProfile(StrEnum):
+    GENERAL_VIDEO = "GENERAL_VIDEO"
+    DOUYIN_SHORT_DRAMA = "DOUYIN_SHORT_DRAMA"
+
+
 class AutonomousExecutionTarget(StrEnum):
     MOCK = "MOCK"
     REAL_H3 = "REAL_H3"
@@ -278,6 +283,7 @@ class ProjectRecord(DomainModel):
     name: str
     source_mode: SourceMode
     run_mode: RunMode
+    production_profile: ProductionProfile = ProductionProfile.DOUYIN_SHORT_DRAMA
     language: str = "zh-CN"
     aspect_ratio: str = "9:16"
     target_duration_seconds: float = 50.0
@@ -1014,6 +1020,7 @@ class ProjectListResponse(DomainModel):
 class CreateProjectRequest(DomainModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     source_mode: SourceMode
+    production_profile: ProductionProfile = ProductionProfile.DOUYIN_SHORT_DRAMA
     input_text: str = Field(default="", max_length=50000)
     input_images: list[CreativeInputImage] = Field(
         default_factory=list[CreativeInputImage],

@@ -55,6 +55,7 @@
 | A011 | `LOCKED` | 视频探测、适应性抽帧、镜内时间序列和相邻镜头边界检查作为 Agent 可调用的通用工具；观察只报告可见证据，Director 给出可覆盖建议，不把建议变成硬门，也不新增单一样片或门场景专用字段 | A006、A008、P007 |
 | A012 | `LOCKED` | 真人 `AUTO_DRAFT` 在同一 SQLite/API 核心上采用有限推进和自动轮询，复用现有资产/H3 任务、Take、QA 和 TimelineManifest；仅配置缺失、提交未知或重试耗尽进入 `NEEDS_ATTENTION`，应用重启后可继续 | A005、A008、P007 |
 | A013 | `LOCKED` | 视觉资产以 Agent 管理、Tool 执行：结构化分镜需求驱动目录搜索、覆盖检查、同源派生、语义审查、登记和逐镜 ReferencePlan；场景先建 Master Wide，必要时再派生局部视图，三视图不是固定前置。这些是可忽略的 Agent 选择，不是用户硬审批门 | A006、A008、P007、P010 |
+| A014 | `LOCKED` | 项目级 `GENERAL_VIDEO / DOUYIN_SHORT_DRAMA` 只切换同一运行时中的 Writer、Production Planner 和 Director Prompt Policy；资产、H3、QA、时间线与导出保持共用。Planner 不硬限定镜头数或信息节拍，Director 根据实际意图和观察证据给可忽略建议，不新增爆点/动作计数字段 | A006、A011–A013 |
 
 ## C. 图像、视频、音频与后期路线
 
@@ -115,6 +116,7 @@
 - 2026-08-20：用户选择不填写数值 CSV，直接提交三版完整观看后的汇总定性结论：A 的首镜有竖向接缝造成局部空间不连续；B 的录音笔播放被错误表现为女主本人说话，属于声音来源语义失败；C 未发现明确严重问题，并选为当前最终版。本轮产品验收据此完成，至少 2/3 未被判为整片严重失败；没有收集三名独立评审、维度分数或继续观看意愿，因此不宣称完成三人评分 benchmark。B 的问题保留为通用已知缺口，不增加录音笔专用字段。详见 [Phase 10 实施记录](20-phase10-independent-repeats-and-blind-review.md)。
 - 2026-08-20：Phase 11 将可上传或麦克风录制的 2–15 秒角色人声规范化为 H3 可用 WAV，并以项目级可选绑定接入资产工作台、独立重复和 Route Planner。实际有该角色台词的镜头可自动选择带 `reference_audio` 的 Reference 候选；未绑定时继续使用 H3 原生声音，Frame 修复路线也可因画面质量不采用声线输入。声线版本会使旧路线与旧任务产物失效。用户明确本阶段只支持输入，不新增声音 QA；详见 [Phase 11 实施记录](21-phase11-optional-character-voice-input.md)。
 - 2026-08-20：Phase 12 已实现跨项目资产目录、分镜结构化 `reference_needs`、场景 Master Wide、同源 GPT Image 派生、母版系谱、资产覆盖检查和逐镜 `ReferencePlan`，并将搜索、导入和覆盖检查暴露为 Product API。真实《明天别来了》运行生成 4 个资产包、18 个登记视图和 36 个 H3 768P Take，Director 自动拆分高风险交接镜头，最终形成 8 个入选 Take、6 条锁定字幕和 58.00 秒成片。详见 [Phase 12 实施记录](22-phase12-cross-script-asset-agent.md)。
+- 2026-08-21：Phase 13 已在项目创建、持久化、独立重复、Planner、Director 和桌面创建页贯通 `GENERAL_VIDEO / DOUYIN_SHORT_DRAMA`。两套策略共用同一 Agent Runtime；旧项目默认按抖音短剧读取。规划 Schema 移除固定 6–10 镜限制并允许无对白，仍保留 45–60 秒交付目标和 H3 单段 4–15 秒技术边界。本阶段只做本地/Fake Provider 工程验证，未调用付费生成资源。详见 [Phase 13 实施记录](23-phase13-production-profiles.md)。
 
 ## 对话顺序
 

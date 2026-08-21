@@ -2203,6 +2203,8 @@ export interface components {
             input_text: string;
             /** Name */
             name?: string | null;
+            /** @default DOUYIN_SHORT_DRAMA */
+            production_profile: components["schemas"]["ProductionProfile"];
             /**
              * Render Export
              * @default true
@@ -2446,6 +2448,8 @@ export interface components {
             input_text: string;
             /** Name */
             name?: string | null;
+            /** @default DOUYIN_SHORT_DRAMA */
+            production_profile: components["schemas"]["ProductionProfile"];
             /** @default AUTO_DRAFT */
             run_mode: components["schemas"]["RunMode"];
             source_mode: components["schemas"]["SourceMode"];
@@ -4980,6 +4984,11 @@ export interface components {
             /** Utility */
             utility: string;
         };
+        /**
+         * ProductionProfile
+         * @enum {string}
+         */
+        ProductionProfile: "GENERAL_VIDEO" | "DOUYIN_SHORT_DRAMA";
         /** ProgressSummary */
         ProgressSummary: {
             /** Export Ready */
@@ -5101,6 +5110,8 @@ export interface components {
             language: string;
             /** Name */
             name: string;
+            /** @default DOUYIN_SHORT_DRAMA */
+            production_profile: components["schemas"]["ProductionProfile"];
             run_mode: components["schemas"]["RunMode"];
             source_mode: components["schemas"]["SourceMode"];
             stage: components["schemas"]["ProjectStage"];

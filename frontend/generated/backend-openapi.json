@@ -1478,6 +1478,10 @@
             ],
             "title": "Name"
           },
+          "production_profile": {
+            "$ref": "#/components/schemas/ProductionProfile",
+            "default": "DOUYIN_SHORT_DRAMA"
+          },
           "render_export": {
             "default": true,
             "title": "Render Export",
@@ -2115,6 +2119,10 @@
               }
             ],
             "title": "Name"
+          },
+          "production_profile": {
+            "$ref": "#/components/schemas/ProductionProfile",
+            "default": "DOUYIN_SHORT_DRAMA"
           },
           "run_mode": {
             "$ref": "#/components/schemas/RunMode",
@@ -9086,6 +9094,14 @@
         "title": "PreprocessingStep",
         "type": "object"
       },
+      "ProductionProfile": {
+        "enum": [
+          "GENERAL_VIDEO",
+          "DOUYIN_SHORT_DRAMA"
+        ],
+        "title": "ProductionProfile",
+        "type": "string"
+      },
       "ProgressSummary": {
         "additionalProperties": false,
         "properties": {
@@ -9452,6 +9468,10 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "production_profile": {
+            "$ref": "#/components/schemas/ProductionProfile",
+            "default": "DOUYIN_SHORT_DRAMA"
           },
           "run_mode": {
             "$ref": "#/components/schemas/RunMode"

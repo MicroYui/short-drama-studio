@@ -24,6 +24,7 @@ from short_drama.models import (
     DirectorRepairStrategy,
     EnqueueRequest,
     Freshness,
+    ProductionProfile,
     QaFailureCategory,
     QaIssue,
     QaStatus,
@@ -1193,6 +1194,7 @@ def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
     document = service.repository.get_project(project.document.project.id)
     assert document is not None
     document.project.run_mode = RunMode.GUIDED
+    document.project.production_profile = ProductionProfile.GENERAL_VIDEO
     service.repository.save_project(document)
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
@@ -1207,6 +1209,10 @@ def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
     )
     assert result.status_code == 200, result.text
     body = result.json()
+    director_instructions, director_input = fake.generations[0]
+    assert "general live-action vertical video" in director_instructions
+    assert "Do not treat quiet passages or long takes as defects" in director_instructions
+    assert json.loads(director_input)["production_profile"] == "GENERAL_VIDEO"
     assert body["repair_applied"] is False
     assert body["next_action"] == "AWAIT_USER"
     unchanged = next(

@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import json
 
-from short_drama.models import CreateProjectRequest, SourceMode
+from short_drama.models import (
+    CreateProjectRequest,
+    ProductionProfile,
+    ProjectDocument,
+    SourceMode,
+)
 from short_drama.production_planner import (
+    ProductionPlan,
     _fallback_plan,
     _locked_dialogue,
+    _planner_prompt,
     build_project_document_from_plan,
     create_production_plan,
     refresh_lightweight_reference_plans,
@@ -63,6 +70,74 @@ def _request() -> CreateProjectRequest:
         source_mode=SourceMode.SCRIPT_LOCKED,
         input_text=LOCKED_SCRIPT,
     )
+
+
+def test_production_profiles_inject_distinct_policies_without_fixed_shot_count() -> None:
+    general_request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.GENERAL_VIDEO,
+    )
+    douyin_request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.DOUYIN_SHORT_DRAMA,
+    )
+
+    general_instructions, general_input = _planner_prompt(general_request)
+    douyin_instructions, douyin_input = _planner_prompt(douyin_request)
+    general_payload = json.loads(general_input)
+    douyin_payload = json.loads(douyin_input)
+
+    assert "Atmosphere, silence" in general_instructions
+    assert "Do not invent conflict" in general_instructions
+    assert "curiosity gap" in douyin_instructions
+    assert "Never add shots" in douyin_instructions
+    assert general_payload["production_profile"] == "GENERAL_VIDEO"
+    assert douyin_payload["production_profile"] == "DOUYIN_SHORT_DRAMA"
+    assert general_payload["requirements"]["shots"] == (
+        "choose the smallest coherent executable set; no fixed count"
+    )
+    assert "6-10" not in general_instructions + general_input
+    assert "6-10" not in douyin_instructions + douyin_input
+
+
+def test_general_profile_accepts_silent_long_take_plan_without_density_gate() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.GENERAL_VIDEO,
+    )
+    fallback = _fallback_plan(request)
+    assert len(fallback.shots) == 4
+    assert fallback.lines == []
+    assert fallback.style.genre == "都市生活观察"
+    payload = fallback.model_dump(mode="json")
+    payload["lines"] = []
+    payload["shots"] = payload["shots"][:3]
+    for shot in payload["shots"]:
+        shot["duration_seconds"] = 15.0
+        shot["dialogue_line_indices"] = []
+
+    plan = ProductionPlan.model_validate(payload)
+
+    assert len(plan.shots) == 3
+    assert sum(shot.duration_seconds for shot in plan.shots) == 45.0
+    assert plan.lines == []
+
+
+def test_legacy_project_document_defaults_to_douyin_profile() -> None:
+    request = _request()
+    planning = create_production_plan(request, None)
+    document = build_project_document_from_plan(
+        project_id="project-profile-backward-compatible",
+        request=request,
+        planning=planning,
+        created_at="2026-08-21T00:00:00Z",
+    )
+    payload = document.model_dump(mode="json")
+    del payload["project"]["production_profile"]
+
+    restored = ProjectDocument.model_validate(payload)
+
+    assert restored.project.production_profile == ProductionProfile.DOUYIN_SHORT_DRAMA
 
 
 def test_locked_dialogue_ignores_metadata_and_classifies_recorded_voice() -> None:

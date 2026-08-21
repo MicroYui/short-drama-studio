@@ -33,6 +33,7 @@ from short_drama.models import (
     ShotPlan,
     SpatialInteractionConstraint,
 )
+from short_drama.production_profiles import production_profile_policy
 from short_drama.quality_learning import H3CapabilityProfileResponse
 
 
@@ -1081,9 +1082,11 @@ def build_director_advice_input(
     prior_repairs: list[DirectorRepairRecord],
 ) -> tuple[str, str]:
     assets = {item.id: item for item in document.assets}
+    profile = production_profile_policy(document.project.production_profile)
     instructions = (
         "You are a film director agent advising a user who is producing a live-action "
-        "vertical short drama. Return JSON only, matching the supplied schema. Evaluate "
+        f"vertical video. The active production profile is {profile.label}. Director policy: "
+        f"{profile.director} Return JSON only, matching the supplied schema. Evaluate "
         "the actual shot context; do not apply a fixed action-count or duration threshold. "
         "Compare prompt retry, keyframe replacement, shot split, and coverage-camera change "
         "against the actual QA failure and provider capability profile. A prompt retry should "
@@ -1176,10 +1179,13 @@ def build_director_advice_input(
         },
         "user_direction": request.user_direction,
         "run_mode": document.project.run_mode.value,
+        "production_profile": document.project.production_profile.value,
         "product_rule": (
             "Advice never blocks generation. In AUTO_DRAFT, return an executable proposed_repair "
             "for the recommended strategy so the workflow can continue without a user pause. In "
             "GUIDED, the user may apply or ignore it. Never invent scene-specific schema fields. "
+            "Do not require a minimum beat count, a fixed shot count, or new information at a "
+            "fixed time interval. "
             "Keep the JSON concise: at most three advisories, at most four repair options, omit "
             "unchanged optional fields, and keep each prose field under 300 characters."
         ),

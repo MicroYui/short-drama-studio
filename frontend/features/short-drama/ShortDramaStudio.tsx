@@ -41,6 +41,7 @@ import {
   type GenerationTask,
   type ProjectAggregate,
   type ProjectRecord,
+  type ProductionProfile,
   type RunMode,
   type ScriptLine,
   type ShotPlan,
@@ -92,6 +93,11 @@ const strategyLabels: Record<string, string> = {
   image_guided: '图像锚点驱动',
   audio_driven: '音频驱动',
   hybrid_repair: '混合局部修复',
+}
+
+const productionProfileLabels: Record<ProductionProfile, string> = {
+  GENERAL_VIDEO: '通用视频',
+  DOUYIN_SHORT_DRAMA: '抖音短剧',
 }
 
 function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red' }) {
@@ -189,7 +195,8 @@ function OverviewPanel({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 12 · Cross-script AUTO_DRAFT</Badge>
+              <Badge tone="blue">Phase 13 · Production Profiles</Badge>
+              <Badge tone="green">{productionProfileLabels[record.production_profile ?? 'DOUYIN_SHORT_DRAMA']}</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
               {latestRun && <Badge tone={latestRun.status === 'COMPLETE' ? 'green' : latestRun.status === 'FAILED' || latestRun.status === 'NEEDS_ATTENTION' ? 'amber' : 'blue'}>{latestRun.planner} · {latestRun.status}</Badge>}
@@ -750,6 +757,7 @@ function CreateProjectPanel({
 }: {
   onCreate: (
     name: string,
+    productionProfile: ProductionProfile,
     mode: SourceMode,
     input: string,
     runMode: RunMode,
@@ -759,6 +767,7 @@ function CreateProjectPanel({
   onFixture: () => void
 }) {
   const [name, setName] = useState('新的都市短剧')
+  const [productionProfile, setProductionProfile] = useState<ProductionProfile>('DOUYIN_SHORT_DRAMA')
   const [sourceMode, setSourceMode] = useState<SourceMode>('AUTO_ORIGINAL')
   const [runMode, setRunMode] = useState<RunMode>('AUTO_DRAFT')
   const [executionTarget, setExecutionTarget] = useState<AutonomousExecutionTarget>('REAL_H3')
@@ -793,14 +802,21 @@ function CreateProjectPanel({
       <div className="grid w-full gap-8 xl:grid-cols-[1fr_1.1fr]">
         <div className="flex flex-col justify-center">
           <Badge tone="blue">AI 短剧制片工作台</Badge>
-          <h1 className="mt-5 text-4xl font-semibold leading-tight text-white">不给素材、给几张图片、一句话或完整剧本，都进入同一制片闭环</h1>
-          <p className="mt-4 text-sm leading-7 text-zinc-400">AUTO_DRAFT 会自动完成策划、资产登记、分镜、候选、时间线与导出；GUIDED 保留可编辑停靠点。视频观察工具会抽取时间序列与镜头边界供 QA 和导演 Agent 使用。</p>
+          <h1 className="mt-5 text-4xl font-semibold leading-tight text-white">先选择创作节奏，再让任意输入进入同一制片闭环</h1>
+          <p className="mt-4 text-sm leading-7 text-zinc-400">通用视频允许氛围、留白和有意义的长镜头；抖音短剧强调冲突前置、悬念链与爆点回收。两者共享同一套资产、Director、H3、QA 和时间线工具。</p>
           <button className={`${secondaryButton} mt-8 w-fit px-5 py-3`} onClick={onFixture}><Clapperboard className="h-4 w-4 text-blue-400" />打开固定验收片《别相信我》</button>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-2xl">
           <h2 className="text-lg font-semibold text-white">新建项目</h2>
           <div className="mt-5 space-y-4">
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">项目名</span><input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none focus:border-blue-500" /></label>
+            <div>
+              <span className="mb-1.5 block text-xs text-zinc-500">制作类型</span>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setProductionProfile('DOUYIN_SHORT_DRAMA')} className={`rounded-xl border p-3 text-left transition ${productionProfile === 'DOUYIN_SHORT_DRAMA' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-600'}`}><p className="text-sm font-medium text-zinc-100">抖音短剧</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">冲突前置、悬念推进、反转回收；不机械堆镜头。</p></button>
+                <button type="button" onClick={() => setProductionProfile('GENERAL_VIDEO')} className={`rounded-xl border p-3 text-left transition ${productionProfile === 'GENERAL_VIDEO' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-600'}`}><p className="text-sm font-medium text-zinc-100">通用视频</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">节奏服从内容，允许氛围、留白和有意义的长镜头。</p></button>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">输入契约</span><select value={sourceMode} onChange={(event) => setSourceMode(event.target.value as SourceMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_ORIGINAL">完全自动创作</option><option value="IMAGE_SEEDED">图片启发创作</option><option value="IDEA_EXPANSION">一句话扩写</option><option value="SCRIPT_LOCKED">已有剧本锁定</option></select></label>
               <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">运行模式</span><select value={runMode} onChange={(event) => setRunMode(event.target.value as RunMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_DRAFT">自动到底</option><option value="GUIDED">可停靠引导</option></select></label>
@@ -814,7 +830,7 @@ function CreateProjectPanel({
               </div>
               {imagePaths.length > 0 && <div className="mt-3 space-y-1.5">{imagePaths.map((path) => <div key={path} className="flex items-center justify-between gap-3 rounded-lg bg-zinc-900 px-2.5 py-2"><span className="truncate text-[11px] text-zinc-400">{path.split(/[\\/]/).at(-1)}</span><button type="button" className="text-zinc-600 hover:text-red-300" onClick={() => setImagePaths((current) => current.filter((item) => item !== path))}><X className="h-3.5 w-3.5" /></button></div>)}</div>}
             </div>
-            <button className={`${primaryButton} w-full py-3`} disabled={!canSubmit} onClick={() => onCreate(name.trim(), sourceMode, input.trim(), runMode, executionTarget, images)}><WandSparkles className="h-4 w-4" />{runMode === 'AUTO_DRAFT' ? executionTarget === 'REAL_H3' ? '启动无人值守真人草稿' : '生成完整 Mock 草稿' : '建立可编辑制片项目'}</button>
+            <button className={`${primaryButton} w-full py-3`} disabled={!canSubmit} onClick={() => onCreate(name.trim(), productionProfile, sourceMode, input.trim(), runMode, executionTarget, images)}><WandSparkles className="h-4 w-4" />{runMode === 'AUTO_DRAFT' ? executionTarget === 'REAL_H3' ? '启动无人值守真人草稿' : '生成完整 Mock 草稿' : '建立可编辑制片项目'}</button>
           </div>
           <p className="mt-4 text-center text-[11px] text-zinc-600">没有配置 GPT 时使用本地可复现策划回退；真实质量结论不会由 Mock 冒充。</p>
         </div>
@@ -929,6 +945,7 @@ export function ShortDramaStudio() {
 
   const createProject = (
     name: string,
+    productionProfile: ProductionProfile,
     sourceMode: SourceMode,
     inputText: string,
     runMode: RunMode,
@@ -937,6 +954,7 @@ export function ShortDramaStudio() {
   ) => {
     const request = {
       name,
+      production_profile: productionProfile,
       source_mode: sourceMode,
       input_text: inputText,
       input_images: images,
@@ -1120,7 +1138,7 @@ export function ShortDramaStudio() {
             {projects.map((item) => (
               <button key={item.id} onClick={() => void loadProject(item.id)} className={`w-full rounded-lg px-3 py-2.5 text-left transition ${activeProjectId === item.id && !showCreate ? 'bg-blue-500/10 text-white ring-1 ring-blue-500/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'}`}>
                 <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-medium">{item.name}</span><ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-600" /></div>
-                <div className="mt-1 flex items-center gap-1.5"><span className="text-[10px] text-zinc-600">{stageLabels[item.stage] ?? item.stage}</span><span className="text-zinc-800">·</span><span className="text-[10px] text-zinc-600">{item.source_mode === 'SCRIPT_LOCKED' ? '剧本' : item.source_mode === 'IMAGE_SEEDED' ? '图片' : item.source_mode === 'AUTO_ORIGINAL' ? '自动' : '创意'}</span></div>
+                <div className="mt-1 flex items-center gap-1.5"><span className="text-[10px] text-zinc-600">{stageLabels[item.stage] ?? item.stage}</span><span className="text-zinc-800">·</span><span className="text-[10px] text-zinc-600">{productionProfileLabels[item.production_profile ?? 'DOUYIN_SHORT_DRAMA']}</span><span className="text-zinc-800">·</span><span className="text-[10px] text-zinc-600">{item.source_mode === 'SCRIPT_LOCKED' ? '剧本' : item.source_mode === 'IMAGE_SEEDED' ? '图片' : item.source_mode === 'AUTO_ORIGINAL' ? '自动' : '创意'}</span></div>
               </button>
             ))}
           </div>

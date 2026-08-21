@@ -38,6 +38,7 @@ from short_drama.models import (
     AutonomousRunAdvanceRequest,
     AutonomousRunStatus,
     Freshness,
+    ProductionProfile,
     ReferenceRequirement,
     ReferenceRole,
     SourceMode,
@@ -471,6 +472,7 @@ def test_repeat_run_reuses_approved_preproduction_but_starts_new_generation(
     asset_path = tmp_path / "approved-core.png"
     Image.new("RGB", (768, 1344), (40, 60, 80)).save(asset_path)
     source_document = source.document
+    source_document.project.production_profile = ProductionProfile.GENERAL_VIDEO
     for asset in source_document.assets:
         if asset.kind not in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}:
             continue
@@ -497,6 +499,9 @@ def test_repeat_run_reuses_approved_preproduction_but_starts_new_generation(
     )
 
     assert repeated.project.document.project.id != source.document.project.id
+    assert repeated.project.document.project.production_profile == (
+        ProductionProfile.GENERAL_VIDEO
+    )
     assert repeated.run.status == AutonomousRunStatus.RUNNING
     assert repeated.run.current_step.value in {"PREPARE_SHOT_ASSETS", "GENERATE"}
     assert repeated.project.tasks == []

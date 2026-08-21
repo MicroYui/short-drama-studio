@@ -153,6 +153,9 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
     assert len(fixture["document"]["shots"]) == 8
     assert len(fixture["document"]["script_versions"][0]["lines"]) == 5
     assert fixture["document"]["project"]["source_mode"] == "SCRIPT_LOCKED"
+    assert fixture["document"]["project"]["production_profile"] == (
+        "DOUYIN_SHORT_DRAMA"
+    )
     assert {
         entry["strategy"] for entry in fixture["document"]["execution_plan"]
     } == {
@@ -168,6 +171,7 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
         json={
             "name": "一句话输入",
             "source_mode": "IDEA_EXPANSION",
+            "production_profile": "GENERAL_VIDEO",
             "input_text": idea_text,
             "run_mode": "GUIDED",
         },
@@ -175,6 +179,7 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
     assert idea_response.status_code == 200, idea_response.text
     idea = idea_response.json()
     assert idea["document"]["project"]["input_text"] == idea_text
+    assert idea["document"]["project"]["production_profile"] == "GENERAL_VIDEO"
     assert idea["document"]["script_versions"][0]["original_text"] == idea_text
 
     locked_text = "林夏：不要动那支录音笔。"
@@ -189,6 +194,9 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
     )
     assert locked_response.status_code == 200, locked_response.text
     locked = locked_response.json()
+    assert locked["document"]["project"]["production_profile"] == (
+        "DOUYIN_SHORT_DRAMA"
+    )
     script = locked["document"]["script_versions"][0]
     assert script["original_text"] == locked_text
     assert script["lines"][0]["original_text"] == "不要动那支录音笔。"
@@ -283,6 +291,29 @@ def test_autonomous_create_runs_to_manifest_without_user_stops(client) -> None:
     assert body["project"]["progress"]["shots_with_selected_take"] == 8
     assert body["project"]["progress"]["manifest_ready"] is True
     assert body["export"] is None
+
+
+def test_general_profile_silent_fallback_runs_to_manifest(client) -> None:
+    response = client.post(
+        "/api/short-drama/projects/autonomous-draft",
+        json={
+            "source_mode": "AUTO_ORIGINAL",
+            "production_profile": "GENERAL_VIDEO",
+            "input_text": "",
+            "run_mode": "AUTO_DRAFT",
+            "render_export": False,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "COMPLETE"
+    assert body["project"]["document"]["project"]["production_profile"] == (
+        "GENERAL_VIDEO"
+    )
+    assert len(body["project"]["document"]["shots"]) == 4
+    assert body["project"]["document"]["script_versions"][0]["lines"] == []
+    assert body["project"]["progress"]["manifest_ready"] is True
 
 
 def test_locked_script_preserves_more_than_ten_dialogue_lines(client) -> None:
