@@ -1,4 +1,4 @@
-"""AudioInspection tools, persistence, AUTO_DRAFT, and Director handoff."""
+"""Manual AudioInspection tools, persistence, and Director handoff."""
 
 from __future__ import annotations
 
@@ -125,10 +125,15 @@ def test_audio_inspection_closes_dialogue_and_voice_checks_with_fake_service(
     service = _service(tmp_path, audio)
     project = service.initialize_fixture()
 
-    result = service.auto_draft(project.document.project.id, render_export=False)
+    draft = service.auto_draft(project.document.project.id, render_export=False)
+    assert draft.project.audio_inspections == []
+    result = service.inspect_current_manifest_audio(
+        project.document.project.id,
+        AudioInspectionRequest(),
+    )
 
     assert len(result.project.audio_inspections) == 1
-    report = result.project.audio_inspections[0]
+    report = result.report
     assert report.semantic_status.value == "COMPLETE"
     assert len(report.clip_inspections) == 8
     assert len(report.dialogue_checks) == 5
@@ -153,11 +158,16 @@ def test_audio_issue_is_available_to_director_agent_without_forcing_repair(
     director = FakeDirectorLanguageProvider()
     service = _service(tmp_path, audio, director)
     project = service.initialize_fixture()
-    result = service.auto_draft(project.document.project.id, render_export=False)
+    draft = service.auto_draft(project.document.project.id, render_export=False)
+    assert draft.project.audio_inspections == []
+    result = service.inspect_current_manifest_audio(
+        project.document.project.id,
+        AudioInspectionRequest(),
+    )
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
     )
-    report = result.project.audio_inspections[-1]
+    report = result.report
     mismatch = next(
         item
         for item in report.dialogue_checks
@@ -208,7 +218,7 @@ def test_audio_inspection_endpoint_persists_non_semantic_report(client) -> None:
     body = inspected.json()
     assert body["report"]["semantic_status"] == "NOT_REQUESTED"
     assert len(body["report"]["clip_inspections"]) == 8
-    assert len(body["project"]["audio_inspections"]) == 2
+    assert len(body["project"]["audio_inspections"]) == 1
     assert all(
         check["passed"] for check in body["report"]["technical_checks"]
     )

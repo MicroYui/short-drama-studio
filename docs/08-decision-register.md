@@ -56,6 +56,7 @@
 | A012 | `LOCKED` | 真人 `AUTO_DRAFT` 在同一 SQLite/API 核心上采用有限推进和自动轮询，复用现有资产/H3 任务、Take、QA 和 TimelineManifest；仅配置缺失、提交未知或重试耗尽进入 `NEEDS_ATTENTION`，应用重启后可继续 | A005、A008、P007 |
 | A013 | `LOCKED` | 视觉资产以 Agent 管理、Tool 执行：结构化分镜需求驱动目录搜索、覆盖检查、同源派生、语义审查、登记和逐镜 ReferencePlan；场景先建 Master Wide，必要时再派生局部视图，三视图不是固定前置。这些是可忽略的 Agent 选择，不是用户硬审批门 | A006、A008、P007、P010 |
 | A014 | `LOCKED` | 项目级 `GENERAL_VIDEO / DOUYIN_SHORT_DRAMA` 只切换同一运行时中的 Writer、Production Planner 和 Director Prompt Policy；资产、H3、QA、时间线与导出保持共用。Planner 不硬限定镜头数或信息节拍，Director 根据实际意图和观察证据给可忽略建议，不新增爆点/动作计数字段 | A006、A011–A013 |
+| A015 | `LOCKED` | 新项目时长由用户自由填写，抖音短剧默认 5 分钟且 3/5/10/15 分钟仅为快捷值。多分钟内容采用 Story Architect → Script Critic → 顺序 Scene Directors 的分层规划；Critic 只做有证据的开放式剧本审阅，必要时触发最多两轮自动修订与逐轮复审，剩余建议可忽略。场间以精简状态传递上下文，不建立独立微服务群，不把创作建议变成固定节拍门控。本阶段只验证剧本规划，不调用 GPT Image 或 H3 | A006、A014 |
 
 ## C. 图像、视频、音频与后期路线
 
@@ -117,6 +118,7 @@
 - 2026-08-20：Phase 11 将可上传或麦克风录制的 2–15 秒角色人声规范化为 H3 可用 WAV，并以项目级可选绑定接入资产工作台、独立重复和 Route Planner。实际有该角色台词的镜头可自动选择带 `reference_audio` 的 Reference 候选；未绑定时继续使用 H3 原生声音，Frame 修复路线也可因画面质量不采用声线输入。声线版本会使旧路线与旧任务产物失效。用户明确本阶段只支持输入，不新增声音 QA；详见 [Phase 11 实施记录](21-phase11-optional-character-voice-input.md)。
 - 2026-08-20：Phase 12 已实现跨项目资产目录、分镜结构化 `reference_needs`、场景 Master Wide、同源 GPT Image 派生、母版系谱、资产覆盖检查和逐镜 `ReferencePlan`，并将搜索、导入和覆盖检查暴露为 Product API。真实《明天别来了》运行生成 4 个资产包、18 个登记视图和 36 个 H3 768P Take，Director 自动拆分高风险交接镜头，最终形成 8 个入选 Take、6 条锁定字幕和 58.00 秒成片。详见 [Phase 12 实施记录](22-phase12-cross-script-asset-agent.md)。
 - 2026-08-21：Phase 13 已在项目创建、持久化、独立重复、Planner、Director 和桌面创建页贯通 `GENERAL_VIDEO / DOUYIN_SHORT_DRAMA`。两套策略共用同一 Agent Runtime；旧项目默认按抖音短剧读取。规划 Schema 移除固定 6–10 镜限制并允许无对白，仍保留 45–60 秒交付目标和 H3 单段 4–15 秒技术边界。本阶段只做本地/Fake Provider 工程验证，未调用付费生成资源。详见 [Phase 13 实施记录](23-phase13-production-profiles.md)。
+- 2026-08-21：Phase 14 已将新项目改为 15 秒到 30 分钟任意目标时长，抖音短剧默认 5 分钟并保留可选快捷值。超过 90 秒时由 Story Architect 生成整集与场次契约，Script Critic 开放式审阅并可触发最多两轮自动修订，再由 Scene Director 逐场展开并传递上一场实际连续性状态；审阅建议持久化且可忽略。两次 5 分钟真实语言探针只检查剧本，未调用 GPT Image 2 或 MiniMax-H3；第二次实际完成一轮审阅修订并在复审中继续暴露证物逻辑问题，因此没有把单样本写成稳定质量结论。详见 [Phase 14 实施记录](24-phase14-long-form-multi-agent-planning.md)。
 
 ## 对话顺序
 

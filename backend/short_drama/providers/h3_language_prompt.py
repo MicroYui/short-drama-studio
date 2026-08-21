@@ -20,6 +20,7 @@ route 已由上游规划器选定，不得在提示词编译阶段改换生成�
 visible_assets 是本镜头可见资产的权威清单；项目 Bible 只是这些资产的消歧资料。未列入 visible_assets 的人物或道具不得入画，即使其在对白、相邻镜头或项目 Bible 中出现。
 route_media_bindings 描述本次路线实际绑定的媒体。first_frame 是不可改写的开场画面，last_frame 是不可改写的结束画面，reference media 只锚定其明确描述的身份、空间、道具或声音；提示词不得与这些媒体的描述冲突。
 previous_shot_terminal_state 只用于承接上一镜的物理终态；不得把上一镜独有的人物、道具或事件带入当前镜头。
+structured_scene_context 是故事统筹 Agent 为本场声明的剧情目的、目标时长和跨场入场/出场摘要；它用于理解本镜在全场中的作用，但不得覆盖 locked_shot 或已批准媒体。
 structured_action_plan 是导演 Agent 为当前镜头声明的动作顺序和物理交互关系。按顺序执行已声明动作；当 contact_persists 为 true 时，保持接触到最终帧或后续动作节拍明确改变该状态。刚性附件始终属于声明的物体表面并随主体同步运动，不得消失、换面、复制或漂移。不得据此增加未声明动作。
 把镜头写成单个连续镜头，按时间顺序明确起始状态、动作节拍、摄影机运动和结束状态。优先提高真人感、物理动作连续性、身份与道具稳定性、构图和运镜可执行性。
 动作和运镜不得超出 locked_shot 与 source_prompt 已明确规定的范围；不得自行添加开关门、人物进出场、镜头穿越门窗、道具交接或场景转换等大动作。
@@ -252,6 +253,10 @@ def build_language_prompt_input(
         for line_id in shot.dialogue_line_ids
         if line_id in line_by_id
     ]
+    scene = next(
+        (item for item in script.structured_scenes if item.id == shot.scene_id),
+        None,
+    )
     route_guidance = {
         VideoGenerationRoute.DIRECT: "无图像锚点，提示词必须完整建立首帧人物、空间、构图和动作起点。",
         VideoGenerationRoute.FRAME_FIRST: "首帧图已批准；从首帧精确起步，保持人物、服装、空间、构图和道具外观。",
@@ -279,6 +284,9 @@ def build_language_prompt_input(
             "transition_out": shot.transition_out,
         },
         "previous_shot_terminal_state": _previous_shot_terminal_state(document, shot),
+        "structured_scene_context": (
+            scene.model_dump(mode="json") if scene is not None else None
+        ),
         "structured_action_plan": _structured_action_plan(document, shot),
         "production_rules": {
             "route_selected_upstream": True,

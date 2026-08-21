@@ -20,6 +20,8 @@ from short_drama.models import (
     ShotPlan,
     TechnicalCheck,
     TimelineManifest,
+    TimelineVideoClip,
+    OutputSpec,
 )
 
 
@@ -358,89 +360,45 @@ class TimelineExporter:
         manifest_path.write_text(manifest.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
         spec = manifest.output_spec
-        # Concat demuxing assumes identical stream parameters and can silently truncate when
-        # provider media changes frame rate, resolution, codec profile, or audio sample rate.
-        input_args = [
-            argument
-            for clip in manifest.video_clips
-            for argument in ("-i", clip.media_path)
-        ]
-        filter_parts: list[str] = []
-        concat_inputs: list[str] = []
-        for index, clip in enumerate(manifest.video_clips):
-            source_in = f"{clip.source_in_seconds:.6f}"
-            duration = f"{clip.duration_seconds:.6f}"
-            filter_parts.extend(
+        if len(manifest.video_clips) <= 24:
+            self._render_normalized_group(manifest.video_clips, clean_path, spec)
+        else:
+            chunk_dir = export_dir / "normalized-chunks"
+            chunk_dir.mkdir(parents=True, exist_ok=True)
+            chunk_paths: list[Path] = []
+            for start in range(0, len(manifest.video_clips), 24):
+                chunk_path = chunk_dir / f"chunk-{start // 24 + 1:03d}.mp4"
+                self._render_normalized_group(
+                    manifest.video_clips[start : start + 24],
+                    chunk_path,
+                    spec,
+                )
+                chunk_paths.append(chunk_path)
+            chunk_list_path = chunk_dir / "chunks.txt"
+            chunk_list_path.write_text(
+                "\n".join(
+                    f"file '{str(path.resolve()).replace(chr(39), chr(39) + chr(92) + chr(39) + chr(39))}'"
+                    for path in chunk_paths
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            _run_ffmpeg(
                 [
-                    (
-                        f"[{index}:v:0]"
-                        f"tpad=stop_mode=clone:stop_duration={duration},"
-                        f"trim=start={source_in}:duration={duration},"
-                        "setpts=PTS-STARTPTS,"
-                        f"scale={spec.width}:{spec.height}:flags=lanczos,"
-                        f"setsar=1,fps={spec.fps},format={spec.pixel_format}"
-                        f"[video{index}]"
-                    ),
-                    (
-                        f"[{index}:a:0]"
-                        f"apad=pad_dur={duration},"
-                        f"atrim=start={source_in}:duration={duration},"
-                        "asetpts=PTS-STARTPTS,"
-                        f"aresample={spec.audio_sample_rate},"
-                        "aformat=channel_layouts=stereo"
-                        f"[audio{index}]"
-                    ),
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(chunk_list_path),
+                    "-c",
+                    "copy",
+                    "-movflags",
+                    "+faststart",
+                    str(clean_path),
                 ]
             )
-            concat_inputs.extend((f"[video{index}]", f"[audio{index}]"))
-        filter_parts.append(
-            "".join(concat_inputs)
-            + f"concat=n={len(manifest.video_clips)}:v=1:a=1[video][audio]"
-        )
-
-        _run_ffmpeg(
-            [
-                "-y",
-                *input_args,
-                "-filter_complex",
-                ";".join(filter_parts),
-                "-map",
-                "[video]",
-                "-map",
-                "[audio]",
-                "-r",
-                str(spec.fps),
-                "-fps_mode",
-                "cfr",
-                "-c:v",
-                "libx264",
-                "-profile:v",
-                spec.profile,
-                "-preset",
-                "ultrafast",
-                "-crf",
-                str(spec.crf),
-                "-pix_fmt",
-                spec.pixel_format,
-                "-color_primaries",
-                spec.color_space,
-                "-color_trc",
-                spec.color_space,
-                "-colorspace",
-                spec.color_space,
-                "-c:a",
-                spec.audio_codec,
-                "-ar",
-                str(spec.audio_sample_rate),
-                "-ac",
-                "2",
-                "-b:a",
-                f"{spec.audio_bitrate_kbps}k",
-                "-movflags",
-                "+faststart",
-                str(clean_path),
-            ]
-        )
 
         if manifest.subtitle_cues:
             _run_ffmpeg(
@@ -498,6 +456,96 @@ class TimelineExporter:
             qa_report_path=str(qa_path.resolve()),
             checks=checks,
             created_at=created_at,
+        )
+
+    def _render_normalized_group(
+        self,
+        clips: list[TimelineVideoClip],
+        output_path: Path,
+        spec: OutputSpec,
+    ) -> None:
+        # Each group normalizes provider differences before concat. Grouping bounds command-line
+        # size and ffmpeg graph fan-out for multi-minute projects while retaining exact clip trims.
+        input_args = [
+            argument
+            for clip in clips
+            for argument in ("-i", clip.media_path)
+        ]
+        filter_parts: list[str] = []
+        concat_inputs: list[str] = []
+        for index, clip in enumerate(clips):
+            source_in = f"{clip.source_in_seconds:.6f}"
+            duration = f"{clip.duration_seconds:.6f}"
+            filter_parts.extend(
+                [
+                    (
+                        f"[{index}:v:0]"
+                        f"tpad=stop_mode=clone:stop_duration={duration},"
+                        f"trim=start={source_in}:duration={duration},"
+                        "setpts=PTS-STARTPTS,"
+                        f"scale={spec.width}:{spec.height}:flags=lanczos,"
+                        f"setsar=1,fps={spec.fps},format={spec.pixel_format}"
+                        f"[video{index}]"
+                    ),
+                    (
+                        f"[{index}:a:0]"
+                        f"apad=pad_dur={duration},"
+                        f"atrim=start={source_in}:duration={duration},"
+                        "asetpts=PTS-STARTPTS,"
+                        f"aresample={spec.audio_sample_rate},"
+                        "aformat=channel_layouts=stereo"
+                        f"[audio{index}]"
+                    ),
+                ]
+            )
+            concat_inputs.extend((f"[video{index}]", f"[audio{index}]"))
+        filter_parts.append(
+            "".join(concat_inputs)
+            + f"concat=n={len(clips)}:v=1:a=1[video][audio]"
+        )
+
+        _run_ffmpeg(
+            [
+                "-y",
+                *input_args,
+                "-filter_complex",
+                ";".join(filter_parts),
+                "-map",
+                "[video]",
+                "-map",
+                "[audio]",
+                "-r",
+                str(spec.fps),
+                "-fps_mode",
+                "cfr",
+                "-c:v",
+                "libx264",
+                "-profile:v",
+                spec.profile,
+                "-preset",
+                "ultrafast",
+                "-crf",
+                str(spec.crf),
+                "-pix_fmt",
+                spec.pixel_format,
+                "-color_primaries",
+                spec.color_space,
+                "-color_trc",
+                spec.color_space,
+                "-colorspace",
+                spec.color_space,
+                "-c:a",
+                spec.audio_codec,
+                "-ar",
+                str(spec.audio_sample_rate),
+                "-ac",
+                "2",
+                "-b:a",
+                f"{spec.audio_bitrate_kbps}k",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
         )
 
     def _build_srt(self, manifest: TimelineManifest) -> str:

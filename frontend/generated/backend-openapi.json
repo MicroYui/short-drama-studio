@@ -1493,6 +1493,19 @@
           },
           "source_mode": {
             "$ref": "#/components/schemas/SourceMode"
+          },
+          "target_duration_seconds": {
+            "anyOf": [
+              {
+                "maximum": 1800.0,
+                "minimum": 15.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration Seconds"
           }
         },
         "required": [
@@ -2130,6 +2143,19 @@
           },
           "source_mode": {
             "$ref": "#/components/schemas/SourceMode"
+          },
+          "target_duration_seconds": {
+            "anyOf": [
+              {
+                "maximum": 1800.0,
+                "minimum": 15.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration Seconds"
           }
         },
         "required": [
@@ -4773,7 +4799,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 100,
+            "maxItems": 500,
             "title": "Shot Ids",
             "type": "array"
           },
@@ -10962,6 +10988,54 @@
         "title": "RuntimePolicyResponse",
         "type": "object"
       },
+      "SceneContinuitySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "character_states": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Character States",
+            "type": "array"
+          },
+          "known_facts": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Known Facts",
+            "type": "array"
+          },
+          "open_threads": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Open Threads",
+            "type": "array"
+          },
+          "prop_states": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Prop States",
+            "type": "array"
+          },
+          "setting": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Setting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "setting"
+        ],
+        "title": "SceneContinuitySummary",
+        "type": "object"
+      },
       "ScriptLine": {
         "additionalProperties": false,
         "properties": {
@@ -10999,6 +11073,94 @@
         ],
         "title": "ScriptLine",
         "type": "object"
+      },
+      "ScriptReviewIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "observation": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Observation",
+            "type": "string"
+          },
+          "recommendation": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Recommendation",
+            "type": "string"
+          },
+          "scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "title": "Scene Sequences",
+            "type": "array"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/ScriptReviewSeverity"
+          }
+        },
+        "required": [
+          "category",
+          "severity",
+          "observation",
+          "recommendation"
+        ],
+        "title": "ScriptReviewIssue",
+        "type": "object"
+      },
+      "ScriptReviewReport": {
+        "additionalProperties": false,
+        "properties": {
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptReviewIssue"
+            },
+            "maxItems": 30,
+            "title": "Issues",
+            "type": "array"
+          },
+          "requires_revision": {
+            "default": false,
+            "title": "Requires Revision",
+            "type": "boolean"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Strengths",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "ScriptReviewReport",
+        "type": "object"
+      },
+      "ScriptReviewSeverity": {
+        "enum": [
+          "HIGH",
+          "MEDIUM",
+          "LOW"
+        ],
+        "title": "ScriptReviewSeverity",
+        "type": "string"
       },
       "ScriptVersion": {
         "additionalProperties": false,
@@ -11053,6 +11215,16 @@
           "project_id": {
             "title": "Project Id",
             "type": "string"
+          },
+          "review_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_mode": {
             "$ref": "#/components/schemas/SourceMode"
@@ -11287,6 +11459,17 @@
             "minimum": 1.0,
             "title": "Revision",
             "type": "integer"
+          },
+          "scene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Id"
           },
           "sequence": {
             "title": "Sequence",
@@ -11780,6 +11963,26 @@
       "StructuredScene": {
         "additionalProperties": false,
         "properties": {
+          "entry_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneContinuitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneContinuitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "heading": {
             "title": "Heading",
             "type": "string"
@@ -11795,9 +11998,32 @@
             "title": "Line Ids",
             "type": "array"
           },
+          "narrative_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narrative Purpose"
+          },
           "summary": {
             "title": "Summary",
             "type": "string"
+          },
+          "target_duration_seconds": {
+            "anyOf": [
+              {
+                "minimum": 4.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration Seconds"
           }
         },
         "required": [

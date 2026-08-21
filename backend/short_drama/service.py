@@ -1336,16 +1336,24 @@ class ShortDramaService:
             return self._advance_real_qa_and_repair(project_id, run_id)
         if run.current_step == AutonomousRunStep.TIMELINE:
             self.rebuild_manifest(project_id)
-            self._advance_autonomous_run(
-                project_id,
-                run_id,
-                completed_step=AutonomousRunStep.TIMELINE,
-                next_step=AutonomousRunStep.AUDIO_QA,
-            )
+            if run.render_export:
+                self._advance_autonomous_run(
+                    project_id,
+                    run_id,
+                    completed_step=AutonomousRunStep.TIMELINE,
+                    next_step=AutonomousRunStep.EXPORT,
+                )
+            else:
+                self._finish_autonomous_run(
+                    project_id,
+                    run_id,
+                    status=AutonomousRunStatus.COMPLETE,
+                    completed_steps=[AutonomousRunStep.TIMELINE],
+                )
             return True, False
         if run.current_step == AutonomousRunStep.AUDIO_QA:
-            report = self._ensure_current_manifest_audio_inspection(project_id)
-            self._record_autonomous_audio_findings(project_id, run_id, report)
+            # Backward-compatible resume for runs persisted before automatic audio QA
+            # was removed. Voice/audio inputs remain supported; audio inspection is manual.
             if run.render_export:
                 self._advance_autonomous_run(
                     project_id,
@@ -1869,6 +1877,10 @@ class ShortDramaService:
         approved: AssetVersion,
         need: ReferenceViewNeed,
     ) -> None:
+        shown_shot_ids = need.shot_ids[:8]
+        shot_summary = "、".join(shown_shot_ids)
+        if len(need.shot_ids) > len(shown_shot_ids):
+            shot_summary += f" 等（共 {len(need.shot_ids)} 镜）"
         self.add_reference_pack_entry(
             project_id,
             ReferencePackEntryCreateRequest(
@@ -1880,10 +1892,8 @@ class ShortDramaService:
                 framing=need.framing,
                 tags=need.tags,
                 description=(
-                    f"同源母版派生视图，用于镜头 "
-                    + "、".join(need.shot_ids)
-                    + f"：{need.purpose}"
-                ),
+                    f"同源母版派生视图，用于镜头 {shot_summary}：{need.purpose}"
+                )[:2000],
                 priority=80,
             ),
         )
@@ -4834,12 +4844,22 @@ class ShortDramaService:
             document = self._require_project_document(project_id)
             if rebuild_manifest or document.project.current_manifest_id is None:
                 manifest = self.rebuild_manifest(project_id)
-                document = self._require_project_document(project_id)
             else:
                 manifest = self._current_manifest(document)
-            export = self.exporter.render(manifest, utc_now())
-            if not all(check.passed for check in export.checks):
-                raise WorkflowConflictError("Technical export QA failed")
+            manifest_snapshot = manifest.model_copy(deep=True)
+
+        # ffmpeg can take minutes for a long episode. Keep it outside the service lock so
+        # progress reads and unrelated project work remain responsive during export.
+        export = self.exporter.render(manifest_snapshot, utc_now())
+        if not all(check.passed for check in export.checks):
+            raise WorkflowConflictError("Technical export QA failed")
+
+        with self._lock:
+            document = self._require_project_document(project_id)
+            if document.project.current_manifest_id != manifest_snapshot.id:
+                raise WorkflowConflictError(
+                    "Timeline changed while export was rendering; export the current timeline again"
+                )
             self.repository.save_export(export)
             document.project.stage = ProjectStage.EXPORTED
             document.project.updated_at = utc_now()
@@ -4948,31 +4968,18 @@ class ShortDramaService:
 
         self.rebuild_manifest(project_id)
         if autonomous_run_id is not None:
-            self._advance_autonomous_run(
-                project_id,
-                autonomous_run_id,
-                completed_step=AutonomousRunStep.TIMELINE,
-                next_step=AutonomousRunStep.AUDIO_QA,
-            )
-        audio_report = self._ensure_current_manifest_audio_inspection(project_id)
-        if autonomous_run_id is not None:
-            self._record_autonomous_audio_findings(
-                project_id,
-                autonomous_run_id,
-                audio_report,
-            )
-        export: ExportRecord | None = None
-        if render_export:
-            if autonomous_run_id is not None:
+            if render_export:
                 self._advance_autonomous_run(
                     project_id,
                     autonomous_run_id,
-                    completed_step=AutonomousRunStep.AUDIO_QA,
+                    completed_step=AutonomousRunStep.TIMELINE,
                     next_step=AutonomousRunStep.EXPORT,
                 )
+        export: ExportRecord | None = None
+        if render_export:
             export = self.export_project(project_id, rebuild_manifest=False)
         if autonomous_run_id is not None:
-            completed_steps = [AutonomousRunStep.AUDIO_QA]
+            completed_steps = [AutonomousRunStep.TIMELINE]
             if export is not None:
                 completed_steps.append(AutonomousRunStep.EXPORT)
             self._finish_autonomous_run(
@@ -5035,14 +5042,12 @@ class ShortDramaService:
         with self._lock:
             document = self._require_project_document(project_id)
             takes = self.repository.list_takes(project_id)
+            takes_by_shot: dict[str, list[Take]] = {}
+            for take in takes:
+                if take.freshness == Freshness.CURRENT and _take_is_timeline_eligible(take):
+                    takes_by_shot.setdefault(take.shot_id, []).append(take)
             for shot in document.shots:
-                candidates = [
-                    take
-                    for take in takes
-                    if take.shot_id == shot.id
-                    and take.freshness == Freshness.CURRENT
-                    and _take_is_timeline_eligible(take)
-                ]
+                candidates = takes_by_shot.get(shot.id, [])
                 if not candidates:
                     continue
                 best = max(
@@ -5545,6 +5550,7 @@ class ShortDramaService:
                     id=replacement_id,
                     project_id=document.project.id,
                     sequence=source_shot.sequence,
+                    scene_id=source_shot.scene_id,
                     duration_seconds=draft.duration_seconds,
                     narrative_purpose=draft.narrative_purpose,
                     visual=draft.visual,

@@ -146,6 +146,84 @@ def test_timeline_export_normalizes_heterogeneous_take_media(tmp_path: Path) -> 
     assert Path(export.subtitled_video_path).is_file()
 
 
+def test_timeline_export_chunks_long_multi_shot_manifest(tmp_path: Path) -> None:
+    source_path = tmp_path / "short-source.mp4"
+    _render_export_source(
+        source_path,
+        size="108x192",
+        fps=12,
+        audio_sample_rate=24000,
+        duration_seconds=0.25,
+    )
+    clip_duration = 0.2
+    video_clips = [
+        TimelineVideoClip(
+            id=f"video-{index:03d}",
+            shot_id=f"shot-{index:03d}",
+            take_id=f"take-{index:03d}",
+            media_path=str(source_path),
+            start_seconds=(index - 1) * clip_duration,
+            source_in_seconds=0.0,
+            duration_seconds=clip_duration,
+            transition_in="none",
+            transition_out="none",
+        )
+        for index in range(1, 26)
+    ]
+    audio_clips = [
+        TimelineAudioClip(
+            id=f"audio-{index:03d}",
+            shot_id=clip.shot_id,
+            take_id=clip.take_id,
+            media_path=clip.media_path,
+            start_seconds=clip.start_seconds,
+            duration_seconds=clip.duration_seconds,
+            gain_db=0.0,
+            role="MODEL_NATIVE_TEST",
+        )
+        for index, clip in enumerate(video_clips, start=1)
+    ]
+    manifest = TimelineManifest(
+        id="chunked-manifest-v1",
+        project_id="chunked-project",
+        version=1,
+        script_version_id="script-v1",
+        bible_version_id="bible-v1",
+        video_clips=video_clips,
+        audio_clips=audio_clips,
+        subtitle_cues=[],
+        output_spec=OutputSpec(
+            width=108,
+            height=192,
+            fps=12,
+            crf=28,
+            audio_sample_rate=24000,
+            audio_bitrate_kbps=64,
+        ),
+        duration_seconds=5.0,
+        approval_status=ApprovalStatus.DRAFT,
+        freshness=Freshness.CURRENT,
+        created_at="2026-08-21T00:00:00Z",
+    )
+
+    export = TimelineExporter(tmp_path / "workspace").render(
+        manifest,
+        "2026-08-21T00:00:01Z",
+    )
+
+    assert all(check.passed for check in export.checks), export.checks
+    chunk_dir = (
+        tmp_path
+        / "workspace"
+        / manifest.project_id
+        / "exports"
+        / manifest.id
+        / "normalized-chunks"
+    )
+    assert (chunk_dir / "chunk-001.mp4").is_file()
+    assert (chunk_dir / "chunk-002.mp4").is_file()
+
+
 def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state) -> None:
     fixture = _initialize_fixture(client)
     fixture_again = _initialize_fixture(client)
@@ -232,7 +310,9 @@ def test_empty_and_image_inputs_share_the_same_planning_contract(
     empty_body = empty.json()
     assert empty_body["document"]["project"]["source_mode"] == "AUTO_ORIGINAL"
     assert empty_body["document"]["project"]["name"]
-    assert len(empty_body["document"]["shots"]) == 8
+    assert empty_body["document"]["project"]["target_duration_seconds"] == 300
+    assert len(empty_body["document"]["script_versions"][0]["structured_scenes"]) == 4
+    assert len(empty_body["document"]["shots"]) == 20
 
     image_path = tmp_path / "visual-seed.png"
     Image.new("RGB", (96, 128), "#2d415b").save(image_path)
@@ -272,7 +352,7 @@ def test_empty_and_image_inputs_share_the_same_planning_contract(
     )
 
 
-def test_autonomous_create_runs_to_manifest_without_user_stops(client) -> None:
+def test_five_minute_autonomous_create_runs_to_manifest_without_user_stops(client) -> None:
     response = client.post(
         "/api/short-drama/projects/autonomous-draft",
         json={
@@ -287,9 +367,11 @@ def test_autonomous_create_runs_to_manifest_without_user_stops(client) -> None:
     body = response.json()
     assert body["run"]["status"] == "COMPLETE"
     assert body["run"]["current_step"] == "COMPLETE"
-    assert body["run"]["planner"] == "deterministic-fallback-v1"
-    assert body["project"]["progress"]["shots_with_selected_take"] == 8
+    assert body["run"]["planner"] == "deterministic-multi-agent-fallback-v2"
+    assert body["project"]["document"]["project"]["target_duration_seconds"] == 300
+    assert body["project"]["progress"]["shots_with_selected_take"] == 20
     assert body["project"]["progress"]["manifest_ready"] is True
+    assert "AUDIO_QA" not in body["run"]["completed_steps"]
     assert body["export"] is None
 
 

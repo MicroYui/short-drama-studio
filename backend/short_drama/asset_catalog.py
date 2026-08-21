@@ -181,7 +181,7 @@ def ensure_base_reference_pack_entries(
 def missing_reference_views(
     document: ProjectDocument,
     *,
-    limit: int = 16,
+    limit: int = 500,
 ) -> list[ReferenceViewNeed]:
     """Return deduplicated requested views not covered by an approved pack entry."""
 

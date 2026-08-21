@@ -215,7 +215,7 @@ class H3ProductionRoutePlan(DomainModel):
 
 
 class H3ProductionRoutePlanRequest(DomainModel):
-    shot_ids: list[str] = Field(default_factory=list[str], max_length=100)
+    shot_ids: list[str] = Field(default_factory=list[str], max_length=500)
     use_language_agent: bool = True
     candidate_count: int = Field(default=1, ge=1, le=5)
 

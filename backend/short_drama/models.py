@@ -108,6 +108,12 @@ class QaFailureCategory(StrEnum):
     OTHER = "OTHER"
 
 
+class ScriptReviewSeverity(StrEnum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
 class VideoInspectionScope(StrEnum):
     INTRA_SHOT = "INTRA_SHOT"
     SHOT_BOUNDARY = "SHOT_BOUNDARY"
@@ -310,11 +316,38 @@ class ScriptLine(DomainModel):
     audio_kind: AudioKind
 
 
+class SceneContinuitySummary(DomainModel):
+    setting: str = Field(min_length=1, max_length=500)
+    character_states: list[str] = Field(default_factory=list[str], max_length=20)
+    prop_states: list[str] = Field(default_factory=list[str], max_length=20)
+    known_facts: list[str] = Field(default_factory=list[str], max_length=20)
+    open_threads: list[str] = Field(default_factory=list[str], max_length=20)
+
+
 class StructuredScene(DomainModel):
     id: str
     heading: str
     summary: str
     line_ids: list[str]
+    narrative_purpose: str | None = None
+    target_duration_seconds: float | None = Field(default=None, ge=4.0)
+    entry_state: SceneContinuitySummary | None = None
+    exit_state: SceneContinuitySummary | None = None
+
+
+class ScriptReviewIssue(DomainModel):
+    category: str = Field(min_length=1, max_length=80)
+    severity: ScriptReviewSeverity
+    scene_sequences: list[int] = Field(default_factory=list[int], max_length=12)
+    observation: str = Field(min_length=1, max_length=1200)
+    recommendation: str = Field(min_length=1, max_length=1200)
+
+
+class ScriptReviewReport(DomainModel):
+    summary: str = Field(min_length=1, max_length=2000)
+    strengths: list[str] = Field(default_factory=list[str], max_length=12)
+    issues: list[ScriptReviewIssue] = Field(default_factory=list[ScriptReviewIssue], max_length=30)
+    requires_revision: bool = False
 
 
 class ScriptVersion(DomainModel):
@@ -327,6 +360,7 @@ class ScriptVersion(DomainModel):
     subtitle_text: str
     lines: list[ScriptLine]
     structured_scenes: list[StructuredScene]
+    review_report: ScriptReviewReport | None = None
     approval_status: ApprovalStatus
     freshness: Freshness
     parent_version_id: str | None = None
@@ -474,6 +508,7 @@ class ShotPlan(DomainModel):
     id: str
     project_id: str
     sequence: int
+    scene_id: str | None = None
     duration_seconds: float
     narrative_purpose: str
     visual: str
@@ -1021,6 +1056,7 @@ class CreateProjectRequest(DomainModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     source_mode: SourceMode
     production_profile: ProductionProfile = ProductionProfile.DOUYIN_SHORT_DRAMA
+    target_duration_seconds: float | None = Field(default=None, ge=15.0, le=1800.0)
     input_text: str = Field(default="", max_length=50000)
     input_images: list[CreativeInputImage] = Field(
         default_factory=list[CreativeInputImage],
@@ -1036,6 +1072,13 @@ class CreateProjectRequest(DomainModel):
         if self.source_mode == SourceMode.IMAGE_SEEDED and not self.input_images:
             raise ValueError("IMAGE_SEEDED requires at least one input image")
         return self
+
+    def resolved_target_duration_seconds(self) -> float:
+        if self.target_duration_seconds is not None:
+            return self.target_duration_seconds
+        if self.production_profile == ProductionProfile.DOUYIN_SHORT_DRAMA:
+            return 300.0
+        return 60.0
 
 
 class VideoInspectionRequest(DomainModel):

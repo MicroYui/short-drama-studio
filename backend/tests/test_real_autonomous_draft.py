@@ -535,6 +535,7 @@ def test_real_autonomous_draft_resumes_and_exports_without_shot_by_shot_input(
         AutonomousDraftCreateRequest(
             name="自动真人草稿",
             source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
             input_text="",
             execution_target=AutonomousExecutionTarget.REAL_H3,
             render_export=True,
@@ -566,7 +567,7 @@ def test_real_autonomous_draft_resumes_and_exports_without_shot_by_shot_input(
     assert "PLAN_ROUTES" in {
         step.value for step in response.run.completed_steps
     }
-    assert "AUDIO_QA" in {
+    assert "AUDIO_QA" not in {
         step.value for step in response.run.completed_steps
     }
     assert response.export is not None
@@ -575,7 +576,7 @@ def test_real_autonomous_draft_resumes_and_exports_without_shot_by_shot_input(
     assert len(selected) == len(response.project.document.shots)
     assert {item.provider for item in selected} == {"minimax"}
     assert response.project.video_inspections
-    assert response.project.audio_inspections
+    assert response.project.audio_inspections == []
     later_shot_ids = {
         item.id for item in response.project.document.shots if item.sequence > 1
     }
@@ -631,6 +632,7 @@ def test_real_autonomous_draft_persists_attention_when_image_provider_is_missing
     response = service.create_autonomous_draft(
         AutonomousDraftCreateRequest(
             source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
             input_text="",
             execution_target=AutonomousExecutionTarget.REAL_H3,
         )
@@ -652,6 +654,7 @@ def test_real_autonomous_draft_retries_a_rejected_visual_asset_once(
     started = service.create_autonomous_draft(
         AutonomousDraftCreateRequest(
             source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
             input_text="",
             execution_target=AutonomousExecutionTarget.REAL_H3,
         )
@@ -702,6 +705,7 @@ def test_real_autonomous_draft_creates_only_one_retry_for_a_failed_h3_task(
     response = service.create_autonomous_draft(
         AutonomousDraftCreateRequest(
             source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
             input_text="",
             execution_target=AutonomousExecutionTarget.REAL_H3,
             render_export=False,
@@ -757,6 +761,7 @@ def test_real_autonomous_draft_rotates_polling_past_a_slow_h3_task(
     response = service.create_autonomous_draft(
         AutonomousDraftCreateRequest(
             source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
             input_text="",
             execution_target=AutonomousExecutionTarget.REAL_H3,
             render_export=False,
@@ -791,6 +796,7 @@ def test_real_autonomous_draft_retries_transient_semantic_review_failure(
     response = service.create_autonomous_draft(
         AutonomousDraftCreateRequest(
             source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
             input_text="",
             execution_target=AutonomousExecutionTarget.REAL_H3,
             render_export=False,
@@ -833,6 +839,7 @@ def test_real_autonomous_draft_repairs_rejected_video_and_replans(
     response = service.create_autonomous_draft(
         AutonomousDraftCreateRequest(
             source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
             input_text="",
             execution_target=AutonomousExecutionTarget.REAL_H3,
             render_export=False,

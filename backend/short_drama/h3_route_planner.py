@@ -177,19 +177,27 @@ def build_h3_production_route_plan(
         for candidates in candidates_by_shot.values()
     )
     if language_client is not None and needs_route_judgment:
-        try:
-            agent_choices = _choose_with_language_agent(
-                document=document,
-                shots=shots,
-                candidates_by_shot=candidates_by_shot,
-                risks_by_shot=risks_by_shot,
-                client=language_client,
-            )
+        used_language_agent = False
+        for batch in _route_agent_batches(shots):
+            try:
+                agent_choices.update(
+                    _choose_with_language_agent(
+                        document=document,
+                        shots=batch,
+                        candidates_by_shot=candidates_by_shot,
+                        risks_by_shot=risks_by_shot,
+                        client=language_client,
+                    )
+                )
+                used_language_agent = True
+            except (LanguageProviderError, ValueError) as exc:
+                global_warnings.append(
+                    "GPT-5.6-sol route advice unavailable for shots "
+                    + ", ".join(shot.id for shot in batch)
+                    + f"; deterministic evidence ranking used: {exc}"
+                )
+        if used_language_agent:
             planner += "+gpt-5.6-sol"
-        except (LanguageProviderError, ValueError) as exc:
-            global_warnings.append(
-                f"GPT-5.6-sol route advice unavailable; deterministic evidence ranking used: {exc}"
-            )
 
     decisions: list[H3ShotRoutePlan] = []
     new_seconds = 0
@@ -1099,6 +1107,27 @@ def _fallback_candidate(candidates: list[_RouteCandidate]) -> _RouteCandidate:
     return max(candidates, key=lambda item: item.quality_score)
 
 
+def _route_agent_batches(
+    shots: list[ShotPlan],
+    *,
+    maximum_size: int = 20,
+) -> list[list[ShotPlan]]:
+    batches: list[list[ShotPlan]] = []
+    current: list[ShotPlan] = []
+    current_scene_id: str | None = None
+    for shot in shots:
+        scene_changed = bool(current) and shot.scene_id != current_scene_id
+        if scene_changed or len(current) >= maximum_size:
+            batches.append(current)
+            current = []
+        if not current:
+            current_scene_id = shot.scene_id
+        current.append(shot)
+    if current:
+        batches.append(current)
+    return batches
+
+
 def _choose_with_language_agent(
     *,
     document: ProjectDocument,
@@ -1134,6 +1163,13 @@ def _choose_with_language_agent(
                 "",
             ),
         },
+        "scene_contexts": [
+            scene.model_dump(mode="json")
+            for script in document.script_versions
+            if script.id == document.project.current_script_version_id
+            for scene in script.structured_scenes
+            if any(shot.scene_id == scene.id for shot in shots)
+        ],
         "shots": [
             {
                 "shot": shot.model_dump(mode="json"),
@@ -1176,7 +1212,7 @@ def _choose_with_language_agent(
     output = client.generate_text(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
-        max_output_tokens=5000,
+        max_output_tokens=8000,
     )
     parsed = _AgentRouteChoices.model_validate_json(_strip_json_fence(output))
     expected = {shot.id for shot in shots}

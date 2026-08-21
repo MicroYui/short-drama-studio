@@ -195,7 +195,7 @@ function OverviewPanel({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 13 · Production Profiles</Badge>
+              <Badge tone="blue">Phase 14 · Long-form Multi-Agent</Badge>
               <Badge tone="green">{productionProfileLabels[record.production_profile ?? 'DOUYIN_SHORT_DRAMA']}</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
@@ -203,7 +203,7 @@ function OverviewPanel({
             </div>
             <h2 className="text-2xl font-semibold text-white">从任意输入到可播放成片的一键闭环</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-300">
-              四种输入、Agent 管理的同源资产包、H3 路线、异步任务、长镜头抽帧、镜间连续性、Director 有界返工和时间线共享同一可恢复状态。真实运行会自动轮询；只有配置缺失、提交结果未知或重试耗尽才需要介入。
+              自定义时长先由 Story Architect 规划整集，Script Critic 做开放式剧本审阅，再由 Scene Director 逐场展开并传递精简连续性状态；后续资产、H3、QA、Director 返工和时间线继续共享同一可恢复项目。
             </p>
           </div>
           <div className="flex min-w-56 flex-col gap-2">
@@ -345,6 +345,9 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
   const projectRecord = project.document.project
   const script = project.document.script_versions.find((item) => item.id === projectRecord.current_script_version_id) ?? project.document.script_versions.at(-1)
   if (!script) return null
+  const review = script.review_report
+  const reviewStrengths = review?.strengths ?? []
+  const reviewIssues = review?.issues ?? []
   return (
     <div>
       <SectionTitle
@@ -357,6 +360,54 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
         <Metric label="语言" value={projectRecord.language} detail="首版正式验收普通话中文" />
         <Metric label="版本" value={project.document.script_versions.length} detail="旧版本和旧成片均保留" />
       </div>
+      {review && (
+        <section className={`mb-5 rounded-xl border p-4 ${review.requires_revision ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div><h3 className="text-sm font-medium text-white">Script Critic 剧本审阅</h3><p className="mt-1 text-xs leading-5 text-zinc-400">{review.summary}</p></div>
+            <Badge tone={review.requires_revision ? 'amber' : 'green'}>{review.requires_revision ? '仍有建议' : '可继续'}</Badge>
+          </div>
+          {reviewStrengths.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{reviewStrengths.map((strength) => <Badge key={strength} tone="green">{strength}</Badge>)}</div>}
+          {reviewIssues.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {reviewIssues.map((issue, index) => {
+                const sceneSequences = issue.scene_sequences ?? []
+                const tone = issue.severity === 'HIGH' ? 'red' : issue.severity === 'MEDIUM' ? 'amber' : 'neutral'
+                return (
+                  <div key={`${issue.category}-${index}`} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={tone}>{issue.severity}</Badge>
+                      <span className="text-xs font-medium text-zinc-300">{issue.category}</span>
+                      {sceneSequences.length > 0 && <span className="text-[11px] text-zinc-600">场次 {sceneSequences.join('、')}</span>}
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-zinc-400">{issue.observation}</p>
+                    <p className="mt-1 text-xs leading-5 text-blue-300">建议：{issue.recommendation}</p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <p className="mt-3 text-[11px] text-zinc-600">审阅是 Agent 建议，不是硬门；用户可以继续、编辑或忽略。</p>
+        </section>
+      )}
+      <section className="mb-5">
+        <h3 className="mb-3 text-sm font-medium text-white">场次结构</h3>
+        <div className="grid gap-3 xl:grid-cols-2">
+          {script.structured_scenes.map((scene, index) => (
+            <div key={scene.id} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] text-zinc-600">场次 {index + 1}</p>
+                  <h4 className="mt-1 text-sm font-medium text-zinc-200">{scene.heading}</h4>
+                </div>
+                {scene.target_duration_seconds != null && <Badge tone="blue">约 {scene.target_duration_seconds} 秒</Badge>}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-zinc-400">{scene.summary}</p>
+              {scene.narrative_purpose && <p className="mt-2 text-xs leading-5 text-blue-300">作用：{scene.narrative_purpose}</p>}
+              <p className="mt-2 text-[11px] text-zinc-600">对白 {scene.line_ids.length} 句</p>
+            </div>
+          ))}
+        </div>
+      </section>
       <div className="space-y-3">
         {script.lines.map((line) => <ScriptLineEditor key={`${script.id}-${line.id}`} line={line} onSave={onRevise} />)}
       </div>
@@ -758,6 +809,7 @@ function CreateProjectPanel({
   onCreate: (
     name: string,
     productionProfile: ProductionProfile,
+    targetDurationSeconds: number,
     mode: SourceMode,
     input: string,
     runMode: RunMode,
@@ -768,6 +820,8 @@ function CreateProjectPanel({
 }) {
   const [name, setName] = useState('新的都市短剧')
   const [productionProfile, setProductionProfile] = useState<ProductionProfile>('DOUYIN_SHORT_DRAMA')
+  const [targetDurationValue, setTargetDurationValue] = useState('5')
+  const [targetDurationUnit, setTargetDurationUnit] = useState<'MINUTES' | 'SECONDS'>('MINUTES')
   const [sourceMode, setSourceMode] = useState<SourceMode>('AUTO_ORIGINAL')
   const [runMode, setRunMode] = useState<RunMode>('AUTO_DRAFT')
   const [executionTarget, setExecutionTarget] = useState<AutonomousExecutionTarget>('REAL_H3')
@@ -789,7 +843,29 @@ function CreateProjectPanel({
   }))
   const requiresText = sourceMode === 'IDEA_EXPANSION' || sourceMode === 'SCRIPT_LOCKED'
   const requiresImage = sourceMode === 'IMAGE_SEEDED'
-  const canSubmit = Boolean(name.trim()) && (!requiresText || Boolean(input.trim())) && (!requiresImage || images.length > 0)
+  const durationNumber = Number(targetDurationValue)
+  const targetDurationSeconds = Math.round(durationNumber * (targetDurationUnit === 'MINUTES' ? 60 : 1))
+  const hasValidTargetDuration = Number.isFinite(targetDurationSeconds) && targetDurationSeconds >= 15 && targetDurationSeconds <= 1800
+  const canSubmit = Boolean(name.trim()) && hasValidTargetDuration && (!requiresText || Boolean(input.trim())) && (!requiresImage || images.length > 0)
+  const selectProductionProfile = (nextProfile: ProductionProfile) => {
+    if (nextProfile === productionProfile) return
+    setProductionProfile(nextProfile)
+    if (nextProfile === 'DOUYIN_SHORT_DRAMA') {
+      setTargetDurationValue('5')
+      setTargetDurationUnit('MINUTES')
+      return
+    }
+    setTargetDurationValue('60')
+    setTargetDurationUnit('SECONDS')
+  }
+  const selectTargetDurationUnit = (nextUnit: 'MINUTES' | 'SECONDS') => {
+    if (nextUnit === targetDurationUnit) return
+    if (Number.isFinite(durationNumber) && durationNumber > 0) {
+      const converted = nextUnit === 'MINUTES' ? durationNumber / 60 : durationNumber * 60
+      setTargetDurationValue(String(Number(converted.toFixed(2))))
+    }
+    setTargetDurationUnit(nextUnit)
+  }
   const inputLabel = sourceMode === 'SCRIPT_LOCKED'
     ? '锁定剧本'
     : sourceMode === 'IDEA_EXPANSION'
@@ -813,9 +889,31 @@ function CreateProjectPanel({
             <div>
               <span className="mb-1.5 block text-xs text-zinc-500">制作类型</span>
               <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setProductionProfile('DOUYIN_SHORT_DRAMA')} className={`rounded-xl border p-3 text-left transition ${productionProfile === 'DOUYIN_SHORT_DRAMA' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-600'}`}><p className="text-sm font-medium text-zinc-100">抖音短剧</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">冲突前置、悬念推进、反转回收；不机械堆镜头。</p></button>
-                <button type="button" onClick={() => setProductionProfile('GENERAL_VIDEO')} className={`rounded-xl border p-3 text-left transition ${productionProfile === 'GENERAL_VIDEO' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-600'}`}><p className="text-sm font-medium text-zinc-100">通用视频</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">节奏服从内容，允许氛围、留白和有意义的长镜头。</p></button>
+                <button type="button" onClick={() => selectProductionProfile('DOUYIN_SHORT_DRAMA')} className={`rounded-xl border p-3 text-left transition ${productionProfile === 'DOUYIN_SHORT_DRAMA' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-600'}`}><p className="text-sm font-medium text-zinc-100">抖音短剧</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">冲突前置、悬念推进、反转回收；默认规划 5 分钟。</p></button>
+                <button type="button" onClick={() => selectProductionProfile('GENERAL_VIDEO')} className={`rounded-xl border p-3 text-left transition ${productionProfile === 'GENERAL_VIDEO' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-600'}`}><p className="text-sm font-medium text-zinc-100">通用视频</p><p className="mt-1 text-[11px] leading-4 text-zinc-500">节奏服从内容，默认 60 秒并可自由调整。</p></button>
               </div>
+            </div>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div><p className="text-xs font-medium text-zinc-300">目标成片时长</p><p className="mt-1 text-[11px] leading-4 text-zinc-600">Agent 会据此展开剧本、场景与分镜；实际成片允许合理浮动，不作为阻断生成的硬门。</p></div>
+                {hasValidTargetDuration && <Badge tone="blue">约 {targetDurationSeconds >= 60 ? `${Number((targetDurationSeconds / 60).toFixed(1))} 分钟` : `${targetDurationSeconds} 秒`}</Badge>}
+              </div>
+              {productionProfile === 'DOUYIN_SHORT_DRAMA' && (
+                <div className="mt-3">
+                  <p className="mb-1.5 text-[11px] text-zinc-600">常用快捷值（可选，也可在下方填写任意时长）</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[3, 5, 10, 15].map((minutes) => {
+                      const selected = targetDurationUnit === 'MINUTES' && durationNumber === minutes
+                      return <button key={minutes} type="button" onClick={() => { setTargetDurationValue(String(minutes)); setTargetDurationUnit('MINUTES') }} className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${selected ? 'border-blue-500 bg-blue-500/10 text-blue-200' : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'}`}>{minutes} 分钟</button>
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_120px] gap-2">
+                <input type="number" min={targetDurationUnit === 'MINUTES' ? 0.25 : 15} max={targetDurationUnit === 'MINUTES' ? 30 : 1800} step={targetDurationUnit === 'MINUTES' ? 0.1 : 1} value={targetDurationValue} onChange={(event) => setTargetDurationValue(event.target.value)} aria-label="自定义目标时长" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none focus:border-blue-500" />
+                <select value={targetDurationUnit} onChange={(event) => selectTargetDurationUnit(event.target.value as 'MINUTES' | 'SECONDS')} aria-label="目标时长单位" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="MINUTES">分钟</option><option value="SECONDS">秒</option></select>
+              </div>
+              {!hasValidTargetDuration && <p className="mt-2 text-[11px] text-red-300">请输入 15 秒到 30 分钟之间的任意目标时长。</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">输入契约</span><select value={sourceMode} onChange={(event) => setSourceMode(event.target.value as SourceMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_ORIGINAL">完全自动创作</option><option value="IMAGE_SEEDED">图片启发创作</option><option value="IDEA_EXPANSION">一句话扩写</option><option value="SCRIPT_LOCKED">已有剧本锁定</option></select></label>
@@ -830,7 +928,7 @@ function CreateProjectPanel({
               </div>
               {imagePaths.length > 0 && <div className="mt-3 space-y-1.5">{imagePaths.map((path) => <div key={path} className="flex items-center justify-between gap-3 rounded-lg bg-zinc-900 px-2.5 py-2"><span className="truncate text-[11px] text-zinc-400">{path.split(/[\\/]/).at(-1)}</span><button type="button" className="text-zinc-600 hover:text-red-300" onClick={() => setImagePaths((current) => current.filter((item) => item !== path))}><X className="h-3.5 w-3.5" /></button></div>)}</div>}
             </div>
-            <button className={`${primaryButton} w-full py-3`} disabled={!canSubmit} onClick={() => onCreate(name.trim(), productionProfile, sourceMode, input.trim(), runMode, executionTarget, images)}><WandSparkles className="h-4 w-4" />{runMode === 'AUTO_DRAFT' ? executionTarget === 'REAL_H3' ? '启动无人值守真人草稿' : '生成完整 Mock 草稿' : '建立可编辑制片项目'}</button>
+            <button className={`${primaryButton} w-full py-3`} disabled={!canSubmit} onClick={() => onCreate(name.trim(), productionProfile, targetDurationSeconds, sourceMode, input.trim(), runMode, executionTarget, images)}><WandSparkles className="h-4 w-4" />{runMode === 'AUTO_DRAFT' ? executionTarget === 'REAL_H3' ? '启动无人值守真人草稿' : '生成完整 Mock 草稿' : '建立可编辑制片项目'}</button>
           </div>
           <p className="mt-4 text-center text-[11px] text-zinc-600">没有配置 GPT 时使用本地可复现策划回退；真实质量结论不会由 Mock 冒充。</p>
         </div>
@@ -946,6 +1044,7 @@ export function ShortDramaStudio() {
   const createProject = (
     name: string,
     productionProfile: ProductionProfile,
+    targetDurationSeconds: number,
     sourceMode: SourceMode,
     inputText: string,
     runMode: RunMode,
@@ -955,6 +1054,7 @@ export function ShortDramaStudio() {
     const request = {
       name,
       production_profile: productionProfile,
+      target_duration_seconds: targetDurationSeconds,
       source_mode: sourceMode,
       input_text: inputText,
       input_images: images,

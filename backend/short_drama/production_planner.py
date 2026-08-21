@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+from collections import Counter
 import json
+import math
 import mimetypes
 import re
 from dataclasses import dataclass
@@ -42,7 +44,9 @@ from short_drama.models import (
     ReferenceRequirement,
     ReferenceRole,
     ScriptLine,
+    ScriptReviewReport,
     ScriptVersion,
+    SceneContinuitySummary,
     ShotPlan,
     SourceMode,
     StructuredScene,
@@ -110,6 +114,7 @@ class PlannedReferenceNeed(DomainModel):
 
 
 class PlannedShot(DomainModel):
+    scene_sequence: int = Field(default=1, ge=1)
     duration_seconds: float = Field(ge=4.0, le=15.0)
     narrative_purpose: str = Field(min_length=1, max_length=500)
     visual: str = Field(min_length=1, max_length=1200)
@@ -132,25 +137,109 @@ class PlannedShot(DomainModel):
     )
 
 
+class PlannedSceneContract(DomainModel):
+    sequence: int = Field(ge=1)
+    heading: str = Field(min_length=1, max_length=200)
+    summary: str = Field(min_length=1, max_length=1600)
+    narrative_purpose: str = Field(min_length=1, max_length=800)
+    target_duration_seconds: float = Field(ge=4.0, le=300.0)
+    dialogue_line_indices: list[int] = Field(default_factory=list[int], max_length=80)
+    location_names: list[str] = Field(min_length=1, max_length=6)
+    continuity_in: SceneContinuitySummary
+    continuity_out: SceneContinuitySummary
+
+
+class EpisodeOutline(DomainModel):
+    title: str = Field(min_length=1, max_length=120)
+    story_summary: str = Field(min_length=1, max_length=2400)
+    target_duration_seconds: float = Field(ge=15.0, le=1800.0)
+    lines: list[PlannedDialogueLine] = Field(
+        default_factory=list[PlannedDialogueLine],
+        max_length=500,
+    )
+    characters: list[PlannedCharacter] = Field(min_length=1, max_length=12)
+    locations: list[PlannedLocation] = Field(min_length=1, max_length=20)
+    props: list[PlannedProp] = Field(default_factory=list[PlannedProp], max_length=20)
+    style: PlannedStyle
+    scenes: list[PlannedSceneContract] = Field(min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def validate_outline(self) -> EpisodeOutline:
+        sequences = [scene.sequence for scene in self.scenes]
+        if sequences != list(range(1, len(self.scenes) + 1)):
+            raise ValueError("Scene sequences must be contiguous and 1-based")
+        line_count = len(self.lines)
+        assigned = [
+            index
+            for scene in self.scenes
+            for index in scene.dialogue_line_indices
+        ]
+        invalid = sorted({index for index in assigned if index < 1 or index > line_count})
+        if invalid:
+            raise ValueError(f"Scene dialogue indices are out of range: {invalid}")
+        duplicates = sorted(index for index, count in Counter(assigned).items() if count > 1)
+        if duplicates:
+            raise ValueError(f"Dialogue lines are assigned to multiple scenes: {duplicates}")
+        missing = sorted(set(range(1, line_count + 1)) - set(assigned))
+        if missing:
+            raise ValueError(f"Dialogue lines are not assigned to a scene: {missing}")
+        known_locations = {location.name for location in self.locations}
+        unknown_locations = sorted(
+            {
+                name
+                for scene in self.scenes
+                for name in scene.location_names
+                if name not in known_locations
+            }
+        )
+        if unknown_locations:
+            raise ValueError(
+                "Scene contracts use unknown locations: " + ", ".join(unknown_locations)
+            )
+        planned_duration = sum(scene.target_duration_seconds for scene in self.scenes)
+        tolerance = max(15.0, self.target_duration_seconds * 0.2)
+        if abs(planned_duration - self.target_duration_seconds) > tolerance:
+            raise ValueError(
+                "Scene duration targets do not match the episode target: "
+                f"target={self.target_duration_seconds}, scenes={planned_duration}"
+            )
+        return self
+
+
+class SceneShotPlan(DomainModel):
+    scene_sequence: int = Field(ge=1)
+    shots: list[PlannedShot] = Field(min_length=1, max_length=80)
+    continuity_out: SceneContinuitySummary
+
+
 class ProductionPlan(DomainModel):
     title: str = Field(min_length=1, max_length=120)
     scene_heading: str = Field(min_length=1, max_length=200)
-    scene_summary: str = Field(min_length=1, max_length=1000)
+    scene_summary: str = Field(min_length=1, max_length=2400)
+    target_duration_seconds: float = Field(default=50.0, ge=15.0, le=1800.0)
     lines: list[PlannedDialogueLine] = Field(
         default_factory=list[PlannedDialogueLine],
+        max_length=500,
+    )
+    characters: list[PlannedCharacter] = Field(min_length=1, max_length=12)
+    locations: list[PlannedLocation] = Field(min_length=1, max_length=20)
+    props: list[PlannedProp] = Field(default_factory=list[PlannedProp], max_length=20)
+    style: PlannedStyle
+    scenes: list[PlannedSceneContract] = Field(
+        default_factory=list[PlannedSceneContract],
         max_length=40,
     )
-    characters: list[PlannedCharacter] = Field(min_length=1, max_length=4)
-    locations: list[PlannedLocation] = Field(min_length=1, max_length=3)
-    props: list[PlannedProp] = Field(default_factory=list[PlannedProp], max_length=4)
-    style: PlannedStyle
-    shots: list[PlannedShot] = Field(min_length=1, max_length=20)
+    shots: list[PlannedShot] = Field(min_length=1, max_length=500)
 
     @model_validator(mode="after")
     def validate_timeline(self) -> ProductionPlan:
         duration = sum(shot.duration_seconds for shot in self.shots)
-        if duration < 45.0 or duration > 60.0:
-            raise ValueError("Planned episode duration must be between 45 and 60 seconds")
+        tolerance = max(15.0, self.target_duration_seconds * 0.2)
+        if abs(duration - self.target_duration_seconds) > tolerance:
+            raise ValueError(
+                "Planned episode duration does not match the requested target: "
+                f"target={self.target_duration_seconds}, shots={duration}"
+            )
         line_count = len(self.lines)
         invalid = sorted(
             {
@@ -162,6 +251,21 @@ class ProductionPlan(DomainModel):
         )
         if invalid:
             raise ValueError(f"Shot dialogue indices are out of range: {invalid}")
+        shot_assignments = [
+            index
+            for shot in self.shots
+            for index in shot.dialogue_line_indices
+        ]
+        expected_line_indices = set(range(1, line_count + 1))
+        duplicated_shot_lines = sorted(
+            index for index, count in Counter(shot_assignments).items() if count > 1
+        )
+        missing_shot_lines = sorted(expected_line_indices - set(shot_assignments))
+        if duplicated_shot_lines or missing_shot_lines:
+            raise ValueError(
+                "Shots must use every declared dialogue line exactly once: "
+                f"duplicates={duplicated_shot_lines}, missing={missing_shot_lines}"
+            )
         known_subjects = (
             {item.name for item in self.characters}
             | {item.name for item in self.locations}
@@ -180,6 +284,46 @@ class ProductionPlan(DomainModel):
                 "Reference needs use unknown production subjects: "
                 + ", ".join(unknown_subjects)
             )
+        if self.scenes:
+            sequences = [scene.sequence for scene in self.scenes]
+            if sequences != list(range(1, len(self.scenes) + 1)):
+                raise ValueError("Scene sequences must be contiguous and 1-based")
+            scene_assignments = [
+                index
+                for scene in self.scenes
+                for index in scene.dialogue_line_indices
+            ]
+            invalid_scene_lines = sorted(
+                {
+                    index
+                    for index in scene_assignments
+                    if index < 1 or index > line_count
+                }
+            )
+            duplicated_scene_lines = sorted(
+                index
+                for index, count in Counter(scene_assignments).items()
+                if count > 1
+            )
+            missing_scene_lines = sorted(expected_line_indices - set(scene_assignments))
+            if invalid_scene_lines or duplicated_scene_lines or missing_scene_lines:
+                raise ValueError(
+                    "Scenes must assign every declared dialogue line exactly once: "
+                    f"invalid={invalid_scene_lines}, duplicates={duplicated_scene_lines}, "
+                    f"missing={missing_scene_lines}"
+                )
+            known_sequences = {scene.sequence for scene in self.scenes}
+            invalid_scene_refs = sorted(
+                {
+                    shot.scene_sequence
+                    for shot in self.shots
+                    if shot.scene_sequence not in known_sequences
+                }
+            )
+            if invalid_scene_refs:
+                raise ValueError(
+                    f"Shots reference unknown scene sequences: {invalid_scene_refs}"
+                )
         return self
 
 
@@ -188,6 +332,7 @@ class ProductionPlanningResult:
     plan: ProductionPlan
     planner: str
     warnings: list[str]
+    review_report: ScriptReviewReport | None = None
 
 
 def _strip_json_fence(value: str) -> str:
@@ -428,7 +573,8 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         "for a Mandarin live-action vertical video. Return JSON only and match the supplied schema "
         f"exactly. The active production profile is {profile.label}. Writer policy: "
         f"{profile.writer} Production-planner policy: {profile.planner} Produce one coherent "
-        "45-60 second video. Individual generated segments may be 4-15 seconds because of the "
+        f"video targeting {request.resolved_target_duration_seconds():g} seconds. Individual "
+        "generated segments may be 4-15 seconds because of the "
         "current video-provider contract; choose shot count and duration from the material rather "
         "than a fixed formula. Do not stretch a shot or combine several risky contacts merely to "
         "fill 15 seconds. Keep character, wardrobe, location geometry, props, screen direction, "
@@ -454,6 +600,7 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
     payload = {
         "source_mode": request.source_mode.value,
         "production_profile": request.production_profile.value,
+        "target_duration_seconds": request.resolved_target_duration_seconds(),
         "project_name": request.name,
         "text_input": request.input_text.strip(),
         "locked_dialogue": [
@@ -464,7 +611,7 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
             "medium": profile.label,
             "language": "普通话中文",
             "aspect_ratio": "9:16",
-            "duration_seconds": "45-60",
+            "duration_seconds": request.resolved_target_duration_seconds(),
             "shot_duration_seconds": "4-15 provider boundary; no preferred duration",
             "dialogue_lines": "follow the material; silence is valid; preserve locked dialogue",
             "shots": "choose the smallest coherent executable set; no fixed count",
@@ -502,6 +649,7 @@ def _planner_repair_prompt(
     payload = {
         "source_mode": request.source_mode.value,
         "production_profile": request.production_profile.value,
+        "target_duration_seconds": request.resolved_target_duration_seconds(),
         "source_text": request.input_text.strip(),
         "locked_dialogue": [line.model_dump(mode="json") for line in locked],
         "validation_error": str(error),
@@ -509,6 +657,243 @@ def _planner_repair_prompt(
         "output_schema": ProductionPlan.model_json_schema(),
     }
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _outline_prompt(request: CreateProjectRequest) -> tuple[str, str]:
+    profile = production_profile_policy(request.production_profile)
+    locked = (
+        _locked_dialogue(request.input_text)
+        if request.source_mode == SourceMode.SCRIPT_LOCKED
+        else []
+    )
+    instructions = (
+        "You are the story-architect Agent for a Mandarin live-action vertical production. "
+        "Return JSON only and match EpisodeOutline exactly. Work at episode and scene-contract "
+        "level: define the causal story, global cast, reusable locations and props, then split it "
+        "into coherent scenes. Do not output shots, camera moves, keyframes, or provider prompts. "
+        f"The production profile is {profile.label}. Writer policy: {profile.writer} "
+        f"Planning policy: {profile.planner} The user target is "
+        f"{request.resolved_target_duration_seconds():g} seconds. Scene count and duration must "
+        "follow the material; prefer scene-sized contexts that a downstream director can expand "
+        "without receiving the whole prior screenplay. Each scene contract must state its story "
+        "purpose, locations, dialogue assignment, and compact continuity input/output including "
+        "character state, prop state, known facts, and open questions. Keep the causal question "
+        "chain alive across scenes without adding beats mechanically. Every dialogue line belongs "
+        "to exactly one scene and indices are 1-based. For SCRIPT_LOCKED, copy every supplied "
+        "speaker, text, audio_kind, and order verbatim. A recorded voice is VOICEOVER and need not "
+        "become a visible character. Use only declared location names in scene contracts. Do not "
+        "add fields outside the schema."
+    )
+    payload = {
+        "source_mode": request.source_mode.value,
+        "production_profile": request.production_profile.value,
+        "project_name": request.name,
+        "target_duration_seconds": request.resolved_target_duration_seconds(),
+        "text_input": request.input_text.strip(),
+        "locked_dialogue": [line.model_dump(mode="json") for line in locked],
+        "image_references": [
+            {
+                "index": index,
+                "descriptor": image.descriptor,
+                "filename": Path(image.local_path).name if image.local_path else None,
+                "url": image.external_url,
+            }
+            for index, image in enumerate(request.input_images, start=1)
+        ],
+        "handoff_contract": {
+            "story_architect_owns": "story, assets, scenes, dialogue allocation, expected states",
+            "scene_director_owns": "shot execution inside one scene",
+            "continuity": "compact state summaries, not accumulated prior-shot prose",
+        },
+        "output_schema": EpisodeOutline.model_json_schema(),
+    }
+    return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _outline_repair_prompt(
+    request: CreateProjectRequest,
+    invalid_output: str,
+    error: ValueError,
+) -> tuple[str, str]:
+    instructions, source = _outline_prompt(request)
+    payload = json.loads(source)
+    payload["validation_error"] = str(error)
+    payload["invalid_outline_json"] = invalid_output
+    return (
+        instructions
+        + " Repair the supplied invalid outline while preserving valid creative decisions. "
+        "Return one complete corrected EpisodeOutline JSON object only.",
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    )
+
+
+def _story_critic_prompt(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+) -> tuple[str, str]:
+    profile = production_profile_policy(request.production_profile)
+    instructions = (
+        "You are an independent script-critic Agent reviewing a Mandarin live-action vertical "
+        "episode before shot planning. Return JSON only and match ScriptReviewReport exactly. "
+        "Review the actual outline rather than checking it against a hidden answer key. Do not "
+        "assume every story needs more twists, dialogue, scenes, or cuts. Identify only specific, "
+        "evidence-backed problems in causal logic, stated world rules, character motivation, "
+        "setup/payoff, unresolved threads, scene utility, information repetition, dialogue function, "
+        "or pacing relative to the requested duration and production profile. A deliberate mystery "
+        "is not a plot hole when the episode pays it off or clearly leaves it as an intentional "
+        "continuing question. Recommendations are advisory and must not prescribe fixed beat counts. "
+        "For SCRIPT_LOCKED, never recommend rewriting supplied dialogue; recommend changes around it. "
+        f"Active profile: {profile.label}. Writer policy: {profile.writer}"
+    )
+    payload = {
+        "source_contract": {
+            "source_mode": request.source_mode.value,
+            "production_profile": request.production_profile.value,
+            "target_duration_seconds": request.resolved_target_duration_seconds(),
+            "source_text": request.input_text.strip(),
+        },
+        "episode_outline": outline.model_dump(mode="json"),
+        "output_schema": ScriptReviewReport.model_json_schema(),
+    }
+    return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _story_revision_prompt(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    review: ScriptReviewReport,
+) -> tuple[str, str]:
+    profile = production_profile_policy(request.production_profile)
+    locked = (
+        _locked_dialogue(request.input_text)
+        if request.source_mode == SourceMode.SCRIPT_LOCKED
+        else []
+    )
+    instructions = (
+        "You are the story-architect Agent revising an episode after an independent script review. "
+        "Return one complete EpisodeOutline JSON object only. Preserve working creative choices and "
+        "apply only review findings that are supported by the outline. Resolve causal contradictions, "
+        "unmotivated choices, or missing setup/payoff at episode and scene-contract level; do not add "
+        "shots, camera directions, fixed beat counts, or mechanical twists. Every dialogue line must "
+        "still belong to exactly one scene. For SCRIPT_LOCKED, preserve every supplied speaker, text, "
+        "audio_kind, and order verbatim. "
+        f"Profile: {profile.label}. Writer policy: {profile.writer} Do not add fields outside the schema."
+    )
+    payload = {
+        "source_mode": request.source_mode.value,
+        "production_profile": request.production_profile.value,
+        "target_duration_seconds": request.resolved_target_duration_seconds(),
+        "source_text": request.input_text.strip(),
+        "locked_dialogue": [line.model_dump(mode="json") for line in locked],
+        "current_outline": outline.model_dump(mode="json"),
+        "script_review": review.model_dump(mode="json"),
+        "output_schema": EpisodeOutline.model_json_schema(),
+    }
+    return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _scene_director_prompt(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    scene: PlannedSceneContract,
+    handoff_in: SceneContinuitySummary,
+) -> tuple[str, str]:
+    profile = production_profile_policy(request.production_profile)
+    next_scene = next(
+        (item for item in outline.scenes if item.sequence == scene.sequence + 1),
+        None,
+    )
+    relevant_lines = [
+        {
+            "index": index,
+            **outline.lines[index - 1].model_dump(mode="json"),
+        }
+        for index in scene.dialogue_line_indices
+    ]
+    instructions = (
+        "You are a scene-director Agent. Return JSON only and match SceneShotPlan exactly. Expand "
+        "only the supplied scene contract into executable 4-15 second shots. The story architect "
+        "owns global facts, cast, locations, props, and dialogue; do not invent or rename them. "
+        "Each assigned dialogue index must appear in exactly one shot and no other line index may "
+        "appear. Keep every shot.scene_sequence and the top-level scene_sequence equal to the "
+        "current scene. Use the previous scene's actual handoff as physical truth while still "
+        "aiming for the architect's intended exit and the next scene's required entry. Do not copy "
+        "all earlier shots into the plan; the compact handoff is the memory boundary. Long takes "
+        "are allowed when they contain meaningful internal progression. Do not stretch risky "
+        "multi-contact action to fill duration. Populate minimal reference_needs using only names "
+        "declared in the global assets. "
+        f"Profile: {profile.label}. Planner policy: {profile.planner} Do not add fields outside "
+        "the schema."
+    )
+    payload = {
+        "episode": {
+            "title": outline.title,
+            "story_summary": outline.story_summary,
+            "target_duration_seconds": outline.target_duration_seconds,
+            "style": outline.style.model_dump(mode="json"),
+            "characters": [item.model_dump(mode="json") for item in outline.characters],
+            "locations": [
+                item.model_dump(mode="json")
+                for item in outline.locations
+                if item.name in scene.location_names
+            ],
+            "props": [item.model_dump(mode="json") for item in outline.props],
+        },
+        "scene_contract": scene.model_dump(mode="json"),
+        "assigned_dialogue": relevant_lines,
+        "previous_actual_handoff": handoff_in.model_dump(mode="json"),
+        "next_scene": (
+            {
+                "heading": next_scene.heading,
+                "narrative_purpose": next_scene.narrative_purpose,
+                "expected_entry": next_scene.continuity_in.model_dump(mode="json"),
+            }
+            if next_scene is not None
+            else None
+        ),
+        "output_schema": SceneShotPlan.model_json_schema(),
+    }
+    return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _scene_repair_prompt(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    scene: PlannedSceneContract,
+    handoff_in: SceneContinuitySummary,
+    invalid_output: str,
+    error: ValueError,
+) -> tuple[str, str]:
+    instructions, source = _scene_director_prompt(request, outline, scene, handoff_in)
+    payload = json.loads(source)
+    payload["validation_error"] = str(error)
+    payload["invalid_scene_plan_json"] = invalid_output
+    return (
+        instructions
+        + " Repair the invalid scene plan without changing the scene contract. Return one complete "
+        "corrected SceneShotPlan JSON object only.",
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    )
+
+
+def _validate_locked_outline(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+) -> None:
+    if request.source_mode != SourceMode.SCRIPT_LOCKED:
+        return
+    expected_lines = _locked_dialogue(request.input_text)
+    expected = [(line.speaker, line.text, line.audio_kind) for line in expected_lines]
+    actual = [(line.speaker, line.text, line.audio_kind) for line in outline.lines]
+    if actual != expected:
+        raise ValueError("Story architect changed or omitted locked dialogue")
+    dialogue_speakers = {
+        line.speaker for line in expected_lines if line.audio_kind == AudioKind.DIALOGUE
+    }
+    character_names = {character.name for character in outline.characters}
+    missing = sorted(dialogue_speakers - character_names)
+    if missing:
+        raise ValueError("Story architect omitted speaking characters: " + ", ".join(missing))
 
 
 def _validate_locked_dialogue(request: CreateProjectRequest, plan: ProductionPlan) -> None:
@@ -546,6 +931,14 @@ def _validate_locked_dialogue(request: CreateProjectRequest, plan: ProductionPla
             "Planning model invented invalid locked-script characters: "
             + ", ".join(invalid)
         )
+    assigned = [
+        index
+        for shot in plan.shots
+        for index in shot.dialogue_line_indices
+    ]
+    expected_indices = list(range(1, len(plan.lines) + 1))
+    if sorted(assigned) != expected_indices or len(assigned) != len(set(assigned)):
+        raise ValueError("Planning model duplicated or omitted locked dialogue in shots")
 
 
 def _fallback_general_plan(request: CreateProjectRequest) -> ProductionPlan:
@@ -661,7 +1054,7 @@ def _fallback_general_plan(request: CreateProjectRequest) -> ProductionPlan:
     )
 
 
-def _fallback_plan(request: CreateProjectRequest) -> ProductionPlan:
+def _fallback_short_plan(request: CreateProjectRequest) -> ProductionPlan:
     if (
         request.production_profile == ProductionProfile.GENERAL_VIDEO
         and request.source_mode != SourceMode.SCRIPT_LOCKED
@@ -770,6 +1163,491 @@ def _fallback_plan(request: CreateProjectRequest) -> ProductionPlan:
     )
 
 
+def _retime_shots(
+    templates: list[PlannedShot],
+    *,
+    target_duration_seconds: float,
+    scene_sequence: int,
+    preferred_count: int | None = None,
+) -> list[PlannedShot]:
+    if not templates:
+        raise ValueError("At least one shot template is required")
+    minimum_count = max(1, math.ceil(target_duration_seconds / 15.0))
+    maximum_count = max(1, math.floor(target_duration_seconds / 4.0))
+    requested_count = preferred_count if preferred_count is not None else len(templates)
+    count = min(maximum_count, max(minimum_count, requested_count))
+    if count == 1:
+        selected = [templates[0]]
+    elif count <= len(templates):
+        selected = [
+            templates[round(index * (len(templates) - 1) / (count - 1))]
+            for index in range(count)
+        ]
+    else:
+        selected = [templates[index % len(templates)] for index in range(count)]
+    duration = round(target_duration_seconds / count, 3)
+    shots = [
+        template.model_copy(
+            deep=True,
+            update={
+                "scene_sequence": scene_sequence,
+                "duration_seconds": duration,
+            },
+        )
+        for template in selected
+    ]
+    shots[-1].duration_seconds = round(
+        target_duration_seconds - sum(shot.duration_seconds for shot in shots[:-1]),
+        3,
+    )
+    return shots
+
+
+def _fallback_scene_state(
+    *,
+    setting: str,
+    scene_sequence: int,
+    phase: str,
+) -> SceneContinuitySummary:
+    previous_fact = (
+        []
+        if scene_sequence == 1 and phase == "entry"
+        else [f"第 {max(1, scene_sequence - (1 if phase == 'entry' else 0))} 场的发现已经发生"]
+    )
+    return SceneContinuitySummary(
+        setting=setting,
+        character_states=[f"主要人物进入第 {scene_sequence} 场的{phase}状态，身份与服装保持一致"],
+        prop_states=["核心叙事道具沿用上一场已建立的持有者与可见状态"],
+        known_facts=previous_fact,
+        open_threads=(
+            [f"第 {scene_sequence} 场需要推进的因果问题"]
+            if phase == "entry"
+            else [f"第 {scene_sequence + 1} 场需要回应的新问题"]
+        ),
+    )
+
+
+def _distribute_line_indices(line_count: int, scene_count: int) -> list[list[int]]:
+    buckets: list[list[int]] = [[] for _ in range(scene_count)]
+    for offset, index in enumerate(range(1, line_count + 1)):
+        bucket = min(scene_count - 1, offset * scene_count // max(1, line_count))
+        buckets[bucket].append(index)
+    return buckets
+
+
+def _fallback_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
+    base = _fallback_short_plan(request)
+    target = request.resolved_target_duration_seconds()
+    scene_count = 1 if target <= 90.0 else min(40, max(2, math.ceil(target / 75.0)))
+    scene_duration = target / scene_count
+    lines: list[PlannedDialogueLine] = list(base.lines)
+    if scene_count > 1 and request.source_mode != SourceMode.SCRIPT_LOCKED:
+        first = base.characters[0].name
+        second = base.characters[min(1, len(base.characters) - 1)].name
+        lines = []
+        for sequence in range(1, scene_count + 1):
+            lines.extend(
+                [
+                    PlannedDialogueLine(
+                        speaker=first,
+                        text=f"第{sequence}处线索，和我们最初知道的不一样。",
+                    ),
+                    PlannedDialogueLine(
+                        speaker=second,
+                        text=f"因为有人只让你看到第{sequence}层答案。",
+                    ),
+                    PlannedDialogueLine(
+                        speaker=first,
+                        text=f"那这一场留下的问题，究竟指向谁？",
+                    ),
+                    PlannedDialogueLine(
+                        speaker=second,
+                        text=f"先看完第{sequence}份记录，再决定相信谁。",
+                    ),
+                ]
+            )
+    line_buckets = _distribute_line_indices(len(lines), scene_count)
+    arcs = (
+        "用可辨认的异常建立本集核心问题",
+        "让第一份证据改变人物对关系的判断",
+        "用行动后果扩大冲突并暴露新的信息缺口",
+        "让人物选择付出代价，推动关系重新站队",
+        "揭示此前线索的另一层含义并形成反转",
+        "让反转产生现实后果而不是停留在解释",
+        "回收关键道具与人物承诺",
+        "完成本集主要回答，同时留下下一集可追的问题",
+    )
+    setting = base.locations[0].name
+    scenes = [
+        PlannedSceneContract(
+            sequence=sequence,
+            heading=(
+                base.scene_heading
+                if scene_count == 1
+                else f"{base.scene_heading}·段落 {sequence:02d}"
+            ),
+            summary=f"{base.scene_summary}；第 {sequence} 场沿因果链继续推进。",
+            narrative_purpose=arcs[(sequence - 1) % len(arcs)],
+            target_duration_seconds=(
+                round(scene_duration, 3)
+                if sequence < scene_count
+                else round(target - round(scene_duration, 3) * (scene_count - 1), 3)
+            ),
+            dialogue_line_indices=line_buckets[sequence - 1],
+            location_names=[setting],
+            continuity_in=_fallback_scene_state(
+                setting=setting,
+                scene_sequence=sequence,
+                phase="entry",
+            ),
+            continuity_out=_fallback_scene_state(
+                setting=setting,
+                scene_sequence=sequence,
+                phase="exit",
+            ),
+        )
+        for sequence in range(1, scene_count + 1)
+    ]
+    return EpisodeOutline(
+        title=base.title,
+        story_summary=base.scene_summary,
+        target_duration_seconds=target,
+        lines=lines,
+        characters=base.characters,
+        locations=base.locations,
+        props=base.props,
+        style=base.style,
+        scenes=scenes,
+    )
+
+
+def _fallback_directed_scene_plan(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    scene: PlannedSceneContract,
+    handoff_in: SceneContinuitySummary,
+) -> SceneShotPlan:
+    base = _fallback_short_plan(request)
+    preferred_count = 5 if request.production_profile == ProductionProfile.DOUYIN_SHORT_DRAMA else 4
+    shots = _retime_shots(
+        base.shots,
+        target_duration_seconds=scene.target_duration_seconds,
+        scene_sequence=scene.sequence,
+        preferred_count=preferred_count,
+    )
+    for shot in shots:
+        shot.dialogue_line_indices = []
+        shot.narrative_purpose = f"{scene.narrative_purpose}；{shot.narrative_purpose}"
+        shot.visual = f"{scene.heading}。{shot.visual}"
+    for offset, line_index in enumerate(scene.dialogue_line_indices):
+        shots[offset % len(shots)].dialogue_line_indices.append(line_index)
+    shots[0].character_positions = "; ".join(handoff_in.character_states) or shots[0].character_positions
+    shots[0].prop_state_in = "; ".join(handoff_in.prop_states) or shots[0].prop_state_in
+    shots[-1].prop_state_out = "; ".join(scene.continuity_out.prop_states) or shots[-1].prop_state_out
+    shots[-1].action_out = "; ".join(scene.continuity_out.open_threads) or shots[-1].action_out
+    return SceneShotPlan(
+        scene_sequence=scene.sequence,
+        shots=shots,
+        continuity_out=scene.continuity_out.model_copy(deep=True),
+    )
+
+
+def _validate_directed_scene_plan(
+    scene: PlannedSceneContract,
+    plan: SceneShotPlan,
+) -> None:
+    if plan.scene_sequence != scene.sequence:
+        raise ValueError("Scene director returned the wrong scene sequence")
+    if any(shot.scene_sequence != scene.sequence for shot in plan.shots):
+        raise ValueError("Scene director shots reference another scene")
+    assigned = [
+        index
+        for shot in plan.shots
+        for index in shot.dialogue_line_indices
+    ]
+    expected = scene.dialogue_line_indices
+    if sorted(assigned) != sorted(expected) or len(assigned) != len(set(assigned)):
+        raise ValueError("Scene director changed, duplicated, or omitted assigned dialogue lines")
+    duration = sum(shot.duration_seconds for shot in plan.shots)
+    tolerance = max(10.0, scene.target_duration_seconds * 0.2)
+    if abs(duration - scene.target_duration_seconds) > tolerance:
+        raise ValueError(
+            "Directed scene duration does not match its contract: "
+            f"target={scene.target_duration_seconds}, shots={duration}"
+        )
+
+
+def _assemble_production_plan(
+    outline: EpisodeOutline,
+    directed_scenes: list[SceneShotPlan],
+) -> ProductionPlan:
+    if [scene.scene_sequence for scene in directed_scenes] != [
+        scene.sequence for scene in outline.scenes
+    ]:
+        raise ValueError("Directed scenes do not match the episode outline")
+    shots = [shot for scene in directed_scenes for shot in scene.shots]
+    return ProductionPlan(
+        title=outline.title,
+        scene_heading=outline.scenes[0].heading,
+        scene_summary=outline.story_summary,
+        target_duration_seconds=outline.target_duration_seconds,
+        lines=outline.lines,
+        characters=outline.characters,
+        locations=outline.locations,
+        props=outline.props,
+        style=outline.style,
+        scenes=outline.scenes,
+        shots=shots,
+    )
+
+
+def _fallback_plan(request: CreateProjectRequest) -> ProductionPlan:
+    outline = _fallback_episode_outline(request)
+    directed: list[SceneShotPlan] = []
+    handoff = outline.scenes[0].continuity_in.model_copy(deep=True)
+    for scene in outline.scenes:
+        plan = _fallback_directed_scene_plan(request, outline, scene, handoff)
+        _validate_directed_scene_plan(scene, plan)
+        directed.append(plan)
+        handoff = plan.continuity_out.model_copy(deep=True)
+    return _assemble_production_plan(outline, directed)
+
+
+def _normalize_single_pass_plan(
+    request: CreateProjectRequest,
+    plan: ProductionPlan,
+) -> ProductionPlan:
+    payload = plan.model_dump(mode="python")
+    payload["target_duration_seconds"] = request.resolved_target_duration_seconds()
+    shots = list(plan.shots)
+    if not plan.scenes:
+        for shot in shots:
+            shot.scene_sequence = 1
+        first = shots[0]
+        last = shots[-1]
+        location_name = plan.locations[0].name
+        payload["scenes"] = [
+            PlannedSceneContract(
+                sequence=1,
+                heading=plan.scene_heading,
+                summary=plan.scene_summary,
+                narrative_purpose="完成当前短片的完整叙事目的",
+                target_duration_seconds=sum(shot.duration_seconds for shot in shots),
+                dialogue_line_indices=list(range(1, len(plan.lines) + 1)),
+                location_names=[location_name],
+                continuity_in=SceneContinuitySummary(
+                    setting=location_name,
+                    character_states=[first.character_positions, first.action_in],
+                    prop_states=[first.prop_state_in],
+                    known_facts=[],
+                    open_threads=[plan.scene_summary],
+                ),
+                continuity_out=SceneContinuitySummary(
+                    setting=location_name,
+                    character_states=[last.character_positions, last.action_out],
+                    prop_states=[last.prop_state_out],
+                    known_facts=[plan.scene_summary],
+                    open_threads=[],
+                ),
+            ).model_dump(mode="python")
+        ]
+        payload["shots"] = [shot.model_dump(mode="python") for shot in shots]
+    return ProductionPlan.model_validate(payload)
+
+
+def _create_multi_agent_production_plan(
+    request: CreateProjectRequest,
+    client: LanguageProviderClient,
+) -> ProductionPlanningResult:
+    image_urls, image_warnings = _planner_image_urls(request)
+    warnings = list(image_warnings)
+    outline_source = "gpt-5.6-sol story architect"
+    outline_instructions, outline_input = _outline_prompt(request)
+    try:
+        outline_output = client.generate_text(
+            instructions=outline_instructions,
+            input_text=outline_input,
+            image_urls=image_urls,
+            max_output_tokens=14000,
+        )
+        try:
+            outline = EpisodeOutline.model_validate_json(_strip_json_fence(outline_output))
+            _validate_locked_outline(request, outline)
+        except ValueError as first_error:
+            repair_instructions, repair_input = _outline_repair_prompt(
+                request,
+                outline_output,
+                first_error,
+            )
+            repaired_output = client.generate_text(
+                instructions=repair_instructions,
+                input_text=repair_input,
+                image_urls=image_urls,
+                max_output_tokens=14000,
+            )
+            outline = EpisodeOutline.model_validate_json(_strip_json_fence(repaired_output))
+            _validate_locked_outline(request, outline)
+            outline_source += " repaired"
+            warnings.append(
+                "故事统筹 Agent 首次输出未通过结构校验，已自动修复后采用："
+                + str(first_error)
+            )
+    except (LanguageProviderError, ValueError) as outline_error:
+        outline = _fallback_episode_outline(request)
+        outline_source = "deterministic story architect fallback"
+        warnings.append(
+            "故事统筹 Agent 未通过，已使用本地可复现大纲并继续逐场规划："
+            + str(outline_error)
+        )
+
+    review_report: ScriptReviewReport | None = None
+    critic_used = False
+    script_revision_rounds = 0
+    critic_instructions, critic_input = _story_critic_prompt(request, outline)
+    try:
+        critic_output = client.generate_text(
+            instructions=critic_instructions,
+            input_text=critic_input,
+            image_urls=[],
+            max_output_tokens=6000,
+        )
+        review_report = ScriptReviewReport.model_validate_json(
+            _strip_json_fence(critic_output)
+        )
+        critic_used = True
+    except (LanguageProviderError, ValueError) as critic_error:
+        warnings.append(
+            "剧本审阅 Agent 不可用，结构化大纲仍继续逐场规划："
+            + str(critic_error)
+        )
+
+    while (
+        review_report is not None
+        and review_report.requires_revision
+        and script_revision_rounds < 2
+    ):
+        issue_count = len(review_report.issues)
+        try:
+            revision_instructions, revision_input = _story_revision_prompt(
+                request,
+                outline,
+                review_report,
+            )
+            revision_output = client.generate_text(
+                instructions=revision_instructions,
+                input_text=revision_input,
+                image_urls=image_urls,
+                max_output_tokens=14000,
+            )
+            revised_outline = EpisodeOutline.model_validate_json(
+                _strip_json_fence(revision_output)
+            )
+            _validate_locked_outline(request, revised_outline)
+            outline = revised_outline
+            script_revision_rounds += 1
+            warnings.append(
+                f"剧本审阅 Agent 第 {script_revision_rounds} 轮提出 {issue_count} 项问题，"
+                "Story Architect 已自动修订。"
+            )
+            followup_instructions, followup_input = _story_critic_prompt(request, outline)
+            followup_output = client.generate_text(
+                instructions=followup_instructions,
+                input_text=followup_input,
+                image_urls=[],
+                max_output_tokens=6000,
+            )
+            review_report = ScriptReviewReport.model_validate_json(
+                _strip_json_fence(followup_output)
+            )
+        except (LanguageProviderError, ValueError) as revision_error:
+            warnings.append(
+                f"第 {script_revision_rounds + 1} 轮剧本修订或复审不可用，"
+                "保留当前大纲与最近审阅建议："
+                + str(revision_error)
+            )
+            break
+    if review_report is not None and review_report.requires_revision:
+        warnings.append(
+            f"当前剧本审阅仍保留 {len(review_report.issues)} 项可选修改建议；"
+            "建议不会阻断后续规划，用户可继续、编辑或忽略。"
+        )
+
+    directed_scenes: list[SceneShotPlan] = []
+    handoff = outline.scenes[0].continuity_in.model_copy(deep=True)
+    used_scene_fallback = False
+    used_scene_repair = False
+    for scene in outline.scenes:
+        instructions, input_text = _scene_director_prompt(
+            request,
+            outline,
+            scene,
+            handoff,
+        )
+        try:
+            output = client.generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=[],
+                max_output_tokens=10000,
+            )
+            try:
+                directed = SceneShotPlan.model_validate_json(_strip_json_fence(output))
+                _validate_directed_scene_plan(scene, directed)
+            except ValueError as first_error:
+                repair_instructions, repair_input = _scene_repair_prompt(
+                    request,
+                    outline,
+                    scene,
+                    handoff,
+                    output,
+                    first_error,
+                )
+                repaired_output = client.generate_text(
+                    instructions=repair_instructions,
+                    input_text=repair_input,
+                    image_urls=[],
+                    max_output_tokens=10000,
+                )
+                directed = SceneShotPlan.model_validate_json(
+                    _strip_json_fence(repaired_output)
+                )
+                _validate_directed_scene_plan(scene, directed)
+                used_scene_repair = True
+                warnings.append(
+                    f"场景 {scene.sequence:02d} 导演 Agent 首次输出无效，已局部修复后采用："
+                    + str(first_error)
+                )
+        except (LanguageProviderError, ValueError) as scene_error:
+            directed = _fallback_directed_scene_plan(request, outline, scene, handoff)
+            _validate_directed_scene_plan(scene, directed)
+            used_scene_fallback = True
+            warnings.append(
+                f"场景 {scene.sequence:02d} 导演 Agent 未通过，仅该场使用本地回退："
+                + str(scene_error)
+            )
+        directed_scenes.append(directed)
+        handoff = directed.continuity_out.model_copy(deep=True)
+
+    plan = _assemble_production_plan(outline, directed_scenes)
+    _validate_locked_dialogue(request, plan)
+    planner = f"multi-agent:{outline_source}"
+    if critic_used:
+        planner += " + script critic"
+    if script_revision_rounds:
+        planner += f" revised-{script_revision_rounds}x"
+    planner += " + scene directors"
+    if used_scene_repair:
+        planner += " repaired"
+    if used_scene_fallback:
+        planner += " mixed-fallback"
+    return ProductionPlanningResult(
+        plan=plan,
+        planner=planner,
+        warnings=warnings,
+        review_report=review_report,
+    )
+
+
 def create_production_plan(
     request: CreateProjectRequest,
     client: LanguageProviderClient | None,
@@ -777,9 +1655,11 @@ def create_production_plan(
     if client is None:
         return ProductionPlanningResult(
             plan=_fallback_plan(request),
-            planner="deterministic-fallback-v1",
+            planner="deterministic-multi-agent-fallback-v2",
             warnings=["GPT-5.6-sol 未配置，已使用可复现的本地规划回退。"],
         )
+    if request.resolved_target_duration_seconds() > 90.0:
+        return _create_multi_agent_production_plan(request, client)
     image_urls, image_warnings = _planner_image_urls(request)
     instructions, input_text = _planner_prompt(request)
     try:
@@ -799,7 +1679,10 @@ def create_production_plan(
             ],
         )
     try:
-        plan = ProductionPlan.model_validate_json(_strip_json_fence(output))
+        plan = _normalize_single_pass_plan(
+            request,
+            ProductionPlan.model_validate_json(_strip_json_fence(output)),
+        )
         _validate_locked_dialogue(request, plan)
         return ProductionPlanningResult(
             plan=plan,
@@ -819,8 +1702,9 @@ def create_production_plan(
                 image_urls=image_urls,
                 max_output_tokens=8000,
             )
-            repaired_plan = ProductionPlan.model_validate_json(
-                _strip_json_fence(repaired_output)
+            repaired_plan = _normalize_single_pass_plan(
+                request,
+                ProductionPlan.model_validate_json(_strip_json_fence(repaired_output)),
             )
             _validate_locked_dialogue(request, repaired_plan)
             return ProductionPlanningResult(
@@ -1020,6 +1904,30 @@ def build_project_document_from_plan(
         )
         for index, line in enumerate(planned_lines, start=1)
     ]
+    line_ids = {index: line.id for index, line in enumerate(lines, start=1)}
+    planned_scenes = plan.scenes or [
+        PlannedSceneContract(
+            sequence=1,
+            heading=plan.scene_heading,
+            summary=plan.scene_summary,
+            narrative_purpose="完成当前短片的完整叙事目的",
+            target_duration_seconds=sum(shot.duration_seconds for shot in plan.shots),
+            dialogue_line_indices=list(range(1, len(lines) + 1)),
+            location_names=[plan.locations[0].name],
+            continuity_in=SceneContinuitySummary(
+                setting=plan.locations[0].name,
+                open_threads=[plan.scene_summary],
+            ),
+            continuity_out=SceneContinuitySummary(
+                setting=plan.locations[0].name,
+                known_facts=[plan.scene_summary],
+            ),
+        )
+    ]
+    scene_id_by_sequence = {
+        scene.sequence: f"{project_id}-scene-{scene.sequence:02d}"
+        for scene in planned_scenes
+    }
     original_text = request.input_text.strip() or "\n".join(
         f"{line.speaker}：{line.original_text}" for line in lines
     )
@@ -1034,12 +1942,26 @@ def build_project_document_from_plan(
         lines=lines,
         structured_scenes=[
             StructuredScene(
-                id=f"{project_id}-scene-01",
-                heading=plan.scene_heading,
-                summary=plan.scene_summary,
-                line_ids=[line.id for line in lines],
+                id=scene_id_by_sequence[scene.sequence],
+                heading=scene.heading,
+                summary=scene.summary,
+                line_ids=[
+                    line_ids[index]
+                    for index in scene.dialogue_line_indices
+                    if index in line_ids
+                ],
+                narrative_purpose=scene.narrative_purpose,
+                target_duration_seconds=scene.target_duration_seconds,
+                entry_state=scene.continuity_in.model_copy(deep=True),
+                exit_state=scene.continuity_out.model_copy(deep=True),
             )
+            for scene in planned_scenes
         ],
+        review_report=(
+            planning.review_report.model_copy(deep=True)
+            if planning.review_report is not None
+            else None
+        ),
         approval_status=ApprovalStatus.APPROVED,
         freshness=Freshness.CURRENT,
         created_at=created_at,
@@ -1159,12 +2081,12 @@ def build_project_document_from_plan(
             )
         )
 
-    line_ids = {index: line.id for index, line in enumerate(lines, start=1)}
     shots = [
         ShotPlan(
             id=f"{project_id}-shot-{sequence:02d}",
             project_id=project_id,
             sequence=sequence,
+            scene_id=scene_id_by_sequence.get(shot.scene_sequence),
             duration_seconds=shot.duration_seconds,
             narrative_purpose=shot.narrative_purpose,
             visual=shot.visual,
@@ -1297,7 +2219,7 @@ def build_project_document_from_plan(
         source_mode=request.source_mode,
         run_mode=request.run_mode,
         production_profile=request.production_profile,
-        target_duration_seconds=sum(shot.duration_seconds for shot in shots),
+        target_duration_seconds=request.resolved_target_duration_seconds(),
         input_text=request.input_text,
         input_images=[image.model_copy(deep=True) for image in request.input_images],
         stage=ProjectStage.PLANNED,
@@ -1340,13 +2262,11 @@ def refresh_lightweight_reference_plans(document: ProjectDocument) -> bool:
         for version in asset.versions
     }
     location_count = sum(asset.kind == AssetKind.LOCATION for asset in document.assets)
+    plans_by_shot = {item.shot_id: item for item in document.reference_plan}
     changed = False
 
     for shot in document.shots:
-        plan = next(
-            (item for item in document.reference_plan if item.shot_id == shot.id),
-            None,
-        )
+        plan = plans_by_shot.get(shot.id)
         if plan is None:
             continue
 

@@ -37,6 +37,7 @@ from short_drama.models import (
     VideoGenerationRoute,
 )
 from short_drama.providers.minimax_h3_compiler import build_h3_prompt
+from short_drama.h3_route_planner import _route_agent_batches
 from short_drama.service import (
     ShortDramaService,
     WorkflowConflictError,
@@ -166,6 +167,30 @@ def _persist_passed_h3_take(
     evidence.reviewed_at = NOW
     service.repository.save_route_evidence(evidence)
     return take
+
+
+def test_route_agent_batches_by_scene_and_bounded_size(tmp_path: Path) -> None:
+    project = _service(tmp_path).initialize_fixture()
+    source = project.document.shots[0]
+    shots = [
+        source.model_copy(
+            update={
+                "id": f"shot-{index:03d}",
+                "sequence": index,
+                "scene_id": "scene-1" if index <= 25 else "scene-2",
+            }
+        )
+        for index in range(1, 46)
+    ]
+
+    batches = _route_agent_batches(shots)
+
+    assert [len(batch) for batch in batches] == [20, 5, 20]
+    assert [{shot.scene_id for shot in batch} for batch in batches] == [
+        {"scene-1"},
+        {"scene-1"},
+        {"scene-2"},
+    ]
 
 
 def test_route_plan_reuses_reviewed_h3_takes_and_builds_real_manifest(

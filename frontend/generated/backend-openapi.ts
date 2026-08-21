@@ -2213,6 +2213,8 @@ export interface components {
             /** @default AUTO_DRAFT */
             run_mode: components["schemas"]["RunMode"];
             source_mode: components["schemas"]["SourceMode"];
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
         };
         /** AutonomousDraftResponse */
         AutonomousDraftResponse: {
@@ -2453,6 +2455,8 @@ export interface components {
             /** @default AUTO_DRAFT */
             run_mode: components["schemas"]["RunMode"];
             source_mode: components["schemas"]["SourceMode"];
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
         };
         /** CreativeInputImage */
         CreativeInputImage: {
@@ -5645,6 +5649,19 @@ export interface components {
             /** Force Api Generations */
             force_api_generations: boolean;
         };
+        /** SceneContinuitySummary */
+        SceneContinuitySummary: {
+            /** Character States */
+            character_states?: string[];
+            /** Known Facts */
+            known_facts?: string[];
+            /** Open Threads */
+            open_threads?: string[];
+            /** Prop States */
+            prop_states?: string[];
+            /** Setting */
+            setting: string;
+        };
         /** ScriptLine */
         ScriptLine: {
             audio_kind: components["schemas"]["AudioKind"];
@@ -5659,6 +5676,37 @@ export interface components {
             /** Subtitle Text */
             subtitle_text: string;
         };
+        /** ScriptReviewIssue */
+        ScriptReviewIssue: {
+            /** Category */
+            category: string;
+            /** Observation */
+            observation: string;
+            /** Recommendation */
+            recommendation: string;
+            /** Scene Sequences */
+            scene_sequences?: number[];
+            severity: components["schemas"]["ScriptReviewSeverity"];
+        };
+        /** ScriptReviewReport */
+        ScriptReviewReport: {
+            /** Issues */
+            issues?: components["schemas"]["ScriptReviewIssue"][];
+            /**
+             * Requires Revision
+             * @default false
+             */
+            requires_revision: boolean;
+            /** Strengths */
+            strengths?: string[];
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * ScriptReviewSeverity
+         * @enum {string}
+         */
+        ScriptReviewSeverity: "HIGH" | "MEDIUM" | "LOW";
         /** ScriptVersion */
         ScriptVersion: {
             approval_status: components["schemas"]["ApprovalStatus"];
@@ -5677,6 +5725,7 @@ export interface components {
             parent_version_id?: string | null;
             /** Project Id */
             project_id: string;
+            review_report?: components["schemas"]["ScriptReviewReport"] | null;
             source_mode: components["schemas"]["SourceMode"];
             /** Spoken Text */
             spoken_text: string;
@@ -5807,6 +5856,8 @@ export interface components {
              * @default 1
              */
             revision: number;
+            /** Scene Id */
+            scene_id?: string | null;
             /** Sequence */
             sequence: number;
             /** Transition Out */
@@ -5940,14 +5991,20 @@ export interface components {
         };
         /** StructuredScene */
         StructuredScene: {
+            entry_state?: components["schemas"]["SceneContinuitySummary"] | null;
+            exit_state?: components["schemas"]["SceneContinuitySummary"] | null;
             /** Heading */
             heading: string;
             /** Id */
             id: string;
             /** Line Ids */
             line_ids: string[];
+            /** Narrative Purpose */
+            narrative_purpose?: string | null;
             /** Summary */
             summary: string;
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
         };
         /** StyleProfile */
         StyleProfile: {
