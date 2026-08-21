@@ -137,6 +137,12 @@ from short_drama.models import (
     MockBehavior,
     OperationKind,
     OutputSpec,
+    PlanningRunCreateRequest,
+    PlanningRunListResponse,
+    PlanningRunRecord,
+    PlanningRunResponse,
+    PlanningRunStatus,
+    PlanningRunStep,
     ProgressSummary,
     ProjectAggregate,
     ProjectBibleVersion,
@@ -173,10 +179,17 @@ from short_drama.models import (
     WorkerDrainResponse,
 )
 from short_drama.production_planner import (
+    EpisodeOutline,
     ProductionPlanningResult,
+    SceneShotPlan,
+    assemble_multi_agent_planning_result,
     build_project_document_from_plan,
     create_production_plan,
+    create_story_architecture,
+    direct_story_scene,
     refresh_lightweight_reference_plans,
+    review_story_outline,
+    revise_story_outline,
 )
 from short_drama.quality_learning import (
     H3CapabilityProfileResponse,
@@ -579,11 +592,279 @@ class ShortDramaService:
             language_provider_factory or default_language_provider_factory
         )
         self._lock = threading.RLock()
+        self._planning_run_locks: dict[str, threading.Lock] = {}
 
     def list_projects(self) -> ProjectListResponse:
         return ProjectListResponse(
             projects=[document.project for document in self.repository.list_projects()]
         )
+
+    def list_planning_runs(self) -> PlanningRunListResponse:
+        return PlanningRunListResponse(runs=self.repository.list_planning_runs())
+
+    def get_planning_run(self, run_id: str) -> PlanningRunResponse:
+        return self._planning_run_response(self._require_planning_run(run_id))
+
+    def create_planning_run(
+        self,
+        request: PlanningRunCreateRequest,
+    ) -> PlanningRunResponse:
+        now = utc_now()
+        run = PlanningRunRecord(
+            id=f"planning-run-{uuid4().hex}",
+            status=PlanningRunStatus.RUNNING,
+            current_step=PlanningRunStep.STORY_ARCHITECT,
+            request=request,
+            created_at=now,
+            updated_at=now,
+        )
+        self.repository.save_planning_run(run)
+        return PlanningRunResponse(run=run)
+
+    def advance_planning_run(self, run_id: str) -> PlanningRunResponse:
+        lock = self._planning_run_lock(run_id)
+        if not lock.acquire(blocking=False):
+            raise WorkflowConflictError(f"Planning run {run_id} is already advancing")
+        try:
+            run = self._require_planning_run(run_id)
+            if run.status == PlanningRunStatus.COMPLETE:
+                return self._planning_run_response(run)
+            if run.status == PlanningRunStatus.FAILED:
+                raise WorkflowConflictError(
+                    f"Planning run {run_id} failed and cannot be advanced"
+                )
+            run.status = PlanningRunStatus.RUNNING
+            run.error_message = None
+            self._advance_planning_run_once(run)
+            run.updated_at = utc_now()
+            self.repository.save_planning_run(run)
+            return self._planning_run_response(run)
+        except WorkflowConflictError:
+            raise
+        except Exception as exc:
+            run = self.repository.get_planning_run(run_id)
+            if run is None:
+                raise
+            run.status = PlanningRunStatus.NEEDS_ATTENTION
+            run.error_message = str(exc)
+            run.updated_at = utc_now()
+            self.repository.save_planning_run(run)
+            return self._planning_run_response(run)
+        finally:
+            lock.release()
+
+    def _advance_planning_run_once(self, run: PlanningRunRecord) -> None:
+        request = CreateProjectRequest.model_validate(
+            run.request.model_dump(exclude={"render_export", "execution_target"})
+        )
+        client = self._configured_language_client()
+        if run.current_step == PlanningRunStep.STORY_ARCHITECT:
+            architecture = create_story_architecture(request, client)
+            run.outline_json = architecture.outline.model_dump_json()
+            run.outline_source = architecture.source
+            run.total_scenes = len(architecture.outline.scenes)
+            run.warnings.extend(architecture.warnings)
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.STORY_ARCHITECT,
+                PlanningRunStep.SCRIPT_CRITIC,
+            )
+            return
+
+        outline = self._planning_outline(run)
+        if run.current_step == PlanningRunStep.SCRIPT_CRITIC:
+            critique = review_story_outline(request, outline, client)
+            if critique.report is not None:
+                run.review_report = critique.report
+            run.critic_used = run.critic_used or critique.used
+            run.warnings.extend(critique.warnings)
+            if (
+                run.review_report is not None
+                and run.review_report.requires_revision
+                and run.revision_round < run.max_revision_rounds
+            ):
+                next_step = PlanningRunStep.STORY_REVISION
+            else:
+                self._append_remaining_review_warning(run)
+                next_step = PlanningRunStep.SCENE_DIRECTOR
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.SCRIPT_CRITIC,
+                next_step,
+            )
+            return
+
+        if run.current_step == PlanningRunStep.STORY_REVISION:
+            if run.review_report is None:
+                raise WorkflowConflictError(
+                    "Planning run has no script review to revise"
+                )
+            revision = revise_story_outline(
+                request,
+                outline,
+                run.review_report,
+                client,
+                revision_round=run.revision_round + 1,
+            )
+            run.warnings.extend(revision.warnings)
+            if revision.revised:
+                run.outline_json = revision.outline.model_dump_json()
+                run.revision_round += 1
+                next_step = PlanningRunStep.SCRIPT_CRITIC
+            else:
+                self._append_remaining_review_warning(run)
+                next_step = PlanningRunStep.SCENE_DIRECTOR
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.STORY_REVISION,
+                next_step,
+            )
+            return
+
+        if run.current_step == PlanningRunStep.SCENE_DIRECTOR:
+            directed_scenes = [
+                SceneShotPlan.model_validate_json(value)
+                for value in run.directed_scene_json
+            ]
+            if run.next_scene_sequence > len(outline.scenes):
+                run.current_step = PlanningRunStep.FINALIZE
+                return
+            scene = outline.scenes[run.next_scene_sequence - 1]
+            handoff = (
+                directed_scenes[-1].continuity_out.model_copy(deep=True)
+                if directed_scenes
+                else outline.scenes[0].continuity_in.model_copy(deep=True)
+            )
+            direction = direct_story_scene(
+                request,
+                outline,
+                scene,
+                handoff,
+                client,
+            )
+            run.directed_scene_json.append(direction.scene.model_dump_json())
+            run.used_scene_repair = run.used_scene_repair or direction.repaired
+            run.used_scene_fallback = (
+                run.used_scene_fallback or direction.used_fallback
+            )
+            run.warnings.extend(direction.warnings)
+            run.next_scene_sequence += 1
+            if run.next_scene_sequence > len(outline.scenes):
+                self._complete_planning_step(
+                    run,
+                    PlanningRunStep.SCENE_DIRECTOR,
+                    PlanningRunStep.FINALIZE,
+                )
+            return
+
+        if run.current_step == PlanningRunStep.FINALIZE:
+            directed_scenes = [
+                SceneShotPlan.model_validate_json(value)
+                for value in run.directed_scene_json
+            ]
+            planning = assemble_multi_agent_planning_result(
+                request,
+                outline,
+                directed_scenes,
+                outline_source=run.outline_source or "unknown story architect",
+                critic_used=run.critic_used,
+                revision_rounds=run.revision_round,
+                used_scene_repair=run.used_scene_repair,
+                used_scene_fallback=run.used_scene_fallback,
+                warnings=run.warnings,
+                review_report=run.review_report,
+            )
+            if run.project_id is None:
+                run.project_id = f"project-{uuid4().hex[:12]}"
+                run.updated_at = utc_now()
+                self.repository.save_planning_run(run)
+            document = build_project_document_from_plan(
+                project_id=run.project_id,
+                request=request,
+                planning=planning,
+                created_at=utc_now(),
+            )
+            with self._lock:
+                self.repository.save_project(document)
+            if request.run_mode == RunMode.AUTO_DRAFT:
+                autonomous = self._initialize_autonomous_run(
+                    run.project_id,
+                    request=request,
+                    planning=planning,
+                    execution_target=run.request.execution_target,
+                    render_export=run.request.render_export,
+                    run_id=run.autonomous_run_id
+                    or f"autonomous-run-{run.id.removeprefix('planning-run-')}",
+                )
+                run.autonomous_run_id = autonomous.id
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.FINALIZE,
+                PlanningRunStep.COMPLETE,
+            )
+            run.status = PlanningRunStatus.COMPLETE
+            run.completed_at = utc_now()
+            if PlanningRunStep.COMPLETE not in run.completed_steps:
+                run.completed_steps.append(PlanningRunStep.COMPLETE)
+            return
+
+        if run.current_step == PlanningRunStep.COMPLETE:
+            run.status = PlanningRunStatus.COMPLETE
+            return
+        raise WorkflowConflictError(
+            f"Planning run cannot advance from {run.current_step.value}"
+        )
+
+    @staticmethod
+    def _complete_planning_step(
+        run: PlanningRunRecord,
+        completed_step: PlanningRunStep,
+        next_step: PlanningRunStep,
+    ) -> None:
+        if completed_step not in run.completed_steps:
+            run.completed_steps.append(completed_step)
+        run.current_step = next_step
+
+    @staticmethod
+    def _append_remaining_review_warning(run: PlanningRunRecord) -> None:
+        report = run.review_report
+        if report is None or not report.requires_revision:
+            return
+        warning = (
+            f"当前剧本审阅仍保留 {len(report.issues)} 项可选修改建议；"
+            "建议不会阻断后续规划，用户可继续、编辑或忽略。"
+        )
+        if warning not in run.warnings:
+            run.warnings.append(warning)
+
+    @staticmethod
+    def _planning_outline(run: PlanningRunRecord) -> EpisodeOutline:
+        if run.outline_json is None:
+            raise WorkflowConflictError("Planning run has no Story Architect outline")
+        return EpisodeOutline.model_validate_json(run.outline_json)
+
+    def _planning_run_response(self, run: PlanningRunRecord) -> PlanningRunResponse:
+        document = (
+            self.repository.get_project(run.project_id)
+            if run.project_id is not None
+            else None
+        )
+        project = self._aggregate(document) if document is not None else None
+        return PlanningRunResponse(run=run, project=project)
+
+    def _require_planning_run(self, run_id: str) -> PlanningRunRecord:
+        run = self.repository.get_planning_run(run_id)
+        if run is None:
+            raise ArtifactNotFoundError(run_id)
+        return run
+
+    def _planning_run_lock(self, run_id: str) -> threading.Lock:
+        with self._lock:
+            lock = self._planning_run_locks.get(run_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._planning_run_locks[run_id] = lock
+            return lock
 
     def search_asset_catalog(
         self,
@@ -699,38 +980,15 @@ class ShortDramaService:
         )
         project, planning = self._create_planned_project(create_request)
         project_id = project.document.project.id
-        now = utc_now()
-        run = AutonomousRunRecord(
-            id=f"autonomous-run-{uuid4().hex}",
-            project_id=project_id,
-            status=AutonomousRunStatus.RUNNING,
-            current_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
-            completed_steps=[
-                AutonomousRunStep.NORMALIZE_INPUT,
-                AutonomousRunStep.PLAN,
-            ],
-            planner=planning.planner,
-            execution_target=request.execution_target,
-            render_export=request.render_export,
-            warnings=list(planning.warnings),
-            created_at=now,
-            updated_at=now,
-        )
-        with self._lock:
-            document = self._require_project_document(project_id)
-            document.autonomous_runs.append(run)
-            self.repository.save_project(document)
+        run_id = f"autonomous-run-{uuid4().hex}"
         try:
-            self._import_creative_input_images(project_id, create_request)
-            self._advance_autonomous_run(
+            run = self._initialize_autonomous_run(
                 project_id,
-                run.id,
-                completed_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
-                next_step=(
-                    AutonomousRunStep.GENERATE
-                    if request.execution_target == AutonomousExecutionTarget.MOCK
-                    else AutonomousRunStep.PREPARE_ASSETS
-                ),
+                request=create_request,
+                planning=planning,
+                execution_target=request.execution_target,
+                render_export=request.render_export,
+                run_id=run_id,
             )
             if request.execution_target == AutonomousExecutionTarget.REAL_H3:
                 return self.advance_autonomous_run(
@@ -744,27 +1002,86 @@ class ShortDramaService:
                 autonomous_run_id=run.id,
             )
         except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
-            self._finish_autonomous_run(
-                project_id,
-                run.id,
-                status=AutonomousRunStatus.NEEDS_ATTENTION,
-                error_message=str(exc),
-            )
+            if any(
+                item.id == run_id
+                for item in self._require_project_document(project_id).autonomous_runs
+            ):
+                self._finish_autonomous_run(
+                    project_id,
+                    run_id,
+                    status=AutonomousRunStatus.NEEDS_ATTENTION,
+                    error_message=str(exc),
+                )
             raise
         except Exception as exc:
-            self._finish_autonomous_run(
-                project_id,
-                run.id,
-                status=AutonomousRunStatus.FAILED,
-                error_message=str(exc),
-            )
+            if any(
+                item.id == run_id
+                for item in self._require_project_document(project_id).autonomous_runs
+            ):
+                self._finish_autonomous_run(
+                    project_id,
+                    run_id,
+                    status=AutonomousRunStatus.FAILED,
+                    error_message=str(exc),
+                )
             raise
-        completed = self._require_autonomous_run(project_id, run.id)
+        completed = self._require_autonomous_run(project_id, run_id)
         return AutonomousDraftResponse(
             project=result.project,
             export=result.export,
             run=completed,
         )
+
+    def _initialize_autonomous_run(
+        self,
+        project_id: str,
+        *,
+        request: CreateProjectRequest,
+        planning: ProductionPlanningResult,
+        execution_target: AutonomousExecutionTarget,
+        render_export: bool,
+        run_id: str | None = None,
+    ) -> AutonomousRunRecord:
+        resolved_run_id = run_id or f"autonomous-run-{uuid4().hex}"
+        with self._lock:
+            document = self._require_project_document(project_id)
+            existing = next(
+                (item for item in document.autonomous_runs if item.id == resolved_run_id),
+                None,
+            )
+            if existing is None:
+                now = utc_now()
+                existing = AutonomousRunRecord(
+                    id=resolved_run_id,
+                    project_id=project_id,
+                    status=AutonomousRunStatus.RUNNING,
+                    current_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
+                    completed_steps=[
+                        AutonomousRunStep.NORMALIZE_INPUT,
+                        AutonomousRunStep.PLAN,
+                    ],
+                    planner=planning.planner,
+                    execution_target=execution_target,
+                    render_export=render_export,
+                    warnings=list(planning.warnings),
+                    created_at=now,
+                    updated_at=now,
+                )
+                document.autonomous_runs.append(existing)
+                self.repository.save_project(document)
+        if existing.current_step == AutonomousRunStep.IMPORT_INPUT_ASSETS:
+            self._import_creative_input_images(project_id, request)
+            self._advance_autonomous_run(
+                project_id,
+                existing.id,
+                completed_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
+                next_step=(
+                    AutonomousRunStep.GENERATE
+                    if execution_target == AutonomousExecutionTarget.MOCK
+                    else AutonomousRunStep.PREPARE_ASSETS
+                ),
+            )
+        return self._require_autonomous_run(project_id, existing.id)
 
     def create_autonomous_repeat(
         self,
@@ -1061,13 +1378,7 @@ class ShortDramaService:
         self,
         request: CreateProjectRequest,
     ) -> tuple[ProjectAggregate, ProductionPlanningResult]:
-        api_key = self.language_config.api_key()
-        base_url = self.language_config.base_url()
-        client = (
-            self.language_provider_factory(api_key, base_url)
-            if api_key or is_loopback_openai_url(base_url)
-            else None
-        )
+        client = self._configured_language_client()
         planning = create_production_plan(request, client)
         project_id = f"project-{uuid4().hex[:12]}"
         created_at = utc_now()
@@ -1080,6 +1391,15 @@ class ShortDramaService:
         with self._lock:
             self.repository.save_project(document)
             return self._aggregate(document), planning
+
+    def _configured_language_client(self) -> LanguageProviderClient | None:
+        api_key = self.language_config.api_key()
+        base_url = self.language_config.base_url()
+        return (
+            self.language_provider_factory(api_key, base_url)
+            if api_key or is_loopback_openai_url(base_url)
+            else None
+        )
 
     def _import_creative_input_images(
         self,

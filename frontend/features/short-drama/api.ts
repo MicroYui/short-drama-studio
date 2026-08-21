@@ -56,6 +56,9 @@ export type VideoInspectionRequest = components['schemas']['VideoInspectionReque
 export type AudioInspectionReport = components['schemas']['AudioInspectionReport']
 export type AudioInspectionRequest = components['schemas']['AudioInspectionRequest']
 export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRepeatCreateRequest']
+export type PlanningRunCreateRequest = components['schemas']['PlanningRunCreateRequest']
+export type PlanningRunRecord = components['schemas']['PlanningRunRecord']
+export type PlanningRunResponse = components['schemas']['PlanningRunResponse']
 export type VoiceReferenceBinding = components['schemas']['VoiceReferenceBinding']
 export type VoiceReferenceMutationResponse = components['schemas']['VoiceReferenceMutationResponse']
 export type VoiceReferenceUpdateRequest = components['schemas']['VoiceReferenceUpdateRequest']
@@ -65,6 +68,10 @@ export type AssetCatalogImportRequest = components['schemas']['AssetCatalogImpor
 export type AssetCoverageResponse = components['schemas']['AssetCoverageResponse']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
+const listPlanningRuns = makeEndpointClient('/api/short-drama/planning-runs', 'get')
+const createPlanningRun = makeEndpointClient('/api/short-drama/planning-runs', 'post')
+const getPlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}', 'get')
+const advancePlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/advance', 'post')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
 const createAutonomousDraft = makeEndpointClient('/api/short-drama/projects/autonomous-draft', 'post')
 const createAutonomousRepeat = makeEndpointClient('/api/short-drama/projects/{source_project_id}/autonomous-repeats', 'post')
@@ -158,6 +165,18 @@ function characterPath(projectId: string, characterId: string, suffix = ''): str
 
 export const ShortDramaApi = {
   listProjects: () => listProjects(),
+  listPlanningRuns: () => listPlanningRuns(),
+  createPlanningRun,
+  getPlanningRun: (runId: string) => getPlanningRun(
+    undefined,
+    undefined,
+    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}`,
+  ),
+  advancePlanningRun: (runId: string) => advancePlanningRun(
+    undefined,
+    undefined,
+    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/advance`,
+  ),
   createProject,
   createAutonomousDraft,
   createAutonomousRepeat: (

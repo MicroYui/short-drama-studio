@@ -10,20 +10,25 @@ from short_drama.models import (
     CreateProjectRequest,
     ProductionProfile,
     ProjectDocument,
+    ReferenceRole,
     ScriptReviewIssue,
     ScriptReviewReport,
     ScriptReviewSeverity,
     SourceMode,
 )
 from short_drama.production_planner import (
+    PlannedReferenceNeed,
     ProductionPlan,
     _fallback_directed_scene_plan,
     _fallback_episode_outline,
     _fallback_plan,
+    _compact_error,
     _locked_dialogue,
     _planner_prompt,
+    _validate_directed_scene_plan,
     build_project_document_from_plan,
     create_production_plan,
+    direct_story_scene,
     refresh_lightweight_reference_plans,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderError
@@ -152,6 +157,43 @@ class MultiAgentLanguageClient:
         return self.scene_plans[sequence].model_dump_json()
 
 
+class SceneReferenceRepairClient:
+    def __init__(self, request: CreateProjectRequest) -> None:
+        self.request = request
+        self.outline = _fallback_episode_outline(request)
+        self.calls = 0
+
+    def validate_credentials(self) -> None:
+        pass
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        del instructions, input_text, image_urls, max_output_tokens
+        self.calls += 1
+        scene = self.outline.scenes[0]
+        plan = _fallback_directed_scene_plan(
+            self.request,
+            self.outline,
+            scene,
+            scene.continuity_in,
+        )
+        if self.calls == 1:
+            plan.shots[0].reference_needs.append(
+                PlannedReferenceNeed(
+                    subject_name="未声明的临时道具",
+                    acceptable_roles=[ReferenceRole.PROP_PRODUCT],
+                    purpose="首次无效输出",
+                )
+            )
+        return plan.model_dump_json()
+
+
 def _request() -> CreateProjectRequest:
     return CreateProjectRequest(
         name="别相信我",
@@ -260,6 +302,70 @@ def test_multi_agent_planner_falls_back_only_the_failed_scene() -> None:
     assert not shots_by_scene[2][0].narrative_purpose.startswith("Agent scene 2")
     assert shots_by_scene[3][0].narrative_purpose.startswith("Agent scene 3")
     assert any("场景 02" in warning and "仅该场" in warning for warning in planning.warnings)
+
+
+def test_scene_director_rejects_reference_subjects_outside_episode_asset_contract() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=300,
+    )
+    outline = _fallback_episode_outline(request)
+    scene = outline.scenes[0]
+    plan = _fallback_directed_scene_plan(
+        request,
+        outline,
+        scene,
+        scene.continuity_in,
+    )
+    plan.shots[0].reference_needs.append(
+        PlannedReferenceNeed(
+            subject_name="未声明的临时道具",
+            acceptable_roles=[ReferenceRole.PROP_PRODUCT],
+            purpose="测试单场资产契约校验",
+        )
+    )
+
+    with pytest.raises(ValueError, match="outside the episode asset contract"):
+        _validate_directed_scene_plan(outline, scene, plan)
+
+
+def test_scene_director_locally_repairs_unknown_reference_subject_before_finalize() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=300,
+    )
+    client = SceneReferenceRepairClient(request)
+    scene = client.outline.scenes[0]
+
+    result = direct_story_scene(
+        request,
+        client.outline,
+        scene,
+        scene.continuity_in,
+        client,
+    )
+
+    assert result.repaired is True
+    assert result.used_fallback is False
+    assert client.calls == 2
+    assert all(
+        need.subject_name != "未声明的临时道具"
+        for shot in result.scene.shots
+        for need in shot.reference_needs
+    )
+
+
+def test_provider_html_error_is_compacted_before_persisting_warning() -> None:
+    error = LanguageProviderError(
+        "<!DOCTYPE html><html><head><title>Unicorn! · Provider</title></head>"
+        + "<body>failure</body></html>"
+        + ("x" * 5000)
+    )
+
+    summary = _compact_error(error)
+
+    assert summary == "Provider returned an HTML error page: Unicorn! · Provider"
+    assert "<!DOCTYPE" not in summary
 
 
 def test_script_critic_can_trigger_one_story_architect_revision_before_scene_planning() -> None:
@@ -391,6 +497,23 @@ def test_locked_dialogue_ignores_metadata_and_classifies_recorded_voice() -> Non
     ]
 
 
+def test_locked_dialogue_ignores_common_story_contract_headings() -> None:
+    lines = _locked_dialogue(
+        "\n".join(
+            [
+                "核心场景：仓库、酒店、停车场。",
+                "关键规则：未来可以被改变。",
+                "结尾明确：录音只代表可能结果。",
+                "许宁：“下次先相信我。”",
+            ]
+        )
+    )
+
+    assert [(line.speaker, line.text) for line in lines] == [
+        ("许宁", "下次先相信我。")
+    ]
+
+
 def test_locked_dialogue_uses_actor_at_action_start_and_voice_owner_at_source() -> None:
     lines = _locked_dialogue(
         "\n".join(
@@ -406,6 +529,42 @@ def test_locked_dialogue_uses_actor_at_action_start_and_voice_owner_at_source() 
         ("周衡", "DIALOGUE"),
         ("录音笔中的林夏", "VOICEOVER"),
     ]
+
+
+def test_locked_dialogue_uses_latest_action_clause_and_nearest_voice_owner() -> None:
+    lines = _locked_dialogue(
+        "\n".join(
+            [
+                "角色：许宁，29岁。程野，31岁。顾岚，35岁。",
+                "程野推门进来。许宁藏起录音笔，问：“你明晚九点在哪？”",
+                "许宁把顾岚叫来。程野出现，看见录音笔，说：“你还是听了那段录音。”",
+                "许宁、顾岚和程野当面对质。录音笔再次播放许宁的声音：“如果我没来这里，死的人才会是顾岚。”",
+                "许宁关掉录音笔，对程野说：“下次先相信我。”",
+            ]
+        )
+    )
+
+    assert [(line.speaker, line.audio_kind.value) for line in lines] == [
+        ("许宁", "DIALOGUE"),
+        ("程野", "DIALOGUE"),
+        ("录音笔中的许宁", "VOICEOVER"),
+        ("许宁", "DIALOGUE"),
+    ]
+
+
+def test_locked_dialogue_strips_speech_actions_from_character_labels() -> None:
+    lines = _locked_dialogue(
+        "\n".join(
+            [
+                "角色：许宁，29岁。程野，31岁。",
+                "许宁问：“你明晚九点在哪？”",
+                "程野回答：“停车场。”",
+                "许宁低声说：“别让他看见请柬。”",
+            ]
+        )
+    )
+
+    assert [line.speaker for line in lines] == ["许宁", "程野", "许宁"]
 
 
 def test_locked_fallback_does_not_turn_metadata_or_voiceover_into_characters() -> None:

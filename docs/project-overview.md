@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12 已实现跨项目资产目录、同源派生视图与 Asset Agent Tools；Phase 13 加入通用视频和抖音短剧两套 Prompt Policy；Phase 14 允许用户填写任意目标时长，并以 Story Architect、Script Critic、逐场 Scene Director 和精简连续性 handoff 规划多分钟短剧。连续性、资产、H3、QA、时间线和导出仍共享同一可恢复流程，没有增加样片专用字段或信息密度硬门控。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12 已实现跨项目资产目录、同源派生视图与 Asset Agent Tools；Phase 13 加入通用视频和抖音短剧两套 Prompt Policy；Phase 14 允许用户填写任意目标时长，并以 Story Architect、Script Critic、逐场 Scene Director 和精简连续性 handoff 规划多分钟短剧；Phase 15 将长篇规划拆成 SQLite 持久化的 `PlanningRun`，按 Agent 阶段和场次逐步推进、失败局部重试并支持应用重启恢复。连续性、资产、H3、QA、时间线和导出仍共享同一流程，没有增加样片专用字段或信息密度硬门控。
 
 ## 结论先行
 
@@ -54,9 +54,10 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 24. [Phase 12：跨剧本资产 Agent 与同源场景视图](22-phase12-cross-script-asset-agent.md)
 25. [Phase 13：通用视频与抖音短剧制作策略](23-phase13-production-profiles.md)
 26. [Phase 14：多分钟短剧的分层 Multi-Agent 规划](24-phase14-long-form-multi-agent-planning.md)
+27. [Phase 15：可恢复的长篇剧本规划](25-phase15-recoverable-long-form-planning.md)
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；通用视频/抖音短剧 Prompt Policy；自定义目标时长、整集大纲、场次契约、逐场 Director 和连续性 handoff；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片。
+- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；通用视频/抖音短剧 Prompt Policy；任意目标时长、整集大纲、场次契约、逐场 Director、连续性 handoff 与可恢复 `PlanningRun`；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片。
 - 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。本阶段不新增声音 QA。尚未完成：跨项目默认路线样本门槛；复杂多人对白、参考声线的真实稳定性，以及声音来源语义的自动验证。
-- 下一步：先用 GPT-5.6-sol 和人工审阅验证不同题材、不同自定义时长下的长篇剧本质量、信息密度和跨场连续性；这项验证不需要 GPT Image 或 H3。视觉生成仍留在后续完整成片阶段，本阶段不新增声音 QA。
+- 下一步：在可恢复 PlanningRun 上继续扩充不同题材、不同自定义时长的剧本质量样本，并让 Script Critic 的剩余问题进入可比较的剧本版本；这项验证不需要 GPT Image 或 H3。视觉生成仍留在后续完整成片阶段，本阶段不新增声音 QA。

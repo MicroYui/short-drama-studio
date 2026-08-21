@@ -9100,6 +9100,317 @@
         "title": "OutputSpec",
         "type": "object"
       },
+      "PlanningRunCreateRequest": {
+        "additionalProperties": false,
+        "description": "Persisted long-form planning request before a project document exists.",
+        "properties": {
+          "execution_target": {
+            "$ref": "#/components/schemas/AutonomousExecutionTarget",
+            "default": "MOCK"
+          },
+          "input_images": {
+            "items": {
+              "$ref": "#/components/schemas/CreativeInputImage"
+            },
+            "maxItems": 8,
+            "title": "Input Images",
+            "type": "array"
+          },
+          "input_text": {
+            "default": "",
+            "maxLength": 50000,
+            "title": "Input Text",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "production_profile": {
+            "$ref": "#/components/schemas/ProductionProfile",
+            "default": "DOUYIN_SHORT_DRAMA"
+          },
+          "render_export": {
+            "default": true,
+            "title": "Render Export",
+            "type": "boolean"
+          },
+          "run_mode": {
+            "$ref": "#/components/schemas/RunMode",
+            "default": "AUTO_DRAFT"
+          },
+          "source_mode": {
+            "$ref": "#/components/schemas/SourceMode"
+          },
+          "target_duration_seconds": {
+            "anyOf": [
+              {
+                "maximum": 1800.0,
+                "minimum": 15.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration Seconds"
+          }
+        },
+        "required": [
+          "source_mode"
+        ],
+        "title": "PlanningRunCreateRequest",
+        "type": "object"
+      },
+      "PlanningRunListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningRunRecord"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "PlanningRunListResponse",
+        "type": "object"
+      },
+      "PlanningRunRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "autonomous_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autonomous Run Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "completed_steps": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningRunStep"
+            },
+            "title": "Completed Steps",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "critic_used": {
+            "default": false,
+            "title": "Critic Used",
+            "type": "boolean"
+          },
+          "current_step": {
+            "$ref": "#/components/schemas/PlanningRunStep"
+          },
+          "directed_scene_json": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Directed Scene Json",
+            "type": "array"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "max_revision_rounds": {
+            "default": 2,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Max Revision Rounds",
+            "type": "integer"
+          },
+          "next_scene_sequence": {
+            "default": 1,
+            "maximum": 501.0,
+            "minimum": 1.0,
+            "title": "Next Scene Sequence",
+            "type": "integer"
+          },
+          "outline_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outline Json"
+          },
+          "outline_source": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outline Source"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "request": {
+            "$ref": "#/components/schemas/PlanningRunCreateRequest"
+          },
+          "review_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_round": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlanningRunStatus"
+          },
+          "total_scenes": {
+            "default": 0,
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Total Scenes",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "used_scene_fallback": {
+            "default": false,
+            "title": "Used Scene Fallback",
+            "type": "boolean"
+          },
+          "used_scene_repair": {
+            "default": false,
+            "title": "Used Scene Repair",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "current_step",
+          "request",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PlanningRunRecord",
+        "type": "object"
+      },
+      "PlanningRunResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectAggregate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "$ref": "#/components/schemas/PlanningRunRecord"
+          }
+        },
+        "required": [
+          "run"
+        ],
+        "title": "PlanningRunResponse",
+        "type": "object"
+      },
+      "PlanningRunStatus": {
+        "enum": [
+          "RUNNING",
+          "COMPLETE",
+          "NEEDS_ATTENTION",
+          "FAILED"
+        ],
+        "title": "PlanningRunStatus",
+        "type": "string"
+      },
+      "PlanningRunStep": {
+        "enum": [
+          "STORY_ARCHITECT",
+          "SCRIPT_CRITIC",
+          "STORY_REVISION",
+          "SCENE_DIRECTOR",
+          "FINALIZE",
+          "COMPLETE"
+        ],
+        "title": "PlanningRunStep",
+        "type": "string"
+      },
       "PreprocessingStep": {
         "properties": {
           "params": {
@@ -15305,6 +15616,200 @@
           }
         },
         "summary": "Retry Image Task",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/planning-runs": {
+      "get": {
+        "operationId": "list_planning_runs_api_short_drama_planning_runs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Planning Runs",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "post": {
+        "operationId": "create_planning_run_api_short_drama_planning_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningRunCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Planning Run",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/planning-runs/{run_id}": {
+      "get": {
+        "operationId": "get_planning_run_api_short_drama_planning_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Planning Run",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/planning-runs/{run_id}/advance": {
+      "post": {
+        "operationId": "advance_planning_run_api_short_drama_planning_runs__run_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Advance Planning Run",
         "tags": [
           "short-drama"
         ]

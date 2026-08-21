@@ -39,6 +39,8 @@ import {
   type CreativeInputImage,
   type ExportRecord,
   type GenerationTask,
+  type PlanningRunRecord,
+  type PlanningRunResponse,
   type ProjectAggregate,
   type ProjectRecord,
   type ProductionProfile,
@@ -98,6 +100,15 @@ const strategyLabels: Record<string, string> = {
 const productionProfileLabels: Record<ProductionProfile, string> = {
   GENERAL_VIDEO: '通用视频',
   DOUYIN_SHORT_DRAMA: '抖音短剧',
+}
+
+const planningStepLabels: Record<PlanningRunRecord['current_step'], string> = {
+  STORY_ARCHITECT: 'Story Architect · 整集大纲',
+  SCRIPT_CRITIC: 'Script Critic · 独立审稿',
+  STORY_REVISION: 'Story Architect · 有界修订',
+  SCENE_DIRECTOR: 'Scene Director · 逐场分镜',
+  FINALIZE: '汇总剧本与制片计划',
+  COMPLETE: '剧本规划完成',
 }
 
 function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'blue' | 'green' | 'amber' | 'red' }) {
@@ -195,7 +206,7 @@ function OverviewPanel({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 14 · Long-form Multi-Agent</Badge>
+              <Badge tone="blue">Phase 15 · Recoverable Multi-Agent</Badge>
               <Badge tone="green">{productionProfileLabels[record.production_profile ?? 'DOUYIN_SHORT_DRAMA']}</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
@@ -776,7 +787,7 @@ function QaPanel({
           <div><h3 className="font-medium text-white">音频与对白检查工具</h3><p className="mt-1 text-xs leading-5 text-zinc-500">逐镜提取原生音轨，检查静音、削波、时长与字幕时间；可用语音服务时再核对锁定对白和跨镜声线。结果是 Director 可忽略建议。</p></div>
           <button className={secondaryButton} disabled={!currentManifest(project)} onClick={onInspectAudio}><FileAudio className="h-4 w-4" />重新检查当前时间线</button>
         </div>
-        {!latestAudio ? <p className="mt-8 text-center text-sm text-zinc-600">生成时间线后可运行 AudioInspection；AUTO_DRAFT 会在导出前自动执行。</p> : (
+        {!latestAudio ? <p className="mt-8 text-center text-sm text-zinc-600">生成时间线后可按需手动运行 AudioInspection；自动流程仅保留可选声音输入，不默认执行声音 QA。</p> : (
           <div className="mt-4 space-y-4">
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
               <div className="flex flex-wrap items-center gap-2"><Badge tone={latestAudio.semantic_status === 'COMPLETE' ? 'green' : latestAudio.semantic_status === 'FAILED' ? 'amber' : 'neutral'}>{latestAudio.semantic_status}</Badge><span className="text-[11px] text-zinc-600">{latestAudioClips.length} 音轨 · {latestDialogueChecks.length} 句对白 · {latestAudioIssues.length} 个问题</span></div>
@@ -797,6 +808,85 @@ function QaPanel({
       </div>
       <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
         <div className="flex gap-3"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" /><div><p className="text-sm font-medium text-amber-100">质量结论边界</p><p className="mt-1 text-xs leading-5 text-zinc-400">Mock 分数只证明工程链路。H3 实验台会保存真实 768P 输出与单人硬门槛审片；路线稳定性和最终质量仍需按固定五句台词、身份/道具连续性、声音、口型和至少三人盲评完成。</p></div></div>
+      </div>
+    </div>
+  )
+}
+
+function PlanningRunPanel({
+  run,
+  onRetry,
+}: {
+  run: PlanningRunRecord
+  onRetry: () => void
+}) {
+  const directedScenes = run.directed_scene_json ?? []
+  const completedSteps = run.completed_steps ?? []
+  const reviewIssues = run.review_report?.issues ?? []
+  const warnings = run.warnings ?? []
+  const completedScenes = Math.min(
+    directedScenes.length,
+    run.total_scenes,
+  )
+  const targetSeconds = run.request.target_duration_seconds ?? (
+    run.request.production_profile === 'DOUYIN_SHORT_DRAMA' ? 300 : 60
+  )
+  const durationLabel = targetSeconds >= 60
+    ? `${Number((targetSeconds / 60).toFixed(1))} 分钟`
+    : `${targetSeconds} 秒`
+  const stages: PlanningRunRecord['current_step'][] = [
+    'STORY_ARCHITECT',
+    'SCRIPT_CRITIC',
+    'STORY_REVISION',
+    'SCENE_DIRECTOR',
+    'FINALIZE',
+  ]
+  const currentIndex = run.current_step === 'COMPLETE'
+    ? stages.length
+    : stages.indexOf(run.current_step)
+  const needsAttention = run.status === 'NEEDS_ATTENTION'
+  return (
+    <div className="mx-auto flex min-h-full max-w-5xl items-center px-8 py-12">
+      <div className="w-full overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-zinc-950 to-cyan-500/5 shadow-2xl">
+        <div className="border-b border-zinc-800/80 p-6 sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 15 · Recoverable Planning</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
+              <h1 className="mt-4 text-2xl font-semibold text-white">{run.request.name ?? '新短剧'}正在进行剧本规划</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">当前阶段只处理故事结构、因果、对白、场次和连续性规划，不调用 GPT Image 或 MiniMax-H3。每个 Agent 阶段和每个场次完成后都会保存，关闭应用后也能从当前节点继续。</p>
+            </div>
+            <div className={`flex min-w-56 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm ${needsAttention ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-blue-500/30 bg-blue-500/10 text-blue-100'}`}>
+              {needsAttention ? <AlertCircle className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
+              {needsAttention ? '当前节点需要重试' : planningStepLabels[run.current_step]}
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1.4fr_0.8fr]">
+          <div>
+            <h2 className="text-sm font-semibold text-white">分层规划进度</h2>
+            <div className="mt-4 space-y-2">
+              {stages.map((step, index) => {
+                const complete = index < currentIndex || completedSteps.includes(step)
+                const active = step === run.current_step
+                return (
+                  <div key={step} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${active ? 'border-blue-500/30 bg-blue-500/10' : 'border-zinc-800 bg-zinc-950/60'}`}>
+                    {complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /> : active ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-400" /> : <CircleDot className="h-4 w-4 shrink-0 text-zinc-700" />}
+                    <div className="min-w-0 flex-1"><p className={`text-sm ${active ? 'font-medium text-white' : complete ? 'text-zinc-300' : 'text-zinc-600'}`}>{planningStepLabels[step]}</p>{step === 'SCENE_DIRECTOR' && run.total_scenes > 0 && <p className="mt-1 text-[11px] text-zinc-500">已完成 {completedScenes}/{run.total_scenes} 场；一次只展开一场并传递上一场实际交接状态</p>}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+              <p className="text-xs font-medium text-zinc-300">当前剧本检查</p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-zinc-900 p-3"><p className="text-zinc-600">修订轮次</p><p className="mt-1 font-semibold text-white">{run.revision_round}/{run.max_revision_rounds}</p></div><div className="rounded-lg bg-zinc-900 p-3"><p className="text-zinc-600">审稿建议</p><p className="mt-1 font-semibold text-white">{reviewIssues.length} 项</p></div></div>
+              <p className="mt-3 text-[11px] leading-5 text-zinc-500">审稿建议会触发最多两轮自动修订；仍未消除的建议会保留给用户，但不会阻断逐场规划。</p>
+            </div>
+            {warnings.length > 0 && <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="text-xs font-medium text-amber-100">最近记录</p><p className="mt-2 text-xs leading-5 text-zinc-400">{warnings.at(-1)}</p></div>}
+            {needsAttention && <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-xs font-medium text-red-200">{run.error_message ?? '当前 Agent 节点未完成'}</p><p className="mt-2 text-[11px] leading-5 text-zinc-500">重试只会重跑当前阶段或当前场次，已经完成的内容不会从头生成。</p><button className={`${primaryButton} mt-4 w-full`} onClick={onRetry}><RefreshCw className="h-4 w-4" />重试当前节点</button></div>}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -946,8 +1036,12 @@ export function ShortDramaStudio() {
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [planningRun, setPlanningRun] = useState<PlanningRunRecord | null>(null)
+  const [planningPollTick, setPlanningPollTick] = useState(0)
   const [autoPollTick, setAutoPollTick] = useState(0)
+  const planningAdvanceInFlight = useRef(false)
   const autoAdvanceInFlight = useRef(false)
+  const mockAutoDraftInFlight = useRef(false)
 
   const perform = useCallback(async <T,>(label: string, action: () => Promise<ResultLike<T>>, onSuccess: (data: T) => void) => {
     setBusyLabel(label)
@@ -975,6 +1069,15 @@ export function ShortDramaStudio() {
     return result.data.projects
   }, [])
 
+  const loadPlanningRuns = useCallback(async () => {
+    const result = await ShortDramaApi.listPlanningRuns()
+    if (!result.ok) {
+      setError(result.error.message)
+      return []
+    }
+    return result.data.runs
+  }, [])
+
   const loadProject = useCallback(async (projectId: string) => {
     setBusyLabel('读取项目')
     const result = await ShortDramaApi.getProject(projectId)
@@ -985,19 +1088,32 @@ export function ShortDramaStudio() {
     }
     setActiveProjectId(projectId)
     setProject(result.data)
+    setPlanningRun(null)
     setShowCreate(false)
   }, [])
 
   useEffect(() => {
     let cancelled = false
     const initialize = async () => {
-      const listed = await loadProjects()
-      if (cancelled || listed.length === 0) return
+      const [listed, planningRuns] = await Promise.all([
+        loadProjects(),
+        loadPlanningRuns(),
+      ])
+      if (cancelled) return
+      const resumable = planningRuns.find((run) => (
+        run.status === 'RUNNING' || run.status === 'NEEDS_ATTENTION'
+      ))
+      if (resumable) {
+        setPlanningRun(resumable)
+        setShowCreate(true)
+        return
+      }
+      if (listed.length === 0) return
       await loadProject(listed[0].id)
     }
     void initialize()
     return () => { cancelled = true }
-  }, [loadProject, loadProjects])
+  }, [loadPlanningRuns, loadProject, loadProjects])
 
   const refresh = useCallback(async () => {
     if (!activeProjectId) return
@@ -1005,6 +1121,103 @@ export function ShortDramaStudio() {
     if (result.ok) setProject(result.data)
     else setError(result.error.message)
   }, [activeProjectId])
+
+  const acceptPlanningResult = useCallback((data: PlanningRunResponse) => {
+    setPlanningRun(data.run)
+    if (data.run.status !== 'COMPLETE' || !data.project) return
+    const projectId = data.project.document.project.id
+    setProject(data.project)
+    setActiveProjectId(projectId)
+    setPlanningRun(null)
+    setShowCreate(false)
+    setTab(data.run.request.run_mode === 'GUIDED' ? 'script' : 'overview')
+    void loadProjects()
+    if (data.run.request.run_mode === 'GUIDED') {
+      setNotice('长篇剧本规划完成，可在剧本页检查和修改')
+      return
+    }
+    if (data.run.request.execution_target === 'REAL_H3') {
+      setNotice('长篇剧本规划完成，自动制片开始继续推进')
+      return
+    }
+    mockAutoDraftInFlight.current = true
+    setBusyLabel('剧本已完成，继续生成 Mock 成片')
+    void ShortDramaApi.autoDraft(projectId, data.run.request.render_export)
+      .then((result) => {
+        if (!result.ok) throw new Error(result.error.message)
+        setProject(result.data.project)
+        setTab('timeline')
+        setNotice('长篇 Mock 草稿已完成')
+        void loadProjects()
+      })
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : String(caught))
+      })
+      .finally(() => {
+        mockAutoDraftInFlight.current = false
+        setBusyLabel(null)
+      })
+  }, [loadProjects])
+
+  const advancePlanning = useCallback(() => {
+    if (!planningRun || planningAdvanceInFlight.current) return
+    planningAdvanceInFlight.current = true
+    setError(null)
+    void ShortDramaApi.advancePlanningRun(planningRun.id)
+      .then((result) => {
+        if (!result.ok) {
+          setError(result.error.message)
+          window.setTimeout(
+            () => setPlanningPollTick((value) => value + 1),
+            5000,
+          )
+          return
+        }
+        acceptPlanningResult(result.data)
+      })
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : String(caught))
+        window.setTimeout(
+          () => setPlanningPollTick((value) => value + 1),
+          5000,
+        )
+      })
+      .finally(() => { planningAdvanceInFlight.current = false })
+  }, [acceptPlanningResult, planningRun])
+
+  useEffect(() => {
+    if (!planningRun || planningRun.status !== 'RUNNING') return
+    const timer = window.setTimeout(advancePlanning, 350)
+    return () => window.clearTimeout(timer)
+  }, [advancePlanning, planningPollTick, planningRun])
+
+  useEffect(() => {
+    const run = project?.document.autonomous_runs?.at(-1)
+    if (
+      !project
+      || !run
+      || run.execution_target !== 'MOCK'
+      || run.status !== 'RUNNING'
+      || mockAutoDraftInFlight.current
+    ) return
+    mockAutoDraftInFlight.current = true
+    setBusyLabel('恢复未完成的 Mock 自动草稿')
+    void ShortDramaApi.autoDraft(project.document.project.id, run.render_export)
+      .then((result) => {
+        if (!result.ok) throw new Error(result.error.message)
+        setProject(result.data.project)
+        setTab('timeline')
+        setNotice('Mock 自动草稿已恢复并完成')
+        void loadProjects()
+      })
+      .catch((caught) => {
+        setError(caught instanceof Error ? caught.message : String(caught))
+      })
+      .finally(() => {
+        mockAutoDraftInFlight.current = false
+        setBusyLabel(null)
+      })
+  }, [loadProjects, project])
 
   useEffect(() => {
     const run = project?.document.autonomous_runs?.at(-1)
@@ -1059,6 +1272,23 @@ export function ShortDramaStudio() {
       input_text: inputText,
       input_images: images,
       run_mode: runMode,
+    }
+    if (targetDurationSeconds > 90) {
+      void perform(
+        '启动可恢复长篇剧本规划',
+        () => ShortDramaApi.createPlanningRun({
+          ...request,
+          execution_target: executionTarget,
+          render_export: true,
+        }),
+        (data) => {
+          setPlanningRun(data.run)
+          setProject(null)
+          setActiveProjectId(null)
+          setShowCreate(true)
+        },
+      )
+      return
     }
     if (runMode === 'AUTO_DRAFT') {
       void perform(
@@ -1230,7 +1460,7 @@ export function ShortDramaStudio() {
       <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800/80 bg-[#0c0e12]">
         <div className="border-b border-zinc-800/80 p-4">
           <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500 text-white"><Clapperboard className="h-5 w-5" /></div><div><p className="text-sm font-semibold text-white">Short Drama Studio</p><p className="text-[11px] text-zinc-500">Local Production Core</p></div></div>
-          <button className={`${secondaryButton} mt-4 w-full`} onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />新建项目</button>
+          <button className={`${secondaryButton} mt-4 w-full`} onClick={() => { setPlanningRun(null); setShowCreate(true) }}><Plus className="h-4 w-4" />新建项目</button>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">Projects · SQLite</p>
@@ -1249,7 +1479,7 @@ export function ShortDramaStudio() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {!shouldShowCreate && project && (
+        {!planningRun && !shouldShowCreate && project && (
           <header className="border-b border-zinc-800/80 bg-[#0b0d11]/95">
             <div className="flex h-16 items-center justify-between px-6">
               <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="truncate text-base font-semibold text-white">{project.document.project.name}</h1><Badge tone="blue">{stageLabels[project.document.project.stage] ?? project.document.project.stage}</Badge></div><p className="mt-0.5 text-[11px] text-zinc-600">{project.document.project.id} · {project.document.project.language} · {project.document.project.aspect_ratio}</p></div>
@@ -1262,7 +1492,7 @@ export function ShortDramaStudio() {
         )}
 
         <main className="relative min-h-0 flex-1 overflow-y-auto">
-          {shouldShowCreate ? <CreateProjectPanel onCreate={createProject} onFixture={initializeFixture} /> : <div className="mx-auto max-w-[1600px] p-6 lg:p-8">{content}</div>}
+          {planningRun ? <PlanningRunPanel run={planningRun} onRetry={advancePlanning} /> : shouldShowCreate ? <CreateProjectPanel onCreate={createProject} onFixture={initializeFixture} /> : <div className="mx-auto max-w-[1600px] p-6 lg:p-8">{content}</div>}
           {busyLabel && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm"><div className="rounded-xl border border-zinc-700 bg-zinc-900 px-6 py-5 shadow-2xl"><div className="flex items-center gap-3 text-sm font-medium text-white"><Loader2 className="h-5 w-5 animate-spin text-blue-400" />{busyLabel}</div><p className="mt-2 text-xs text-zinc-500">任务和恢复点正在持久化，请勿关闭窗口。</p></div></div>}
           {(notice || error) && <div className={`fixed bottom-5 right-5 z-40 max-w-md rounded-xl border px-4 py-3 shadow-2xl ${error ? 'border-red-500/30 bg-red-950/95' : 'border-emerald-500/30 bg-emerald-950/95'}`}><div className="flex items-start gap-2">{error ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />}<div><p className="text-sm text-white">{error ? '操作未完成' : notice}</p>{error && <p className="mt-1 text-xs leading-5 text-red-200/70">{error}</p>}</div><button className="ml-3 text-xs text-zinc-500" onClick={() => { setNotice(null); setError(null) }}>关闭</button></div></div>}
         </main>

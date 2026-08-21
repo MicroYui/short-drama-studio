@@ -64,6 +64,9 @@ from short_drama.models import (
     ExportRequest,
     LocalReworkRequest,
     OperationKind,
+    PlanningRunCreateRequest,
+    PlanningRunListResponse,
+    PlanningRunResponse,
     ProjectAggregate,
     ProjectListResponse,
     ReviseScriptLineRequest,
@@ -548,6 +551,43 @@ def review_h3_take(
 @router.get("/projects", response_model=ProjectListResponse)
 def list_projects(service: ShortDramaService = Depends(get_short_drama_service)) -> ProjectListResponse:
     return service.list_projects()
+
+
+@router.get("/planning-runs", response_model=PlanningRunListResponse)
+def list_planning_runs(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunListResponse:
+    return service.list_planning_runs()
+
+
+@router.post("/planning-runs", response_model=PlanningRunResponse)
+def create_planning_run(
+    request: PlanningRunCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunResponse:
+    return service.create_planning_run(request)
+
+
+@router.get("/planning-runs/{run_id}", response_model=PlanningRunResponse)
+def get_planning_run(
+    run_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunResponse:
+    try:
+        return service.get_planning_run(run_id)
+    except ArtifactNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/planning-runs/{run_id}/advance", response_model=PlanningRunResponse)
+def advance_planning_run(
+    run_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunResponse:
+    try:
+        return service.advance_planning_run(run_id)
+    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
 
 
 @router.post("/projects", response_model=ProjectAggregate)

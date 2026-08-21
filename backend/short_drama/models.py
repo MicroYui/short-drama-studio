@@ -57,6 +57,22 @@ class AutonomousRunStep(StrEnum):
     COMPLETE = "COMPLETE"
 
 
+class PlanningRunStatus(StrEnum):
+    RUNNING = "RUNNING"
+    COMPLETE = "COMPLETE"
+    NEEDS_ATTENTION = "NEEDS_ATTENTION"
+    FAILED = "FAILED"
+
+
+class PlanningRunStep(StrEnum):
+    STORY_ARCHITECT = "STORY_ARCHITECT"
+    SCRIPT_CRITIC = "SCRIPT_CRITIC"
+    STORY_REVISION = "STORY_REVISION"
+    SCENE_DIRECTOR = "SCENE_DIRECTOR"
+    FINALIZE = "FINALIZE"
+    COMPLETE = "COMPLETE"
+
+
 class ApprovalStatus(StrEnum):
     DRAFT = "DRAFT"
     APPROVED = "APPROVED"
@@ -1105,6 +1121,50 @@ class AutonomousDraftCreateRequest(CreateProjectRequest):
         if self.run_mode != RunMode.AUTO_DRAFT:
             raise ValueError("Autonomous draft creation requires AUTO_DRAFT")
         return self
+
+
+class PlanningRunCreateRequest(CreateProjectRequest):
+    """Persisted long-form planning request before a project document exists."""
+
+    render_export: bool = True
+    execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
+
+
+class PlanningRunRecord(DomainModel):
+    id: str
+    status: PlanningRunStatus
+    current_step: PlanningRunStep
+    completed_steps: list[PlanningRunStep] = Field(
+        default_factory=list[PlanningRunStep]
+    )
+    request: PlanningRunCreateRequest
+    outline_json: str | None = None
+    review_report: ScriptReviewReport | None = None
+    directed_scene_json: list[str] = Field(default_factory=list[str], max_length=500)
+    next_scene_sequence: int = Field(default=1, ge=1, le=501)
+    total_scenes: int = Field(default=0, ge=0, le=500)
+    revision_round: int = Field(default=0, ge=0, le=2)
+    max_revision_rounds: int = Field(default=2, ge=0, le=2)
+    outline_source: str | None = Field(default=None, max_length=240)
+    critic_used: bool = False
+    used_scene_repair: bool = False
+    used_scene_fallback: bool = False
+    warnings: list[str] = Field(default_factory=list[str])
+    error_message: str | None = None
+    project_id: str | None = None
+    autonomous_run_id: str | None = None
+    created_at: str
+    updated_at: str
+    completed_at: str | None = None
+
+
+class PlanningRunListResponse(DomainModel):
+    runs: list[PlanningRunRecord]
+
+
+class PlanningRunResponse(DomainModel):
+    run: PlanningRunRecord
+    project: ProjectAggregate | None = None
 
 
 class AutonomousRepeatCreateRequest(DomainModel):

@@ -17,6 +17,7 @@ from short_drama.models import (
     ExportRecord,
     Freshness,
     GenerationTask,
+    PlanningRunRecord,
     ProjectDocument,
     RouteEvidence,
     Take,
@@ -204,6 +205,15 @@ class ShortDramaRepository:
                     ON h3_route_plans(project_id, version);
                 CREATE INDEX IF NOT EXISTS idx_h3_route_plans_project_updated
                     ON h3_route_plans(project_id, updated_at);
+
+                CREATE TABLE IF NOT EXISTS planning_runs (
+                    id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_planning_runs_status_updated
+                    ON planning_runs(status, updated_at);
                 """
             )
             task_columns = {
@@ -236,6 +246,42 @@ class ShortDramaRepository:
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(6, datetime('now'))"
             )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(7, datetime('now'))"
+            )
+
+    def save_planning_run(self, run: PlanningRunRecord) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO planning_runs(id, status, updated_at, record_json)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    updated_at = excluded.updated_at,
+                    record_json = excluded.record_json
+                """,
+                (run.id, run.status.value, run.updated_at, run.model_dump_json()),
+            )
+
+    def get_planning_run(self, run_id: str) -> PlanningRunRecord | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM planning_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return PlanningRunRecord.model_validate_json(cast(str, row["record_json"]))
+
+    def list_planning_runs(self) -> list[PlanningRunRecord]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT record_json FROM planning_runs ORDER BY updated_at DESC, id ASC"
+            ).fetchall()
+        return [
+            PlanningRunRecord.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]
 
     def save_project(self, document: ProjectDocument) -> None:
         project = document.project

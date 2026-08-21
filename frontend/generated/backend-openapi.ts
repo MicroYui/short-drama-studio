@@ -758,6 +758,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/planning-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Planning Runs */
+        get: operations["list_planning_runs_api_short_drama_planning_runs_get"];
+        put?: never;
+        /** Create Planning Run */
+        post: operations["create_planning_run_api_short_drama_planning_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/planning-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Planning Run */
+        get: operations["get_planning_run_api_short_drama_planning_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/planning-runs/{run_id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Advance Planning Run */
+        post: operations["advance_planning_run_api_short_drama_planning_runs__run_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects": {
         parameters: {
             query?: never;
@@ -4979,6 +5031,121 @@ export interface components {
              */
             width: number;
         };
+        /**
+         * PlanningRunCreateRequest
+         * @description Persisted long-form planning request before a project document exists.
+         */
+        PlanningRunCreateRequest: {
+            /** @default MOCK */
+            execution_target: components["schemas"]["AutonomousExecutionTarget"];
+            /** Input Images */
+            input_images?: components["schemas"]["CreativeInputImage"][];
+            /**
+             * Input Text
+             * @default
+             */
+            input_text: string;
+            /** Name */
+            name?: string | null;
+            /** @default DOUYIN_SHORT_DRAMA */
+            production_profile: components["schemas"]["ProductionProfile"];
+            /**
+             * Render Export
+             * @default true
+             */
+            render_export: boolean;
+            /** @default AUTO_DRAFT */
+            run_mode: components["schemas"]["RunMode"];
+            source_mode: components["schemas"]["SourceMode"];
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
+        };
+        /** PlanningRunListResponse */
+        PlanningRunListResponse: {
+            /** Runs */
+            runs: components["schemas"]["PlanningRunRecord"][];
+        };
+        /** PlanningRunRecord */
+        PlanningRunRecord: {
+            /** Autonomous Run Id */
+            autonomous_run_id?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Completed Steps */
+            completed_steps?: components["schemas"]["PlanningRunStep"][];
+            /** Created At */
+            created_at: string;
+            /**
+             * Critic Used
+             * @default false
+             */
+            critic_used: boolean;
+            current_step: components["schemas"]["PlanningRunStep"];
+            /** Directed Scene Json */
+            directed_scene_json?: string[];
+            /** Error Message */
+            error_message?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Max Revision Rounds
+             * @default 2
+             */
+            max_revision_rounds: number;
+            /**
+             * Next Scene Sequence
+             * @default 1
+             */
+            next_scene_sequence: number;
+            /** Outline Json */
+            outline_json?: string | null;
+            /** Outline Source */
+            outline_source?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            request: components["schemas"]["PlanningRunCreateRequest"];
+            review_report?: components["schemas"]["ScriptReviewReport"] | null;
+            /**
+             * Revision Round
+             * @default 0
+             */
+            revision_round: number;
+            status: components["schemas"]["PlanningRunStatus"];
+            /**
+             * Total Scenes
+             * @default 0
+             */
+            total_scenes: number;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * Used Scene Fallback
+             * @default false
+             */
+            used_scene_fallback: boolean;
+            /**
+             * Used Scene Repair
+             * @default false
+             */
+            used_scene_repair: boolean;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** PlanningRunResponse */
+        PlanningRunResponse: {
+            project?: components["schemas"]["ProjectAggregate"] | null;
+            run: components["schemas"]["PlanningRunRecord"];
+        };
+        /**
+         * PlanningRunStatus
+         * @enum {string}
+         */
+        PlanningRunStatus: "RUNNING" | "COMPLETE" | "NEEDS_ATTENTION" | "FAILED";
+        /**
+         * PlanningRunStep
+         * @enum {string}
+         */
+        PlanningRunStep: "STORY_ARCHITECT" | "SCRIPT_CRITIC" | "STORY_REVISION" | "SCENE_DIRECTOR" | "FINALIZE" | "COMPLETE";
         /** PreprocessingStep */
         PreprocessingStep: {
             /** Params */
@@ -8145,6 +8312,166 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageTaskResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_planning_runs_api_short_drama_planning_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningRunListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_planning_run_api_short_drama_planning_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningRunCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningRunResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_planning_run_api_short_drama_planning_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningRunResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    advance_planning_run_api_short_drama_planning_runs__run_id__advance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningRunResponse"];
                 };
             };
             /** @description Client Error */

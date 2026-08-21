@@ -335,6 +335,35 @@ class ProductionPlanningResult:
     review_report: ScriptReviewReport | None = None
 
 
+@dataclass(frozen=True)
+class StoryArchitectureResult:
+    outline: EpisodeOutline
+    source: str
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class ScriptCritiqueResult:
+    report: ScriptReviewReport | None
+    used: bool
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class StoryRevisionResult:
+    outline: EpisodeOutline
+    revised: bool
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class SceneDirectionResult:
+    scene: SceneShotPlan
+    repaired: bool
+    used_fallback: bool
+    warnings: list[str]
+
+
 def _strip_json_fence(value: str) -> str:
     text = value.strip()
     if not text.startswith("```"):
@@ -345,6 +374,19 @@ def _strip_json_fence(value: str) -> str:
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
     return "\n".join(lines).strip()
+
+
+def _compact_error(error: BaseException, *, max_chars: int = 800) -> str:
+    text = re.sub(r"\s+", " ", str(error)).strip()
+    if "<!doctype html" in text.lower() or "<html" in text.lower():
+        title = re.search(r"<title>(.*?)</title>", text, flags=re.IGNORECASE)
+        detail = re.sub(r"<[^>]+>", " ", title.group(1)).strip() if title else ""
+        text = "Provider returned an HTML error page"
+        if detail:
+            text += f": {detail}"
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "…"
 
 
 _SCRIPT_METADATA_LABELS = {
@@ -359,6 +401,7 @@ _SCRIPT_METADATA_LABELS = {
     "主要角色",
     "登场人物",
     "场景",
+    "核心场景",
     "地点",
     "时间",
     "核心道具",
@@ -369,9 +412,13 @@ _SCRIPT_METADATA_LABELS = {
     "备注",
     "梗概",
     "简介",
+    "结尾",
+    "结尾明确",
+    "结局",
 }
 _ACTION_PREFIX_PATTERN = re.compile(
     r"^([\u4e00-\u9fffA-Za-z·•_-]{2,12}?)(?="
+    r"低声说|轻声说|冷冷地说|回答|回应|反问|追问|开口|"
     r"右手|左手|抬|看|说|问|答|握|拿|走|转|坐|站|把|将|听|笑|低声|"
     r"轻声|冷冷|突然|缓缓|盯|望|伸|推|拉|沉默|呼吸|皱眉|点头|摇头)"
 )
@@ -388,7 +435,13 @@ def _split_label(source_line: str) -> tuple[str, str] | None:
 
 def _is_metadata_label(value: str) -> bool:
     compact = re.sub(r"[\s.、()（）_-]", "", value)
-    return compact in _SCRIPT_METADATA_LABELS
+    if compact in _SCRIPT_METADATA_LABELS:
+        return True
+    return re.fullmatch(
+        r"(?:核心|主要|关键|整体|制作)?"
+        r"(?:场景|地点|道具|设定|规则|冲突|悬念|反转|结尾|结局|主题|风格|时长|语言|说明|要求)",
+        compact,
+    ) is not None
 
 
 def _is_voiceover_prefix(value: str) -> bool:
@@ -422,7 +475,8 @@ def _declared_character_names(source_lines: list[str]) -> list[str]:
             and not any(character.isspace() for character in label)
             and not _is_voiceover_prefix(label)
         ):
-            names.append(label)
+            action = _ACTION_PREFIX_PATTERN.match(label)
+            names.append(action.group(1) if action is not None else label)
     return list(dict.fromkeys(names))
 
 
@@ -443,9 +497,9 @@ def _mentioned_character(
     prefer_last: bool,
 ) -> str | None:
     mentions = [
-        (value.find(name), name)
+        ((value.rfind(name) if prefer_last else value.find(name)), name)
         for name in character_names
-        if value.find(name) >= 0
+        if (value.rfind(name) if prefer_last else value.find(name)) >= 0
     ]
     if not mentions:
         return None
@@ -480,7 +534,12 @@ def _dialogue_speaker(prefix: str, character_names: list[str]) -> str | None:
         return None
     if _is_voiceover_prefix(normalized):
         return _voiceover_speaker(normalized, character_names)
-    known = _mentioned_character(normalized, character_names, prefer_last=False)
+    latest_clause = re.split(r"[。！？!?；;]", normalized)[-1].strip()
+    known = _mentioned_character(
+        latest_clause,
+        character_names,
+        prefer_last=False,
+    )
     if known is not None:
         return known
     match = _ACTION_PREFIX_PATTERN.match(normalized)
@@ -1353,6 +1412,7 @@ def _fallback_directed_scene_plan(
 
 
 def _validate_directed_scene_plan(
+    outline: EpisodeOutline,
     scene: PlannedSceneContract,
     plan: SceneShotPlan,
 ) -> None:
@@ -1374,6 +1434,24 @@ def _validate_directed_scene_plan(
         raise ValueError(
             "Directed scene duration does not match its contract: "
             f"target={scene.target_duration_seconds}, shots={duration}"
+        )
+    known_subjects = (
+        {item.name for item in outline.characters}
+        | {item.name for item in outline.locations}
+        | {item.name for item in outline.props}
+    )
+    unknown_subjects = sorted(
+        {
+            need.subject_name
+            for shot in plan.shots
+            for need in shot.reference_needs
+            if need.subject_name not in known_subjects
+        }
+    )
+    if unknown_subjects:
+        raise ValueError(
+            "Scene director reference needs use subjects outside the episode asset "
+            "contract: " + ", ".join(unknown_subjects)
         )
 
 
@@ -1407,7 +1485,7 @@ def _fallback_plan(request: CreateProjectRequest) -> ProductionPlan:
     handoff = outline.scenes[0].continuity_in.model_copy(deep=True)
     for scene in outline.scenes:
         plan = _fallback_directed_scene_plan(request, outline, scene, handoff)
-        _validate_directed_scene_plan(scene, plan)
+        _validate_directed_scene_plan(outline, scene, plan)
         directed.append(plan)
         handoff = plan.continuity_out.model_copy(deep=True)
     return _assemble_production_plan(outline, directed)
@@ -1455,28 +1533,36 @@ def _normalize_single_pass_plan(
     return ProductionPlan.model_validate(payload)
 
 
-def _create_multi_agent_production_plan(
+def create_story_architecture(
     request: CreateProjectRequest,
-    client: LanguageProviderClient,
-) -> ProductionPlanningResult:
+    client: LanguageProviderClient | None,
+) -> StoryArchitectureResult:
+    """Run only the long-form Story Architect stage, with a local fallback."""
+
+    if client is None:
+        return StoryArchitectureResult(
+            outline=_fallback_episode_outline(request),
+            source="deterministic story architect fallback",
+            warnings=["GPT-5.6-sol 未配置，Story Architect 已使用本地可复现大纲。"],
+        )
     image_urls, image_warnings = _planner_image_urls(request)
     warnings = list(image_warnings)
-    outline_source = "gpt-5.6-sol story architect"
-    outline_instructions, outline_input = _outline_prompt(request)
+    source = "gpt-5.6-sol story architect"
+    instructions, input_text = _outline_prompt(request)
     try:
-        outline_output = client.generate_text(
-            instructions=outline_instructions,
-            input_text=outline_input,
+        output = client.generate_text(
+            instructions=instructions,
+            input_text=input_text,
             image_urls=image_urls,
             max_output_tokens=14000,
         )
         try:
-            outline = EpisodeOutline.model_validate_json(_strip_json_fence(outline_output))
+            outline = EpisodeOutline.model_validate_json(_strip_json_fence(output))
             _validate_locked_outline(request, outline)
         except ValueError as first_error:
             repair_instructions, repair_input = _outline_repair_prompt(
                 request,
-                outline_output,
+                output,
                 first_error,
             )
             repaired_output = client.generate_text(
@@ -1485,87 +1571,273 @@ def _create_multi_agent_production_plan(
                 image_urls=image_urls,
                 max_output_tokens=14000,
             )
-            outline = EpisodeOutline.model_validate_json(_strip_json_fence(repaired_output))
+            outline = EpisodeOutline.model_validate_json(
+                _strip_json_fence(repaired_output)
+            )
             _validate_locked_outline(request, outline)
-            outline_source += " repaired"
+            source += " repaired"
             warnings.append(
                 "故事统筹 Agent 首次输出未通过结构校验，已自动修复后采用："
-                + str(first_error)
+                + _compact_error(first_error)
             )
-    except (LanguageProviderError, ValueError) as outline_error:
+    except (LanguageProviderError, ValueError) as error:
         outline = _fallback_episode_outline(request)
-        outline_source = "deterministic story architect fallback"
+        source = "deterministic story architect fallback"
         warnings.append(
             "故事统筹 Agent 未通过，已使用本地可复现大纲并继续逐场规划："
-            + str(outline_error)
+            + _compact_error(error)
         )
+    return StoryArchitectureResult(outline=outline, source=source, warnings=warnings)
 
-    review_report: ScriptReviewReport | None = None
-    critic_used = False
-    script_revision_rounds = 0
-    critic_instructions, critic_input = _story_critic_prompt(request, outline)
+
+def review_story_outline(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    client: LanguageProviderClient | None,
+) -> ScriptCritiqueResult:
+    """Run the independent script critic without blocking later planning."""
+
+    if client is None:
+        return ScriptCritiqueResult(
+            report=None,
+            used=False,
+            warnings=["GPT-5.6-sol 未配置，已跳过语义剧本审阅并保留结构校验。"],
+        )
+    instructions, input_text = _story_critic_prompt(request, outline)
     try:
-        critic_output = client.generate_text(
-            instructions=critic_instructions,
-            input_text=critic_input,
+        output = client.generate_text(
+            instructions=instructions,
+            input_text=input_text,
             image_urls=[],
             max_output_tokens=6000,
         )
-        review_report = ScriptReviewReport.model_validate_json(
-            _strip_json_fence(critic_output)
+        return ScriptCritiqueResult(
+            report=ScriptReviewReport.model_validate_json(_strip_json_fence(output)),
+            used=True,
+            warnings=[],
         )
-        critic_used = True
-    except (LanguageProviderError, ValueError) as critic_error:
-        warnings.append(
-            "剧本审阅 Agent 不可用，结构化大纲仍继续逐场规划："
-            + str(critic_error)
+    except (LanguageProviderError, ValueError) as error:
+        return ScriptCritiqueResult(
+            report=None,
+            used=False,
+            warnings=[
+                "剧本审阅 Agent 不可用，结构化大纲仍继续逐场规划："
+                + _compact_error(error)
+            ],
         )
+
+
+def revise_story_outline(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    review_report: ScriptReviewReport,
+    client: LanguageProviderClient | None,
+    *,
+    revision_round: int,
+) -> StoryRevisionResult:
+    """Apply one bounded Story Architect revision and preserve the prior outline on failure."""
+
+    if client is None:
+        return StoryRevisionResult(
+            outline=outline,
+            revised=False,
+            warnings=[
+                f"第 {revision_round} 轮剧本修订不可用，保留当前大纲与最近审阅建议。"
+            ],
+        )
+    image_urls, image_warnings = _planner_image_urls(request)
+    instructions, input_text = _story_revision_prompt(
+        request,
+        outline,
+        review_report,
+    )
+    try:
+        output = client.generate_text(
+            instructions=instructions,
+            input_text=input_text,
+            image_urls=image_urls,
+            max_output_tokens=14000,
+        )
+        revised = EpisodeOutline.model_validate_json(_strip_json_fence(output))
+        _validate_locked_outline(request, revised)
+        return StoryRevisionResult(
+            outline=revised,
+            revised=True,
+            warnings=[
+                *image_warnings,
+                f"剧本审阅 Agent 第 {revision_round} 轮提出 "
+                f"{len(review_report.issues)} 项问题，Story Architect 已自动修订。",
+            ],
+        )
+    except (LanguageProviderError, ValueError) as error:
+        return StoryRevisionResult(
+            outline=outline,
+            revised=False,
+            warnings=[
+                *image_warnings,
+                f"第 {revision_round} 轮剧本修订不可用，"
+                "保留当前大纲与最近审阅建议："
+                + _compact_error(error),
+            ],
+        )
+
+
+def direct_story_scene(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    scene: PlannedSceneContract,
+    handoff: SceneContinuitySummary,
+    client: LanguageProviderClient | None,
+) -> SceneDirectionResult:
+    """Direct exactly one scene so callers can persist a recovery point after it."""
+
+    if client is None:
+        directed = _fallback_directed_scene_plan(request, outline, scene, handoff)
+        _validate_directed_scene_plan(outline, scene, directed)
+        return SceneDirectionResult(
+            scene=directed,
+            repaired=False,
+            used_fallback=True,
+            warnings=[
+                f"场景 {scene.sequence:02d} 未调用语言模型，已使用本地可复现分镜。"
+            ],
+        )
+    instructions, input_text = _scene_director_prompt(
+        request,
+        outline,
+        scene,
+        handoff,
+    )
+    try:
+        output = client.generate_text(
+            instructions=instructions,
+            input_text=input_text,
+            image_urls=[],
+            max_output_tokens=10000,
+        )
+        try:
+            directed = SceneShotPlan.model_validate_json(_strip_json_fence(output))
+            _validate_directed_scene_plan(outline, scene, directed)
+            return SceneDirectionResult(
+                scene=directed,
+                repaired=False,
+                used_fallback=False,
+                warnings=[],
+            )
+        except ValueError as first_error:
+            repair_instructions, repair_input = _scene_repair_prompt(
+                request,
+                outline,
+                scene,
+                handoff,
+                output,
+                first_error,
+            )
+            repaired_output = client.generate_text(
+                instructions=repair_instructions,
+                input_text=repair_input,
+                image_urls=[],
+                max_output_tokens=10000,
+            )
+            directed = SceneShotPlan.model_validate_json(
+                _strip_json_fence(repaired_output)
+            )
+            _validate_directed_scene_plan(outline, scene, directed)
+            return SceneDirectionResult(
+                scene=directed,
+                repaired=True,
+                used_fallback=False,
+                warnings=[
+                    f"场景 {scene.sequence:02d} 导演 Agent 首次输出无效，"
+                    "已局部修复后采用："
+                    + _compact_error(first_error)
+                ],
+            )
+    except (LanguageProviderError, ValueError) as error:
+        directed = _fallback_directed_scene_plan(request, outline, scene, handoff)
+        _validate_directed_scene_plan(outline, scene, directed)
+        return SceneDirectionResult(
+            scene=directed,
+            repaired=False,
+            used_fallback=True,
+            warnings=[
+                f"场景 {scene.sequence:02d} 导演 Agent 未通过，仅该场使用本地回退："
+                + _compact_error(error)
+            ],
+        )
+
+
+def assemble_multi_agent_planning_result(
+    request: CreateProjectRequest,
+    outline: EpisodeOutline,
+    directed_scenes: list[SceneShotPlan],
+    *,
+    outline_source: str,
+    critic_used: bool,
+    revision_rounds: int,
+    used_scene_repair: bool,
+    used_scene_fallback: bool,
+    warnings: list[str],
+    review_report: ScriptReviewReport | None,
+) -> ProductionPlanningResult:
+    plan = _assemble_production_plan(outline, directed_scenes)
+    _validate_locked_dialogue(request, plan)
+    planner = f"multi-agent:{outline_source}"
+    if critic_used:
+        planner += " + script critic"
+    if revision_rounds:
+        planner += f" revised-{revision_rounds}x"
+    planner += " + scene directors"
+    if used_scene_repair:
+        planner += " repaired"
+    if used_scene_fallback:
+        planner += " mixed-fallback"
+    return ProductionPlanningResult(
+        plan=plan,
+        planner=planner,
+        warnings=list(dict.fromkeys(warnings)),
+        review_report=review_report,
+    )
+
+
+def _create_multi_agent_production_plan(
+    request: CreateProjectRequest,
+    client: LanguageProviderClient,
+) -> ProductionPlanningResult:
+    architecture = create_story_architecture(request, client)
+    outline = architecture.outline
+    warnings = list(architecture.warnings)
+    review_report: ScriptReviewReport | None = None
+    critic_used = False
+    script_revision_rounds = 0
+    critique = review_story_outline(request, outline, client)
+    review_report = critique.report
+    critic_used = critique.used
+    warnings.extend(critique.warnings)
 
     while (
         review_report is not None
         and review_report.requires_revision
         and script_revision_rounds < 2
     ):
-        issue_count = len(review_report.issues)
-        try:
-            revision_instructions, revision_input = _story_revision_prompt(
-                request,
-                outline,
-                review_report,
-            )
-            revision_output = client.generate_text(
-                instructions=revision_instructions,
-                input_text=revision_input,
-                image_urls=image_urls,
-                max_output_tokens=14000,
-            )
-            revised_outline = EpisodeOutline.model_validate_json(
-                _strip_json_fence(revision_output)
-            )
-            _validate_locked_outline(request, revised_outline)
-            outline = revised_outline
-            script_revision_rounds += 1
-            warnings.append(
-                f"剧本审阅 Agent 第 {script_revision_rounds} 轮提出 {issue_count} 项问题，"
-                "Story Architect 已自动修订。"
-            )
-            followup_instructions, followup_input = _story_critic_prompt(request, outline)
-            followup_output = client.generate_text(
-                instructions=followup_instructions,
-                input_text=followup_input,
-                image_urls=[],
-                max_output_tokens=6000,
-            )
-            review_report = ScriptReviewReport.model_validate_json(
-                _strip_json_fence(followup_output)
-            )
-        except (LanguageProviderError, ValueError) as revision_error:
-            warnings.append(
-                f"第 {script_revision_rounds + 1} 轮剧本修订或复审不可用，"
-                "保留当前大纲与最近审阅建议："
-                + str(revision_error)
-            )
+        revision = revise_story_outline(
+            request,
+            outline,
+            review_report,
+            client,
+            revision_round=script_revision_rounds + 1,
+        )
+        warnings.extend(revision.warnings)
+        if not revision.revised:
             break
+        outline = revision.outline
+        script_revision_rounds += 1
+        critique = review_story_outline(request, outline, client)
+        warnings.extend(critique.warnings)
+        if critique.report is None:
+            break
+        review_report = critique.report
+        critic_used = critic_used or critique.used
     if review_report is not None and review_report.requires_revision:
         warnings.append(
             f"当前剧本审阅仍保留 {len(review_report.issues)} 项可选修改建议；"
@@ -1577,72 +1849,28 @@ def _create_multi_agent_production_plan(
     used_scene_fallback = False
     used_scene_repair = False
     for scene in outline.scenes:
-        instructions, input_text = _scene_director_prompt(
+        direction = direct_story_scene(
             request,
             outline,
             scene,
             handoff,
+            client,
         )
-        try:
-            output = client.generate_text(
-                instructions=instructions,
-                input_text=input_text,
-                image_urls=[],
-                max_output_tokens=10000,
-            )
-            try:
-                directed = SceneShotPlan.model_validate_json(_strip_json_fence(output))
-                _validate_directed_scene_plan(scene, directed)
-            except ValueError as first_error:
-                repair_instructions, repair_input = _scene_repair_prompt(
-                    request,
-                    outline,
-                    scene,
-                    handoff,
-                    output,
-                    first_error,
-                )
-                repaired_output = client.generate_text(
-                    instructions=repair_instructions,
-                    input_text=repair_input,
-                    image_urls=[],
-                    max_output_tokens=10000,
-                )
-                directed = SceneShotPlan.model_validate_json(
-                    _strip_json_fence(repaired_output)
-                )
-                _validate_directed_scene_plan(scene, directed)
-                used_scene_repair = True
-                warnings.append(
-                    f"场景 {scene.sequence:02d} 导演 Agent 首次输出无效，已局部修复后采用："
-                    + str(first_error)
-                )
-        except (LanguageProviderError, ValueError) as scene_error:
-            directed = _fallback_directed_scene_plan(request, outline, scene, handoff)
-            _validate_directed_scene_plan(scene, directed)
-            used_scene_fallback = True
-            warnings.append(
-                f"场景 {scene.sequence:02d} 导演 Agent 未通过，仅该场使用本地回退："
-                + str(scene_error)
-            )
-        directed_scenes.append(directed)
-        handoff = directed.continuity_out.model_copy(deep=True)
+        directed_scenes.append(direction.scene)
+        handoff = direction.scene.continuity_out.model_copy(deep=True)
+        warnings.extend(direction.warnings)
+        used_scene_repair = used_scene_repair or direction.repaired
+        used_scene_fallback = used_scene_fallback or direction.used_fallback
 
-    plan = _assemble_production_plan(outline, directed_scenes)
-    _validate_locked_dialogue(request, plan)
-    planner = f"multi-agent:{outline_source}"
-    if critic_used:
-        planner += " + script critic"
-    if script_revision_rounds:
-        planner += f" revised-{script_revision_rounds}x"
-    planner += " + scene directors"
-    if used_scene_repair:
-        planner += " repaired"
-    if used_scene_fallback:
-        planner += " mixed-fallback"
-    return ProductionPlanningResult(
-        plan=plan,
-        planner=planner,
+    return assemble_multi_agent_planning_result(
+        request,
+        outline,
+        directed_scenes,
+        outline_source=architecture.source,
+        critic_used=critic_used,
+        revision_rounds=script_revision_rounds,
+        used_scene_repair=used_scene_repair,
+        used_scene_fallback=used_scene_fallback,
         warnings=warnings,
         review_report=review_report,
     )
@@ -1713,7 +1941,7 @@ def create_production_plan(
                 warnings=[
                     *image_warnings,
                     "GPT-5.6-sol 首次规划未通过结构校验，已自动修复后采用："
-                    + str(first_error),
+                    + _compact_error(first_error),
                 ],
             )
         except (LanguageProviderError, ValueError) as repair_error:

@@ -344,6 +344,12 @@ Planner 不再硬限定 6–10 镜，Director 也不使用固定动作数、固�
 
 超过 90 秒时，Planner 分为 Story Architect、Script Critic 与逐场 Scene Director。Story Architect 维护整集因果、全局资产、对白和场次契约；Script Critic 以开放式审阅发现有证据的因果、动机、伏笔回收和节奏问题，必要时触发最多两轮整集修订与逐轮复审；Scene Director 只展开当前场，并通过人物、道具、事实和待回应问题组成的 compact handoff 顺序传递连续性。审阅建议可忽略，场次失败只局部修复或回退，不把整集重新丢给一个超长 Prompt。本阶段主要检查剧本和结构，不调用 GPT Image 或 H3。
 
+### Phase 15：持久化 PlanningRun
+
+超过 90 秒的创建不再同步执行全部长篇 Agent。项目正式建立前先把原始请求、当前阶段、整集大纲、审稿报告、修订轮次和已经完成的逐场计划保存为独立 `PlanningRun`；一次推进只运行一个 Agent 阶段或一场 Scene Director。应用重启后从当前节点继续，单场失败只重试当前场。完成 `FINALIZE` 后才建立正式 ProjectDocument，并在 AUTO_DRAFT 模式下衔接原有 AutonomousRun。
+
+PlanningRun 不是新的工作流画布或微服务。它只是 SQLite/API 核心中的一个前置长任务状态机；语言模型调用期间不持有全局锁，前端通过阶段和场次进度自动轮询。规划阶段不调用 GPT Image 或 H3。
+
 ## 12. 当前不做
 
 - 不调用或依赖即梦、可灵、LTX Studio、纳逗 Pro；
