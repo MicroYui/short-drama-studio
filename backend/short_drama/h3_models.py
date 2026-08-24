@@ -13,6 +13,7 @@ from short_drama.models import (
     ExportRecord,
     GenerationTask,
     ProjectAggregate,
+    QaStatus,
     QaIssue,
     QaFailureCategory,
     RouteEvidence,
@@ -36,6 +37,28 @@ class H3MediaRole(StrEnum):
     REFERENCE_IMAGE = "reference_image"
     REFERENCE_VIDEO = "reference_video"
     REFERENCE_AUDIO = "reference_audio"
+
+
+class H3VideoGuideKind(StrEnum):
+    PREVIOUS_TAKE = "PREVIOUS_TAKE"
+    TAIL_WINDOW = "TAIL_WINDOW"
+    CAMERA_PREVIS = "CAMERA_PREVIS"
+
+
+class H3CameraMotionPreset(StrEnum):
+    STATIC = "STATIC"
+    DOLLY_IN = "DOLLY_IN"
+    DOLLY_OUT = "DOLLY_OUT"
+    TRACK_LEFT = "TRACK_LEFT"
+    TRACK_RIGHT = "TRACK_RIGHT"
+    JIB_UP = "JIB_UP"
+    JIB_DOWN = "JIB_DOWN"
+    FOLLOW = "FOLLOW"
+
+
+class H3VideoGuideBaseSource(StrEnum):
+    TARGET_START_FRAME = "TARGET_START_FRAME"
+    PREVIOUS_BOUNDARY_FRAME = "PREVIOUS_BOUNDARY_FRAME"
 
 
 class H3RemoteStatus(StrEnum):
@@ -64,6 +87,7 @@ class H3MediaInput(DomainModel):
     role: H3MediaRole
     source: H3MediaSource
     asset_version_id: str | None = None
+    video_guide_id: str | None = None
 
 
 class H3ProbeRequest(DomainModel):
@@ -146,6 +170,28 @@ class H3RouteAssetPreparation(DomainModel):
     review_summary: str | None = Field(default=None, max_length=4000)
 
 
+class H3VideoGuide(DomainModel):
+    id: str
+    shot_id: str
+    source_shot_id: str
+    source_shot_revision: int = Field(ge=1)
+    source_take_id: str
+    kind: H3VideoGuideKind
+    media_path: str
+    duration_seconds: float = Field(gt=0.0, le=15.0)
+    source_in_seconds: float = Field(default=0.0, ge=0.0)
+    camera_motion: H3CameraMotionPreset | None = None
+    previs_base_source: H3VideoGuideBaseSource | None = None
+    base_asset_version_id: str | None = None
+    source_qa_status: QaStatus
+    source_quality_score: float = Field(ge=0.0, le=5.0)
+    source_issue_codes: list[str] = Field(default_factory=list[str], max_length=24)
+    rationale: str = Field(min_length=1, max_length=2000)
+    warnings: list[str] = Field(default_factory=list[str], max_length=16)
+    advisory_only: Literal[True] = True
+    created_at: str
+
+
 class H3ShotRoutePlan(DomainModel):
     shot_id: str
     shot_sequence: int = Field(ge=1)
@@ -174,6 +220,11 @@ class H3ShotRoutePlan(DomainModel):
         default_factory=list[H3RouteAssetPreparation],
         max_length=4,
     )
+    video_guides: list[H3VideoGuide] = Field(
+        default_factory=list[H3VideoGuide],
+        max_length=3,
+    )
+    selected_video_guide_id: str | None = None
     candidate_count: int = Field(default=1, ge=1, le=5)
     inspection: H3InspectionPolicy
     readiness: H3ShotRouteReadiness
@@ -189,6 +240,15 @@ class H3ShotRoutePlan(DomainModel):
             raise ValueError("REUSE_TAKE requires reuse_take_id")
         if self.action == H3ShotRouteAction.GENERATE and self.reuse_take_id is not None:
             raise ValueError("GENERATE cannot declare reuse_take_id")
+        if self.selected_video_guide_id is not None:
+            known = {item.id for item in self.video_guides}
+            if self.selected_video_guide_id not in known:
+                raise ValueError("selected_video_guide_id must reference a declared video guide")
+            if not any(
+                item.video_guide_id == self.selected_video_guide_id
+                for item in self.media_inputs
+            ):
+                raise ValueError("Selected video guide must be present in media_inputs")
         return self
 
 
@@ -218,6 +278,7 @@ class H3ProductionRoutePlanRequest(DomainModel):
     shot_ids: list[str] = Field(default_factory=list[str], max_length=500)
     use_language_agent: bool = True
     candidate_count: int = Field(default=1, ge=1, le=5)
+    consider_video_guides: bool = True
 
 
 class H3ProductionRoutePlanResponse(DomainModel):

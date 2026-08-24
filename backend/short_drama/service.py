@@ -80,6 +80,7 @@ from short_drama.h3_worker import (
     PersistentH3Worker,
     default_h3_client_factory,
 )
+from short_drama.h3_video_guides import H3VideoGuideBuilder
 from short_drama.image_models import (
     AssetCreateRequest,
     AssetImportLocalRequest,
@@ -289,6 +290,59 @@ def _take_is_timeline_eligible(take: Take) -> bool:
     return take.qa_status == QaStatus.PASSED or (
         _BOUNDED_BEST_EFFORT_CHECK in take.qa_report.checks
     )
+
+
+def _next_h3_continuity_wave(
+    document: ProjectDocument,
+    takes: list[Take],
+) -> list[str]:
+    """Return the next uncovered shot in each scene.
+
+    This lets later shots use an accepted preceding Take as an optional Route Agent
+    input without forcing reference-video generation or serializing unrelated scenes.
+    """
+
+    covered = {
+        take.shot_id
+        for take in takes
+        if take.is_selected
+        and take.freshness == Freshness.CURRENT
+        and take.availability == TakeAvailability.AVAILABLE
+        and _take_is_timeline_eligible(take)
+    }
+    selected_scenes: set[str] = set()
+    result: list[str] = []
+    for shot in sorted(document.shots, key=lambda item: item.sequence):
+        if shot.id in covered:
+            continue
+        scene_key = shot.scene_id or "__UNSCOPED_SCENE__"
+        if scene_key in selected_scenes:
+            continue
+        selected_scenes.add(scene_key)
+        result.append(shot.id)
+    return result
+
+
+def _missing_timeline_shot_ids(
+    document: ProjectDocument,
+    takes: list[Take],
+    *,
+    restrict_to: set[str] | None = None,
+) -> list[str]:
+    covered = {
+        take.shot_id
+        for take in takes
+        if take.is_selected
+        and take.freshness == Freshness.CURRENT
+        and take.availability == TakeAvailability.AVAILABLE
+        and _take_is_timeline_eligible(take)
+    }
+    return [
+        shot.id
+        for shot in sorted(document.shots, key=lambda item: item.sequence)
+        if shot.id not in covered
+        and (restrict_to is None or shot.id in restrict_to)
+    ]
 
 
 def _timeline_clip_window(shot: ShotPlan, take: Take) -> tuple[float, float]:
@@ -573,6 +627,7 @@ class ShortDramaService:
         self.media_renderer = MockMediaRenderer(workspace_root)
         self.exporter = TimelineExporter(workspace_root)
         self.video_inspector = VideoInspector(workspace_root)
+        self.h3_video_guide_builder = H3VideoGuideBuilder(workspace_root)
         self.audio_inspector = AudioInspector(workspace_root)
         self.audio_semantic_service = audio_semantic_service
         self.worker = PersistentMockWorker(self.repository, self.media_renderer)
@@ -1935,11 +1990,26 @@ class ShortDramaService:
         if run.current_step == AutonomousRunStep.PREPARE_ASSETS:
             return self._advance_base_asset_preparation(project_id, run_id)
         if run.current_step == AutonomousRunStep.PLAN_ROUTES:
+            route_document = self._require_project_document(project_id)
+            wave_shot_ids = _next_h3_continuity_wave(
+                route_document,
+                self.repository.list_takes(project_id),
+            )
+            if not wave_shot_ids:
+                self._advance_autonomous_run(
+                    project_id,
+                    run_id,
+                    completed_step=AutonomousRunStep.PLAN_ROUTES,
+                    next_step=AutonomousRunStep.TIMELINE,
+                )
+                return True, False
             response = self.compile_h3_production_route_plan(
                 project_id,
                 H3ProductionRoutePlanRequest(
+                    shot_ids=wave_shot_ids,
                     use_language_agent=True,
                     candidate_count=2,
+                    consider_video_guides=True,
                 ),
             )
             needs_asset = any(
@@ -3385,26 +3455,18 @@ class ShortDramaService:
 
         self._select_best_current_takes(project_id)
         aggregate = self.get_project(project_id)
-        missing = [
-            shot.id
-            for shot in aggregate.document.shots
-            if not any(
-                take.shot_id == shot.id
-                and take.is_selected
-                and take.freshness == Freshness.CURRENT
-                and _take_is_timeline_eligible(take)
-                for take in aggregate.takes
-            )
-        ]
+        planned_shot_ids = {item.shot_id for item in plan.decisions}
+        missing = _missing_timeline_shot_ids(
+            aggregate.document,
+            aggregate.takes,
+            restrict_to=planned_shot_ids,
+        )
         if not missing:
-            plan.status = H3RoutePlanStatus.COMPLETE
-            plan.updated_at = utc_now()
-            self.repository.save_h3_route_plan(plan)
-            self._advance_autonomous_run(
-                project_id,
-                run_id,
-                completed_step=AutonomousRunStep.QA_AND_REPAIR,
-                next_step=AutonomousRunStep.TIMELINE,
+            self._complete_h3_wave_or_episode(
+                project_id=project_id,
+                run_id=run_id,
+                plan=plan,
+                aggregate=aggregate,
             )
             return True, False
         if run.repair_round >= run.max_repair_rounds:
@@ -3416,26 +3478,17 @@ class ShortDramaService:
             if waived_take_ids:
                 self._select_best_current_takes(project_id)
                 refreshed = self.get_project(project_id)
-                missing = [
-                    shot.id
-                    for shot in refreshed.document.shots
-                    if not any(
-                        take.shot_id == shot.id
-                        and take.is_selected
-                        and take.freshness == Freshness.CURRENT
-                        and _take_is_timeline_eligible(take)
-                        for take in refreshed.takes
-                    )
-                ]
+                missing = _missing_timeline_shot_ids(
+                    refreshed.document,
+                    refreshed.takes,
+                    restrict_to=planned_shot_ids,
+                )
                 if not missing:
-                    plan.status = H3RoutePlanStatus.COMPLETE
-                    plan.updated_at = utc_now()
-                    self.repository.save_h3_route_plan(plan)
-                    self._advance_autonomous_run(
-                        project_id,
-                        run_id,
-                        completed_step=AutonomousRunStep.QA_AND_REPAIR,
-                        next_step=AutonomousRunStep.TIMELINE,
+                    self._complete_h3_wave_or_episode(
+                        project_id=project_id,
+                        run_id=run_id,
+                        plan=plan,
+                        aggregate=refreshed,
                     )
                     return True, False
             raise WorkflowConflictError(
@@ -3461,6 +3514,40 @@ class ShortDramaService:
             persisted.updated_at = utc_now()
             self.repository.save_project(document)
         return True, False
+
+    def _complete_h3_wave_or_episode(
+        self,
+        *,
+        project_id: str,
+        run_id: str,
+        plan: H3ProductionRoutePlan,
+        aggregate: ProjectAggregate,
+    ) -> None:
+        plan.status = H3RoutePlanStatus.COMPLETE
+        plan.updated_at = utc_now()
+        self.repository.save_h3_route_plan(plan)
+        remaining = _missing_timeline_shot_ids(
+            aggregate.document,
+            aggregate.takes,
+        )
+        if not remaining:
+            self._advance_autonomous_run(
+                project_id,
+                run_id,
+                completed_step=AutonomousRunStep.QA_AND_REPAIR,
+                next_step=AutonomousRunStep.TIMELINE,
+            )
+            return
+        with self._lock:
+            document = self._require_project_document(project_id)
+            persisted = next(
+                item for item in document.autonomous_runs if item.id == run_id
+            )
+            persisted.route_plan_id = None
+            persisted.current_step = AutonomousRunStep.PLAN_ROUTES
+            persisted.waiting_reason = None
+            persisted.updated_at = utc_now()
+            self.repository.save_project(document)
 
     def _apply_automatic_h3_review(
         self,
@@ -4181,24 +4268,39 @@ class ShortDramaService:
             if api_key or is_loopback_openai_url(base_url):
                 language_client = self.language_provider_factory(api_key, base_url)
         existing = self.repository.list_h3_route_plans(project_id)
+        takes = self.repository.list_takes(project_id)
+        created_at = utc_now()
+        prepared_media_inputs = self._prepared_h3_media_inputs(
+            document,
+            existing,
+        )
+        video_guides = {}
+        video_guide_warnings: list[str] = []
+        if request.consider_video_guides:
+            video_guides, video_guide_warnings = self.h3_video_guide_builder.prepare(
+                document=document,
+                takes=takes,
+                shot_ids=request.shot_ids,
+                created_at=created_at,
+                prepared_media_inputs=prepared_media_inputs,
+            )
         try:
             plan = build_h3_production_route_plan(
                 document=document,
                 tasks=self.repository.list_tasks(project_id),
-                takes=self.repository.list_takes(project_id),
+                takes=takes,
                 evidence=self.repository.list_route_evidence(project_id),
                 provider_runs=self.repository.list_provider_runs(project_id),
                 inspections=self.repository.list_video_inspections(project_id),
                 pricing=self.h3_config.pricing_snapshot(),
                 version=max((item.version for item in existing), default=0) + 1,
-                created_at=utc_now(),
+                created_at=created_at,
                 shot_ids=request.shot_ids,
                 candidate_count=request.candidate_count,
                 language_client=language_client,
-                prepared_media_inputs=self._prepared_h3_media_inputs(
-                    document,
-                    existing,
-                ),
+                prepared_media_inputs=prepared_media_inputs,
+                video_guides=video_guides,
+                video_guide_warnings=video_guide_warnings,
             )
         except RoutePlanningError as exc:
             raise WorkflowConflictError(str(exc)) from exc

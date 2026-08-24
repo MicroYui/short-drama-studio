@@ -31,6 +31,7 @@ import {
   type H3ProviderConfig,
   type H3ProviderRun,
   type H3ProbeRequest,
+  type H3VideoGuideKind,
   type ProjectAggregate,
   type QaFailureCategory,
   type RouteEvidence,
@@ -86,6 +87,17 @@ const roleLabels: Record<H3MediaRole, string> = {
   reference_video: '参考视频',
   reference_audio: '参考音频',
 }
+
+const videoGuideLabels: Record<H3VideoGuideKind, string> = {
+  PREVIOUS_TAKE: '前序完整 Take',
+  TAIL_WINDOW: '前序尾部运动窗口',
+  CAMERA_PREVIS: '低保真机位预演',
+}
+
+const videoGuideLabel = (guide: { kind: H3VideoGuideKind; previs_base_source?: string | null }) =>
+  guide.kind === 'CAMERA_PREVIS' && guide.previs_base_source === 'TARGET_START_FRAME'
+    ? '当前镜头首帧机位预演'
+    : videoGuideLabels[guide.kind]
 
 const roleKinds: Record<H3MediaRole, H3MediaKind> = {
   first_frame: 'IMAGE',
@@ -516,7 +528,7 @@ export function H3LabPanel({
     '编译整集 H3 制片路线',
     () => ShortDramaApi.compileH3ProductionRoutePlan(
       project.document.project.id,
-      { shot_ids: [], use_language_agent: true, candidate_count: 1 },
+      { shot_ids: [], use_language_agent: true, candidate_count: 1, consider_video_guides: true },
     ),
     (result) => setProductionRoutePlans((current) => [
       result.plan,
@@ -772,9 +784,9 @@ export function H3LabPanel({
       <section className="rounded-xl border border-blue-500/20 bg-blue-500/[0.04] p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">Phase 6 · 整集制片路线 Agent</h3></div>
+            <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">Phase 18 · 整集制片路线 Agent</h3></div>
             <p className="mt-2 max-w-4xl text-xs leading-5 text-zinc-400">
-              基于当前 ShotPlan、已批准资产、RouteEvidence、失败能力画像和视频观察，逐镜头选择“复用已通过 Take / Direct / 首帧 / 首尾帧 / Reference”。先编译 dry-run；已通过的真实 Take 优先复用，关键帧和拆镜只是可忽略建议。
+              基于当前 ShotPlan、已批准资产、RouteEvidence、失败能力画像和视频观察，逐镜头选择“复用已通过 Take / Direct / 首帧 / 首尾帧 / Reference”。同场景已有前镜时，还会准备前序完整 Take、尾部运动窗口和低保真机位预演供 Agent 比较；这些都是可覆盖建议，不是提交门槛。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -805,6 +817,7 @@ export function H3LabPanel({
                   {decision.reuse_take_id && <p className="mt-2 truncate text-[10px] text-emerald-300/70">Take: {decision.reuse_take_id}</p>}
                   {(decision.inspection_issue_codes?.length ?? 0) > 0 && <p className="mt-2 text-[10px] leading-4 text-amber-300/70">观察提醒：{decision.inspection_issue_codes?.join(', ')}（可忽略或交给 Director Agent）</p>}
                   {(decision.asset_preparations?.length ?? 0) > 0 && <p className="mt-2 text-[10px] text-amber-300/70">可选资产准备：{decision.asset_preparations?.map((item) => roleLabels[item.role]).join(' + ')}</p>}
+                  {(decision.video_guides?.length ?? 0) > 0 && <p className="mt-2 text-[10px] leading-4 text-cyan-300/70">连续性视频候选：{decision.video_guides?.map(videoGuideLabel).join(' / ')}{decision.selected_video_guide_id ? ` · 已选 ${videoGuideLabel(decision.video_guides?.find((item) => item.id === decision.selected_video_guide_id) ?? { kind: 'TAIL_WINDOW' })}` : ' · 当前未采用'}</p>}
                   {decision.warnings?.map((warning) => <p key={warning} className="mt-1 text-[10px] leading-4 text-amber-200/60">{warning}</p>)}
                 </div>
               ))}

@@ -10,6 +10,11 @@ import pytest
 from PIL import Image
 
 from short_drama.h3_models import (
+    H3CameraMotionPreset,
+    H3MediaInput,
+    H3MediaKind,
+    H3MediaRole,
+    H3MediaSource,
     H3ProductionRouteExecuteRequest,
     H3ProductionRoutePlanRequest,
     H3ProviderConfigUpdate,
@@ -17,6 +22,8 @@ from short_drama.h3_models import (
     H3ShotRouteAction,
     H3ShotRouteExecutionStatus,
     H3ShotRouteReadiness,
+    H3VideoGuideBaseSource,
+    H3VideoGuideKind,
 )
 from short_drama.models import (
     AssetMediaType,
@@ -36,13 +43,16 @@ from short_drama.models import (
     TaskStatus,
     VideoGenerationRoute,
 )
+from short_drama.media import probe_media_with_ffmpeg
 from short_drama.providers.minimax_h3_compiler import build_h3_prompt
 from short_drama.h3_route_planner import _route_agent_batches
+from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.service import (
     ShortDramaService,
     WorkflowConflictError,
     _BOUNDED_BEST_EFFORT_CHECK,
     _can_receive_bounded_best_effort_waiver,
+    _next_h3_continuity_wave,
     _prioritize_keyframe_canvas,
     _scope_keyframe_reference_versions,
     _timeline_clip_window,
@@ -192,6 +202,236 @@ def test_route_agent_batches_by_scene_and_bounded_size(tmp_path: Path) -> None:
         {"scene-2"},
     ]
 
+
+def test_next_h3_continuity_wave_selects_one_uncovered_shot_per_scene(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    document.shots[0].scene_id = "scene-a"
+    document.shots[1].scene_id = "scene-a"
+    for shot in document.shots[2:]:
+        shot.scene_id = "scene-b"
+
+    assert _next_h3_continuity_wave(document, []) == [
+        document.shots[0].id,
+        document.shots[2].id,
+    ]
+
+    video = tmp_path / "wave-source.mp4"
+    _render_video(video, duration=4.0)
+    first = _persist_passed_h3_take(
+        service,
+        shot_id=document.shots[0].id,
+        media_path=video,
+        selected=True,
+    )
+    third = _persist_passed_h3_take(
+        service,
+        shot_id=document.shots[2].id,
+        media_path=video,
+        selected=True,
+    )
+
+    assert _next_h3_continuity_wave(document, [first, third]) == [
+        document.shots[1].id,
+        document.shots[3].id,
+    ]
+
+
+def test_video_guides_are_prepared_as_visual_only_optional_route_inputs(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    source_shot, target_shot = project.document.shots[:2]
+    video = tmp_path / "preceding-take.mp4"
+    _render_video(video, duration=5.0)
+    _persist_passed_h3_take(
+        service,
+        shot_id=source_shot.id,
+        media_path=video,
+        selected=True,
+    )
+
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[target_shot.id],
+            use_language_agent=False,
+            consider_video_guides=True,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+
+    assert {item.kind for item in decision.video_guides} == {
+        H3VideoGuideKind.PREVIOUS_TAKE,
+        H3VideoGuideKind.TAIL_WINDOW,
+        H3VideoGuideKind.CAMERA_PREVIS,
+    }
+    assert decision.selected_video_guide_id is None
+    assert decision.override_allowed is True
+    previs = next(
+        item
+        for item in decision.video_guides
+        if item.kind == H3VideoGuideKind.CAMERA_PREVIS
+    )
+    assert previs.camera_motion == H3CameraMotionPreset.DOLLY_IN
+    assert previs.previs_base_source == H3VideoGuideBaseSource.PREVIOUS_BOUNDARY_FRAME
+    assert previs.base_asset_version_id is None
+    for guide in decision.video_guides:
+        path = Path(guide.media_path)
+        assert path.is_file() and path.stat().st_size > 0
+        metadata = probe_media_with_ffmpeg(path)
+        assert metadata["size"] == "768x1344"
+        assert metadata["audio"] == "missing"
+        assert float(metadata["duration"]) == pytest.approx(
+            guide.duration_seconds,
+            abs=0.08,
+        )
+
+
+def test_camera_previs_prefers_the_target_approved_start_frame(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    source_shot, target_shot = project.document.shots[:2]
+    video = tmp_path / "preceding-take.mp4"
+    _render_video(video, duration=5.0)
+    source_take = _persist_passed_h3_take(
+        service,
+        shot_id=source_shot.id,
+        media_path=video,
+        selected=True,
+    )
+    target_frame = tmp_path / "target-approved-start.png"
+    Image.new("RGB", (768, 1344), "#bf4f3f").save(target_frame)
+
+    guides_by_shot, warnings = service.h3_video_guide_builder.prepare(
+        document=project.document,
+        takes=[source_take],
+        shot_ids=[target_shot.id],
+        created_at=NOW,
+        prepared_media_inputs={
+            target_shot.id: [
+                H3MediaInput(
+                    kind=H3MediaKind.IMAGE,
+                    role=H3MediaRole.FIRST_FRAME,
+                    source=H3MediaSource(local_path=str(target_frame)),
+                    asset_version_id="asset-version-target-start",
+                )
+            ]
+        },
+    )
+
+    assert warnings == []
+    previs = next(
+        item
+        for item in guides_by_shot[target_shot.id]
+        if item.kind == H3VideoGuideKind.CAMERA_PREVIS
+    )
+    assert previs.previs_base_source == H3VideoGuideBaseSource.TARGET_START_FRAME
+    assert previs.base_asset_version_id == "asset-version-target-start"
+    assert "asset-version-target-start" in previs.id
+    assert "previs-target-asset-version-target-start" in previs.media_path
+    metadata = probe_media_with_ffmpeg(Path(previs.media_path))
+    assert metadata["size"] == "768x1344"
+    assert metadata["audio"] == "missing"
+
+
+def test_route_agent_can_choose_tail_window_without_making_it_a_gate(
+    tmp_path: Path,
+) -> None:
+    class FakeRouteAgent:
+        def __init__(self, output: str) -> None:
+            self.output = output
+            self.calls: list[tuple[str, str]] = []
+
+        def validate_credentials(self) -> None:
+            return None
+
+        def generate_text(
+            self,
+            *,
+            instructions: str,
+            input_text: str,
+            image_urls: list[str] | None = None,
+            max_output_tokens: int = 2200,
+        ) -> str:
+            del image_urls, max_output_tokens
+            self.calls.append((instructions, input_text))
+            return self.output
+
+    base_service = _service(tmp_path)
+    project = base_service.initialize_fixture()
+    source_shot, target_shot = project.document.shots[:2]
+    source_video = tmp_path / "route-agent-source.mp4"
+    _render_video(source_video, duration=5.0)
+    source_take = _persist_passed_h3_take(
+        base_service,
+        shot_id=source_shot.id,
+        media_path=source_video,
+        selected=True,
+    )
+    tail_id = (
+        f"h3-video-guide-tail_window-{target_shot.id}-{source_take.id}-"
+        f"r{target_shot.revision}"
+    )
+    fake = FakeRouteAgent(
+        "{\"choices\":[{"
+        f"\"shot_id\":\"{target_shot.id}\","
+        f"\"candidate_id\":\"video-guide:{tail_id}\","
+        "\"rationale\":\"The boundary state matters more than the wider prior edit.\","
+        "\"qa_focus_categories\":[\"SPATIAL_CONTINUITY\",\"CHARACTER_ORIENTATION\"],"
+        "\"warnings\":[\"The recommendation is optional and should be boundary-reviewed.\"]"
+        "}]}"
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _api_key, _base_url: fake,
+    )
+    service.language_config.update(
+        LanguageProviderConfigUpdate(
+            api_key="test-key",
+            base_url="https://example.invalid/v1",
+        )
+    )
+
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[target_shot.id],
+            use_language_agent=True,
+            consider_video_guides=True,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+
+    assert decision.route == VideoGenerationRoute.REFERENCE
+    assert decision.selected_video_guide_id == tail_id
+    assert decision.media_inputs[0].video_guide_id == tail_id
+    assert decision.override_allowed is True
+    assert fake.calls
+    assert "never mandatory" in fake.calls[0][0]
+
+    updated = service.repository.get_project(project.document.project.id)
+    assert updated is not None
+    updated_source = next(item for item in updated.shots if item.id == source_shot.id)
+    updated_source.revision += 1
+    service.repository.save_project(updated)
+    with pytest.raises(WorkflowConflictError, match="video-guide source shots"):
+        service.execute_h3_production_route_plan(
+            project.document.project.id,
+            compiled.plan.id,
+            H3ProductionRouteExecuteRequest(
+                enqueue_new_generations=False,
+                inspect_reused_takes=False,
+                rebuild_manifest=False,
+            ),
+        )
 
 def test_route_plan_reuses_reviewed_h3_takes_and_builds_real_manifest(
     tmp_path: Path,

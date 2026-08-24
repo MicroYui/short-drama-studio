@@ -119,6 +119,29 @@ REGRESSION_CASES: tuple[RegressionCase, ...] = (
             DirectorRepairStrategy.CHANGE_CAMERA,
         ],
     ),
+    RegressionCase(
+        id="same-scene-boundary-video-guide-v1",
+        title="同场景相邻镜头的视频连续性参考",
+        scenario=(
+            "前镜已有被选 Take，后镜需要承接人物身份、场景布局、动作或摄影机方向；"
+            "比较不使用视频参考、前镜完整 Take、前镜尾部运动窗口与低保真机位预演。"
+        ),
+        learning_objective=(
+            "判断 reference_video 是否改善镜间连续性和摄影机路径，同时识别错误继承、"
+            "构图降级、重复前镜动作和返工范围扩大的风险。"
+        ),
+        failure_categories=[
+            QaFailureCategory.SPATIAL_CONTINUITY,
+            QaFailureCategory.CHARACTER_ORIENTATION,
+            QaFailureCategory.IDENTITY_CONTINUITY,
+            QaFailureCategory.COMPOSITION_QUALITY,
+        ],
+        expected_repair_strategies=[
+            DirectorRepairStrategy.CHANGE_KEYFRAME,
+            DirectorRepairStrategy.CHANGE_CAMERA,
+            DirectorRepairStrategy.PROMPT_RETRY,
+        ],
+    ),
 )
 
 

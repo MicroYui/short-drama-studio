@@ -24,6 +24,8 @@ from short_drama.h3_models import (
     H3ShotRouteAction,
     H3ShotRoutePlan,
     H3ShotRouteReadiness,
+    H3VideoGuide,
+    H3VideoGuideKind,
     H3ProviderRun,
 )
 from short_drama.models import (
@@ -57,6 +59,7 @@ from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
     LanguageProviderError,
 )
+from short_drama.h3_video_guides import append_h3_video_guide_guidance
 from short_drama.reference_planner import (
     KeyframeBriefCompileRequest,
     KeyframePosition,
@@ -96,6 +99,8 @@ class _RouteCandidate:
     rationale: str
     quality_score: float
     reuse_take_id: str | None = None
+    video_guide_id: str | None = None
+    video_guide: H3VideoGuide | None = None
     evidence_ids: list[str] = field(default_factory=list[str])
     warnings: list[str] = field(default_factory=list[str])
     missing_inputs: list[str] = field(default_factory=list[str])
@@ -118,6 +123,8 @@ def build_h3_production_route_plan(
     candidate_count: int,
     language_client: LanguageProviderClient | None,
     prepared_media_inputs: dict[str, list[H3MediaInput]] | None = None,
+    video_guides: dict[str, list[H3VideoGuide]] | None = None,
+    video_guide_warnings: list[str] | None = None,
 ) -> H3ProductionRoutePlan:
     selected_ids = set(shot_ids)
     known_ids = {shot.id for shot in document.shots}
@@ -144,7 +151,7 @@ def build_h3_production_route_plan(
 
     candidates_by_shot: dict[str, list[_RouteCandidate]] = {}
     risks_by_shot: dict[str, tuple[list[str], list[QaFailureCategory]]] = {}
-    global_warnings: list[str] = []
+    global_warnings: list[str] = list(video_guide_warnings or [])
     for shot in shots:
         reference_plan = plan_by_shot.get(shot.id, ReferencePlanEntry(
             shot_id=shot.id,
@@ -167,6 +174,7 @@ def build_h3_production_route_plan(
             evidence_by_take=evidence_by_take,
             inspections_by_take=inspections_by_take,
             prepared_media_inputs=(prepared_media_inputs or {}).get(shot.id, []),
+            video_guides=(video_guides or {}).get(shot.id, []),
             applied_repair_strategy=applied_repair_strategy,
         )
 
@@ -286,6 +294,11 @@ def build_h3_production_route_plan(
                 asset_preparations=[
                     item.model_copy(deep=True) for item in chosen.preparations
                 ],
+                video_guides=[
+                    item.model_copy(deep=True)
+                    for item in (video_guides or {}).get(shot.id, [])
+                ],
+                selected_video_guide_id=chosen.video_guide_id,
                 candidate_count=(
                     1
                     if chosen.action == H3ShotRouteAction.REUSE_TAKE
@@ -347,6 +360,19 @@ def validate_route_plan_freshness(
         raise RoutePlanningError(
             "Route plan uses outdated shot revisions: " + ", ".join(stale)
         )
+    stale_guide_sources = [
+        guide.source_shot_id
+        for decision in plan.decisions
+        if decision.selected_video_guide_id is not None
+        for guide in decision.video_guides
+        if guide.id == decision.selected_video_guide_id
+        and revision_by_shot.get(guide.source_shot_id) != guide.source_shot_revision
+    ]
+    if stale_guide_sources:
+        raise RoutePlanningError(
+            "Route plan uses outdated video-guide source shots: "
+            + ", ".join(stale_guide_sources)
+        )
 
 
 def _build_candidates(
@@ -362,6 +388,7 @@ def _build_candidates(
     evidence_by_take: dict[str, RouteEvidence],
     inspections_by_take: dict[str, list[VideoInspectionReport]],
     prepared_media_inputs: list[H3MediaInput],
+    video_guides: list[H3VideoGuide],
     applied_repair_strategy: DirectorRepairStrategy | None,
 ) -> list[_RouteCandidate]:
     del tasks, inspections_by_take
@@ -559,6 +586,17 @@ def _build_candidates(
         if reference_candidate is not None:
             candidates.append(reference_candidate)
 
+        candidates.extend(
+            _video_guide_candidates(
+                document=document,
+                shot=shot,
+                guides=video_guides,
+                duration=duration,
+                prompt=fresh_prompt,
+                approved_inputs=approved_inputs,
+            )
+        )
+
     direct_readiness = (
         H3ShotRouteReadiness.READY_WITH_WARNINGS
         if preparations or duration_warnings
@@ -710,6 +748,78 @@ def _reference_candidate(
         missing_inputs=list(preview.missing_requirement_ids),
         readiness=readiness,
     )
+
+
+def _video_guide_candidates(
+    *,
+    document: ProjectDocument,
+    shot: ShotPlan,
+    guides: list[H3VideoGuide],
+    duration: int,
+    prompt: str,
+    approved_inputs: dict[str, tuple[AssetMediaType, H3MediaSource]],
+) -> list[_RouteCandidate]:
+    voice_references, voice_warnings = _voice_reference_inputs(
+        document=document,
+        shot=shot,
+        approved_inputs=approved_inputs,
+    )
+    result: list[_RouteCandidate] = []
+    score_hints = {
+        H3VideoGuideKind.PREVIOUS_TAKE: 90.0,
+        H3VideoGuideKind.TAIL_WINDOW: 95.0,
+        H3VideoGuideKind.CAMERA_PREVIS: 85.0,
+    }
+    for guide in guides:
+        guide_input = H3MediaInput(
+            kind=H3MediaKind.VIDEO,
+            role=H3MediaRole.REFERENCE_VIDEO,
+            source=H3MediaSource(local_path=guide.media_path),
+            video_guide_id=guide.id,
+        )
+        media_inputs = [
+            guide_input,
+            *(item for _character_name, item in voice_references),
+        ]
+        compiled_prompt = append_h3_video_guide_guidance(prompt, guide)
+        compiled_prompt = _append_voice_reference_guidance(
+            compiled_prompt,
+            voice_references,
+        )
+        try:
+            validate_h3_probe(
+                route=VideoGenerationRoute.REFERENCE,
+                prompt=compiled_prompt,
+                duration_seconds=duration,
+                media_inputs=media_inputs,
+            )
+        except H3CapabilityError:
+            continue
+        warnings = list(dict.fromkeys([*guide.warnings, *voice_warnings]))
+        result.append(
+            _RouteCandidate(
+                id=f"video-guide:{guide.id}",
+                action=H3ShotRouteAction.GENERATE,
+                route=VideoGenerationRoute.REFERENCE,
+                prompt=compiled_prompt,
+                duration_seconds=duration,
+                media_inputs=media_inputs,
+                video_guide_id=guide.id,
+                video_guide=guide,
+                rationale=guide.rationale,
+                quality_score=(
+                    score_hints[guide.kind]
+                    + min(0.9, guide.source_quality_score / 10.0)
+                ),
+                warnings=warnings,
+                readiness=(
+                    H3ShotRouteReadiness.READY_WITH_WARNINGS
+                    if warnings
+                    else H3ShotRouteReadiness.READY
+                ),
+            )
+        )
+    return result
 
 
 def _voice_reference_inputs(
@@ -1144,6 +1254,20 @@ def _choose_with_language_agent(
         "compare empirical route evidence, approved visual bindings, action complexity, and QA "
         "risk. Recommendations and warnings are advisory and dismissible. Long shots require "
         "temporal and boundary observation; do not claim sparse frames prove an action absent."
+        " Optional video-guide candidates are visual-only controls derived from the selected "
+        "preceding Take in the same scene or from the current shot's approved start frame. Treat "
+        "raw preceding-video references as likely to continue or repeat their visible action even "
+        "when the prompt asks otherwise. Choose TAIL_WINDOW or PREVIOUS_TAKE mainly when the target "
+        "genuinely continues the same action and similar coverage: TAIL_WINDOW for boundary pose, "
+        "prop state, screen direction, or camera momentum; PREVIOUS_TAKE when wider choreography "
+        "and location context justify its larger error-inheritance surface. When the target changes "
+        "coverage, reverses angle, or begins a new action, compare frame-controlled candidates first. "
+        "A CAMERA_PREVIS rooted in TARGET_START_FRAME can test coarse camera path while retaining the "
+        "approved target composition; one rooted in PREVIOUS_BOUNDARY_FRAME may preserve the wrong "
+        "coverage. A 2D previs cannot validate body blocking or guarantee the planned end action. "
+        "Avoid a guide whose source QA issues are likely to propagate. These candidates are never "
+        "mandatory. quality_score_hint is only a "
+        "conservative deterministic fallback ordering, not a learned quality score."
         " When the user supplied a character voice reference for a speaking shot, normally "
         "prefer the ready candidate carrying reference_audio unless an applied Director repair "
         "or stronger frame-control need outweighs it."
@@ -1202,6 +1326,35 @@ def _choose_with_language_agent(
                         "warnings": candidate.warnings,
                         "missing_inputs": candidate.missing_inputs,
                         "readiness": candidate.readiness.value,
+                        "video_guide": (
+                            {
+                                "id": candidate.video_guide.id,
+                                "kind": candidate.video_guide.kind.value,
+                                "source_shot_id": candidate.video_guide.source_shot_id,
+                                "source_shot_revision": candidate.video_guide.source_shot_revision,
+                                "source_take_id": candidate.video_guide.source_take_id,
+                                "duration_seconds": candidate.video_guide.duration_seconds,
+                                "source_in_seconds": candidate.video_guide.source_in_seconds,
+                                "camera_motion": (
+                                    candidate.video_guide.camera_motion.value
+                                    if candidate.video_guide.camera_motion is not None
+                                    else None
+                                ),
+                                "previs_base_source": (
+                                    candidate.video_guide.previs_base_source.value
+                                    if candidate.video_guide.previs_base_source is not None
+                                    else None
+                                ),
+                                "base_asset_version_id": (
+                                    candidate.video_guide.base_asset_version_id
+                                ),
+                                "source_qa_status": candidate.video_guide.source_qa_status.value,
+                                "source_quality_score": candidate.video_guide.source_quality_score,
+                                "source_issue_codes": candidate.video_guide.source_issue_codes,
+                            }
+                            if candidate.video_guide is not None
+                            else None
+                        ),
                     }
                     for candidate in candidates_by_shot[shot.id]
                 ],

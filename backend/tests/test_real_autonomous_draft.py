@@ -613,6 +613,12 @@ def test_real_autonomous_draft_resumes_and_exports_without_shot_by_shot_input(
         for decision in plan.decisions
         for preparation in decision.asset_preparations
     )
+    assert any(
+        decision.video_guides
+        for plan in plans
+        for decision in plan.decisions
+        if decision.shot_sequence > 1
+    )
 
 
 def test_real_autonomous_draft_persists_attention_when_image_provider_is_missing(

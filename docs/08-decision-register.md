@@ -77,7 +77,7 @@
 | M011 | `LOCKED` | H3 源视频保持 768P；交付预设为 1080×1920 9:16 H.264 High/YUV420P/BT.709/CRF18 MP4、AAC-LC 48kHz 192kbps，默认 30fps CFR但避免损伤性改帧；输出带/无字幕 MP4、SRT、ASS、TimelineManifest，安全区上/左8%右16%下20%，约 -14 LUFS/-1 dBTP，并做 FFmpeg/ffprobe 技术 QA | P008、M005 |
 | M012 | `LATER` | 局部图像修复、补帧、超分、降噪等后处理是否值得加入 | E003–E005 |
 | M013 | `LATER` | LTX-2.x 或其他视频模型候选不进入当前范围；只有未来明确重新开放模型扩展时才讨论 | M001 |
-| M014 | `EXPERIMENT_REQUIRED` | H3 `reference_video` 是否适合作为连续场景、强依赖镜头和长镜头续接路线，以及低保真人物走位/机位/运镜预演能否提高动作与摄影机连续性而不显著传播错误或降低画质 | M001、M003、M010 |
+| M014 | `LOCKED` | H3 `reference_video` 作为 Director/Route Agent 的可选工具，不是连续镜头默认前置。真实样本中，前序完整 Take 与尾窗会重演可见动作；主要在同动作、相近覆盖的续接镜头中候选。反打/换机位优先比较 Frame，机位预演优先从当前镜头批准首帧建立；二维预演不能保证人体走位或终态动作。用户可忽略建议，缺少 guide 不阻断生成 | M001、M003、M010、E010 |
 
 ## D. 固定实验与质量判定
 
@@ -92,7 +92,8 @@
 | E007 | `LOCKED` | 1 人检查硬门槛、至少 3 人匿名盲评；同一锁定输入独立运行 3 次 AUTO_DRAFT，全部到可播放时间线并导出，自动 QA/定向重试后至少 2/3 无严重失败。最终片 45–60 秒、全部硬门槛通过、核心项中位数≥4/5、至少 2/3 愿意继续看；允许换 Take/局部返工，不允许靠人工重建大部分影片 | E006 |
 | E008 | `EXPERIMENT_REQUIRED` | 各镜头类型的默认 RouteEvidence | E002–E007 |
 | E009 | `LATER` | 视频模型横向比较不进入当前范围；未来开放 M013 时再设计 | M013 |
-| E010 | `EXPERIMENT_REQUIRED` | 在同一镜头意图、资产和 768P 条件下比较 Frame 基线、前序完整 Take reference video、前序尾部运动窗口和低保真走位/运镜预演；检查身份/场景几何、动作/视线、摄影机路径、错误继承、画质和返工范围。结果进入 Director/Route Agent 可覆盖建议，不设为所有镜头固定前置 | M014、A011、A013 |
+| E010 | `LOCKED` | 已在同一 7 秒反打镜头、同资产和 768P 下比较 Frame 基线、前序完整 Take、前序尾窗、前镜尾帧预演与当前镜头批准首帧预演。完整 Take/尾窗均重启行走；前镜尾帧预演重置距离；当前镜头首帧预演保住反打、人物、场景和道具且未重复前镜，但仍未完成结尾起步动作。结论只形成 Agent 可覆盖路线策略，不设固定前置 | M014、A011、A013 |
+| E011 | `EXPERIMENT_REQUIRED` | 在后续正常质量积累中复测真正同动作/同覆盖的续接、长镜头 Extend、多人遮挡与快速手物接触，统计完整 Take、尾窗和当前镜头首帧预演的跨剧本稳定率；不为扩大样本而阻塞当前完整流程 | M014、E010 |
 
 ## E. 实施与验收
 
@@ -126,6 +127,7 @@
 - 2026-08-21：Phase 15 已把长篇 Story Architect、Script Critic、有界修订和逐场 Scene Director 从一次同步创建拆为 SQLite 持久化 `PlanningRun`。前端展示当前节点与场次进度，重启后自动发现未完成 run，错误只重试当前节点；短片同步创建保持兼容。120 秒真实 GPT-5.6-sol 探针在第 1 场后重建 Service，仍完成 3 场、16 镜和 8 句原样锁定台词；最终 Critic 仍保留 6 项建议，因此只证明可恢复检查闭环，不宣称剧本质量通过。真实探针同时促使单场校验前移“参考需求必须引用整集资产契约”，并修复说明标题、说话动作和对话对象被误识别为说话人的问题。运行结束时图像、视频与 Provider task 均为 0，未调用 GPT Image 或 MiniMax-H3。详见 [Phase 15 实施记录](25-phase15-recoverable-long-form-planning.md)。
 - 2026-08-21：Phase 16 已将每轮 `EpisodeOutline` 和 `ScriptReviewReport` 作为独立 PlanningRun artifact 持久化，新增单 run 详细历史和跨项目剧本评测 API，桌面剧本页显示三轮修订轨迹。数量变化只作描述，不作剧本分数或强制门；最新轮比上一轮报告更多问题时，Director Agent 只建议比较版本。220 秒 IDEA_EXPANSION、470 秒 AUTO_ORIGINAL 和同输入策略复跑的三个真实 GPT-5.6-sol 样本均保存 3 份大纲与 3 份审稿，并在 Scene Director 前停止，未调用 GPT Image 或 MiniMax-H3。结果显示修订报告可非单调变化，因此不声称“最新版必然最好”或稳定质量提升。详见 [Phase 16 实施记录](26-phase16-script-quality-history.md)。
 - 2026-08-24：Phase 17 在非单调回退时加入独立 `REVISION_JUDGE` 节点，持久化推荐、依据、取舍和置信度，并明确保持 `advisory_only`。集成测试覆盖正常改善不调用、回退触发、跨重启保留、推荐旧稿但仍使用最新版，以及 Judge 失败不阻断。复用 Phase 16 两组真实快照的 GPT-5.6-sol 比较均推荐第 2 轮，同时列出新引入的矛盾；它只证明比较闭环成立，不是人类剧本质量 benchmark。运行后 Project、image task、generation task、provider run 和 H3 route plan 均为 0。后续另以 E010 验证 H3 reference video 与低保真运镜预演，不把它们写死为固定步骤。详见 [Phase 17 实施记录](27-phase17-revision-judge.md)。
+- 2026-08-24：Phase 18 将前镜完整 Take、最后 4 秒尾窗和 4 秒低保真机位预演实现为可持久化 `H3VideoGuide`，并由 Route Agent 在 Direct、Frame 和 Reference 候选间可覆盖选择。同一 7 秒反打样本中，完整 Take/尾窗都重启了前镜行走，前镜尾帧预演重置了人物距离；改用当前镜头批准首帧作为预演基底后，反打、人物、走廊和工牌连续且未重复前镜，只剩结尾起步未完成。该结果已进入通用 Agent 策略和回归案例；它是单样本能力边界，不是全局默认，也没有增加创意门控、场景专用字段或 hash 冻结。详见 [Phase 18 实施记录](28-phase18-h3-video-reference-previs.md)。
 
 ## 对话顺序
 

@@ -4105,6 +4105,20 @@
         "title": "GpuTelemetry",
         "type": "object"
       },
+      "H3CameraMotionPreset": {
+        "enum": [
+          "STATIC",
+          "DOLLY_IN",
+          "DOLLY_OUT",
+          "TRACK_LEFT",
+          "TRACK_RIGHT",
+          "JIB_UP",
+          "JIB_DOWN",
+          "FOLLOW"
+        ],
+        "title": "H3CameraMotionPreset",
+        "type": "string"
+      },
       "H3CapabilityProfileResponse": {
         "additionalProperties": false,
         "properties": {
@@ -4304,6 +4318,17 @@
           },
           "source": {
             "$ref": "#/components/schemas/H3MediaSource"
+          },
+          "video_guide_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Guide Id"
           }
         },
         "required": [
@@ -4794,6 +4819,11 @@
             "minimum": 1.0,
             "title": "Candidate Count",
             "type": "integer"
+          },
+          "consider_video_guides": {
+            "default": true,
+            "title": "Consider Video Guides",
+            "type": "boolean"
           },
           "shot_ids": {
             "items": {
@@ -5553,6 +5583,17 @@
             "title": "Route Evidence Ids",
             "type": "array"
           },
+          "selected_video_guide_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Video Guide Id"
+          },
           "shot_id": {
             "title": "Shot Id",
             "type": "string"
@@ -5568,6 +5609,14 @@
             },
             "maxItems": 10,
             "title": "Task Ids",
+            "type": "array"
+          },
+          "video_guides": {
+            "items": {
+              "$ref": "#/components/schemas/H3VideoGuide"
+            },
+            "maxItems": 3,
+            "title": "Video Guides",
             "type": "array"
           },
           "warnings": {
@@ -5877,6 +5926,156 @@
         ],
         "title": "H3UrlValue",
         "type": "object"
+      },
+      "H3VideoGuide": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "base_asset_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Asset Version Id"
+          },
+          "camera_motion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3CameraMotionPreset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 15.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/H3VideoGuideKind"
+          },
+          "media_path": {
+            "title": "Media Path",
+            "type": "string"
+          },
+          "previs_base_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3VideoGuideBaseSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "source_in_seconds": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Source In Seconds",
+            "type": "number"
+          },
+          "source_issue_codes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Source Issue Codes",
+            "type": "array"
+          },
+          "source_qa_status": {
+            "$ref": "#/components/schemas/QaStatus"
+          },
+          "source_quality_score": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Source Quality Score",
+            "type": "number"
+          },
+          "source_shot_id": {
+            "title": "Source Shot Id",
+            "type": "string"
+          },
+          "source_shot_revision": {
+            "minimum": 1.0,
+            "title": "Source Shot Revision",
+            "type": "integer"
+          },
+          "source_take_id": {
+            "title": "Source Take Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "shot_id",
+          "source_shot_id",
+          "source_shot_revision",
+          "source_take_id",
+          "kind",
+          "media_path",
+          "duration_seconds",
+          "source_qa_status",
+          "source_quality_score",
+          "rationale",
+          "created_at"
+        ],
+        "title": "H3VideoGuide",
+        "type": "object"
+      },
+      "H3VideoGuideBaseSource": {
+        "enum": [
+          "TARGET_START_FRAME",
+          "PREVIOUS_BOUNDARY_FRAME"
+        ],
+        "title": "H3VideoGuideBaseSource",
+        "type": "string"
+      },
+      "H3VideoGuideKind": {
+        "enum": [
+          "PREVIOUS_TAKE",
+          "TAIL_WINDOW",
+          "CAMERA_PREVIS"
+        ],
+        "title": "H3VideoGuideKind",
+        "type": "string"
       },
       "H3VideoRequest": {
         "additionalProperties": false,

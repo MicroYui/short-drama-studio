@@ -3227,6 +3227,11 @@ export interface components {
             /** Vramused */
             vramUsed: number;
         };
+        /**
+         * H3CameraMotionPreset
+         * @enum {string}
+         */
+        H3CameraMotionPreset: "STATIC" | "DOLLY_IN" | "DOLLY_OUT" | "TRACK_LEFT" | "TRACK_RIGHT" | "JIB_UP" | "JIB_DOWN" | "FOLLOW";
         /** H3CapabilityProfileResponse */
         H3CapabilityProfileResponse: {
             /**
@@ -3289,6 +3294,8 @@ export interface components {
             kind: components["schemas"]["H3MediaKind"];
             role: components["schemas"]["H3MediaRole"];
             source: components["schemas"]["H3MediaSource"];
+            /** Video Guide Id */
+            video_guide_id?: string | null;
         };
         /**
          * H3MediaKind
@@ -3510,6 +3517,11 @@ export interface components {
              * @default 1
              */
             candidate_count: number;
+            /**
+             * Consider Video Guides
+             * @default true
+             */
+            consider_video_guides: boolean;
             /** Shot Ids */
             shot_ids?: string[];
             /**
@@ -3755,12 +3767,16 @@ export interface components {
             route: components["schemas"]["VideoGenerationRoute"];
             /** Route Evidence Ids */
             route_evidence_ids?: string[];
+            /** Selected Video Guide Id */
+            selected_video_guide_id?: string | null;
             /** Shot Id */
             shot_id: string;
             /** Shot Sequence */
             shot_sequence: number;
             /** Task Ids */
             task_ids?: string[];
+            /** Video Guides */
+            video_guides?: components["schemas"]["H3VideoGuide"][];
             /** Warnings */
             warnings?: string[];
         };
@@ -3841,6 +3857,60 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** H3VideoGuide */
+        H3VideoGuide: {
+            /**
+             * Advisory Only
+             * @default true
+             * @constant
+             */
+            advisory_only: true;
+            /** Base Asset Version Id */
+            base_asset_version_id?: string | null;
+            camera_motion?: components["schemas"]["H3CameraMotionPreset"] | null;
+            /** Created At */
+            created_at: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Id */
+            id: string;
+            kind: components["schemas"]["H3VideoGuideKind"];
+            /** Media Path */
+            media_path: string;
+            previs_base_source?: components["schemas"]["H3VideoGuideBaseSource"] | null;
+            /** Rationale */
+            rationale: string;
+            /** Shot Id */
+            shot_id: string;
+            /**
+             * Source In Seconds
+             * @default 0
+             */
+            source_in_seconds: number;
+            /** Source Issue Codes */
+            source_issue_codes?: string[];
+            source_qa_status: components["schemas"]["QaStatus"];
+            /** Source Quality Score */
+            source_quality_score: number;
+            /** Source Shot Id */
+            source_shot_id: string;
+            /** Source Shot Revision */
+            source_shot_revision: number;
+            /** Source Take Id */
+            source_take_id: string;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
+         * H3VideoGuideBaseSource
+         * @enum {string}
+         */
+        H3VideoGuideBaseSource: "TARGET_START_FRAME" | "PREVIOUS_BOUNDARY_FRAME";
+        /**
+         * H3VideoGuideKind
+         * @enum {string}
+         */
+        H3VideoGuideKind: "PREVIOUS_TAKE" | "TAIL_WINDOW" | "CAMERA_PREVIS";
         /** H3VideoRequest */
         H3VideoRequest: {
             /** Content */

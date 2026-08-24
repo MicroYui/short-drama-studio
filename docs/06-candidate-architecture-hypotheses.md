@@ -74,6 +74,17 @@ flowchart TD
 
 这些角色输出相互引用的 schema，不需要为每个角色建立独立运行时。Route Planner 应依据已记录的能力和实验结果建议路线；不为展示技术栈增加步骤，但允许为质量非劣、稳定性和控制增益主动加入 GPT Image 2 等能力。
 
+### Agent 控制面的职责
+
+当前控制面就是同一运行时中的四层协作，不另建规则引擎或审批系统：
+
+- **Agent Harness** 注册资产搜索/生成、关键帧、H3 路线、视频抽帧、边界检查和时间线等 Tools，并组装当前项目、镜头、资产、Take、QA 与历史证据上下文；
+- **Prompt Policy** 根据通用视频或抖音短剧 Profile，以及 Writer、Director、Route Agent、Reviewer 的职责注入不同目标和选择原则；
+- **持久化 Orchestrator** 保存 PlanningRun、AutonomousRun、任务、Take、路线计划和当前步骤，负责有限推进、并发、重试、恢复与 `SUBMIT_UNKNOWN` 对账；
+- **确定性校验器** 只判断输入组合是否合法、文件是否存在、版本引用是否新鲜、Provider 状态和时间线是否可执行。
+
+创作质量、是否补资产、是否使用视频参考、是否拆镜或换机位仍由 Agent 给出可忽略建议。项目不使用文档 SHA、素材 hash 冻结、创意审批门或样片专用规则来代替这些判断；普通 ID、缓存键和任务 fingerprint 只服务于查找、复用与避免重复提交，不构成内容冻结。
+
 ## 4. 核心数据模型
 
 ### `Project`
@@ -360,9 +371,13 @@ PlanningRun 不是新的工作流画布或微服务。它只是 SQLite/API 核�
 
 Judge 只给出推荐版本、备选版本、置信度、依据和取舍，不修改 `outline_json`，不阻断 Scene Director。缺少快照、模型不可用或输出不合法时也继续使用最新版。正常单调改善不调用 Judge。这个阶段仍是纯剧本处理，不调用 GPT Image 或 H3。
 
-### 后续：H3 视频参考与运镜预演路线
+### Phase 18：H3 视频参考与运镜预演路线
 
-当前 H3 Adapter 已能提交 `reference_video`。后续将比较前序完整 Take、前序尾部运动窗口和低保真人物走位/机位预演三种视频参考，判断它们对连续场景、强动作依赖和长镜头续接的增益及错误继承风险。实验先复用 LTX Desktop 上游已有的控制视频预处理、逐帧 depth/pose 和 conditioning cache 分层思路，再用 H3 验证，不接入 LTX 权重或假设两种模型的控制语义相同。首轮运行复用现有 `H3MediaInput`、镜头依赖、视频观察和 `RouteEvidence`，由 Director/Route Agent 推荐路线；没有证据前不把预演设为固定前置步骤，也不扩张场景专用领域字段。
+H3 Adapter 已把前序完整 Take、前序尾部运动窗口和低保真机位预演实现为可持久化 `H3VideoGuide`。媒体 Tool 负责裁切、去音轨、归一化和二维预演；Route Agent 结合当前镜头、来源 QA、预演基底和历史证据，在 Direct、Frame、Reference 与 guide 候选中选择，用户仍可覆盖。`AUTO_DRAFT` 在同一场内按连续性 wave 推进，使后镜能使用前镜已选 Take；不同场可并行。
+
+真实 768P 样本显示，H3 会把原始前镜视频中的行走当作待继续内容：完整 Take 与尾窗都重启了动作，Prompt 中要求不重复并不可靠；从前镜尾帧制作预演也继承了错误覆盖和距离。改为从当前镜头已批准首帧制作预演后，反打、人物、走廊和道具连续且没有重复前镜，但仍未完成计划终态动作。因此 Agent 对同动作、相近覆盖才优先考虑完整 Take/尾窗；反打或换机位先比较 Frame，`TARGET_START_FRAME` 预演只帮助构图与粗摄影机路径，不能验证走位。
+
+这条路线借鉴 LTX Desktop 控制视频预处理、逐帧 depth/pose Service 与 conditioning cache 的工程分层，不接入 LTX 权重，也不把 H3 `reference_video` 当作同等强度的控制通道。确定性代码只校验媒体、Provider 合同、任务状态和版本引用，不设置创意门控、场景专用字段或 hash 冻结。详见 [Phase 18 实施记录](28-phase18-h3-video-reference-previs.md)。
 
 ## 12. 当前不做
 
