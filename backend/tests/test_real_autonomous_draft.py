@@ -39,6 +39,8 @@ from short_drama.models import (
     AutonomousRepeatCreateRequest,
     AutonomousRunAdvanceRequest,
     AutonomousRunStatus,
+    AutonomousRunStep,
+    EpisodeReviewStatus,
     Freshness,
     PlanningRunCreateRequest,
     PlanningRunStatus,
@@ -179,7 +181,10 @@ class FakeLanguageClient:
         repair_first_shot: bool = False,
         repair_shot_sequences: set[int] | None = None,
         persistent_repair_shot_sequences: set[int] | None = None,
+        episode_repair_shot_sequences: set[int] | None = None,
+        persistent_episode_repair_shot_sequences: set[int] | None = None,
         fail_video_reviews: int = 0,
+        fail_episode_reviews: int = 0,
     ) -> None:
         self.reject_first_asset = reject_first_asset
         self.repair_shot_sequences = set(repair_shot_sequences or set())
@@ -190,9 +195,21 @@ class FakeLanguageClient:
         )
         self.repair_shot_sequences.update(self.persistent_repair_shot_sequences)
         self.repaired_shot_sequences: set[int] = set()
+        self.episode_repair_shot_sequences = set(
+            episode_repair_shot_sequences or set()
+        )
+        self.persistent_episode_repair_shot_sequences = set(
+            persistent_episode_repair_shot_sequences or set()
+        )
+        self.episode_repair_shot_sequences.update(
+            self.persistent_episode_repair_shot_sequences
+        )
         self.fail_video_reviews = fail_video_reviews
+        self.fail_episode_reviews = fail_episode_reviews
         self.asset_review_calls = 0
         self.director_calls = 0
+        self.episode_scene_payloads: list[dict[str, Any]] = []
+        self.episode_summary_payloads: list[dict[str, Any]] = []
 
     def validate_credentials(self) -> None:
         pass
@@ -285,6 +302,63 @@ class FakeLanguageClient:
                     "observations": [],
                     "issues": [],
                     "summary": "No severe visible contradiction was found in sampled frames.",
+                }
+            )
+        if "scene-level episode-review Agent" in instructions:
+            if self.fail_episode_reviews > 0:
+                self.fail_episode_reviews -= 1
+                raise LanguageProviderError("simulated transient episode reviewer overload")
+            payload = json.loads(input_text)
+            self.episode_scene_payloads.append(payload)
+            target: dict[str, Any] | None = None
+            for evidence in payload["shot_evidence"]:
+                sequence = int(evidence["shot_plan"]["sequence"])
+                if (
+                    sequence in self.episode_repair_shot_sequences
+                    and (
+                        sequence in self.persistent_episode_repair_shot_sequences
+                        or sequence not in self.repaired_shot_sequences
+                    )
+                ):
+                    target = evidence["shot_plan"]
+                    break
+            findings = []
+            if target is not None:
+                findings.append(
+                    {
+                        "dimension": "STORY_CLARITY",
+                        "code": "EPISODE_BEAT_VISIBLY_UNREADABLE",
+                        "severity": "HIGH",
+                        "message": "The edited scene does not visibly communicate the linked narrative beat.",
+                        "category": "COMPOSITION_QUALITY",
+                        "evidence": "The selected contact sheet and persisted observations leave the declared beat unreadable in the edit.",
+                        "scene_ids": [payload["scene"]["id"]],
+                        "shot_ids": [target["id"]],
+                        "recommended_action": "Regenerate only the linked shot with a clearer readable composition while preserving the story beat.",
+                        "repair_recommended": True,
+                    }
+                )
+            return json.dumps(
+                {
+                    "observations": ["The scene was reviewed from selected Takes in timeline order."],
+                    "findings": findings,
+                    "summary": (
+                        "One linked shot needs a local episode-level repair."
+                        if findings
+                        else "The edited scene has no supported episode-level finding."
+                    ),
+                }
+            )
+        if "episode-level reviewer Agent" in instructions:
+            if self.fail_episode_reviews > 0:
+                self.fail_episode_reviews -= 1
+                raise LanguageProviderError("simulated transient episode reviewer overload")
+            payload = json.loads(input_text)
+            self.episode_summary_payloads.append(payload)
+            return json.dumps(
+                {
+                    "findings": [],
+                    "summary": "The scene handoffs form a readable episode without another cross-scene finding.",
                 }
             )
         if "film director agent advising a user" in instructions:
@@ -719,10 +793,172 @@ def test_five_minute_planning_handoff_completes_timeline_without_second_runtime(
         for payload in language.scene_prompt_payloads
     )
     assert len(h3.requests) == 40
+    assert len(language.episode_scene_payloads) == 4
+    assert len(language.episode_summary_payloads) == 1
+    assert all(
+        len(payload["shot_evidence"]) == 5
+        for payload in language.episode_scene_payloads
+    )
+    assert all(
+        set(payload) == {
+            "output_schema",
+            "episode",
+            "scene",
+            "scene_sequence",
+            "shot_evidence",
+            "image_map",
+            "allowed_dimensions",
+            "allowed_issue_categories",
+            "product_rule",
+        }
+        for payload in language.episode_scene_payloads
+    )
+    assert completed.project.episode_reviews[-1].status == EpisodeReviewStatus.COMPLETE
+    assert completed.project.episode_reviews[-1].findings == []
+    assert language.director_calls == 0
     assert all(
         run.execution_target == AutonomousExecutionTarget.REAL_H3
         for run in completed.project.document.autonomous_runs
     )
+
+
+def test_episode_reviewer_repairs_only_linked_shot_and_resumes_after_restart(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient(episode_repair_shot_sequences={2})
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    first = _service(tmp_path, image, language, h3)
+    response = first.create_autonomous_draft(
+        AutonomousDraftCreateRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
+            input_text="",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=False,
+        )
+    )
+    first.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+
+    partial: AutonomousDraftResponse | None = None
+    for _ in range(240):
+        response = first.advance_autonomous_run(
+            response.project.document.project.id,
+            response.run.id,
+            AutonomousRunAdvanceRequest(max_actions=12),
+        )
+        if (
+            response.run.current_step == AutonomousRunStep.EPISODE_REVIEW
+            and response.project.episode_reviews
+            and response.project.episode_reviews[-1].status == EpisodeReviewStatus.RUNNING
+            and response.project.episode_reviews[-1].next_scene_index > 0
+        ):
+            partial = response
+            break
+    assert partial is not None
+
+    restarted = _service(tmp_path, image, language, h3)
+    restarted.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    completed = _finish_real_autonomous_run(
+        restarted,
+        project_id=partial.project.document.project.id,
+        run_id=partial.run.id,
+    )
+
+    assert completed.run.status == AutonomousRunStatus.COMPLETE
+    assert completed.run.repair_round == 1
+    assert language.director_calls == 1
+    revisions = {
+        shot.sequence: shot.revision for shot in completed.project.document.shots
+    }
+    assert revisions[2] == 2
+    assert all(revision == 1 for sequence, revision in revisions.items() if sequence != 2)
+    repaired_report = next(
+        item
+        for item in completed.project.episode_reviews
+        if item.repair_applied_shot_ids
+    )
+    shot_two = next(
+        item for item in completed.project.document.shots if item.sequence == 2
+    )
+    assert repaired_report.repair_applied_shot_ids == [shot_two.id]
+    assert completed.project.episode_reviews[-1].status == EpisodeReviewStatus.COMPLETE
+    assert completed.project.episode_reviews[-1].findings == []
+
+
+def test_episode_reviewer_failure_does_not_block_export_or_require_attention(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient(fail_episode_reviews=3)
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    response = service.create_autonomous_draft(
+        AutonomousDraftCreateRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
+            input_text="",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=True,
+        )
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    completed = _finish_real_autonomous_run(
+        service,
+        project_id=response.project.document.project.id,
+        run_id=response.run.id,
+    )
+
+    assert completed.run.status == AutonomousRunStatus.COMPLETE
+    assert completed.export is not None
+    assert language.director_calls == 0
+    report = completed.project.episode_reviews[-1]
+    assert report.status == EpisodeReviewStatus.FAILED
+    assert report.active_stage_attempts == 3
+    assert "导出不受阻" in report.summary
+    assert any(f"Episode review {report.id}:" in item for item in completed.run.warnings)
+
+
+def test_episode_reviewer_respects_existing_per_shot_repair_limit(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient(persistent_episode_repair_shot_sequences={1})
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    response = service.create_autonomous_draft(
+        AutonomousDraftCreateRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
+            input_text="",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=False,
+        )
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    completed = _finish_real_autonomous_run(
+        service,
+        project_id=response.project.document.project.id,
+        run_id=response.run.id,
+        max_cycles=900,
+    )
+
+    assert completed.run.status == AutonomousRunStatus.COMPLETE
+    assert completed.run.repair_round == completed.run.max_repair_rounds == 3
+    assert language.director_calls == 3
+    assert len(completed.project.episode_reviews) == 4
+    last_report = completed.project.episode_reviews[-1]
+    first_shot = min(completed.project.document.shots, key=lambda item: item.sequence)
+    assert last_report.repair_skipped_shot_ids == [first_shot.id]
+    assert any("per-shot automatic repair limit" in item for item in last_report.warnings)
 
 
 def test_repeat_run_reuses_approved_preproduction_but_starts_new_generation(

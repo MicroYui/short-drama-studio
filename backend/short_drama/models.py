@@ -52,6 +52,7 @@ class AutonomousRunStep(StrEnum):
     GENERATE = "GENERATE"
     QA_AND_REPAIR = "QA_AND_REPAIR"
     TIMELINE = "TIMELINE"
+    EPISODE_REVIEW = "EPISODE_REVIEW"
     AUDIO_QA = "AUDIO_QA"
     EXPORT = "EXPORT"
     COMPLETE = "COMPLETE"
@@ -72,6 +73,23 @@ class PlanningRunStep(StrEnum):
     SCENE_DIRECTOR = "SCENE_DIRECTOR"
     FINALIZE = "FINALIZE"
     COMPLETE = "COMPLETE"
+
+
+class EpisodeReviewStatus(StrEnum):
+    RUNNING = "RUNNING"
+    COMPLETE = "COMPLETE"
+    UNAVAILABLE = "UNAVAILABLE"
+    FAILED = "FAILED"
+
+
+class EpisodeReviewDimension(StrEnum):
+    STORY_CLARITY = "STORY_CLARITY"
+    SCENE_CAUSALITY = "SCENE_CAUSALITY"
+    CROSS_SCENE_CONTINUITY = "CROSS_SCENE_CONTINUITY"
+    CHARACTER_PROP_STATE = "CHARACTER_PROP_STATE"
+    SOUND_SOURCE_SEMANTICS = "SOUND_SOURCE_SEMANTICS"
+    PACING = "PACING"
+    OTHER = "OTHER"
 
 
 class ScriptQualityTrend(StrEnum):
@@ -823,6 +841,7 @@ class AutonomousRunRecord(DomainModel):
     planner: str
     execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
     route_plan_id: str | None = None
+    episode_review_id: str | None = None
     repair_round: int = Field(default=0, ge=0)
     max_repair_rounds: int = Field(default=3, ge=0, le=5)
     render_export: bool = True
@@ -1125,6 +1144,59 @@ class AudioInspectionReport(DomainModel):
     created_at: str
 
 
+class EpisodeReviewFinding(DomainModel):
+    id: str
+    dimension: EpisodeReviewDimension
+    issue: QaIssue
+    evidence: str = Field(min_length=1, max_length=2400)
+    scene_ids: list[str] = Field(default_factory=list[str], max_length=24)
+    shot_ids: list[str] = Field(default_factory=list[str], max_length=64)
+    recommended_action: str = Field(min_length=1, max_length=1600)
+    repair_recommended: bool = False
+    dismissible: bool = True
+
+
+class SceneEpisodeReview(DomainModel):
+    scene_id: str
+    scene_sequence: int = Field(ge=1)
+    shot_ids: list[str] = Field(min_length=1, max_length=128)
+    inspection_ids: list[str] = Field(default_factory=list[str], max_length=128)
+    observations: list[str] = Field(default_factory=list[str], max_length=32)
+    findings: list[EpisodeReviewFinding] = Field(
+        default_factory=list[EpisodeReviewFinding],
+        max_length=32,
+    )
+    summary: str = Field(min_length=1, max_length=3000)
+
+
+class EpisodeReviewReport(DomainModel):
+    id: str
+    project_id: str
+    manifest_id: str
+    source_script_version_id: str
+    status: EpisodeReviewStatus
+    semantic_model: str | None = None
+    scene_reviews: list[SceneEpisodeReview] = Field(
+        default_factory=list[SceneEpisodeReview],
+        max_length=500,
+    )
+    next_scene_index: int = Field(default=0, ge=0, le=500)
+    findings: list[EpisodeReviewFinding] = Field(
+        default_factory=list[EpisodeReviewFinding],
+        max_length=256,
+    )
+    summary: str = Field(default="整集审阅进行中。", min_length=1, max_length=5000)
+    warnings: list[str] = Field(default_factory=list[str], max_length=128)
+    active_stage_key: str | None = Field(default=None, max_length=240)
+    active_stage_attempts: int = Field(default=0, ge=0, le=3)
+    repair_applied_shot_ids: list[str] = Field(default_factory=list[str], max_length=128)
+    repair_skipped_shot_ids: list[str] = Field(default_factory=list[str], max_length=128)
+    repairs_complete: bool = False
+    advisory_only: bool = True
+    created_at: str
+    updated_at: str
+
+
 class ExportRecord(DomainModel):
     id: str
     project_id: str
@@ -1163,6 +1235,9 @@ class ProjectAggregate(DomainModel):
     )
     audio_inspections: list[AudioInspectionReport] = Field(
         default_factory=list[AudioInspectionReport]
+    )
+    episode_reviews: list[EpisodeReviewReport] = Field(
+        default_factory=list[EpisodeReviewReport]
     )
     progress: ProgressSummary
 
@@ -1212,6 +1287,11 @@ class AudioInspectionRequest(DomainModel):
     semantic_review: bool = True
     speaker_continuity: bool = True
     dialogue_padding_seconds: float = Field(default=0.35, ge=0.0, le=1.5)
+
+
+class EpisodeReviewRequest(DomainModel):
+    max_actions: int = Field(default=32, ge=1, le=200)
+    force_new: bool = False
 
 
 class AutonomousDraftCreateRequest(CreateProjectRequest):
@@ -1344,6 +1424,11 @@ class VideoInspectionResponse(DomainModel):
 
 class AudioInspectionResponse(DomainModel):
     report: AudioInspectionReport
+    project: ProjectAggregate
+
+
+class EpisodeReviewResponse(DomainModel):
+    report: EpisodeReviewReport
     project: ProjectAggregate
 
 

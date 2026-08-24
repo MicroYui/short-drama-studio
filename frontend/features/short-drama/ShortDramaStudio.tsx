@@ -124,6 +124,7 @@ const autonomousStepLabels: Record<AutonomousRunRecord['current_step'], string> 
   GENERATE: '生成 H3 候选',
   QA_AND_REPAIR: '视频 QA 与导演修复',
   TIMELINE: '组装时间线',
+  EPISODE_REVIEW: '整集分层审阅',
   AUDIO_QA: '音频检查',
   EXPORT: '导出成片',
   COMPLETE: '自动制片完成',
@@ -804,15 +805,24 @@ function TimelinePanel({ project, onBuild, onExport }: { project: ProjectAggrega
 function QaPanel({
   project,
   onInspectAudio,
+  onReviewEpisode,
 }: {
   project: ProjectAggregate
   onInspectAudio: () => void
+  onReviewEpisode: () => void
 }) {
   const exported = currentExport(project)
   const currentTakes = project.takes.filter((take) => take.freshness === 'CURRENT')
   const hardPass = currentTakes.filter((take) => take.qa_report.hard_gate_passed).length
   const videoInspections = project.video_inspections ?? []
   const audioInspections = project.audio_inspections ?? []
+  const episodeReviews = project.episode_reviews ?? []
+  const latestEpisodeReview = episodeReviews.at(-1)
+  const latestEpisodeFindings = latestEpisodeReview?.findings ?? []
+  const latestSceneReviews = latestEpisodeReview?.scene_reviews ?? []
+  const latestEpisodeWarnings = latestEpisodeReview?.warnings ?? []
+  const appliedEpisodeRepairs = latestEpisodeReview?.repair_applied_shot_ids ?? []
+  const skippedEpisodeRepairs = latestEpisodeReview?.repair_skipped_shot_ids ?? []
   const latestAudio = audioInspections.at(-1)
   const latestAudioClips = latestAudio?.clip_inspections ?? []
   const latestDialogueChecks = latestAudio?.dialogue_checks ?? []
@@ -820,12 +830,13 @@ function QaPanel({
   const latestAudioIssues = latestAudio?.issues ?? []
   return (
     <div>
-      <SectionTitle title="质量检查" description="Mock QA 只证明媒体、引用、时钟和导出正确；真人表演、身份、口型和观看意愿必须等真实 H3 样片与人工盲评。" />
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <SectionTitle title="质量检查" description="技术检查和 Agent Reviewer 提供可定位证据与可忽略建议；真人表演、观看意愿和自动审阅漏报仍以真实成片观看为准。" />
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
         <Metric label="当前 Take" value={currentTakes.length} detail="旧版本不丢失" />
         <Metric label="硬门槛" value={`${hardPass}/${currentTakes.length}`} detail="Mock 技术门槛" />
         <Metric label="失效 Take" value={project.progress.stale_takes} detail="仍可复现旧成片" />
         <Metric label="视频观察" value={videoInspections.length} detail="适应性抽帧报告" />
+        <Metric label="整集审阅" value={episodeReviews.length} detail="分场汇总与导演建议" />
         <Metric label="音频 QA" value={audioInspections.length} detail="对白、声线与字幕" />
         <Metric label="导出检查" value={exported ? `${exported.checks.filter((check) => check.passed).length}/${exported.checks.length}` : '—'} detail="FFmpeg 媒体合规" />
       </div>
@@ -858,6 +869,47 @@ function QaPanel({
             </div>
           )}
         </div>
+      </div>
+      <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2"><h3 className="font-medium text-white">整集分层审阅</h3><Badge tone="blue">Agent Tool</Badge></div>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-500">Scene Reviewer 只读取当前场次的入选 Take、抽帧证据和锁定剧本，Episode Reviewer 再汇总跨场因果、连续性、人物道具状态、声音来源语义与节奏。建议可忽略，不是创意评分门或导出审批门。</p>
+          </div>
+          <button className={secondaryButton} disabled={!currentManifest(project)} onClick={onReviewEpisode}><ScanSearch className="h-4 w-4" />{latestEpisodeReview?.status === 'RUNNING' ? '继续整集审阅' : '审阅当前整集'}</button>
+        </div>
+        {!latestEpisodeReview ? <p className="mt-8 text-center text-sm text-zinc-600">时间线就绪后可运行整集审阅；AUTO_DRAFT 会自动运行，并只对明确关联的镜头提出局部修复。</p> : (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={latestEpisodeReview.status === 'COMPLETE' ? 'green' : latestEpisodeReview.status === 'FAILED' ? 'amber' : latestEpisodeReview.status === 'UNAVAILABLE' ? 'neutral' : 'blue'}>{latestEpisodeReview.status}</Badge>
+                <span className="text-[11px] text-zinc-600">{latestSceneReviews.length} 个场次 · {latestEpisodeFindings.length} 个建议 · {appliedEpisodeRepairs.length} 个镜头已局部返工</span>
+                {skippedEpisodeRepairs.length > 0 && <span className="text-[11px] text-amber-300">{skippedEpisodeRepairs.length} 个建议已跳过</span>}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-zinc-400">{latestEpisodeReview.summary}</p>
+              {latestEpisodeWarnings.length > 0 && <ul className="mt-2 space-y-1 text-[11px] leading-5 text-amber-200/80">{latestEpisodeWarnings.map((warning) => <li key={warning}>· {warning}</li>)}</ul>}
+            </div>
+            {latestEpisodeFindings.length === 0 ? <p className="text-center text-sm text-zinc-600">当前报告没有提出整集级问题；系统不会为了凑返工而改镜头。</p> : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {latestEpisodeFindings.map((finding) => {
+                  const tone = finding.issue.severity === 'HIGH' ? 'red' : finding.issue.severity === 'MEDIUM' ? 'amber' : 'neutral'
+                  const sceneIds = finding.scene_ids ?? []
+                  const shotIds = finding.shot_ids ?? []
+                  return (
+                    <div key={finding.id} className="rounded-lg border border-zinc-800 bg-zinc-950/70 p-3">
+                      <div className="flex flex-wrap items-center gap-2"><Badge tone={tone}>{finding.issue.severity}</Badge><span className="text-xs font-medium text-zinc-300">{finding.dimension}</span>{finding.repair_recommended && <Badge tone="blue">建议局部返工</Badge>}</div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">{finding.issue.message}</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">证据：{finding.evidence}</p>
+                      <p className="mt-1 text-xs leading-5 text-blue-300">建议：{finding.recommended_action}</p>
+                      {(sceneIds.length > 0 || shotIds.length > 0) && <p className="mt-2 text-[11px] text-zinc-600">关联场次 {sceneIds.join('、') || '—'} · 镜头 {shotIds.join('、') || '—'}</p>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <p className="text-[11px] leading-5 text-zinc-600">该报告始终是可忽略建议；失败或 Provider 不可用也不会阻止时间线导出。它不会自动触发 STT、声纹或音频质量检查。</p>
+          </div>
+        )}
       </div>
       <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
         <div className="flex items-center justify-between gap-3"><div><h3 className="font-medium text-white">视频观察工具</h3><p className="mt-1 text-xs text-zinc-500">长镜头按全时段覆盖与视觉变化抽帧；相邻入选镜头额外生成边界接触表。报告只提供证据和问题，不替用户决定。</p></div><Badge tone="blue">Agent Tool</Badge></div>
@@ -1515,6 +1567,19 @@ export function ShortDramaStudio() {
     )
   }
 
+  const reviewEpisode = () => {
+    if (!activeProjectId) return
+    const latestReview = project?.episode_reviews?.at(-1)
+    void perform(
+      latestReview?.status === 'RUNNING' ? '继续整集分层审阅' : '运行整集分层审阅',
+      () => ShortDramaApi.reviewProjectEpisode(activeProjectId, {
+        max_actions: 32,
+        force_new: latestReview?.status !== 'RUNNING',
+      }),
+      (data) => setProject(data.project),
+    )
+  }
+
   const reviseLine = (line: ScriptLine, spoken: string, subtitle: string) => {
     if (!activeProjectId) return
     void perform('创建新剧本版本并局部失效', () => ShortDramaApi.reviseScriptLine(activeProjectId, { line_id: line.id, spoken_text: spoken, subtitle_text: subtitle, change_reason: '工作台台词修改' }), setProject)
@@ -1550,7 +1615,7 @@ export function ShortDramaStudio() {
     if (tab === 'h3') return <H3LabPanel project={project} onProjectChange={setProject} onError={setError} onNotice={setNotice} />
     if (tab === 'takes') return <TakesPanel project={project} onDrain={drain} onTaskAction={handleTaskAction} onCancel={cancelTask} onSelect={selectTake} onInspect={inspectTake} />
     if (tab === 'timeline') return <TimelinePanel project={project} onBuild={buildManifest} onExport={exportProject} />
-    return <QaPanel project={project} onInspectAudio={inspectAudio} />
+    return <QaPanel project={project} onInspectAudio={inspectAudio} onReviewEpisode={reviewEpisode} />
   }, [project, tab])
 
   const shouldShowCreate = showCreate || !project

@@ -1617,6 +1617,17 @@
           "current_step": {
             "$ref": "#/components/schemas/AutonomousRunStep"
           },
+          "episode_review_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Review Id"
+          },
           "error_message": {
             "anyOf": [
               {
@@ -1743,6 +1754,7 @@
           "GENERATE",
           "QA_AND_REPAIR",
           "TIMELINE",
+          "EPISODE_REVIEW",
           "AUDIO_QA",
           "EXPORT",
           "COMPLETE"
@@ -2432,6 +2444,18 @@
               }
             ],
             "title": "Audio Inspection Id"
+          },
+          "episode_review_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Review Id"
           },
           "inspection_id": {
             "anyOf": [
@@ -3254,6 +3278,264 @@
         },
         "title": "EnqueueRequest",
         "type": "object"
+      },
+      "EpisodeReviewDimension": {
+        "enum": [
+          "STORY_CLARITY",
+          "SCENE_CAUSALITY",
+          "CROSS_SCENE_CONTINUITY",
+          "CHARACTER_PROP_STATE",
+          "SOUND_SOURCE_SEMANTICS",
+          "PACING",
+          "OTHER"
+        ],
+        "title": "EpisodeReviewDimension",
+        "type": "string"
+      },
+      "EpisodeReviewFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "dimension": {
+            "$ref": "#/components/schemas/EpisodeReviewDimension"
+          },
+          "dismissible": {
+            "default": true,
+            "title": "Dismissible",
+            "type": "boolean"
+          },
+          "evidence": {
+            "maxLength": 2400,
+            "minLength": 1,
+            "title": "Evidence",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issue": {
+            "$ref": "#/components/schemas/QaIssue"
+          },
+          "recommended_action": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Recommended Action",
+            "type": "string"
+          },
+          "repair_recommended": {
+            "default": false,
+            "title": "Repair Recommended",
+            "type": "boolean"
+          },
+          "scene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Scene Ids",
+            "type": "array"
+          },
+          "shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Shot Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "dimension",
+          "issue",
+          "evidence",
+          "recommended_action"
+        ],
+        "title": "EpisodeReviewFinding",
+        "type": "object"
+      },
+      "EpisodeReviewReport": {
+        "additionalProperties": false,
+        "properties": {
+          "active_stage_attempts": {
+            "default": 0,
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Active Stage Attempts",
+            "type": "integer"
+          },
+          "active_stage_key": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Stage Key"
+          },
+          "advisory_only": {
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeReviewFinding"
+            },
+            "maxItems": 256,
+            "title": "Findings",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "next_scene_index": {
+            "default": 0,
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Next Scene Index",
+            "type": "integer"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "repair_applied_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 128,
+            "title": "Repair Applied Shot Ids",
+            "type": "array"
+          },
+          "repair_skipped_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 128,
+            "title": "Repair Skipped Shot Ids",
+            "type": "array"
+          },
+          "repairs_complete": {
+            "default": false,
+            "title": "Repairs Complete",
+            "type": "boolean"
+          },
+          "scene_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/SceneEpisodeReview"
+            },
+            "maxItems": 500,
+            "title": "Scene Reviews",
+            "type": "array"
+          },
+          "semantic_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Model"
+          },
+          "source_script_version_id": {
+            "title": "Source Script Version Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EpisodeReviewStatus"
+          },
+          "summary": {
+            "default": "整集审阅进行中。",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 128,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "manifest_id",
+          "source_script_version_id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EpisodeReviewReport",
+        "type": "object"
+      },
+      "EpisodeReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "force_new": {
+            "default": false,
+            "title": "Force New",
+            "type": "boolean"
+          },
+          "max_actions": {
+            "default": 32,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Max Actions",
+            "type": "integer"
+          }
+        },
+        "title": "EpisodeReviewRequest",
+        "type": "object"
+      },
+      "EpisodeReviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "report": {
+            "$ref": "#/components/schemas/EpisodeReviewReport"
+          }
+        },
+        "required": [
+          "report",
+          "project"
+        ],
+        "title": "EpisodeReviewResponse",
+        "type": "object"
+      },
+      "EpisodeReviewStatus": {
+        "enum": [
+          "RUNNING",
+          "COMPLETE",
+          "UNAVAILABLE",
+          "FAILED"
+        ],
+        "title": "EpisodeReviewStatus",
+        "type": "string"
       },
       "EvidencePurpose": {
         "enum": [
@@ -9785,6 +10067,13 @@
           "document": {
             "$ref": "#/components/schemas/ProjectDocument"
           },
+          "episode_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeReviewReport"
+            },
+            "title": "Episode Reviews",
+            "type": "array"
+          },
           "exports": {
             "items": {
               "$ref": "#/components/schemas/ExportRecord"
@@ -11683,6 +11972,67 @@
           "setting"
         ],
         "title": "SceneContinuitySummary",
+        "type": "object"
+      },
+      "SceneEpisodeReview": {
+        "additionalProperties": false,
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeReviewFinding"
+            },
+            "maxItems": 32,
+            "title": "Findings",
+            "type": "array"
+          },
+          "inspection_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 128,
+            "title": "Inspection Ids",
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Observations",
+            "type": "array"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "scene_sequence": {
+            "minimum": 1.0,
+            "title": "Scene Sequence",
+            "type": "integer"
+          },
+          "shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "title": "Shot Ids",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_id",
+          "scene_sequence",
+          "shot_ids",
+          "summary"
+        ],
+        "title": "SceneEpisodeReview",
         "type": "object"
       },
       "ScriptLine": {
@@ -18301,6 +18651,68 @@
           }
         },
         "summary": "Add Reference Pack Entry",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/review-episode": {
+      "post": {
+        "operationId": "review_project_episode_api_short_drama_projects__project_id__review_episode_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EpisodeReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Review Project Episode",
         "tags": [
           "short-drama"
         ]

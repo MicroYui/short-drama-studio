@@ -81,6 +81,7 @@ from short_drama.h3_worker import (
     default_h3_client_factory,
 )
 from short_drama.h3_video_guides import H3VideoGuideBuilder
+from short_drama.episode_review import review_episode, review_scene
 from short_drama.image_models import (
     AssetCreateRequest,
     AssetImportLocalRequest,
@@ -128,6 +129,10 @@ from short_drama.models import (
     DirectorRepairRecord,
     DirectorRepairStrategy,
     EnqueueRequest,
+    EpisodeReviewReport,
+    EpisodeReviewRequest,
+    EpisodeReviewResponse,
+    EpisodeReviewStatus,
     EvidencePurpose,
     EvidenceStatus,
     ExecutionPlanEntry,
@@ -169,6 +174,7 @@ from short_drama.models import (
     ScriptQualityRoundSummary,
     ScriptQualityTrend,
     ScriptReviewSeverity,
+    StructuredScene,
     ScriptVersion,
     SemanticReviewStatus,
     ShotPlan,
@@ -280,6 +286,7 @@ _TERMINAL_TASK_STATUSES = {
 }
 _MAX_AUTONOMOUS_IMAGE_ATTEMPTS = 3
 _MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS = 3
+_MAX_EPISODE_REVIEW_ATTEMPTS = 3
 _DIRECTOR_ADVICE_MAX_OUTPUT_TOKENS = 7200
 _BOUNDED_BEST_EFFORT_CHECK = "bounded-auto-draft-best-effort-waiver"
 _REFERENCE_VIEW_MARKER_PREFIX = "AUTO_REFERENCE_VIEW:"
@@ -2060,21 +2067,22 @@ class ShortDramaService:
             return self._advance_real_qa_and_repair(project_id, run_id)
         if run.current_step == AutonomousRunStep.TIMELINE:
             self.rebuild_manifest(project_id)
-            if run.render_export:
-                self._advance_autonomous_run(
-                    project_id,
-                    run_id,
-                    completed_step=AutonomousRunStep.TIMELINE,
-                    next_step=AutonomousRunStep.EXPORT,
+            with self._lock:
+                document = self._require_project_document(project_id)
+                persisted = next(
+                    item for item in document.autonomous_runs if item.id == run_id
                 )
-            else:
-                self._finish_autonomous_run(
-                    project_id,
-                    run_id,
-                    status=AutonomousRunStatus.COMPLETE,
-                    completed_steps=[AutonomousRunStep.TIMELINE],
-                )
+                persisted.episode_review_id = None
+                self.repository.save_project(document)
+            self._advance_autonomous_run(
+                project_id,
+                run_id,
+                completed_step=AutonomousRunStep.TIMELINE,
+                next_step=AutonomousRunStep.EPISODE_REVIEW,
+            )
             return True, False
+        if run.current_step == AutonomousRunStep.EPISODE_REVIEW:
+            return self._advance_real_episode_review(project_id, run_id)
         if run.current_step == AutonomousRunStep.AUDIO_QA:
             # Backward-compatible resume for runs persisted before automatic audio QA
             # was removed. Voice/audio inputs remain supported; audio inspection is manual.
@@ -2107,6 +2115,247 @@ class ShortDramaService:
             return False, False
         raise WorkflowConflictError(
             f"REAL_H3 run cannot advance from {run.current_step.value}"
+        )
+
+    def _advance_real_episode_review(
+        self,
+        project_id: str,
+        run_id: str,
+    ) -> tuple[bool, bool]:
+        run = self._require_autonomous_run(project_id, run_id)
+        report: EpisodeReviewReport
+        if run.episode_review_id is None:
+            document = self._require_project_document(project_id)
+            manifest = self._current_manifest(document)
+            report = self._get_or_create_episode_review(
+                document,
+                manifest,
+                force_new=False,
+            )
+            with self._lock:
+                document = self._require_project_document(project_id)
+                persisted = next(
+                    item for item in document.autonomous_runs if item.id == run_id
+                )
+                persisted.episode_review_id = report.id
+                persisted.updated_at = utc_now()
+                self.repository.save_project(document)
+        else:
+            loaded_report = self.repository.get_episode_review(run.episode_review_id)
+            if loaded_report is None or loaded_report.project_id != project_id:
+                raise ArtifactNotFoundError(run.episode_review_id)
+            report = loaded_report
+
+        if report.status == EpisodeReviewStatus.RUNNING:
+            report = self._advance_episode_review_report_once(report.id)
+            if report.status == EpisodeReviewStatus.RUNNING:
+                total_scenes = len(
+                    self._episode_review_scene_groups(
+                        self._require_project_document(project_id),
+                        script_version_id=report.source_script_version_id,
+                    )
+                )
+                self._set_autonomous_waiting(
+                    project_id,
+                    run_id,
+                    (
+                        f"Episode Reviewer saved {report.next_scene_index}/{total_scenes} "
+                        "scene review(s); AUTO_DRAFT will continue from the persisted cursor."
+                    ),
+                )
+                return True, True
+            if report.status == EpisodeReviewStatus.COMPLETE:
+                self._set_autonomous_waiting(
+                    project_id,
+                    run_id,
+                    "Episode review is complete; Director is considering linked local repairs.",
+                )
+                return True, True
+
+        if report.status == EpisodeReviewStatus.COMPLETE and not report.repairs_complete:
+            return self._advance_episode_review_repair_once(
+                project_id,
+                run_id,
+                report,
+            )
+
+        self._record_autonomous_episode_review(project_id, run_id, report)
+        self._finish_episode_review_step(project_id, run_id)
+        return True, False
+
+    def _advance_episode_review_repair_once(
+        self,
+        project_id: str,
+        run_id: str,
+        report: EpisodeReviewReport,
+    ) -> tuple[bool, bool]:
+        document = self._require_project_document(project_id)
+        run = self._require_autonomous_run(project_id, run_id)
+        shot_sequence = {item.id: item.sequence for item in document.shots}
+        candidate_shot_ids = sorted(
+            {
+                shot_id
+                for finding in report.findings
+                if finding.repair_recommended
+                for shot_id in finding.shot_ids
+                if shot_id in shot_sequence
+            },
+            key=shot_sequence.__getitem__,
+        )
+        considered = {
+            *report.repair_applied_shot_ids,
+            *report.repair_skipped_shot_ids,
+        }
+        next_shot_id = next(
+            (item for item in candidate_shot_ids if item not in considered),
+            None,
+        )
+        if next_shot_id is not None:
+            if (
+                _autonomous_director_repair_attempts(document, next_shot_id)
+                >= run.max_repair_rounds
+            ):
+                report.repair_skipped_shot_ids.append(next_shot_id)
+                report.warnings.append(
+                    f"Episode Reviewer repair skipped for {next_shot_id}: the per-shot "
+                    f"automatic repair limit ({run.max_repair_rounds}) is exhausted."
+                )
+                report.updated_at = utc_now()
+                self.repository.save_episode_review(report)
+                return True, True
+            source_take = next(
+                (
+                    take
+                    for take in self.repository.list_takes_for_shot(
+                        project_id,
+                        next_shot_id,
+                    )
+                    if take.is_selected
+                    and take.freshness == Freshness.CURRENT
+                    and take.availability == TakeAvailability.AVAILABLE
+                ),
+                None,
+            )
+            if source_take is None:
+                report.repair_skipped_shot_ids.append(next_shot_id)
+                report.warnings.append(
+                    f"Episode Reviewer repair skipped for {next_shot_id}: no current selected "
+                    "Take remains available."
+                )
+                report.updated_at = utc_now()
+                self.repository.save_episode_review(report)
+                return True, True
+            inspection = next(
+                (
+                    item
+                    for item in reversed(
+                        self.repository.list_video_inspections(project_id)
+                    )
+                    if item.take_id == source_take.id
+                ),
+                None,
+            )
+            linked = [
+                item for item in report.findings if next_shot_id in item.shot_ids
+            ]
+            direction = " ".join(
+                (
+                    f"Episode Reviewer evidence: {item.evidence} "
+                    f"Suggested action: {item.recommended_action}"
+                )
+                for item in linked
+            )[:2000]
+            try:
+                result = self.run_director_loop(
+                    project_id,
+                    next_shot_id,
+                    DirectorAdviceRequest(
+                        take_id=source_take.id,
+                        inspection_id=(inspection.id if inspection is not None else None),
+                        episode_review_id=report.id,
+                        user_direction=direction,
+                    ),
+                )
+            except (WorkflowConflictError, ProviderOperationError) as exc:
+                report.repair_skipped_shot_ids.append(next_shot_id)
+                report.warnings.append(
+                    f"Episode Reviewer Director repair skipped for {next_shot_id}: {exc}"
+                )
+            else:
+                if result.repair_applied:
+                    report.repair_applied_shot_ids.append(next_shot_id)
+                else:
+                    report.repair_skipped_shot_ids.append(next_shot_id)
+                    report.warnings.append(
+                        f"Episode Reviewer Director returned no executable local repair for "
+                        f"{next_shot_id}; the advisory remains visible."
+                    )
+            report.updated_at = utc_now()
+            self.repository.save_episode_review(report)
+            self._set_autonomous_waiting(
+                project_id,
+                run_id,
+                (
+                    f"Episode Reviewer considered {len(considered) + 1}/"
+                    f"{len(candidate_shot_ids)} linked shot repair(s)."
+                ),
+            )
+            return True, True
+
+        report.repairs_complete = True
+        report.updated_at = utc_now()
+        self.repository.save_episode_review(report)
+        self._record_autonomous_episode_review(project_id, run_id, report)
+        if report.repair_applied_shot_ids:
+            with self._lock:
+                document = self._require_project_document(project_id)
+                persisted = next(
+                    item for item in document.autonomous_runs if item.id == run_id
+                )
+                persisted.repair_round += 1
+                persisted.route_plan_id = None
+                persisted.episode_review_id = None
+                persisted.current_step = AutonomousRunStep.PLAN_ROUTES
+                persisted.waiting_reason = None
+                persisted.updated_at = utc_now()
+                self.repository.save_project(document)
+            return True, False
+        self._finish_episode_review_step(project_id, run_id)
+        return True, False
+
+    def _record_autonomous_episode_review(
+        self,
+        project_id: str,
+        run_id: str,
+        report: EpisodeReviewReport,
+    ) -> None:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            run = next(item for item in document.autonomous_runs if item.id == run_id)
+            prefix = f"Episode review {report.id}:"
+            run.warnings = [item for item in run.warnings if not item.startswith(prefix)]
+            run.warnings.append(
+                f"{prefix} status={report.status.value}, findings={len(report.findings)}, "
+                f"repairs={len(report.repair_applied_shot_ids)}. {report.summary}"
+            )
+            run.updated_at = utc_now()
+            self.repository.save_project(document)
+
+    def _finish_episode_review_step(self, project_id: str, run_id: str) -> None:
+        run = self._require_autonomous_run(project_id, run_id)
+        if run.render_export:
+            self._advance_autonomous_run(
+                project_id,
+                run_id,
+                completed_step=AutonomousRunStep.EPISODE_REVIEW,
+                next_step=AutonomousRunStep.EXPORT,
+            )
+            return
+        self._finish_autonomous_run(
+            project_id,
+            run_id,
+            status=AutonomousRunStatus.COMPLETE,
+            completed_steps=[AutonomousRunStep.EPISODE_REVIEW],
         )
 
     def _advance_base_asset_preparation(
@@ -4207,6 +4456,32 @@ class ShortDramaService:
             reviewer_notes.append(
                 f"{audio_inspection.id}: {audio_inspection.summary}"
             )
+        if request.episode_review_id is not None:
+            episode_review = self.repository.get_episode_review(
+                request.episode_review_id
+            )
+            if (
+                episode_review is None
+                or episode_review.project_id != project_id
+            ):
+                raise ArtifactNotFoundError(request.episode_review_id)
+            linked_findings = [
+                item for item in episode_review.findings if shot_id in item.shot_ids
+            ]
+            if not linked_findings:
+                raise WorkflowConflictError(
+                    "Director advice episode review has no evidence for this shot"
+                )
+            qa_issues.extend(
+                item.issue.model_copy(deep=True) for item in linked_findings
+            )
+            reviewer_notes.extend(
+                (
+                    f"{episode_review.id}/{item.id}: {item.evidence} "
+                    f"Recommended action: {item.recommended_action}"
+                )
+                for item in linked_findings
+            )
         capability_profile = build_h3_capability_profile(
             self.repository.list_takes(project_id),
             project_id=project_id,
@@ -5315,6 +5590,228 @@ class ShortDramaService:
             project=self.get_project(project_id),
         )
 
+    def review_current_episode(
+        self,
+        project_id: str,
+        request: EpisodeReviewRequest,
+    ) -> EpisodeReviewResponse:
+        document = self._require_project_document(project_id)
+        manifest = self._current_manifest(document)
+        report = self._get_or_create_episode_review(
+            document,
+            manifest,
+            force_new=request.force_new,
+        )
+        for _ in range(request.max_actions):
+            if report.status != EpisodeReviewStatus.RUNNING:
+                break
+            report = self._advance_episode_review_report_once(report.id)
+        return EpisodeReviewResponse(
+            report=report,
+            project=self.get_project(project_id),
+        )
+
+    def _get_or_create_episode_review(
+        self,
+        document: ProjectDocument,
+        manifest: TimelineManifest,
+        *,
+        force_new: bool,
+    ) -> EpisodeReviewReport:
+        existing = [
+            item
+            for item in self.repository.list_episode_reviews(document.project.id)
+            if item.manifest_id == manifest.id
+        ]
+        if existing and not force_new:
+            return existing[-1]
+        now = utc_now()
+        report = EpisodeReviewReport(
+            id=f"episode-review-{uuid4().hex}",
+            project_id=document.project.id,
+            manifest_id=manifest.id,
+            source_script_version_id=manifest.script_version_id,
+            status=EpisodeReviewStatus.RUNNING,
+            created_at=now,
+            updated_at=now,
+        )
+        self.repository.save_episode_review(report)
+        return report
+
+    def _advance_episode_review_report_once(
+        self,
+        report_id: str,
+    ) -> EpisodeReviewReport:
+        report = self.repository.get_episode_review(report_id)
+        if report is None:
+            raise ArtifactNotFoundError(report_id)
+        if report.status != EpisodeReviewStatus.RUNNING:
+            return report
+        document = self._require_project_document(report.project_id)
+        manifest = next(
+            (item for item in document.manifests if item.id == report.manifest_id),
+            None,
+        )
+        if manifest is None:
+            raise ArtifactNotFoundError(report.manifest_id)
+        client = self._configured_language_client()
+        if client is None:
+            report.status = EpisodeReviewStatus.UNAVAILABLE
+            report.summary = (
+                "GPT-5.6-sol 未配置；逐镜视频观察仍保留，整集语义审阅为 UNKNOWN。"
+            )
+            report.warnings.append(
+                "Episode Reviewer was skipped because no language provider is configured."
+            )
+            report.repairs_complete = True
+            report.updated_at = utc_now()
+            self.repository.save_episode_review(report)
+            return report
+
+        scene_groups = self._episode_review_scene_groups(
+            document,
+            script_version_id=manifest.script_version_id,
+        )
+        if report.next_scene_index < len(scene_groups):
+            scene_sequence, scene, shots = scene_groups[report.next_scene_index]
+            stage_key = f"SCENE:{scene.id}:{scene_sequence}"
+            try:
+                takes = self.repository.list_takes(document.project.id)
+                takes_by_id = {item.id: item for item in takes}
+                latest_inspection_by_take: dict[str, VideoInspectionReport] = {}
+                for inspection in self.repository.list_video_inspections(
+                    document.project.id
+                ):
+                    latest_inspection_by_take[inspection.take_id] = inspection
+                scene_review = review_scene(
+                    document=document,
+                    manifest=manifest,
+                    scene=scene,
+                    scene_sequence=scene_sequence,
+                    shots=shots,
+                    takes_by_id=takes_by_id,
+                    latest_inspection_by_take=latest_inspection_by_take,
+                    client=client,
+                )
+            except (LanguageProviderError, ValueError) as exc:
+                return self._record_episode_review_failure(
+                    report,
+                    stage_key=stage_key,
+                    error=exc,
+                )
+            report.scene_reviews.append(scene_review)
+            report.next_scene_index += 1
+            report.semantic_model = "gpt-5.6-sol"
+            report.active_stage_key = None
+            report.active_stage_attempts = 0
+            report.summary = (
+                f"整集审阅已完成 {report.next_scene_index}/{len(scene_groups)} 个场次。"
+            )
+            report.updated_at = utc_now()
+            self.repository.save_episode_review(report)
+            return report
+
+        stage_key = "EPISODE"
+        try:
+            episode_findings, summary = review_episode(
+                document=document,
+                manifest=manifest,
+                scene_reviews=report.scene_reviews,
+                client=client,
+            )
+        except (LanguageProviderError, ValueError) as exc:
+            return self._record_episode_review_failure(
+                report,
+                stage_key=stage_key,
+                error=exc,
+            )
+        report.findings = [
+            *(finding for scene in report.scene_reviews for finding in scene.findings),
+            *episode_findings,
+        ]
+        report.summary = summary
+        report.status = EpisodeReviewStatus.COMPLETE
+        report.semantic_model = "gpt-5.6-sol"
+        report.active_stage_key = None
+        report.active_stage_attempts = 0
+        report.updated_at = utc_now()
+        self.repository.save_episode_review(report)
+        return report
+
+    def _record_episode_review_failure(
+        self,
+        report: EpisodeReviewReport,
+        *,
+        stage_key: str,
+        error: Exception,
+    ) -> EpisodeReviewReport:
+        attempts = (
+            report.active_stage_attempts + 1
+            if report.active_stage_key == stage_key
+            else 1
+        )
+        report.active_stage_key = stage_key
+        report.active_stage_attempts = attempts
+        report.warnings.append(
+            f"{stage_key} review attempt {attempts}/{_MAX_EPISODE_REVIEW_ATTEMPTS} "
+            f"failed: {error}"
+        )
+        if attempts >= _MAX_EPISODE_REVIEW_ATTEMPTS:
+            report.status = EpisodeReviewStatus.FAILED
+            report.summary = (
+                f"整集 Reviewer 在 {stage_key} 连续失败 "
+                f"{_MAX_EPISODE_REVIEW_ATTEMPTS} 次；现有逐镜证据仍保留，导出不受阻。"
+            )
+            report.repairs_complete = True
+        report.updated_at = utc_now()
+        self.repository.save_episode_review(report)
+        return report
+
+    @staticmethod
+    def _episode_review_scene_groups(
+        document: ProjectDocument,
+        *,
+        script_version_id: str | None = None,
+    ) -> list[tuple[int, StructuredScene, list[ShotPlan]]]:
+        script = next(
+            item
+            for item in document.script_versions
+            if item.id
+            == (script_version_id or document.project.current_script_version_id)
+        )
+        groups: dict[str, list[ShotPlan]] = {}
+        for shot in sorted(document.shots, key=lambda item: item.sequence):
+            scene_key = shot.scene_id or "__UNSCOPED_SCENE__"
+            groups.setdefault(scene_key, []).append(shot)
+        ordered: list[tuple[StructuredScene, list[ShotPlan]]] = []
+        for scene in script.structured_scenes:
+            shots = groups.pop(scene.id, [])
+            if shots:
+                ordered.append((scene, shots))
+        for scene_key, shots in groups.items():
+            ordered.append(
+                (
+                    StructuredScene(
+                        id=scene_key,
+                        heading="未显式分场",
+                        summary="按实际时间线连续审阅未归属到结构化场次的镜头。",
+                        line_ids=list(
+                            dict.fromkeys(
+                                line_id
+                                for shot in shots
+                                for line_id in shot.dialogue_line_ids
+                            )
+                        ),
+                    ),
+                    shots,
+                )
+            )
+        ordered.sort(key=lambda item: min(shot.sequence for shot in item[1]))
+        return [
+            (index, scene, shots)
+            for index, (scene, shots) in enumerate(ordered, start=1)
+        ]
+
     def _ensure_current_manifest_audio_inspection(
         self,
         project_id: str,
@@ -6232,6 +6729,7 @@ class ShortDramaService:
             route_evidence=self.repository.list_route_evidence(document.project.id),
             video_inspections=self.repository.list_video_inspections(document.project.id),
             audio_inspections=self.repository.list_audio_inspections(document.project.id),
+            episode_reviews=self.repository.list_episode_reviews(document.project.id),
             progress=progress,
         )
 

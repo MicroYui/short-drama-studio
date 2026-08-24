@@ -13,6 +13,7 @@ from short_drama.h3_models import H3ProductionRoutePlan, H3ProviderRun, H3Upload
 from short_drama.image_models import ImageGenerationTask, ImageTaskStatus
 from short_drama.models import (
     AudioInspectionReport,
+    EpisodeReviewReport,
     EvidenceStatus,
     ExportRecord,
     Freshness,
@@ -194,6 +195,17 @@ class ShortDramaRepository:
                 CREATE INDEX IF NOT EXISTS idx_audio_inspections_project_manifest
                     ON audio_inspections(project_id, manifest_id, created_at);
 
+                CREATE TABLE IF NOT EXISTS episode_reviews (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    manifest_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_episode_reviews_project_manifest
+                    ON episode_reviews(project_id, manifest_id, updated_at);
+
                 CREATE TABLE IF NOT EXISTS h3_route_plans (
                     id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -264,6 +276,9 @@ class ShortDramaRepository:
             )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(8, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(9, datetime('now'))"
             )
 
     def save_planning_run(self, run: PlanningRunRecord) -> None:
@@ -928,6 +943,52 @@ class ShortDramaRepository:
             ).fetchall()
         return [
             AudioInspectionReport.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]
+
+    def save_episode_review(self, report: EpisodeReviewReport) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO episode_reviews(
+                    id, project_id, manifest_id, status, updated_at, record_json
+                ) VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    updated_at = excluded.updated_at,
+                    record_json = excluded.record_json
+                """,
+                (
+                    report.id,
+                    report.project_id,
+                    report.manifest_id,
+                    report.status.value,
+                    report.updated_at,
+                    report.model_dump_json(),
+                ),
+            )
+
+    def get_episode_review(self, report_id: str) -> EpisodeReviewReport | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM episode_reviews WHERE id = ?",
+                (report_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return EpisodeReviewReport.model_validate_json(cast(str, row["record_json"]))
+
+    def list_episode_reviews(self, project_id: str) -> list[EpisodeReviewReport]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM episode_reviews
+                WHERE project_id = ? ORDER BY updated_at ASC, id ASC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            EpisodeReviewReport.model_validate_json(cast(str, row["record_json"]))
             for row in rows
         ]
 

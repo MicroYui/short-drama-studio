@@ -1289,6 +1289,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/review-episode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Project Episode */
+        post: operations["review_project_episode_api_short_drama_projects__project_id__review_episode_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/script/revise-line": {
         parameters: {
             query?: never;
@@ -2340,6 +2357,8 @@ export interface components {
             /** Created At */
             created_at: string;
             current_step: components["schemas"]["AutonomousRunStep"];
+            /** Episode Review Id */
+            episode_review_id?: string | null;
             /** Error Message */
             error_message?: string | null;
             /** @default MOCK */
@@ -2386,7 +2405,7 @@ export interface components {
          * AutonomousRunStep
          * @enum {string}
          */
-        AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "PREPARE_ASSETS" | "PLAN_ROUTES" | "PREPARE_SHOT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "AUDIO_QA" | "EXPORT" | "COMPLETE";
+        AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "PREPARE_ASSETS" | "PLAN_ROUTES" | "PREPARE_SHOT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "EPISODE_REVIEW" | "AUDIO_QA" | "EXPORT" | "COMPLETE";
         /** Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post */
         Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post: {
             /** Descriptor */
@@ -2612,6 +2631,8 @@ export interface components {
         DirectorAdviceRequest: {
             /** Audio Inspection Id */
             audio_inspection_id?: string | null;
+            /** Episode Review Id */
+            episode_review_id?: string | null;
             /** Inspection Id */
             inspection_id?: string | null;
             /** Max Images */
@@ -2889,6 +2910,114 @@ export interface components {
             /** Shot Ids */
             shot_ids?: string[] | null;
         };
+        /**
+         * EpisodeReviewDimension
+         * @enum {string}
+         */
+        EpisodeReviewDimension: "STORY_CLARITY" | "SCENE_CAUSALITY" | "CROSS_SCENE_CONTINUITY" | "CHARACTER_PROP_STATE" | "SOUND_SOURCE_SEMANTICS" | "PACING" | "OTHER";
+        /** EpisodeReviewFinding */
+        EpisodeReviewFinding: {
+            dimension: components["schemas"]["EpisodeReviewDimension"];
+            /**
+             * Dismissible
+             * @default true
+             */
+            dismissible: boolean;
+            /** Evidence */
+            evidence: string;
+            /** Id */
+            id: string;
+            issue: components["schemas"]["QaIssue"];
+            /** Recommended Action */
+            recommended_action: string;
+            /**
+             * Repair Recommended
+             * @default false
+             */
+            repair_recommended: boolean;
+            /** Scene Ids */
+            scene_ids?: string[];
+            /** Shot Ids */
+            shot_ids?: string[];
+        };
+        /** EpisodeReviewReport */
+        EpisodeReviewReport: {
+            /**
+             * Active Stage Attempts
+             * @default 0
+             */
+            active_stage_attempts: number;
+            /** Active Stage Key */
+            active_stage_key?: string | null;
+            /**
+             * Advisory Only
+             * @default true
+             */
+            advisory_only: boolean;
+            /** Created At */
+            created_at: string;
+            /** Findings */
+            findings?: components["schemas"]["EpisodeReviewFinding"][];
+            /** Id */
+            id: string;
+            /** Manifest Id */
+            manifest_id: string;
+            /**
+             * Next Scene Index
+             * @default 0
+             */
+            next_scene_index: number;
+            /** Project Id */
+            project_id: string;
+            /** Repair Applied Shot Ids */
+            repair_applied_shot_ids?: string[];
+            /** Repair Skipped Shot Ids */
+            repair_skipped_shot_ids?: string[];
+            /**
+             * Repairs Complete
+             * @default false
+             */
+            repairs_complete: boolean;
+            /** Scene Reviews */
+            scene_reviews?: components["schemas"]["SceneEpisodeReview"][];
+            /** Semantic Model */
+            semantic_model?: string | null;
+            /** Source Script Version Id */
+            source_script_version_id: string;
+            status: components["schemas"]["EpisodeReviewStatus"];
+            /**
+             * Summary
+             * @default 整集审阅进行中。
+             */
+            summary: string;
+            /** Updated At */
+            updated_at: string;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** EpisodeReviewRequest */
+        EpisodeReviewRequest: {
+            /**
+             * Force New
+             * @default false
+             */
+            force_new: boolean;
+            /**
+             * Max Actions
+             * @default 32
+             */
+            max_actions: number;
+        };
+        /** EpisodeReviewResponse */
+        EpisodeReviewResponse: {
+            project: components["schemas"]["ProjectAggregate"];
+            report: components["schemas"]["EpisodeReviewReport"];
+        };
+        /**
+         * EpisodeReviewStatus
+         * @enum {string}
+         */
+        EpisodeReviewStatus: "RUNNING" | "COMPLETE" | "UNAVAILABLE" | "FAILED";
         /**
          * EvidencePurpose
          * @enum {string}
@@ -5314,6 +5443,8 @@ export interface components {
             /** Audio Inspections */
             audio_inspections?: components["schemas"]["AudioInspectionReport"][];
             document: components["schemas"]["ProjectDocument"];
+            /** Episode Reviews */
+            episode_reviews?: components["schemas"]["EpisodeReviewReport"][];
             /** Exports */
             exports: components["schemas"]["ExportRecord"][];
             progress: components["schemas"]["ProgressSummary"];
@@ -5978,6 +6109,23 @@ export interface components {
             prop_states?: string[];
             /** Setting */
             setting: string;
+        };
+        /** SceneEpisodeReview */
+        SceneEpisodeReview: {
+            /** Findings */
+            findings?: components["schemas"]["EpisodeReviewFinding"][];
+            /** Inspection Ids */
+            inspection_ids?: string[];
+            /** Observations */
+            observations?: string[];
+            /** Scene Id */
+            scene_id: string;
+            /** Scene Sequence */
+            scene_sequence: number;
+            /** Shot Ids */
+            shot_ids: string[];
+            /** Summary */
+            summary: string;
         };
         /** ScriptLine */
         ScriptLine: {
@@ -10028,6 +10176,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReferencePackEntryMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    review_project_episode_api_short_drama_projects__project_id__review_episode_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EpisodeReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeReviewResponse"];
                 };
             };
             /** @description Client Error */

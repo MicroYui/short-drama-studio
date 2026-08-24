@@ -60,6 +60,7 @@
 | A016 | `LOCKED` | 超过 90 秒的长篇规划使用 SQLite 持久化 `PlanningRun`，一次只推进一个 Story Architect/Critic/Revision 节点或一个 Scene Director 场次；应用重启从当前节点继续，失败只重试当前节点，完成后再建立正式项目并衔接 AUTO_DRAFT。规划阶段不调用 GPT Image 或 H3 | A005、A012、A015 |
 | A017 | `LOCKED` | 最新 Script Critic 报告相对上一轮出现总问题数或 HIGH 增加时，条件触发独立 Revision Judge 比较最近两版完整大纲及各自审稿；建议持久化并展示依据、取舍和置信度，但不自动替换当前大纲、不阻断 Scene Director，用户可忽略。正常改善不调用 Judge，失败时保留最新版继续；本阶段只使用 GPT-5.6-sol，不调用 GPT Image 或 H3 | A015、A016 |
 | A018 | `LOCKED` | 长篇 `PlanningRun.FINALIZE` 在 `AUTO_DRAFT` 下直接建立原有 `AutonomousRun`，复用资产、H3 continuity wave、QA、Director、Take、TimelineManifest 和导出，不建立第二运行时。累计返工轮次只作进度；自动修复上限按镜头计算，一个镜头不会消耗其他镜头额度。2 分钟中途重启导出与 5 分钟 20 镜/40 候选离线规模验证已通过 | A005、A012、A016 |
+| A019 | `LOCKED` | 多分钟 TimelineManifest 使用 Scene Reviewer → Episode Reviewer 分层汇总现有入选 Take、VideoInspection 与锁定剧本，并保存关联场次/镜头的可忽略报告。只有明确关联镜头的建议才交给现有 Director；应用修复后复用原 Route/H3/QA/Timeline 链路。Reviewer 缺失或三次阶段失败不阻断导出，不自动运行声音 QA，也不增加整集评分门、固定节拍、答案键、场景专用字段、hash 冻结或第二运行时 | A011、A012、A018 |
 
 ## C. 图像、视频、音频与后期路线
 
@@ -130,6 +131,7 @@
 - 2026-08-24：Phase 17 在非单调回退时加入独立 `REVISION_JUDGE` 节点，持久化推荐、依据、取舍和置信度，并明确保持 `advisory_only`。集成测试覆盖正常改善不调用、回退触发、跨重启保留、推荐旧稿但仍使用最新版，以及 Judge 失败不阻断。复用 Phase 16 两组真实快照的 GPT-5.6-sol 比较均推荐第 2 轮，同时列出新引入的矛盾；它只证明比较闭环成立，不是人类剧本质量 benchmark。运行后 Project、image task、generation task、provider run 和 H3 route plan 均为 0。后续另以 E010 验证 H3 reference video 与低保真运镜预演，不把它们写死为固定步骤。详见 [Phase 17 实施记录](27-phase17-revision-judge.md)。
 - 2026-08-24：Phase 18 将前镜完整 Take、最后 4 秒尾窗和 4 秒低保真机位预演实现为可持久化 `H3VideoGuide`，并由 Route Agent 在 Direct、Frame 和 Reference 候选间可覆盖选择。同一 7 秒反打样本中，完整 Take/尾窗都重启了前镜行走，前镜尾帧预演重置了人物距离；改用当前镜头批准首帧作为预演基底后，反打、人物、走廊和工牌连续且未重复前镜，只剩结尾起步未完成。该结果已进入通用 Agent 策略和回归案例；它是单样本能力边界，不是全局默认，也没有增加创意门控、场景专用字段或 hash 冻结。详见 [Phase 18 实施记录](28-phase18-h3-video-reference-previs.md)。
 - 2026-08-24：Phase 19 已把超过 90 秒的持久化 `PlanningRun` 直接衔接到现有 Asset Agent、H3 continuity wave、视频 QA/Director、TimelineManifest 和导出。2 分钟 10 镜测试在首批部分 Take 产生后重建 Service，仍完成 4 个互不相关镜头的局部返工、10/10 入选、120 秒 Manifest 与导出；5 分钟 20 镜测试用 40 个 Fake H3 候选完成 300 秒 Manifest，并验证逐场 Prompt 只传 compact handoff。原先全剧共享三次返工的错误已改为每镜最多三次，累计轮次只作进度。该阶段验证编排而非真实长片画质，因此没有提交付费 2–5 分钟 H3 长片；详见 [Phase 19 实施记录](29-phase19-long-form-autodraft.md)。
+- 2026-08-24：Phase 20 已将 Scene Reviewer、Episode Reviewer 和关联 Director 修复接入原有 `AutonomousRun`。5 分钟 4 场/20 镜无问题测试只执行 4 次分场审阅和 1 次整集汇总，不调用 Director；中途重启测试从持久化场次游标继续且只修复关联镜头；Reviewer 三次失败仍完成导出；同一问题持续存在时恰好按每镜上限修复三次后停止。Phase 8–10 三版真实语言探针找到了可见的道具/动作连续性，但漏掉 A 的空间竖缝且按设计不判断 B 的声音来源；一个通用空间清单对照只增加报告数量、未提高该召回，已撤回。报告不自动调用 STT、声纹或音频质量 QA，也不成为导出门；详见 [Phase 20 实施记录](30-phase20-episode-review-agent.md)。
 
 ## 对话顺序
 

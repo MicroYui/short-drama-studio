@@ -385,6 +385,14 @@ H3 Adapter 已把前序完整 Take、前序尾部运动窗口和低保真机位�
 
 长篇规模验证发现原来的三轮 Director 限额被错误解释为全剧共享。现在 `repair_round` 只是累计返工 wave，`max_repair_rounds` 是每个镜头的自动修复上限；前面镜头的返工不会耗尽后面无关镜头的机会。2 分钟 10 镜项目在中途重建 Service 后完成 4 个局部返工、120 秒 Manifest 和导出；5 分钟 20 镜项目用 40 个 Fake H3 候选完成 300 秒 Manifest。Scene Director 仍只接收当前场、compact handoff 和下一场入口。详见 [Phase 19 实施记录](29-phase19-long-form-autodraft.md)。
 
+### Phase 20：整集 Reviewer 与关联 Director 修复
+
+`TimelineManifest` 建立后，原有 `AutonomousRun` 进入 `EPISODE_REVIEW`。Scene Reviewer 每次只读取一个场次的锁定意图、入选 Take、clip 顺序、现有 VideoInspection 和有限 contact sheet；Episode Reviewer 再用场次摘要汇总跨场因果、连续性、人物/道具状态、已有证据支持的声音来源语义和具体剪辑材料造成的节奏问题。报告以 `EpisodeReviewReport` 持久化场次游标、发现、关联镜头、重试和局部返工结果，进程重启后继续。
+
+只有明确关联镜头且建议局部修复的 finding 才交给现有 Director Agent；Director 仍决定重生成、换关键帧、拆镜、换机位或不修。应用修复后回到现有 Route/H3/QA/Timeline 链路并重新审阅。报告始终可忽略，模型不可用或三次阶段失败都继续导出；不运行自动 STT、声纹或音频质量 QA，也不设置整集分数、固定节拍、审批门或 hash 冻结。详见 [Phase 20 实施记录](30-phase20-episode-review-agent.md)。
+
+Phase 8–10 三版真实语言探针表明，它能发现若干可见道具和动作连续性问题，但漏掉了人工已知的首镜空间竖缝，并因没有时间化声音证据而不判断错误说话来源。一次通用空间检查清单对照只增加报告数量而没有召回漏报，已撤回。因此整集 Reviewer 是证据汇总与 Director 建议层，不是高召回质量校验器；后续若增强，应从跨剧本逐镜观察 Tool 和证据质量入手。
+
 ## 12. 当前不做
 
 - 不调用或依赖即梦、可灵、LTX Studio、纳逗 Pro；

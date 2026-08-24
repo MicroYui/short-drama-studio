@@ -198,6 +198,10 @@ Planner 先声明镜头实际需要的主体、角色、角度、景别和状态
 
 超过 90 秒的 `PlanningRun` 在 FINALIZE 后直接建立正式 Project 和原有 `AutonomousRun`，继续复用 Asset Agent、H3 continuity wave、视频 QA、Director、Take、TimelineManifest 与导出，不建立第二运行时。Scene Director 上下文保持为整集资产契约、当前场、当前对白、上一场 compact handoff 和下一场入口。`repair_round` 仅为全剧累计进度，`max_repair_rounds` 是单镜自动修复上限；一个镜头的返工不消耗其他镜头额度。达到上限只触发现有可恢复状态或明确可见的 best-effort，不构成创意审批门。
 
+### D50. 整集 QA 使用分层 Reviewer，报告不成为门控
+
+时间线建立后，由 Scene Reviewer 按场读取入选 Take、锁定剧本和现有 VideoInspection，再由 Episode Reviewer 汇总跨场与整集问题。报告必须关联证据、场次和镜头；只有明确关联镜头的局部修复建议才交给现有 Director Agent，用户可忽略。Provider 不可用、三次阶段失败或没有可执行修复都继续导出。该阶段不自动运行 STT、声纹或音频质量 QA，不新增整集评分阈值、固定节拍规则、答案键、场景专用字段、hash 冻结或第二运行时。
+
 ## 2. 已完成确认的五项基础
 
 ### Q1. 首个样片美术方向（已确认）

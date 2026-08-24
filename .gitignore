@@ -72,6 +72,7 @@ backend/models/
 # Profiling scripts and results
 backend/scripts/*
 !backend/scripts/run_phase18_h3_video_guides.py
+!backend/scripts/run_phase20_episode_review_probe.py
 backend/profile_results/
 
 # Temporary working directory

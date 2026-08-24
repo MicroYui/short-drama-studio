@@ -540,6 +540,29 @@ def test_worker_recovers_running_and_interrupted_submit_after_restart(tmp_path: 
     assert third.repository.provider_submission_count(submitting_task.request_fingerprint) == 0
 
 
+def test_episode_review_endpoint_persists_non_blocking_unavailable_report(client) -> None:
+    initialized = _initialize_fixture(client)
+    project_id = initialized["document"]["project"]["id"]
+    auto = client.post(
+        f"/api/short-drama/projects/{project_id}/auto-draft",
+        json={"render_export": False},
+    )
+    assert auto.status_code == 200, auto.text
+
+    reviewed = client.post(
+        f"/api/short-drama/projects/{project_id}/review-episode",
+        json={"max_actions": 4},
+    )
+
+    assert reviewed.status_code == 200, reviewed.text
+    body = reviewed.json()
+    assert body["report"]["status"] == "UNAVAILABLE"
+    assert body["report"]["advisory_only"] is True
+    assert "UNKNOWN" in body["report"]["summary"]
+    assert body["project"]["episode_reviews"][-1]["id"] == body["report"]["id"]
+    assert body["project"]["progress"]["manifest_ready"] is True
+
+
 def test_complete_eight_shot_mock_timeline_export_and_local_invalidation(client) -> None:
     initialized = _initialize_fixture(client)
     project_id = initialized["document"]["project"]["id"]

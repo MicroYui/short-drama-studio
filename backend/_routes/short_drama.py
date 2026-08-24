@@ -60,6 +60,8 @@ from short_drama.models import (
     AutonomousRunAdvanceRequest,
     CreateProjectRequest,
     EnqueueRequest,
+    EpisodeReviewRequest,
+    EpisodeReviewResponse,
     ExportRecord,
     ExportRequest,
     LocalReworkRequest,
@@ -1041,6 +1043,27 @@ def inspect_project_audio(
         ProjectNotFoundError,
         ArtifactNotFoundError,
         WorkflowConflictError,
+        MediaGenerationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/review-episode",
+    response_model=EpisodeReviewResponse,
+)
+def review_project_episode(
+    project_id: str,
+    request: EpisodeReviewRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> EpisodeReviewResponse:
+    try:
+        return service.review_current_episode(project_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
         MediaGenerationError,
     ) as exc:
         raise _translate_error(exc) from exc

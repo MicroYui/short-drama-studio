@@ -58,6 +58,8 @@ export type VideoInspectionReport = components['schemas']['VideoInspectionReport
 export type VideoInspectionRequest = components['schemas']['VideoInspectionRequest']
 export type AudioInspectionReport = components['schemas']['AudioInspectionReport']
 export type AudioInspectionRequest = components['schemas']['AudioInspectionRequest']
+export type EpisodeReviewReport = components['schemas']['EpisodeReviewReport']
+export type EpisodeReviewRequest = components['schemas']['EpisodeReviewRequest']
 export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRepeatCreateRequest']
 export type PlanningRunCreateRequest = components['schemas']['PlanningRunCreateRequest']
 export type PlanningRunRecord = components['schemas']['PlanningRunRecord']
@@ -94,6 +96,7 @@ const reviseScriptLine = makeEndpointClient('/api/short-drama/projects/{project_
 const selectTake = makeEndpointClient('/api/short-drama/takes/{take_id}/select', 'post')
 const inspectTakeVideo = makeEndpointClient('/api/short-drama/takes/{take_id}/inspect-video', 'post')
 const inspectProjectAudio = makeEndpointClient('/api/short-drama/projects/{project_id}/inspect-audio', 'post')
+const reviewProjectEpisode = makeEndpointClient('/api/short-drama/projects/{project_id}/review-episode', 'post')
 const advanceTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/advance', 'post')
 const cancelTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/cancel', 'post')
 const retryTask = makeEndpointClient('/api/short-drama/tasks/{task_id}/retry', 'post')
@@ -245,6 +248,13 @@ export const ShortDramaApi = {
       body,
       undefined,
       projectPath(projectId, '/inspect-audio'),
+    )
+  ),
+  reviewProjectEpisode: (projectId: string, body: EpisodeReviewRequest) => (
+    reviewProjectEpisode(
+      body,
+      undefined,
+      projectPath(projectId, '/review-episode'),
     )
   ),
   advanceTask: (taskId: string) => advanceTask(undefined, undefined, taskPath(taskId, 'advance')),
