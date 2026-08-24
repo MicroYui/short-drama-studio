@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import imageio_ffmpeg
 from PIL import Image
@@ -32,16 +33,24 @@ from short_drama.models import (
     ApprovalStatus,
     AssetKind,
     AssetMediaType,
+    AutonomousDraftResponse,
     AutonomousDraftCreateRequest,
     AutonomousExecutionTarget,
     AutonomousRepeatCreateRequest,
     AutonomousRunAdvanceRequest,
     AutonomousRunStatus,
     Freshness,
+    PlanningRunCreateRequest,
+    PlanningRunStatus,
     ProductionProfile,
     ReferenceRequirement,
     ReferenceRole,
+    RunMode,
     SourceMode,
+)
+from short_drama.production_planner import (
+    _fallback_directed_scene_plan,
+    _fallback_episode_outline,
 )
 from short_drama.providers.image_provider import ImageProviderInput, ImageProviderResult
 from short_drama.providers.openai_compatible_language_client import LanguageProviderError
@@ -168,10 +177,19 @@ class FakeLanguageClient:
         *,
         reject_first_asset: bool = False,
         repair_first_shot: bool = False,
+        repair_shot_sequences: set[int] | None = None,
+        persistent_repair_shot_sequences: set[int] | None = None,
         fail_video_reviews: int = 0,
     ) -> None:
         self.reject_first_asset = reject_first_asset
-        self.repair_first_shot = repair_first_shot
+        self.repair_shot_sequences = set(repair_shot_sequences or set())
+        if repair_first_shot:
+            self.repair_shot_sequences.add(1)
+        self.persistent_repair_shot_sequences = set(
+            persistent_repair_shot_sequences or set()
+        )
+        self.repair_shot_sequences.update(self.persistent_repair_shot_sequences)
+        self.repaired_shot_sequences: set[int] = set()
         self.fail_video_reviews = fail_video_reviews
         self.asset_review_calls = 0
         self.director_calls = 0
@@ -239,7 +257,14 @@ class FakeLanguageClient:
                 self.fail_video_reviews -= 1
                 raise LanguageProviderError("simulated transient model overload")
             payload = json.loads(input_text)
-            if self.repair_first_shot and payload["current_shot"]["sequence"] == 1:
+            sequence = int(payload["current_shot"]["sequence"])
+            if (
+                sequence in self.repair_shot_sequences
+                and (
+                    sequence in self.persistent_repair_shot_sequences
+                    or sequence not in self.repaired_shot_sequences
+                )
+            ):
                 return json.dumps(
                     {
                         "observations": [],
@@ -265,7 +290,7 @@ class FakeLanguageClient:
         if "film director agent advising a user" in instructions:
             payload = json.loads(input_text)
             self.director_calls += 1
-            self.repair_first_shot = False
+            self.repaired_shot_sequences.add(int(payload["shot"]["sequence"]))
             revised_visual = (
                 payload["shot"]["visual"]
                 + " Keep the same narrative beat with a simpler, clearly readable composition."
@@ -305,6 +330,66 @@ class FakeLanguageClient:
                 }
             )
         raise AssertionError(f"Unexpected language request: {instructions[:100]}")
+
+
+class LongFormProductionLanguageClient(FakeLanguageClient):
+    """Serve both persisted long-form planning and the existing production Agents."""
+
+    def __init__(
+        self,
+        request: PlanningRunCreateRequest,
+        *,
+        repair_shot_sequences: set[int] | None = None,
+    ) -> None:
+        super().__init__(repair_shot_sequences=repair_shot_sequences)
+        self.outline = _fallback_episode_outline(request)
+        self.scene_plans = {}
+        self.planning_scene_calls: list[int] = []
+        self.scene_prompt_payloads: list[dict[str, Any]] = []
+        self.expected_handoffs: dict[int, dict[str, Any]] = {}
+        handoff = self.outline.scenes[0].continuity_in.model_copy(deep=True)
+        for scene in self.outline.scenes:
+            self.expected_handoffs[scene.sequence] = handoff.model_dump(mode="json")
+            plan = _fallback_directed_scene_plan(
+                request,
+                self.outline,
+                scene,
+                handoff,
+            )
+            self.scene_plans[scene.sequence] = plan
+            handoff = plan.continuity_out.model_copy(deep=True)
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        if "story-architect Agent" in instructions and "revising an episode" not in instructions:
+            return self.outline.model_dump_json()
+        if "independent script-critic Agent" in instructions:
+            return json.dumps(
+                {
+                    "summary": "The deterministic long-form fixture is ready for scene direction.",
+                    "strengths": ["The causal handoff is explicit across scenes."],
+                    "issues": [],
+                    "requires_revision": False,
+                }
+            )
+        if "scene-director Agent" in instructions:
+            payload = json.loads(input_text)
+            self.scene_prompt_payloads.append(payload)
+            sequence = int(payload["scene_contract"]["sequence"])
+            self.planning_scene_calls.append(sequence)
+            return self.scene_plans[sequence].model_dump_json()
+        return super().generate_text(
+            instructions=instructions,
+            input_text=input_text,
+            image_urls=image_urls,
+            max_output_tokens=max_output_tokens,
+        )
 
 
 class AutoCompletingH3Client:
@@ -459,6 +544,185 @@ def _service(
     )
     service.update_h3_config(H3ProviderConfigUpdate(api_key="h3-key"))
     return service
+
+
+def _finish_long_form_planning(
+    service: ShortDramaService,
+    request: PlanningRunCreateRequest,
+) -> tuple[str, str]:
+    response = service.create_planning_run(request)
+    for _ in range(80):
+        if response.run.status == PlanningRunStatus.COMPLETE:
+            break
+        response = service.advance_planning_run(response.run.id)
+    assert response.run.status == PlanningRunStatus.COMPLETE
+    assert response.run.project_id is not None
+    assert response.run.autonomous_run_id is not None
+    return response.run.project_id, response.run.autonomous_run_id
+
+
+def _finish_real_autonomous_run(
+    service: ShortDramaService,
+    *,
+    project_id: str,
+    run_id: str,
+    max_cycles: int = 600,
+    selected_take_trace: list[int] | None = None,
+) -> AutonomousDraftResponse:
+    for _ in range(max_cycles):
+        response = service.advance_autonomous_run(
+            project_id,
+            run_id,
+            AutonomousRunAdvanceRequest(max_actions=60),
+        )
+        assert response.run.status != AutonomousRunStatus.FAILED
+        if selected_take_trace is not None:
+            selected_take_trace.append(
+                response.project.progress.shots_with_selected_take
+            )
+        if response.run.status == AutonomousRunStatus.COMPLETE:
+            return response
+    raise AssertionError("long-form autonomous run did not finish within the test bound")
+
+
+def test_long_form_planning_handoff_completes_two_minute_export_after_restart(
+    tmp_path: Path,
+) -> None:
+    request = PlanningRunCreateRequest(
+        name="两分钟无人值守制片",
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.DOUYIN_SHORT_DRAMA,
+        target_duration_seconds=120,
+        run_mode=RunMode.AUTO_DRAFT,
+        execution_target=AutonomousExecutionTarget.REAL_H3,
+        render_export=True,
+    )
+    image = FakeImageProvider()
+    language = LongFormProductionLanguageClient(
+        request,
+        repair_shot_sequences={1, 2, 3, 4},
+    )
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    first = _service(tmp_path, image, language, h3)
+    first.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    project_id, run_id = _finish_long_form_planning(first, request)
+
+    planned = first.get_project(project_id)
+    assert planned.document.project.target_duration_seconds == 120
+    assert len(planned.document.shots) >= 8
+    assert planned.document.autonomous_runs[-1].current_step.value == "PREPARE_ASSETS"
+
+    before_restart: AutonomousDraftResponse | None = None
+    for _ in range(80):
+        candidate = first.advance_autonomous_run(
+            project_id,
+            run_id,
+            AutonomousRunAdvanceRequest(max_actions=8),
+        )
+        assert candidate.run.status == AutonomousRunStatus.RUNNING
+        selected = candidate.project.progress.shots_with_selected_take
+        if 0 < selected < candidate.project.progress.total_shots:
+            before_restart = candidate
+            break
+    assert before_restart is not None
+
+    restarted = _service(tmp_path, image, language, h3)
+    restarted.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    selected_take_trace = [before_restart.project.progress.shots_with_selected_take]
+    completed = _finish_real_autonomous_run(
+        restarted,
+        project_id=project_id,
+        run_id=run_id,
+        selected_take_trace=selected_take_trace,
+    )
+
+    assert completed.run.status == AutonomousRunStatus.COMPLETE
+    assert completed.export is not None
+    manifest = completed.project.document.manifests[-1]
+    assert manifest.duration_seconds == 120
+    assert completed.project.progress.shots_with_selected_take == len(
+        completed.project.document.shots
+    )
+    assert completed.project.progress.export_ready is True
+    assert language.planning_scene_calls == [1, 2]
+    assert completed.run.repair_round == 4
+    assert language.director_calls == 4
+    assert len(h3.requests) == 28
+    assert len(restarted.repository.list_h3_route_plans(project_id)) >= 4
+    assert selected_take_trace == sorted(selected_take_trace)
+    assert selected_take_trace[-1] == len(completed.project.document.shots)
+    revisions = {
+        shot.sequence: shot.revision for shot in completed.project.document.shots
+    }
+    assert all(revisions[sequence] == 2 for sequence in {1, 2, 3, 4})
+    assert all(
+        revision == 1
+        for sequence, revision in revisions.items()
+        if sequence not in {1, 2, 3, 4}
+    )
+
+
+def test_five_minute_planning_handoff_completes_timeline_without_second_runtime(
+    tmp_path: Path,
+) -> None:
+    request = PlanningRunCreateRequest(
+        name="五分钟无人值守制片",
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.DOUYIN_SHORT_DRAMA,
+        target_duration_seconds=300,
+        run_mode=RunMode.AUTO_DRAFT,
+        execution_target=AutonomousExecutionTarget.REAL_H3,
+        render_export=False,
+    )
+    image = FakeImageProvider()
+    language = LongFormProductionLanguageClient(request)
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+    project_id, run_id = _finish_long_form_planning(service, request)
+    completed = _finish_real_autonomous_run(
+        service,
+        project_id=project_id,
+        run_id=run_id,
+    )
+
+    assert completed.run.status == AutonomousRunStatus.COMPLETE
+    assert completed.export is None
+    manifest = completed.project.document.manifests[-1]
+    assert manifest.duration_seconds == 300
+    assert len(completed.project.document.shots) == 20
+    assert completed.project.progress.shots_with_selected_take == 20
+    assert completed.project.progress.manifest_ready is True
+    assert completed.project.progress.export_ready is False
+    assert len(language.planning_scene_calls) == 4
+    assert len(language.scene_prompt_payloads) == 4
+    assert all(
+        set(payload) == {
+            "episode",
+            "scene_contract",
+            "assigned_dialogue",
+            "previous_actual_handoff",
+            "next_scene",
+            "output_schema",
+        }
+        for payload in language.scene_prompt_payloads
+    )
+    assert all(
+        payload["previous_actual_handoff"]
+        == language.expected_handoffs[int(payload["scene_contract"]["sequence"])]
+        for payload in language.scene_prompt_payloads
+    )
+    assert len(h3.requests) == 40
+    assert all(
+        run.execution_target == AutonomousExecutionTarget.REAL_H3
+        for run in completed.project.document.autonomous_runs
+    )
 
 
 def test_repeat_run_reuses_approved_preproduction_but_starts_new_generation(
@@ -881,4 +1145,50 @@ def test_real_autonomous_draft_repairs_rejected_video_and_replans(
         and take.freshness.value == "CURRENT"
         and take.is_selected
         for take in response.project.takes
+    )
+
+
+def test_real_autonomous_draft_limits_repairs_per_shot_not_per_episode(
+    tmp_path: Path,
+) -> None:
+    image = FakeImageProvider()
+    language = FakeLanguageClient(persistent_repair_shot_sequences={1})
+    h3 = AutoCompletingH3Client(tmp_path / "h3-cache")
+    service = _service(tmp_path, image, language, h3)
+    response = service.create_autonomous_draft(
+        AutonomousDraftCreateRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=50,
+            input_text="",
+            execution_target=AutonomousExecutionTarget.REAL_H3,
+            render_export=False,
+        )
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
+    )
+
+    for _ in range(260):
+        response = service.advance_autonomous_run(
+            response.project.document.project.id,
+            response.run.id,
+            AutonomousRunAdvanceRequest(max_actions=40),
+        )
+        assert response.run.status != AutonomousRunStatus.FAILED
+        if response.run.status == AutonomousRunStatus.COMPLETE:
+            break
+
+    assert response.run.status == AutonomousRunStatus.COMPLETE
+    assert response.run.repair_round == response.run.max_repair_rounds == 3
+    assert language.director_calls == 3
+    first_shot = min(response.project.document.shots, key=lambda item: item.sequence)
+    selected = next(
+        take
+        for take in response.project.takes
+        if take.shot_id == first_shot.id and take.is_selected
+    )
+    assert selected.qa_status.value == "REJECTED"
+    assert "bounded-auto-draft-best-effort-waiver" in selected.qa_report.checks
+    assert "3 automatic Director repair attempt(s) for this shot" in (
+        selected.qa_report.reviewer_notes or ""
     )

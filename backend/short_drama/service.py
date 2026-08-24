@@ -345,6 +345,25 @@ def _missing_timeline_shot_ids(
     ]
 
 
+def _autonomous_director_repair_attempts(
+    document: ProjectDocument,
+    shot_id: str,
+) -> int:
+    """Count post-Take automatic repair attempts for one shot.
+
+    Pre-production or inherited Director decisions have no source Take and therefore
+    do not consume this runtime retry allowance.
+    """
+
+    return sum(
+        1
+        for repair in document.repair_history
+        if repair.source_shot_id == shot_id
+        and repair.source_take_id is not None
+        and repair.decision == DirectorRepairDecision.APPLIED
+    )
+
+
 def _timeline_clip_window(shot: ShotPlan, take: Take) -> tuple[float, float]:
     """Fit provider media to the Director's shot duration without freezing frames.
 
@@ -3469,11 +3488,17 @@ class ShortDramaService:
                 aggregate=aggregate,
             )
             return True, False
-        if run.repair_round >= run.max_repair_rounds:
+        exhausted = [
+            shot_id
+            for shot_id in missing
+            if _autonomous_director_repair_attempts(aggregate.document, shot_id)
+            >= run.max_repair_rounds
+        ]
+        if exhausted:
             waived_take_ids = self._apply_bounded_best_effort_waivers(
                 project_id,
                 run_id,
-                missing,
+                exhausted,
             )
             if waived_take_ids:
                 self._select_best_current_takes(project_id)
@@ -3491,15 +3516,24 @@ class ShortDramaService:
                         aggregate=refreshed,
                     )
                     return True, False
-            raise WorkflowConflictError(
-                "REAL_H3 AUTO_DRAFT exhausted Director repair rounds for: "
-                + ", ".join(missing)
-            )
-        repaired = self._run_autonomous_director_repairs(project_id, missing)
-        if not repaired:
+                aggregate = refreshed
+            still_exhausted = [
+                shot_id
+                for shot_id in missing
+                if _autonomous_director_repair_attempts(aggregate.document, shot_id)
+                >= run.max_repair_rounds
+            ]
+            if still_exhausted:
+                raise WorkflowConflictError(
+                    "REAL_H3 AUTO_DRAFT exhausted the per-shot Director repair limit for: "
+                    + ", ".join(still_exhausted)
+                )
+        repaired_shot_ids = self._run_autonomous_director_repairs(project_id, missing)
+        unrepaired = [shot_id for shot_id in missing if shot_id not in repaired_shot_ids]
+        if unrepaired:
             raise WorkflowConflictError(
                 "REAL_H3 AUTO_DRAFT needs an executable Director repair for: "
-                + ", ".join(missing)
+                + ", ".join(unrepaired)
             )
         with self._lock:
             plan.status = H3RoutePlanStatus.PARTIAL
@@ -5644,7 +5678,6 @@ class ShortDramaService:
         render_export: bool,
         autonomous_run_id: str | None,
     ) -> AutoDraftResponse:
-        repair_round = 0
         max_repair_rounds = 2
         while True:
             self.enqueue(project_id, EnqueueRequest())
@@ -5679,21 +5712,34 @@ class ShortDramaService:
             ]
             if not missing_selected:
                 break
-            if repair_round >= max_repair_rounds:
-                raise WorkflowConflictError(
-                    "AUTO_DRAFT exhausted Director repair rounds for: "
-                    + ", ".join(missing_selected)
+            exhausted = [
+                shot_id
+                for shot_id in missing_selected
+                if _autonomous_director_repair_attempts(
+                    aggregate.document,
+                    shot_id,
                 )
-            repaired = self._run_autonomous_director_repairs(
+                >= max_repair_rounds
+            ]
+            if exhausted:
+                raise WorkflowConflictError(
+                    "AUTO_DRAFT exhausted the per-shot Director repair limit for: "
+                    + ", ".join(exhausted)
+                )
+            repaired_shot_ids = self._run_autonomous_director_repairs(
                 project_id,
                 missing_selected,
             )
-            if not repaired:
+            unrepaired = [
+                shot_id
+                for shot_id in missing_selected
+                if shot_id not in repaired_shot_ids
+            ]
+            if unrepaired:
                 raise WorkflowConflictError(
                     "AUTO_DRAFT needs a passed Take or an executable Director repair for: "
-                    + ", ".join(missing_selected)
+                    + ", ".join(unrepaired)
                 )
-            repair_round += 1
             if autonomous_run_id is not None:
                 self._advance_autonomous_run(
                     project_id,
@@ -5738,12 +5784,12 @@ class ShortDramaService:
         self,
         project_id: str,
         shot_ids: list[str],
-    ) -> bool:
+    ) -> set[str]:
         project = self.get_project(project_id)
         if project.document.project.run_mode != RunMode.AUTO_DRAFT:
-            return False
+            return set()
         reports = project.video_inspections
-        applied = False
+        applied_shot_ids: set[str] = set()
         for shot_id in shot_ids:
             candidates = [
                 take
@@ -5778,8 +5824,9 @@ class ShortDramaService:
                     ),
                 ),
             )
-            applied = result.repair_applied or applied
-        return applied
+            if result.repair_applied:
+                applied_shot_ids.add(shot_id)
+        return applied_shot_ids
 
     def _select_best_current_takes(self, project_id: str) -> None:
         with self._lock:
@@ -5852,9 +5899,14 @@ class ShortDramaService:
                 if _BOUNDED_BEST_EFFORT_CHECK not in best.qa_report.checks:
                     best.qa_report.checks.append(_BOUNDED_BEST_EFFORT_CHECK)
                 issue_codes = [item.code for item in best.qa_report.issues]
+                repair_attempts = _autonomous_director_repair_attempts(
+                    document,
+                    shot_id,
+                )
                 waiver_note = (
                     "AUTO_DRAFT bounded best-effort timeline waiver after "
-                    f"{run.repair_round} repair round(s); QA remains REJECTED and unresolved "
+                    f"{repair_attempts} automatic Director repair attempt(s) for this shot; "
+                    "QA remains REJECTED and unresolved "
                     "issues remain visible: "
                     + (", ".join(issue_codes) if issue_codes else "none")
                 )

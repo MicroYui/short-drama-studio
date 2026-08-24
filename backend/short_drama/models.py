@@ -823,7 +823,7 @@ class AutonomousRunRecord(DomainModel):
     planner: str
     execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
     route_plan_id: str | None = None
-    repair_round: int = Field(default=0, ge=0, le=10)
+    repair_round: int = Field(default=0, ge=0)
     max_repair_rounds: int = Field(default=3, ge=0, le=5)
     render_export: bool = True
     waiting_reason: str | None = None

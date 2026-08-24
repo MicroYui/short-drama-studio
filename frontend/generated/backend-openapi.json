@@ -1669,7 +1669,6 @@
           },
           "repair_round": {
             "default": 0,
-            "maximum": 10.0,
             "minimum": 0.0,
             "title": "Repair Round",
             "type": "integer"

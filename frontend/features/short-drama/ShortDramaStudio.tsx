@@ -36,6 +36,7 @@ import { pathToFileUrl } from '../../lib/file-url'
 import {
   ShortDramaApi,
   type AutonomousExecutionTarget,
+  type AutonomousRunRecord,
   type CreativeInputImage,
   type ExportRecord,
   type GenerationTask,
@@ -111,6 +112,21 @@ const planningStepLabels: Record<PlanningRunRecord['current_step'], string> = {
   SCENE_DIRECTOR: 'Scene Director · 逐场分镜',
   FINALIZE: '汇总剧本与制片计划',
   COMPLETE: '剧本规划完成',
+}
+
+const autonomousStepLabels: Record<AutonomousRunRecord['current_step'], string> = {
+  NORMALIZE_INPUT: '归一化输入',
+  PLAN: '建立制片计划',
+  IMPORT_INPUT_ASSETS: '导入输入资产',
+  PREPARE_ASSETS: '准备核心资产',
+  PLAN_ROUTES: '规划下一组 H3 路线',
+  PREPARE_SHOT_ASSETS: '准备镜头资产',
+  GENERATE: '生成 H3 候选',
+  QA_AND_REPAIR: '视频 QA 与导演修复',
+  TIMELINE: '组装时间线',
+  AUDIO_QA: '音频检查',
+  EXPORT: '导出成片',
+  COMPLETE: '自动制片完成',
 }
 
 const scriptQualityTrendLabels: Record<ScriptQualityHistoryResponse['comparison']['trend'], string> = {
@@ -216,7 +232,7 @@ function OverviewPanel({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-3xl">
             <div className="mb-3 flex items-center gap-2">
-              <Badge tone="blue">Phase 16 · Script Quality History</Badge>
+              <Badge tone="blue">AUTO_DRAFT</Badge>
               <Badge tone="green">{productionProfileLabels[record.production_profile ?? 'DOUYIN_SHORT_DRAMA']}</Badge>
               <Badge>{record.source_mode}</Badge>
               <Badge>{record.run_mode}</Badge>
@@ -235,9 +251,9 @@ function OverviewPanel({
         </div>
       </section>
 
-      {latestRun?.execution_target === 'REAL_H3' && (latestRun.waiting_reason || latestRun.error_message) && (
+      {latestRun?.execution_target === 'REAL_H3' && latestRun.status !== 'COMPLETE' && (
         <section className={`rounded-xl border p-4 ${latestRun.status === 'NEEDS_ATTENTION' ? 'border-amber-500/20 bg-amber-500/5' : 'border-blue-500/20 bg-blue-500/5'}`}>
-          <div className="flex gap-3"><Clock3 className={`mt-0.5 h-4 w-4 shrink-0 ${latestRun.status === 'NEEDS_ATTENTION' ? 'text-amber-400' : 'text-blue-400'}`} /><div><p className="text-sm font-medium text-zinc-200">{latestRun.current_step} · 第 {latestRun.repair_round}/{latestRun.max_repair_rounds} 轮返工</p><p className="mt-1 text-xs leading-5 text-zinc-400">{latestRun.error_message ?? latestRun.waiting_reason}</p></div></div>
+          <div className="flex gap-3"><Clock3 className={`mt-0.5 h-4 w-4 shrink-0 ${latestRun.status === 'NEEDS_ATTENTION' ? 'text-amber-400' : 'text-blue-400'}`} /><div><p className="text-sm font-medium text-zinc-200">{autonomousStepLabels[latestRun.current_step]} · 镜头 {progress.shots_with_selected_take}/{progress.total_shots}</p><p className="mt-1 text-xs leading-5 text-zinc-400">{latestRun.error_message ?? latestRun.waiting_reason ?? `任务 ${progress.terminal_tasks}/${progress.total_tasks} 已进入终态；系统会继续推进下一次有限动作。`}</p><p className="mt-1 text-[11px] leading-5 text-zinc-500">累计 {latestRun.repair_round} 轮自动返工；同一个镜头最多自动尝试 {latestRun.max_repair_rounds} 次。</p></div></div>
         </section>
       )}
 
@@ -930,7 +946,7 @@ function PlanningRunPanel({
         <div className="border-b border-zinc-800/80 p-6 sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 17 · Revision Judge</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
+              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">可恢复长篇规划</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
               <h1 className="mt-4 text-2xl font-semibold text-white">{run.request.name ?? '新短剧'}正在进行剧本规划</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">当前阶段只处理故事结构、因果、对白、场次和连续性规划，不调用 GPT Image 或 MiniMax-H3。每个 Agent 阶段和每个场次完成后都会保存，关闭应用后也能从当前节点继续。</p>
             </div>

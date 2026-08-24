@@ -194,6 +194,10 @@ Planner 先声明镜头实际需要的主体、角色、角度、景别和状态
 
 前镜完整 Take、前镜尾部运动窗口和低保真机位预演均作为可选 `H3VideoGuide` 工件进入 Route Agent。真实样本表明，H3 可能把原始前镜视频中的动作当作待继续内容，即使 Prompt 要求不要重复；因此完整 Take/尾窗主要用于确实延续同一动作与相近覆盖的镜头。反打或换机位时优先比较 Frame 路线，若使用机位预演则优先从当前镜头已批准起始关键帧生成。预演可帮助保持构图和粗运镜，但不能证明人体走位或终态动作必然完成。所有路线建议都可忽略；缺少 guide、Agent 不可用或用户坚持原路线都不阻断生成，也不为该能力增加场景专用字段、hash 冻结或额外审批门。
 
+### D49. 多分钟 AUTO_DRAFT 复用同一 Orchestrator，返工额度按镜头计算
+
+超过 90 秒的 `PlanningRun` 在 FINALIZE 后直接建立正式 Project 和原有 `AutonomousRun`，继续复用 Asset Agent、H3 continuity wave、视频 QA、Director、Take、TimelineManifest 与导出，不建立第二运行时。Scene Director 上下文保持为整集资产契约、当前场、当前对白、上一场 compact handoff 和下一场入口。`repair_round` 仅为全剧累计进度，`max_repair_rounds` 是单镜自动修复上限；一个镜头的返工不消耗其他镜头额度。达到上限只触发现有可恢复状态或明确可见的 best-effort，不构成创意审批门。
+
 ## 2. 已完成确认的五项基础
 
 ### Q1. 首个样片美术方向（已确认）

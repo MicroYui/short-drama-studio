@@ -379,6 +379,12 @@ H3 Adapter 已把前序完整 Take、前序尾部运动窗口和低保真机位�
 
 这条路线借鉴 LTX Desktop 控制视频预处理、逐帧 depth/pose Service 与 conditioning cache 的工程分层，不接入 LTX 权重，也不把 H3 `reference_video` 当作同等强度的控制通道。确定性代码只校验媒体、Provider 合同、任务状态和版本引用，不设置创意门控、场景专用字段或 hash 冻结。详见 [Phase 18 实施记录](28-phase18-h3-video-reference-previs.md)。
 
+### Phase 19：多分钟无人值守制片衔接
+
+`PlanningRun.FINALIZE` 在 `AUTO_DRAFT` 模式下直接建立原有 `AutonomousRun`，后续继续使用 Asset Agent、同场 continuity wave、H3 异步任务、视频 QA、Director 局部修复、Take、TimelineManifest 和导出。前端从规划节点/场次进度自然切换到制片步骤、入选镜头和任务进度；这不是第二套 runtime 或工作流画布。
+
+长篇规模验证发现原来的三轮 Director 限额被错误解释为全剧共享。现在 `repair_round` 只是累计返工 wave，`max_repair_rounds` 是每个镜头的自动修复上限；前面镜头的返工不会耗尽后面无关镜头的机会。2 分钟 10 镜项目在中途重建 Service 后完成 4 个局部返工、120 秒 Manifest 和导出；5 分钟 20 镜项目用 40 个 Fake H3 候选完成 300 秒 Manifest。Scene Director 仍只接收当前场、compact handoff 和下一场入口。详见 [Phase 19 实施记录](29-phase19-long-form-autodraft.md)。
+
 ## 12. 当前不做
 
 - 不调用或依赖即梦、可灵、LTX Studio、纳逗 Pro；
