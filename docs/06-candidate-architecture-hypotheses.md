@@ -354,6 +354,16 @@ PlanningRun 不是新的工作流画布或微服务。它只是 SQLite/API 核�
 
 每轮 `EpisodeOutline` 和 `ScriptReviewReport` 以独立 PlanningRun artifact 保存，不随轮询重复返回。Product API 可读取单个 run 的完整历史，也可检索跨项目摘要。对比只描述各轮报告的问题数、严重度和类别名变化，不把它们当作剧本得分或答案键。最新轮比上一轮报告更多问题时，Director Agent 只给出可忽略的版本比较建议，不阻断后续规划。
 
+### Phase 17：条件触发的 Revision Judge
+
+当最新一轮 Script Critic 相比上一轮出现总问题数或 HIGH 增加时，PlanningRun 在 Scene Director 前插入一次 `REVISION_JUDGE`。该节点读取最近两份审稿和它们各自对应的完整大纲，由独立 GPT-5.6-sol Agent 比较实际因果、规则、可见证据、人物动机、信息密度和新引入的矛盾。结果以 `RevisionJudgeRecommendation` 保存在 PlanningRun，并通过剧本质量历史 API 展示。
+
+Judge 只给出推荐版本、备选版本、置信度、依据和取舍，不修改 `outline_json`，不阻断 Scene Director。缺少快照、模型不可用或输出不合法时也继续使用最新版。正常单调改善不调用 Judge。这个阶段仍是纯剧本处理，不调用 GPT Image 或 H3。
+
+### 后续：H3 视频参考与运镜预演路线
+
+当前 H3 Adapter 已能提交 `reference_video`。后续将比较前序完整 Take、前序尾部运动窗口和低保真人物走位/机位预演三种视频参考，判断它们对连续场景、强动作依赖和长镜头续接的增益及错误继承风险。实验先复用 LTX Desktop 上游已有的控制视频预处理、逐帧 depth/pose 和 conditioning cache 分层思路，再用 H3 验证，不接入 LTX 权重或假设两种模型的控制语义相同。首轮运行复用现有 `H3MediaInput`、镜头依赖、视频观察和 `RouteEvidence`，由 Director/Route Agent 推荐路线；没有证据前不把预演设为固定前置步骤，也不扩张场景专用领域字段。
+
 ## 12. 当前不做
 
 - 不调用或依赖即梦、可灵、LTX Studio、纳逗 Pro；

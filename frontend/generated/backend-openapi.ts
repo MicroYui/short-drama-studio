@@ -5160,6 +5160,7 @@ export interface components {
             project_id?: string | null;
             request: components["schemas"]["PlanningRunCreateRequest"];
             review_report?: components["schemas"]["ScriptReviewReport"] | null;
+            revision_judge?: components["schemas"]["RevisionJudgeRecommendation"] | null;
             /**
              * Revision Round
              * @default 0
@@ -5200,7 +5201,7 @@ export interface components {
          * PlanningRunStep
          * @enum {string}
          */
-        PlanningRunStep: "STORY_ARCHITECT" | "SCRIPT_CRITIC" | "STORY_REVISION" | "SCENE_DIRECTOR" | "FINALIZE" | "COMPLETE";
+        PlanningRunStep: "STORY_ARCHITECT" | "SCRIPT_CRITIC" | "STORY_REVISION" | "REVISION_JUDGE" | "SCENE_DIRECTOR" | "FINALIZE" | "COMPLETE";
         /** PreprocessingStep */
         PreprocessingStep: {
             /** Params */
@@ -5827,6 +5828,30 @@ export interface components {
             /** Subtitle Text */
             subtitle_text: string;
         };
+        /**
+         * RevisionJudgeConfidence
+         * @enum {string}
+         */
+        RevisionJudgeConfidence: "LOW" | "MEDIUM" | "HIGH";
+        /** RevisionJudgeRecommendation */
+        RevisionJudgeRecommendation: {
+            /**
+             * Advisory Only
+             * @default true
+             */
+            advisory_only: boolean;
+            /** Alternative Revision Round */
+            alternative_revision_round: number;
+            confidence: components["schemas"]["RevisionJudgeConfidence"];
+            /** Evidence */
+            evidence?: string[];
+            /** Recommended Revision Round */
+            recommended_revision_round: number;
+            /** Summary */
+            summary: string;
+            /** Tradeoffs */
+            tradeoffs?: string[];
+        };
         /** RouteEvidence */
         RouteEvidence: {
             /** Created At */
@@ -5947,6 +5972,7 @@ export interface components {
             outline_snapshots?: components["schemas"]["PlanningOutlineSnapshot"][];
             /** Review Snapshots */
             review_snapshots?: components["schemas"]["PlanningReviewSnapshot"][];
+            revision_judge?: components["schemas"]["RevisionJudgeRecommendation"] | null;
         };
         /** ScriptQualityRoundSummary */
         ScriptQualityRoundSummary: {

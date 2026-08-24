@@ -107,6 +107,7 @@ const planningStepLabels: Record<PlanningRunRecord['current_step'], string> = {
   STORY_ARCHITECT: 'Story Architect · 整集大纲',
   SCRIPT_CRITIC: 'Script Critic · 独立审稿',
   STORY_REVISION: 'Story Architect · 有界修订',
+  REVISION_JUDGE: 'Revision Judge · 比较最近两版',
   SCENE_DIRECTOR: 'Scene Director · 逐场分镜',
   FINALIZE: '汇总剧本与制片计划',
   COMPLETE: '剧本规划完成',
@@ -389,6 +390,9 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
   const newQualityLabels = qualityHistory?.comparison.newly_reported_category_labels ?? []
   const latestTotalIssueDelta = qualityHistory?.comparison.latest_total_issue_delta ?? 0
   const latestHighIssueDelta = qualityHistory?.comparison.latest_high_issue_delta ?? 0
+  const revisionJudge = qualityHistory?.revision_judge ?? null
+  const revisionJudgeEvidence = revisionJudge?.evidence ?? []
+  const revisionJudgeTradeoffs = revisionJudge?.tradeoffs ?? []
   return (
     <div>
       <SectionTitle
@@ -428,6 +432,19 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
             <div className="rounded-lg bg-zinc-950/50 p-3"><p className="text-[11px] font-medium text-zinc-400">末轮新报告</p><p className="mt-1 text-[11px] leading-5 text-zinc-600">{newQualityLabels.join('、') || '无'}</p></div>
           </div>
           {qualityHistory.comparison.latest_report_regression_risk && <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-100">最近一轮相比上一轮的报告变化：总数 {latestTotalIssueDelta >= 0 ? '+' : ''}{latestTotalIssueDelta}，HIGH {latestHighIssueDelta >= 0 ? '+' : ''}{latestHighIssueDelta}。Director Agent 会建议比较最近两版，但不会替用户做强制选择。</p>}
+          {revisionJudge && (
+            <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-medium text-cyan-100">Revision Judge 建议</p>
+                <Badge tone="blue">优先考虑{revisionJudge.recommended_revision_round === 0 ? '初稿' : `第 ${revisionJudge.recommended_revision_round} 轮修订稿`}</Badge>
+                <Badge>{revisionJudge.confidence} 置信度</Badge>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-zinc-300">{revisionJudge.summary}</p>
+              {revisionJudgeEvidence.length > 0 && <div className="mt-3"><p className="text-[11px] font-medium text-zinc-400">判断依据</p><ul className="mt-1 space-y-1 text-[11px] leading-5 text-zinc-500">{revisionJudgeEvidence.map((item) => <li key={item}>· {item}</li>)}</ul></div>}
+              {revisionJudgeTradeoffs.length > 0 && <div className="mt-3"><p className="text-[11px] font-medium text-zinc-400">取舍</p><ul className="mt-1 space-y-1 text-[11px] leading-5 text-zinc-500">{revisionJudgeTradeoffs.map((item) => <li key={item}>· {item}</li>)}</ul></div>}
+              <p className="mt-3 text-[11px] leading-5 text-cyan-200/70">该建议可忽略；当前流程没有自动替换大纲，仍按最新版完成后续规划。</p>
+            </div>
+          )}
           <p className="mt-3 text-[11px] leading-5 text-zinc-600">这是跨轮审稿描述，不是自动打分或通过门；用户可继续修改，也可忽略建议。</p>
         </section>
       )}
@@ -899,6 +916,7 @@ function PlanningRunPanel({
     'STORY_ARCHITECT',
     'SCRIPT_CRITIC',
     'STORY_REVISION',
+    'REVISION_JUDGE',
     'SCENE_DIRECTOR',
     'FINALIZE',
   ]
@@ -912,7 +930,7 @@ function PlanningRunPanel({
         <div className="border-b border-zinc-800/80 p-6 sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 16 · Recoverable Script Review</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
+              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 17 · Revision Judge</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
               <h1 className="mt-4 text-2xl font-semibold text-white">{run.request.name ?? '新短剧'}正在进行剧本规划</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">当前阶段只处理故事结构、因果、对白、场次和连续性规划，不调用 GPT Image 或 MiniMax-H3。每个 Agent 阶段和每个场次完成后都会保存，关闭应用后也能从当前节点继续。</p>
             </div>
@@ -927,12 +945,16 @@ function PlanningRunPanel({
             <h2 className="text-sm font-semibold text-white">分层规划进度</h2>
             <div className="mt-4 space-y-2">
               {stages.map((step, index) => {
-                const complete = index < currentIndex || completedSteps.includes(step)
+                const skipped = step === 'REVISION_JUDGE'
+                  && index < currentIndex
+                  && !completedSteps.includes(step)
+                const complete = completedSteps.includes(step)
+                  || (step !== 'REVISION_JUDGE' && index < currentIndex)
                 const active = step === run.current_step
                 return (
                   <div key={step} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${active ? 'border-blue-500/30 bg-blue-500/10' : 'border-zinc-800 bg-zinc-950/60'}`}>
                     {complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /> : active ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-400" /> : <CircleDot className="h-4 w-4 shrink-0 text-zinc-700" />}
-                    <div className="min-w-0 flex-1"><p className={`text-sm ${active ? 'font-medium text-white' : complete ? 'text-zinc-300' : 'text-zinc-600'}`}>{planningStepLabels[step]}</p>{step === 'SCENE_DIRECTOR' && run.total_scenes > 0 && <p className="mt-1 text-[11px] text-zinc-500">已完成 {completedScenes}/{run.total_scenes} 场；一次只展开一场并传递上一场实际交接状态</p>}</div>
+                    <div className="min-w-0 flex-1"><p className={`text-sm ${active ? 'font-medium text-white' : complete ? 'text-zinc-300' : 'text-zinc-600'}`}>{planningStepLabels[step]}</p>{skipped && <p className="mt-1 text-[11px] text-zinc-600">最新复审没有触发回退风险，本次无需比较版本</p>}{step === 'SCENE_DIRECTOR' && run.total_scenes > 0 && <p className="mt-1 text-[11px] text-zinc-500">已完成 {completedScenes}/{run.total_scenes} 场；一次只展开一场并传递上一场实际交接状态</p>}</div>
                   </div>
                 )
               })}

@@ -16,6 +16,8 @@ from short_drama.models import (
     PlanningRunCreateRequest,
     PlanningRunStatus,
     PlanningRunStep,
+    RevisionJudgeConfidence,
+    RevisionJudgeRecommendation,
     ReviseScriptLineRequest,
     RunMode,
     ScriptReviewIssue,
@@ -28,6 +30,9 @@ from short_drama.production_planner import (
     _fallback_episode_outline,
 )
 from short_drama.providers.language_config import LanguageProviderConfigUpdate
+from short_drama.providers.openai_compatible_language_client import (
+    LanguageProviderError,
+)
 from short_drama.service import ShortDramaService
 
 
@@ -39,13 +44,16 @@ class StagedLanguageClient:
         revision_rounds_required: int = 0,
         fail_scene_once: int | None = None,
         review_issue_counts: list[int] | None = None,
+        fail_judge: bool = False,
     ) -> None:
         self.outline = _fallback_episode_outline(request)
         self.revision_rounds_required = revision_rounds_required
         self.fail_scene_once = fail_scene_once
         self.review_issue_counts = review_issue_counts
+        self.fail_judge = fail_judge
         self.critic_calls = 0
         self.revision_calls = 0
+        self.judge_calls = 0
         self.scene_calls: list[int] = []
         self.scene_inputs: list[dict[str, object]] = []
         self._failed_scene = False
@@ -74,6 +82,22 @@ class StagedLanguageClient:
         max_output_tokens: int = 2200,
     ) -> str:
         del image_urls, max_output_tokens
+        if "revision-judge Agent" in instructions:
+            self.judge_calls += 1
+            if self.fail_judge:
+                raise LanguageProviderError("transient revision judge failure")
+            payload = json.loads(input_text)
+            candidates = payload["candidates"]
+            older_round = int(candidates[0]["revision_round"])
+            newer_round = int(candidates[1]["revision_round"])
+            return RevisionJudgeRecommendation(
+                recommended_revision_round=older_round,
+                alternative_revision_round=newer_round,
+                confidence=RevisionJudgeConfidence.HIGH,
+                summary="较早版本闭合了核心因果，较新版本引入了新的解释冲突。",
+                evidence=["开场异常与结尾机制在较早版本中直接对应。"],
+                tradeoffs=["较新版本补充了信息，但削弱了因果清晰度。"],
+            ).model_dump_json()
         if "independent script-critic Agent" in instructions:
             self.critic_calls += 1
             issue_count = (
@@ -114,7 +138,9 @@ class StagedLanguageClient:
         if "revising an episode" in instructions:
             self.revision_calls += 1
             payload = self.outline.model_dump(mode="python")
-            payload["story_summary"] += " 已补全开场与结尾的因果闭环。"
+            payload["story_summary"] += (
+                f" 第 {self.revision_calls} 轮已补全开场与结尾的因果闭环。"
+            )
             return json.dumps(payload, ensure_ascii=False)
         if "story-architect Agent" in instructions:
             return self.outline.model_dump_json()
@@ -266,6 +292,8 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     assert history.comparison.trend.value == "FEWER_REPORTED_ISSUES"
     assert history.comparison.total_issue_delta == -1
     assert history.comparison.high_issue_delta == -1
+    assert history.revision_judge is None
+    assert language.judge_calls == 0
 
 
 def test_transient_scene_failure_keeps_the_same_local_retry_point(
@@ -302,19 +330,72 @@ def test_latest_review_regression_is_advisory_and_does_not_block(
         review_issue_counts=[4, 2, 3],
     )
     service = _service(tmp_path, language)
+    run_id = service.create_planning_run(request).run.id
+    response = service.get_planning_run(run_id)
+    for _ in range(6):
+        response = service.advance_planning_run(run_id)
+    assert response.run.current_step == PlanningRunStep.REVISION_JUDGE
+    assert response.run.directed_scene_json == []
+
+    judged = service.advance_planning_run(run_id)
+    assert judged.run.current_step == PlanningRunStep.SCENE_DIRECTOR
+    assert judged.run.revision_judge is not None
+
+    restarted = _service(tmp_path, language)
+    restored = restarted.get_planning_run(run_id)
+    assert restored.run.revision_judge == judged.run.revision_judge
+    completed = _finish(restarted, run_id)
+
+    history = restarted.get_planning_run_script_quality(completed.run.id)
+    assert [item.total_issues for item in history.comparison.rounds] == [4, 2, 3]
+    assert history.comparison.total_issue_delta == -1
+    assert history.comparison.latest_total_issue_delta == 1
+    assert history.comparison.latest_high_issue_delta == 0
+    assert history.comparison.latest_report_regression_risk is True
+    assert history.revision_judge is not None
+    assert history.revision_judge.recommended_revision_round == 1
+    assert history.revision_judge.alternative_revision_round == 2
+    assert history.revision_judge.advisory_only is True
+    assert language.judge_calls == 1
+    assert completed.run.status == PlanningRunStatus.COMPLETE
+    assert PlanningRunStep.REVISION_JUDGE in completed.run.completed_steps
+    assert completed.run.outline_json is not None
+    assert "第 2 轮已补全" in completed.run.outline_json
+    assert any("建议优先比较并考虑" in item for item in completed.run.warnings)
+    assert any("未自动替换大纲" in item for item in completed.run.warnings)
+    assert completed.project is not None
+    assert restarted.repository.list_image_tasks(
+        completed.project.document.project.id
+    ) == []
+    assert restarted.repository.list_provider_runs(
+        completed.project.document.project.id
+    ) == []
+
+
+def test_revision_judge_provider_failure_does_not_block_latest_outline(
+    tmp_path: Path,
+) -> None:
+    request = _request(260)
+    language = StagedLanguageClient(
+        request,
+        revision_rounds_required=2,
+        review_issue_counts=[4, 2, 3],
+        fail_judge=True,
+    )
+    service = _service(tmp_path, language)
     completed = _finish(
         service,
         service.create_planning_run(request).run.id,
     )
 
     history = service.get_planning_run_script_quality(completed.run.id)
-    assert [item.total_issues for item in history.comparison.rounds] == [4, 2, 3]
-    assert history.comparison.total_issue_delta == -1
-    assert history.comparison.latest_total_issue_delta == 1
-    assert history.comparison.latest_high_issue_delta == 0
     assert history.comparison.latest_report_regression_risk is True
+    assert history.revision_judge is None
+    assert language.judge_calls == 1
     assert completed.run.status == PlanningRunStatus.COMPLETE
-    assert any("建议比较最近两版" in item for item in completed.run.warnings)
+    assert completed.run.outline_json is not None
+    assert "第 2 轮已补全" in completed.run.outline_json
+    assert any("Revision Judge 不可用" in item for item in completed.run.warnings)
 
 
 def test_planning_run_api_can_finish_with_local_script_only_fallback(

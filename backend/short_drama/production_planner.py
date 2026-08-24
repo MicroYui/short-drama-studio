@@ -43,6 +43,7 @@ from short_drama.models import (
     ReferencePlanEntry,
     ReferenceRequirement,
     ReferenceRole,
+    RevisionJudgeRecommendation,
     ScriptLine,
     ScriptReviewReport,
     ScriptVersion,
@@ -346,6 +347,12 @@ class StoryArchitectureResult:
 class ScriptCritiqueResult:
     report: ScriptReviewReport | None
     used: bool
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class RevisionJudgeResult:
+    recommendation: RevisionJudgeRecommendation | None
     warnings: list[str]
 
 
@@ -820,6 +827,55 @@ def _story_critic_prompt(
         },
         "episode_outline": outline.model_dump(mode="json"),
         "output_schema": ScriptReviewReport.model_json_schema(),
+    }
+    return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _revision_judge_prompt(
+    request: CreateProjectRequest,
+    *,
+    older_revision_round: int,
+    older_outline: EpisodeOutline,
+    older_review: ScriptReviewReport,
+    newer_revision_round: int,
+    newer_outline: EpisodeOutline,
+    newer_review: ScriptReviewReport,
+) -> tuple[str, str]:
+    profile = production_profile_policy(request.production_profile)
+    instructions = (
+        "You are an independent revision-judge Agent comparing two consecutive versions of a "
+        "Mandarin live-action vertical episode after the latest Script Critic report showed a "
+        "possible non-monotonic regression. Return JSON only and match "
+        "RevisionJudgeRecommendation exactly. Recommend one supplied revision and name the other "
+        "as the alternative. Do not rewrite either outline and do not assume the newer version is "
+        "better. Issue counts and severity counts are evidence, not a score: inspect the actual "
+        "outlines and each version's review. Compare causal closure, exact payoff of the opening "
+        "hook, grounded technical or institutional rules, visible evidence, character motivation, "
+        "scene utility, information density, and whether a repair introduced new contradictions. "
+        "Explain concrete evidence and meaningful tradeoffs. Set advisory_only to true; the result "
+        "must never block planning or silently replace the user's current outline. "
+        f"Active profile: {profile.label}. Writer policy: {profile.writer}"
+    )
+    payload = {
+        "source_contract": {
+            "source_mode": request.source_mode.value,
+            "production_profile": request.production_profile.value,
+            "target_duration_seconds": request.resolved_target_duration_seconds(),
+            "source_text": request.input_text.strip(),
+        },
+        "candidates": [
+            {
+                "revision_round": older_revision_round,
+                "outline": older_outline.model_dump(mode="json"),
+                "script_review": older_review.model_dump(mode="json"),
+            },
+            {
+                "revision_round": newer_revision_round,
+                "outline": newer_outline.model_dump(mode="json"),
+                "script_review": newer_review.model_dump(mode="json"),
+            },
+        ],
+        "output_schema": RevisionJudgeRecommendation.model_json_schema(),
     }
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -1636,6 +1692,72 @@ def review_story_outline(
             used=False,
             warnings=[
                 "剧本审阅 Agent 不可用，结构化大纲仍继续逐场规划："
+                + _compact_error(error)
+            ],
+        )
+
+
+def judge_story_revisions(
+    request: CreateProjectRequest,
+    *,
+    older_revision_round: int,
+    older_outline: EpisodeOutline,
+    older_review: ScriptReviewReport,
+    newer_revision_round: int,
+    newer_outline: EpisodeOutline,
+    newer_review: ScriptReviewReport,
+    client: LanguageProviderClient | None,
+) -> RevisionJudgeResult:
+    """Recommend between two reviewed outlines without mutating the current selection."""
+
+    if older_revision_round >= newer_revision_round:
+        return RevisionJudgeResult(
+            recommendation=None,
+            warnings=[
+                "Revision Judge 缺少按时间排序的两版大纲，已保留最新版继续规划。"
+            ],
+        )
+    if client is None:
+        return RevisionJudgeResult(
+            recommendation=None,
+            warnings=[
+                "GPT-5.6-sol 未配置，已跳过 Revision Judge；最新版大纲继续进入逐场规划。"
+            ],
+        )
+    instructions, input_text = _revision_judge_prompt(
+        request,
+        older_revision_round=older_revision_round,
+        older_outline=older_outline,
+        older_review=older_review,
+        newer_revision_round=newer_revision_round,
+        newer_outline=newer_outline,
+        newer_review=newer_review,
+    )
+    try:
+        output = client.generate_text(
+            instructions=instructions,
+            input_text=input_text,
+            image_urls=[],
+            max_output_tokens=4000,
+        )
+        recommendation = RevisionJudgeRecommendation.model_validate_json(
+            _strip_json_fence(output)
+        )
+        candidate_rounds = {older_revision_round, newer_revision_round}
+        returned_rounds = {
+            recommendation.recommended_revision_round,
+            recommendation.alternative_revision_round,
+        }
+        if returned_rounds != candidate_rounds:
+            raise ValueError(
+                "Revision Judge selected a revision outside the supplied candidates"
+            )
+        return RevisionJudgeResult(recommendation=recommendation, warnings=[])
+    except (LanguageProviderError, ValueError) as error:
+        return RevisionJudgeResult(
+            recommendation=None,
+            warnings=[
+                "Revision Judge 不可用，未替用户改选版本；最新版大纲继续进入逐场规划："
                 + _compact_error(error)
             ],
         )

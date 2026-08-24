@@ -9381,6 +9381,16 @@
               }
             ]
           },
+          "revision_judge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionJudgeRecommendation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "revision_round": {
             "default": 0,
             "maximum": 2.0,
@@ -9469,6 +9479,7 @@
           "STORY_ARCHITECT",
           "SCRIPT_CRITIC",
           "STORY_REVISION",
+          "REVISION_JUDGE",
           "SCENE_DIRECTOR",
           "FINALIZE",
           "COMPLETE"
@@ -11214,6 +11225,70 @@
         "title": "ReviseScriptLineRequest",
         "type": "object"
       },
+      "RevisionJudgeConfidence": {
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH"
+        ],
+        "title": "RevisionJudgeConfidence",
+        "type": "string"
+      },
+      "RevisionJudgeRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "alternative_revision_round": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Alternative Revision Round",
+            "type": "integer"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/RevisionJudgeConfidence"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "recommended_revision_round": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Recommended Revision Round",
+            "type": "integer"
+          },
+          "summary": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "tradeoffs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Tradeoffs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recommended_revision_round",
+          "alternative_revision_round",
+          "confidence",
+          "summary"
+        ],
+        "title": "RevisionJudgeRecommendation",
+        "type": "object"
+      },
       "RouteEvidence": {
         "additionalProperties": false,
         "properties": {
@@ -11623,6 +11698,16 @@
             "maxItems": 3,
             "title": "Review Snapshots",
             "type": "array"
+          },
+          "revision_judge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionJudgeRecommendation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

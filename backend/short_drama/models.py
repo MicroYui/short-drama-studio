@@ -68,6 +68,7 @@ class PlanningRunStep(StrEnum):
     STORY_ARCHITECT = "STORY_ARCHITECT"
     SCRIPT_CRITIC = "SCRIPT_CRITIC"
     STORY_REVISION = "STORY_REVISION"
+    REVISION_JUDGE = "REVISION_JUDGE"
     SCENE_DIRECTOR = "SCENE_DIRECTOR"
     FINALIZE = "FINALIZE"
     COMPLETE = "COMPLETE"
@@ -79,6 +80,12 @@ class ScriptQualityTrend(StrEnum):
     MIXED_REPORTED_ISSUES = "MIXED_REPORTED_ISSUES"
     MORE_REPORTED_ISSUES = "MORE_REPORTED_ISSUES"
     UNCHANGED_REPORTED_ISSUES = "UNCHANGED_REPORTED_ISSUES"
+
+
+class RevisionJudgeConfidence(StrEnum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
 
 
 class ApprovalStatus(StrEnum):
@@ -388,6 +395,24 @@ class PlanningReviewSnapshot(DomainModel):
     created_at: str
 
 
+class RevisionJudgeRecommendation(DomainModel):
+    recommended_revision_round: int = Field(ge=0, le=2)
+    alternative_revision_round: int = Field(ge=0, le=2)
+    confidence: RevisionJudgeConfidence
+    summary: str = Field(min_length=1, max_length=1200)
+    evidence: list[str] = Field(default_factory=list[str], max_length=8)
+    tradeoffs: list[str] = Field(default_factory=list[str], max_length=8)
+    advisory_only: bool = True
+
+    @model_validator(mode="after")
+    def validate_recommendation(self) -> RevisionJudgeRecommendation:
+        if self.recommended_revision_round == self.alternative_revision_round:
+            raise ValueError("Revision Judge must compare two different revisions")
+        if not self.advisory_only:
+            raise ValueError("Revision Judge recommendations must remain advisory")
+        return self
+
+
 class ScriptQualityRoundSummary(DomainModel):
     review_round: int = Field(ge=1, le=3)
     revision_round: int = Field(ge=0, le=2)
@@ -436,6 +461,7 @@ class ScriptQualityHistoryResponse(DomainModel):
         default_factory=list[PlanningReviewSnapshot],
         max_length=3,
     )
+    revision_judge: RevisionJudgeRecommendation | None = None
 
 
 class ScriptQualityCatalogResponse(DomainModel):
@@ -1217,6 +1243,7 @@ class PlanningRunRecord(DomainModel):
     request: PlanningRunCreateRequest
     outline_json: str | None = None
     review_report: ScriptReviewReport | None = None
+    revision_judge: RevisionJudgeRecommendation | None = None
     directed_scene_json: list[str] = Field(default_factory=list[str], max_length=500)
     next_scene_sequence: int = Field(default=1, ge=1, le=501)
     total_scenes: int = Field(default=0, ge=0, le=500)

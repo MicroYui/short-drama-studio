@@ -195,6 +195,7 @@ from short_drama.production_planner import (
     create_production_plan,
     create_story_architecture,
     direct_story_scene,
+    judge_story_revisions,
     refresh_lightweight_reference_plans,
     review_story_outline,
     revise_story_outline,
@@ -624,6 +625,7 @@ class ShortDramaService:
             comparison=self._script_quality_comparison(run, reviews),
             outline_snapshots=outlines,
             review_snapshots=reviews,
+            revision_judge=run.revision_judge,
         )
 
     def list_script_quality_evaluations(self) -> ScriptQualityCatalogResponse:
@@ -727,15 +729,21 @@ class ShortDramaService:
             run.critic_used = run.critic_used or critique.used
             run.warnings.extend(critique.warnings)
             if (
-                run.review_report is not None
-                and run.review_report.requires_revision
+                critique.report is not None
+                and critique.report.requires_revision
                 and run.revision_round < run.max_revision_rounds
             ):
                 next_step = PlanningRunStep.STORY_REVISION
             else:
                 self._append_remaining_review_warning(run)
-                self._append_latest_review_regression_warning(run)
-                next_step = PlanningRunStep.SCENE_DIRECTOR
+                if (
+                    critique.report is not None
+                    and self._latest_review_has_regression(run)
+                ):
+                    self._append_latest_review_regression_warning(run)
+                    next_step = PlanningRunStep.REVISION_JUDGE
+                else:
+                    next_step = PlanningRunStep.SCENE_DIRECTOR
             self._complete_planning_step(
                 run,
                 PlanningRunStep.SCRIPT_CRITIC,
@@ -778,6 +786,15 @@ class ShortDramaService:
                 run,
                 PlanningRunStep.STORY_REVISION,
                 next_step,
+            )
+            return
+
+        if run.current_step == PlanningRunStep.REVISION_JUDGE:
+            self._run_revision_judge(run, request, client)
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.REVISION_JUDGE,
+                PlanningRunStep.SCENE_DIRECTOR,
             )
             return
 
@@ -898,6 +915,87 @@ class ShortDramaService:
         if warning not in run.warnings:
             run.warnings.append(warning)
 
+    def _latest_review_has_regression(self, run: PlanningRunRecord) -> bool:
+        reviews = self.repository.list_planning_review_snapshots(run.id)
+        if len(reviews) < 2:
+            return False
+        previous = reviews[-2].report
+        latest = reviews[-1].report
+        previous_high = sum(
+            issue.severity == ScriptReviewSeverity.HIGH
+            for issue in previous.issues
+        )
+        latest_high = sum(
+            issue.severity == ScriptReviewSeverity.HIGH
+            for issue in latest.issues
+        )
+        return (
+            len(latest.issues) > len(previous.issues)
+            or latest_high > previous_high
+        )
+
+    def _run_revision_judge(
+        self,
+        run: PlanningRunRecord,
+        request: CreateProjectRequest,
+        client: LanguageProviderClient | None,
+    ) -> None:
+        reviews = self.repository.list_planning_review_snapshots(run.id)
+        outlines = self.repository.list_planning_outline_snapshots(run.id)
+        run.revision_judge = None
+        if len(reviews) < 2:
+            run.warnings.append(
+                "Revision Judge 缺少两轮审稿证据，已保留最新版继续逐场规划。"
+            )
+            return
+        older_review = reviews[-2]
+        newer_review = reviews[-1]
+        outlines_by_round = {
+            snapshot.revision_round: snapshot for snapshot in outlines
+        }
+        older_snapshot = outlines_by_round.get(older_review.revision_round)
+        newer_snapshot = outlines_by_round.get(newer_review.revision_round)
+        if older_snapshot is None or newer_snapshot is None:
+            run.warnings.append(
+                "Revision Judge 缺少与最近两轮审稿对应的大纲快照，"
+                "未替用户改选版本并继续使用最新版。"
+            )
+            return
+        try:
+            older_outline = EpisodeOutline.model_validate_json(
+                older_snapshot.outline_json
+            )
+            newer_outline = EpisodeOutline.model_validate_json(
+                newer_snapshot.outline_json
+            )
+        except ValueError as error:
+            run.warnings.append(
+                "Revision Judge 无法读取最近两版大纲，未替用户改选版本并继续使用最新版："
+                + str(error)
+            )
+            return
+        result = judge_story_revisions(
+            request,
+            older_revision_round=older_review.revision_round,
+            older_outline=older_outline,
+            older_review=older_review.report,
+            newer_revision_round=newer_review.revision_round,
+            newer_outline=newer_outline,
+            newer_review=newer_review.report,
+            client=client,
+        )
+        run.revision_judge = result.recommendation
+        run.warnings.extend(result.warnings)
+        if result.recommendation is None:
+            return
+        recommended = result.recommendation.recommended_revision_round
+        label = "初稿" if recommended == 0 else f"第 {recommended} 轮修订稿"
+        run.warnings.append(
+            f"Revision Judge 建议优先比较并考虑 {label}"
+            f"（{result.recommendation.confidence.value} 置信度）。"
+            "当前流程未自动替换大纲，仍使用最新版继续；用户可忽略该建议。"
+        )
+
     def _append_latest_review_regression_warning(
         self,
         run: PlanningRunRecord,
@@ -915,9 +1013,7 @@ class ShortDramaService:
             issue.severity == ScriptReviewSeverity.HIGH
             for issue in latest.issues
         )
-        total_increased = len(latest.issues) > len(previous.issues)
-        high_increased = latest_high > previous_high
-        if not total_increased and not high_increased:
+        if not self._latest_review_has_regression(run):
             return
         warning = (
             "最近一轮复审较上一轮报告了更多问题"

@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12 已实现跨项目资产目录、同源派生视图与 Asset Agent Tools；Phase 13 加入通用视频和抖音短剧两套 Prompt Policy；Phase 14 允许用户填写任意目标时长，并以 Story Architect、Script Critic、逐场 Scene Director 和精简连续性 handoff 规划多分钟短剧；Phase 15 将长篇规划拆成 SQLite 持久化的 `PlanningRun`，按 Agent 阶段和场次逐步推进、失败局部重试并支持应用重启恢复；Phase 16 保留每轮大纲与审稿、提供跨剧本检索和修订轨迹，并在最新轮次非单调变差时给出可忽略提醒。连续性、资产、H3、QA、时间线和导出仍共享同一流程，没有增加样片专用字段或信息密度硬门控。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12 已实现跨项目资产目录、同源派生视图与 Asset Agent Tools；Phase 13 加入通用视频和抖音短剧两套 Prompt Policy；Phase 14 允许用户填写任意目标时长，并以 Story Architect、Script Critic、逐场 Scene Director 和精简连续性 handoff 规划多分钟短剧；Phase 15 将长篇规划拆成 SQLite 持久化的 `PlanningRun`，按 Agent 阶段和场次逐步推进、失败局部重试并支持应用重启恢复；Phase 16 保留每轮大纲与审稿、提供跨剧本检索和修订轨迹；Phase 17 在最新轮次非单调变差时，由独立 Revision Judge 比较最近两版并持久化可忽略建议，不自动替用户换稿。连续性、资产、H3、QA、时间线和导出仍共享同一流程，没有增加样片专用字段或信息密度硬门控。
 
 ## 结论先行
 
@@ -56,9 +56,10 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 26. [Phase 14：多分钟短剧的分层 Multi-Agent 规划](24-phase14-long-form-multi-agent-planning.md)
 27. [Phase 15：可恢复的长篇剧本规划](25-phase15-recoverable-long-form-planning.md)
 28. [Phase 16：跨剧本审稿历史与修订效果](26-phase16-script-quality-history.md)
+29. [Phase 17：独立 Revision Judge 与版本建议](27-phase17-revision-judge.md)
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；通用视频/抖音短剧 Prompt Policy；任意目标时长、整集大纲、场次契约、逐场 Director、连续性 handoff、可恢复 `PlanningRun`、每轮大纲/审稿工件和跨剧本修订轨迹；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片。
+- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；通用视频/抖音短剧 Prompt Policy；任意目标时长、整集大纲、场次契约、逐场 Director、连续性 handoff、可恢复 `PlanningRun`、每轮大纲/审稿工件、跨剧本修订轨迹和条件触发的 Revision Judge；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片。
 - 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。本阶段不新增声音 QA。尚未完成：跨项目默认路线样本门槛；复杂多人对白、参考声线的真实稳定性，以及声音来源语义的自动验证。
-- 下一步：针对“最新修订并不必然最好”的真实结果，让独立 Revision Judge Agent 对最近两版大纲和审稿做基于证据的选版建议；建议不阻断、用户可覆盖，且仍只使用 GPT-5.6-sol 剧本侧能力，不调用 GPT Image 或 H3。
+- 下一步：验证 H3 `reference_video` 对连续场景、强依赖镜头和长镜头续接的真实增益，并比较“前序 Take、尾部运动窗口、低保真走位/运镜预演”三类视频参考。它们只进入 Director/Route Agent 的可覆盖建议，不成为所有镜头的固定步骤。
