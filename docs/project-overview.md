@@ -1,6 +1,6 @@
 # AI 抖音短剧工作流调研
 
-本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12 已实现跨项目资产目录、同源派生视图与 Asset Agent Tools；Phase 13 加入通用视频和抖音短剧两套 Prompt Policy；Phase 14 允许用户填写任意目标时长，并以 Story Architect、Script Critic、逐场 Scene Director 和精简连续性 handoff 规划多分钟短剧；Phase 15 将长篇规划拆成 SQLite 持久化的 `PlanningRun`，按 Agent 阶段和场次逐步推进、失败局部重试并支持应用重启恢复；Phase 16 保留每轮大纲与审稿、提供跨剧本检索和修订轨迹；Phase 17 在最新轮次非单调变差时，由独立 Revision Judge 比较最近两版并持久化可忽略建议，不自动替用户换稿；Phase 18 将前序 Take、尾部运动窗口和当前镜头关键帧机位预演做成 Route Agent 可覆盖的 H3 视频参考工具，并完成 768P 对照；Phase 19 将长篇 FINALIZE 直接衔接到同一资产、H3、QA、Timeline Orchestrator，并完成 2–5 分钟离线规模、重启和局部返工验证；Phase 20 在同一运行时把现有抽帧证据交给分层 Scene/Episode Reviewer，并由 Director 对关联镜头做可忽略的局部修复建议。连续性、资产、H3、QA、时间线和导出仍共享同一流程，没有增加样片专用字段、创意门控或 hash 冻结。
+本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12–21 已建立跨剧本资产、Production Skills、多分钟 PlanningRun、H3 长篇衔接、整集 Reviewer、Critic 路由、来源诊断与语义修改控制面。Phase 22 将约 4 秒到数十分钟剧本收敛为分层 Tools；Phase 23 将领域 Prompt、角色策略和建议式 playbook 收敛为显式 `ProductionSkill` 与静态 Catalog；Phase 24–25 完成第一轮视频生成前质量研究，并实现 H3 官方 Prompt IR、顺序候选和相对选片 Tool；Phase 26 系统补齐成熟平台、开源工程与前沿论文证据；Phase 27 已实现项目隔离的参考视觉重排、关键帧相对比较和输入兼容性 Agent Tools；Phase 28 已将 Production Skill 拆为稳定 constitution、角色 rubric 和上下文经验，并统一注入剧本、导演、资产、H3 与整集 Review。PlanningRun/AutonomousRun 只作默认自主编排、恢复和 Provider 对账，不限制用户或 Agent 直接组合 Tools。连续性、资产、H3、QA、时间线和导出仍共享同一核心，没有增加样片专用字段、创意门控或 hash 冻结。
 
 ## 结论先行
 
@@ -60,9 +60,18 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 30. [Phase 18：H3 连续性视频参考与机位预演](28-phase18-h3-video-reference-previs.md)
 31. [Phase 19：多分钟无人值守制片衔接](29-phase19-long-form-autodraft.md)
 32. [Phase 20：整集 Reviewer 与 Director 闭环](30-phase20-episode-review-agent.md)
+33. [Phase 21：三分钟真人短剧最终剧本](31-phase21-real-three-minute-episode.md)
+34. [Phase 21：Skill 驱动审阅路由与用户语义修改控制面](32-phase21-skill-review-and-change-control.md)
+35. [Phase 22：统一分层剧本 Tools 与局部 Patch](33-phase22-hierarchical-script-tools.md)
+36. [Phase 23：显式 Production Skills 与建议式 Playbook](34-phase23-explicit-production-skills.md)
+37. [Phase 24：视频生成前质量优化调研](35-phase24-pre-h3-quality-research.md)
+38. [Phase 25：H3 Prompt IR、顺序候选与相对选片](36-phase25-h3-prompt-and-adaptive-takes.md)
+39. [Phase 26：成熟平台、前沿论文、开源实现与 H3 低重试策略](37-phase26-platform-paper-open-source-low-retry-research.md)
+40. [Phase 27：生成前视觉输入质量 Tools](38-phase27-visual-input-quality-tools.md)
+41. [Phase 28：Production Skill 分层与统一角色注入](39-phase28-production-skill-layering-and-injection.md)
 
 ## 当前边界
 
 - 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；通用视频/抖音短剧 Prompt Policy；任意目标时长、整集大纲、场次契约、逐场 Director、连续性 handoff、可恢复 `PlanningRun`、每轮大纲/审稿工件、跨剧本修订轨迹和条件触发的 Revision Judge；H3 前序 Take/尾窗/机位预演 Tool、同场 continuity wave 和真实 768P 对照；长篇 FINALIZE→AUTO_DRAFT 同一运行时衔接、每镜返工额度、2 分钟重启导出和 5 分钟 20 镜离线规模验证；分层 Scene/Episode Reviewer、关联 Director 局部返工、重启恢复和不阻断导出语义；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片。
 - 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理。本阶段不新增声音 QA。尚未完成：跨项目默认路线样本门槛；复杂多人对白、参考声线的真实稳定性，以及声音来源语义的自动验证。
-- 下一步：选择适合 2–5 分钟验收的剧本生成一版完整真人 H3 成片；视觉 QA 若继续增强，应基于跨剧本逐镜回归集改进观察 Tool 或证据分辨率，而不是围绕当前单片漏报增加提示词。继续积累同动作/同覆盖、长镜头 Extend、多人遮挡与快速手物接触证据。
+- 下一步：Phase 29 补齐问题时间定位、类型化 Repair Planner 与轻量 H3 Capability Playbook；完成离线验证后，再由用户确认是否进入小规模真实 H3 低重试实验。视觉 QA 改进继续基于跨剧本逐镜回归集，而不是围绕当前单片漏报增加专用规则。

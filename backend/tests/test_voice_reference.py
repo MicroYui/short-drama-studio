@@ -152,7 +152,7 @@ def test_route_planner_uses_character_voice_for_speaking_shot_and_native_fallbac
         "reference_audio"
     ]
     assert "<Audio 1>" in voice_decision.prompt
-    assert "不要复制参考音频中的原台词" in voice_decision.prompt
+    assert "all spoken words remain the locked dialogue" in voice_decision.prompt
 
     native_plan = service.compile_h3_production_route_plan(
         project_id,

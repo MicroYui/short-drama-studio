@@ -544,6 +544,7 @@ export function H3LabPanel({
       {
         reuse_passed_takes: true,
         enqueue_new_generations: enqueueNew,
+        adaptive_sequential: false,
         inspect_reused_takes: true,
         semantic_review: true,
         rebuild_manifest: true,

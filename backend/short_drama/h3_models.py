@@ -292,6 +292,7 @@ class H3ProductionRoutePlanListResponse(DomainModel):
 class H3ProductionRouteExecuteRequest(DomainModel):
     reuse_passed_takes: bool = True
     enqueue_new_generations: bool = False
+    adaptive_sequential: bool = False
     inspect_reused_takes: bool = True
     semantic_review: bool = True
     rebuild_manifest: bool = True

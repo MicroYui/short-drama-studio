@@ -105,7 +105,8 @@ const productionProfileLabels: Record<ProductionProfile, string> = {
 }
 
 const planningStepLabels: Record<PlanningRunRecord['current_step'], string> = {
-  STORY_ARCHITECT: 'Story Architect · 整集大纲',
+  STORY_ARCHITECT: 'Story Architect · 全局蓝图',
+  SCENE_WRITER: 'Scene Writer · 逐场剧本',
   SCRIPT_CRITIC: 'Script Critic · 独立审稿',
   STORY_REVISION: 'Story Architect · 有界修订',
   REVISION_JUDGE: 'Revision Judge · 比较最近两版',
@@ -399,8 +400,20 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
   }, [planningRunId])
   if (!script) return null
   const review = script.review_report
+  const reviewDisposition = script.review_disposition
   const reviewStrengths = review?.strengths ?? []
   const reviewIssues = review?.issues ?? []
+  const routedIssueOwners = new Map(
+    (reviewDisposition?.issue_routes ?? []).map((route) => [route.issue_index, route.owner]),
+  )
+  const reviewBadge = reviewDisposition?.action === 'REVISE_STORY'
+    ? 'Agent 建议修订剧本'
+    : reviewDisposition?.action === 'CONTINUE_WITH_HANDOFF'
+      ? '已下放制作层'
+      : reviewIssues.length > 0
+        ? '保留可选建议'
+        : '可继续'
+  const reviewNeedsStoryRevision = reviewDisposition?.action === 'REVISE_STORY'
   const qualityRounds = qualityHistory?.comparison.rounds ?? []
   const persistentQualityLabels = qualityHistory?.comparison.persistent_category_labels ?? []
   const absentQualityLabels = qualityHistory?.comparison.category_labels_no_longer_reported ?? []
@@ -467,10 +480,10 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
       )}
       {qualityError && <p className="mb-5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">暂时无法读取审稿轨迹：{qualityError}</p>}
       {review && (
-        <section className={`mb-5 rounded-xl border p-4 ${review.requires_revision ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
+        <section className={`mb-5 rounded-xl border p-4 ${reviewNeedsStoryRevision ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
           <div className="flex items-start justify-between gap-3">
             <div><h3 className="text-sm font-medium text-white">Script Critic 剧本审阅</h3><p className="mt-1 text-xs leading-5 text-zinc-400">{review.summary}</p></div>
-            <Badge tone={review.requires_revision ? 'amber' : 'green'}>{review.requires_revision ? '仍有建议' : '可继续'}</Badge>
+            <Badge tone={reviewNeedsStoryRevision ? 'amber' : 'green'}>{reviewBadge}</Badge>
           </div>
           {reviewStrengths.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{reviewStrengths.map((strength) => <Badge key={strength} tone="green">{strength}</Badge>)}</div>}
           {reviewIssues.length > 0 && (
@@ -484,6 +497,7 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
                       <Badge tone={tone}>{issue.severity}</Badge>
                       <span className="text-xs font-medium text-zinc-300">{issue.category}</span>
                       {sceneSequences.length > 0 && <span className="text-[11px] text-zinc-600">场次 {sceneSequences.join('、')}</span>}
+                      {routedIssueOwners.get(index + 1) && <span className="text-[11px] text-cyan-500">交给 {routedIssueOwners.get(index + 1)}</span>}
                     </div>
                     <p className="mt-2 text-xs leading-5 text-zinc-400">{issue.observation}</p>
                     <p className="mt-1 text-xs leading-5 text-blue-300">建议：{issue.recommendation}</p>
@@ -492,7 +506,7 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
               })}
             </div>
           )}
-          <p className="mt-3 text-[11px] text-zinc-600">审阅是 Agent 建议，不是硬门；用户可以继续、编辑或忽略。</p>
+          <p className="mt-3 text-[11px] text-zinc-600">Critic 只报告观察；当前 Production Skill 的 Review Router 决定默认修订或下放。用户始终可以继续、编辑、让 Agent 改写或忽略。</p>
         </section>
       )}
       <section className="mb-5">
@@ -967,6 +981,7 @@ function PlanningRunPanel({
   onRetry: () => void
 }) {
   const directedScenes = run.directed_scene_json ?? []
+  const writtenScenes = run.scene_script_json ?? []
   const completedSteps = run.completed_steps ?? []
   const reviewIssues = run.review_report?.issues ?? []
   const warnings = run.warnings ?? []
@@ -982,6 +997,7 @@ function PlanningRunPanel({
     : `${targetSeconds} 秒`
   const stages: PlanningRunRecord['current_step'][] = [
     'STORY_ARCHITECT',
+    'SCENE_WRITER',
     'SCRIPT_CRITIC',
     'STORY_REVISION',
     'REVISION_JUDGE',
@@ -998,7 +1014,7 @@ function PlanningRunPanel({
         <div className="border-b border-zinc-800/80 p-6 sm:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">可恢复长篇规划</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
+              <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">可恢复分层规划</Badge><Badge>{durationLabel}</Badge><Badge>{run.request.production_profile}</Badge></div>
               <h1 className="mt-4 text-2xl font-semibold text-white">{run.request.name ?? '新短剧'}正在进行剧本规划</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">当前阶段只处理故事结构、因果、对白、场次和连续性规划，不调用 GPT Image 或 MiniMax-H3。每个 Agent 阶段和每个场次完成后都会保存，关闭应用后也能从当前节点继续。</p>
             </div>
@@ -1022,7 +1038,7 @@ function PlanningRunPanel({
                 return (
                   <div key={step} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${active ? 'border-blue-500/30 bg-blue-500/10' : 'border-zinc-800 bg-zinc-950/60'}`}>
                     {complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /> : active ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-400" /> : <CircleDot className="h-4 w-4 shrink-0 text-zinc-700" />}
-                    <div className="min-w-0 flex-1"><p className={`text-sm ${active ? 'font-medium text-white' : complete ? 'text-zinc-300' : 'text-zinc-600'}`}>{planningStepLabels[step]}</p>{skipped && <p className="mt-1 text-[11px] text-zinc-600">最新复审没有触发回退风险，本次无需比较版本</p>}{step === 'SCENE_DIRECTOR' && run.total_scenes > 0 && <p className="mt-1 text-[11px] text-zinc-500">已完成 {completedScenes}/{run.total_scenes} 场；一次只展开一场并传递上一场实际交接状态</p>}</div>
+                    <div className="min-w-0 flex-1"><p className={`text-sm ${active ? 'font-medium text-white' : complete ? 'text-zinc-300' : 'text-zinc-600'}`}>{planningStepLabels[step]}</p>{skipped && <p className="mt-1 text-[11px] text-zinc-600">最新复审没有触发回退风险，本次无需比较版本</p>}{step === 'SCENE_WRITER' && run.total_scenes > 0 && <p className="mt-1 text-[11px] text-zinc-500">已完成 {Math.min(writtenScenes.length, run.total_scenes)}/{run.total_scenes} 场；只读取近场全文、较早摘要和相关剧本文档</p>}{step === 'SCENE_DIRECTOR' && run.total_scenes > 0 && <p className="mt-1 text-[11px] text-zinc-500">已完成 {completedScenes}/{run.total_scenes} 场；一次只展开一场并传递上一场实际交接状态</p>}</div>
                   </div>
                 )
               })}
@@ -1032,7 +1048,7 @@ function PlanningRunPanel({
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
               <p className="text-xs font-medium text-zinc-300">当前剧本检查</p>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-zinc-900 p-3"><p className="text-zinc-600">修订轮次</p><p className="mt-1 font-semibold text-white">{run.revision_round}/{run.max_revision_rounds}</p></div><div className="rounded-lg bg-zinc-900 p-3"><p className="text-zinc-600">审稿建议</p><p className="mt-1 font-semibold text-white">{reviewIssues.length} 项</p></div></div>
-              <p className="mt-3 text-[11px] leading-5 text-zinc-500">审稿建议会触发最多两轮自动修订；仍未消除的建议会保留给用户，但不会阻断逐场规划。</p>
+              <p className="mt-3 text-[11px] leading-5 text-zinc-500">Critic 只给观察；Review Router 按当前 Production Skill 判断哪些需要剧本修订、哪些下放给导演/资产/视频/时间线工具。默认可自动继续，用户也可随时改写或忽略。</p>
             </div>
             {warnings.length > 0 && <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="text-xs font-medium text-amber-100">最近记录</p><p className="mt-2 text-xs leading-5 text-zinc-400">{warnings.at(-1)}</p></div>}
             {needsAttention && <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4"><p className="text-xs font-medium text-red-200">{run.error_message ?? '当前 Agent 节点未完成'}</p><p className="mt-2 text-[11px] leading-5 text-zinc-500">重试只会重跑当前阶段或当前场次，已经完成的内容不会从头生成。</p><button className={`${primaryButton} mt-4 w-full`} onClick={onRetry}><RefreshCw className="h-4 w-4" />重试当前节点</button></div>}
@@ -1086,7 +1102,7 @@ function CreateProjectPanel({
   const requiresImage = sourceMode === 'IMAGE_SEEDED'
   const durationNumber = Number(targetDurationValue)
   const targetDurationSeconds = Math.round(durationNumber * (targetDurationUnit === 'MINUTES' ? 60 : 1))
-  const hasValidTargetDuration = Number.isFinite(targetDurationSeconds) && targetDurationSeconds >= 15 && targetDurationSeconds <= 1800
+  const hasValidTargetDuration = Number.isFinite(targetDurationSeconds) && targetDurationSeconds >= 4
   const canSubmit = Boolean(name.trim()) && hasValidTargetDuration && (!requiresText || Boolean(input.trim())) && (!requiresImage || images.length > 0)
   const selectProductionProfile = (nextProfile: ProductionProfile) => {
     if (nextProfile === productionProfile) return
@@ -1151,10 +1167,10 @@ function CreateProjectPanel({
                 </div>
               )}
               <div className="mt-3 grid grid-cols-[minmax(0,1fr)_120px] gap-2">
-                <input type="number" min={targetDurationUnit === 'MINUTES' ? 0.25 : 15} max={targetDurationUnit === 'MINUTES' ? 30 : 1800} step={targetDurationUnit === 'MINUTES' ? 0.1 : 1} value={targetDurationValue} onChange={(event) => setTargetDurationValue(event.target.value)} aria-label="自定义目标时长" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none focus:border-blue-500" />
+                <input type="number" min={targetDurationUnit === 'MINUTES' ? 0.0667 : 4} step={targetDurationUnit === 'MINUTES' ? 0.1 : 1} value={targetDurationValue} onChange={(event) => setTargetDurationValue(event.target.value)} aria-label="自定义目标时长" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none focus:border-blue-500" />
                 <select value={targetDurationUnit} onChange={(event) => selectTargetDurationUnit(event.target.value as 'MINUTES' | 'SECONDS')} aria-label="目标时长单位" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="MINUTES">分钟</option><option value="SECONDS">秒</option></select>
               </div>
-              {!hasValidTargetDuration && <p className="mt-2 text-[11px] text-red-300">请输入 15 秒到 30 分钟之间的任意目标时长。</p>}
+              {!hasValidTargetDuration && <p className="mt-2 text-[11px] text-red-300">请输入不少于 4 秒的任意目标时长。</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">输入契约</span><select value={sourceMode} onChange={(event) => setSourceMode(event.target.value as SourceMode)} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none"><option value="AUTO_ORIGINAL">完全自动创作</option><option value="IMAGE_SEEDED">图片启发创作</option><option value="IDEA_EXPANSION">一句话扩写</option><option value="SCRIPT_LOCKED">已有剧本锁定</option></select></label>
@@ -1284,11 +1300,11 @@ export function ShortDramaStudio() {
     setTab(data.run.request.run_mode === 'GUIDED' ? 'script' : 'overview')
     void loadProjects()
     if (data.run.request.run_mode === 'GUIDED') {
-      setNotice('长篇剧本规划完成，可在剧本页检查和修改')
+      setNotice('分层剧本规划完成，可在剧本页检查和修改')
       return
     }
     if (data.run.request.execution_target === 'REAL_H3') {
-      setNotice('长篇剧本规划完成，自动制片开始继续推进')
+      setNotice('分层剧本规划完成，自动制片开始继续推进')
       return
     }
     mockAutoDraftInFlight.current = true
@@ -1424,50 +1440,18 @@ export function ShortDramaStudio() {
       input_images: images,
       run_mode: runMode,
     }
-    if (targetDurationSeconds > 90) {
-      void perform(
-        '启动可恢复长篇剧本规划',
-        () => ShortDramaApi.createPlanningRun({
-          ...request,
-          execution_target: executionTarget,
-          render_export: true,
-        }),
-        (data) => {
-          setPlanningRun(data.run)
-          setProject(null)
-          setActiveProjectId(null)
-          setShowCreate(true)
-        },
-      )
-      return
-    }
-    if (runMode === 'AUTO_DRAFT') {
-      void perform(
-        executionTarget === 'REAL_H3' ? '真人无人值守草稿启动' : '自动生成 Mock 草稿',
-        () => ShortDramaApi.createAutonomousDraft({
-          ...request,
-          execution_target: executionTarget,
-          render_export: true,
-        }),
-        (data) => {
-          setProject(data.project)
-          setActiveProjectId(data.project.document.project.id)
-          setShowCreate(false)
-          setTab(data.run.status === 'COMPLETE' ? 'timeline' : 'overview')
-          void loadProjects()
-        },
-      )
-      return
-    }
     void perform(
-      '建立可编辑制片项目',
-      () => ShortDramaApi.createProject(request),
+      '启动可恢复分层剧本规划',
+      () => ShortDramaApi.createPlanningRun({
+        ...request,
+        execution_target: executionTarget,
+        render_export: true,
+      }),
       (data) => {
-        setProject(data)
-        setActiveProjectId(data.document.project.id)
-        setShowCreate(false)
-        setTab('overview')
-        void loadProjects()
+        setPlanningRun(data.run)
+        setProject(null)
+        setActiveProjectId(null)
+        setShowCreate(true)
       },
     )
   }

@@ -108,6 +108,12 @@ def _image_data_url(path: Path) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
+def image_data_url(path: Path) -> str:
+    """Expose local inspection artifacts to other multimodal Agent tools."""
+
+    return _image_data_url(path)
+
+
 def _semantic_reference_images(
     document: ProjectDocument,
     reference_plan: ReferencePlanEntry | None,
@@ -178,6 +184,15 @@ def _semantic_reference_images(
         if len(result) >= 8:
             break
     return result
+
+
+def semantic_reference_images(
+    document: ProjectDocument,
+    reference_plan: ReferencePlanEntry | None,
+) -> list[tuple[str, str]]:
+    """Return the same bounded canonical reference set used by video inspection."""
+
+    return _semantic_reference_images(document, reference_plan)
 
 
 class VideoInspector:

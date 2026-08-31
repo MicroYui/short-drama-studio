@@ -33,7 +33,10 @@ from short_drama.models import (
     ShotPlan,
     SpatialInteractionConstraint,
 )
-from short_drama.production_profiles import production_profile_policy
+from short_drama.production_profiles import (
+    ProductionSkillRole,
+    compile_production_prompt,
+)
 from short_drama.quality_learning import H3CapabilityProfileResponse
 
 
@@ -1083,11 +1086,22 @@ def build_director_advice_input(
     prior_repairs: list[DirectorRepairRecord],
 ) -> tuple[str, str]:
     assets = {item.id: item for item in document.assets}
-    profile = production_profile_policy(document.project.production_profile)
+    skill_prompt = compile_production_prompt(
+        document.project.production_profile,
+        roles=(ProductionSkillRole.DIRECTOR,),
+        context="\n".join(
+            (
+                shot.model_dump_json(),
+                plan.model_dump_json(),
+                *(issue.model_dump_json() for issue in qa_issues),
+                *reviewer_notes,
+                *(repair.model_dump_json() for repair in prior_repairs),
+            )
+        ),
+    )
     instructions = (
         "You are a film director agent advising a user who is producing a live-action "
-        f"vertical video. The active production profile is {profile.label}. Director policy: "
-        f"{profile.director} Return JSON only, matching the supplied schema. Evaluate "
+        f"vertical video. {skill_prompt.text} Return JSON only, matching the supplied schema. Evaluate "
         "the actual shot context; do not apply a fixed action-count or duration threshold. "
         "Compare prompt retry, keyframe replacement, shot split, and coverage-camera change "
         "against the actual QA failure and provider capability profile. A prompt retry should "

@@ -520,6 +520,11 @@
       "AssetCatalogSearchRequest": {
         "additionalProperties": false,
         "properties": {
+          "include_cross_project": {
+            "default": false,
+            "title": "Include Cross Project",
+            "type": "boolean"
+          },
           "include_current_project": {
             "default": true,
             "title": "Include Current Project",
@@ -552,6 +557,14 @@
             },
             "maxItems": 12,
             "title": "Roles",
+            "type": "array"
+          },
+          "source_project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Source Project Ids",
             "type": "array"
           },
           "tags": {
@@ -785,9 +798,64 @@
       "AssetSourceRecord": {
         "additionalProperties": false,
         "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "creator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator"
+          },
+          "creator_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Uri"
+          },
+          "license_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Name"
+          },
+          "license_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Uri"
           },
           "model": {
             "anyOf": [
@@ -833,6 +901,17 @@
             ],
             "title": "Provider"
           },
+          "provider_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Asset Id"
+          },
           "source_label": {
             "title": "Source Label",
             "type": "string"
@@ -850,6 +929,17 @@
               }
             ],
             "title": "Source Uri"
+          },
+          "stock_import_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Import Mode"
           }
         },
         "required": [
@@ -1465,6 +1555,14 @@
             "title": "Input Text",
             "type": "string"
           },
+          "linked_asset_project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Linked Asset Project Ids",
+            "type": "array"
+          },
           "name": {
             "anyOf": [
               {
@@ -1497,8 +1595,7 @@
           "target_duration_seconds": {
             "anyOf": [
               {
-                "maximum": 1800.0,
-                "minimum": 15.0,
+                "minimum": 4.0,
                 "type": "number"
               },
               {
@@ -1933,6 +2030,61 @@
         "title": "CatalogDownloadStartResponse",
         "type": "object"
       },
+      "ChangeImpactStep": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Target Ids",
+            "type": "array"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/ChangePlanTool"
+          }
+        },
+        "required": [
+          "tool",
+          "reason"
+        ],
+        "title": "ChangeImpactStep",
+        "type": "object"
+      },
+      "ChangePlanTool": {
+        "enum": [
+          "script.edit_or_agent_revise",
+          "asset.create_or_edit_version",
+          "shot.update_plan",
+          "shot.update_reference_plan",
+          "video.regenerate_shots",
+          "timeline.rebuild"
+        ],
+        "title": "ChangePlanTool",
+        "type": "string"
+      },
+      "ChangeTargetKind": {
+        "enum": [
+          "SCRIPT_LINE",
+          "SCENE",
+          "CHARACTER",
+          "LOCATION",
+          "PROP",
+          "ASSET",
+          "SHOT",
+          "TAKE",
+          "TIMELINE"
+        ],
+        "title": "ChangeTargetKind",
+        "type": "string"
+      },
       "CharacterProfile": {
         "additionalProperties": false,
         "properties": {
@@ -2131,6 +2283,14 @@
             "title": "Input Text",
             "type": "string"
           },
+          "linked_asset_project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Linked Asset Project Ids",
+            "type": "array"
+          },
           "name": {
             "anyOf": [
               {
@@ -2158,8 +2318,7 @@
           "target_duration_seconds": {
             "anyOf": [
               {
-                "maximum": 1800.0,
-                "minimum": 15.0,
+                "minimum": 4.0,
                 "type": "number"
               },
               {
@@ -4868,6 +5027,11 @@
       "H3ProductionRouteExecuteRequest": {
         "additionalProperties": false,
         "properties": {
+          "adaptive_sequential": {
+            "default": false,
+            "title": "Adaptive Sequential",
+            "type": "boolean"
+          },
           "enqueue_new_generations": {
             "default": false,
             "title": "Enqueue New Generations",
@@ -8024,6 +8188,256 @@
         "title": "ImageUsage",
         "type": "object"
       },
+      "InputCompatibilityDecision": {
+        "enum": [
+          "COMPATIBLE",
+          "CHANGE_KEYFRAME",
+          "CHANGE_ROUTE",
+          "SPLIT_SHOT",
+          "NEEDS_REVIEW"
+        ],
+        "title": "InputCompatibilityDecision",
+        "type": "string"
+      },
+      "InputCompatibilityObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Evidence",
+            "type": "string"
+          },
+          "input_id": {
+            "title": "Input Id",
+            "type": "string"
+          },
+          "visible_state": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Visible State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_id",
+          "visible_state",
+          "evidence"
+        ],
+        "title": "InputCompatibilityObservation",
+        "type": "object"
+      },
+      "InputCompatibilityReport": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/InputCompatibilityDecision"
+          },
+          "end_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Version Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/VisualInputIssue"
+            },
+            "maxItems": 24,
+            "title": "Issues",
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/InputCompatibilityObservation"
+            },
+            "maxItems": 24,
+            "title": "Observations",
+            "type": "array"
+          },
+          "proceed_allowed": {
+            "const": true,
+            "default": true,
+            "title": "Proceed Allowed",
+            "type": "boolean"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "reference_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 9,
+            "title": "Reference Version Ids",
+            "type": "array"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute"
+          },
+          "semantic_model": {
+            "default": "gpt-5.6-sol",
+            "title": "Semantic Model",
+            "type": "string"
+          },
+          "semantic_status": {
+            "$ref": "#/components/schemas/SemanticReviewStatus",
+            "default": "COMPLETE"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "start_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Version Id"
+          },
+          "summary": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "technical_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Technical Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "shot_id",
+          "route",
+          "decision",
+          "confidence",
+          "summary",
+          "created_at"
+        ],
+        "title": "InputCompatibilityReport",
+        "type": "object"
+      },
+      "InputCompatibilityRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "end_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Version Id"
+          },
+          "include_previous_boundary": {
+            "default": true,
+            "title": "Include Previous Boundary",
+            "type": "boolean"
+          },
+          "reference_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 9,
+            "title": "Reference Version Ids",
+            "type": "array"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute"
+          },
+          "start_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Version Id"
+          }
+        },
+        "required": [
+          "route"
+        ],
+        "title": "InputCompatibilityRequest",
+        "type": "object"
+      },
+      "InputCompatibilityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "report": {
+            "$ref": "#/components/schemas/InputCompatibilityReport"
+          }
+        },
+        "required": [
+          "report",
+          "project"
+        ],
+        "title": "InputCompatibilityResponse",
+        "type": "object"
+      },
       "InputSpec": {
         "properties": {
           "kind": {
@@ -8298,6 +8712,226 @@
           "input_version_ids"
         ],
         "title": "KeyframeBriefCompileResponse",
+        "type": "object"
+      },
+      "KeyframeCandidateReview": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "relative_score": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Relative Score",
+            "type": "number"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Strengths",
+            "type": "array"
+          },
+          "video_generation_risks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Video Generation Risks",
+            "type": "array"
+          },
+          "weaknesses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Weaknesses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "asset_version_id",
+          "relative_score"
+        ],
+        "title": "KeyframeCandidateReview",
+        "type": "object"
+      },
+      "KeyframeComparisonDecision": {
+        "enum": [
+          "SELECT_KEYFRAME",
+          "NONE_ACCEPTABLE"
+        ],
+        "title": "KeyframeComparisonDecision",
+        "type": "string"
+      },
+      "KeyframeComparisonReport": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "candidate_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/KeyframeCandidateReview"
+            },
+            "maxItems": 12,
+            "title": "Candidate Reviews",
+            "type": "array"
+          },
+          "candidate_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "minItems": 2,
+            "title": "Candidate Version Ids",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/KeyframeComparisonDecision"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/VisualInputIssue"
+            },
+            "maxItems": 24,
+            "title": "Issues",
+            "type": "array"
+          },
+          "position": {
+            "$ref": "#/components/schemas/KeyframePosition"
+          },
+          "proceed_allowed": {
+            "const": true,
+            "default": true,
+            "title": "Proceed Allowed",
+            "type": "boolean"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "selected_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Version Id"
+          },
+          "semantic_model": {
+            "default": "gpt-5.6-sol",
+            "title": "Semantic Model",
+            "type": "string"
+          },
+          "semantic_status": {
+            "$ref": "#/components/schemas/SemanticReviewStatus",
+            "default": "COMPLETE"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "shot_id",
+          "position",
+          "candidate_version_ids",
+          "decision",
+          "summary",
+          "created_at"
+        ],
+        "title": "KeyframeComparisonReport",
+        "type": "object"
+      },
+      "KeyframeComparisonRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "minItems": 2,
+            "title": "Candidate Version Ids",
+            "type": "array"
+          },
+          "include_previous_boundary": {
+            "default": true,
+            "title": "Include Previous Boundary",
+            "type": "boolean"
+          },
+          "position": {
+            "$ref": "#/components/schemas/KeyframePosition"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
+          }
+        },
+        "required": [
+          "candidate_version_ids",
+          "position"
+        ],
+        "title": "KeyframeComparisonRequest",
+        "type": "object"
+      },
+      "KeyframeComparisonResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "report": {
+            "$ref": "#/components/schemas/KeyframeComparisonReport"
+          }
+        },
+        "required": [
+          "report",
+          "project"
+        ],
+        "title": "KeyframeComparisonResponse",
         "type": "object"
       },
       "KeyframePosition": {
@@ -9580,6 +10214,148 @@
         "title": "OutputSpec",
         "type": "object"
       },
+      "PlannedDialogueLine": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_kind": {
+            "$ref": "#/components/schemas/AudioKind",
+            "default": "DIALOGUE"
+          },
+          "speaker": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Speaker",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker",
+          "text"
+        ],
+        "title": "PlannedDialogueLine",
+        "type": "object"
+      },
+      "PlannedSceneContract": {
+        "additionalProperties": false,
+        "properties": {
+          "continuity_in": {
+            "$ref": "#/components/schemas/SceneContinuitySummary"
+          },
+          "continuity_out": {
+            "$ref": "#/components/schemas/SceneContinuitySummary"
+          },
+          "dialogue_line_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "title": "Dialogue Line Indices",
+            "type": "array"
+          },
+          "heading": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Heading",
+            "type": "string"
+          },
+          "location_names": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Location Names",
+            "type": "array"
+          },
+          "narrative_purpose": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Narrative Purpose",
+            "type": "string"
+          },
+          "playable_actions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Playable Actions",
+            "type": "array"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "summary": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "target_duration_seconds": {
+            "minimum": 4.0,
+            "title": "Target Duration Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sequence",
+          "heading",
+          "summary",
+          "narrative_purpose",
+          "target_duration_seconds",
+          "location_names",
+          "continuity_in",
+          "continuity_out"
+        ],
+        "title": "PlannedSceneContract",
+        "type": "object"
+      },
+      "PlanningOutlineAgentRevisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "instruction": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Instruction",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction"
+        ],
+        "title": "PlanningOutlineAgentRevisionRequest",
+        "type": "object"
+      },
+      "PlanningOutlineDirectEditRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change_reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Change Reason",
+            "type": "string"
+          },
+          "outline_json": {
+            "maxLength": 250000,
+            "minLength": 2,
+            "title": "Outline Json",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outline_json",
+          "change_reason"
+        ],
+        "title": "PlanningOutlineDirectEditRequest",
+        "type": "object"
+      },
       "PlanningOutlineSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -9591,17 +10367,47 @@
             "title": "Outline Json",
             "type": "string"
           },
+          "repair_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryRepairPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "revision_round": {
-            "maximum": 2.0,
+            "maximum": 20.0,
             "minimum": 0.0,
             "title": "Revision Round",
             "type": "integer"
+          },
+          "revision_verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryRevisionVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source": {
             "maxLength": 240,
             "minLength": 1,
             "title": "Source",
             "type": "string"
+          },
+          "source_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorySourceContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -9620,17 +10426,27 @@
             "title": "Created At",
             "type": "string"
           },
+          "disposition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewDisposition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "report": {
             "$ref": "#/components/schemas/ScriptReviewReport"
           },
           "review_round": {
-            "maximum": 3.0,
+            "maximum": 21.0,
             "minimum": 1.0,
             "title": "Review Round",
             "type": "integer"
           },
           "revision_round": {
-            "maximum": 2.0,
+            "maximum": 20.0,
             "minimum": 0.0,
             "title": "Revision Round",
             "type": "integer"
@@ -9647,7 +10463,7 @@
       },
       "PlanningRunCreateRequest": {
         "additionalProperties": false,
-        "description": "Persisted long-form planning request before a project document exists.",
+        "description": "Persisted duration-agnostic planning request before a project exists.",
         "properties": {
           "execution_target": {
             "$ref": "#/components/schemas/AutonomousExecutionTarget",
@@ -9666,6 +10482,14 @@
             "maxLength": 50000,
             "title": "Input Text",
             "type": "string"
+          },
+          "linked_asset_project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Linked Asset Project Ids",
+            "type": "array"
           },
           "name": {
             "anyOf": [
@@ -9699,8 +10523,7 @@
           "target_duration_seconds": {
             "anyOf": [
               {
-                "maximum": 1800.0,
-                "minimum": 15.0,
+                "minimum": 4.0,
                 "type": "number"
               },
               {
@@ -9800,9 +10623,29 @@
             "title": "Id",
             "type": "string"
           },
+          "latest_repair_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryRepairPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_revision_verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryRevisionVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "max_revision_rounds": {
-            "default": 2,
-            "maximum": 2.0,
+            "default": 3,
+            "maximum": 3.0,
             "minimum": 0.0,
             "title": "Max Revision Rounds",
             "type": "integer"
@@ -9812,6 +10655,13 @@
             "maximum": 501.0,
             "minimum": 1.0,
             "title": "Next Scene Sequence",
+            "type": "integer"
+          },
+          "next_script_scene_sequence": {
+            "default": 1,
+            "maximum": 501.0,
+            "minimum": 1.0,
+            "title": "Next Script Scene Sequence",
             "type": "integer"
           },
           "outline_json": {
@@ -9851,6 +10701,16 @@
           "request": {
             "$ref": "#/components/schemas/PlanningRunCreateRequest"
           },
+          "review_disposition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewDisposition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "review_report": {
             "anyOf": [
               {
@@ -9873,10 +10733,28 @@
           },
           "revision_round": {
             "default": 0,
-            "maximum": 2.0,
+            "maximum": 20.0,
             "minimum": 0.0,
             "title": "Revision Round",
             "type": "integer"
+          },
+          "scene_script_json": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Scene Script Json",
+            "type": "array"
+          },
+          "source_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorySourceContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/PlanningRunStatus"
@@ -9957,6 +10835,7 @@
       "PlanningRunStep": {
         "enum": [
           "STORY_ARCHITECT",
+          "SCENE_WRITER",
           "SCRIPT_CRITIC",
           "STORY_REVISION",
           "REVISION_JUDGE",
@@ -9966,6 +10845,248 @@
         ],
         "title": "PlanningRunStep",
         "type": "string"
+      },
+      "PlanningSceneRevisionRequest": {
+        "additionalProperties": false,
+        "description": "Natural-language local edit; explicit scenes override Agent scope selection.",
+        "properties": {
+          "instruction": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Instruction",
+            "type": "string"
+          },
+          "scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 40,
+            "title": "Scene Sequences",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instruction"
+        ],
+        "title": "PlanningSceneRevisionRequest",
+        "type": "object"
+      },
+      "PlanningScriptDocument": {
+        "additionalProperties": false,
+        "description": "One versioned, retrieval-ready unit from a planning outline.",
+        "properties": {
+          "body": {
+            "default": "",
+            "maxLength": 60000,
+            "title": "Body",
+            "type": "string"
+          },
+          "character_names": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Character Names",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Document Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PlanningScriptDocumentKind"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/PlannedDialogueLine"
+            },
+            "maxItems": 500,
+            "title": "Lines",
+            "type": "array"
+          },
+          "location_names": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Location Names",
+            "type": "array"
+          },
+          "prop_names": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prop Names",
+            "type": "array"
+          },
+          "revision_round": {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          },
+          "run_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlannedSceneContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scene_sequence": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Sequence"
+          },
+          "search_metadata": {
+            "default": "",
+            "maxLength": 12000,
+            "title": "Search Metadata",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "revision_round",
+          "document_id",
+          "kind",
+          "title",
+          "summary",
+          "created_at"
+        ],
+        "title": "PlanningScriptDocument",
+        "type": "object"
+      },
+      "PlanningScriptDocumentKind": {
+        "enum": [
+          "STORY_BIBLE",
+          "SCENE"
+        ],
+        "title": "PlanningScriptDocumentKind",
+        "type": "string"
+      },
+      "PlanningScriptSearchHit": {
+        "additionalProperties": false,
+        "properties": {
+          "bm25_score": {
+            "title": "Bm25 Score",
+            "type": "number"
+          },
+          "document": {
+            "$ref": "#/components/schemas/PlanningScriptDocument"
+          },
+          "matched_by": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Matched By",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document",
+          "bm25_score"
+        ],
+        "title": "PlanningScriptSearchHit",
+        "type": "object"
+      },
+      "PlanningScriptSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "include_story_bible": {
+            "default": true,
+            "title": "Include Story Bible",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 8,
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "PlanningScriptSearchRequest",
+        "type": "object"
+      },
+      "PlanningScriptSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningScriptSearchHit"
+            },
+            "maxItems": 24,
+            "title": "Hits",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "revision_round": {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "revision_round",
+          "query"
+        ],
+        "title": "PlanningScriptSearchResponse",
+        "type": "object"
       },
       "PreprocessingStep": {
         "properties": {
@@ -10089,6 +11210,13 @@
               "$ref": "#/components/schemas/RouteEvidence"
             },
             "title": "Route Evidence",
+            "type": "array"
+          },
+          "take_comparisons": {
+            "items": {
+              "$ref": "#/components/schemas/TakeComparisonReport"
+            },
+            "title": "Take Comparisons",
             "type": "array"
           },
           "takes": {
@@ -10364,6 +11492,14 @@
             "default": "zh-CN",
             "title": "Language",
             "type": "string"
+          },
+          "linked_asset_project_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Linked Asset Project Ids",
+            "type": "array"
           },
           "name": {
             "title": "Name",
@@ -11326,6 +12462,366 @@
         "title": "ReferenceViewNeed",
         "type": "object"
       },
+      "ReferenceVisualCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "angle": {
+            "$ref": "#/components/schemas/ReferenceAngle"
+          },
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "deterministic_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Deterministic Reasons",
+            "type": "array"
+          },
+          "deterministic_score": {
+            "title": "Deterministic Score",
+            "type": "integer"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "framing": {
+            "$ref": "#/components/schemas/ReferenceFraming"
+          },
+          "pack_id": {
+            "title": "Pack Id",
+            "type": "string"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ReferenceRole"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "pack_id",
+          "entry_id",
+          "subject_asset_id",
+          "asset_version_id",
+          "role",
+          "angle",
+          "framing",
+          "description",
+          "deterministic_score"
+        ],
+        "title": "ReferenceVisualCandidate",
+        "type": "object"
+      },
+      "ReferenceVisualCandidateReview": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "relative_score": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Relative Score",
+            "type": "number"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Strengths",
+            "type": "array"
+          },
+          "weaknesses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Weaknesses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "relative_score"
+        ],
+        "title": "ReferenceVisualCandidateReview",
+        "type": "object"
+      },
+      "ReferenceVisualRerankDecision": {
+        "enum": [
+          "SELECT_REFERENCES",
+          "NONE_ACCEPTABLE"
+        ],
+        "title": "ReferenceVisualRerankDecision",
+        "type": "string"
+      },
+      "ReferenceVisualRerankReport": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "const": true,
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "candidate_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceVisualCandidateReview"
+            },
+            "maxItems": 32,
+            "title": "Candidate Reviews",
+            "type": "array"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceVisualCandidate"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/ReferenceVisualRerankDecision"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/VisualInputIssue"
+            },
+            "maxItems": 24,
+            "title": "Issues",
+            "type": "array"
+          },
+          "max_selected": {
+            "maximum": 9.0,
+            "minimum": 1.0,
+            "title": "Max Selected",
+            "type": "integer"
+          },
+          "proceed_allowed": {
+            "const": true,
+            "default": true,
+            "title": "Proceed Allowed",
+            "type": "boolean"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "redundant_candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Redundant Candidate Ids",
+            "type": "array"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "selections": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceVisualSelectionAdvice"
+            },
+            "maxItems": 9,
+            "title": "Selections",
+            "type": "array"
+          },
+          "semantic_model": {
+            "default": "gpt-5.6-sol",
+            "title": "Semantic Model",
+            "type": "string"
+          },
+          "semantic_status": {
+            "$ref": "#/components/schemas/SemanticReviewStatus",
+            "default": "COMPLETE"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "shot_id",
+          "requirement_ids",
+          "candidates",
+          "max_selected",
+          "decision",
+          "summary",
+          "created_at"
+        ],
+        "title": "ReferenceVisualRerankReport",
+        "type": "object"
+      },
+      "ReferenceVisualRerankRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_entry_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Candidate Entry Ids",
+            "type": "array"
+          },
+          "max_candidates": {
+            "anyOf": [
+              {
+                "maximum": 32.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Candidates"
+          },
+          "max_selected": {
+            "anyOf": [
+              {
+                "maximum": 9.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Selected"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
+          }
+        },
+        "title": "ReferenceVisualRerankRequest",
+        "type": "object"
+      },
+      "ReferenceVisualRerankResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ReferenceVisualRerankReport"
+          }
+        },
+        "required": [
+          "report",
+          "project"
+        ],
+        "title": "ReferenceVisualRerankResponse",
+        "type": "object"
+      },
+      "ReferenceVisualSelectionAdvice": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "responsibilities": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Responsibilities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "responsibilities",
+          "confidence"
+        ],
+        "title": "ReferenceVisualSelectionAdvice",
+        "type": "object"
+      },
       "RegressionCase": {
         "additionalProperties": false,
         "properties": {
@@ -11680,6 +13176,19 @@
         "title": "RetakeVideoResponse",
         "type": "object"
       },
+      "ReviewRepairOwner": {
+        "description": "Smallest production layer that can reasonably address a review issue.",
+        "enum": [
+          "STORY_ARCHITECT",
+          "SCENE_DIRECTOR",
+          "ASSET_AGENT",
+          "VIDEO_DIRECTOR",
+          "TIMELINE_AGENT",
+          "USER_OPTIONAL"
+        ],
+        "title": "ReviewRepairOwner",
+        "type": "string"
+      },
       "ReviseScriptLineRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11712,6 +13221,31 @@
         "title": "ReviseScriptLineRequest",
         "type": "object"
       },
+      "ReviseScriptLinesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change_reason": {
+            "minLength": 1,
+            "title": "Change Reason",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptLineRevision"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revisions",
+          "change_reason"
+        ],
+        "title": "ReviseScriptLinesRequest",
+        "type": "object"
+      },
       "RevisionJudgeConfidence": {
         "enum": [
           "LOW",
@@ -11730,7 +13264,7 @@
             "type": "boolean"
           },
           "alternative_revision_round": {
-            "maximum": 2.0,
+            "maximum": 20.0,
             "minimum": 0.0,
             "title": "Alternative Revision Round",
             "type": "integer"
@@ -11747,7 +13281,7 @@
             "type": "array"
           },
           "recommended_revision_round": {
-            "maximum": 2.0,
+            "maximum": 20.0,
             "minimum": 0.0,
             "title": "Recommended Revision Round",
             "type": "integer"
@@ -12073,6 +13607,32 @@
         "title": "ScriptLine",
         "type": "object"
       },
+      "ScriptLineRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "line_id": {
+            "title": "Line Id",
+            "type": "string"
+          },
+          "spoken_text": {
+            "minLength": 1,
+            "title": "Spoken Text",
+            "type": "string"
+          },
+          "subtitle_text": {
+            "minLength": 1,
+            "title": "Subtitle Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "line_id",
+          "spoken_text",
+          "subtitle_text"
+        ],
+        "title": "ScriptLineRevision",
+        "type": "object"
+      },
       "ScriptQualityCatalogResponse": {
         "additionalProperties": false,
         "properties": {
@@ -12183,7 +13743,7 @@
             "items": {
               "$ref": "#/components/schemas/ScriptQualityRoundSummary"
             },
-            "maxItems": 3,
+            "maxItems": 21,
             "title": "Rounds",
             "type": "array"
           },
@@ -12235,7 +13795,7 @@
             "items": {
               "$ref": "#/components/schemas/PlanningOutlineSnapshot"
             },
-            "maxItems": 3,
+            "maxItems": 21,
             "title": "Outline Snapshots",
             "type": "array"
           },
@@ -12243,7 +13803,7 @@
             "items": {
               "$ref": "#/components/schemas/PlanningReviewSnapshot"
             },
-            "maxItems": 3,
+            "maxItems": 21,
             "title": "Review Snapshots",
             "type": "array"
           },
@@ -12295,13 +13855,13 @@
             "type": "boolean"
           },
           "review_round": {
-            "maximum": 3.0,
+            "maximum": 21.0,
             "minimum": 1.0,
             "title": "Review Round",
             "type": "integer"
           },
           "revision_round": {
-            "maximum": 2.0,
+            "maximum": 20.0,
             "minimum": 0.0,
             "title": "Revision Round",
             "type": "integer"
@@ -12333,6 +13893,50 @@
           "UNCHANGED_REPORTED_ISSUES"
         ],
         "title": "ScriptQualityTrend",
+        "type": "string"
+      },
+      "ScriptReviewDisposition": {
+        "additionalProperties": false,
+        "description": "Skill-aware routing recommendation; users may always override it.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ScriptReviewDispositionAction"
+          },
+          "issue_routes": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptReviewIssueRoute"
+            },
+            "maxItems": 30,
+            "title": "Issue Routes",
+            "type": "array"
+          },
+          "rationale": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action",
+          "rationale"
+        ],
+        "title": "ScriptReviewDisposition",
+        "type": "object"
+      },
+      "ScriptReviewDispositionAction": {
+        "description": "Default autonomous action chosen by the active Production Skill.",
+        "enum": [
+          "REVISE_STORY",
+          "CONTINUE_WITH_HANDOFF",
+          "CONTINUE"
+        ],
+        "title": "ScriptReviewDispositionAction",
         "type": "string"
       },
       "ScriptReviewIssue": {
@@ -12375,6 +13979,32 @@
           "recommendation"
         ],
         "title": "ScriptReviewIssue",
+        "type": "object"
+      },
+      "ScriptReviewIssueRoute": {
+        "additionalProperties": false,
+        "properties": {
+          "issue_index": {
+            "minimum": 1.0,
+            "title": "Issue Index",
+            "type": "integer"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/ReviewRepairOwner"
+          },
+          "rationale": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_index",
+          "owner",
+          "rationale"
+        ],
+        "title": "ScriptReviewIssueRoute",
         "type": "object"
       },
       "ScriptReviewReport": {
@@ -12488,6 +14118,16 @@
             "title": "Project Id",
             "type": "string"
           },
+          "review_disposition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewDisposition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "review_report": {
             "anyOf": [
               {
@@ -12536,6 +14176,190 @@
           "created_at"
         ],
         "title": "ScriptVersion",
+        "type": "object"
+      },
+      "SemanticChangeIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "needs_user_clarification": {
+            "default": false,
+            "title": "Needs User Clarification",
+            "type": "boolean"
+          },
+          "preserve": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Preserve",
+            "type": "array"
+          },
+          "requested_change": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Requested Change",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticChangeTarget"
+            },
+            "maxItems": 64,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary",
+          "requested_change"
+        ],
+        "title": "SemanticChangeIntent",
+        "type": "object"
+      },
+      "SemanticChangePlan": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Affected Asset Ids",
+            "type": "array"
+          },
+          "affected_scene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Affected Scene Ids",
+            "type": "array"
+          },
+          "affected_script_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Affected Script Line Ids",
+            "type": "array"
+          },
+          "affected_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Affected Shot Ids",
+            "type": "array"
+          },
+          "applies_changes": {
+            "default": false,
+            "title": "Applies Changes",
+            "type": "boolean"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/SemanticChangeIntent"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "stale_take_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Stale Take Ids",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeImpactStep"
+            },
+            "maxItems": 12,
+            "title": "Steps",
+            "type": "array"
+          },
+          "user_editable": {
+            "default": true,
+            "title": "User Editable",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "instruction",
+          "intent"
+        ],
+        "title": "SemanticChangePlan",
+        "type": "object"
+      },
+      "SemanticChangePlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "explicit_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Explicit Target Ids",
+            "type": "array"
+          },
+          "instruction": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Instruction",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction"
+        ],
+        "title": "SemanticChangePlanRequest",
+        "type": "object"
+      },
+      "SemanticChangeTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ChangeTargetKind"
+          },
+          "reason": {
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target_id",
+          "reason"
+        ],
+        "title": "SemanticChangeTarget",
         "type": "object"
       },
       "SemanticReviewStatus": {
@@ -13232,6 +15056,664 @@
         "title": "StatusResponse",
         "type": "object"
       },
+      "StockAssetCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_notes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Advisory Notes",
+            "type": "array"
+          },
+          "asset_kind": {
+            "$ref": "#/components/schemas/AssetKind"
+          },
+          "attribution": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "creator": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator"
+          },
+          "creator_url": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Url"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "image_url": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Image Url",
+            "type": "string"
+          },
+          "license_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "License Name",
+            "type": "string"
+          },
+          "license_url": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Url"
+          },
+          "preview_url": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Preview Url",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/StockAssetProvider"
+          },
+          "provider_asset_id": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Provider Asset Id",
+            "type": "string"
+          },
+          "recommended_use": {
+            "$ref": "#/components/schemas/StockAssetRecommendedUse"
+          },
+          "source_page_url": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Source Page Url",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 48,
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          }
+        },
+        "required": [
+          "provider",
+          "provider_asset_id",
+          "asset_kind",
+          "title",
+          "source_page_url",
+          "image_url",
+          "preview_url",
+          "license_name",
+          "recommended_use"
+        ],
+        "title": "StockAssetCandidate",
+        "type": "object"
+      },
+      "StockAssetImportMode": {
+        "enum": [
+          "AUTO",
+          "DIRECT",
+          "DERIVE"
+        ],
+        "title": "StockAssetImportMode",
+        "type": "string"
+      },
+      "StockAssetImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/StockAssetCandidate"
+          },
+          "descriptor": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Descriptor",
+            "type": "string"
+          },
+          "import_mode": {
+            "$ref": "#/components/schemas/StockAssetImportMode",
+            "default": "AUTO"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "target_asset_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Target Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_asset_id",
+          "candidate",
+          "descriptor"
+        ],
+        "title": "StockAssetImportRequest",
+        "type": "object"
+      },
+      "StockAssetOrientation": {
+        "enum": [
+          "ANY",
+          "PORTRAIT",
+          "LANDSCAPE",
+          "SQUARE"
+        ],
+        "title": "StockAssetOrientation",
+        "type": "string"
+      },
+      "StockAssetProvider": {
+        "enum": [
+          "OPENVERSE",
+          "PEXELS",
+          "PIXABAY"
+        ],
+        "title": "StockAssetProvider",
+        "type": "string"
+      },
+      "StockAssetRecommendedUse": {
+        "enum": [
+          "DIRECT_OR_DERIVE",
+          "VISUAL_GROUNDING_NEW_IDENTITY"
+        ],
+        "title": "StockAssetRecommendedUse",
+        "type": "string"
+      },
+      "StockAssetSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_kind": {
+            "$ref": "#/components/schemas/AssetKind"
+          },
+          "commercial_and_modifiable_only": {
+            "default": true,
+            "title": "Commercial And Modifiable Only",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 12,
+            "maximum": 40.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "orientation": {
+            "$ref": "#/components/schemas/StockAssetOrientation",
+            "default": "PORTRAIT"
+          },
+          "page": {
+            "default": 1,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/StockAssetProvider",
+            "default": "OPENVERSE"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "asset_kind"
+        ],
+        "title": "StockAssetSearchRequest",
+        "type": "object"
+      },
+      "StockAssetSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/StockAssetCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/StockAssetProvider"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider",
+          "query",
+          "page",
+          "candidates"
+        ],
+        "title": "StockAssetSearchResponse",
+        "type": "object"
+      },
+      "StockProviderConfigListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/StockProviderConfigResponse"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "StockProviderConfigListResponse",
+        "type": "object"
+      },
+      "StockProviderConfigResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "can_search": {
+            "title": "Can Search",
+            "type": "boolean"
+          },
+          "has_api_key": {
+            "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "key_source": {
+            "title": "Key Source",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/StockAssetProvider"
+          }
+        },
+        "required": [
+          "provider",
+          "base_url",
+          "has_api_key",
+          "key_source",
+          "can_search"
+        ],
+        "title": "StockProviderConfigResponse",
+        "type": "object"
+      },
+      "StockProviderConfigUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          }
+        },
+        "title": "StockProviderConfigUpdate",
+        "type": "object"
+      },
+      "StoryRepairAction": {
+        "additionalProperties": false,
+        "description": "One evidence-backed recommendation; it is not an execution gate.",
+        "properties": {
+          "affected_scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "title": "Affected Scene Sequences",
+            "type": "array"
+          },
+          "diagnosis": {
+            "$ref": "#/components/schemas/StoryRepairDiagnosis"
+          },
+          "issue_index": {
+            "minimum": 1.0,
+            "title": "Issue Index",
+            "type": "integer"
+          },
+          "preserve": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Preserve",
+            "type": "array"
+          },
+          "rationale": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "recommended_change": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Recommended Change",
+            "type": "string"
+          },
+          "remove_or_simplify": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Remove Or Simplify",
+            "type": "array"
+          },
+          "should_revise": {
+            "title": "Should Revise",
+            "type": "boolean"
+          },
+          "validation_questions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Validation Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "issue_index",
+          "diagnosis",
+          "should_revise",
+          "rationale",
+          "recommended_change"
+        ],
+        "title": "StoryRepairAction",
+        "type": "object"
+      },
+      "StoryRepairDiagnosis": {
+        "description": "Where a routed story issue actually originates after a second look.",
+        "enum": [
+          "SOURCE_CONCEPT_GAP",
+          "OUTLINE_DEFECT",
+          "CRITIC_OVERREACH"
+        ],
+        "title": "StoryRepairDiagnosis",
+        "type": "string"
+      },
+      "StoryRepairPlan": {
+        "additionalProperties": false,
+        "description": "Cross-round diagnosis and minimal repair plan prepared before rewriting.",
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/StoryRepairAction"
+            },
+            "maxItems": 30,
+            "title": "Actions",
+            "type": "array"
+          },
+          "invariants": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Invariants",
+            "type": "array"
+          },
+          "source_promise": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Source Promise",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "summary",
+          "source_promise"
+        ],
+        "title": "StoryRepairPlan",
+        "type": "object"
+      },
+      "StoryRevisionVerification": {
+        "additionalProperties": false,
+        "description": "Narrow check that a Writer followed its repair brief without regressions.",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "satisfied_issue_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 30,
+            "title": "Satisfied Issue Indices",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/StoryRevisionViolation"
+            },
+            "maxItems": 20,
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accepted",
+          "summary"
+        ],
+        "title": "StoryRevisionVerification",
+        "type": "object"
+      },
+      "StoryRevisionViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "observation": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Observation",
+            "type": "string"
+          },
+          "repair_instruction": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Repair Instruction",
+            "type": "string"
+          },
+          "scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "title": "Scene Sequences",
+            "type": "array"
+          }
+        },
+        "required": [
+          "category",
+          "observation",
+          "repair_instruction"
+        ],
+        "title": "StoryRevisionViolation",
+        "type": "object"
+      },
+      "StorySourceContract": {
+        "additionalProperties": false,
+        "description": "Explicit user promises separated from creative choices left to the Agents.",
+        "properties": {
+          "authoritative_user_overrides": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Authoritative User Overrides",
+            "type": "array"
+          },
+          "explicit_commitments": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Explicit Commitments",
+            "type": "array"
+          },
+          "explicit_prohibitions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Explicit Prohibitions",
+            "type": "array"
+          },
+          "open_creative_choices": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Open Creative Choices",
+            "type": "array"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "explicit_commitments"
+        ],
+        "title": "StorySourceContract",
+        "type": "object"
+      },
       "StructuredScene": {
         "additionalProperties": false,
         "properties": {
@@ -13605,6 +16087,225 @@
         ],
         "title": "TakeAvailability",
         "type": "string"
+      },
+      "TakeComparisonCandidateReview": {
+        "additionalProperties": false,
+        "properties": {
+          "relative_score": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Relative Score",
+            "type": "number"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Strengths",
+            "type": "array"
+          },
+          "take_id": {
+            "title": "Take Id",
+            "type": "string"
+          },
+          "weaknesses": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Weaknesses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "take_id",
+          "relative_score"
+        ],
+        "title": "TakeComparisonCandidateReview",
+        "type": "object"
+      },
+      "TakeComparisonDecision": {
+        "enum": [
+          "SELECT_TAKE",
+          "NONE_ACCEPTABLE",
+          "UNAVAILABLE"
+        ],
+        "title": "TakeComparisonDecision",
+        "type": "string"
+      },
+      "TakeComparisonReport": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "candidate_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/TakeComparisonCandidateReview"
+            },
+            "maxItems": 5,
+            "title": "Candidate Reviews",
+            "type": "array"
+          },
+          "candidate_take_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 2,
+            "title": "Candidate Take Ids",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/TakeComparisonDecision"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inspection_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 2,
+            "title": "Inspection Ids",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "selected_take_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Take Id"
+          },
+          "semantic_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Model"
+          },
+          "semantic_status": {
+            "$ref": "#/components/schemas/SemanticReviewStatus"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "shot_id",
+          "candidate_take_ids",
+          "inspection_ids",
+          "decision",
+          "semantic_status",
+          "summary",
+          "created_at"
+        ],
+        "title": "TakeComparisonReport",
+        "type": "object"
+      },
+      "TakeComparisonRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "apply_selection": {
+            "default": false,
+            "title": "Apply Selection",
+            "type": "boolean"
+          },
+          "include_previous_boundary": {
+            "default": true,
+            "title": "Include Previous Boundary",
+            "type": "boolean"
+          },
+          "inspect_missing": {
+            "default": true,
+            "title": "Inspect Missing",
+            "type": "boolean"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "take_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Take Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shot_id"
+        ],
+        "title": "TakeComparisonRequest",
+        "type": "object"
+      },
+      "TakeComparisonResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "report": {
+            "$ref": "#/components/schemas/TakeComparisonReport"
+          }
+        },
+        "required": [
+          "report",
+          "project"
+        ],
+        "title": "TakeComparisonResponse",
+        "type": "object"
       },
       "TargetResolution": {
         "description": "Desired output resolution for a local generation. The backend corrects it to the\nnearest valid size (snapped down to a multiple of 32, never above the source).",
@@ -14236,6 +16937,102 @@
           "confidence"
         ],
         "title": "VideoObservation",
+        "type": "object"
+      },
+      "VisualInputIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Affected Ids",
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/VisualInputIssueCategory"
+          },
+          "evidence": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Evidence",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "severity",
+          "message",
+          "evidence"
+        ],
+        "title": "VisualInputIssue",
+        "type": "object"
+      },
+      "VisualInputIssueCategory": {
+        "enum": [
+          "IDENTITY",
+          "WARDROBE",
+          "SCENE_TOPOLOGY",
+          "PROP_STATE",
+          "COMPOSITION",
+          "ACTION_BOUNDARY",
+          "CONTACT",
+          "CAMERA",
+          "REFERENCE_CONFLICT",
+          "REDUNDANCY",
+          "TECHNICAL_CONTRACT",
+          "OTHER"
+        ],
+        "title": "VisualInputIssueCategory",
+        "type": "string"
+      },
+      "VisualInputReportsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "compatibility_checks": {
+            "items": {
+              "$ref": "#/components/schemas/InputCompatibilityReport"
+            },
+            "title": "Compatibility Checks",
+            "type": "array"
+          },
+          "keyframe_comparisons": {
+            "items": {
+              "$ref": "#/components/schemas/KeyframeComparisonReport"
+            },
+            "title": "Keyframe Comparisons",
+            "type": "array"
+          },
+          "reference_reranks": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceVisualRerankReport"
+            },
+            "title": "Reference Reranks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reference_reranks",
+          "keyframe_comparisons",
+          "compatibility_checks"
+        ],
+        "title": "VisualInputReportsResponse",
         "type": "object"
       },
       "VoiceReferenceBinding": {
@@ -16333,6 +19130,57 @@
         ]
       }
     },
+    "/api/short-drama/asset-agent/tools/search-stock": {
+      "post": {
+        "operationId": "search_stock_assets_api_short_drama_asset_agent_tools_search_stock_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockAssetSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockAssetSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Search Stock Assets",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/fixtures/dont-trust-me": {
       "post": {
         "operationId": "initialize_dont_trust_me_fixture_api_short_drama_fixtures_dont_trust_me_post",
@@ -16776,6 +19624,306 @@
         ]
       }
     },
+    "/api/short-drama/planning-runs/{run_id}/agent-tools/revise-scenes": {
+      "post": {
+        "operationId": "revise_planning_scenes_with_agent_api_short_drama_planning_runs__run_id__agent_tools_revise_scenes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningSceneRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Revise Planning Scenes With Agent",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/planning-runs/{run_id}/agent-tools/search-script": {
+      "post": {
+        "operationId": "search_planning_script_documents_api_short_drama_planning_runs__run_id__agent_tools_search_script_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningScriptSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningScriptSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Search Planning Script Documents",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/planning-runs/{run_id}/outline": {
+      "put": {
+        "operationId": "replace_planning_outline_api_short_drama_planning_runs__run_id__outline_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningOutlineDirectEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Replace Planning Outline",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/planning-runs/{run_id}/outline/agent-revise": {
+      "post": {
+        "operationId": "revise_planning_outline_with_agent_api_short_drama_planning_runs__run_id__outline_agent_revise_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningOutlineAgentRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Revise Planning Outline With Agent",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/planning-runs/{run_id}/outline/revise-from-review": {
+      "post": {
+        "operationId": "revise_planning_outline_from_review_api_short_drama_planning_runs__run_id__outline_revise_from_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Revise Planning Outline From Review",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/planning-runs/{run_id}/script-quality": {
       "get": {
         "operationId": "get_planning_run_script_quality_api_short_drama_planning_runs__run_id__script_quality_get",
@@ -17071,6 +20219,182 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/agent-tools/compare-takes": {
+      "post": {
+        "operationId": "compare_takes_api_short_drama_projects__project_id__agent_tools_compare_takes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeComparisonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakeComparisonResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Compare Takes",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/agent-tools/plan-change": {
+      "post": {
+        "operationId": "preview_semantic_change_api_short_drama_projects__project_id__agent_tools_plan_change_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticChangePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticChangePlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Preview Semantic Change",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/agent-tools/visual-input-reports": {
+      "get": {
+        "operationId": "list_visual_input_reports_api_short_drama_projects__project_id__agent_tools_visual_input_reports_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualInputReportsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Visual Input Reports",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects/{project_id}/asset-agent/tools/import-asset": {
       "post": {
         "operationId": "import_catalog_asset_api_short_drama_projects__project_id__asset_agent_tools_import_asset_post",
@@ -17128,6 +20452,68 @@
           }
         },
         "summary": "Import Catalog Asset",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/asset-agent/tools/import-stock": {
+      "post": {
+        "operationId": "import_stock_asset_api_short_drama_projects__project_id__asset_agent_tools_import_stock_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockAssetImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Import Stock Asset",
         "tags": [
           "short-drama"
         ]
@@ -18780,6 +22166,281 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/script/revise-lines": {
+      "post": {
+        "operationId": "revise_script_lines_api_short_drama_projects__project_id__script_revise_lines_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseScriptLinesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Revise Script Lines",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/agent-tools/check-input-compatibility": {
+      "post": {
+        "operationId": "check_shot_input_compatibility_api_short_drama_projects__project_id__shots__shot_id__agent_tools_check_input_compatibility_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InputCompatibilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputCompatibilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Check Shot Input Compatibility",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/agent-tools/compare-keyframes": {
+      "post": {
+        "operationId": "compare_shot_keyframes_api_short_drama_projects__project_id__shots__shot_id__agent_tools_compare_keyframes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyframeComparisonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyframeComparisonResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Compare Shot Keyframes",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/shots/{shot_id}/agent-tools/rerank-references": {
+      "post": {
+        "operationId": "rerank_shot_reference_visuals_api_short_drama_projects__project_id__shots__shot_id__agent_tools_rerank_references_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferenceVisualRerankRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceVisualRerankResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Rerank Shot Reference Visuals",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects/{project_id}/shots/{shot_id}/director-advice": {
       "post": {
         "operationId": "get_director_advice_api_short_drama_projects__project_id__shots__shot_id__director_advice_post",
@@ -19910,6 +23571,108 @@
           }
         },
         "summary": "Validate H3 Provider Config",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/stock-assets": {
+      "get": {
+        "operationId": "get_stock_provider_configs_api_short_drama_providers_stock_assets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockProviderConfigListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Stock Provider Configs",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/providers/stock-assets/{provider}": {
+      "post": {
+        "operationId": "update_stock_provider_config_api_short_drama_providers_stock_assets__provider__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/StockAssetProvider"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockProviderConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockProviderConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Update Stock Provider Config",
         "tags": [
           "short-drama"
         ]

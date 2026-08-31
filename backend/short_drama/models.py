@@ -67,6 +67,7 @@ class PlanningRunStatus(StrEnum):
 
 class PlanningRunStep(StrEnum):
     STORY_ARCHITECT = "STORY_ARCHITECT"
+    SCENE_WRITER = "SCENE_WRITER"
     SCRIPT_CRITIC = "SCRIPT_CRITIC"
     STORY_REVISION = "STORY_REVISION"
     REVISION_JUDGE = "REVISION_JUDGE"
@@ -163,6 +164,33 @@ class ScriptReviewSeverity(StrEnum):
     LOW = "LOW"
 
 
+class ScriptReviewDispositionAction(StrEnum):
+    """Default autonomous action chosen by the active Production Skill."""
+
+    REVISE_STORY = "REVISE_STORY"
+    CONTINUE_WITH_HANDOFF = "CONTINUE_WITH_HANDOFF"
+    CONTINUE = "CONTINUE"
+
+
+class ReviewRepairOwner(StrEnum):
+    """Smallest production layer that can reasonably address a review issue."""
+
+    STORY_ARCHITECT = "STORY_ARCHITECT"
+    SCENE_DIRECTOR = "SCENE_DIRECTOR"
+    ASSET_AGENT = "ASSET_AGENT"
+    VIDEO_DIRECTOR = "VIDEO_DIRECTOR"
+    TIMELINE_AGENT = "TIMELINE_AGENT"
+    USER_OPTIONAL = "USER_OPTIONAL"
+
+
+class StoryRepairDiagnosis(StrEnum):
+    """Where a routed story issue actually originates after a second look."""
+
+    SOURCE_CONCEPT_GAP = "SOURCE_CONCEPT_GAP"
+    OUTLINE_DEFECT = "OUTLINE_DEFECT"
+    CRITIC_OVERREACH = "CRITIC_OVERREACH"
+
+
 class VideoInspectionScope(StrEnum):
     INTRA_SHOT = "INTRA_SHOT"
     SHOT_BOUNDARY = "SHOT_BOUNDARY"
@@ -173,6 +201,12 @@ class SemanticReviewStatus(StrEnum):
     UNAVAILABLE = "UNAVAILABLE"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
+
+
+class TakeComparisonDecision(StrEnum):
+    SELECT_TAKE = "SELECT_TAKE"
+    NONE_ACCEPTABLE = "NONE_ACCEPTABLE"
+    UNAVAILABLE = "UNAVAILABLE"
 
 
 class AudioContinuityAssessment(StrEnum):
@@ -347,6 +381,10 @@ class ProjectRecord(DomainModel):
         default_factory=list[CreativeInputImage],
         max_length=8,
     )
+    linked_asset_project_ids: list[str] = Field(
+        default_factory=list[str],
+        max_length=32,
+    )
     voice_reference_revision: int = Field(default=0, ge=0)
     stage: ProjectStage
     current_script_version_id: str
@@ -399,23 +437,155 @@ class ScriptReviewReport(DomainModel):
     requires_revision: bool = False
 
 
+class ScriptReviewIssueRoute(DomainModel):
+    issue_index: int = Field(ge=1)
+    owner: ReviewRepairOwner
+    rationale: str = Field(min_length=1, max_length=600)
+
+
+class ScriptReviewDisposition(DomainModel):
+    """Skill-aware routing recommendation; users may always override it."""
+
+    action: ScriptReviewDispositionAction
+    issue_routes: list[ScriptReviewIssueRoute] = Field(
+        default_factory=list[ScriptReviewIssueRoute],
+        max_length=30,
+    )
+    rationale: str = Field(min_length=1, max_length=1200)
+    user_overridable: bool = True
+
+    @model_validator(mode="after")
+    def validate_disposition(self) -> ScriptReviewDisposition:
+        issue_indices = [route.issue_index for route in self.issue_routes]
+        if len(issue_indices) != len(set(issue_indices)):
+            raise ValueError("Each script-review issue may be routed only once")
+        if not self.user_overridable:
+            raise ValueError("Script-review routing must remain user-overridable")
+        if self.action == ScriptReviewDispositionAction.REVISE_STORY and not any(
+            route.owner == ReviewRepairOwner.STORY_ARCHITECT
+            for route in self.issue_routes
+        ):
+            raise ValueError("REVISE_STORY requires at least one Story Architect issue")
+        return self
+
+
+class StorySourceContract(DomainModel):
+    """Explicit user promises separated from creative choices left to the Agents."""
+
+    explicit_commitments: list[str] = Field(min_length=1, max_length=30)
+    explicit_prohibitions: list[str] = Field(default_factory=list[str], max_length=20)
+    open_creative_choices: list[str] = Field(default_factory=list[str], max_length=20)
+    authoritative_user_overrides: list[str] = Field(
+        default_factory=list[str],
+        max_length=20,
+    )
+    user_overridable: bool = True
+
+    @model_validator(mode="after")
+    def validate_source_contract(self) -> StorySourceContract:
+        if not self.user_overridable:
+            raise ValueError("Story source commitments must remain user-overridable")
+        return self
+
+
+class StoryRepairAction(DomainModel):
+    """One evidence-backed recommendation; it is not an execution gate."""
+
+    issue_index: int = Field(ge=1)
+    diagnosis: StoryRepairDiagnosis
+    should_revise: bool
+    rationale: str = Field(min_length=1, max_length=1200)
+    affected_scene_sequences: list[int] = Field(
+        default_factory=list[int],
+        max_length=12,
+    )
+    recommended_change: str = Field(min_length=1, max_length=1600)
+    remove_or_simplify: list[str] = Field(default_factory=list[str], max_length=12)
+    preserve: list[str] = Field(default_factory=list[str], max_length=12)
+    validation_questions: list[str] = Field(default_factory=list[str], max_length=12)
+
+    @model_validator(mode="after")
+    def validate_action(self) -> StoryRepairAction:
+        if self.diagnosis == StoryRepairDiagnosis.CRITIC_OVERREACH and self.should_revise:
+            raise ValueError("Critic overreach cannot require an automatic story rewrite")
+        return self
+
+
+class StoryRepairPlan(DomainModel):
+    """Cross-round diagnosis and minimal repair plan prepared before rewriting."""
+
+    summary: str = Field(min_length=1, max_length=1600)
+    source_promise: str = Field(min_length=1, max_length=1200)
+    invariants: list[str] = Field(default_factory=list[str], max_length=20)
+    actions: list[StoryRepairAction] = Field(
+        default_factory=list[StoryRepairAction],
+        max_length=30,
+    )
+    user_overridable: bool = True
+
+    @model_validator(mode="after")
+    def validate_plan(self) -> StoryRepairPlan:
+        issue_indices = [action.issue_index for action in self.actions]
+        if len(issue_indices) != len(set(issue_indices)):
+            raise ValueError("Each routed story issue must be diagnosed exactly once")
+        if not self.user_overridable:
+            raise ValueError("Story repair recommendations must remain user-overridable")
+        return self
+
+
+class StoryRevisionViolation(DomainModel):
+    category: str = Field(min_length=1, max_length=120)
+    scene_sequences: list[int] = Field(default_factory=list[int], max_length=12)
+    observation: str = Field(min_length=1, max_length=1200)
+    repair_instruction: str = Field(min_length=1, max_length=1200)
+
+
+class StoryRevisionVerification(DomainModel):
+    """Narrow check that a Writer followed its repair brief without regressions."""
+
+    accepted: bool
+    summary: str = Field(min_length=1, max_length=1600)
+    satisfied_issue_indices: list[int] = Field(default_factory=list[int], max_length=30)
+    violations: list[StoryRevisionViolation] = Field(
+        default_factory=list[StoryRevisionViolation],
+        max_length=20,
+    )
+    user_overridable: bool = True
+
+    @model_validator(mode="after")
+    def validate_verification(self) -> StoryRevisionVerification:
+        if self.accepted and self.violations:
+            raise ValueError("Accepted story revisions cannot retain plan violations")
+        if not self.accepted and not self.violations:
+            raise ValueError("Rejected story revisions must name a concrete violation")
+        if len(self.satisfied_issue_indices) != len(set(self.satisfied_issue_indices)):
+            raise ValueError("Satisfied repair issue indices must be unique")
+        if not self.user_overridable:
+            raise ValueError("Story revision verification must remain user-overridable")
+        return self
+
+
 class PlanningOutlineSnapshot(DomainModel):
-    revision_round: int = Field(ge=0, le=2)
+    revision_round: int = Field(ge=0, le=20)
     outline_json: str
     source: str = Field(min_length=1, max_length=240)
+    source_contract: StorySourceContract | None = None
+    repair_plan: StoryRepairPlan | None = None
+    revision_verification: StoryRevisionVerification | None = None
     created_at: str
 
 
 class PlanningReviewSnapshot(DomainModel):
-    review_round: int = Field(ge=1, le=3)
-    revision_round: int = Field(ge=0, le=2)
+    review_round: int = Field(ge=1, le=21)
+    revision_round: int = Field(ge=0, le=20)
     report: ScriptReviewReport
+    disposition: ScriptReviewDisposition | None = None
     created_at: str
 
 
 class RevisionJudgeRecommendation(DomainModel):
-    recommended_revision_round: int = Field(ge=0, le=2)
-    alternative_revision_round: int = Field(ge=0, le=2)
+    recommended_revision_round: int = Field(ge=0, le=20)
+    alternative_revision_round: int = Field(ge=0, le=20)
     confidence: RevisionJudgeConfidence
     summary: str = Field(min_length=1, max_length=1200)
     evidence: list[str] = Field(default_factory=list[str], max_length=8)
@@ -432,8 +602,8 @@ class RevisionJudgeRecommendation(DomainModel):
 
 
 class ScriptQualityRoundSummary(DomainModel):
-    review_round: int = Field(ge=1, le=3)
-    revision_round: int = Field(ge=0, le=2)
+    review_round: int = Field(ge=1, le=21)
+    revision_round: int = Field(ge=0, le=20)
     total_issues: int = Field(ge=0)
     high_issues: int = Field(ge=0)
     medium_issues: int = Field(ge=0)
@@ -451,7 +621,7 @@ class ScriptQualityComparison(DomainModel):
     target_duration_seconds: float
     rounds: list[ScriptQualityRoundSummary] = Field(
         default_factory=list[ScriptQualityRoundSummary],
-        max_length=3,
+        max_length=21,
     )
     trend: ScriptQualityTrend
     total_issue_delta: int | None = None
@@ -473,11 +643,11 @@ class ScriptQualityHistoryResponse(DomainModel):
     comparison: ScriptQualityComparison
     outline_snapshots: list[PlanningOutlineSnapshot] = Field(
         default_factory=list[PlanningOutlineSnapshot],
-        max_length=3,
+        max_length=21,
     )
     review_snapshots: list[PlanningReviewSnapshot] = Field(
         default_factory=list[PlanningReviewSnapshot],
-        max_length=3,
+        max_length=21,
     )
     revision_judge: RevisionJudgeRecommendation | None = None
 
@@ -497,6 +667,7 @@ class ScriptVersion(DomainModel):
     lines: list[ScriptLine]
     structured_scenes: list[StructuredScene]
     review_report: ScriptReviewReport | None = None
+    review_disposition: ScriptReviewDisposition | None = None
     planning_run_id: str | None = None
     approval_status: ApprovalStatus
     freshness: Freshness
@@ -566,6 +737,13 @@ class AssetSourceRecord(DomainModel):
     source_uri: str | None = None
     original_filename: str | None = None
     provider: str | None = None
+    provider_asset_id: str | None = None
+    creator: str | None = None
+    creator_uri: str | None = None
+    license_name: str | None = None
+    license_uri: str | None = None
+    attribution: str | None = None
+    stock_import_mode: str | None = None
     model: str | None = None
     prompt: str | None = None
     created_at: str
@@ -1026,6 +1204,49 @@ class VideoInspectionReport(DomainModel):
     created_at: str
 
 
+class TakeComparisonCandidateReview(DomainModel):
+    take_id: str
+    relative_score: float = Field(ge=0.0, le=5.0)
+    strengths: list[str] = Field(default_factory=list[str], max_length=12)
+    weaknesses: list[str] = Field(default_factory=list[str], max_length=12)
+
+
+class TakeComparisonReport(DomainModel):
+    id: str
+    project_id: str
+    shot_id: str
+    candidate_take_ids: list[str] = Field(min_length=2, max_length=5)
+    inspection_ids: list[str] = Field(min_length=2, max_length=10)
+    decision: TakeComparisonDecision
+    selected_take_id: str | None = None
+    semantic_status: SemanticReviewStatus
+    semantic_model: str | None = None
+    candidate_reviews: list[TakeComparisonCandidateReview] = Field(
+        default_factory=list[TakeComparisonCandidateReview],
+        max_length=5,
+    )
+    summary: str = Field(min_length=1, max_length=3000)
+    warnings: list[str] = Field(default_factory=list[str], max_length=16)
+    advisory_only: bool = True
+    created_at: str
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> TakeComparisonReport:
+        if len(set(self.candidate_take_ids)) != len(self.candidate_take_ids):
+            raise ValueError("Take comparison candidates must be unique")
+        if self.decision == TakeComparisonDecision.SELECT_TAKE:
+            if self.selected_take_id not in self.candidate_take_ids:
+                raise ValueError("Selected Take must be one of the compared candidates")
+        elif self.selected_take_id is not None:
+            raise ValueError("Only SELECT_TAKE may declare selected_take_id")
+        review_ids = [item.take_id for item in self.candidate_reviews]
+        if len(set(review_ids)) != len(review_ids):
+            raise ValueError("Take comparison candidate reviews must be unique")
+        if any(take_id not in self.candidate_take_ids for take_id in review_ids):
+            raise ValueError("Candidate review refers to an unlisted Take")
+        return self
+
+
 class AudioTimeRange(DomainModel):
     start_seconds: float = Field(ge=0.0)
     end_seconds: float = Field(ge=0.0)
@@ -1233,6 +1454,9 @@ class ProjectAggregate(DomainModel):
     video_inspections: list[VideoInspectionReport] = Field(
         default_factory=list[VideoInspectionReport]
     )
+    take_comparisons: list[TakeComparisonReport] = Field(
+        default_factory=list[TakeComparisonReport]
+    )
     audio_inspections: list[AudioInspectionReport] = Field(
         default_factory=list[AudioInspectionReport]
     )
@@ -1250,11 +1474,15 @@ class CreateProjectRequest(DomainModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     source_mode: SourceMode
     production_profile: ProductionProfile = ProductionProfile.DOUYIN_SHORT_DRAMA
-    target_duration_seconds: float | None = Field(default=None, ge=15.0, le=1800.0)
+    target_duration_seconds: float | None = Field(default=None, ge=4.0)
     input_text: str = Field(default="", max_length=50000)
     input_images: list[CreativeInputImage] = Field(
         default_factory=list[CreativeInputImage],
         max_length=8,
+    )
+    linked_asset_project_ids: list[str] = Field(
+        default_factory=list[str],
+        max_length=32,
     )
     run_mode: RunMode = RunMode.AUTO_DRAFT
 
@@ -1283,6 +1511,20 @@ class VideoInspectionRequest(DomainModel):
     review_focus: str | None = Field(default=None, max_length=2000)
 
 
+class TakeComparisonRequest(DomainModel):
+    shot_id: str
+    take_ids: list[str] = Field(default_factory=list[str], max_length=5)
+    inspect_missing: bool = True
+    include_previous_boundary: bool = True
+    review_focus: str | None = Field(default=None, max_length=2000)
+    apply_selection: bool = False
+
+
+class TakeComparisonResponse(DomainModel):
+    report: TakeComparisonReport
+    project: ProjectAggregate
+
+
 class AudioInspectionRequest(DomainModel):
     semantic_review: bool = True
     speaker_continuity: bool = True
@@ -1307,7 +1549,7 @@ class AutonomousDraftCreateRequest(CreateProjectRequest):
 
 
 class PlanningRunCreateRequest(CreateProjectRequest):
-    """Persisted long-form planning request before a project document exists."""
+    """Persisted duration-agnostic planning request before a project exists."""
 
     render_export: bool = True
     execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
@@ -1323,12 +1565,18 @@ class PlanningRunRecord(DomainModel):
     request: PlanningRunCreateRequest
     outline_json: str | None = None
     review_report: ScriptReviewReport | None = None
+    review_disposition: ScriptReviewDisposition | None = None
+    source_contract: StorySourceContract | None = None
+    latest_repair_plan: StoryRepairPlan | None = None
+    latest_revision_verification: StoryRevisionVerification | None = None
     revision_judge: RevisionJudgeRecommendation | None = None
+    scene_script_json: list[str] = Field(default_factory=list[str], max_length=500)
+    next_script_scene_sequence: int = Field(default=1, ge=1, le=501)
     directed_scene_json: list[str] = Field(default_factory=list[str], max_length=500)
     next_scene_sequence: int = Field(default=1, ge=1, le=501)
     total_scenes: int = Field(default=0, ge=0, le=500)
-    revision_round: int = Field(default=0, ge=0, le=2)
-    max_revision_rounds: int = Field(default=2, ge=0, le=2)
+    revision_round: int = Field(default=0, ge=0, le=20)
+    max_revision_rounds: int = Field(default=3, ge=0, le=3)
     outline_source: str | None = Field(default=None, max_length=240)
     critic_used: bool = False
     used_scene_repair: bool = False
@@ -1349,6 +1597,15 @@ class PlanningRunListResponse(DomainModel):
 class PlanningRunResponse(DomainModel):
     run: PlanningRunRecord
     project: ProjectAggregate | None = None
+
+
+class PlanningOutlineDirectEditRequest(DomainModel):
+    outline_json: str = Field(min_length=2, max_length=250000)
+    change_reason: str = Field(min_length=1, max_length=2000)
+
+
+class PlanningOutlineAgentRevisionRequest(DomainModel):
+    instruction: str = Field(min_length=1, max_length=8000)
 
 
 class AutonomousRepeatCreateRequest(DomainModel):
@@ -1388,6 +1645,17 @@ class ReviseScriptLineRequest(DomainModel):
     line_id: str
     spoken_text: str = Field(min_length=1)
     subtitle_text: str = Field(min_length=1)
+    change_reason: str = Field(min_length=1)
+
+
+class ScriptLineRevision(DomainModel):
+    line_id: str
+    spoken_text: str = Field(min_length=1)
+    subtitle_text: str = Field(min_length=1)
+
+
+class ReviseScriptLinesRequest(DomainModel):
+    revisions: list[ScriptLineRevision] = Field(min_length=1, max_length=500)
     change_reason: str = Field(min_length=1)
 
 

@@ -21,6 +21,11 @@ from short_drama.models import (
     ReferenceRequirement,
     ReferenceRole,
 )
+from short_drama.production_profiles import (
+    ProductionSkillRole,
+    compile_production_prompt,
+    production_skill,
+)
 
 
 class AssetCatalogSearchRequest(DomainModel):
@@ -32,6 +37,11 @@ class AssetCatalogSearchRequest(DomainModel):
     )
     tags: list[str] = Field(default_factory=list[str], max_length=24)
     include_current_project: bool = True
+    include_cross_project: bool = False
+    source_project_ids: list[str] = Field(
+        default_factory=list[str],
+        max_length=32,
+    )
     limit: int = Field(default=12, ge=1, le=50)
 
 
@@ -238,6 +248,96 @@ def missing_reference_views(
     return list(pending.values())[:limit]
 
 
+_AUTONOMOUS_REUSABLE_REFERENCE_ROLES = {
+    ReferenceRole.CHARACTER_FACE,
+    ReferenceRole.CHARACTER_PROFILE,
+    ReferenceRole.CHARACTER_BACK,
+    ReferenceRole.LOCATION_REVERSE,
+    ReferenceRole.LOCATION_INTERACTION,
+}
+
+
+def recommended_reusable_reference_views(
+    document: ProjectDocument,
+    *,
+    limit: int = 24,
+) -> list[ReferenceViewNeed]:
+    """Choose a small reusable subset from shot-level reference preferences.
+
+    Shot plans may carry temporary performance, damage, contact, and action tags. Those
+    remain useful retrieval hints, but generating a separate reusable asset for every tag
+    duplicates the later keyframe layer. Autonomous preparation therefore fills only
+    identity-angle and location-topology role gaps; prop use/state and temporary shot state
+    remain keyframe work. The full preference list stays available through
+    ``missing_reference_views`` for an Agent or user to request explicitly.
+    """
+
+    valid_entries = _valid_pack_entries(document)
+    covered_roles = {
+        (pack.subject_asset_id, entry.role) for pack, entry in valid_entries
+    }
+    grouped: dict[tuple[str, ReferenceRole], ReferenceViewNeed] = {}
+    for need in missing_reference_views(document):
+        if need.role not in _AUTONOMOUS_REUSABLE_REFERENCE_ROLES:
+            continue
+        key = (need.subject_asset_id, need.role)
+        if key in covered_roles:
+            continue
+        existing = grouped.get(key)
+        if existing is not None:
+            existing.requirement_ids.extend(
+                item for item in need.requirement_ids if item not in existing.requirement_ids
+            )
+            existing.shot_ids.extend(
+                item for item in need.shot_ids if item not in existing.shot_ids
+            )
+            continue
+        if need.role == ReferenceRole.CHARACTER_FACE:
+            angle = ReferenceAngle.FRONT
+            framing = ReferenceFraming.FACE_CLOSE_UP
+            tags = ["identity", "face"]
+            purpose = "建立可跨镜复用的正面面部身份锦点，不携带当前镜头表演。"
+        elif need.role == ReferenceRole.CHARACTER_PROFILE:
+            angle = (
+                need.angle
+                if need.angle
+                in {ReferenceAngle.LEFT_PROFILE, ReferenceAngle.RIGHT_PROFILE}
+                else ReferenceAngle.LEFT_PROFILE
+            )
+            framing = ReferenceFraming.MEDIUM
+            tags = ["identity", "profile"]
+            purpose = "建立可跨镜复用的角色侧面身份锦点，不携带当前镜头动作。"
+        elif need.role == ReferenceRole.CHARACTER_BACK:
+            angle = ReferenceAngle.BACK
+            framing = ReferenceFraming.FULL_BODY
+            tags = ["identity", "back"]
+            purpose = "建立可跨镜复用的角色背面轮廓与服装锦点。"
+        else:
+            angle = need.angle
+            framing = ReferenceFraming.WIDE
+            tags = [
+                "topology",
+                "reverse" if need.role == ReferenceRole.LOCATION_REVERSE else "interaction",
+            ]
+            purpose = (
+                "建立可跨镜复用的同源空间反打关系与出入口方位。"
+                if need.role == ReferenceRole.LOCATION_REVERSE
+                else "建立可跨镜复用的交互区、通道和固定物空间关系。"
+            )
+        grouped[key] = ReferenceViewNeed(
+            subject_asset_id=need.subject_asset_id,
+            requirement_ids=list(need.requirement_ids),
+            shot_ids=list(need.shot_ids),
+            role=need.role,
+            angle=angle,
+            framing=framing,
+            tags=tags,
+            purpose=purpose,
+            lineage_root_version_id=need.lineage_root_version_id,
+        )
+    return list(grouped.values())[:limit]
+
+
 def build_reference_view_prompt(
     document: ProjectDocument,
     subject: Asset,
@@ -249,8 +349,15 @@ def build_reference_view_prompt(
         if item.id == document.project.current_bible_version_id
     )
     tags = "、".join(need.tags) if need.tags else "无额外标签"
+    skill = production_skill(document.project.production_profile)
+    skill_prompt = compile_production_prompt(
+        document.project.production_profile,
+        roles=(ProductionSkillRole.ASSET_REVIEWER,),
+        context="\n".join((subject.name, need.purpose, tags)),
+        include_constitution=False,
+    )
     shared = (
-        "基于输入的当前批准母版，生成一张单幅9:16真人短剧制片参考图。"
+        f"基于输入的当前批准母版，生成一张单幅、9:16 的{skill.medium}制片参考图。"
         "母版是身份或空间几何的唯一来源；保持同一人物、服装、物体实例、材质、"
         "灯光状态和左右关系。不要宫格、拼贴、说明文字、箭头、品牌、水印或可读标牌。"
     )
@@ -270,10 +377,14 @@ def build_reference_view_prompt(
             f"输出同一道具的{need.role.value}、{need.framing.value}状态，状态标签：{tags}。"
             "保持形状、颜色、尺度、部件数量和材质；若需要手持比例，只出现匿名裁切手部。"
         )
+    style_context = (
+        f"\n项目摄影：{bible.style.cinematography}\n色彩：{bible.style.color}"
+        if subject.kind == AssetKind.LOCATION
+        else "\n光线与背景：中性柔光，不引入剧情环境或临时表演状态。"
+    )
     return (
         f"{shared}\n{task}\n资产：{subject.name}\n用途：{need.purpose}\n"
-        f"项目摄影：{bible.style.cinematography}\n色彩：{bible.style.color}\n"
-        f"禁止：{'；'.join(bible.style.forbidden)}。"
+        f"{style_context}\n制作类型策略：{skill_prompt.text}"
     )
 
 
@@ -284,9 +395,18 @@ def search_asset_catalog(
     request: AssetCatalogSearchRequest,
 ) -> AssetCatalogSearchResponse:
     requested_tags = {item.strip().lower() for item in request.tags if item.strip()}
+    source_project_ids = set(request.source_project_ids)
     query_tokens = _search_tokens(request.query)
     candidates: list[AssetCatalogCandidate] = []
     for document in documents:
+        if source_project_ids and document.project.id not in source_project_ids:
+            continue
+        if (
+            current_project_id is not None
+            and document.project.id != current_project_id
+            and not request.include_cross_project
+        ):
+            continue
         if (
             document.project.id == current_project_id
             and not request.include_current_project

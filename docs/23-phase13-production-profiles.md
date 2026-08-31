@@ -1,6 +1,6 @@
 # Phase 13：通用视频与抖音短剧制作策略
 
-> 后续状态：Phase 14 已将此处的 45–60 秒规划基线扩展为用户可自定义的目标时长；抖音短剧默认 5 分钟，并采用分层 Multi-Agent 长篇规划。本文保留 Phase 13 当时的实现记录。
+> 后续状态：Phase 14 已将此处的 45–60 秒规划基线扩展为用户可自定义的目标时长；Phase 23 将这些 Prompt Policy 收敛为显式 `ProductionSkill` 与静态 Catalog；Phase 28 进一步把 Skill 拆为稳定 constitution、角色 rubric 和上下文经验，并让资产、H3 路由/Prompt 编译及整集 Review 按职责读取 Skill。本文保留 Phase 13 当时的实现记录。
 
 ## 目标
 

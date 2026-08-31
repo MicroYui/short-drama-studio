@@ -25,6 +25,10 @@ from short_drama.models import (
     TimelineManifest,
     VideoInspectionReport,
 )
+from short_drama.production_profiles import (
+    ProductionSkillRole,
+    compile_production_prompt,
+)
 from short_drama.providers.openai_compatible_language_client import LanguageProviderClient
 
 
@@ -145,9 +149,20 @@ def review_scene(
             }
         )
 
+    skill_prompt = compile_production_prompt(
+        document.project.production_profile,
+        roles=(ProductionSkillRole.EPISODE_REVIEWER,),
+        context="\n".join(
+            (
+                scene.model_dump_json(),
+                json.dumps(shot_evidence, ensure_ascii=False),
+            )
+        ),
+    )
     instructions = (
-        "You are a scene-level episode-review Agent for a live-action vertical drama. Return "
-        "JSON only and match SceneReviewAgentOutput. Review the supplied scene as edited, using "
+        "You are a scene-level episode-review Agent for a live-action vertical production. "
+        f"{skill_prompt.text} Return JSON only and match SceneReviewAgentOutput. Review the supplied "
+        "scene as edited, using "
         "the locked scene purpose, chronological ShotPlans, selected Takes, timeline clips, and "
         "persisted video observations. Report evidence before inference. Do not grade the scene, "
         "require a fixed beat count, require new information every N seconds, or turn polish "
@@ -222,9 +237,20 @@ def review_episode(
         item.scene_id for item in scene_reviews
     }
     allowed_shot_ids = {item.id for item in document.shots}
+    skill_prompt = compile_production_prompt(
+        document.project.production_profile,
+        roles=(ProductionSkillRole.EPISODE_REVIEWER,),
+        context="\n".join(
+            (
+                script.model_dump_json(),
+                *(item.model_dump_json() for item in scene_reviews),
+            )
+        ),
+    )
     instructions = (
-        "You are an episode-level reviewer Agent for a live-action vertical drama. Return JSON only "
-        "and match EpisodeReviewAgentOutput. Compare the locked script, scene entry/exit states, "
+        "You are an episode-level reviewer Agent for a live-action vertical production. "
+        f"{skill_prompt.text} Return JSON only and match EpisodeReviewAgentOutput. Compare the locked "
+        "script, scene entry/exit states, "
         "timeline order, and the independent scene reviews. Find only cross-scene or episode-level "
         "problems that are supported by those artifacts: story clarity, causal handoff, character "
         "or prop state, sound-source semantics already observed visually, and pacing caused by "

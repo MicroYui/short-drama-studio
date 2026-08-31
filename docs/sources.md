@@ -1,6 +1,6 @@
 # 来源与源码快照
 
-快照日期：2026-08-17。本清单优先记录官方资料和固定源码 commit。产品能力、模型接口、价格与仓库代码都会变化，进入实现前应重新核验。
+基础快照日期：2026-08-17；Phase 26 补充快照日期：2026-08-27。本清单优先记录官方资料和固定源码 commit。产品能力、模型接口、价格与仓库代码都会变化，进入实现前应重新核验。
 
 ## 1. 模型与 API 官方资料
 
@@ -54,13 +54,15 @@
 仅用于研究产品机制；最终系统不调用或依赖这些产品。
 
 - 即梦：[官方主页](https://www.jimeng.com/)
-- 可灵：[VIDEO 3.0 用户指南](https://app.klingai.com/cn/quickstart/klingai-video-3-model-user-guide)
-- LTX Studio：[产品主页](https://website.ltx.studio/)、[完整工作流教程](https://ltx.io/blog/ltx-studio-tutorial)、[TV/Media workflow](https://ltx.io/studio/solution/tv-media-networks)、[Retake 教程](https://ltx.io/blog/retake-ai-directing-tool-ltx-studio)、[Elements 教程](https://ltx.io/blog/getting-started-with-elements)、[Retake API](https://docs.ltx.io/api-documentation/api-reference/async-video-generation/submit-retake)
+- 可灵：[VIDEO 3.0 用户指南](https://kling.ai/quickstart/klingai-video-3-model-user-guide)、[Element Library 3.0](https://kling.ai/quickstart/klingai-element-library-3-user-guide)
+- LTX Studio：[产品主页](https://website.ltx.studio/)、[完整工作流教程](https://ltx.io/blog/ltx-studio-tutorial)、[TV/Media workflow](https://ltx.io/studio/solution/tv-media-networks)、[Retake 教程](https://ltx.io/blog/retake-ai-directing-tool-ltx-studio)、[Elements 教程](https://ltx.io/blog/getting-started-with-elements)、[Flows](https://ltx.studio/blog/ltx-studio-flows)、[Retake API](https://docs.ltx.io/api-documentation/api-reference/async-video-generation/submit-retake)
 - LTX Studio 制作方法：[一致角色指南](https://ltx.io/blog/how-to-create-a-consistent-character)、[完整预视化流水线](https://ltx.io/blog/how-to-build-a-complete-pre-visualization-pipeline)
 - Google Flow：[Ingredients 与 Frames 帮助](https://support.google.com/flow/answer/16353334?hl=en)
-- Runway：[Gen-4 Image References](https://help.runwayml.com/hc/en-us/articles/40042718905875-Creating-with-Gen-4-Image-References)、[Image-to-Video Prompting Guide](https://help.runwayml.com/hc/en-us/articles/48324313115155-Image-to-Video-Prompting-Guide)
+- Runway：[Gen-4 Image References](https://help.runwayml.com/hc/en-us/articles/40042718905875-Creating-with-Gen-4-Image-References)、[Gen-4 Video Prompting Guide](https://help.runwayml.com/hc/en-us/articles/39789879462419-Gen-4-Video-Prompting-Guide)
+- Adobe Firefly：[Match camera motion to reference video](https://helpx.adobe.com/firefly/web/work-with-audio-and-video/work-with-video/match-camera-motion-to-reference-video.html)
+- Dreamina：[Storyboard AI / Multiframes](https://dreamina.capcut.com/create/storyboard-ai)
 - 可灵：[多图参考公开说明](https://kuaishou.gcs-web.com/zh-hant/news-releases/news-release-details/kuaishoukelingaituichuduotucankao-gongneng)
-- 纳逗 Pro：[业务页](https://www.iqiyi.com/common/aqynatoopro.html)、[发布说明](https://pages.iqiyi.com/m/scpr/63x0au29.html?qyc-pr=1)、[新功能说明](https://pages.iqiyi.com/m/scpr/63x0avkx.html?qyc-pr=1)
+- 纳逗 Pro：[工作台指南](https://nadoupro.iqiyi.com/docs/workspace-guide)、[AI 媒体生成指南](https://nadoupro.iqiyi.com/docs/ai-media-generation-guide)、[AI 导演手册](https://nadoupro.iqiyi.com/docs/ai-director-guide)、[Skills 与 Agents](https://nadoupro.iqiyi.com/docs/skills-and-agents-guide)、[业务页](https://www.iqiyi.com/common/aqynatoopro.html)
 
 公开产品资料中的效果描述标为 `PRODUCT-CLAIM`。由于这些产品不可用于本项目，本轮不安排登录、积分或平台实测。
 
@@ -85,14 +87,43 @@ LTX Desktop 的应用代码与模型权重必须分开判断：[应用 License](
 
 LTX 模型本身的版本与能力另见 [Lightricks/LTX-2](https://github.com/Lightricks/LTX-2)。Desktop 代码中的生成、Retake、Extend 和 LoRA 路径仍带有具体 LTX 模型版本假设，因此不能把桌面应用壳等同于某个模型版本的通用能力；当前项目只复用应用与编辑代码。
 
-## 4. ComfyUI 官方开发资料
+### Phase 26 补充源码快照
+
+Phase 26 为验证视频质量和低重试机制重新拉取了相关仓库。下表是本轮实际审查的 commit，不覆盖上表记录的历史实现快照。
+
+| 项目 | 本轮审查 commit | 本轮用途 |
+| --- | --- | --- |
+| [MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3) | [`d21241f0a4b3acbb34c97dae47fa417b7065e438`](https://github.com/MiniMax-AI/MiniMax-H3/commit/d21241f0a4b3acbb34c97dae47fa417b7065e438) | 官方生成模式、Prompt Skill、Context-IR 和多模态角色 |
+| [LTX Desktop](https://github.com/Lightricks/LTX-Desktop) | [`68cd86c15e5fd25f56229ea63c0dbcb0338f7812`](https://github.com/Lightricks/LTX-Desktop/commit/68cd86c15e5fd25f56229ea63c0dbcb0338f7812) | 多关键帧、Retake、Gap Fill 和 alternate takes |
+| [Toonflow](https://github.com/HBAI-Ltd/Toonflow-app) | [`e03cf590eb0cab63534a4040db9acb4ec95b42a6`](https://github.com/HBAI-Ltd/Toonflow-app/commit/e03cf590eb0cab63534a4040db9acb4ec95b42a6) | Skill 渐进加载、项目记忆与固定 workflow 反例 |
+| [ComfyUI](https://github.com/comfy-org/ComfyUI) | [`d8e7bbc9d586d95f758d6b0ed23d519088be578a`](https://github.com/comfy-org/ComfyUI/commit/d8e7bbc9d586d95f758d6b0ed23d519088be578a) | 输入签名缓存、依赖失效与局部执行原则 |
+| [ViMax](https://github.com/HKUDS/ViMax) | [`05a48943878312d88fe5a016c12a9654940ecc43`](https://github.com/HKUDS/ViMax/commit/05a48943878312d88fe5a016c12a9654940ecc43) | 参考筛选、三视图与 camera tree 机位预演 |
+| [AESR](https://github.com/oceanflowlab/AESR) | [`a2b3d010e4b66eed0398ead1b592bc9038f8f6db`](https://github.com/oceanflowlab/AESR/commit/a2b3d010e4b66eed0398ead1b592bc9038f8f6db) | 黑盒模型 Playbook、时间定位与按失败类型修复；未发现明确软件 License，只研究机制 |
+| [MSVBench](https://github.com/HITsz-TMG/MSVBench) | [`309318bf29594fe21a487d4fd78284faef0d777b`](https://github.com/HITsz-TMG/MSVBench/commit/309318bf29594fe21a487d4fd78284faef0d777b) | 多镜头分层评测、物理状态和摄影语法连续性 |
+| [MultiShotMaster](https://github.com/KlingAIResearch/MultiShotMaster) | [`1df812dda262639e4a3ca6e4a1da9000b0a8e124`](https://github.com/KlingAIResearch/MultiShotMaster/commit/1df812dda262639e4a3ca6e4a1da9000b0a8e124) | global invariants、per-shot captions 和模型内部多镜边界 |
+
+## 4. 前沿论文与评测资料
+
+- [AESR: Agentic Exploration and Self-Refinement for Black-Box Video Generation](https://arxiv.org/abs/2608.20749)
+- [Video-T1: Test-Time Scaling for Video Generation](https://arxiv.org/abs/2503.18942)
+- [VideoReward](https://arxiv.org/abs/2501.13918)
+- [MSVBench](https://arxiv.org/abs/2602.23969)
+- [PersonaShot](https://arxiv.org/abs/2608.16717)
+- [FramePack](https://arxiv.org/abs/2504.12626)
+- [VideoDirectorGPT](https://arxiv.org/abs/2309.15091)
+- [DrawVideo](https://arxiv.org/abs/2605.23508)
+- [MultiShotMaster](https://arxiv.org/abs/2512.03041)
+
+论文结论统一标为 `PAPER-REPORTED`；只有在当前 AceData + MiniMax-H3 路线复现后，才升级为本项目实验结论。模型内部 latent 搜索、训练方法或专用编辑接口不能视为 H3 Harness 已具备的能力。
+
+## 5. ComfyUI 官方开发资料
 
 - [Submit a workflow](https://docs.comfy.org/api-reference/cloud/workflow/submit-a-workflow-for-execution)
 - [Custom nodes overview](https://docs.comfy.org/custom-nodes/overview)
 - [Server-side custom node overview](https://docs.comfy.org/custom-nodes/backend/server_overview)
 - [Registry overview](https://docs.comfy.org/registry/overview)
 
-## 5. 证据使用规则
+## 6. 证据使用规则
 
 - 官方文档用于确认接口、字段和产品公开功能；
 - 固定源码用于确认代码里实际存在的数据模型和执行路径；

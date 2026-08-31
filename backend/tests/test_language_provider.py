@@ -18,7 +18,7 @@ from short_drama.language_models import (
     LanguageProviderConfigUpdate,
 )
 from short_drama.h3_models import H3MediaInput, H3MediaKind, H3MediaRole, H3MediaSource
-from short_drama.models import VideoGenerationRoute
+from short_drama.models import ProductionProfile, VideoGenerationRoute
 from short_drama.models import (
     ActionBeat,
     SpatialInteractionConstraint,
@@ -29,6 +29,7 @@ from short_drama.providers.openai_compatible_language_client import (
     OpenAICompatibleLanguageClient,
 )
 from short_drama.providers.h3_language_prompt import build_language_prompt_input
+from short_drama.providers.minimax_h3_compiler import build_h3_prompt
 from short_drama.service import (
     ProviderOperationError,
     ShortDramaService,
@@ -365,13 +366,7 @@ def test_language_api_compiles_h3_prompt_without_submitting_video(
 ) -> None:
     for variable in ("GPT_SOL_API_KEY", "OPENAI_API_KEY", "GPT_SOL_BASE_URL"):
         monkeypatch.delenv(variable, raising=False)
-    compiled = (
-        "真人都市悬疑短剧，电影级写实，9:16竖屏，精确8秒，单一连续镜头。"
-        "林夏近景，短黑发、米白色风衣，视线越过镜头，稳定机位并在末段轻推。"
-        "林夏用普通话逐字说：“你说他十点离开，可监控里，十点零三分他还在这里。”"
-        "周衡只在画外作为视线目标，不入画；无其他人物或道具。禁止字幕、水印和画面内可读文字。"
-    )
-    fake = FakeLanguageProvider(compiled)
+    fake = FakeLanguageProvider()
 
     def factory(api_key: str, base_url: str) -> FakeLanguageProvider:
         assert api_key == ""
@@ -384,6 +379,14 @@ def test_language_api_compiles_h3_prompt_without_submitting_video(
         language_provider_factory=factory,
     )
     project = service.initialize_fixture()
+    shot = next(item for item in project.document.shots if item.sequence == 2)
+    compiled = build_h3_prompt(
+        project.document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=8,
+    )
+    fake.output_text = compiled
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
     )
@@ -407,7 +410,7 @@ def test_language_api_compiles_h3_prompt_without_submitting_video(
     assert payload["route"] == "REFERENCE"
     assert payload["compiled_prompt"] == compiled
     assert payload["validation_notes"] == [
-        "non-empty prompt within MiniMax-H3 7000-character limit",
+        "official MiniMax-H3 prompt field order preserved",
         "locked 9:16 ratio and 8-second duration preserved",
         "1 locked dialogue line(s) preserved verbatim",
     ]
@@ -419,12 +422,12 @@ def test_language_api_compiles_h3_prompt_without_submitting_video(
     assert service.list_h3_provider_runs(project.document.project.id).runs == []
 
 
-def test_language_prompt_uses_visible_assets_and_previous_terminal_state() -> None:
+def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state() -> None:
     from short_drama.fixture import build_dont_trust_me_fixture
 
     document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
     shot_2 = next(shot for shot in document.shots if shot.sequence == 2)
-    _, input_text = build_language_prompt_input(
+    instructions, input_text = build_language_prompt_input(
         document,
         shot_2,
         route=VideoGenerationRoute.REFERENCE,
@@ -433,6 +436,10 @@ def test_language_prompt_uses_visible_assets_and_previous_terminal_state() -> No
     )
     payload = json.loads(input_text)
 
+    assert "当前制作类型为真人抖音竖屏短剧" in instructions
+    assert "Video Prompt Compiler rubric:" in instructions
+    assert "Production constitution:" not in instructions
+    assert payload["production_profile"] == "DOUYIN_SHORT_DRAMA"
     assert payload["visible_assets"] == ["林夏", "雨夜便利店"]
     assert [
         character["name"]
@@ -455,6 +462,20 @@ def test_language_prompt_uses_visible_assets_and_previous_terminal_state() -> No
         "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
         "continuity_handoff": "从上一镜终态自然承接，但不得携入当前镜头未列出的可见资产。",
     }
+
+    document.project.production_profile = ProductionProfile.GENERAL_VIDEO
+    general_instructions, general_input = build_language_prompt_input(
+        document,
+        shot_2,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=8,
+        source_prompt="baseline",
+    )
+    assert "当前制作类型为真人竖屏视频" in general_instructions
+    assert "Active Production Skill: general live-action vertical video." in general_instructions
+    assert "Video Prompt Compiler rubric:" in general_instructions
+    assert "live-action Douyin vertical short drama" not in general_instructions
+    assert json.loads(general_input)["production_profile"] == "GENERAL_VIDEO"
 
 
 def test_language_prompt_includes_structured_physical_interactions() -> None:
@@ -586,15 +607,24 @@ def test_language_compiler_rejects_changed_locked_dialogue(
 ) -> None:
     for variable in ("GPT_SOL_API_KEY", "OPENAI_API_KEY", "GPT_SOL_BASE_URL"):
         monkeypatch.delenv(variable, raising=False)
-    fake = FakeLanguageProvider(
-        "真人都市悬疑，9:16，8秒。林夏用普通话说：“你说他九点离开。”"
-    )
+    fake = FakeLanguageProvider()
     service = ShortDramaService(
         database_path=tmp_path / "app-data" / "short-drama.sqlite3",
         workspace_root=tmp_path / "workspace",
         language_provider_factory=lambda _api_key, _base_url: fake,
     )
-    service.initialize_fixture()
+    project = service.initialize_fixture()
+    shot = next(item for item in project.document.shots if item.sequence == 2)
+    valid = build_h3_prompt(
+        project.document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=8,
+    )
+    fake.output_text = valid.replace(
+        "你说他十点离开，可监控里，十点零三分他还在这里。",
+        "你说他九点离开。",
+    )
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
     )
@@ -610,22 +640,26 @@ def test_language_compiler_rejects_changed_locked_dialogue(
         )
 
 
-def test_language_compiler_accepts_voiceover_source_and_speaker_paraphrase(
+def test_language_compiler_accepts_official_voiceover_form(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for variable in ("GPT_SOL_API_KEY", "OPENAI_API_KEY", "GPT_SOL_BASE_URL"):
         monkeypatch.delenv(variable, raising=False)
-    fake = FakeLanguageProvider(
-        "真人都市悬疑，9:16，精确8秒。录音笔扬声器传出林夏的普通话录音："
-        "“如果你听到这段话，别相信我。”人物全程闭嘴。"
-    )
+    fake = FakeLanguageProvider()
     service = ShortDramaService(
         database_path=tmp_path / "app-data" / "short-drama.sqlite3",
         workspace_root=tmp_path / "workspace",
         language_provider_factory=lambda _api_key, _base_url: fake,
     )
-    service.initialize_fixture()
+    project = service.initialize_fixture()
+    shot = next(item for item in project.document.shots if item.sequence == 5)
+    fake.output_text = build_h3_prompt(
+        project.document,
+        shot,
+        route=VideoGenerationRoute.FRAME_FIRST,
+        duration_seconds=8,
+    )
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
     )
@@ -641,3 +675,5 @@ def test_language_compiler_accepts_voiceover_source_and_speaker_paraphrase(
 
     assert result.compiled_prompt == fake.output_text
     assert result.validation_notes[-1] == "1 locked dialogue line(s) preserved verbatim"
+    assert "says in an off-screen voiceover" in result.compiled_prompt
+    assert "lips remain completely closed" in result.compiled_prompt

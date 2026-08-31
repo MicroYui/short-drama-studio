@@ -34,6 +34,7 @@ from short_drama.models import (
     EvidenceStatus,
     Freshness,
     OperationKind,
+    ProductionProfile,
     QAReport,
     QaFailureCategory,
     QaIssue,
@@ -416,6 +417,29 @@ def test_route_agent_can_choose_tail_window_without_making_it_a_gate(
     assert decision.override_allowed is True
     assert fake.calls
     assert "never mandatory" in fake.calls[0][0]
+    assert (
+        "Active Production Skill: live-action Douyin vertical short drama."
+        in fake.calls[0][0]
+    )
+    assert "Route Planner rubric:" in fake.calls[0][0]
+    assert "Production constitution:" not in fake.calls[0][0]
+
+    general_document = service.repository.get_project(project.document.project.id)
+    assert general_document is not None
+    general_document.project.production_profile = ProductionProfile.GENERAL_VIDEO
+    service.repository.save_project(general_document)
+    service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[target_shot.id],
+            use_language_agent=True,
+            consider_video_guides=True,
+        ),
+    )
+    general_instructions = fake.calls[-1][0]
+    assert "Active Production Skill: general live-action vertical video." in general_instructions
+    assert "Route Planner rubric:" in general_instructions
+    assert "live-action Douyin vertical short drama" not in general_instructions
 
     updated = service.repository.get_project(project.document.project.id)
     assert updated is not None
@@ -899,6 +923,96 @@ def test_route_plan_can_enqueue_production_tasks_without_calling_provider(
     assert all(item.status == TaskStatus.QUEUED for item in executed.queued_tasks)
     saved_evidence = service.repository.list_route_evidence(project.document.project.id)
     assert {item.purpose for item in saved_evidence} == {EvidencePurpose.PRODUCTION}
+
+
+def test_route_plan_adaptive_execution_queues_only_the_first_candidate(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    shot = project.document.shots[0]
+    service.update_h3_config(H3ProviderConfigUpdate(api_key="test-key"))
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+            candidate_count=3,
+        ),
+    )
+
+    executed = service.execute_h3_production_route_plan(
+        project.document.project.id,
+        compiled.plan.id,
+        H3ProductionRouteExecuteRequest(
+            enqueue_new_generations=True,
+            adaptive_sequential=True,
+            inspect_reused_takes=False,
+            rebuild_manifest=False,
+        ),
+    )
+
+    assert len(executed.queued_tasks) == 1
+    assert executed.queued_tasks[0].candidate_index == 1
+    assert executed.plan.decisions[0].candidate_count == 3
+    assert executed.plan.decisions[0].task_ids == [executed.queued_tasks[0].id]
+
+
+def test_adaptive_candidate_policy_retries_quality_but_not_structural_failure(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    shot = project.document.shots[0]
+    compiled = service.compile_h3_production_route_plan(
+        project.document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+            candidate_count=2,
+        ),
+    )
+    decision = compiled.plan.decisions[0]
+    take = _persist_passed_h3_take(
+        service,
+        shot_id=shot.id,
+        media_path=tmp_path / "candidate.mp4",
+    )
+    decision.task_ids = [take.task_id]
+    take.qa_status = QaStatus.REJECTED
+    take.qa_report.status = QaStatus.REJECTED
+    take.qa_report.hard_gate_passed = False
+    take.qa_report.issues = [
+        QaIssue(
+            code="COMPOSITION_WEAK",
+            severity="MAJOR",
+            message="The generated composition is visibly weak.",
+            repair_layer="VIDEO_DIRECTOR",
+            category=QaFailureCategory.COMPOSITION_QUALITY,
+        )
+    ]
+    service.repository.save_take(take)
+
+    assert service._should_generate_next_adaptive_candidate(
+        decision,
+        service.get_project(project.document.project.id),
+    )
+
+    take.qa_report.issues = [
+        QaIssue(
+            code="SPATIAL_LAYOUT_CONTRADICTION",
+            severity="MAJOR",
+            message="The generated space contradicts the approved layout.",
+            repair_layer="VIDEO_DIRECTOR",
+            category=QaFailureCategory.SPATIAL_CONTINUITY,
+        )
+    ]
+    service.repository.save_take(take)
+
+    assert not service._should_generate_next_adaptive_candidate(
+        decision,
+        service.get_project(project.document.project.id),
+    )
 
 
 def test_route_plan_becomes_stale_after_shot_revision_changes(tmp_path: Path) -> None:

@@ -243,9 +243,9 @@ def test_h3_prompt_only_constrains_assets_present_in_the_shot() -> None:
     prop_prompt = build_h3_prompt(document, shot_5)
 
     assert "红色录音笔" not in dialogue_prompt
-    assert "不要主动加入本镜头未提及的角色或道具" in dialogue_prompt
+    assert "Do not introduce undeclared characters, props" in dialogue_prompt
     assert "红色录音笔" in prop_prompt
-    assert "连续性状态：开始时道具从周衡右手进入" in prop_prompt
+    assert "the opening state is 道具从周衡右手进入" in prop_prompt
 
 
 def test_h3_prompt_omits_hidden_prop_state_from_generation_projection() -> None:
@@ -280,7 +280,7 @@ def test_h3_prompt_omits_hidden_prop_state_from_generation_projection() -> None:
     prompt = build_h3_prompt(document, shot)
 
     assert "录音笔" not in prompt
-    assert "画面只呈现参考计划中的可见主体" in prompt
+    assert "Show only the visible subjects declared by the shot reference plan" in prompt
 
 
 def test_h3_prompt_carries_structured_contact_and_rigid_attachments() -> None:
@@ -323,10 +323,94 @@ def test_h3_prompt_carries_structured_contact_and_rigid_attachments() -> None:
 
     prompt = build_h3_prompt(document, shot)
 
-    assert "动作节拍必须依序执行" in prompt
-    assert "本镜头内保持接触，除非后续动作节拍明确改变该状态" in prompt
-    assert "entrance.primary_door.handle.exterior固定在entrance.primary_door.face.exterior" in prompt
-    assert "部件不得消失、换面、复制、脱离或漂移" in prompt
+    assert "Perform the declared action beats in order" in prompt
+    assert "Maintain that contact through the shot" in prompt
+    assert (
+        "entrance.primary_door.handle.exterior remains rigidly attached to "
+        "entrance.primary_door.face.exterior"
+    ) in prompt
+    assert "Parts never disappear, switch faces, duplicate, detach, or drift" in prompt
+
+
+def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> None:
+    document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    dialogue_shot = next(shot for shot in document.shots if shot.sequence == 2)
+    voiceover_shot = next(shot for shot in document.shots if shot.sequence == 5)
+    first = H3MediaInput(
+        kind=H3MediaKind.IMAGE,
+        role=H3MediaRole.FIRST_FRAME,
+        source=H3MediaSource(external_url="https://example.invalid/first.png"),
+    )
+    last = H3MediaInput(
+        kind=H3MediaKind.IMAGE,
+        role=H3MediaRole.LAST_FRAME,
+        source=H3MediaSource(external_url="https://example.invalid/last.png"),
+    )
+    reference = H3MediaInput(
+        kind=H3MediaKind.IMAGE,
+        role=H3MediaRole.REFERENCE_IMAGE,
+        source=H3MediaSource(external_url="https://example.invalid/reference.png"),
+    )
+
+    direct = build_h3_prompt(
+        document,
+        dialogue_shot,
+        route=VideoGenerationRoute.DIRECT,
+        duration_seconds=8,
+    )
+    frame = build_h3_prompt(
+        document,
+        dialogue_shot,
+        route=VideoGenerationRoute.FRAME_FIRST,
+        duration_seconds=8,
+        media_inputs=[first],
+    )
+    first_last = build_h3_prompt(
+        document,
+        dialogue_shot,
+        route=VideoGenerationRoute.FRAME_FIRST_LAST,
+        duration_seconds=8,
+        media_inputs=[first, last],
+    )
+    referenced = build_h3_prompt(
+        document,
+        dialogue_shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=8,
+        media_inputs=[reference],
+    )
+    voiceover = build_h3_prompt(
+        document,
+        voiceover_shot,
+        route=VideoGenerationRoute.FRAME_FIRST,
+        duration_seconds=8,
+        media_inputs=[first],
+    )
+
+    assert direct.startswith("integrated_multimodal_description:")
+    assert "(S1) says in Mandarin Chinese: <d>[Chinese]" in direct
+    assert frame.startswith(
+        "For the target video, at 0.00 seconds into the target video, "
+        "<Picture 1> (from [Shot 1]) is fully referenced."
+    )
+    assert first_last.startswith(
+        "How the reference pictures align with the target video — "
+        "Picture 1 (from Shot 1) aligns with the 0.00-second mark"
+    )
+    fields = [
+        "subject_definitions:",
+        "summary:",
+        "retention_analysis:",
+        "detailed_description:",
+        "overall_soundscape:",
+        "non_diegetic_music:",
+    ]
+    assert [referenced.index(field) for field in fields] == sorted(
+        referenced.index(field) for field in fields
+    )
+    assert "<Picture 1>" in referenced
+    assert "says in an off-screen voiceover" in voiceover
+    assert "lips remain completely closed" in voiceover
 
 
 def test_h3_compiler_enforces_routes_before_network() -> None:

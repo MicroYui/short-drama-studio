@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from collections.abc import Iterator, Sequence
@@ -24,8 +25,19 @@ from short_drama.models import (
     ProjectDocument,
     RouteEvidence,
     Take,
+    TakeComparisonReport,
     TaskStatus,
     VideoInspectionReport,
+)
+from short_drama.script_documents import (
+    PlanningScriptDocument,
+    PlanningScriptDocumentKind,
+    PlanningScriptSearchHit,
+)
+from short_drama.visual_input_quality import (
+    InputCompatibilityReport,
+    KeyframeComparisonReport,
+    ReferenceVisualRerankReport,
 )
 
 
@@ -185,6 +197,28 @@ class ShortDramaRepository:
                 CREATE INDEX IF NOT EXISTS idx_video_inspections_project_shot
                     ON video_inspections(project_id, shot_id, created_at);
 
+                CREATE TABLE IF NOT EXISTS take_comparisons (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    shot_id TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_take_comparisons_project_shot
+                    ON take_comparisons(project_id, shot_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS visual_input_reports (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    shot_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_visual_input_reports_project_shot
+                    ON visual_input_reports(project_id, shot_id, kind, created_at);
+
                 CREATE TABLE IF NOT EXISTS audio_inspections (
                     id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -239,8 +273,53 @@ class ShortDramaRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_planning_run_artifacts_run_kind
                     ON planning_run_artifacts(run_id, kind, sequence);
+
+                CREATE TABLE IF NOT EXISTS planning_script_documents (
+                    run_id TEXT NOT NULL,
+                    revision_round INTEGER NOT NULL,
+                    document_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    scene_sequence INTEGER,
+                    created_at TEXT NOT NULL,
+                    document_json TEXT NOT NULL,
+                    PRIMARY KEY(run_id, revision_round, document_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_planning_script_documents_revision
+                    ON planning_script_documents(run_id, revision_round, kind, scene_sequence);
                 """
             )
+            try:
+                connection.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS planning_script_documents_fts
+                    USING fts5(
+                        run_id UNINDEXED,
+                        revision_round UNINDEXED,
+                        document_id UNINDEXED,
+                        title,
+                        metadata,
+                        body,
+                        tokenize='trigram'
+                    )
+                    """
+                )
+            except sqlite3.OperationalError:
+                # Older SQLite builds may omit the trigram tokenizer.  FTS5 itself
+                # is still useful for whitespace-delimited metadata in that case.
+                connection.execute(
+                    """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS planning_script_documents_fts
+                    USING fts5(
+                        run_id UNINDEXED,
+                        revision_round UNINDEXED,
+                        document_id UNINDEXED,
+                        title,
+                        metadata,
+                        body,
+                        tokenize='unicode61'
+                    )
+                    """
+                )
             task_columns = {
                 cast(str, row["name"])
                 for row in connection.execute("PRAGMA table_info(generation_tasks)").fetchall()
@@ -279,6 +358,12 @@ class ShortDramaRepository:
             )
             connection.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(9, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(10, datetime('now'))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(11, datetime('now'))"
             )
 
     def save_planning_run(self, run: PlanningRunRecord) -> None:
@@ -356,6 +441,181 @@ class ShortDramaRepository:
         return [
             PlanningReviewSnapshot.model_validate_json(value)
             for value in self._list_planning_artifacts(run_id, "REVIEW")
+        ]
+
+    def replace_planning_script_documents(
+        self,
+        run_id: str,
+        revision_round: int,
+        documents: Sequence[PlanningScriptDocument],
+    ) -> None:
+        """Replace one outline revision's retrieval projection atomically."""
+
+        for document in documents:
+            if document.run_id != run_id or document.revision_round != revision_round:
+                raise ValueError("Planning script document scope does not match replacement")
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "DELETE FROM planning_script_documents WHERE run_id = ? AND revision_round = ?",
+                (run_id, revision_round),
+            )
+            connection.execute(
+                "DELETE FROM planning_script_documents_fts WHERE run_id = ? AND revision_round = ?",
+                (run_id, str(revision_round)),
+            )
+            for document in documents:
+                connection.execute(
+                    """
+                    INSERT INTO planning_script_documents(
+                        run_id, revision_round, document_id, kind, scene_sequence,
+                        created_at, document_json
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        document.run_id,
+                        document.revision_round,
+                        document.document_id,
+                        document.kind.value,
+                        document.scene_sequence,
+                        document.created_at,
+                        document.model_dump_json(),
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO planning_script_documents_fts(
+                        run_id, revision_round, document_id, title, metadata, body
+                    ) VALUES(?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        document.run_id,
+                        str(document.revision_round),
+                        document.document_id,
+                        document.title,
+                        document.search_metadata,
+                        document.body,
+                    ),
+                )
+
+    def list_planning_script_documents(
+        self,
+        run_id: str,
+        revision_round: int,
+    ) -> list[PlanningScriptDocument]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT document_json
+                FROM planning_script_documents
+                WHERE run_id = ? AND revision_round = ?
+                ORDER BY CASE kind WHEN 'STORY_BIBLE' THEN 0 ELSE 1 END,
+                         scene_sequence ASC,
+                         document_id ASC
+                """,
+                (run_id, revision_round),
+            ).fetchall()
+        return [
+            PlanningScriptDocument.model_validate_json(
+                cast(str, row["document_json"])
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def _planning_fts_query(value: str) -> str:
+        """Build a quoted trigram OR query from Chinese or word-like text."""
+
+        segments = re.findall(r"[\u3400-\u9fff]{3,}|[A-Za-z0-9_]{3,}", value.casefold())
+        terms: list[str] = []
+        for segment in segments:
+            candidates = (
+                [segment[index : index + 3] for index in range(len(segment) - 2)]
+                if re.fullmatch(r"[\u3400-\u9fff]+", segment)
+                else [segment]
+            )
+            for candidate in candidates:
+                escaped = candidate.replace('"', '""')
+                if escaped not in terms:
+                    terms.append(escaped)
+                if len(terms) >= 32:
+                    break
+            if len(terms) >= 32:
+                break
+        return " OR ".join(f'"{term}"' for term in terms)
+
+    def search_planning_script_documents(
+        self,
+        run_id: str,
+        revision_round: int,
+        query: str,
+        *,
+        limit: int = 8,
+        include_story_bible: bool = True,
+    ) -> list[PlanningScriptSearchHit]:
+        """Rank documents within one script revision using SQLite FTS5 BM25."""
+
+        fts_query = self._planning_fts_query(query)
+        with self._lock, self._connection() as connection:
+            if fts_query:
+                kind_filter = "" if include_story_bible else "AND d.kind = ?"
+                values: list[object] = [
+                    fts_query,
+                    run_id,
+                    str(revision_round),
+                ]
+                if not include_story_bible:
+                    values.append(PlanningScriptDocumentKind.SCENE.value)
+                values.append(limit)
+                rows = connection.execute(
+                    f"""
+                    SELECT d.document_json,
+                           bm25(
+                               planning_script_documents_fts,
+                               0.0, 0.0, 0.0, 8.0, 4.0, 1.0
+                           ) AS score
+                    FROM planning_script_documents_fts
+                    JOIN planning_script_documents AS d
+                      ON d.run_id = planning_script_documents_fts.run_id
+                     AND d.revision_round = CAST(
+                         planning_script_documents_fts.revision_round AS INTEGER
+                     )
+                     AND d.document_id = planning_script_documents_fts.document_id
+                    WHERE planning_script_documents_fts MATCH ?
+                      AND planning_script_documents_fts.run_id = ?
+                      AND planning_script_documents_fts.revision_round = ?
+                      {kind_filter}
+                    ORDER BY score ASC, d.scene_sequence ASC, d.document_id ASC
+                    LIMIT ?
+                    """,
+                    values,
+                ).fetchall()
+            else:
+                kind_filter = "" if include_story_bible else "AND kind = ?"
+                values = [run_id, revision_round]
+                if not include_story_bible:
+                    values.append(PlanningScriptDocumentKind.SCENE.value)
+                values.extend([f"%{query.strip()}%", limit])
+                rows = connection.execute(
+                    f"""
+                    SELECT document_json, 0.0 AS score
+                    FROM planning_script_documents
+                    WHERE run_id = ? AND revision_round = ?
+                      {kind_filter}
+                      AND document_json LIKE ?
+                    ORDER BY scene_sequence ASC, document_id ASC
+                    LIMIT ?
+                    """,
+                    values,
+                ).fetchall()
+        return [
+            PlanningScriptSearchHit(
+                document=PlanningScriptDocument.model_validate_json(
+                    cast(str, row["document_json"])
+                ),
+                bm25_score=float(row["score"]),
+                matched_by=["FTS5_BM25" if fts_query else "METADATA_SUBSTRING"],
+            )
+            for row in rows
         ]
 
     def _save_planning_artifact(
@@ -903,6 +1163,157 @@ class ShortDramaRepository:
             VideoInspectionReport.model_validate_json(cast(str, row["record_json"]))
             for row in rows
         ]
+
+    def save_take_comparison(self, report: TakeComparisonReport) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO take_comparisons(
+                    id, project_id, shot_id, decision, created_at, record_json
+                ) VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    decision = excluded.decision,
+                    record_json = excluded.record_json
+                """,
+                (
+                    report.id,
+                    report.project_id,
+                    report.shot_id,
+                    report.decision.value,
+                    report.created_at,
+                    report.model_dump_json(),
+                ),
+            )
+
+    def get_take_comparison(self, report_id: str) -> TakeComparisonReport | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM take_comparisons WHERE id = ?",
+                (report_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return TakeComparisonReport.model_validate_json(cast(str, row["record_json"]))
+
+    def list_take_comparisons(self, project_id: str) -> list[TakeComparisonReport]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM take_comparisons
+                WHERE project_id = ? ORDER BY created_at ASC, id ASC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [
+            TakeComparisonReport.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]
+
+    def save_reference_visual_rerank(self, report: ReferenceVisualRerankReport) -> None:
+        self._save_visual_input_report(
+            report_id=report.id,
+            project_id=report.project_id,
+            shot_id=report.shot_id,
+            kind="REFERENCE_RERANK",
+            created_at=report.created_at,
+            record_json=report.model_dump_json(),
+        )
+
+    def list_reference_visual_reranks(
+        self,
+        project_id: str,
+    ) -> list[ReferenceVisualRerankReport]:
+        return [
+            ReferenceVisualRerankReport.model_validate_json(record)
+            for record in self._list_visual_input_report_json(
+                project_id,
+                kind="REFERENCE_RERANK",
+            )
+        ]
+
+    def save_keyframe_comparison(self, report: KeyframeComparisonReport) -> None:
+        self._save_visual_input_report(
+            report_id=report.id,
+            project_id=report.project_id,
+            shot_id=report.shot_id,
+            kind="KEYFRAME_COMPARISON",
+            created_at=report.created_at,
+            record_json=report.model_dump_json(),
+        )
+
+    def list_keyframe_comparisons(
+        self,
+        project_id: str,
+    ) -> list[KeyframeComparisonReport]:
+        return [
+            KeyframeComparisonReport.model_validate_json(record)
+            for record in self._list_visual_input_report_json(
+                project_id,
+                kind="KEYFRAME_COMPARISON",
+            )
+        ]
+
+    def save_input_compatibility_report(self, report: InputCompatibilityReport) -> None:
+        self._save_visual_input_report(
+            report_id=report.id,
+            project_id=report.project_id,
+            shot_id=report.shot_id,
+            kind="INPUT_COMPATIBILITY",
+            created_at=report.created_at,
+            record_json=report.model_dump_json(),
+        )
+
+    def list_input_compatibility_reports(
+        self,
+        project_id: str,
+    ) -> list[InputCompatibilityReport]:
+        return [
+            InputCompatibilityReport.model_validate_json(record)
+            for record in self._list_visual_input_report_json(
+                project_id,
+                kind="INPUT_COMPATIBILITY",
+            )
+        ]
+
+    def _save_visual_input_report(
+        self,
+        *,
+        report_id: str,
+        project_id: str,
+        shot_id: str,
+        kind: str,
+        created_at: str,
+        record_json: str,
+    ) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO visual_input_reports(
+                    id, project_id, shot_id, kind, created_at, record_json
+                ) VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    kind = excluded.kind,
+                    record_json = excluded.record_json
+                """,
+                (report_id, project_id, shot_id, kind, created_at, record_json),
+            )
+
+    def _list_visual_input_report_json(
+        self,
+        project_id: str,
+        *,
+        kind: str,
+    ) -> list[str]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM visual_input_reports
+                WHERE project_id = ? AND kind = ?
+                ORDER BY created_at ASC, id ASC
+                """,
+                (project_id, kind),
+            ).fetchall()
+        return [cast(str, row["record_json"]) for row in rows]
 
     def save_audio_inspection(self, report: AudioInspectionReport) -> None:
         with self._lock, self._connection() as connection:

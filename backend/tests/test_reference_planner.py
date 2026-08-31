@@ -1211,7 +1211,9 @@ def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
     body = result.json()
     director_instructions, director_input = fake.generations[0]
     assert "general live-action vertical video" in director_instructions
-    assert "Do not treat quiet passages or long takes as defects" in director_instructions
+    assert "Director rubric:" in director_instructions
+    assert "Judge staging and pacing against the intended experience" in director_instructions
+    assert "live-action Douyin vertical short drama" not in director_instructions
     assert json.loads(director_input)["production_profile"] == "GENERAL_VIDEO"
     assert body["repair_applied"] is False
     assert body["next_action"] == "AWAIT_USER"

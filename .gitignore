@@ -73,6 +73,7 @@ backend/models/
 backend/scripts/*
 !backend/scripts/run_phase18_h3_video_guides.py
 !backend/scripts/run_phase20_episode_review_probe.py
+!backend/scripts/run_phase21_real_episode.py
 backend/profile_results/
 
 # Temporary working directory
@@ -82,6 +83,7 @@ backend/tmp/
 backend/outputs/*.mp4
 backend/outputs/*.png
 backend/generated/
+output/
 
 # Build artifacts
 release/

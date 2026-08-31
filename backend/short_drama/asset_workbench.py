@@ -54,6 +54,7 @@ from short_drama.providers.image_provider import (
 from short_drama.providers.openai_image_client import OpenAIImageClient
 from short_drama.providers.openai_image_endpoint import resolve_image_endpoint
 from short_drama.repository import ShortDramaRepository
+from short_drama.stock_assets import StockAssetImportRequest
 from short_drama.worker import utc_now
 
 
@@ -239,6 +240,58 @@ class AssetWorkbench:
                     created_at=now,
                 ),
                 approval_status=ApprovalStatus.DRAFT,
+                freshness=Freshness.CURRENT,
+                created_at=now,
+            )
+            self._append_version(document, asset, version)
+            return version
+
+    def import_stock_candidate(
+        self,
+        project_id: str,
+        request: StockAssetImportRequest,
+    ) -> AssetVersion:
+        """Register one user- or Agent-selected stock result with source metadata."""
+
+        candidate = request.candidate
+        with self._lock:
+            document = self._require_project(project_id)
+            asset = self._require_asset(document, request.target_asset_id)
+            if (
+                asset.kind != AssetKind.REFERENCE
+                and candidate.asset_kind != asset.kind
+            ):
+                raise AssetWorkbenchConflict(
+                    "Stock candidate kind does not match the target asset"
+                )
+            parent_id = self._resolve_parent(asset, request.parent_version_id)
+            now = utc_now()
+            version = AssetVersion(
+                id=f"asset-version-{uuid4().hex[:12]}",
+                version=self._next_version_number(asset),
+                origin_type=OriginType.LIBRARY_IMPORT,
+                descriptor=request.descriptor.strip(),
+                media_type=AssetMediaType.IMAGE,
+                external_url=candidate.image_url,
+                width=candidate.width,
+                height=candidate.height,
+                parent_version_id=parent_id,
+                source=AssetSourceRecord(
+                    source_type=OriginType.LIBRARY_IMPORT,
+                    source_label=f"外部素材库：{candidate.provider.value}",
+                    source_uri=candidate.source_page_url,
+                    provider=candidate.provider.value,
+                    provider_asset_id=candidate.provider_asset_id,
+                    creator=candidate.creator,
+                    creator_uri=candidate.creator_url,
+                    license_name=candidate.license_name,
+                    license_uri=candidate.license_url,
+                    attribution=candidate.attribution,
+                    stock_import_mode=request.import_mode.value,
+                    created_at=now,
+                ),
+                approval_status=ApprovalStatus.DRAFT,
+                review_notes="；".join(candidate.advisory_notes) or None,
                 freshness=Freshness.CURRENT,
                 created_at=now,
             )
@@ -512,6 +565,8 @@ class AssetWorkbench:
                 asset.current_version_id = version.id
             else:
                 version.approval_status = ApprovalStatus.REJECTED
+                if asset.approved_version_id == version.id:
+                    asset.approved_version_id = None
             version.review_notes = request.notes.strip()
             document.project.updated_at = utc_now()
             self.repository.save_project(document)

@@ -47,6 +47,13 @@ export type ReferencePlanPreviewRequest = components['schemas']['ReferencePlanPr
 export type ReferencePlanPreviewResponse = components['schemas']['ReferencePlanPreviewResponse']
 export type KeyframeBriefCompileRequest = components['schemas']['KeyframeBriefCompileRequest']
 export type KeyframeBriefCompileResponse = components['schemas']['KeyframeBriefCompileResponse']
+export type ReferenceVisualRerankRequest = components['schemas']['ReferenceVisualRerankRequest']
+export type ReferenceVisualRerankResponse = components['schemas']['ReferenceVisualRerankResponse']
+export type KeyframeComparisonRequest = components['schemas']['KeyframeComparisonRequest']
+export type KeyframeComparisonResponse = components['schemas']['KeyframeComparisonResponse']
+export type InputCompatibilityRequest = components['schemas']['InputCompatibilityRequest']
+export type InputCompatibilityResponse = components['schemas']['InputCompatibilityResponse']
+export type VisualInputReportsResponse = components['schemas']['VisualInputReportsResponse']
 export type DirectorAdviceRequest = components['schemas']['DirectorAdviceRequest']
 export type DirectorAdviceResponse = components['schemas']['DirectorAdviceResponse']
 export type DirectorLoopResponse = components['schemas']['DirectorLoopResponse']
@@ -64,6 +71,9 @@ export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRep
 export type PlanningRunCreateRequest = components['schemas']['PlanningRunCreateRequest']
 export type PlanningRunRecord = components['schemas']['PlanningRunRecord']
 export type PlanningRunResponse = components['schemas']['PlanningRunResponse']
+export type PlanningSceneRevisionRequest = components['schemas']['PlanningSceneRevisionRequest']
+export type PlanningScriptSearchRequest = components['schemas']['PlanningScriptSearchRequest']
+export type PlanningScriptSearchResponse = components['schemas']['PlanningScriptSearchResponse']
 export type ScriptQualityHistoryResponse = components['schemas']['ScriptQualityHistoryResponse']
 export type ScriptQualityCatalogResponse = components['schemas']['ScriptQualityCatalogResponse']
 export type VoiceReferenceBinding = components['schemas']['VoiceReferenceBinding']
@@ -73,13 +83,28 @@ export type AssetCatalogSearchRequest = components['schemas']['AssetCatalogSearc
 export type AssetCatalogSearchResponse = components['schemas']['AssetCatalogSearchResponse']
 export type AssetCatalogImportRequest = components['schemas']['AssetCatalogImportRequest']
 export type AssetCoverageResponse = components['schemas']['AssetCoverageResponse']
+export type StockAssetProvider = components['schemas']['StockAssetProvider']
+export type StockAssetImportMode = components['schemas']['StockAssetImportMode']
+export type StockProviderConfig = components['schemas']['StockProviderConfigResponse']
+export type StockAssetCandidate = components['schemas']['StockAssetCandidate']
+export type StockAssetSearchRequest = components['schemas']['StockAssetSearchRequest']
+export type StockAssetSearchResponse = components['schemas']['StockAssetSearchResponse']
+export type StockAssetImportRequest = components['schemas']['StockAssetImportRequest']
+export type SemanticChangePlanRequest = components['schemas']['SemanticChangePlanRequest']
+export type SemanticChangePlan = components['schemas']['SemanticChangePlan']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
+const previewSemanticChange = makeEndpointClient('/api/short-drama/projects/{project_id}/agent-tools/plan-change', 'post')
 const listPlanningRuns = makeEndpointClient('/api/short-drama/planning-runs', 'get')
 const createPlanningRun = makeEndpointClient('/api/short-drama/planning-runs', 'post')
 const getPlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}', 'get')
 const advancePlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/advance', 'post')
+const replacePlanningOutline = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/outline', 'put')
+const revisePlanningOutlineWithAgent = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/outline/agent-revise', 'post')
+const revisePlanningOutlineFromReview = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/outline/revise-from-review', 'post')
 const getPlanningRunScriptQuality = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/script-quality', 'get')
+const searchPlanningScript = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/agent-tools/search-script', 'post')
+const revisePlanningScenes = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/agent-tools/revise-scenes', 'post')
 const listScriptQualityEvaluations = makeEndpointClient('/api/short-drama/script-quality', 'get')
 const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
 const createAutonomousDraft = makeEndpointClient('/api/short-drama/projects/autonomous-draft', 'post')
@@ -93,6 +118,7 @@ const drain = makeEndpointClient('/api/short-drama/worker/drain', 'post')
 const rebuildManifest = makeEndpointClient('/api/short-drama/projects/{project_id}/manifest/rebuild', 'post')
 const exportProject = makeEndpointClient('/api/short-drama/projects/{project_id}/export', 'post')
 const reviseScriptLine = makeEndpointClient('/api/short-drama/projects/{project_id}/script/revise-line', 'post')
+const reviseScriptLines = makeEndpointClient('/api/short-drama/projects/{project_id}/script/revise-lines', 'post')
 const selectTake = makeEndpointClient('/api/short-drama/takes/{take_id}/select', 'post')
 const inspectTakeVideo = makeEndpointClient('/api/short-drama/takes/{take_id}/inspect-video', 'post')
 const inspectProjectAudio = makeEndpointClient('/api/short-drama/projects/{project_id}/inspect-audio', 'post')
@@ -129,6 +155,10 @@ const addReferencePackEntry = makeEndpointClient('/api/short-drama/projects/{pro
 const updateShotReferencePlan = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/reference-plan', 'put')
 const previewShotReferencePlan = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/reference-plan/preview', 'post')
 const compileKeyframeBrief = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/keyframe-brief/compile', 'post')
+const rerankShotReferences = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/agent-tools/rerank-references', 'post')
+const compareShotKeyframes = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/agent-tools/compare-keyframes', 'post')
+const checkShotInputCompatibility = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/agent-tools/check-input-compatibility', 'post')
+const listVisualInputReports = makeEndpointClient('/api/short-drama/projects/{project_id}/agent-tools/visual-input-reports', 'get')
 const getDirectorAdvice = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/director-advice', 'post')
 const runDirectorLoop = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/director-loop', 'post')
 const decideDirectorRepair = makeEndpointClient('/api/short-drama/projects/{project_id}/shots/{shot_id}/director-repair', 'post')
@@ -148,6 +178,10 @@ const recoverImageTaskOutput = makeEndpointClient('/api/short-drama/image-tasks/
 const searchAssets = makeEndpointClient('/api/short-drama/asset-agent/tools/search-assets', 'post')
 const inspectAssetCoverage = makeEndpointClient('/api/short-drama/projects/{project_id}/asset-agent/tools/inspect-coverage', 'get')
 const importCatalogAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/asset-agent/tools/import-asset', 'post')
+const getStockProviderConfigs = makeEndpointClient('/api/short-drama/providers/stock-assets', 'get')
+const updateStockProviderConfig = makeEndpointClient('/api/short-drama/providers/stock-assets/{provider}', 'post')
+const searchStockAssets = makeEndpointClient('/api/short-drama/asset-agent/tools/search-stock', 'post')
+const importStockAsset = makeEndpointClient('/api/short-drama/projects/{project_id}/asset-agent/tools/import-stock', 'post')
 
 function projectPath(projectId: string, suffix = ''): string {
   return `/api/short-drama/projects/${encodeURIComponent(projectId)}${suffix}`
@@ -187,10 +221,45 @@ export const ShortDramaApi = {
     undefined,
     `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/advance`,
   ),
+  replacePlanningOutline: (
+    runId: string,
+    body: components['schemas']['PlanningOutlineDirectEditRequest'],
+  ) => replacePlanningOutline(
+    body,
+    undefined,
+    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/outline`,
+  ),
+  revisePlanningOutlineWithAgent: (
+    runId: string,
+    body: components['schemas']['PlanningOutlineAgentRevisionRequest'],
+  ) => revisePlanningOutlineWithAgent(
+    body,
+    undefined,
+    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/outline/agent-revise`,
+  ),
+  revisePlanningOutlineFromReview: (runId: string) => revisePlanningOutlineFromReview(
+    undefined,
+    undefined,
+    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/outline/revise-from-review`,
+  ),
   getPlanningRunScriptQuality: (runId: string) => getPlanningRunScriptQuality(
     undefined,
     undefined,
     `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/script-quality`,
+  ),
+  searchPlanningScript: (runId: string, body: PlanningScriptSearchRequest) => (
+    searchPlanningScript(
+      body,
+      undefined,
+      `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/agent-tools/search-script`,
+    )
+  ),
+  revisePlanningScenes: (runId: string, body: PlanningSceneRevisionRequest) => (
+    revisePlanningScenes(
+      body,
+      undefined,
+      `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/agent-tools/revise-scenes`,
+    )
   ),
   listScriptQualityEvaluations: () => listScriptQualityEvaluations(),
   createProject,
@@ -215,6 +284,14 @@ export const ShortDramaApi = {
   ),
   initializeFixture: () => initializeFixture(),
   getProject: (projectId: string) => getProject(undefined, undefined, projectPath(projectId)),
+  previewSemanticChange: (
+    projectId: string,
+    body: SemanticChangePlanRequest,
+  ) => previewSemanticChange(
+    body,
+    undefined,
+    projectPath(projectId, '/agent-tools/plan-change'),
+  ),
   autoDraft: (projectId: string, renderExport = true) => (
     autoDraft({ render_export: renderExport }, undefined, projectPath(projectId, '/auto-draft'))
   ),
@@ -233,6 +310,10 @@ export const ShortDramaApi = {
     projectId: string,
     body: components['schemas']['ReviseScriptLineRequest'],
   ) => reviseScriptLine(body, undefined, projectPath(projectId, '/script/revise-line')),
+  reviseScriptLines: (
+    projectId: string,
+    body: components['schemas']['ReviseScriptLinesRequest'],
+  ) => reviseScriptLines(body, undefined, projectPath(projectId, '/script/revise-lines')),
   selectTake: (takeId: string) => (
     selectTake(undefined, undefined, `/api/short-drama/takes/${encodeURIComponent(takeId)}/select`)
   ),
@@ -372,6 +453,38 @@ export const ShortDramaApi = {
     undefined,
     shotPath(projectId, shotId, '/keyframe-brief/compile'),
   ),
+  rerankShotReferences: (
+    projectId: string,
+    shotId: string,
+    body: ReferenceVisualRerankRequest,
+  ) => rerankShotReferences(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/agent-tools/rerank-references'),
+  ),
+  compareShotKeyframes: (
+    projectId: string,
+    shotId: string,
+    body: KeyframeComparisonRequest,
+  ) => compareShotKeyframes(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/agent-tools/compare-keyframes'),
+  ),
+  checkShotInputCompatibility: (
+    projectId: string,
+    shotId: string,
+    body: InputCompatibilityRequest,
+  ) => checkShotInputCompatibility(
+    body,
+    undefined,
+    shotPath(projectId, shotId, '/agent-tools/check-input-compatibility'),
+  ),
+  listVisualInputReports: (projectId: string) => listVisualInputReports(
+    undefined,
+    undefined,
+    projectPath(projectId, '/agent-tools/visual-input-reports'),
+  ),
   getDirectorAdvice: (
     projectId: string,
     shotId: string,
@@ -499,6 +612,25 @@ export const ShortDramaApi = {
     body,
     undefined,
     projectPath(projectId, '/asset-agent/tools/import-asset'),
+  ),
+  getStockProviderConfigs: () => getStockProviderConfigs(),
+  updateStockProviderConfig: (
+    provider: StockAssetProvider,
+    apiKey: string | null,
+    baseUrl: string,
+  ) => updateStockProviderConfig(
+    { api_key: apiKey, base_url: baseUrl, clear_api_key: false },
+    undefined,
+    `/api/short-drama/providers/stock-assets/${encodeURIComponent(provider)}`,
+  ),
+  searchStockAssets: (body: StockAssetSearchRequest) => searchStockAssets(body),
+  importStockAsset: (
+    projectId: string,
+    body: StockAssetImportRequest,
+  ) => importStockAsset(
+    body,
+    undefined,
+    projectPath(projectId, '/asset-agent/tools/import-stock'),
   ),
   localRework: (
     projectId: string,

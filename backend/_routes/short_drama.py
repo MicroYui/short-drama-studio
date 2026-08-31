@@ -11,6 +11,10 @@ from short_drama.asset_catalog import (
     AssetCatalogSearchResponse,
     AssetCoverageResponse,
 )
+from short_drama.change_planner import (
+    SemanticChangePlan,
+    SemanticChangePlanRequest,
+)
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
     H3NotSubmittedResolutionRequest,
@@ -67,6 +71,8 @@ from short_drama.models import (
     LocalReworkRequest,
     OperationKind,
     PlanningRunCreateRequest,
+    PlanningOutlineAgentRevisionRequest,
+    PlanningOutlineDirectEditRequest,
     PlanningRunListResponse,
     PlanningRunResponse,
     ScriptQualityCatalogResponse,
@@ -74,7 +80,10 @@ from short_drama.models import (
     ProjectAggregate,
     ProjectListResponse,
     ReviseScriptLineRequest,
+    ReviseScriptLinesRequest,
     StatusMessage,
+    TakeComparisonRequest,
+    TakeComparisonResponse,
     TaskActionResponse,
     TimelineManifest,
     VideoInspectionRequest,
@@ -83,6 +92,11 @@ from short_drama.models import (
     WorkerDrainResponse,
 )
 from short_drama.quality_learning import H3CapabilityProfileResponse
+from short_drama.script_documents import (
+    PlanningSceneRevisionRequest,
+    PlanningScriptSearchRequest,
+    PlanningScriptSearchResponse,
+)
 from short_drama.reference_planner import (
     DirectorAdviceRequest,
     DirectorAdviceResponse,
@@ -104,9 +118,27 @@ from short_drama.service import (
 )
 from short_drama.deps import get_short_drama_service
 from short_drama.service import ShortDramaService
+from short_drama.stock_assets import (
+    StockAssetImportRequest,
+    StockAssetProvider,
+    StockAssetSearchRequest,
+    StockAssetSearchResponse,
+    StockProviderConfigListResponse,
+    StockProviderConfigResponse,
+    StockProviderConfigUpdate,
+)
 from short_drama.voice_models import (
     VoiceReferenceMutationResponse,
     VoiceReferenceUpdateRequest,
+)
+from short_drama.visual_input_quality import (
+    InputCompatibilityRequest,
+    InputCompatibilityResponse,
+    KeyframeComparisonRequest,
+    KeyframeComparisonResponse,
+    ReferenceVisualRerankRequest,
+    ReferenceVisualRerankResponse,
+    VisualInputReportsResponse,
 )
 
 
@@ -168,6 +200,57 @@ def import_catalog_asset(
 ) -> AssetMutationResponse:
     try:
         return service.import_catalog_asset(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/providers/stock-assets",
+    response_model=StockProviderConfigListResponse,
+)
+def get_stock_provider_configs(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StockProviderConfigListResponse:
+    return service.get_stock_provider_configs()
+
+
+@router.post(
+    "/providers/stock-assets/{provider}",
+    response_model=StockProviderConfigResponse,
+)
+def update_stock_provider_config(
+    provider: StockAssetProvider,
+    request: StockProviderConfigUpdate,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StockProviderConfigResponse:
+    return service.update_stock_provider_config(provider, request)
+
+
+@router.post(
+    "/asset-agent/tools/search-stock",
+    response_model=StockAssetSearchResponse,
+)
+def search_stock_assets(
+    request: StockAssetSearchRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StockAssetSearchResponse:
+    try:
+        return service.search_stock_assets(request)
+    except ProviderOperationError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/asset-agent/tools/import-stock",
+    response_model=AssetMutationResponse,
+)
+def import_stock_asset(
+    project_id: str,
+    request: StockAssetImportRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AssetMutationResponse:
+    try:
+        return service.import_stock_asset(project_id, request)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 
@@ -319,6 +402,83 @@ def compile_keyframe_brief(
     try:
         return service.compile_keyframe_brief(project_id, shot_id, request)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/agent-tools/rerank-references",
+    response_model=ReferenceVisualRerankResponse,
+)
+def rerank_shot_reference_visuals(
+    project_id: str,
+    shot_id: str,
+    request: ReferenceVisualRerankRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ReferenceVisualRerankResponse:
+    try:
+        return service.rerank_shot_reference_visuals(project_id, shot_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/agent-tools/compare-keyframes",
+    response_model=KeyframeComparisonResponse,
+)
+def compare_shot_keyframes(
+    project_id: str,
+    shot_id: str,
+    request: KeyframeComparisonRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> KeyframeComparisonResponse:
+    try:
+        return service.compare_shot_keyframes(project_id, shot_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/shots/{shot_id}/agent-tools/check-input-compatibility",
+    response_model=InputCompatibilityResponse,
+)
+def check_shot_input_compatibility(
+    project_id: str,
+    shot_id: str,
+    request: InputCompatibilityRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> InputCompatibilityResponse:
+    try:
+        return service.check_shot_input_compatibility(project_id, shot_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/agent-tools/visual-input-reports",
+    response_model=VisualInputReportsResponse,
+)
+def list_visual_input_reports(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> VisualInputReportsResponse:
+    try:
+        return service.list_visual_input_reports(project_id)
+    except ProjectNotFoundError as exc:
         raise _translate_error(exc) from exc
 
 
@@ -557,6 +717,21 @@ def list_projects(service: ShortDramaService = Depends(get_short_drama_service))
     return service.list_projects()
 
 
+@router.post(
+    "/projects/{project_id}/agent-tools/plan-change",
+    response_model=SemanticChangePlan,
+)
+def preview_semantic_change(
+    project_id: str,
+    request: SemanticChangePlanRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> SemanticChangePlan:
+    try:
+        return service.preview_semantic_change(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
 @router.get("/planning-runs", response_model=PlanningRunListResponse)
 def list_planning_runs(
     service: ShortDramaService = Depends(get_short_drama_service),
@@ -594,6 +769,58 @@ def advance_planning_run(
         raise _translate_error(exc) from exc
 
 
+@router.put(
+    "/planning-runs/{run_id}/outline",
+    response_model=PlanningRunResponse,
+)
+def replace_planning_outline(
+    run_id: str,
+    request: PlanningOutlineDirectEditRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunResponse:
+    try:
+        return service.replace_planning_outline(run_id, request)
+    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/planning-runs/{run_id}/outline/agent-revise",
+    response_model=PlanningRunResponse,
+)
+def revise_planning_outline_with_agent(
+    run_id: str,
+    request: PlanningOutlineAgentRevisionRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunResponse:
+    try:
+        return service.revise_planning_outline_with_agent(run_id, request)
+    except (
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/planning-runs/{run_id}/outline/revise-from-review",
+    response_model=PlanningRunResponse,
+)
+def revise_planning_outline_from_review(
+    run_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunResponse:
+    try:
+        return service.revise_planning_outline_from_review(run_id)
+    except (
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
 @router.get(
     "/planning-runs/{run_id}/script-quality",
     response_model=ScriptQualityHistoryResponse,
@@ -605,6 +832,40 @@ def get_planning_run_script_quality(
     try:
         return service.get_planning_run_script_quality(run_id)
     except ArtifactNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/planning-runs/{run_id}/agent-tools/search-script",
+    response_model=PlanningScriptSearchResponse,
+)
+def search_planning_script_documents(
+    run_id: str,
+    request: PlanningScriptSearchRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningScriptSearchResponse:
+    try:
+        return service.search_planning_script_documents(run_id, request)
+    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/planning-runs/{run_id}/agent-tools/revise-scenes",
+    response_model=PlanningRunResponse,
+)
+def revise_planning_scenes_with_agent(
+    run_id: str,
+    request: PlanningSceneRevisionRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> PlanningRunResponse:
+    try:
+        return service.revise_planning_scenes_with_agent(run_id, request)
+    except (
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 
@@ -1029,6 +1290,27 @@ def inspect_take_video(
 
 
 @router.post(
+    "/projects/{project_id}/agent-tools/compare-takes",
+    response_model=TakeComparisonResponse,
+)
+def compare_takes(
+    project_id: str,
+    request: TakeComparisonRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> TakeComparisonResponse:
+    try:
+        return service.compare_takes(project_id, request)
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+        ProviderOperationError,
+        MediaGenerationError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
     "/projects/{project_id}/inspect-audio",
     response_model=AudioInspectionResponse,
 )
@@ -1077,6 +1359,18 @@ def revise_script_line(
 ) -> ProjectAggregate:
     try:
         return service.revise_script_line(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/projects/{project_id}/script/revise-lines", response_model=ProjectAggregate)
+def revise_script_lines(
+    project_id: str,
+    request: ReviseScriptLinesRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProjectAggregate:
+    try:
+        return service.revise_script_lines(project_id, request)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 

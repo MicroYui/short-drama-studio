@@ -1,6 +1,6 @@
 # 当前架构与技术设计
 
-这是当前已确认的产品架构与技术设计。核心结构按 Mock 闭环需要正常实现和迁移；H3 内部路线、GPT Image 覆盖范围、声音路线、镜头分组及后处理仍由固定实验决定。即梦、可灵、LTX Studio 和纳逗 Pro 只贡献产品机制，不进入运行时。
+这是当前已确认的产品架构与技术设计。核心结构按真实闭环需要正常实现和迁移；H3 内部路线、GPT Image 覆盖范围、声音路线、镜头分组及后处理根据实际制片证据持续调整，只有结论不清或需要形成跨项目默认时才做受控比较。即梦、可灵、LTX Studio 和纳逗 Pro 只贡献产品机制，不进入运行时。
 
 ## 1. 产品原则
 
@@ -76,14 +76,37 @@ flowchart TD
 
 ### Agent 控制面的职责
 
-当前控制面就是同一运行时中的四层协作，不另建规则引擎或审批系统：
+产品对用户呈现的是 AI-native Agent，而不是要求用户搭建或逐节点操作 workflow。已确认的目标控制面由同一运行时中的以下能力组成，不另建规则引擎或审批系统：
 
-- **Agent Harness** 注册资产搜索/生成、关键帧、H3 路线、视频抽帧、边界检查和时间线等 Tools，并组装当前项目、镜头、资产、Take、QA 与历史证据上下文；
-- **Prompt Policy** 根据通用视频或抖音短剧 Profile，以及 Writer、Director、Route Agent、Reviewer 的职责注入不同目标和选择原则；
+- **Agent Harness** 负责理解自然语言目标、选择 Skill、组装上下文、调用 Tools、委派子 Agent，并根据工具结果继续规划；
+- **Production Skills** 封装某类成片的稳定 constitution、按职责选择的 role rubric、按当前上下文召回的经验、建议式 playbook、Critic 关注点和 Review Router 的修复归属原则。PoC 阶段不建设动态 Skill Registry、插件发现或独立 Skill 服务；当前 `ProductionProfile → ProductionSkill` 静态 Catalog 已足够。Skill 不限制全局 Tool Catalog，playbook 可由 Agent 或用户跳过、重复或覆盖。先把抖音短剧 PoC 做通，数字人口播等只是未来新增的 Skill 实现，不要求改动项目、任务、资产、Take 或时间线核心；
+- **Tool Catalog** 提供可独立组合的原子能力，包括剧本规划与审阅、Multi-Agent 委派、单场/单镜规划、资产检索与派生、图像生成/编辑、H3 生成、视频观察、连续性检查、时间线局部更新和语义影响分析。Tool 返回结构化工件或证据，不暗含固定创作顺序；
 - **持久化 Orchestrator** 保存 PlanningRun、AutonomousRun、任务、Take、路线计划和当前步骤，负责有限推进、并发、重试、恢复与 `SUBMIT_UNKNOWN` 对账；
 - **确定性校验器** 只判断输入组合是否合法、文件是否存在、版本引用是否新鲜、Provider 状态和时间线是否可执行。
 
-创作质量、是否补资产、是否使用视频参考、是否拆镜或换机位仍由 Agent 给出可忽略建议。项目不使用文档 SHA、素材 hash 冻结、创意审批门或样片专用规则来代替这些判断；普通 ID、缓存键和任务 fingerprint 只服务于查找、复用与避免重复提交，不构成内容冻结。
+这里的 Orchestrator/状态机是 Agent 的可恢复执行底座和任务记录，不是决定创作路径的产品级 workflow。创作质量、是否补资产、是否使用视频参考、是否拆镜或换机位仍由 Agent 给出可忽略建议；Agent 可以按任务动态串联或并行调用能力。项目不使用文档 SHA、素材 hash 冻结、创意审批门或样片专用规则来代替这些判断；普通 ID、缓存键和任务 fingerprint 只服务于查找、复用与避免重复提交，不构成内容冻结。
+
+### 自然语言修改与语义影响规划
+
+“把许岚在办公室里的外套改成红色”不应进入一条预制换装 workflow。目标能力是由 Agent：
+
+1. 把自然语言解析为实体、属性、适用时空/剧情范围和用户意图；范围不明确且会造成明显不同结果时再向用户确认；
+2. 查询 ProjectBible、资产目录、镜头内容和版本依赖，找出该角色在指定服装状态下真正入镜的镜头，以及这些镜头使用的关键帧、参考包、Take 和时间线片段；
+3. 形成可解释的 `ImpactPlan`，默认只失效受影响分支；对白、声音、字幕和没有该服装的镜头不因“可能相关”被重做；
+4. 自主调用图像编辑/生成、ReferencePlan、H3、视频观察和 Timeline patch 等 Tools，检查结果后继续局部修复或完成替换；
+5. 保留旧版本和可回退的入选 Take，允许用户修改范围、直接指定镜头或忽略 Agent 建议。
+
+现有版本依赖与 `CURRENT/STALE` 已具备局部重算的底层语义；当前已交付只读 `ChangeIntent → ProjectIndex → ImpactPlan` Agent Tool，支持自然语言或显式目标 ID，并通过真实 ReferencePlan、对白、场次、镜头和 Take 依赖计算局部影响。它不会直接修改项目；后续 Change Executor 继续复用现有版本、图像、ReferencePlan、H3、检查和 Timeline Tools。不为“换衣服”“换门”或其他单例需求各建字段和流程。
+
+语义修改对架构的最小合同如下：
+
+- `ChangeIntent`：保存用户原话、解析出的目标实体、属性变化、适用场景/时间范围和必须保留的约束；它是一次 Agent 计划，不是新的长期业务对象；
+- `ProjectIndex`：由当前 ProjectDocument、ProjectBible、ReferencePlan、任务、Take 与 TimelineManifest 按需编译的只读索引。首版不引入图数据库、向量库或第二份项目真相源；
+- `ImpactPlan`：列出确定命中的上游版本、需要失效/重做的镜头分支、保持不变的工件、调用 Tools 的顺序及每项原因。LLM 负责理解与提出范围，确定性依赖查询负责校验真实 ID 和下游闭包；
+- `Change Executor`：创建新版本，调用已有资产编辑、ReferencePlan、H3、检查和时间线 Tools，并按实际依赖标记 `STALE`。执行途中仍使用现有任务、Take 和恢复机制；当前影响计划已实现，通用自动执行器仍按具体 Tool 完整度逐步接入；
+- 若一句话存在两个会造成明显不同重算范围的合理解释，Agent 才请求澄清；否则按最小影响范围自主执行并在结果中说明。
+
+因此需要优先设计的是 ProjectIndex、ChangeIntent 和 ImpactPlan 的契约，不是 Skill Registry。Multi-Agent 仍由 Harness 作为一种可调用能力调度，不为每个角色建立微服务或固定流程。
 
 ## 4. 核心数据模型
 
@@ -133,6 +156,8 @@ Profile 可以只有文字，也可以引用素材库导入、用户上传、模
 - 与前后镜的 cut/transition 关系；
 - 可否与相邻镜合并生成，以及局部返工风险。
 
+这里的时长是最终剪辑和叙事时长，不是 Provider 请求参数。一个镜头可以短于 4 秒，也可以作为持续表演或运镜超过 15 秒；不能因为 H3 的单次窗口而强行改变导演分镜。
+
 ### `ExecutionPlan`
 
 每个镜头或镜头组显式记录：
@@ -164,6 +189,8 @@ Profile 可以只有文字，也可以引用素材库导入、用户上传、模
 ### `GenerationTask` 与 `Take`
 
 `GenerationTask` 记录 Provider 调用和状态；`Take` 是可观看、可评分、可选用的媒体候选。一个 Task 可以产生多个 Take。Take 的媒体可用性、QA 状态和是否入选分别保存，不压成一个枚举：生成成功只说明媒体可用，`qa_status` 为 `PENDING/PASSED/REJECTED`，`is_selected` 单独表示时间线是否采用。Provider 成功不等于 QA 通过，QA 通过也不等于自动入选。
+
+执行层在 `ShotPlan` 与 Provider Task 之间增加可派生的生成段计划。对于 H3，每个生成段都是 4–15 秒整数，并保存所属 `shot_id`、段序号、目标剪辑区间、连续性来源和裁切余量。长镜头可对应多个 Task/Take，段间使用前段终态、尾窗、关键帧或视频参考接续；不足 4 秒的镜头至少生成 4 秒，再由 `TimelineManifest` 取所需区间。生成段是 Route Planner 编译出的技术工件，不成为新的创意分镜，也不要求用户逐段操作。
 
 ### `TimelineManifest`
 
@@ -212,6 +239,9 @@ PoC 的 H3 `GenerationTask` 固定请求 768P；原始 Take 不被交付缩放�
 
 当前视频生成只接 H3，以下规则只存在于 H3 Adapter：
 
+- 单次请求时长必须是 4–15 秒整数；`ShotPlan` 不继承这个范围；
+- 长镜头由 Route Planner 编译为多个合法生成段，短镜头生成安全余量后在 Timeline 裁切，任何路径都不得直接向 H3 提交超过 15 秒或非整数时长；
+- 多段长镜头在段间继承可见终态并执行边界连续性检查，Director 可建议改为剪辑拆镜或换覆盖机位，但建议不阻断用户保留原长镜头；
 - `frame` 路线用于精确首尾构图和动作接续；
 - `reference` 路线用于角色、场景、动作或声音参考；
 - Adapter 在提交前校验 frame roles 与 reference roles 的互斥；
@@ -345,15 +375,17 @@ P008 已确认短剧生产时间线，A004 已确认本地桌面优先，因此�
 
 ### Phase 13：制作类型 Prompt Policy
 
-新建项目选择 `GENERAL_VIDEO` 或 `DOUYIN_SHORT_DRAMA`，同一 Agent Runtime 根据项目 Profile 为 Writer、Production Planner 和 Director 注入不同策略。通用视频允许氛围、留白和有意义的长镜头；抖音短剧强调好奇缺口、因果悬念链、关系/认知变化和回收。Profile 不直接进入 H3，也不复制资产、QA 或时间线系统。
+新建项目选择 `GENERAL_VIDEO` 或 `DOUYIN_SHORT_DRAMA`，同一 Agent Runtime 根据项目 Profile 为 Concept、Writer、Planner、Critic、Review Router、Director、Asset Reviewer、H3 Route/Prompt Compiler 和 Episode Reviewer 编译各自策略。通用视频允许氛围、留白和有意义的长镜头；抖音短剧强调好奇缺口、因果推进、可见状态变化和回收。项目、资产、H3、QA 与时间线实现仍然共用；抽帧观察、Take 比较、Schema 和 Provider 技术合同不注入品类偏好。
 
 Planner 不再硬限定 6–10 镜，Director 也不使用固定动作数、固定信息间隔或长镜头拒绝规则。系统只保留 45–60 秒交付目标和 H3 单段 4–15 秒的当前技术边界；“镜头是否赚到时长”由 Agent 结合意图与观察证据判断，建议始终可覆盖。
 
 ### Phase 14：自定义时长与分层 Multi-Agent 长篇规划
 
-45–60 秒只保留为首个验收样片的历史范围，不再是新项目限制。桌面端允许用户在 15 秒到 30 分钟内填写任意目标时长；3/5/10/15 分钟只是抖音短剧快捷值，默认 5 分钟，通用视频默认 60 秒。
+45–60 秒只保留为首个验收样片的历史范围，不再是新项目限制。桌面端允许用户填写不少于 4 秒的任意目标时长；3/5/10/15 分钟只是抖音短剧快捷值，默认 5 分钟，通用视频默认 60 秒。快捷值不改变底层 Tools 或 PlanningRun。
 
-超过 90 秒时，Planner 分为 Story Architect、Script Critic 与逐场 Scene Director。Story Architect 维护整集因果、全局资产、对白和场次契约；Script Critic 以开放式审阅发现有证据的因果、动机、伏笔回收和节奏问题，必要时触发最多两轮整集修订与逐轮复审；Scene Director 只展开当前场，并通过人物、道具、事实和待回应问题组成的 compact handoff 顺序传递连续性。审阅建议可忽略，场次失败只局部修复或回退，不把整集重新丢给一个超长 Prompt。本阶段主要检查剧本和结构，不调用 GPT Image 或 H3。
+超过 90 秒时，Planner 分为 Story Architect、Script Critic、Review Router 与逐场 Scene Director。Story Architect 维护整集因果、全局资产、对白和场次契约；Script Critic 只报告有证据的因果、动机、伏笔回收和节奏观察；当前 Production Skill 的 Review Router 决定哪些问题确实需要整集修订，哪些下放导演、资产、视频、时间线或保留为可选建议。只有 Story Architect 归属的问题进入最多三轮整集修订与逐轮复审，其他问题随相关场次 handoff，不用增加解释来修复执行层问题。Scene Director 只展开当前场，并通过人物、道具、事实和待回应问题组成的 compact handoff 顺序传递连续性。所有路由可由用户覆盖，场次失败只局部修复或回退，不把整集重新丢给一个超长 Prompt。本阶段主要检查剧本和结构，不调用 GPT Image 或 H3。
+
+进入故事修订前，Source Contract Agent 独立提取用户显式承诺、禁区和开放选择；Story Repair Planner 再把 routed finding 诊断为来源概念缺口、当前大纲缺陷或 Critic 越界。Repair Plan、Source Contract 和最近三轮历史共同约束 Writer，Revision Verifier 只检查计划执行、来源承诺与新引入的状态回退，最多允许两次针对具体 violation 的定向修复。该层不使用固定剧情规则或答案键，全部建议可由用户覆盖；正常改善不要求 Critic 零问题。
 
 ### Phase 15：持久化 PlanningRun
 
@@ -392,6 +424,12 @@ H3 Adapter 已把前序完整 Take、前序尾部运动窗口和低保真机位�
 只有明确关联镜头且建议局部修复的 finding 才交给现有 Director Agent；Director 仍决定重生成、换关键帧、拆镜、换机位或不修。应用修复后回到现有 Route/H3/QA/Timeline 链路并重新审阅。报告始终可忽略，模型不可用或三次阶段失败都继续导出；不运行自动 STT、声纹或音频质量 QA，也不设置整集分数、固定节拍、审批门或 hash 冻结。详见 [Phase 20 实施记录](30-phase20-episode-review-agent.md)。
 
 Phase 8–10 三版真实语言探针表明，它能发现若干可见道具和动作连续性问题，但漏掉了人工已知的首镜空间竖缝，并因没有时间化声音证据而不判断错误说话来源。一次通用空间检查清单对照只增加报告数量而没有召回漏报，已撤回。因此整集 Reviewer 是证据汇总与 Director 建议层，不是高召回质量校验器；后续若增强，应从跨剧本逐镜观察 Tool 和证据质量入手。
+
+### Phase 22：统一分层剧本 Tools
+
+约 4 秒的单节点内容到数十分钟剧本共用同一组可组合能力：Story Architect 先产生不含自由对白的 Global Blueprint，Scene Writer 再以当前场节点、最近两场全文、较早场摘要和下一段节点逐场生成 `EpisodeScenePatch`。时长只影响节点数和上下文量，不引入第二套规划器。
+
+每个剧本版本被投影为 Story Bible + Scene 文档，以 `run_id/revision_round` 隔离并通过 SQLite FTS5 检索。Scope Agent 只建议 `SCENE_PATCH / FULL_OUTLINE`，用户可指定场次覆盖。Scene Writer、检索、范围建议、局部改写和 Patch 合并均是独立 Tools；PlanningRun 只顺序调用它们并保存每场恢复点。Review Repair 也优先仅修改 Repair Plan 关联场次，全局 Blueprint 重生成只作真正全局改动的兼容路径。详见 [Phase 22 实施记录](33-phase22-hierarchical-script-tools.md)。
 
 ## 12. 当前不做
 

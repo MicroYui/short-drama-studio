@@ -56,6 +56,7 @@ from short_drama.production_planner import (
 )
 from short_drama.providers.image_provider import ImageProviderInput, ImageProviderResult
 from short_drama.providers.openai_compatible_language_client import LanguageProviderError
+from short_drama.script_documents import EpisodeScenePatch, scene_dialogue_lines
 from short_drama.service import (
     ShortDramaService,
     _filter_generation_reference_versions,
@@ -208,6 +209,12 @@ class FakeLanguageClient:
         self.fail_episode_reviews = fail_episode_reviews
         self.asset_review_calls = 0
         self.director_calls = 0
+        self.asset_review_instructions: list[str] = []
+        self.route_instructions: list[str] = []
+        self.video_observation_instructions: list[str] = []
+        self.episode_scene_instructions: list[str] = []
+        self.episode_summary_instructions: list[str] = []
+        self.director_instructions: list[str] = []
         self.episode_scene_payloads: list[dict[str, Any]] = []
         self.episode_summary_payloads: list[dict[str, Any]] = []
 
@@ -224,6 +231,7 @@ class FakeLanguageClient:
     ) -> str:
         del image_urls, max_output_tokens
         if "visual asset inspection tool" in instructions:
+            self.asset_review_instructions.append(instructions)
             self.asset_review_calls += 1
             if self.reject_first_asset and self.asset_review_calls == 1:
                 return json.dumps(
@@ -251,6 +259,7 @@ class FakeLanguageClient:
                 }
             )
         if "production route agent" in instructions:
+            self.route_instructions.append(instructions)
             payload = json.loads(input_text)
             return json.dumps(
                 {
@@ -270,6 +279,7 @@ class FakeLanguageClient:
                 }
             )
         if "video observation tool" in instructions:
+            self.video_observation_instructions.append(instructions)
             if self.fail_video_reviews > 0:
                 self.fail_video_reviews -= 1
                 raise LanguageProviderError("simulated transient model overload")
@@ -305,6 +315,7 @@ class FakeLanguageClient:
                 }
             )
         if "scene-level episode-review Agent" in instructions:
+            self.episode_scene_instructions.append(instructions)
             if self.fail_episode_reviews > 0:
                 self.fail_episode_reviews -= 1
                 raise LanguageProviderError("simulated transient episode reviewer overload")
@@ -350,6 +361,7 @@ class FakeLanguageClient:
                 }
             )
         if "episode-level reviewer Agent" in instructions:
+            self.episode_summary_instructions.append(instructions)
             if self.fail_episode_reviews > 0:
                 self.fail_episode_reviews -= 1
                 raise LanguageProviderError("simulated transient episode reviewer overload")
@@ -362,6 +374,7 @@ class FakeLanguageClient:
                 }
             )
         if "film director agent advising a user" in instructions:
+            self.director_instructions.append(instructions)
             payload = json.loads(input_text)
             self.director_calls += 1
             self.repaired_shot_sequences.add(int(payload["shot"]["sequence"]))
@@ -417,6 +430,12 @@ class LongFormProductionLanguageClient(FakeLanguageClient):
     ) -> None:
         super().__init__(repair_shot_sequences=repair_shot_sequences)
         self.outline = _fallback_episode_outline(request)
+        blueprint_payload = self.outline.model_dump(mode="python")
+        if request.source_mode != SourceMode.SCRIPT_LOCKED:
+            blueprint_payload["lines"] = []
+            for scene in blueprint_payload["scenes"]:
+                scene["dialogue_line_indices"] = []
+        self.blueprint = type(self.outline).model_validate(blueprint_payload)
         self.scene_plans = {}
         self.planning_scene_calls: list[int] = []
         self.scene_prompt_payloads: list[dict[str, Any]] = []
@@ -442,7 +461,24 @@ class LongFormProductionLanguageClient(FakeLanguageClient):
         max_output_tokens: int = 2200,
     ) -> str:
         if "story-architect Agent" in instructions and "revising an episode" not in instructions:
-            return self.outline.model_dump_json()
+            return self.blueprint.model_dump_json()
+        if "Scene Writer Agent" in instructions:
+            payload = json.loads(input_text)
+            sequence = int(payload["current_scene_node"]["sequence"])
+            node = self.blueprint.scenes[sequence - 1]
+            source_scene = self.outline.scenes[sequence - 1]
+            return EpisodeScenePatch(
+                scene_sequence=sequence,
+                heading=node.heading,
+                summary=node.summary,
+                narrative_purpose=node.narrative_purpose,
+                playable_actions=list(node.playable_actions),
+                target_duration_seconds=node.target_duration_seconds,
+                location_names=list(node.location_names),
+                continuity_in=node.continuity_in.model_copy(deep=True),
+                continuity_out=node.continuity_out.model_copy(deep=True),
+                lines=scene_dialogue_lines(self.outline, source_scene),
+            ).model_dump_json()
         if "independent script-critic Agent" in instructions:
             return json.dumps(
                 {
@@ -725,7 +761,9 @@ def test_long_form_planning_handoff_completes_two_minute_export_after_restart(
     assert language.planning_scene_calls == [1, 2]
     assert completed.run.repair_round == 4
     assert language.director_calls == 4
-    assert len(h3.requests) == 28
+    assert len(h3.requests) == (
+        len(completed.project.document.shots) + language.director_calls * 2
+    )
     assert len(restarted.repository.list_h3_route_plans(project_id)) >= 4
     assert selected_take_trace == sorted(selected_take_trace)
     assert selected_take_trace[-1] == len(completed.project.document.shots)
@@ -780,10 +818,12 @@ def test_five_minute_planning_handoff_completes_timeline_without_second_runtime(
         set(payload) == {
             "episode",
             "scene_contract",
-            "assigned_dialogue",
-            "previous_actual_handoff",
-            "next_scene",
-            "output_schema",
+                "assigned_dialogue",
+                "scene_pacing_evidence",
+                "previous_actual_handoff",
+                "routed_review_handoff",
+                "next_scene",
+                "output_schema",
         }
         for payload in language.scene_prompt_payloads
     )
@@ -792,9 +832,33 @@ def test_five_minute_planning_handoff_completes_timeline_without_second_runtime(
         == language.expected_handoffs[int(payload["scene_contract"]["sequence"])]
         for payload in language.scene_prompt_payloads
     )
-    assert len(h3.requests) == 40
+    assert len(h3.requests) == len(completed.project.document.shots)
     assert len(language.episode_scene_payloads) == 4
     assert len(language.episode_summary_payloads) == 1
+    assert language.asset_review_instructions
+    assert all(
+        "Asset Reviewer rubric:" in instructions
+        and "Active Production Skill: live-action Douyin vertical short drama." in instructions
+        for instructions in language.asset_review_instructions
+    )
+    assert language.route_instructions
+    assert all(
+        "Route Planner rubric:" in instructions
+        and "Active Production Skill: live-action Douyin vertical short drama." in instructions
+        for instructions in language.route_instructions
+    )
+    assert language.video_observation_instructions
+    assert all(
+        "Active Production Skill:" not in instructions
+        and "Production constitution:" not in instructions
+        for instructions in language.video_observation_instructions
+    )
+    assert all(
+        "Episode Reviewer rubric:" in instructions
+        and "Production constitution:" in instructions
+        for instructions in language.episode_scene_instructions
+        + language.episode_summary_instructions
+    )
     assert all(
         len(payload["shot_evidence"]) == 5
         for payload in language.episode_scene_payloads
@@ -1273,6 +1337,11 @@ def test_real_autonomous_draft_rotates_polling_past_a_slow_h3_task(
             render_export=False,
         )
     )
+    document = service.repository.get_project(response.project.document.project.id)
+    assert document is not None
+    for index, shot in enumerate(document.shots):
+        shot.scene_id = f"polling-test-scene-{index % 2}"
+    service.repository.save_project(document)
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
     )

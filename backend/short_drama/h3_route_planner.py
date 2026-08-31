@@ -50,6 +50,10 @@ from short_drama.models import (
     VideoInspectionReport,
     VideoInspectionScope,
 )
+from short_drama.production_profiles import (
+    ProductionSkillRole,
+    compile_production_prompt,
+)
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
     build_h3_prompt,
@@ -59,7 +63,6 @@ from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
     LanguageProviderError,
 )
-from short_drama.h3_video_guides import append_h3_video_guide_guidance
 from short_drama.reference_planner import (
     KeyframeBriefCompileRequest,
     KeyframePosition,
@@ -393,7 +396,12 @@ def _build_candidates(
 ) -> list[_RouteCandidate]:
     del tasks, inspections_by_take
     duration, duration_warnings, supported = _duration_for_h3(shot.duration_seconds)
-    fresh_prompt = build_h3_prompt(document, shot)
+    direct_prompt = build_h3_prompt(
+        document,
+        shot,
+        route=VideoGenerationRoute.DIRECT,
+        duration_seconds=duration,
+    )
     candidates: list[_RouteCandidate] = []
     reusable = [
         take
@@ -424,7 +432,7 @@ def _build_candidates(
                 id=f"reuse:{best.id}",
                 action=H3ShotRouteAction.REUSE_TAKE,
                 route=best.route,
-                prompt=run.prompt if run is not None else fresh_prompt,
+                prompt=run.prompt if run is not None else direct_prompt,
                 duration_seconds=duration,
                 media_inputs=(
                     [item.model_copy(deep=True) for item in run.media_inputs]
@@ -463,10 +471,18 @@ def _build_candidates(
             key=lambda item: (item[0].score or 0.0, item[0].reviewed_at or ""),
         )
         template_inputs = _refresh_media_inputs(template_run.media_inputs, approved_inputs)
+        template_prompt = build_h3_prompt(
+            document,
+            shot,
+            route=template_run.route,
+            duration_seconds=duration,
+            media_inputs=template_inputs,
+            video_guides=video_guides,
+        )
         try:
             validate_h3_probe(
                 route=template_run.route,
-                prompt=fresh_prompt,
+                prompt=template_prompt,
                 duration_seconds=duration,
                 media_inputs=template_inputs,
             )
@@ -478,7 +494,7 @@ def _build_candidates(
                     id=f"template:{template_evidence.id}",
                     action=H3ShotRouteAction.GENERATE,
                     route=template_run.route,
-                    prompt=fresh_prompt,
+                    prompt=template_prompt,
                     duration_seconds=duration,
                     media_inputs=template_inputs,
                     evidence_ids=[template_evidence.id],
@@ -524,7 +540,12 @@ def _build_candidates(
                     id=f"frame-first-pending:{shot.id}",
                     action=H3ShotRouteAction.GENERATE,
                     route=VideoGenerationRoute.FRAME_FIRST,
-                    prompt=fresh_prompt,
+                    prompt=build_h3_prompt(
+                        document,
+                        shot,
+                        route=VideoGenerationRoute.FRAME_FIRST,
+                        duration_seconds=duration,
+                    ),
                     duration_seconds=duration,
                     media_inputs=[],
                     rationale=(
@@ -545,10 +566,17 @@ def _build_candidates(
         else:
             selected_preparation.status = H3RouteAssetPreparationStatus.READY
             selected_preparation.approved_version_id = first_frame.asset_version_id
+            frame_prompt = build_h3_prompt(
+                document,
+                shot,
+                route=VideoGenerationRoute.FRAME_FIRST,
+                duration_seconds=duration,
+                media_inputs=[first_frame],
+            )
             try:
                 validate_h3_probe(
                     route=VideoGenerationRoute.FRAME_FIRST,
-                    prompt=fresh_prompt,
+                    prompt=frame_prompt,
                     duration_seconds=duration,
                     media_inputs=[first_frame],
                 )
@@ -560,7 +588,7 @@ def _build_candidates(
                         id=f"frame-first:{shot.id}",
                         action=H3ShotRouteAction.GENERATE,
                         route=VideoGenerationRoute.FRAME_FIRST,
-                        prompt=fresh_prompt,
+                        prompt=frame_prompt,
                         duration_seconds=duration,
                         media_inputs=[first_frame.model_copy(deep=True)],
                         rationale=(
@@ -580,7 +608,6 @@ def _build_candidates(
             shot=shot,
             plan=reference_plan,
             duration=duration,
-            prompt=fresh_prompt,
             approved_inputs=approved_inputs,
         )
         if reference_candidate is not None:
@@ -592,7 +619,6 @@ def _build_candidates(
                 shot=shot,
                 guides=video_guides,
                 duration=duration,
-                prompt=fresh_prompt,
                 approved_inputs=approved_inputs,
             )
         )
@@ -608,7 +634,7 @@ def _build_candidates(
                 id=f"direct:{shot.id}",
                 action=H3ShotRouteAction.GENERATE,
                 route=VideoGenerationRoute.DIRECT,
-                prompt=fresh_prompt,
+                prompt=direct_prompt,
                 duration_seconds=duration,
                 media_inputs=[],
                 rationale=(
@@ -633,7 +659,7 @@ def _build_candidates(
                 id=f"unsupported:{shot.id}",
                 action=H3ShotRouteAction.GENERATE,
                 route=VideoGenerationRoute.DIRECT,
-                prompt=fresh_prompt,
+                prompt=direct_prompt,
                 duration_seconds=duration,
                 media_inputs=[],
                 rationale=(
@@ -656,7 +682,6 @@ def _reference_candidate(
     shot: ShotPlan,
     plan: ReferencePlanEntry,
     duration: int,
-    prompt: str,
     approved_inputs: dict[str, tuple[AssetMediaType, H3MediaSource]],
 ) -> _RouteCandidate | None:
     preview = preview_reference_plan(
@@ -695,7 +720,13 @@ def _reference_candidate(
     inputs.extend(item for _character_name, item in voice_references)
     if not inputs:
         return None
-    compiled_prompt = _append_voice_reference_guidance(prompt, voice_references)
+    compiled_prompt = build_h3_prompt(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=duration,
+        media_inputs=inputs,
+    )
     try:
         validate_h3_probe(
             route=VideoGenerationRoute.REFERENCE,
@@ -756,7 +787,6 @@ def _video_guide_candidates(
     shot: ShotPlan,
     guides: list[H3VideoGuide],
     duration: int,
-    prompt: str,
     approved_inputs: dict[str, tuple[AssetMediaType, H3MediaSource]],
 ) -> list[_RouteCandidate]:
     voice_references, voice_warnings = _voice_reference_inputs(
@@ -781,10 +811,13 @@ def _video_guide_candidates(
             guide_input,
             *(item for _character_name, item in voice_references),
         ]
-        compiled_prompt = append_h3_video_guide_guidance(prompt, guide)
-        compiled_prompt = _append_voice_reference_guidance(
-            compiled_prompt,
-            voice_references,
+        compiled_prompt = build_h3_prompt(
+            document,
+            shot,
+            route=VideoGenerationRoute.REFERENCE,
+            duration_seconds=duration,
+            media_inputs=media_inputs,
+            video_guides=[guide],
         )
         try:
             validate_h3_probe(
@@ -928,23 +961,6 @@ def _voice_reference_inputs(
         total_audio_seconds += duration_seconds or 0.0
         seen_characters.add(character.id)
     return resolved, warnings
-
-
-def _append_voice_reference_guidance(
-    prompt: str,
-    voice_references: list[tuple[str, H3MediaInput]],
-) -> str:
-    if not voice_references:
-        return prompt
-    mapping = "；".join(
-        f"<Audio {index}>只作为角色{character_name}的声线、音色与说话方式参考"
-        for index, (character_name, _media) in enumerate(voice_references, start=1)
-    )
-    return (
-        f"{prompt} 声线参考：{mapping}。"
-        "不要复制参考音频中的原台词、环境声、背景音乐或节拍；"
-        "本镜头仍只说前述锁定台词，并保持原定说话人。"
-    )
 
 
 def _take_is_reusable(
@@ -1246,8 +1262,30 @@ def _choose_with_language_agent(
     risks_by_shot: dict[str, tuple[list[str], list[QaFailureCategory]]],
     client: LanguageProviderClient,
 ) -> dict[str, _AgentRouteChoice]:
+    skill_prompt = compile_production_prompt(
+        document.project.production_profile,
+        roles=(ProductionSkillRole.ROUTE_PLANNER,),
+        context=json.dumps(
+            {
+                "project_name": document.project.name,
+                "shots": [shot.model_dump(mode="json") for shot in shots],
+                "risks": {
+                    shot.id: {
+                        "risk_ids": risks_by_shot[shot.id][0],
+                        "categories": [
+                            item.value for item in risks_by_shot[shot.id][1]
+                        ],
+                    }
+                    for shot in shots
+                },
+            },
+            ensure_ascii=False,
+        ),
+        include_constitution=False,
+    )
     instructions = (
-        "You are a production route agent for a live-action vertical short drama. Return JSON "
+        "You are a production route agent for a live-action vertical production. "
+        f"{skill_prompt.text} Return JSON "
         "only, matching the supplied schema. Choose exactly one supplied candidate per shot. "
         "Never invent routes, asset IDs, Take IDs, or provider capabilities. A current-version "
         "human-reviewed reusable Take is normally preferred over paying to regenerate. For gaps, "

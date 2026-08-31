@@ -139,6 +139,15 @@ def test_local_url_import_version_lineage_and_approval(tmp_path: Path) -> None:
     assert reviewed.version.approval_status == ApprovalStatus.APPROVED
     assert reviewed.asset.approved_version_id == imported.version.id
 
+    rejected = service.review_asset_version(
+        asset.project_id,
+        asset.id,
+        imported.version.id,
+        AssetReviewRequest(decision="REJECTED", notes="复审发现不再适合作为正式版本"),
+    )
+    assert rejected.version.approval_status == ApprovalStatus.REJECTED
+    assert rejected.asset.approved_version_id is None
+
 
 def test_generate_edit_cost_and_candidate_gate(tmp_path: Path) -> None:
     fake = FakeImageProvider()

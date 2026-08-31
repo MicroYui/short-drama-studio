@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
   Sparkles,
   WandSparkles,
 } from 'lucide-react'
@@ -27,6 +28,10 @@ import {
   type ImageTaskCreateRequest,
   type LanguageProviderConfig,
   type ProjectAggregate,
+  type StockAssetCandidate,
+  type StockAssetImportMode,
+  type StockAssetProvider,
+  type StockProviderConfig,
 } from './api'
 import { VoiceReferencePanel } from './VoiceReferencePanel'
 
@@ -87,6 +92,13 @@ function defaultDescriptor(asset: Asset): string {
   return `${asset.name} · GPT Image 2 首批可审片候选`
 }
 
+function stockOrientation(asset: Asset): 'ANY' | 'PORTRAIT' | 'LANDSCAPE' | 'SQUARE' {
+  if (asset.kind === 'CHARACTER') return 'PORTRAIT'
+  if (asset.kind === 'LOCATION') return 'LANDSCAPE'
+  if (asset.kind === 'PROP') return 'SQUARE'
+  return 'ANY'
+}
+
 function money(amount: number | null | undefined): string {
   return amount === null || amount === undefined ? '—' : `$${amount.toFixed(5)}`
 }
@@ -97,12 +109,20 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
   const [selectedVersionId, setSelectedVersionId] = useState('')
   const [config, setConfig] = useState<ImageProviderConfig | null>(null)
   const [languageConfig, setLanguageConfig] = useState<LanguageProviderConfig | null>(null)
+  const [stockConfigs, setStockConfigs] = useState<StockProviderConfig[]>([])
   const [coverage, setCoverage] = useState<AssetCoverageResponse | null>(null)
   const [tasks, setTasks] = useState<ImageGenerationTask[]>([])
   const [apiKey, setApiKey] = useState('')
   const [imageBaseUrl, setImageBaseUrl] = useState('https://api.openai.com/v1')
   const [languageApiKey, setLanguageApiKey] = useState('')
   const [languageBaseUrl, setLanguageBaseUrl] = useState('https://api.openai.com/v1')
+  const [stockProvider, setStockProvider] = useState<StockAssetProvider>('OPENVERSE')
+  const [stockApiKey, setStockApiKey] = useState('')
+  const [stockBaseUrl, setStockBaseUrl] = useState('https://api.openverse.org/v1/images')
+  const [stockImportMode, setStockImportMode] = useState<StockAssetImportMode>('AUTO')
+  const [stockQuery, setStockQuery] = useState('')
+  const [stockCandidates, setStockCandidates] = useState<StockAssetCandidate[]>([])
+  const [stockWarnings, setStockWarnings] = useState<string[]>([])
   const [prompt, setPrompt] = useState('')
   const [descriptor, setDescriptor] = useState('')
   const [operation, setOperation] = useState<'GENERATE' | 'EDIT'>('GENERATE')
@@ -148,6 +168,14 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     setLanguageBaseUrl(result.data.base_url)
   }
 
+  const loadStockConfigs = async () => {
+    const result = await ShortDramaApi.getStockProviderConfigs()
+    if (!result.ok) { onError(result.error.message); return }
+    setStockConfigs(result.data.providers)
+    const selected = result.data.providers.find((item) => item.provider === stockProvider)
+    if (selected) setStockBaseUrl(selected.base_url)
+  }
+
   const loadTasks = async () => {
     const result = await ShortDramaApi.listImageTasks(projectId, asset?.id)
     if (!result.ok) { onError(result.error.message); return }
@@ -162,6 +190,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
 
   useEffect(() => { void loadConfig() }, [])
   useEffect(() => { void loadLanguageConfig() }, [])
+  useEffect(() => { void loadStockConfigs() }, [])
   useEffect(() => { void loadTasks() }, [projectId, asset?.id])
   useEffect(() => { void loadCoverage() }, [projectId, referenceEntryCount])
   useEffect(() => {
@@ -178,6 +207,9 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     setPrimaryInputVersionId('')
     setMaskVersionId('')
     setMaskFeatherPixels(8)
+    setStockCandidates([])
+    setStockWarnings([])
+    setStockImportMode(asset.kind === 'CHARACTER' ? 'DERIVE' : 'AUTO')
   }, [asset?.id])
 
   const perform = async <T,>(label: string, action: () => Promise<ResultLike<T>>, onSuccess: (value: T) => void) => {
@@ -214,6 +246,59 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     setLanguageConfig(value)
     onNotice('GPT-5.6-sol 兼容地址与固定模型验证通过')
   })
+
+  const switchStockProvider = (provider: StockAssetProvider) => {
+    setStockProvider(provider)
+    setStockApiKey('')
+    setStockCandidates([])
+    setStockWarnings([])
+    const next = stockConfigs.find((item) => item.provider === provider)
+    if (next) setStockBaseUrl(next.base_url)
+  }
+
+  const saveStockConnection = () => void perform('保存素材库连接', () => (
+    ShortDramaApi.updateStockProviderConfig(stockProvider, stockApiKey || null, stockBaseUrl.trim())
+  ), (value) => {
+    setStockConfigs((current) => [
+      ...current.filter((item) => item.provider !== value.provider),
+      value,
+    ])
+    setStockBaseUrl(value.base_url)
+    setStockApiKey('')
+    onNotice(`${value.provider} 素材库连接已保存`)
+  })
+
+  const searchStock = () => {
+    if (!asset || !stockQuery.trim()) { onError('请输入素材搜索词'); return }
+    void perform('搜索免费素材库', () => ShortDramaApi.searchStockAssets({
+      provider: stockProvider,
+      query: stockQuery.trim(),
+      asset_kind: asset.kind,
+      orientation: stockOrientation(asset),
+      page: 1,
+      limit: 12,
+      commercial_and_modifiable_only: true,
+    }), (value) => {
+      setStockCandidates(value.candidates)
+      setStockWarnings(value.warnings ?? [])
+      onNotice(`找到 ${value.candidates.length} 个候选；选择、上传或忽略均可`)
+    })
+  }
+
+  const importStock = (candidate: StockAssetCandidate) => {
+    if (!asset) return
+    void perform('导入素材库候选', () => ShortDramaApi.importStockAsset(projectId, {
+      target_asset_id: asset.id,
+      candidate,
+      descriptor: `真实素材候选：${candidate.title}；建议用途 ${candidate.recommended_use}`,
+      parent_version_id: version?.media_type === 'TEXT_REFERENCE' ? null : (version?.id ?? null),
+      import_mode: stockImportMode,
+    }), (value) => {
+      onProjectChange(value.project)
+      setSelectedVersionId(value.version.id)
+      onNotice('素材及其作者、来源页和许可信息已登记为候选 AssetVersion')
+    })
+  }
 
   const createAsset = () => {
     if (!newAssetName.trim() || !newAssetDescriptor.trim()) { onError('请填写资产名称和说明'); return }
@@ -378,6 +463,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
   if (!asset || !version) return null
   const previewUrl = versionUrl(version)
   const azureImageEndpoint = imageBaseUrl.includes('.openai.azure.com') || imageBaseUrl.includes('/openai/deployments/')
+  const stockConfig = stockConfigs.find((item) => item.provider === stockProvider)
 
   return (
     <div className="space-y-6">
@@ -385,7 +471,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
         <div>
           <div className="flex flex-wrap items-center gap-2"><Badge tone="blue">Phase 12 · Asset Agent</Badge><Badge>GPT Image 2</Badge><Badge>同源母版谱系</Badge></div>
           <h2 className="mt-3 text-xl font-semibold text-white">Agent 管理的可复用制片资产包</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">上传、跨项目资产库、GPT Image 新生成和同母版派生共用 AssetVersion。AUTO_DRAFT 会按镜头需求检索最小参考集，只补齐缺失视图；建议可忽略，不形成用户审批门。</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">免费素材库、用户上传、跨项目资产库、GPT Image 新生成和同母版派生共用 AssetVersion。AUTO_DRAFT 会按镜头需求检索最小参考集，只补齐缺失视图；建议可忽略，不形成用户审批门。</p>
         </div>
         <button className={secondaryButton} onClick={() => setShowCreate((value) => !value)}><Plus className="h-4 w-4" />新建资产</button>
       </section>
@@ -401,7 +487,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-cyan-300" /><h3 className="text-sm font-medium text-cyan-100">资产 Agent tools</h3></div>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">search_assets → inspect_asset_coverage → ensure_asset_view → review_and_register → select_shot_references</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">search_stock / search_assets → inspect_asset_coverage → ensure_asset_view → review_and_register → select_shot_references</p>
           </div>
           <button className={subtleButton} onClick={() => void loadCoverage()}><RefreshCw className="h-3.5 w-3.5" />刷新覆盖</button>
         </div>
@@ -435,7 +521,14 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
           <button className={secondaryButton} disabled={!languageBaseUrl.trim() || Boolean(busy)} onClick={saveLanguageConnection}><KeyRound className="h-4 w-4" />保存</button>
           <button className={secondaryButton} disabled={!languageConfig?.can_connect || Boolean(busy)} onClick={validateLanguageConnection}><RefreshCw className="h-4 w-4" />验证</button>
         </div>
-        <p className="text-[11px] leading-5 text-zinc-600">支持标准 OpenAI Base URL、Azure 部署级完整 endpoint 和本地 OpenAI-compatible /v1。本地回环地址可不填 Key；验证不发起图像或语言生成。</p>
+        <div className="grid gap-3 border-t border-zinc-800 pt-3 xl:grid-cols-[170px_minmax(260px,1fr)_minmax(220px,0.8fr)_auto_auto] xl:items-end">
+          <div><label className="text-xs text-zinc-500">免费素材库</label><select className={`${field} mt-1`} value={stockProvider} onChange={(event) => switchStockProvider(event.target.value as StockAssetProvider)}><option value="OPENVERSE">Openverse</option><option value="PEXELS">Pexels</option><option value="PIXABAY">Pixabay</option></select></div>
+          <div><label className="text-xs text-zinc-500">API Base URL</label><input className={`${field} mt-1`} value={stockBaseUrl} onChange={(event) => setStockBaseUrl(event.target.value)} /></div>
+          <div><label className="text-xs text-zinc-500">API Key</label><input className={`${field} mt-1`} value={stockApiKey} onChange={(event) => setStockApiKey(event.target.value)} type="password" placeholder={stockConfig?.has_api_key ? `已配置 · ${stockConfig.key_source}` : stockProvider === 'OPENVERSE' ? 'Openverse 可留空' : '输入免费 API Key'} /></div>
+          <button className={secondaryButton} disabled={!stockBaseUrl.trim() || Boolean(busy)} onClick={saveStockConnection}><KeyRound className="h-4 w-4" />保存</button>
+          <Badge tone={stockConfig?.can_search ? 'green' : 'amber'}>{stockConfig?.can_search ? 'Ready' : '需要 Key'}</Badge>
+        </div>
+        <p className="text-[11px] leading-5 text-zinc-600">Openverse 无 Key 可搜索；Pexels 与 Pixabay 可填各自免费 API Key。搜索只返回候选和来源信息，不会自动批准资产，也不会调用 GPT Image 或 H3。</p>
       </section>
 
       {showCreate && (
@@ -471,7 +564,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
                     ? <video src={previewUrl} controls className="max-h-[620px] max-w-full rounded-lg object-contain shadow-2xl" />
                     : <div className="text-center"><ImageIcon className="mx-auto h-10 w-10 text-zinc-700" /><p className="mt-3 text-sm text-zinc-500">当前版本还没有可预览媒体</p><p className="mt-1 text-xs text-zinc-700">可上传、导入 URL 或使用对应生成工具</p></div>}
             </div>
-            <div className="border-t border-zinc-800 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium text-white">{asset.name}</h3><p className="mt-1 text-xs text-zinc-500">v{version.version} · {version.origin_type} · {version.media_type}{version.width && version.height ? ` · ${version.width}×${version.height}` : ''}</p></div><div className="flex gap-2"><Badge tone={statusTone(version.approval_status)}>{version.approval_status}</Badge>{asset.approved_version_id === version.id && <Badge tone="green">正式版本</Badge>}</div></div><p className="mt-3 text-sm leading-6 text-zinc-300">{version.descriptor}</p>{version.source && <p className="mt-2 text-xs text-zinc-600">来源：{version.source.source_label}{version.source.model ? ` · ${version.source.model}` : ''}{version.parent_version_id ? ` · 派生自 v${asset.versions.find((item) => item.id === version.parent_version_id)?.version ?? '?'}` : ''}</p>}</div>
+            <div className="border-t border-zinc-800 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-medium text-white">{asset.name}</h3><p className="mt-1 text-xs text-zinc-500">v{version.version} · {version.origin_type} · {version.media_type}{version.width && version.height ? ` · ${version.width}×${version.height}` : ''}</p></div><div className="flex gap-2"><Badge tone={statusTone(version.approval_status)}>{version.approval_status}</Badge>{asset.approved_version_id === version.id && <Badge tone="green">正式版本</Badge>}</div></div><p className="mt-3 text-sm leading-6 text-zinc-300">{version.descriptor}</p>{version.source && <div className="mt-2 text-xs leading-5 text-zinc-600"><p>来源：{version.source.source_label}{version.source.creator ? ` · ${version.source.creator}` : ''}{version.source.license_name ? ` · ${version.source.license_name}` : ''}{version.source.model ? ` · ${version.source.model}` : ''}{version.parent_version_id ? ` · 派生自 v${asset.versions.find((item) => item.id === version.parent_version_id)?.version ?? '?'}` : ''}</p>{version.source.source_uri && <a className="text-cyan-500 hover:text-cyan-400" href={version.source.source_uri} target="_blank" rel="noreferrer">查看原始来源</a>}</div>}</div>
           </div>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
@@ -488,6 +581,14 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
             <button className={`${secondaryButton} mt-3 w-full`} onClick={() => void importLocal()} disabled={Boolean(busy)}><FileUp className="h-4 w-4" />选择本地文件</button>
             <div className="mt-3 grid grid-cols-[1fr_100px] gap-2"><input className={field} value={externalUrl} onChange={(event) => setExternalUrl(event.target.value)} placeholder="https://..." /><select className={field} value={externalMediaType} onChange={(event) => setExternalMediaType(event.target.value as AssetMediaType)}><option value="IMAGE">图片</option><option value="VIDEO">视频</option><option value="AUDIO">音频</option></select></div>
             <button className={`${subtleButton} mt-2`} onClick={importUrl}><Link className="h-3.5 w-3.5" />导入外部链接</button>
+          </section>
+
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+            <div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><Search className="h-4 w-4 text-cyan-400" /><h3 className="text-sm font-medium text-white">免费真实素材</h3></div><Badge tone={stockConfig?.can_search ? 'green' : 'amber'}>{stockProvider}</Badge></div>
+            <p className="mt-2 text-[11px] leading-5 text-zinc-600">Agent 可自动选择，用户也可手动换图。人物默认作为真实摄影与造型依据，再生成新虚构身份；拥有授权的上传图可保留身份。</p>
+            <div className="mt-3 grid grid-cols-[1fr_110px_auto] gap-2"><input className={field} value={stockQuery} onChange={(event) => setStockQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') searchStock() }} placeholder="例如 Asian woman workwear portrait" /><select className={field} value={stockImportMode} onChange={(event) => setStockImportMode(event.target.value as StockAssetImportMode)}><option value="AUTO">自动判断</option><option value="DIRECT">直接候选</option><option value="DERIVE">继续派生</option></select><button className={secondaryButton} disabled={Boolean(busy) || !stockConfig?.can_search} onClick={searchStock}><Search className="h-4 w-4" /></button></div>
+            {stockWarnings.length > 0 && <div className="mt-3 rounded-lg border border-amber-500/15 bg-amber-500/5 p-2 text-[10px] leading-4 text-amber-200/70">{stockWarnings.join(' ')}</div>}
+            {stockCandidates.length > 0 && <div className="mt-3 max-h-[620px] space-y-3 overflow-y-auto pr-1">{stockCandidates.map((candidate) => <div key={`${candidate.provider}-${candidate.provider_asset_id}`} className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/70"><img src={candidate.preview_url} alt={candidate.title} className="h-44 w-full object-cover" loading="lazy" /><div className="p-3"><p className="line-clamp-2 text-xs font-medium text-zinc-200">{candidate.title}</p><p className="mt-1 text-[10px] text-zinc-600">{candidate.creator ?? '未知作者'} · {candidate.license_name}{candidate.width && candidate.height ? ` · ${candidate.width}×${candidate.height}` : ''}</p><p className="mt-2 text-[10px] leading-4 text-zinc-500">{candidate.recommended_use === 'VISUAL_GROUNDING_NEW_IDENTITY' ? '建议：真实视觉母版 → 新虚构身份' : '建议：可直接使用或继续派生'}</p><div className="mt-3 flex items-center justify-between gap-2"><a className="text-[10px] text-cyan-400 hover:text-cyan-300" href={candidate.source_page_url} target="_blank" rel="noreferrer">查看来源与许可</a><button className={subtleButton} onClick={() => importStock(candidate)}>导入候选</button></div></div></div>)}</div>}
           </section>
 
           {version.media_type !== 'AUDIO' && <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">

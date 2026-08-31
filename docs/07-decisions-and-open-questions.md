@@ -184,11 +184,11 @@ Mock 阶段直接实现当前完整闭环所需的 schema、模块边界、API �
 
 ### D46. 照片生成和参考包是 Asset Agent Tools
 
-Planner 先声明镜头实际需要的主体、角色、角度、景别和状态，Asset Agent 再搜索当前/跨项目目录、检查覆盖、复用已批准资产或调用 GPT Image 从当前母版派生缺失视图，然后语义审查、登记系谱并为每镜选择最小参考集。场景默认先建单张 Master Wide；反打、局部、交互区和角色三视图只在分镜需要时生成。Agent 推荐可被用户忽略，不形成硬阻断或样片专用规则。
+Planner 先声明镜头实际需要的主体、角色、角度、景别和状态，Asset Agent 再搜索当前/跨项目目录、检查覆盖、复用已批准资产或调用 GPT Image 从当前母版派生缺失视图，然后语义审查、登记系谱并为每镜选择最小参考集。不同剧本默认项目隔离：目录搜索默认只返回当前项目，自动母版复用只能从 `linked_asset_project_ids` 显式关联的系列/续集项目取用；全局跨项目搜索及导入仍是 Agent 或用户明确调用的可选 Tool，导入后须在目标项目重新审查。同一项目内也按镜头实际入镜范围选择资产：显式场景需求作为锚点，连续镜头继承最近的当前地点，不把对白里提到但未出场的人物、下一场地点或明确留在画外的道具一起塞进生成输入。场景默认先建单张 Master Wide；反打、局部、交互区和角色三视图只在分镜需要时生成。Agent 推荐可被用户忽略，不形成硬阻断或样片专用规则。
 
 ### D47. 通用视频与抖音短剧使用同一运行时的不同 Prompt Policy
 
-项目创建时选择通用视频或抖音短剧。两者共享资产、Director、H3、QA 和时间线，只向 Writer、Production Planner 与 Director 注入不同策略。抖音模式强调冲突/好奇缺口前置、因果推进和结尾回收；通用模式允许氛围、留白与长镜头。分镜不设置固定镜头数、动作数或“每 N 秒新信息”门控，Agent 只做可忽略建议，不为提高密度机械增加内容。
+项目创建时选择通用视频或抖音短剧。两者共享项目、资产、H3、QA 和时间线实现；当前 Profile 为 Concept、Writer、Planner、Critic、Review Router、Director、Asset Reviewer、H3 Route/Prompt Compiler 和 Episode Reviewer 编译各自 role rubric。抖音模式强调好奇缺口前置、因果推进、可见状态变化和结尾回收；通用模式允许氛围、留白与长镜头。合同、签名、融资、付款流程等旧样片经验不再属于抖音模式的固定规则，只在当前题材与职责实际命中时作为可忽略经验追加。分镜不设置固定镜头数、动作数或“每 N 秒新信息”门控，Agent 不为提高密度机械增加内容。
 
 ### D48. H3 视频参考是 Route Agent 工具，不是连续性门控
 
@@ -201,6 +201,56 @@ Planner 先声明镜头实际需要的主体、角色、角度、景别和状态
 ### D50. 整集 QA 使用分层 Reviewer，报告不成为门控
 
 时间线建立后，由 Scene Reviewer 按场读取入选 Take、锁定剧本和现有 VideoInspection，再由 Episode Reviewer 汇总跨场与整集问题。报告必须关联证据、场次和镜头；只有明确关联镜头的局部修复建议才交给现有 Director Agent，用户可忽略。Provider 不可用、三次阶段失败或没有可执行修复都继续导出。该阶段不自动运行 STT、声纹或音频质量 QA，不新增整集评分阈值、固定节拍规则、答案键、场景专用字段、hash 冻结或第二运行时。
+
+### D51. 产品采用 Agent + Skills + Tools，workflow 只作执行底座
+
+用户面对的是能理解自然语言目标并自主完成制片的 Agent，不是节点编排器。抖音短剧和后续内容形态作为 Production Skills，分别封装领域目标、上下文、角色分工、可用 Tools 与评审原则；Multi-Agent 委派、单场/单镜规划、资产检索/生成/编辑、H3、视频观察、连续性检查和时间线局部更新均作为可独立组合的 Tools 或 Harness 能力。持久化 PlanningRun、AutonomousRun 和任务状态机继续负责推进、并发、重试、恢复与 Provider 对账，但不规定唯一创作路径，也不要求用户逐节点操作。
+
+PoC 不建设动态 Skill Registry；当前静态 `Profile → ProductionSkill` Catalog 就是最小 Skill 目录。Skill 保存稳定 constitution、按职责选择的 role rubric、按当前上下文召回的经验与可覆盖 playbook，但不限制 Tool Catalog，也不负责重试、恢复或 Provider 副作用。数字人口播等新 Skill 在抖音短剧 PoC 验收后再做，不改变核心架构。自然语言局部修改由 Agent 解析实体、属性和适用范围，再利用按需编译的 `ProjectIndex` 与版本依赖生成 `ImpactPlan`，只重算实际受影响的资产、关键帧、镜头、Take 和时间线分支。例如换一个角色在特定场景中的衣服颜色，不应重做未出现该服装的镜头，也不应无故重做台词、声音或字幕。用户可调整范围、指定镜头或忽略建议。当前已实现只读 `SemanticChangePlan` Agent Tool：LLM 只选语义根对象，Harness 校验真实 ID 并计算资产、台词、场次、镜头与 Take 依赖，返回可编辑且不直接执行的 Tool 计划；后续 Change Executor 复用现有版本、图像、ReferencePlan、H3 与 Timeline Tools，不为单例修改增加专用 workflow 或领域字段。
+
+### D52. 语义修改优先设计为按需索引和影响计划
+
+语义修改是对现有项目对象的理解和局部重算，不是单独的创作 Agent 服务。最小合同为 `ChangeIntent`、从唯一 ProjectDocument 按需编译的只读 `ProjectIndex`、经真实 ID/依赖校验的 `ImpactPlan`，以及复用现有 Tools 和任务状态机的 Change Executor。首版不增加图数据库、向量库、第二份项目状态或换装等专用流程。LLM 负责理解自然语言和提出范围，确定性查询负责确认实际依赖；只有歧义会造成明显不同重算分支时才询问用户。
+
+`POST /projects/{project_id}/agent-tools/plan-change` 已实现前三项合同。用户既可直接给自然语言，也可显式指定镜头/资产 ID；返回计划只描述根目标、实际依赖、会失效的 Take 和建议调用的已有 Tools，不修改项目。这个只读边界使 Agent 可以无人值守继续，也使桌面 UI、用户直接编辑和 Agent 修改共享同一依赖解释，不需要强制审批节点。
+
+### D53. Prompt 与制片策略采用持续改进，不要求每次完整实验
+
+制片过程中若发现 Prompt、资产选择、镜头拆法、检查顺序或重试方式明显提高质量、减少生成次数且没有观察到对应退化，可以直接更新默认实现、记录简短依据并继续。只有路线优劣不明、要形成跨项目默认、会显著改变成本或架构/Provider 边界时，才做同输入受控比较。当前合格 Take 可以使用；稳定率和跨题材结论仍不能由一次最好结果推出。
+
+### D54. 抖音短剧自动选题优先具体高概念与可见爽点
+
+当系统负责选题时，Story Architect 先在内部比较多个实质不同的一句话概念，只输出最强方案。优先选择能一句话讲清的异常设定、具体欲望或威胁、可见反差、情绪回报和后续剧集引擎；不再默认落入办公室、秘密录音/文件、记忆悖论、关系猜疑或“某物没有说谎”式模糊悬疑。极端环境、重生、社会身份翻转、家庭权力冲突和规则幻想只是候选方向，不成为题材配额。用户给出创意时保留其标志性反差并放大，而不是替换为更安全的通用悬疑；Critic 可以指出概念泛化，但建议仍可忽略。
+
+### D55. 确定性校验不限制正常创作内容
+
+Schema 和校验器只维护引用完整性、时间范围、Provider 合约、可恢复执行和数据规模等工程边界，不对角色年龄、性别、关系、题材、结局或正常叙事元素设置创作门禁。已移除 `PlannedCharacter.age >= 18 && <= 80`，儿童、老人及题材需要的非人角色均可进入规划。规模上限、文本长度和 H3 单段 4–15 秒等仍属于上下文/技术约束；若未来某 Provider 对特定内容存在真实限制，由对应 Adapter 明确报告，不反向污染通用故事模型。
+
+### D56. 分镜时长与 H3 单次生成时长分离
+
+`ShotPlan` 表示叙事和剪辑意义上的镜头，时长由内容、表演和运镜决定，可以短于 4 秒，也可以超过 15 秒。MiniMax-H3 的限制只作用于一次 Provider 请求：每个请求必须是 4–15 秒的整数。执行规划应把长镜头编译为多个连续的 H3 生成段，把不足 4 秒的剪辑镜头生成带安全余量的最短合法素材后在时间线裁切；不能把 H3 的窗口反向写成分镜规则，也不能直接提交超过 15 秒或非整数时长。
+
+长镜头生成段之间需要继承前段终态、可选尾窗或关键帧，并由镜内/边界观察检查人物、空间、动作、声音和运镜连续性。Director Agent 仍可根据质量风险建议把它改成多个剪辑镜头、换覆盖机位或保留长镜头并技术分段，用户可以忽略。当前 Planner 已移除 4–15 秒分镜门限；在重新进入真实视频生成前，还需把“一镜多生成段、逐段 Take、段间 QA 和 Timeline 拼接”接入 H3 Route Plan，现阶段不会用不完整实现触发付费生成。
+
+### D57. Critic 只报告观察，Production Skill 的 Review Router 决定修订归属
+
+`ScriptReviewReport.requires_revision` 只保留为旧数据和审稿意见兼容字段，不再控制 `PlanningRun` 或同步规划循环。每次 Critic 后由当前 Production Skill 注入策略的 Review Router Agent 读取实际大纲与全部问题，把每项问题路由给 `STORY_ARCHITECT / SCENE_DIRECTOR / ASSET_AGENT / VIDEO_DIRECTOR / TIMELINE_AGENT / USER_OPTIONAL`，并给出默认的 `REVISE_STORY / CONTINUE_WITH_HANDOFF / CONTINUE`。严重度不是门控：中低问题也可能需要核心剧本修复，高问题也可能只是镜头或资产执行问题。
+
+只有明确属于 Story Architect 的问题会进入下一轮剧本修订；场面调度、构图、道具呈现、生成缺陷和剪辑问题作为结构化 handoff 交给后续制作层，不能靠继续增加对白或解释修复。Router 不可用时系统不会擅自扩大重写范围，而是把观察保留为用户可编辑的可选建议并继续。路由结果会随 PlanningRun 审稿快照和最终 ScriptVersion 持久化；用户始终可以直接改稿、让 Agent 改、继续或忽略，Review Router 是默认自动动作而不是审批门。
+
+### D58. 修订前独立区分来源承诺、剧本缺陷与 Critic 越界
+
+Router 把问题交给 Story Architect 后，不直接把 Critic 当答案。Source Contract Agent 从用户输入中提取显式承诺、明确禁区和开放选择；Story Repair Planner 再把每项 routed finding 诊断为 `SOURCE_CONCEPT_GAP / OUTLINE_DEFECT / CRITIC_OVERREACH`。Critic 越界不得触发自动改稿；显式来源承诺不能为了减少制作规模而静默删除，只能简化其实现方式。Repair Plan、最近三轮历史和 Source Contract 一同进入 Writer。
+
+Writer 输出由窄范围 Revision Verifier 检查是否落实 Repair Plan、保留来源承诺与 invariants，并避免新增因果、资源状态、时序、动机和信息密度回退。最多执行两次针对具体 violation 的修复，仍失败则保留原稿并交由用户决定。用户直接改稿或明确要求 Agent 改稿时，本次指令与已认可大纲作为 authoritative override 优先于冲突的旧承诺，后续自动修订不能擅自改回。停止条件不要求 Critic 零问题：自动修订最多三轮；无 HIGH、来源承诺完整、Verifier 接受且问题未回升时，可以把中低建议下放或保留为可忽略意见。所有计划与验证结果都可由用户覆盖。
+
+### D59. 约 4 秒到数十分钟共用分层剧本 Tools
+
+不按短片、3 分钟或 30 分钟切换 workflow。约 4 秒的单节点内容到数十分钟剧本都使用 `Global Blueprint → Scene Writer → Critic/Repair → Scene Director`，时长只影响场次节点数、单场时长和需要取回的文档上下文。场次数由 Story Architect 根据内容判断，不建立固定时长档或节点配额。
+
+Blueprint、单场写作、版本化剧本检索、修改范围建议、Scene Patch、Patch 合并和局部复审都必须是可独立调用的 Agent Tools。PlanningRun 只提供默认自主编排、持久化和恢复，不规定用户必须从头跑到尾。用户指定某场、某角色或某段台词时，Agent 先检索当前 run/revision 的 Story Bible 和 Scene 文档，建议最小影响范围；用户明确给出场次时直接覆盖该建议。未选中场次不重新生成，台词索引由确定性代码重建。
+
+Critic 自动修订优先按 Repair Plan 的 `affected_scene_sequences` 执行局部 Patch；只有 Scope Agent 判断标题、中心设定、全局角色/地点契约、总时长或大部分因果主干必须改变时，才走完整 Blueprint 修订兼容路径。这是 Agent 建议而非门禁，用户始终可覆盖。详见 [Phase 22](33-phase22-hierarchical-script-tools.md)。
 
 ## 2. 已完成确认的五项基础
 
