@@ -20,9 +20,9 @@
 - `route.plan_h3`：根据 ShotPlan、资产和当前能力选择 DIRECT、FRAME_FIRST、FRAME_FIRST_LAST 或 REFERENCE。
 - `route.compile_h3_prompt`：把已确定镜头编译成 H3 Prompt IR。
 - `route.preview_h3_probe`：在提交前查看最终请求和成本敏感输入。
-- `route.execute_h3_plan` / `video.enqueue`：建立真实生成任务。
-- `task.advance` / `task.drain`：轮询任务并在成功时保存输出。
-- `task.reconcile` / `task.recover_output`：处理远端已提交、本地状态不确定或结果待恢复的情况。
+- `route.execute_h3_plan`：建立真实 MiniMax-H3 生成任务；`video.enqueue` 是确定性 Mock 路径，不会提交 H3。
+- `task.advance`：逐步准备、提交、轮询并保存 H3 输出；`task.drain` 只批量推进 Mock 任务。
+- `route.list_h3_reconciliation`、`route.resolve_h3_submission`、`route.resolve_h3_not_submitted` 处理 H3 提交结果不确定；`task.recover_output` 可恢复已完成但未落盘的 H3 输出。
 - `route.review_h3_take`：把结果与所选路线的重点重新对照。
 
 ## 更新原则

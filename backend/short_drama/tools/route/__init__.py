@@ -223,7 +223,9 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             id="route.enqueue_h3_probe",
             version=1,
             category=ToolCategory.ROUTE,
-            description="Queue a bounded H3 probe using an explicit typed request.",
+            description=(
+                "Queue a bounded real MiniMax-H3 probe using an explicit typed request."
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=RouteProbeInput,
@@ -433,7 +435,10 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             id="route.execute_h3_plan",
             version=1,
             category=ToolCategory.ROUTE,
-            description="Execute a persisted H3 route plan using its explicit execution options.",
+            description=(
+                "Execute a persisted real MiniMax-H3 route plan using its explicit "
+                "execution options."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=RouteExecuteInput,

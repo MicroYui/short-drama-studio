@@ -54,7 +54,10 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
             id="task.drain",
             version=1,
             category=ToolCategory.TASK,
-            description="Advance runnable generation tasks for one project within a step bound.",
+            description=(
+                "Advance runnable deterministic Mock tasks for one project within a step "
+                "bound; real H3 tasks must use task.advance."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=WorkerDrainRequest,
@@ -69,7 +72,7 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
                     ),
                 ),
             ),
-            tags=frozenset({"generation", "task", "worker"}),
+            tags=frozenset({"generation", "task", "worker", "mock"}),
         )
     )
 
@@ -79,6 +82,7 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
         description: str,
         action: Callable[[str], GenerationTask],
         effect: ToolEffect,
+        extra_tags: frozenset[str] = frozenset(),
     ) -> None:
         def invoke(request: TaskActionInput) -> ToolExecution[GenerationTask]:
             return _task_execution(action(request.task_id))
@@ -94,7 +98,7 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
                 input_model=TaskActionInput,
                 output_model=GenerationTask,
                 handler=invoke,
-                tags=frozenset({"generation", "task", "lifecycle"}),
+                tags=frozenset({"generation", "task", "lifecycle"}) | extra_tags,
             )
         )
 
@@ -118,9 +122,10 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
     )
     register_action(
         tool_id="task.reconcile",
-        description="Reconcile the current provider state of an uncertain generation task.",
+        description="Reconcile an uncertain deterministic Mock generation task.",
         action=service.reconcile_task,
         effect=ToolEffect.EXTERNAL,
+        extra_tags=frozenset({"mock"}),
     )
     register_action(
         tool_id="task.recover_output",

@@ -79,7 +79,7 @@ Planner 首先明确：这是单集、系列首集、连续剧中段、预告还
 
 Provider Prompt Compiler 把已批准 ShotPlan 转成模型语法，不负责重写内容。它要忠实表达起始状态、动作发展、摄影机、声音、结束状态和媒体引用，并保留锁定对白和说话人。
 
-H3 可使用 `route.compile_h3_prompt` 或 `route.preview_h3_probe` 预览请求，再使用 `route.execute_h3_plan` 提交；通用路径可使用 `video.enqueue`。外部状态由 `task.advance`、`task.drain`、`task.reconcile` 和 `task.recover_output` 等 Tool 推进。
+REAL_H3 可使用 `route.compile_h3_prompt` 或 `route.preview_h3_probe` 预览请求，再使用 `route.execute_h3_plan` 建立任务，由 `task.advance` 逐步提交与轮询。MOCK 使用 `video.enqueue` 建立确定性本地任务，由 `task.drain` 推进，`task.reconcile` 也只处理 Mock 任务。`task.retry` 和 `task.recover_output` 必须跟随原任务的 Provider。
 
 首个候选生成后先检查，再决定停止、增加同路线候选、修改输入还是换路线。每次迭代尽量改变一个有意义的控制变量，并记录为什么改变；不要用相同错误输入做固定次数抽卡。
 
@@ -89,7 +89,7 @@ H3 可使用 `route.compile_h3_prompt` 或 `route.preview_h3_probe` 预览请求
 
 使用 `video.inspect_take` 保存观察，`video.compare_takes` 做同镜相对比较，`video.select_take` 选择版本。H3 结果可用 `route.review_h3_take` 记录路线证据。
 
-修复时按责任层选择：故事或动机问题回到编剧；覆盖和动作问题回到导演/ShotPlan；身份、场景或关键帧问题回到资产；随机运动问题可 retake；片段不足使用 `video.extend`；局部缝隙使用 `video.gap_fill`；后期能解决的字幕、音量或剪辑问题留在时间线。
+修复时按责任层选择：故事或动机问题回到编剧；覆盖和动作问题回到导演/ShotPlan；身份、场景或关键帧问题回到资产；MOCK 目标中的随机运动问题可用 `video.retake`，片段不足使用 `video.extend`，局部缝隙使用 `video.gap_fill`；REAL_H3 目标回到 H3 路线计划创建新候选；后期能解决的字幕、音量或剪辑问题留在时间线。
 
 `shot.apply_director_repair` 保存明确修复决定，`shot.run_director_loop` 可执行一次导演建议与应用。不要因为整集某一处问题而重新生成所有镜头。
 

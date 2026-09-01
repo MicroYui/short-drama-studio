@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import imageio_ffmpeg
@@ -40,6 +42,7 @@ from short_drama.models import (
     EvidencePurpose,
     EvidenceStatus,
     Freshness,
+    ProjectStage,
     QaFailureCategory,
     QaIssue,
     QaStatus,
@@ -156,6 +159,23 @@ class FakeH3Client:
             task_type="generation",
             modality="video",
         )
+
+
+class ConcurrentSubmitH3Client(FakeH3Client):
+    """Makes an unguarded duplicate submission race deterministic."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.submit_barrier = threading.Barrier(2)
+        self.submit_record_lock = threading.Lock()
+
+    def submit(self, request: H3VideoRequest) -> str:
+        try:
+            self.submit_barrier.wait(timeout=0.5)
+        except threading.BrokenBarrierError:
+            pass
+        with self.submit_record_lock:
+            return super().submit(request)
 
 
 def _fake_factory(fake: FakeH3Client):
@@ -673,6 +693,10 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     sent = fake.submitted_requests[0]
     assert sent.resolution == "768P"
     assert sent.ratio == "9:16"
+    pending = service.enqueue_h3_probe(
+        project_id,
+        H3ProbeRequest(shot_id=shot.id),
+    )
 
     assert service.advance_task(probe.task.id).status == TaskStatus.ACKNOWLEDGED
     fake.set_status("remote-1", H3RemoteStatus.RUNNING)
@@ -681,6 +705,10 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     assert service.advance_task(probe.task.id).status == TaskStatus.SUCCEEDED
 
     aggregate = service.get_project(project_id)
+    assert next(task for task in aggregate.tasks if task.id == pending.task.id).status == (
+        TaskStatus.QUEUED
+    )
+    assert aggregate.document.project.stage == ProjectStage.GENERATING
     take = next(item for item in aggregate.takes if item.task_id == probe.task.id)
     assert take.qa_status == QaStatus.PENDING
     assert take.is_selected is False
@@ -706,6 +734,7 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     assert reviewed.take.qa_status == QaStatus.PASSED
     assert reviewed.take.is_selected is False
     assert reviewed.evidence.status == EvidenceStatus.REVIEWED
+    assert reviewed.project.document.project.stage == ProjectStage.GENERATING
     first_rejection = service.review_h3_take(
         take.id,
         H3TakeReviewRequest(
@@ -766,6 +795,7 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     service.repository.save_route_evidence(persisted_evidence)
     selected = service.select_take(take.id)
     assert next(item for item in selected.takes if item.id == take.id).is_selected is True
+    assert selected.document.project.stage == ProjectStage.GENERATING
 
 
 def test_running_h3_output_is_stale_after_director_changes_shot_plan(
@@ -839,6 +869,53 @@ def test_running_h3_output_is_stale_after_director_changes_shot_plan(
     assert orientation_risk.evidence_take_ids == [take.id]
     with pytest.raises(WorkflowConflictError, match="stale"):
         service.select_take(take.id)
+
+
+def test_h3_prepare_submit_and_retry_reject_stale_inputs(tmp_path: Path) -> None:
+    fake = FakeH3Client()
+    service = _service(tmp_path, fake)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = project.document.shots[0]
+    queued_probe = service.enqueue_h3_probe(
+        project_id,
+        H3ProbeRequest(shot_id=shot.id),
+    )
+    submitting_probe = service.enqueue_h3_probe(
+        project_id,
+        H3ProbeRequest(shot_id=shot.id),
+    )
+    assert service.advance_task(submitting_probe.task.id).status == TaskStatus.SUBMITTING
+
+    updated = service.decide_director_repair(
+        project_id,
+        shot.id,
+        DirectorRepairDecisionRequest(
+            decision=DirectorRepairDecision.APPLIED,
+            strategy=DirectorRepairStrategy.CHANGE_CAMERA,
+            reason="Change the shot before either queued request reaches the provider.",
+            shot_patch=ShotPlanPatch(camera="locked-off profile coverage"),
+        ),
+    )
+    current_shot = next(item for item in updated.document.shots if item.id == shot.id)
+    assert current_shot.revision == shot.revision + 1
+
+    blocked_during_prepare = service.advance_task(queued_probe.task.id)
+    blocked_during_submit = service.advance_task(submitting_probe.task.id)
+
+    assert blocked_during_prepare.status == TaskStatus.FAILED
+    assert blocked_during_prepare.error_code == "H3_INPUTS_STALE"
+    assert blocked_during_submit.status == TaskStatus.FAILED
+    assert blocked_during_submit.error_code == "H3_INPUTS_STALE"
+    assert fake.submitted_requests == []
+    assert service.repository.provider_submission_count(
+        blocked_during_submit.request_fingerprint
+    ) == 0
+    for blocked in (blocked_during_prepare, blocked_during_submit):
+        task_count = len(service.repository.list_tasks(project_id))
+        with pytest.raises(WorkflowConflictError, match="compile a new H3"):
+            service.retry_task(blocked.id)
+        assert len(service.repository.list_tasks(project_id)) == task_count
 
 
 def test_h3_submit_unknown_never_blindly_reposts(tmp_path: Path) -> None:
@@ -929,6 +1006,63 @@ def test_h3_duplicate_local_task_reuses_acknowledged_submission_before_post(
     assert reused.status == TaskStatus.ACKNOWLEDGED
     assert reused.provider_task_id == acknowledged.provider_task_id
     assert len(fake.submitted_requests) == 1
+
+
+def test_concurrent_h3_advance_submits_once_per_request_fingerprint(
+    tmp_path: Path,
+) -> None:
+    fake = ConcurrentSubmitH3Client()
+    service = _service(tmp_path, fake)
+    project = service.initialize_fixture()
+    probe = service.enqueue_h3_probe(
+        project.document.project.id,
+        H3ProbeRequest(shot_id=project.document.shots[0].id),
+    )
+    original_run = service.repository.get_provider_run(probe.task.id)
+    original_evidence = service.repository.get_route_evidence_for_task(probe.task.id)
+    assert original_run is not None
+    assert original_evidence is not None
+    duplicate_task = probe.task.model_copy(
+        deep=True,
+        update={
+            "id": "task-concurrent-duplicate",
+            "provider_run_id": "h3-run-concurrent-duplicate",
+        },
+    )
+    duplicate_run = original_run.model_copy(
+        deep=True,
+        update={
+            "id": "h3-run-concurrent-duplicate",
+            "task_id": duplicate_task.id,
+        },
+    )
+    duplicate_evidence = original_evidence.model_copy(
+        deep=True,
+        update={
+            "id": "evidence-concurrent-duplicate",
+            "task_id": duplicate_task.id,
+        },
+    )
+    service.repository.save_task(duplicate_task)
+    service.repository.save_provider_run(duplicate_run)
+    service.repository.save_route_evidence(duplicate_evidence)
+    assert duplicate_task.request_fingerprint == probe.task.request_fingerprint
+    assert service.advance_task(probe.task.id).status == TaskStatus.SUBMITTING
+    assert service.advance_task(duplicate_task.id).status == TaskStatus.SUBMITTING
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(service.advance_task, task_id)
+            for task_id in (probe.task.id, duplicate_task.id)
+        ]
+        results = [future.result() for future in futures]
+
+    assert len(fake.submitted_requests) == 1
+    assert all(result.status == TaskStatus.ACKNOWLEDGED for result in results)
+    assert {result.provider_task_id for result in results} == {"remote-1"}
+    assert service.repository.provider_submission_count(
+        probe.task.request_fingerprint
+    ) == 1
 
 
 def test_interrupted_prepare_can_be_explicitly_resolved_as_not_submitted(

@@ -38,13 +38,13 @@ Tool 的 Pydantic Schema 是参数真相；Skill 中的建议不能覆盖 Schema
 | 4. 图像生成、审核与参考包 | 只为当前镜头缺失的身份、空间、构图或状态生成图像；候选需审核后才能进入参考包 | `image.enqueue`、`image.list`、`image.advance`、`image.cancel`、`image.retry`、`image.recover_output`、`artifact.review_version`、`artifact.add_reference_entry` | 输入资产、图像任务请求和审核结论；产出 ImageTask、AssetVersion、审核状态和 ReferencePack 条目 | 外部状态未知时先恢复/查询，不盲目重提；图像内容错误时修图或换版本，不把错误起点交给视频 Prompt 补救 |
 | 5. 场次、镜头与连续性计划 | 根据剧本作用、相邻镜头状态和可生成性建立 Shot/ReferencePlan；只需建议时不必直接写入 | `shot.preview_reference_plan`、`shot.update_reference_plan`、`shot.compile_keyframe_brief`、`shot.director_advice` | 输入项目、镜头、参考绑定和动作关系；产出解析预览、ReferencePlan、关键帧 brief 或导演建议 | 镜头粒度、动作或空间关系不成立时回到 ShotPlan/ReferencePlan；不要靠增加随机候选掩盖错误镜头设计 |
 | 6. 生成路线与输入检查 | 按镜头风险选择纯文本、首帧、首尾帧或全参考路线；Provider 能力和实际媒体绑定决定可执行组合 | `qa.rerank_reference_visuals`、`qa.compare_keyframes`、`qa.check_input_compatibility`、`qa.list_visual_input_reports`、`route.h3_capability_profile`、`route.plan_h3`、`route.list_h3_plans` | 输入镜头意图、候选参考、关键帧和项目能力证据；产出视觉比较报告、兼容性报告和 H3 RoutePlan | 若输入冲突或全部不可用，修资产、换关键帧、拆镜或换路线；不要把 Provider 易变限制写成格式规则 |
-| 7. Prompt 编译与视频任务提交 | 镜头事实和路线已经确定后，才翻译成 Provider 请求；需要检查最终请求时先预览 | `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.enqueue_h3_probe`、`route.execute_h3_plan`、`video.enqueue` | 输入 Shot/ReferencePlan、媒体绑定、时长和候选策略；产出最终 Prompt、Provider 请求、GenerationTask 或 H3 run | 请求不合法时改路线或输入；提交结果不确定时进入对账，不重复 POST；内容事实错误应回上游工件修正 |
-| 8. 外部任务推进与恢复 | 单任务精确推进用 `advance`，批量就绪任务用有步数上限的 `drain`；取消、失败、提交未知和下载中断使用各自恢复动作 | `task.advance`、`task.drain`、`task.cancel`、`task.retry`、`task.reconcile`、`task.recover_output`；H3 专属 `route.list_h3_runs`、`route.list_h3_reconciliation`、`route.resolve_h3_submission`、`route.resolve_h3_not_submitted` | 输入 task/run ID；产出持久化任务状态、Provider 对账结果和 Take | 先区分“明确失败”“明确未提交”“已提交但本地未知”“输出已生成但未落盘”；只有明确允许时才重试 |
+| 7. Prompt 编译与视频任务提交 | 镜头事实和路线已经确定后，才翻译成 Provider 请求；需要检查最终请求时先预览 | REAL_H3：`route.compile_h3_prompt`、`route.preview_h3_probe`、`route.enqueue_h3_probe`、`route.execute_h3_plan`；MOCK：`video.enqueue` | 输入 Shot/ReferencePlan、媒体绑定、时长和候选策略；产出最终 Prompt、Provider 请求、GenerationTask 或 H3 run | 请求不合法时改路线或输入；提交结果不确定时进入对账，不重复 POST；内容事实错误应回上游工件修正 |
+| 8. 外部任务推进与恢复 | REAL_H3 用 `task.advance` 单步推进，MOCK 可用有步数上限的 `task.drain`；取消、失败、提交未知和下载中断使用各自恢复动作 | 共用：`task.advance`、`task.cancel`、`task.retry`、`task.recover_output`；MOCK：`task.drain`、`task.reconcile`；H3 专属：`route.list_h3_runs`、`route.list_h3_reconciliation`、`route.resolve_h3_submission`、`route.resolve_h3_not_submitted` | 输入 task/run ID；产出持久化任务状态、Provider 对账结果和 Take | 先区分“明确失败”“明确未提交”“已提交但本地未知”“输出已生成但未落盘”；重试前必须确认原输入仍是当前版本 |
 | 9. Take 检查、比较、选择与局部返工 | 先检查技术可读性和镜头职责，再比较同镜候选；相对最好不等于可用，允许全部拒绝 | `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`、`shot.run_director_loop` | 输入 Take、检查维度或候选集合；产出 inspection、comparison、选择结果、RouteEvidence 和修复建议 | 把问题路由到最小责任层：故事回剧本，构图/动作回镜头，身份/空间回资产，随机执行缺陷才同路线再生成 |
-| 10. 局部视频修复 | 只有当前镜头或局部时间段失败时，优先保留合格内容并产生新候选 | `video.retake`、`video.extend`、`video.gap_fill` | 输入项目、镜头和局部返工请求；产出新的 GenerationTask，旧 Take 继续保留 | 局部操作不支持或边界状态不成立时，换路线、拆镜或回到关键帧；不要自动覆盖当前选片 |
+| 10. 局部视频修复 | 只有当前镜头或局部时间段失败时，优先保留合格内容并产生新候选 | MOCK：`video.retake`、`video.extend`、`video.gap_fill`；REAL_H3 回到 H3 路线计划 | 输入项目、镜头和局部返工请求；产出新的 GenerationTask，旧 Take 继续保留 | 局部操作不支持或边界状态不成立时，换路线、拆镜或回到关键帧；不要自动覆盖当前选片 |
 | 11. 音频、字幕与时间线 | 有选定 Take 后重建时间线；指定声线时更新角色绑定；先检查音画与字幕关系再导出 | `audio.update_voice_reference`、`timeline.rebuild`、`audio.inspect_manifest` | 输入角色声线版本或项目 ID；产出 VoiceReference、TimelineManifest 和音频检查报告 | 声音来源、对白或字幕时间错误时修对应音频/文本/时间线层；未注册的配音或口型能力必须明确列为缺口 |
 | 12. 整集验收与导出 | 从整集承诺、连续性、节奏、音画和交付规格判断是否完成；只有当前时间线通过后导出 | `qa.review_episode`、`timeline.export` | 输入项目、审看请求或导出请求；产出 EpisodeReview、ExportRecord 和成片文件 | 阻断问题通过相应 Tool 建立最小返工分支，修复后重建并复核时间线；可选打磨项不应伪装成失败 |
-| 跨阶段：专业委派 | 当前步骤需要编剧、导演、资产审核、路线规划或成片审校的专业判断，且目标与工件范围可以明确时 | `agent.delegate` | 输入角色、有限目标、ArtifactRef、约束和期望输出；产出可跟踪的 delegation/AgentResult | 委派范围过大时缩小 WorkOrder；返回缺少证据时让专业 Agent 读取共享工件，不复制第二份项目状态 |
+| 跨阶段：专业委派 | 当前步骤需要编剧、导演、资产审核、路线规划或成片审校的专业判断，且目标与工件范围可以明确时 | 可选 `agent.delegate`（当前基础服务未注册） | 输入角色、有限目标、ArtifactRef、约束和期望输出；产出可跟踪的 delegation/AgentResult | 委派范围过大时缩小 WorkOrder；返回缺少证据时让专业 Agent 读取共享工件，不复制第二份项目状态 |
 
 ## Tool Result 与通用故障处理
 
@@ -55,7 +55,7 @@ Tool 的 Pydantic Schema 是参数真相；Skill 中的建议不能覆盖 Schema
 - `NOT_FOUND`：重新读取项目或任务聚合，确认 ID、版本和项目范围；不要把其他项目的同名工件顶替进来。
 - `FAILED`：读取错误类型和领域状态，判断应修输入、换能力、对账、重试还是重新规划。
 
-对于图像、视频和其他外部任务，网络错误或本地中断不能自动推导为“远端未提交”。先使用 `task.reconcile`、`task.recover_output` 或 H3 专属对账 Tool 恢复事实，再决定是否重试。
+对于图像、视频和其他外部任务，网络错误或本地中断不能自动推导为“远端未提交”。Mock 任务用 `task.reconcile`，H3 用专属对账 Tool，已完成但未落盘的任务按原 Provider 使用 `task.recover_output`，恢复事实后再决定是否重试。
 
 ## 目录与扩展约定
 

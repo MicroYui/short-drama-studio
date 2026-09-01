@@ -54,7 +54,7 @@
 
    - **输入：** ShotPlan、ReferencePlan、批准媒体、当前路线和 Provider Capability。
    - **决策：** Provider Prompt 只翻译已确定的内容、动作、摄影机、声音和媒体绑定；候选数量根据不确定性和已有结果动态决定。
-   - **可调用 Tool：** `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`video.enqueue`、`task.advance`、`task.drain`、`task.reconcile`、`task.recover_output`。
+   - **可调用 Tool：** REAL_H3 使用 `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`task.advance`、`task.recover_output`；MOCK 使用 `video.enqueue`、`task.drain`、`task.reconcile`。
    - **产物：** 可追溯的 GenerationTask、实际 Provider 请求和一个或多个 Take。
    - **检查与返工：** 首个候选出现后先观察再决定是否继续。若错误来自输入、镜头或内容，应先改变正确控制变量，不用相同请求固定次数抽卡。
 
@@ -62,7 +62,7 @@
 
    - **输入：** 候选 Take、相邻镜头、项目声明的评价维度和生成任务记录。
    - **决策：** 先检查文件与技术状态，再判断内容、表演、信息、氛围、节奏、风格、空间和连续性是否完成本镜职责；允许所有候选都不可用。
-   - **可调用 Tool：** `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`、`video.retake`、`video.extend`、`video.gap_fill`。
+   - **可调用 Tool：** 共用 `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`；MOCK 才使用 `video.retake`、`video.extend`、`video.gap_fill`，REAL_H3 回到 H3 路线计划。
    - **产物：** 选定 Take、拒绝理由、问题责任层和最小修复决定。
    - **检查与返工：** 内容错误回剧本，构图/覆盖错误回 ShotPlan，身份/风格错误回资产或关键帧，随机生成缺陷才重生；有意静默、跳切或有限运动不因偏离常规而被误判。
 

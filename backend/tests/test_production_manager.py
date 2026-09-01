@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import JsonValue
 
 from _routes.short_drama import router as short_drama_router
 from short_drama.agent_runtime import (
@@ -140,6 +142,26 @@ def _service(root: Path) -> ShortDramaService:
     )
 
 
+def _single_tool_plan(
+    tool_name: str,
+    arguments: dict[str, JsonValue],
+) -> AgentPlanProposal:
+    return AgentPlanProposal(
+        summary=f"Invoke {tool_name}.",
+        steps=[
+            PlanStep(
+                id=tool_name.replace(".", "-"),
+                title=f"Invoke {tool_name}",
+                kind=ActionKind.TOOL_CALL,
+                assigned_agent="production-manager",
+                tool_name=tool_name,
+                instructions=f"Invoke {tool_name}.",
+                arguments=arguments,
+            )
+        ],
+    )
+
+
 def test_capability_catalog_shares_tools_across_file_backed_skills(
     tmp_path: Path,
 ) -> None:
@@ -179,6 +201,103 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
     assert "当前制片技能：AI 原生短剧" in client.instructions[0]
     assert "共享端到端制片流程" in client.instructions[0]
     assert project.id in client.inputs[0]
+
+
+@pytest.mark.parametrize(
+    ("target", "present", "absent"),
+    [
+        (
+            ProductionExecutionTarget.MOCK,
+            {"video.enqueue", "task.drain", "task.reconcile"},
+            {
+                "route.enqueue_h3_probe",
+                "route.execute_h3_plan",
+                "route.resolve_h3_submission",
+                "route.resolve_h3_not_submitted",
+            },
+        ),
+        (
+            ProductionExecutionTarget.REAL_H3,
+            {"route.enqueue_h3_probe", "route.execute_h3_plan"},
+            {
+                "video.enqueue",
+                "video.retake",
+                "video.extend",
+                "video.gap_fill",
+                "task.drain",
+                "task.reconcile",
+            },
+        ),
+        (
+            None,
+            {"project.get", "video.inspect_take", "route.plan_h3"},
+            {
+                "video.enqueue",
+                "video.retake",
+                "video.extend",
+                "video.gap_fill",
+                "task.drain",
+                "task.reconcile",
+                "route.enqueue_h3_probe",
+                "route.execute_h3_plan",
+                "route.resolve_h3_submission",
+                "route.resolve_h3_not_submitted",
+            },
+        ),
+    ],
+)
+def test_language_planner_catalog_filters_incompatible_generation_tools(
+    tmp_path: Path,
+    target: ProductionExecutionTarget | None,
+    present: set[str],
+    absent: set[str],
+) -> None:
+    client = SequencedLanguageClient(
+        [
+            json.dumps(
+                {
+                    "summary": "Stop after catalog inspection.",
+                    "goal_complete": True,
+                    "steps": [
+                        {
+                            "id": "checkpoint",
+                            "title": "Checkpoint",
+                            "kind": "CHECKPOINT",
+                            "assigned_agent": "production-manager",
+                            "instructions": "Record the bounded inspection.",
+                        }
+                    ],
+                }
+            )
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project = service.initialize_fixture().document.project
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+
+    service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Inspect the tools available for this target.",
+            execution_target=target,
+        ),
+    )
+
+    tool_ids = {
+        tool["id"]
+        for tool in json.loads(client.inputs[0])["available_tools"]
+    }
+    assert present <= tool_ids
+    assert tool_ids.isdisjoint(absent)
+    assert {"project.get", "video.inspect_take", "route.plan_h3", "task.advance"} <= (
+        tool_ids
+    )
 
 
 def test_agent_authored_plan_executes_tools_and_survives_service_restart(
@@ -938,6 +1057,70 @@ def test_builtin_specialist_can_call_shared_tools_before_returning_result(
     assert project.production_profile.value in experiences[0].tags
 
 
+def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> None:
+    client = SequencedLanguageClient([])
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project = service.initialize_fixture().document.project
+    client.responses = [
+        json.dumps(
+            {
+                "tool_name": "video.enqueue",
+                "arguments": {"project_id": project.id, "request": {}},
+                "reason": "Attempt a Mock generation from a REAL_H3 specialist.",
+            }
+        )
+    ]
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Delegate one bounded production review.",
+            execution_target=ProductionExecutionTarget.REAL_H3,
+            initial_plan=AgentPlanProposal(
+                summary="Delegate the review.",
+                steps=[
+                    PlanStep(
+                        id="delegate",
+                        title="Delegate review",
+                        kind=ActionKind.DELEGATION,
+                        assigned_agent="scene-director",
+                        instructions="Inspect the project and act only if compatible.",
+                    )
+                ],
+            ),
+        ),
+    )
+    waiting = service.advance_agent_run(
+        run.snapshot.run.id,
+        AgentRunAdvanceRequest(),
+    )
+    work_order_id = waiting.created_work_order_ids[0]
+
+    with pytest.raises(
+        ProductionManagerError,
+        match=r"video\.enqueue.*MOCK.*REAL_H3",
+    ):
+        service.execute_agent_work_order(work_order_id)
+
+    tool_ids = {
+        tool["id"]
+        for tool in json.loads(client.inputs[0])["available_tools"]
+    }
+    assert "video.enqueue" not in tool_ids
+    assert "route.execute_h3_plan" in tool_ids
+    assert "project.get" in tool_ids
+    assert service.repository.list_tasks(project.id) == []
+    work_order = service.agent_runtime_store.get_work_order(work_order_id)
+    assert work_order is not None
+    assert work_order.status == DelegationStatus.NEEDS_ATTENTION
+
+
 def test_completed_work_order_contract_errors_are_wrapped(
     tmp_path: Path,
 ) -> None:
@@ -1142,6 +1325,97 @@ def test_current_run_target_does_not_inherit_an_older_run_target(
         and decision.run_id == current.snapshot.run.id
         for decision in current.context.decisions
     )
+
+
+@pytest.mark.parametrize(
+    ("target", "tool_name", "required"),
+    [
+        (ProductionExecutionTarget.REAL_H3, "video.enqueue", "MOCK"),
+        (ProductionExecutionTarget.REAL_H3, "video.retake", "MOCK"),
+        (ProductionExecutionTarget.REAL_H3, "video.extend", "MOCK"),
+        (ProductionExecutionTarget.REAL_H3, "video.gap_fill", "MOCK"),
+        (ProductionExecutionTarget.REAL_H3, "task.drain", "MOCK"),
+        (ProductionExecutionTarget.REAL_H3, "task.reconcile", "MOCK"),
+        (ProductionExecutionTarget.MOCK, "route.enqueue_h3_probe", "REAL_H3"),
+        (ProductionExecutionTarget.MOCK, "route.execute_h3_plan", "REAL_H3"),
+        (ProductionExecutionTarget.MOCK, "route.resolve_h3_submission", "REAL_H3"),
+        (ProductionExecutionTarget.MOCK, "route.resolve_h3_not_submitted", "REAL_H3"),
+    ],
+)
+def test_agent_plan_rejects_incompatible_execution_tool(
+    tmp_path: Path,
+    target: ProductionExecutionTarget,
+    tool_name: str,
+    required: str,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document.project
+
+    with pytest.raises(
+        ProductionManagerError,
+        match=rf"{re.escape(tool_name)}.*{required}",
+    ):
+        service.create_agent_run(
+            project.id,
+            AgentRunCreateRequest(
+                objective="Attempt an incompatible generation action.",
+                execution_target=target,
+                initial_plan=_single_tool_plan(
+                    tool_name,
+                    {"project_id": project.id},
+                ),
+            ),
+        )
+
+    assert service.repository.list_tasks(project.id) == []
+
+
+def test_provider_execution_tool_requires_an_explicit_run_target(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document.project
+
+    with pytest.raises(ProductionManagerError, match="has no target"):
+        service.create_agent_run(
+            project.id,
+            AgentRunCreateRequest(
+                objective="Attempt generation without choosing a provider target.",
+                initial_plan=_single_tool_plan(
+                    "video.enqueue",
+                    {"project_id": project.id, "request": {}},
+                ),
+            ),
+        )
+
+
+def test_real_h3_run_cannot_advance_a_mock_task(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document.project
+    task = service.enqueue(
+        project.id,
+        EnqueueRequest(candidate_count=1),
+    ).tasks[0]
+
+    with pytest.raises(
+        ProductionManagerError,
+        match=r"task\.advance.*MOCK.*REAL_H3",
+    ):
+        service.create_agent_run(
+            project.id,
+            AgentRunCreateRequest(
+                objective="Advance only tasks for the selected provider.",
+                execution_target=ProductionExecutionTarget.REAL_H3,
+                initial_plan=_single_tool_plan(
+                    "task.advance",
+                    {"task_id": task.id},
+                ),
+            ),
+        )
+
+    persisted = service.repository.get_task(task.id)
+    assert persisted is not None
+    assert persisted.status == TaskStatus.QUEUED
 
 
 def test_local_planner_requests_and_remembers_a_missing_production_target(
@@ -1500,13 +1774,15 @@ def test_work_order_context_resolves_a_persisted_take_reference(
     }
 
 
-def test_local_h3_planner_reads_all_active_tasks_from_the_repository(
+def test_local_h3_planner_never_advances_mock_tasks(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
     project = service.initialize_fixture().document.project
     queued = service.enqueue(project.id, EnqueueRequest(candidate_count=2))
     assert len(queued.tasks) > 8
+    assert all(task.provider == "mock" for task in queued.tasks)
+    mock_task_ids = {task.id for task in queued.tasks}
 
     run = service.create_agent_run(
         project.id,
@@ -1517,8 +1793,8 @@ def test_local_h3_planner_reads_all_active_tasks_from_the_repository(
         ),
     )
 
-    assert len(run.ready_steps) == len(queued.tasks)
-    assert {step.arguments["task_id"] for step in run.ready_steps} == {
-        task.id for task in queued.tasks
-    }
-    assert all(step.tool_name == "task.advance" for step in run.ready_steps)
+    assert not any(
+        step.tool_name == "task.advance"
+        and step.arguments.get("task_id") in mock_task_ids
+        for step in run.ready_steps
+    )

@@ -54,7 +54,7 @@
 
    - **输入：** 当前台词/音频版本、ShotPlan、ReferencePlan、批准媒体和当前路线。
    - **决策：** Prompt 忠实表达说话人、台词、情绪、表情、目光、身体动作、摄影机和背景，不自行增加新主张；候选数量按口型、身份和表演不确定性动态决定。
-   - **可调用 Tool：** `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`video.enqueue`、`task.advance`、`task.drain`、`task.reconcile`、`task.recover_output`。
+   - **可调用 Tool：** REAL_H3 使用 `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`task.advance`、`task.recover_output`；MOCK 使用 `video.enqueue`、`task.drain`、`task.reconcile`。
    - **产物：** 可追溯 GenerationTask 与一个或多个数字人口播 Take。
    - **检查与返工：** 第一条候选出现后立即抽查台词、声音、身份和口型。输入版本错误先停止后续候选；随机表演缺陷才考虑同路线再生成。
 
@@ -62,7 +62,7 @@
 
    - **输入：** 候选 Take、锁定稿、声音基线、主播资产和相邻段落。
    - **决策：** 分开评估事实/台词是否正确，语音是否清楚自然，身份是否稳定，口型是否可信，目光/表情/动作是否支持语义，以及辅助画面是否有用。
-   - **可调用 Tool：** `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`、`video.retake`、`video.extend`、`video.gap_fill`。
+   - **可调用 Tool：** 共用 `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`；MOCK 才使用 `video.retake`、`video.extend`、`video.gap_fill`，REAL_H3 回到 H3 路线计划。
    - **产物：** 选定 Take、逐维观察、拒绝理由和最小修复方案。
    - **检查与返工：** 错词/事实回稿件，发音与韵律回声音基线，构图/手势回导演，身份回资产，随机口型或画面缺陷才重生；后期能修的停顿或入出点留给时间线。
 

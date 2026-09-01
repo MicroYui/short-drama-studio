@@ -54,7 +54,7 @@
 
    - **输入：** ShotPlan、动作节拍、ReferencePlan、批准媒体和当前路线。
    - **决策：** Prompt 表达角色身份、姿势变化、表情、动作时序、画面/相机运动、风格和声音，不自行增加镜头或改变设定；候选数量按高风险维度动态决定。
-   - **可调用 Tool：** `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`video.enqueue`、`task.advance`、`task.drain`、`task.reconcile`、`task.recover_output`。
+   - **可调用 Tool：** REAL_H3 使用 `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`task.advance`、`task.recover_output`；MOCK 使用 `video.enqueue`、`task.drain`、`task.reconcile`。
    - **产物：** 可追溯 GenerationTask、实际请求和一个或多个动画 Take。
    - **检查与返工：** 首个候选出现后先看造型、动作路径和背景稳定性；若问题来自关键帧或冲突参考，先修输入，再决定是否继续生成。
 
@@ -62,7 +62,7 @@
 
    - **输入：** 候选 Take、动画 Bible、关键帧、相邻镜头和项目声明的运动风格。
    - **决策：** 检查角色造型、比例、服装、场景、道具、线条、色彩、动作可读性、表情、背景稳定、合成和音画；允许有意跳帧、保持帧、循环和夸张变形。
-   - **可调用 Tool：** `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`、`video.retake`、`video.extend`、`video.gap_fill`。
+   - **可调用 Tool：** 共用 `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`；MOCK 才使用 `video.retake`、`video.extend`、`video.gap_fill`，REAL_H3 回到 H3 路线计划。
    - **产物：** 选定 Take、逐维观察、风格决定、真实缺陷与最小修复策略。
    - **检查与返工：** 故事问题回剧本，布局/动作问题回 ShotPlan，造型/风格问题回资产或关键帧，模型随机漂移才重生；只有局部时间段失败时优先局部替换。
 

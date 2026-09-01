@@ -35,6 +35,8 @@ H3 Prompt Compiler 还会读取 `providers/minimax_h3/SKILL.md` 及其 `prompt_r
 - 长文本首次规划由 Agent-owned `PlanningRun` 按持久化游标推进大纲、分场写作、审校/修订、逐场导演和最终写入。Production Manager 通过 `planning.advance` 每次推进一个单元，完成后再回到动态计划。
 - 图像、视频、语音等 Provider Task 仍按提交、轮询、下载、成功/失败等真实外部状态推进。
 
+当前 `STORY_ARCHITECT`、`SCENE_WRITER`、`SCRIPT_CRITIC` 和 `SCENE_DIRECTOR` 是 `PlanningRun` 内部的角色化提示与可恢复阶段，共用同一个 Language Provider，不是由默认 `agent.delegate` 并行调度的独立 Agent。通用 Production Manager 虽然支持 `DELEGATION` WorkOrder，但当前首次剧本生成路径没有把每一场拆成这类 WorkOrder。
+
 这两类状态机只保证作业顺序和恢复，不为不同视频类型各写一套端到端 workflow。项目进入正常制作后，下一步仍由 Agent 的 `PlanRevision` 决定。
 
 ## 关于经验

@@ -64,6 +64,51 @@ class ProductionManagerError(ValueError):
     """Raised when an Agent run cannot be planned or advanced as requested."""
 
 
+_MOCK_ONLY_TOOL_IDS = frozenset(
+    {
+        "video.enqueue",
+        "video.retake",
+        "video.extend",
+        "video.gap_fill",
+        "task.drain",
+        "task.reconcile",
+    }
+)
+_REAL_H3_ONLY_TOOL_IDS = frozenset(
+    {
+        "route.enqueue_h3_probe",
+        "route.execute_h3_plan",
+        "route.resolve_h3_submission",
+        "route.resolve_h3_not_submitted",
+    }
+)
+_PROVIDER_BOUND_TASK_TOOL_IDS = frozenset(
+    {
+        "task.advance",
+        "task.retry",
+        "task.recover_output",
+    }
+)
+
+
+def _tools_for_execution_target(
+    tools: Sequence[ToolDescriptor],
+    target: ProductionExecutionTarget | None,
+) -> list[ToolDescriptor]:
+    """Hide only generation executors that contradict the selected run target."""
+
+    blocked = (
+        _MOCK_ONLY_TOOL_IDS | _REAL_H3_ONLY_TOOL_IDS
+        if target is None
+        else (
+            _REAL_H3_ONLY_TOOL_IDS
+            if target == ProductionExecutionTarget.MOCK
+            else _MOCK_ONLY_TOOL_IDS
+        )
+    )
+    return [tool for tool in tools if tool.id not in blocked]
+
+
 class ProjectDocumentStore(Protocol):
     def get_project(self, project_id: str) -> ProjectDocument | None: ...
 
@@ -424,6 +469,13 @@ class LocalProductionPlanner:
             _run_decision_suffix(context, "Render export:", "yes").casefold() != "no"
         )
         stage = document.project.stage
+        terminal_statuses = {
+            TaskStatus.SUCCEEDED,
+            TaskStatus.FAILED,
+            TaskStatus.CANCELLED,
+            TaskStatus.SUBMIT_UNKNOWN,
+            TaskStatus.OUTPUT_MISSING,
+        }
         if stage == ProjectStage.EXPORTED:
             return AgentPlanProposal(
                 summary="The local fallback confirms that the requested export exists.",
@@ -445,7 +497,10 @@ class LocalProductionPlanner:
                     tool_name="video.enqueue",
                     arguments={"project_id": project_id, "request": {}},
                 )
-            if stage == ProjectStage.GENERATING:
+            if stage == ProjectStage.GENERATING and any(
+                task.provider == "mock" and task.status not in terminal_statuses
+                for task in self._projects.list_tasks(project_id)
+            ):
                 return self._one_tool_plan(
                     available,
                     summary="Advance the persisted deterministic generation tasks to idle.",
@@ -515,13 +570,6 @@ class LocalProductionPlanner:
                 },
             )
         if stage == ProjectStage.GENERATING:
-            terminal_statuses = {
-                TaskStatus.SUCCEEDED,
-                TaskStatus.FAILED,
-                TaskStatus.CANCELLED,
-                TaskStatus.SUBMIT_UNKNOWN,
-                TaskStatus.OUTPUT_MISSING,
-            }
             task_refs = [
                 ArtifactRef(
                     project_id=project_id,
@@ -529,7 +577,7 @@ class LocalProductionPlanner:
                     artifact_id=task.id,
                 )
                 for task in self._projects.list_tasks(project_id)
-                if task.status not in terminal_statuses
+                if task.provider == "minimax" and task.status not in terminal_statuses
             ][:48]
             if task_refs:
                 return AgentPlanProposal(
@@ -620,6 +668,7 @@ class LanguageSpecialistAgent:
             raise ValueError("max_tool_rounds must be non-negative")
         self._client = client
         self._tools = tools
+        self._tool_descriptors: list[ToolDescriptor] | None = None
         self._scoped_tool_invoker: (
             Callable[[str, str, Mapping[str, object]], ToolResult] | None
         ) = None
@@ -632,14 +681,24 @@ class LanguageSpecialistAgent:
         scoped_invoker: Callable[
             [str, str, Mapping[str, object]], ToolResult
         ] | None = None,
+        descriptors: Sequence[ToolDescriptor] | None = None,
     ) -> None:
         """Attach the manager's shared registry without changing custom Agent factories."""
 
         self._tools = tools
+        self._tool_descriptors = None if descriptors is None else list(descriptors)
         self._scoped_tool_invoker = scoped_invoker
 
     def execute(self, work_order: AgentWorkOrderView) -> AgentWorkOrderResultRequest:
-        descriptors = [] if self._tools is None else self._tools.list()
+        descriptors = (
+            []
+            if self._tools is None
+            else (
+                self._tools.list()
+                if self._tool_descriptors is None
+                else self._tool_descriptors
+            )
+        )
         tool_catalog = [
             {
                 "id": item.id,
@@ -653,7 +712,7 @@ class LanguageSpecialistAgent:
         evidence_refs: list[ArtifactRef] = []
 
         for round_index in range(self._max_tool_rounds + 1):
-            may_call_tool = self._tools is not None and round_index < self._max_tool_rounds
+            may_call_tool = bool(descriptors) and round_index < self._max_tool_rounds
             instructions = (
                 "你是当前 WorkOrder 指定的专业 Agent。请依据下方对应角色的 Production Skill，"
                 "处理已经限定范围的目标和所提供的工件摘要，不要扩大任务范围。"
@@ -1412,7 +1471,10 @@ class ProductionManager:
             proposal = planner.propose_plan(
                 context=self.get_run(run_id).context,
                 skill_prompt=compiled.text,
-                tools=self.tools.list(),
+                tools=_tools_for_execution_target(
+                    self.tools.list(),
+                    snapshot.run.execution_target,
+                ),
                 current_plan=current,
                 reason=request.reason,
             )
@@ -1958,10 +2020,30 @@ class ProductionManager:
                 )
             self.runtime.begin_work_order(work_order_id)
             view = self.get_work_order(work_order_id)
+            parent_run = self.runtime.snapshot(work_order.parent_run_id).run
         try:
             agent = self._specialist_agent_factory(client)
             if isinstance(agent, LanguageSpecialistAgent):
-                agent.bind_tools(self.tools, scoped_invoker=self._invoke_scoped_tool)
+                def invoke_for_parent_run(
+                    project_id: str,
+                    tool_name: str,
+                    arguments: Mapping[str, object],
+                ) -> ToolResult:
+                    return self._invoke_scoped_tool(
+                        project_id,
+                        tool_name,
+                        arguments,
+                        agent_run_id=parent_run.id,
+                    )
+
+                agent.bind_tools(
+                    self.tools,
+                    scoped_invoker=invoke_for_parent_run,
+                    descriptors=_tools_for_execution_target(
+                        self.tools.list(),
+                        parent_run.execution_target,
+                    ),
+                )
             result = agent.execute(view)
         except Exception as exc:
             with self._run_lock(work_order.parent_run_id):
@@ -2340,6 +2422,7 @@ class ProductionManager:
                     "Agent Tool calls must target the current run project"
                 )
 
+        task: GenerationTask | None = None
         task_id = arguments.get("task_id")
         if isinstance(task_id, str):
             task = self.projects.get_task(task_id)
@@ -2350,6 +2433,32 @@ class ProductionManager:
             if any(owner_id != project_id for owner_id in owner_ids):
                 raise ProductionManagerError(
                     "Agent Tool task_id must belong to the current run project"
+                )
+
+        required_target: ProductionExecutionTarget | None = None
+        if tool_name in _MOCK_ONLY_TOOL_IDS:
+            required_target = ProductionExecutionTarget.MOCK
+        elif tool_name in _REAL_H3_ONLY_TOOL_IDS:
+            required_target = ProductionExecutionTarget.REAL_H3
+        elif tool_name in _PROVIDER_BOUND_TASK_TOOL_IDS and task is not None:
+            required_target = (
+                ProductionExecutionTarget.REAL_H3
+                if task.provider == "minimax"
+                else ProductionExecutionTarget.MOCK
+            )
+        if required_target is not None and agent_run_id is not None:
+            run = self.runtime.store.get_run(agent_run_id)
+            if run is None:
+                raise ProductionManagerError(f"Unknown agent run: {agent_run_id}")
+            if run.execution_target is None:
+                raise ProductionManagerError(
+                    f"Tool {tool_name!r} requires execution target "
+                    f"{required_target.value}, but this Agent run has no target"
+                )
+            if run.execution_target != required_target:
+                raise ProductionManagerError(
+                    f"Tool {tool_name!r} requires execution target "
+                    f"{required_target.value}, not {run.execution_target.value}"
                 )
 
         take_id = arguments.get("take_id")

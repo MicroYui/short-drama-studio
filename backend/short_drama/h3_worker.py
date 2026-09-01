@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,6 +18,7 @@ from short_drama.h3_models import (
 )
 from short_drama.media import H3MediaIngestor, MediaGenerationError
 from short_drama.models import (
+    ApprovalStatus,
     EvidenceStatus,
     Freshness,
     GenerationTask,
@@ -69,16 +71,33 @@ class PersistentH3Worker:
         self.config_store = config_store
         self.client_factory = client_factory
         self.ingestor = H3MediaIngestor()
+        self._advance_locks_guard = threading.Lock()
+        self._advance_locks: dict[str, threading.Lock] = {}
 
     def advance(self, task_id: str) -> GenerationTask:
-        task = self._require_h3_task(task_id)
-        if task.status == TaskStatus.QUEUED:
-            return self._prepare(task)
-        if task.status == TaskStatus.SUBMITTING:
-            return self._submit(task)
-        if task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}:
-            return self._poll(task)
-        raise InvalidTaskTransition(f"Task {task.id} cannot advance from {task.status.value}")
+        initial = self._require_h3_task(task_id)
+        initial_status = initial.status
+        with self._advance_lock(initial.request_fingerprint):
+            task = self._require_h3_task(task_id)
+            if task.status != initial_status:
+                return task
+            if task.status == TaskStatus.QUEUED:
+                return self._prepare(task)
+            if task.status == TaskStatus.SUBMITTING:
+                return self._submit(task)
+            if task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}:
+                return self._poll(task)
+            raise InvalidTaskTransition(
+                f"Task {task.id} cannot advance from {task.status.value}"
+            )
+
+    def _advance_lock(self, request_fingerprint: str) -> threading.Lock:
+        with self._advance_locks_guard:
+            lock = self._advance_locks.get(request_fingerprint)
+            if lock is None:
+                lock = threading.Lock()
+                self._advance_locks[request_fingerprint] = lock
+            return lock
 
     def cancel(self, task_id: str) -> GenerationTask:
         task = self._require_h3_task(task_id)
@@ -190,8 +209,75 @@ class PersistentH3Worker:
     def validate_credentials(self) -> None:
         self._client().list_tasks(page_size=1)
 
+    def input_staleness_reason(
+        self,
+        task: GenerationTask,
+        run: H3ProviderRun | None = None,
+    ) -> str | None:
+        """Return why a not-yet-submitted H3 task no longer matches project truth."""
+
+        document = self.repository.get_project(task.project_id)
+        if document is None:
+            return "The project document no longer exists"
+        shot = next((item for item in document.shots if item.id == task.shot_id), None)
+        if shot is None:
+            return "The task's shot no longer exists"
+        if shot.revision != task.input_shot_revision:
+            return "The shot plan changed after this H3 task was compiled"
+        if task.input_script_version_id != document.project.current_script_version_id:
+            return "The script changed after this H3 task was compiled"
+        if task.input_bible_version_id != document.project.current_bible_version_id:
+            return "The project bible changed after this H3 task was compiled"
+        if (
+            task.input_voice_reference_revision
+            != document.project.voice_reference_revision
+        ):
+            return "Character voice references changed after this H3 task was compiled"
+
+        provider_run = run or self.repository.get_provider_run(task.id)
+        if provider_run is None:
+            return "The H3 provider run is missing"
+        for media in provider_run.media_inputs:
+            version_id = media.asset_version_id
+            if version_id is None:
+                continue
+            asset = next(
+                (
+                    item
+                    for item in document.assets
+                    if any(version.id == version_id for version in item.versions)
+                ),
+                None,
+            )
+            if asset is None:
+                return f"Media asset version {version_id} no longer exists"
+            version = next(
+                (item for item in asset.versions if item.id == version_id),
+                None,
+            )
+            if (
+                asset.approved_version_id != version_id
+                or version is None
+                or version.approval_status != ApprovalStatus.APPROVED
+                or version.freshness != Freshness.CURRENT
+            ):
+                return (
+                    f"Media asset version {version_id} is no longer the current "
+                    "approved version"
+                )
+        return None
+
     def _prepare(self, task: GenerationTask) -> GenerationTask:
         run = self._require_run(task.id)
+        stale_reason = self.input_staleness_reason(task, run)
+        if stale_reason is not None:
+            return self._mark_failed(
+                task,
+                run,
+                "H3_INPUTS_STALE",
+                stale_reason,
+                utc_now(),
+            )
         client = self._client()
         uploaded_inputs: list[H3UploadedInput] = []
 
@@ -247,6 +333,15 @@ class PersistentH3Worker:
             self.repository.save_task(task)
             self._set_evidence_status(task.id, EvidenceStatus.AWAITING_OUTPUT)
             return task
+        stale_reason = self.input_staleness_reason(task, run)
+        if stale_reason is not None:
+            return self._mark_failed(
+                task,
+                run,
+                "H3_INPUTS_STALE",
+                stale_reason,
+                now,
+            )
         try:
             provider_task_id = self._client().submit(run.request)
         except H3DefiniteRequestError as exc:
@@ -466,7 +561,7 @@ class PersistentH3Worker:
             availability=TakeAvailability.AVAILABLE,
             qa_status=QaStatus.PENDING,
             is_selected=False,
-            freshness=self._output_freshness(task),
+            freshness=self._output_freshness(task, run),
             qa_report=report,
             created_at=now,
         )
@@ -494,23 +589,16 @@ class PersistentH3Worker:
         self.repository.save_task(task)
         return task
 
-    def _output_freshness(self, task: GenerationTask) -> Freshness:
-        document = self.repository.get_project(task.project_id)
-        if document is None:
-            return Freshness.STALE
-        shot = next((item for item in document.shots if item.id == task.shot_id), None)
-        if shot is None or shot.revision != task.input_shot_revision:
-            return Freshness.STALE
-        if task.input_script_version_id != document.project.current_script_version_id:
-            return Freshness.STALE
-        if task.input_bible_version_id != document.project.current_bible_version_id:
-            return Freshness.STALE
-        if (
-            task.input_voice_reference_revision
-            != document.project.voice_reference_revision
-        ):
-            return Freshness.STALE
-        return Freshness.CURRENT
+    def _output_freshness(
+        self,
+        task: GenerationTask,
+        run: H3ProviderRun,
+    ) -> Freshness:
+        return (
+            Freshness.CURRENT
+            if self.input_staleness_reason(task, run) is None
+            else Freshness.STALE
+        )
 
     def _upload_local_input(self, client: H3Client, media: H3MediaInput) -> H3UploadedInput:
         assert media.source.local_path is not None

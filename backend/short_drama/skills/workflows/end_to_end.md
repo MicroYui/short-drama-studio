@@ -208,8 +208,8 @@ ProjectDocument、PlanningRun、Asset/AssetVersion、ShotPlan、ReferencePlan、
 ### 执行方法
 
 - Provider Prompt Compiler 只翻译既定镜头：保留锁定对白、人物、动作顺序、时长、画幅和媒体绑定，不在最后一刻重写剧情或增加镜头。
-- H3 可先用 `route.compile_h3_prompt` 或 `route.preview_h3_probe` 查看最终 Prompt/请求，再由 `route.execute_h3_plan` 或 `video.enqueue` 建立生成任务。
-- 使用 `task.advance` 或 `task.drain` 推进任务；需要时用 `task.reconcile`、`task.recover_output` 处理已提交但本地状态不确定的任务。
+- REAL_H3 目标可先用 `route.compile_h3_prompt` 或 `route.preview_h3_probe` 查看最终 Prompt/请求，再由 `route.execute_h3_plan` 建立真实 MiniMax-H3 任务，并用 `task.advance` 逐步推进。
+- MOCK 目标使用 `video.enqueue` 建立确定性本地任务，并用 `task.drain` 批量推进；`task.reconcile` 也只处理 Mock 任务。`task.retry` 和 `task.recover_output` 则必须跟随原任务的 Provider。
 - H3 专属运行可通过 `route.list_h3_runs`、`route.list_h3_reconciliation` 和相应 resolve Tool 对账。
 - 候选数量是当前镜头的搜索上限，不是固定配额。首个候选已经满足目标时可以停止；失败若指向输入或镜头设计，应先改变正确控制变量，再考虑新增候选。
 
@@ -240,7 +240,7 @@ ProjectDocument、PlanningRun、Asset/AssetVersion、ShotPlan、ReferencePlan、
 - `video.select_take`：显式选择进入当前时间线的 Take。
 - `route.review_h3_take`：记录 H3 路线的类型化质量判断。
 - `shot.director_advice`、`shot.apply_director_repair`、`shot.run_director_loop`：把问题路由到导演修复策略。
-- `video.retake`、`video.extend`、`video.gap_fill`：只重做当前镜头、延展片段或补齐局部缺口。
+- `video.retake`、`video.extend`、`video.gap_fill`：为 MOCK 目标只重做当前镜头、延展片段或补齐局部缺口；REAL_H3 应回到 H3 路线计划创建新候选。
 
 ### 修复选择
 

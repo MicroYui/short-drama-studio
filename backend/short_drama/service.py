@@ -3414,17 +3414,15 @@ class ShortDramaService:
             retry_run: H3ProviderRun | None = None
             retry_evidence: RouteEvidence | None = None
             if task.provider == "minimax":
-                if (
-                    task.input_voice_reference_revision
-                    != document.project.voice_reference_revision
-                ):
-                    raise WorkflowConflictError(
-                        "Character voice references changed after this task; compile a new H3 "
-                        "production route plan instead of retrying stale media inputs"
-                    )
                 run = self.repository.get_provider_run(task.id)
                 if run is None:
                     raise WorkflowConflictError(f"H3 provider run for task {task.id} is missing")
+                stale_reason = self.h3_worker.input_staleness_reason(task, run)
+                if stale_reason is not None:
+                    raise WorkflowConflictError(
+                        f"{stale_reason}; compile a new H3 production route plan instead "
+                        "of retrying stale inputs"
+                    )
                 retry, retry_run, retry_evidence = self._new_h3_task_and_run(
                     document=document,
                     shot_id=task.shot_id,
@@ -3471,6 +3469,7 @@ class ShortDramaService:
             raise ArtifactNotFoundError(task_id) from exc
         except InvalidTaskTransition as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        self._refresh_project_stage(task.project_id)
         return task
 
     def resolve_h3_submission(
@@ -3553,7 +3552,7 @@ class ShortDramaService:
                 raise ArtifactNotFoundError(take_id)
             document = self._require_project_document(take.project_id)
             self._invalidate_current_manifests(document)
-            document.project.stage = ProjectStage.REVIEW
+            document.project.stage = self._task_derived_project_stage(take.project_id)
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
             return self._aggregate(document)
@@ -4024,7 +4023,7 @@ class ShortDramaService:
             self.repository.save_route_evidence(evidence)
 
             document = self._require_project_document(take.project_id)
-            document.project.stage = ProjectStage.REVIEW
+            document.project.stage = self._task_derived_project_stage(take.project_id)
             document.project.updated_at = now
             self.repository.save_project(document)
             return H3TakeReviewResponse(
@@ -4305,7 +4304,7 @@ class ShortDramaService:
                 changed = True
             if changed:
                 self._invalidate_current_manifests(document)
-                document.project.stage = ProjectStage.REVIEW
+                document.project.stage = self._task_derived_project_stage(project_id)
                 document.project.updated_at = utc_now()
                 self.repository.save_project(document)
 
@@ -4901,14 +4900,17 @@ class ShortDramaService:
     def _refresh_project_stage(self, project_id: str) -> None:
         with self._lock:
             document = self._require_project_document(project_id)
-            tasks = self.repository.list_tasks(project_id)
-            takes = self.repository.list_takes(project_id)
-            if any(task.status in _TERMINAL_TASK_STATUSES for task in tasks) and takes:
-                document.project.stage = ProjectStage.REVIEW
-            elif tasks:
-                document.project.stage = ProjectStage.GENERATING
+            document.project.stage = self._task_derived_project_stage(project_id)
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
+
+    def _task_derived_project_stage(self, project_id: str) -> ProjectStage:
+        tasks = self.repository.list_tasks(project_id)
+        if any(task.status not in _TERMINAL_TASK_STATUSES for task in tasks):
+            return ProjectStage.GENERATING
+        if tasks and self.repository.list_takes(project_id):
+            return ProjectStage.REVIEW
+        return ProjectStage.GENERATING
 
     def _invalidate_current_manifests(self, document: ProjectDocument) -> None:
         for manifest in document.manifests:

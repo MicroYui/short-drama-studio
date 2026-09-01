@@ -96,13 +96,16 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
             id="video.enqueue",
             version=1,
             category=ToolCategory.VIDEO,
-            description="Queue candidate video generation tasks for selected project shots.",
+            description=(
+                "Queue deterministic Mock video candidates for selected project shots; "
+                "real MiniMax-H3 runs use route.execute_h3_plan instead."
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=VideoEnqueueInput,
             output_model=ProjectAggregate,
             handler=enqueue,
-            tags=frozenset({"video", "generation", "task"}),
+            tags=frozenset({"video", "generation", "task", "mock"}),
         )
     )
 
@@ -245,24 +248,24 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
                 input_model=VideoLocalReworkInput,
                 output_model=GenerationTask,
                 handler=enqueue_rework,
-                tags=frozenset({"video", "shot", "local-rework"}),
+                tags=frozenset({"video", "shot", "local-rework", "mock"}),
             )
         )
 
     register_rework(
         tool_id="video.retake",
         operation=OperationKind.RETAKE,
-        description="Queue a replacement candidate for one shot.",
+        description="Queue a deterministic Mock replacement candidate for one shot.",
     )
     register_rework(
         tool_id="video.extend",
         operation=OperationKind.EXTEND,
-        description="Queue a local extension candidate for one shot.",
+        description="Queue a deterministic Mock extension candidate for one shot.",
     )
     register_rework(
         tool_id="video.gap_fill",
         operation=OperationKind.GAP_FILL,
-        description="Queue a local gap-fill candidate for one shot.",
+        description="Queue a deterministic Mock gap-fill candidate for one shot.",
     )
 
 
