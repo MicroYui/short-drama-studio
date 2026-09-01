@@ -33,6 +33,14 @@ LTX Desktop is an Electron app for AI video generation using LTX models. Three-l
 
 Run a single backend test file via pnpm: `pnpm backend:test -- tests/test_ic_lora.py`
 
+### Restricted Network and JavaScript Dependencies
+
+- The corporate environment only permits its managed Microsoft sources. External npm registries used by npm, pnpm, Corepack, or `npx` are blocked by IT; treat JavaScript dependency execution as offline by default.
+- Do not run `corepack enable`, `corepack prepare`, `npm install`, `pnpm install`, `yarn install`, `npx`, or any command that may bootstrap a package manager or download packages unless the user explicitly authorizes it and provides a reachable managed source.
+- Prefer the dependencies already present in the repository and invoke local binaries directly, for example `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/vite build`.
+- If a required package or binary is not available locally, report the missing dependency and stop that check. Do not retry against public or alternative registries.
+- The command table above documents upstream workflows. In this environment, use equivalent local-binary checks where necessary and report the exact commands that were run.
+
 ## CI Checks
 
 PRs must pass: `pnpm typecheck` + `pnpm backend:test` + frontend Vite build.
