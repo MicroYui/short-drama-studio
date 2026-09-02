@@ -86,15 +86,10 @@ flowchart LR
 公司开发机运行 pnpm 时使用内部 Feed：
 
 ```bash
-pnpm_project() {
-  npm_config_registry=https://packagefeedproxy.microsoft.io/npm/ \
-    npm exec --yes --package=pnpm@10.30.3 -- pnpm "$@"
-}
-
-pnpm_project typecheck
-pnpm_project backend:test
-pnpm_project openapi:generate
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm_project build:fast
+./scripts/pnpm-project.sh typecheck
+./scripts/pnpm-project.sh backend:test
+./scripts/pnpm-project.sh openapi:generate
+CSC_IDENTITY_AUTO_DISCOVERY=false ./scripts/pnpm-project.sh build:fast
 ```
 
 ## 有意保留的边界

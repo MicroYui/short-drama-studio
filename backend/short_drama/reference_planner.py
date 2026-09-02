@@ -38,6 +38,7 @@ from short_drama.production_profiles import (
     compile_production_prompt,
 )
 from short_drama.quality_learning import H3CapabilityProfileResponse
+from short_drama.style_context import declared_style_value
 
 
 class KeyframePosition(StrEnum):
@@ -332,21 +333,25 @@ class KeyframeBriefCompileResponse(ReferencePlanPreviewResponse):
 
 _ROLES_BY_ASSET_KIND: dict[AssetKind, set[ReferenceRole]] = {
     AssetKind.CHARACTER: {
+        ReferenceRole.CANONICAL_MASTER,
         ReferenceRole.CHARACTER_FACE,
         ReferenceRole.CHARACTER_BODY,
         ReferenceRole.CHARACTER_PROFILE,
         ReferenceRole.CHARACTER_BACK,
     },
     AssetKind.LOCATION: {
+        ReferenceRole.CANONICAL_MASTER,
         ReferenceRole.LOCATION_MASTER,
         ReferenceRole.LOCATION_REVERSE,
         ReferenceRole.LOCATION_INTERACTION,
     },
     AssetKind.PROP: {
+        ReferenceRole.CANONICAL_MASTER,
         ReferenceRole.PROP_PRODUCT,
         ReferenceRole.PROP_IN_HAND,
         ReferenceRole.PROP_STATE,
     },
+    AssetKind.REFERENCE: {ReferenceRole.CANONICAL_MASTER},
 }
 
 
@@ -622,26 +627,12 @@ def _binding_selections(
         for version in asset.versions
     }
     defaults = {
-        AssetKind.CHARACTER: (
-            ReferenceRole.CHARACTER_BODY,
-            ReferenceAngle.FRONT,
-            ReferenceFraming.FULL_BODY,
-        ),
-        AssetKind.LOCATION: (
-            ReferenceRole.LOCATION_MASTER,
+        kind: (
+            ReferenceRole.CANONICAL_MASTER,
             ReferenceAngle.NOT_APPLICABLE,
-            ReferenceFraming.WIDE,
-        ),
-        AssetKind.PROP: (
-            ReferenceRole.PROP_PRODUCT,
-            ReferenceAngle.NOT_APPLICABLE,
-            ReferenceFraming.DETAIL,
-        ),
-        AssetKind.REFERENCE: (
-            ReferenceRole.LOCATION_MASTER,
-            ReferenceAngle.NOT_APPLICABLE,
-            ReferenceFraming.WIDE,
-        ),
+            ReferenceFraming.NOT_APPLICABLE,
+        )
+        for kind in AssetKind
     }
     selected: list[ReferenceSelection] = []
     missing: list[str] = []
@@ -769,15 +760,17 @@ def compile_keyframe_brief(
     )
     extra = [item.strip() for item in request.extra_constraints if item.strip()]
     is_topology_reference = request.position == KeyframePosition.TOPOLOGY_REFERENCE
+    production_medium = declared_style_value(style.medium) if style is not None else None
+    medium_suffix = f" in {production_medium}" if production_medium is not None else ""
 
     sections = [
         (
-            "Generate ONE single vertical 9:16 live-action environment topology plate. "
+            f"Generate ONE single environment topology plate{medium_suffix}. "
             "Show no people, body parts, carried props, character silhouettes, or reflections "
             "of people. Do not create a collage, grid, split panel, turnaround sheet, caption, "
             "logo, watermark, arrows, labels, or readable signage."
             if is_topology_reference
-            else "Generate ONE single vertical 9:16 live-action cinematic still. "
+            else f"Generate ONE single shot keyframe{medium_suffix}. "
             "Do not create a collage, grid, split panel, turnaround sheet, caption, logo, "
             "watermark, or readable signage."
         ),
@@ -870,11 +863,26 @@ def compile_keyframe_brief(
             )
         )
     if style:
+        style_fields = [
+            f"{label}: {value}"
+            for label, raw_value in (
+                ("Medium", style.medium),
+                ("cinematography", style.cinematography),
+                ("color", style.color),
+                ("texture", style.texture),
+            )
+            if (value := declared_style_value(raw_value)) is not None
+        ]
+        look_lines: list[str] = []
+        if style_fields:
+            look_lines.append("; ".join(style_fields) + ".")
+        if style.forbidden:
+            look_lines.append("Forbidden: " + "; ".join(style.forbidden))
+    else:
+        look_lines = []
+    if look_lines:
         sections.append(
-            "PROJECT LOOK:\n"
-            f"Medium: {style.medium}; cinematography: {style.cinematography}; "
-            f"color: {style.color}; texture: {style.texture}.\n"
-            "Forbidden: " + "; ".join(style.forbidden)
+            "PROJECT LOOK:\n" + "\n".join(look_lines)
         )
     if extra:
         sections.append("EXTRA LOCKS:\n" + "\n".join(f"- {item}" for item in extra))
@@ -1089,19 +1097,10 @@ def build_director_advice_input(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.DIRECTOR,),
-        context="\n".join(
-            (
-                shot.model_dump_json(),
-                plan.model_dump_json(),
-                *(issue.model_dump_json() for issue in qa_issues),
-                *reviewer_notes,
-                *(repair.model_dump_json() for repair in prior_repairs),
-            )
-        ),
     )
     instructions = (
-        "You are a film director agent advising a user who is producing a live-action "
-        f"vertical video. {skill_prompt.text} Return JSON only, matching the supplied schema. Evaluate "
+        "You are a film director agent advising a user in the active video-production medium. "
+        f"{skill_prompt.text} Return JSON only, matching the supplied schema. Evaluate "
         "the actual shot context; do not apply a fixed action-count or duration threshold. "
         "Compare prompt retry, keyframe replacement, shot split, and coverage-camera change "
         "against the actual QA failure and provider capability profile. A prompt retry should "

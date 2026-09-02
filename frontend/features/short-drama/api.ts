@@ -12,8 +12,7 @@ export type ExportRecord = components['schemas']['ExportRecord']
 export type SourceMode = components['schemas']['SourceMode']
 export type RunMode = components['schemas']['RunMode']
 export type ProductionProfile = components['schemas']['ProductionProfile']
-export type AutonomousExecutionTarget = components['schemas']['AutonomousExecutionTarget']
-export type AutonomousRunRecord = components['schemas']['AutonomousRunRecord']
+export type ProductionExecutionTarget = components['schemas']['ProductionExecutionTarget']
 export type OperationKind = components['schemas']['OperationKind']
 export type VideoGenerationRoute = components['schemas']['VideoGenerationRoute']
 export type H3ProviderConfig = components['schemas']['H3ProviderConfigResponse']
@@ -67,15 +66,6 @@ export type AudioInspectionReport = components['schemas']['AudioInspectionReport
 export type AudioInspectionRequest = components['schemas']['AudioInspectionRequest']
 export type EpisodeReviewReport = components['schemas']['EpisodeReviewReport']
 export type EpisodeReviewRequest = components['schemas']['EpisodeReviewRequest']
-export type AutonomousRepeatCreateRequest = components['schemas']['AutonomousRepeatCreateRequest']
-export type PlanningRunCreateRequest = components['schemas']['PlanningRunCreateRequest']
-export type PlanningRunRecord = components['schemas']['PlanningRunRecord']
-export type PlanningRunResponse = components['schemas']['PlanningRunResponse']
-export type PlanningSceneRevisionRequest = components['schemas']['PlanningSceneRevisionRequest']
-export type PlanningScriptSearchRequest = components['schemas']['PlanningScriptSearchRequest']
-export type PlanningScriptSearchResponse = components['schemas']['PlanningScriptSearchResponse']
-export type ScriptQualityHistoryResponse = components['schemas']['ScriptQualityHistoryResponse']
-export type ScriptQualityCatalogResponse = components['schemas']['ScriptQualityCatalogResponse']
 export type VoiceReferenceBinding = components['schemas']['VoiceReferenceBinding']
 export type VoiceReferenceMutationResponse = components['schemas']['VoiceReferenceMutationResponse']
 export type VoiceReferenceUpdateRequest = components['schemas']['VoiceReferenceUpdateRequest']
@@ -91,28 +81,35 @@ export type StockAssetSearchRequest = components['schemas']['StockAssetSearchReq
 export type StockAssetSearchResponse = components['schemas']['StockAssetSearchResponse']
 export type StockAssetImportRequest = components['schemas']['StockAssetImportRequest']
 export type SemanticChangePlanRequest = components['schemas']['SemanticChangePlanRequest']
-export type SemanticChangePlan = components['schemas']['SemanticChangePlan']
+export type SemanticChangePlan = components['schemas']['SemanticChangePlan-Output']
+export type AgentCapabilityCatalog = components['schemas']['AgentCapabilityCatalog']
+export type AgentProjectCreateRequest = components['schemas']['AgentProjectCreateRequest']
+export type AgentProjectCreateResponse = components['schemas']['AgentProjectCreateResponse']
+export type AgentRunView = components['schemas']['AgentRunView']
+export type AgentRunCreateRequest = components['schemas']['AgentRunCreateRequest']
+export type AgentRunReplanRequest = components['schemas']['AgentRunReplanRequest']
+export type AgentAdvanceResponse = components['schemas']['AgentAdvanceResponse']
+export type AgentPlanProposal = components['schemas']['AgentPlanProposal']
+export type AgentUserInputRequest = components['schemas']['AgentUserInputRequest']
+export type AgentWorkOrderView = components['schemas']['AgentWorkOrderView']
+export type AgentWorkOrderResultRequest = components['schemas']['AgentWorkOrderResultRequest']
+export type AgentWorkOrderResultResponse = components['schemas']['AgentWorkOrderResultResponse']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
+const createAgentProject = makeEndpointClient('/api/short-drama/agent-projects', 'post')
 const previewSemanticChange = makeEndpointClient('/api/short-drama/projects/{project_id}/agent-tools/plan-change', 'post')
-const listPlanningRuns = makeEndpointClient('/api/short-drama/planning-runs', 'get')
-const createPlanningRun = makeEndpointClient('/api/short-drama/planning-runs', 'post')
-const getPlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}', 'get')
-const advancePlanningRun = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/advance', 'post')
-const replacePlanningOutline = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/outline', 'put')
-const revisePlanningOutlineWithAgent = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/outline/agent-revise', 'post')
-const revisePlanningOutlineFromReview = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/outline/revise-from-review', 'post')
-const getPlanningRunScriptQuality = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/script-quality', 'get')
-const searchPlanningScript = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/agent-tools/search-script', 'post')
-const revisePlanningScenes = makeEndpointClient('/api/short-drama/planning-runs/{run_id}/agent-tools/revise-scenes', 'post')
-const listScriptQualityEvaluations = makeEndpointClient('/api/short-drama/script-quality', 'get')
-const createProject = makeEndpointClient('/api/short-drama/projects', 'post')
-const createAutonomousDraft = makeEndpointClient('/api/short-drama/projects/autonomous-draft', 'post')
-const createAutonomousRepeat = makeEndpointClient('/api/short-drama/projects/{source_project_id}/autonomous-repeats', 'post')
-const advanceAutonomousRun = makeEndpointClient('/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance', 'post')
+const getAgentCapabilities = makeEndpointClient('/api/short-drama/agent-runtime/capabilities', 'get')
+const listAgentRuns = makeEndpointClient('/api/short-drama/projects/{project_id}/agent-runs', 'get')
+const createAgentRun = makeEndpointClient('/api/short-drama/projects/{project_id}/agent-runs', 'post')
+const getAgentRun = makeEndpointClient('/api/short-drama/agent-runs/{run_id}', 'get')
+const advanceAgentRun = makeEndpointClient('/api/short-drama/agent-runs/{run_id}/advance', 'post')
+const replanAgentRun = makeEndpointClient('/api/short-drama/agent-runs/{run_id}/replan', 'post')
+const submitAgentUserInput = makeEndpointClient('/api/short-drama/agent-runs/{run_id}/user-input', 'post')
+const getAgentWorkOrder = makeEndpointClient('/api/short-drama/agent-work-orders/{work_order_id}', 'get')
+const executeAgentWorkOrder = makeEndpointClient('/api/short-drama/agent-work-orders/{work_order_id}/execute', 'post')
+const submitAgentWorkOrderResult = makeEndpointClient('/api/short-drama/agent-work-orders/{work_order_id}/result', 'post')
 const initializeFixture = makeEndpointClient('/api/short-drama/fixtures/dont-trust-me', 'post')
 const getProject = makeEndpointClient('/api/short-drama/projects/{project_id}', 'get')
-const autoDraft = makeEndpointClient('/api/short-drama/projects/{project_id}/auto-draft', 'post')
 const enqueue = makeEndpointClient('/api/short-drama/projects/{project_id}/enqueue', 'post')
 const drain = makeEndpointClient('/api/short-drama/worker/drain', 'post')
 const rebuildManifest = makeEndpointClient('/api/short-drama/projects/{project_id}/manifest/rebuild', 'post')
@@ -209,78 +206,52 @@ function characterPath(projectId: string, characterId: string, suffix = ''): str
 
 export const ShortDramaApi = {
   listProjects: () => listProjects(),
-  listPlanningRuns: () => listPlanningRuns(),
-  createPlanningRun,
-  getPlanningRun: (runId: string) => getPlanningRun(
+  createAgentProject: (body: AgentProjectCreateRequest) => createAgentProject(body),
+  getAgentCapabilities: () => getAgentCapabilities(),
+  listAgentRuns: (projectId: string) => listAgentRuns(
     undefined,
     undefined,
-    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}`,
+    projectPath(projectId, '/agent-runs'),
   ),
-  advancePlanningRun: (runId: string) => advancePlanningRun(
-    undefined,
-    undefined,
-    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/advance`,
-  ),
-  replacePlanningOutline: (
-    runId: string,
-    body: components['schemas']['PlanningOutlineDirectEditRequest'],
-  ) => replacePlanningOutline(
+  createAgentRun: (projectId: string, body: AgentRunCreateRequest) => createAgentRun(
     body,
     undefined,
-    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/outline`,
+    projectPath(projectId, '/agent-runs'),
   ),
-  revisePlanningOutlineWithAgent: (
-    runId: string,
-    body: components['schemas']['PlanningOutlineAgentRevisionRequest'],
-  ) => revisePlanningOutlineWithAgent(
+  getAgentRun: (runId: string) => getAgentRun(
+    undefined,
+    undefined,
+    `/api/short-drama/agent-runs/${encodeURIComponent(runId)}`,
+  ),
+  advanceAgentRun: (runId: string, maxActions = 1) => advanceAgentRun(
+    { max_actions: maxActions },
+    undefined,
+    `/api/short-drama/agent-runs/${encodeURIComponent(runId)}/advance`,
+  ),
+  replanAgentRun: (runId: string, body: AgentRunReplanRequest) => replanAgentRun(
     body,
     undefined,
-    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/outline/agent-revise`,
+    `/api/short-drama/agent-runs/${encodeURIComponent(runId)}/replan`,
   ),
-  revisePlanningOutlineFromReview: (runId: string) => revisePlanningOutlineFromReview(
-    undefined,
-    undefined,
-    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/outline/revise-from-review`,
-  ),
-  getPlanningRunScriptQuality: (runId: string) => getPlanningRunScriptQuality(
-    undefined,
-    undefined,
-    `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/script-quality`,
-  ),
-  searchPlanningScript: (runId: string, body: PlanningScriptSearchRequest) => (
-    searchPlanningScript(
-      body,
-      undefined,
-      `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/agent-tools/search-script`,
-    )
-  ),
-  revisePlanningScenes: (runId: string, body: PlanningSceneRevisionRequest) => (
-    revisePlanningScenes(
-      body,
-      undefined,
-      `/api/short-drama/planning-runs/${encodeURIComponent(runId)}/agent-tools/revise-scenes`,
-    )
-  ),
-  listScriptQualityEvaluations: () => listScriptQualityEvaluations(),
-  createProject,
-  createAutonomousDraft,
-  createAutonomousRepeat: (
-    sourceProjectId: string,
-    body: AutonomousRepeatCreateRequest,
-  ) => createAutonomousRepeat(
+  submitAgentUserInput: (runId: string, body: AgentUserInputRequest) => submitAgentUserInput(
     body,
     undefined,
-    projectPath(sourceProjectId, '/autonomous-repeats'),
+    `/api/short-drama/agent-runs/${encodeURIComponent(runId)}/user-input`,
   ),
-  advanceAutonomousRun: (projectId: string, runId: string, maxActions = 24) => (
-    advanceAutonomousRun(
-      { max_actions: maxActions },
-      undefined,
-      projectPath(
-        projectId,
-        `/autonomous-runs/${encodeURIComponent(runId)}/advance`,
-      ),
-    )
+  getAgentWorkOrder: (workOrderId: string) => getAgentWorkOrder(
+    undefined,
+    undefined,
+    `/api/short-drama/agent-work-orders/${encodeURIComponent(workOrderId)}`,
+  ),
+  executeAgentWorkOrder: (workOrderId: string) => executeAgentWorkOrder(
+    undefined,
+    undefined,
+    `/api/short-drama/agent-work-orders/${encodeURIComponent(workOrderId)}/execute`,
+  ),
+  submitAgentWorkOrderResult: (workOrderId: string, body: AgentWorkOrderResultRequest) => submitAgentWorkOrderResult(
+    body,
+    undefined,
+    `/api/short-drama/agent-work-orders/${encodeURIComponent(workOrderId)}/result`,
   ),
   initializeFixture: () => initializeFixture(),
   getProject: (projectId: string) => getProject(undefined, undefined, projectPath(projectId)),
@@ -291,9 +262,6 @@ export const ShortDramaApi = {
     body,
     undefined,
     projectPath(projectId, '/agent-tools/plan-change'),
-  ),
-  autoDraft: (projectId: string, renderExport = true) => (
-    autoDraft({ render_export: renderExport }, undefined, projectPath(projectId, '/auto-draft'))
   ),
   enqueue: (
     projectId: string,

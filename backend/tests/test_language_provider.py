@@ -436,10 +436,10 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
     )
     payload = json.loads(input_text)
 
-    assert "当前制作类型为真人抖音竖屏短剧" in instructions
-    assert "Video Prompt Compiler rubric:" in instructions
-    assert "Production constitution:" not in instructions
-    assert payload["production_profile"] == "DOUYIN_SHORT_DRAMA"
+    assert "当前制作类型为AI 原生短剧" in instructions
+    assert "视频提示词编译职责准则：" in instructions
+    assert "类型创作原则：" not in instructions
+    assert payload["production_profile"] == "AI_SHORT_DRAMA"
     assert payload["visible_assets"] == ["林夏", "雨夜便利店"]
     assert [
         character["name"]
@@ -471,10 +471,10 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
         duration_seconds=8,
         source_prompt="baseline",
     )
-    assert "当前制作类型为真人竖屏视频" in general_instructions
-    assert "Active Production Skill: general live-action vertical video." in general_instructions
-    assert "Video Prompt Compiler rubric:" in general_instructions
-    assert "live-action Douyin vertical short drama" not in general_instructions
+    assert "当前制作类型为按项目声明的视觉媒介" in general_instructions
+    assert "当前制片技能：通用视频。" in general_instructions
+    assert "视频提示词编译职责准则：" in general_instructions
+    assert "AI 原生短剧" not in general_instructions
     assert json.loads(general_input)["production_profile"] == "GENERAL_VIDEO"
 
 

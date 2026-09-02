@@ -14,15 +14,45 @@ from short_drama.audio_inspection import (
     _normalize_dialogue,
     _signal_metrics,
 )
+from short_drama.agent_runtime import AgentRunStatus
 from short_drama.fixture import CANONICAL_LINES
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     AudioContinuityAssessment,
     AudioInspectionRequest,
-    EnqueueRequest,
+    ProductionExecutionTarget,
+)
+from short_drama.production_manager import (
+    AgentRunAdvanceRequest,
+    AgentRunCreateRequest,
 )
 from short_drama.reference_planner import DirectorAdviceRequest
 from short_drama.service import ShortDramaService
+
+
+def _run_mock_agent_to_manifest(client, project_id: str) -> None:
+    created = client.post(
+        f"/api/short-drama/projects/{project_id}/agent-runs",
+        json={
+            "objective": "生成完整 Mock 制片结果",
+            "unattended": True,
+            "execution_target": "MOCK",
+            "render_export": False,
+        },
+    )
+    assert created.status_code == 200, created.text
+    current = created.json()
+    run_id = current["snapshot"]["run"]["id"]
+    for _ in range(16):
+        if current["snapshot"]["run"]["status"] == "COMPLETED":
+            return
+        advanced = client.post(
+            f"/api/short-drama/agent-runs/{run_id}/advance",
+            json={"max_actions": 8},
+        )
+        assert advanced.status_code == 200, advanced.text
+        current = advanced.json()["run"]
+    raise AssertionError("Agent Mock production did not complete")
 
 
 class FakeAudioSemanticService(AudioSemanticService):
@@ -118,6 +148,29 @@ def _service(
     )
 
 
+def _produce_mock_manifest(
+    service: ShortDramaService,
+    project_id: str,
+) -> None:
+    current = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="生成完整 Mock 制片结果",
+            unattended=True,
+            execution_target=ProductionExecutionTarget.MOCK,
+            render_export=False,
+        ),
+    )
+    for _ in range(8):
+        if current.snapshot.run.status == AgentRunStatus.COMPLETED:
+            return
+        current = service.advance_agent_run(
+            current.snapshot.run.id,
+            AgentRunAdvanceRequest(max_actions=8),
+        ).run
+    raise AssertionError("Agent Mock production did not complete")
+
+
 def test_audio_inspection_closes_dialogue_and_voice_checks_with_fake_service(
     tmp_path: Path,
 ) -> None:
@@ -125,8 +178,8 @@ def test_audio_inspection_closes_dialogue_and_voice_checks_with_fake_service(
     service = _service(tmp_path, audio)
     project = service.initialize_fixture()
 
-    draft = service.auto_draft(project.document.project.id, render_export=False)
-    assert draft.project.audio_inspections == []
+    _produce_mock_manifest(service, project.document.project.id)
+    assert service.get_project(project.document.project.id).audio_inspections == []
     result = service.inspect_current_manifest_audio(
         project.document.project.id,
         AudioInspectionRequest(),
@@ -158,8 +211,8 @@ def test_audio_issue_is_available_to_director_agent_without_forcing_repair(
     director = FakeDirectorLanguageProvider()
     service = _service(tmp_path, audio, director)
     project = service.initialize_fixture()
-    draft = service.auto_draft(project.document.project.id, render_export=False)
-    assert draft.project.audio_inspections == []
+    _produce_mock_manifest(service, project.document.project.id)
+    assert service.get_project(project.document.project.id).audio_inspections == []
     result = service.inspect_current_manifest_audio(
         project.document.project.id,
         AudioInspectionRequest(),
@@ -203,11 +256,7 @@ def test_audio_issue_is_available_to_director_agent_without_forcing_repair(
 def test_audio_inspection_endpoint_persists_non_semantic_report(client) -> None:
     initialized = client.post("/api/short-drama/fixtures/dont-trust-me").json()
     project_id = initialized["document"]["project"]["id"]
-    auto = client.post(
-        f"/api/short-drama/projects/{project_id}/auto-draft",
-        json={"render_export": False},
-    )
-    assert auto.status_code == 200, auto.text
+    _run_mock_agent_to_manifest(client, project_id)
 
     inspected = client.post(
         f"/api/short-drama/projects/{project_id}/inspect-audio",

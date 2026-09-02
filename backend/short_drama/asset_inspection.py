@@ -27,6 +27,7 @@ from short_drama.production_profiles import (
     production_skill,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderClient
+from short_drama.style_context import declared_style_value
 
 
 class SemanticAssetReview(DomainModel):
@@ -47,7 +48,6 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
-        context=descriptor,
         include_constitution=False,
     )
     label_source = descriptor
@@ -81,21 +81,38 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         )
     else:
         text_policy = "不要任何文字、标签、水印、品牌名或界面元素。"
+    style = bible.style
+    style_fields = [
+        f"{label}={value}"
+        for label, raw_value in (
+            ("视觉媒介", style.medium),
+            ("镜头语言", style.cinematography),
+            ("色彩", style.color),
+            ("质感", style.texture),
+        )
+        if (value := declared_style_value(raw_value)) is not None
+    ]
+    style_instruction = (
+        "严格服从当前项目 Style：" + "；".join(style_fields) + "。"
+        if style_fields
+        else "当前项目尚未声明具体视觉 Style。"
+    )
     shared = (
-        f"{skill.medium}制片参考资产，写实电影质感，真实皮肤和材质，9:16 竖图，"
-        f"纯视觉内容，{text_policy}"
+        f"{skill.medium}制片参考资产。{style_instruction}"
+        f"不要擅自追加当前 Style 未声明的视觉媒介、审美、材质或表现规则。输出适合竖屏制作的"
+        f"单幅纯视觉内容，{text_policy}"
     )
     if asset.kind == AssetKind.CHARACTER:
         layout = (
-            "生成一张单幅、正面略带四分之三角度的真人全身身份母版。"
-            "完整展示同一人的脸、发型、妆容、体型、鞋子和整套服装；比例自然，"
-            "均匀柔光，背景干净中性。不要宫格、拼贴、多人物、转面图或漫画设定图。"
+            "生成一张能够稳定表达该角色身份与造型的单幅角色母版。取景、角度、比例、"
+            "细节和背景服从当前 Style 与资产描述，并为后续实际镜头提供清楚锚点。"
+            "不要宫格、拼贴、无关人物、文字、logo 或水印。"
         )
     elif asset.kind == AssetKind.LOCATION:
         layout = (
-            "生成一张单幅空场 Master Wide，完整、清楚地交代同一个真实空间的总布局、"
-            "摄影轴线、入口、出口、通道、门窗、桌椅和主要光源。空间必须可拍摄且几何"
-            "关系无歧义。不要人物、分镜宫格、拼贴、多个互相冲突的机位或平面图标签。"
+            "生成一张能够稳定表达该场景规则与后续镜头所需关系的单幅场景母版。"
+            "空间、层次、透视、构图或图形组织方式服从当前 Style 与资产描述。"
+            "不要无关人物、分镜宫格、拼贴、互相冲突的视角或说明标签。"
         )
     elif is_screen_content:
         layout = (
@@ -106,15 +123,15 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         )
     elif asset.kind == AssetKind.PROP:
         layout = (
-            "生成一张单幅、三分之四角度的纯产品母版，清楚展示真实尺度、形状、颜色、"
-            "材质和资产描述中确实存在的标志性结构。按钮、接口、指示灯、把手、附件等"
+            "生成一张能够稳定表达该道具身份和剧情所需结构的单幅母版，清楚展示资产描述"
+            "中确实存在的形状、颜色、材质和标志性特征。按钮、接口、指示灯、把手、附件等"
             "只在该物体本来具有时展示，不得为了丰富画面凭空增加部件。背景干净中性；"
             "不要出现完整人物、交接动作、房间、柜台、商品背景或剧情场景。纸张、合同和"
             "文件只保留不可辨认的中性版式块，不生成乱码或可读正文。不要宫格、拼贴、"
             "商标或额外部件；若上方文字策略列出必需场内文字，仅例外保留该文字。"
         )
     else:
-        layout = "生成一张可供后续镜头构图使用的清晰写实视觉参考图。"
+        layout = "生成一张符合当前 Style、可供后续镜头构图使用的清晰视觉参考图。"
     style_context = ""
     if asset.kind == AssetKind.LOCATION:
         style_context = (
@@ -148,10 +165,10 @@ def build_stock_grounded_character_prompt(
         raise ValueError("Stock identity grounding only applies to character assets")
     return (
         build_base_asset_prompt(document, asset)
-        + "\n\n输入图像是素材库真人照片，只作为真实摄影质感、自然皮肤与人体比例、"
-        "大致年龄感和造型方向的软参考。创建一个全新的虚构人物身份；不得复制、"
+        + "\n\n输入图像是素材库人物照片，只作为当前任务声明范围内的构图、造型或人物特征软参考。"
+        "输出媒介与质感仍服从项目 Style。创建一个全新的虚构人物身份；不得复制、"
         "保留或近似复刻输入人物可识别的面孔与身份。必须优先服从本项目资产描述，"
-        "输出仍是一张可供后续多角度派生和镜头关键帧使用的单人全身身份母版。"
+        "输出仍是一张可供后续派生和镜头关键帧使用的角色身份母版。"
     )
 
 
@@ -170,8 +187,8 @@ def build_stock_grounded_asset_prompt(
     )
     grounding_scope = {
         AssetKind.LOCATION: (
-            "输入图像是现实空间的布局、建筑尺度和材质参考。创建本项目中的虚构地点，"
-            "保留有用的空间拓扑和摄影真实感，但必须服从资产描述重构入口、通道、"
+            "输入图像是场景布局、尺度或材质的参考。创建本项目中的虚构地点，"
+            "只保留对当前 Style 和镜头有用的关系，并服从资产描述重构入口、通道、"
             f"设备区与光线；删除原图中的无关文字、品牌和不属于剧情的物体{required_label_scope}。"
         ),
         AssetKind.PROP: (
@@ -180,7 +197,7 @@ def build_stock_grounded_asset_prompt(
         ),
     }.get(
         asset.kind,
-        "输入图像仅作摄影真实感与构图参考，输出必须服从本项目资产描述。",
+        "输入图像仅作声明范围内的视觉参考，输出必须服从本项目资产描述与 Style。",
     )
     return f"{build_base_asset_prompt(document, asset)}\n\n{grounding_scope}"
 
@@ -232,7 +249,8 @@ def canonical_base_asset_descriptor(
             None,
         )
         if profile is not None:
-            return f"{profile.age}岁；{profile.appearance}；{profile.wardrobe}"
+            age_descriptor = f"{profile.age}岁；" if profile.age > 0 else ""
+            return f"{age_descriptor}{profile.appearance}；{profile.wardrobe}"
     if asset.kind == AssetKind.LOCATION:
         profile = next(
             (
@@ -339,14 +357,6 @@ def inspect_asset_image(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
-        context="\n".join(
-            (
-                asset.name,
-                version.descriptor,
-                shot.model_dump_json() if shot is not None else "",
-                preparation.model_dump_json() if preparation is not None else "",
-            )
-        ),
         include_constitution=False,
     )
     if asset.kind == AssetKind.PROP and _is_screen_content_asset(asset.name):
@@ -383,11 +393,14 @@ def inspect_asset_image(
             ),
         }.get(asset.kind, "Judge visible production usefulness against the supplied descriptor.")
     instructions = (
-        "You are a visual asset inspection tool for a live-action vertical production pipeline. "
+        "You are a visual asset inspection tool for an AI-native vertical video production pipeline. "
         f"{skill_prompt.text} "
         "Return JSON only and match the supplied schema. Compare only visible image evidence with "
         "the supplied asset description, project Bible, and optional ShotPlan/keyframe brief. "
-        "For a shot keyframe, inspect in two passes: first identify the visible actors, limbs, "
+        "The project Bible's declared medium and style are authoritative. Do not add visual-medium, "
+        "surface, camera, or motion requirements that the project did not request. For a shot keyframe, "
+        "inspect in two passes: first identify the visible subjects, "
+        "limbs when relevant, "
         "contacts, prop state, gaze, and action phase without assuming the requested answer; then "
         "compare those observations with the declared start/end state. If an explicitly declared "
         "left/right hand, contact side, or action phase is visibly contradicted, report a generic "
@@ -401,13 +414,15 @@ def inspect_asset_image(
         "recommended=false when a visible explicit start/end state is contradicted, or when a "
         "contact or laterality that the frame is required to show remains ambiguous; an otherwise "
         "attractive image does not cancel those production-control failures. "
-        "Check realism, severe anatomy or object corruption, identity coherence within a reference "
-        "sheet, location geometry, prop shape, framing usefulness, and unwanted text or watermarks. "
+        "Check conformance to the declared style, visible corruption, identity coherence within a "
+        "reference sheet, required location relationships, prop shape, framing usefulness, and "
+        "unwanted text or watermarks. "
         "Do not invent requirements. A recommendation is an overridable production suggestion, "
         "not a user-facing approval gate. Use generic QA categories and stable issue codes. "
         "When canonical reference images are supplied, Image 1 is always the candidate under "
-        "review and later images are approved references. Compare visible identity, hairstyle, "
-        "wardrobe, location topology, and prop construction against the matching approved "
+        "review and later images are approved references. Compare only the identity and appearance "
+        "anchors declared for this character, together with required location relationships and prop "
+        "construction, against the matching approved "
         "reference instead of judging the candidate in isolation. Do not average or merge "
         "different character identities. "
         + review_scope

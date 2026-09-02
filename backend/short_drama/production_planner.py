@@ -31,9 +31,10 @@ from short_drama.models import (
     Freshness,
     LocationProfile,
     OriginType,
+    PlanningRunStatus,
     ProjectBibleVersion,
     ProjectDocument,
-    ProductionProfile,
+    ProjectPlanningMetadata,
     ProjectRecord,
     ProjectStage,
     PropProfile,
@@ -67,6 +68,7 @@ from short_drama.production_profiles import (
     compile_production_prompt,
     production_skill,
 )
+from short_drama.style_context import UNSPECIFIED_STYLE_VALUE
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
     LanguageProviderError,
@@ -102,6 +104,7 @@ class PlannedProp(DomainModel):
 
 
 class PlannedStyle(DomainModel):
+    medium: str = Field(min_length=1, max_length=300)
     genre: str = Field(min_length=1, max_length=120)
     cinematography: str = Field(min_length=1, max_length=800)
     color: str = Field(min_length=1, max_length=500)
@@ -757,13 +760,6 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
             ProductionSkillRole.WRITER,
             ProductionSkillRole.PLANNER,
         ),
-        context="\n".join(
-            [
-                request.name or "",
-                request.input_text,
-                *(item.descriptor or "" for item in request.input_images),
-            ]
-        ),
     )
     locked = (
         _locked_dialogue(request.input_text)
@@ -772,7 +768,7 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
     )
     instructions = (
         "You are the lead writer, production designer, production planner, and continuity planner "
-        "for a Mandarin live-action vertical video. Return JSON only and match the supplied schema "
+        "for the active video-production medium. Return JSON only and match the supplied schema "
         f"exactly. {skill_prompt.text} Produce one coherent "
         f"video targeting {request.resolved_target_duration_seconds():g} seconds. Editorial shots "
         "may be shorter than 4 seconds or longer than 15 seconds when the material earns it. The "
@@ -792,10 +788,15 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         "location Master Wide plus only the reverse, interaction zone, character angle, framing, or "
         "prop state that this shot actually needs. Use stable semantic tags for named location zones "
         "and states so an asset manager can retrieve or derive matching views. Character appearance "
-        "must contain stable identity traits only: age impression, face, hair, body build, and other "
-        "cross-shot visual anchors. Put sweat, dirt, injury, illness, distress, damaged makeup, and "
-        "other temporary story states in the relevant shot or continuity fields, never in the base "
-        "character appearance or wardrobe. Prop appearance must likewise describe only stable visible "
+        "must contain only the stable identity anchors that matter in the project's chosen medium; "
+        "do not require human anatomy, facial, costume, or material details unless the current story "
+        "and Style make them relevant. Choose and state this project's actual visual medium in "
+        "style.medium using natural language derived from the user's intent, source material, and "
+        "creative goal. The ProductionProfile supplies production guidance, not a concrete visual "
+        "medium, surface treatment, camera grammar, or amount of motion. Put temporary story states "
+        "such as damage, fatigue, distress, or transformation in the relevant shot or continuity "
+        "fields, never in the base identity description. "
+        "Prop appearance must likewise describe only stable visible "
         "form, material, color, scale, controls, and construction. Put who carries or uses it, illegal "
         "or destructive actions, evidence meaning, and temporary opened, broken, dirty, wet, or damaged "
         "states in scene actions or continuity, never in the base prop appearance."
@@ -820,9 +821,12 @@ def _planner_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         ],
         "image_references": image_descriptions,
         "requirements": {
-            "medium": production_skill(request.production_profile).label,
-            "language": "普通话中文",
-            "aspect_ratio": "9:16",
+            "medium": (
+                "derive the project's concrete visual medium from user intent and source material, "
+                "then record it in style.medium; do not infer a fixed aesthetic from the profile"
+            ),
+            "language": "follow the source contract and active Production Skill",
+            "aspect_ratio": "follow the delivery contract and active Production Skill",
             "duration_seconds": request.resolved_target_duration_seconds(),
             "shot_duration_seconds": (
                 "editorial duration follows the material; H3 later compiles each provider request "
@@ -849,7 +853,6 @@ def _planner_repair_prompt(
             ProductionSkillRole.WRITER,
             ProductionSkillRole.PLANNER,
         ),
-        context="\n".join((request.input_text, invalid_output)),
     )
     locked = (
         _locked_dialogue(request.input_text)
@@ -857,8 +860,8 @@ def _planner_repair_prompt(
         else []
     )
     instructions = (
-        "You are repairing a previously invalid production-plan JSON for a Mandarin live-action "
-        "vertical video. Return one complete corrected JSON object only and match the "
+        "You are repairing a previously invalid production-plan JSON for the active "
+        "video-production medium. Return one complete corrected JSON object only and match the "
         "supplied ProductionPlan schema exactly. Preserve the story and shot intent where valid. "
         "Dialogue indices are strictly 1-based and may only reference the supplied lines. For "
         "SCRIPT_LOCKED, lines must exactly match locked_dialogue in speaker, text, audio_kind, and "
@@ -891,13 +894,6 @@ def _outline_prompt(request: CreateProjectRequest) -> tuple[str, str]:
             ProductionSkillRole.WRITER,
             ProductionSkillRole.PLANNER,
         ),
-        context="\n".join(
-            [
-                request.name or "",
-                request.input_text,
-                *(item.descriptor or "" for item in request.input_images),
-            ]
-        ),
     )
     locked = (
         _locked_dialogue(request.input_text)
@@ -905,7 +901,7 @@ def _outline_prompt(request: CreateProjectRequest) -> tuple[str, str]:
         else []
     )
     instructions = (
-        "You are the story-architect Agent for a Mandarin live-action vertical production. "
+        "You are the story-architect Agent for the active video-production medium. "
         "Return JSON only and match EpisodeOutline exactly. Produce a compact global blueprint, "
         "not the finished screenplay: define the causal story, global cast, reusable locations "
         "and props, then split it into coherent scene nodes. A downstream Scene Writer expands "
@@ -992,10 +988,9 @@ def _story_critic_prompt(
             ProductionSkillRole.WRITER,
             ProductionSkillRole.CRITIC,
         ),
-        context="\n".join((request.input_text, outline.model_dump_json())),
     )
     instructions = (
-        "You are an independent script-critic Agent reviewing a Mandarin live-action vertical "
+        "You are an independent script-critic Agent reviewing the active video-production "
         "episode before shot planning. Return JSON only and match ScriptReviewReport exactly. "
         "Review the actual outline rather than checking it against a hidden answer key. Do not "
         "assume every story needs more twists, dialogue, scenes, or cuts. Identify only specific, "
@@ -1057,7 +1052,6 @@ def _review_router_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.REVIEW_ROUTER,),
-        context="\n".join((outline.model_dump_json(), review.model_dump_json())),
     )
     instructions = (
         "You are the Review Router Agent inside an AI-native production harness. The Script Critic "
@@ -1108,19 +1102,10 @@ def _revision_judge_prompt(
             ProductionSkillRole.WRITER,
             ProductionSkillRole.CRITIC,
         ),
-        context="\n".join(
-            (
-                request.input_text,
-                older_outline.model_dump_json(),
-                older_review.model_dump_json(),
-                newer_outline.model_dump_json(),
-                newer_review.model_dump_json(),
-            )
-        ),
     )
     instructions = (
-        "You are an independent revision-judge Agent comparing two consecutive versions of a "
-        "Mandarin live-action vertical episode after the latest Script Critic report showed a "
+        "You are an independent revision-judge Agent comparing two consecutive versions of an "
+        "episode in the active video-production medium after the latest Script Critic report showed a "
         "possible non-monotonic regression. Return JSON only and match "
         "RevisionJudgeRecommendation exactly. Recommend one supplied revision and name the other "
         "as the alternative. Do not rewrite either outline and do not assume the newer version is "
@@ -1282,13 +1267,6 @@ def _story_repair_plan_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.WRITER, ProductionSkillRole.CRITIC),
-        context="\n".join(
-            (
-                request.input_text,
-                outline.model_dump_json(),
-                review.model_dump_json(),
-            )
-        ),
     )
     instructions = (
         "You are the story-repair planner Agent working between Script Critic and Story Architect. "
@@ -1401,14 +1379,6 @@ def _story_revision_prompt(
             ProductionSkillRole.CONCEPT,
             ProductionSkillRole.WRITER,
             ProductionSkillRole.CRITIC,
-        ),
-        context="\n".join(
-            (
-                request.input_text,
-                outline.model_dump_json(),
-                review.model_dump_json(),
-                repair_plan.model_dump_json() if repair_plan is not None else "",
-            )
         ),
     )
     locked = (
@@ -1564,14 +1534,6 @@ def _story_revision_targeted_repair_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.WRITER,),
-        context="\n".join(
-            (
-                request.input_text,
-                revised_outline.model_dump_json(),
-                repair_plan.model_dump_json(),
-                verification.model_dump_json(),
-            )
-        ),
     )
     instructions = (
         "You are the Story Architect performing one bounded correction to a revised episode. Return one "
@@ -1608,7 +1570,6 @@ def _user_story_revision_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.WRITER, ProductionSkillRole.PLANNER),
-        context="\n".join((request.input_text, instruction, outline.model_dump_json())),
     )
     locked = (
         _locked_dialogue(request.input_text)
@@ -1677,13 +1638,6 @@ def _scene_director_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.PLANNER, ProductionSkillRole.DIRECTOR),
-        context="\n".join(
-            (
-                request.input_text,
-                scene.model_dump_json(),
-                json.dumps(review_handoff or [], ensure_ascii=False),
-            )
-        ),
     )
     next_scene = next(
         (item for item in outline.scenes if item.sequence == scene.sequence + 1),
@@ -1873,137 +1827,30 @@ def _validate_locked_dialogue(request: CreateProjectRequest, plan: ProductionPla
         raise ValueError("Planning model duplicated or omitted locked dialogue in shots")
 
 
-def _fallback_general_plan(request: CreateProjectRequest) -> ProductionPlan:
-    actor = "林岚"
-    premise = request.input_text.strip()
-    if not premise and request.source_mode == SourceMode.IMAGE_SEEDED:
-        premise = "人物在用户提供的视觉空间里度过一段安静但有方向变化的清晨。"
-    if not premise:
-        premise = "清晨，一名都市青年在窗边整理思绪，并在光线变化中作出一个平静决定。"
-    shots = [
-        PlannedShot(
-            duration_seconds=12.0,
-            narrative_purpose="建立人物、空间和清晨的观察节奏",
-            visual=f"清晨城市室内大全景，{actor}在窗边安静停留，环境细节自然进入画面",
-            framing="大全景",
-            camera="稳定机位缓慢推近，不急于切换",
-            audio_intent="城市远声、室内底噪和自然呼吸，无对白",
-            character_positions=f"{actor}位于窗边画面右侧",
-            eyeline="视线朝向窗外，不建立虚构对话关系",
-            prop_state_in="桌面与窗边保持简洁，无叙事道具变化",
-            prop_state_out="空间关系保持不变，人物注意力转向室内",
-            action_in="人物静观窗外",
-            action_out="人物缓慢收回视线",
-            transition_out="自然切",
-            merge_candidate=True,
-            local_rework_risk="低",
-        ),
-        PlannedShot(
-            duration_seconds=15.0,
-            narrative_purpose="用连续表演呈现情绪从迟疑到松弛的变化",
-            visual=f"中景连续跟随{actor}从窗边走到桌旁，停下整理衣袖并轻轻呼气",
-            framing="中景",
-            camera="克制侧向跟随，路径简单，保持人物完整动作",
-            audio_intent="脚步、衣料摩擦、呼吸和持续环境声，无对白",
-            character_positions=f"{actor}从画面右侧移动到中央桌旁",
-            eyeline="视线由窗外转向桌面，方向连续",
-            prop_state_in="桌面保持空净",
-            prop_state_out="桌面保持空净",
-            action_in="人物刚收回视线",
-            action_out="人物在桌旁站稳并放松肩膀",
-            transition_out="动作切",
-            merge_candidate=False,
-            local_rework_risk="低",
-        ),
-        PlannedShot(
-            duration_seconds=12.0,
-            narrative_purpose="让光线和人物微表情承担情绪信息",
-            visual=f"{actor}近景，晨光逐渐变暖，人物看向室内后露出很轻的释然表情",
-            framing="近景",
-            camera="固定近景，仅做几乎不可察觉的靠近",
-            audio_intent="环境声稍降，保留呼吸与远处车辆声，无对白",
-            character_positions=f"{actor}保持在桌旁，背景窗线稳定",
-            eyeline="视线保持向室内同一锚点",
-            prop_state_in="无道具状态变化",
-            prop_state_out="无道具状态变化",
-            action_in="人物刚刚站稳",
-            action_out="人物情绪由迟疑转为平静",
-            transition_out="视线切",
-            merge_candidate=True,
-            local_rework_risk="低",
-        ),
-        PlannedShot(
-            duration_seconds=11.0,
-            narrative_purpose="以小幅决定动作结束观察段落",
-            visual=f"回到稍宽中景，{actor}拉开椅子坐下，晨光留在空白墙面上，画面自然停留",
-            framing="中景",
-            camera="稳定机位，动作完成后留出短暂余韵",
-            audio_intent="椅脚轻响、城市底噪和室内空气声，无对白",
-            character_positions=f"{actor}从桌旁站姿转为坐姿，空间轴线不变",
-            eyeline="视线落在桌面，不新增画外人物",
-            prop_state_in="椅子位于桌边",
-            prop_state_out="椅子被拉开后人物坐下",
-            action_in="人物已恢复平静",
-            action_out="人物坐定，段落完成",
-            transition_out="淡出",
-            merge_candidate=False,
-            local_rework_risk="低",
-        ),
+def _fallback_source_summary(request: CreateProjectRequest) -> str:
+    text = request.input_text.strip()
+    if text:
+        return text[:2400]
+    image_descriptions = [
+        item.descriptor.strip()
+        for item in request.input_images
+        if item.descriptor.strip()
     ]
-    return ProductionPlan(
-        title=request.name or "清晨留白",
-        scene_heading="内景·城市窗边·清晨",
-        scene_summary=premise,
-        lines=[],
-        characters=[
-            PlannedCharacter(
-                name=actor,
-                age=28,
-                appearance="真实自然的都市青年，面部特征清晰且易于跨镜保持",
-                wardrobe="低饱和浅灰针织上衣与深色长裤，全片保持一致",
-                performance="克制自然，以视线、呼吸、肩颈和微表情完成变化",
-                voice_identity="S1",
-            )
-        ],
-        locations=[
-            PlannedLocation(
-                name="清晨城市窗边",
-                layout="单一室内空间，窗位于画面侧面，桌椅构成简单行动路径",
-                lighting="柔和冷晨光逐渐转暖",
-                palette="浅灰、米白与低饱和蓝色",
-                key_views=["空间建立", f"{actor}窗边中景", f"{actor}近景"],
-            )
-        ],
-        props=[],
-        style=PlannedStyle(
-            genre="都市生活观察",
-            cinematography="9:16 写实电影感，允许留白和连续表演，运镜克制",
-            color="低饱和清晨色调，光线缓慢变暖",
-            texture="真实皮肤、自然布料和柔和窗光",
-            forbidden=["动漫化", "过度磨皮", "无动机快切", "强造冲突", "无因果物体运动"],
-        ),
-        shots=shots,
-    )
+    if image_descriptions:
+        return ("；".join(image_descriptions))[:2400]
+    return "本地回退只建立可继续编辑的制作骨架；具体内容、Style 与节奏等待 Agent 完成。"
 
 
-def _fallback_short_plan(request: CreateProjectRequest) -> ProductionPlan:
-    if (
-        request.production_profile == ProductionProfile.GENERAL_VIDEO
-        and request.source_mode != SourceMode.SCRIPT_LOCKED
-    ):
-        return _fallback_general_plan(request)
+def _fallback_scaffold_plan(request: CreateProjectRequest) -> ProductionPlan:
+    """Preserve user facts without pretending a local template made creative decisions."""
+
     if request.source_mode == SourceMode.SCRIPT_LOCKED:
         lines = _locked_dialogue(request.input_text)
         if not lines:
             raise ValueError("Locked script did not contain recognizable dialogue")
     else:
-        lines = [
-            PlannedDialogueLine(speaker="林岚", text="这件事，和你说的不一样。"),
-            PlannedDialogueLine(speaker="顾川", text="你终于发现了。"),
-            PlannedDialogueLine(speaker="林岚", text="那份记录是谁留下的？"),
-            PlannedDialogueLine(speaker="顾川", text="是你自己。"),
-            PlannedDialogueLine(speaker="林岚", text="可我从没来过这里。"),
-        ]
+        lines = []
+
     speakers = list(
         dict.fromkeys(
             line.speaker
@@ -2011,88 +1858,90 @@ def _fallback_short_plan(request: CreateProjectRequest) -> ProductionPlan:
             if line.audio_kind == AudioKind.DIALOGUE and line.speaker != "旁白"
         )
     )
-    while len(speakers) < 2:
-        speakers.append("顾川" if speakers != ["顾川"] else "林岚")
-    speakers = speakers[:3]
+    if not speakers:
+        speakers = ["项目主体"]
+
     characters = [
         PlannedCharacter(
             name=name,
-            age=28 + index * 3,
-            appearance="真实自然的都市青年，面部特征清晰且易于跨镜保持",
-            wardrobe="低饱和都市通勤装，轮廓和颜色在全片保持一致",
-            performance="克制、警觉，情绪随信息揭示逐步升级",
+            age=0,
+            appearance="只保留用户输入中明确的身份锚点；未声明特征由 Agent 与项目 Style 决定",
+            wardrobe="不由本地回退预设服装、材质或造型规则",
+            performance="表现方式、静动关系与情绪强度由内容和项目 Style 决定",
             voice_identity=f"S{index + 1}",
         )
-        for index, name in enumerate(speakers)
+        for index, name in enumerate(speakers[:12])
     ]
-    premise = request.input_text.strip()
-    if not premise and request.source_mode == SourceMode.IMAGE_SEEDED:
-        premise = "用户提供的视觉线索让两个人发现同一段记忆存在矛盾。"
-    if not premise:
-        premise = "深夜，一段不可能存在的记录让两个人开始怀疑彼此的记忆。"
-    dialogue_slots = (2, 3, 4, 5, 7)
-    dialogue_by_shot: dict[int, list[int]] = {number: [] for number in range(1, 9)}
-    for index in range(1, len(lines) + 1):
-        dialogue_by_shot[dialogue_slots[(index - 1) % len(dialogue_slots)]].append(index)
-    first, second = speakers[0], speakers[1]
-    shot_definitions = (
-        (5.0, "建立异常空间与核心视觉线索", "夜色中的都市室内，镜头从环境线索推进到对峙的两个人", "大全景", "缓慢推近", "城市底噪与室内环境音", "空间与人物关系尚未揭示", "两人形成清晰对峙", "硬切", True, "低"),
-        (7.0, "主角提出第一处矛盾", f"{first}近景，视线锁定{second}，背景保留核心视觉线索", "近景", "稳定机位，末段轻推", f"{first}对白", "主角压住情绪", "矛盾被明确说出", "反打", False, "中"),
-        (6.0, "对手承认掌握更多信息", f"{second}反打，神情平静，手边出现关键记录", "中近景", "静止反打", f"{second}对白", "关键记录尚未被解释", "记录成为注意中心", "反打", False, "中"),
-        (5.0, "把怀疑转向证据来源", f"{first}更近特写，短暂停顿后追问", "特写", "轻微推镜", f"{first}对白", "主角仍相信自己的记忆", "主角开始动摇", "动作切", False, "中"),
-        (8.0, "关键记录揭示不可能的信息", "关键记录特写，信息出现时画面保持可读，人物不做复杂接触动作", "道具特写", "俯角微移", "对白与提示音形成声音桥", "记录处于未确认状态", "记录指向主角本人", "声音桥", False, "高"),
-        (6.0, "给主角认知反应留出表演空间", f"{first}反应近景，呼吸和眼神变化清楚，不加入新动作", "近景反应", "缓慢靠近", "环境音、呼吸与短暂停顿", "主角刚看到反转证据", "主角作出决定", "视线切", True, "低"),
-        (7.0, "对手完成最后的信息施压", f"{second}半侧近景，保持轴线并说出最后一句", "半侧近景", "轻微横移", f"{second}对白", "对手等待主角反应", "双方关系发生逆转", "动作切", False, "中"),
-        (6.0, "以可拍摄的决定动作收束并留下悬念", f"{first}拿起关键记录离开画面，{second}留在原位，避免复杂转身接触", "中景", "跟随半步后停下", "脚步、门铃或城市环境音，无新增对白", "证据仍在两人之间", "证据由主角带走，关系悬置", "淡出", True, "中"),
-    )
+    premise = _fallback_source_summary(request)
+    target = request.resolved_target_duration_seconds()
+    # This split only satisfies the locked-text field capacity; it is not a beat rule.
+    shot_count = max(1, math.ceil(len(lines) / 40))
+    line_buckets = _distribute_line_indices(len(lines), shot_count)
+    duration = round(target / shot_count, 3)
     shots = [
         PlannedShot(
-            duration_seconds=definition[0],
-            narrative_purpose=definition[1],
-            visual=definition[2],
-            framing=definition[3],
-            camera=definition[4],
-            audio_intent=definition[5],
-            dialogue_line_indices=dialogue_by_shot[sequence],
-            character_positions=f"{first}在轴线左侧，{second}在轴线右侧",
-            eyeline="双方视线保持同一对话轴",
-            prop_state_in=definition[6],
-            prop_state_out=definition[7],
-            action_in=definition[6],
-            action_out=definition[7],
-            transition_out=definition[8],
-            merge_candidate=definition[9],
-            local_rework_risk=definition[10],
+            duration_seconds=(
+                duration
+                if sequence < shot_count
+                else round(target - duration * (shot_count - 1), 3)
+            ),
+            narrative_purpose=(
+                f"承载用户输入中的第 {sequence} 个制作单元；"
+                "本地回退不补写题材、反转或节奏模板"
+            ),
+            visual=(
+                "依据用户输入与当前 Style 呈现本制作单元，只使用已声明的主体、"
+                f"环境和状态：{premise[:700]}"
+            ),
+            framing="由 Agent 根据当前内容、Style 与画面职责决定",
+            camera="由 Agent 根据当前内容、Style 与画面职责决定",
+            audio_intent=(
+                "严格保留分配到本镜头的锁定文本，其他声音由 Agent 决定"
+                if line_buckets[sequence - 1]
+                else "声音、静默与文字的分工由 Agent 根据当前内容决定"
+            ),
+            dialogue_line_indices=line_buckets[sequence - 1],
+            character_positions="只沿用用户输入中明确的主体与关系，不新增固定站位",
+            eyeline="仅在当前视觉媒介和剧情确有需要时定义视线或方向关系",
+            prop_state_in="只沿用用户输入中明确的道具或状态",
+            prop_state_out="状态变化由当前内容决定，本地回退不补写",
+            action_in="本制作单元的进入状态由用户输入和前序内容决定",
+            action_out="本制作单元的离开状态由用户输入和后续内容决定",
+            transition_out="由 Agent 根据当前段落与整体节奏决定",
+            merge_candidate=False,
+            local_rework_risk="待 Agent 按具体方案评估",
         )
-        for sequence, definition in enumerate(shot_definitions, start=1)
+        for sequence in range(1, shot_count + 1)
     ]
     return ProductionPlan(
-        title=request.name or "记忆证词",
-        scene_heading="内景·都市室内·深夜",
+        title=request.name or "未命名视频",
+        scene_heading="场景与段落由用户输入和 Agent 规划决定",
         scene_summary=premise,
+        target_duration_seconds=target,
         lines=lines,
         characters=characters,
         locations=[
             PlannedLocation(
-                name="深夜都市室内",
-                layout="单一主空间，两人隔着桌面或柜台对峙，出口位于画面侧后方",
-                lighting="冷白主光与窗外蓝色城市反光",
-                palette="冷灰、蓝黑，以关键记录为单一高饱和视觉锚点",
-                key_views=["空间建立", f"{first}方向", f"{second}反打", "关键记录特写"],
+                name="项目场景",
+                layout="空间、图层或画面组织关系由当前内容与 Style 决定",
+                lighting="光线或明暗规则由当前 Style 决定",
+                palette="色彩关系由当前 Style 决定",
+                key_views=["只按实际镜头需要建立参考"],
             )
         ],
-        props=[
-            PlannedProp(name="关键记录", appearance="小型、轮廓清楚、跨镜容易保持的实体记录载体")
-        ],
+        props=[],
         style=PlannedStyle(
-            genre="都市悬疑",
-            cinematography="9:16 写实电影感，克制运镜，遵守对话轴线并优先自然表演",
-            color="冷白室内光与蓝色夜景反光，高饱和色只用于叙事锚点",
-            texture="真实皮肤、自然布料、可信的玻璃与金属反光",
-            forbidden=["动漫化", "过度磨皮", "角色换脸", "无动机越轴", "无因果物体运动"],
+            medium=UNSPECIFIED_STYLE_VALUE,
+            genre=UNSPECIFIED_STYLE_VALUE,
+            cinematography=UNSPECIFIED_STYLE_VALUE,
+            color=UNSPECIFIED_STYLE_VALUE,
+            texture=UNSPECIFIED_STYLE_VALUE,
+            forbidden=[],
         ),
         shots=shots,
     )
+
+
 
 
 def _retime_shots(
@@ -2139,21 +1988,14 @@ def _fallback_scene_state(
     scene_sequence: int,
     phase: str,
 ) -> SceneContinuitySummary:
-    previous_fact = (
-        []
-        if scene_sequence == 1 and phase == "entry"
-        else [f"第 {max(1, scene_sequence - (1 if phase == 'entry' else 0))} 场的发现已经发生"]
-    )
     return SceneContinuitySummary(
         setting=setting,
-        character_states=[f"主要人物进入第 {scene_sequence} 场的{phase}状态，身份与服装保持一致"],
-        prop_states=["核心叙事道具沿用上一场已建立的持有者与可见状态"],
-        known_facts=previous_fact,
-        open_threads=(
-            [f"第 {scene_sequence} 场需要推进的因果问题"]
-            if phase == "entry"
-            else [f"第 {scene_sequence + 1} 场需要回应的新问题"]
-        ),
+        character_states=[
+            f"第 {scene_sequence} 个制作单元的{phase}主体状态由用户输入与 Agent 规划决定"
+        ],
+        prop_states=["只继承项目已经声明的状态，不由本地回退补写"],
+        known_facts=[],
+        open_threads=["等待 Agent 根据完整项目上下文定义本单元的推进与衔接"],
     )
 
 
@@ -2166,47 +2008,13 @@ def _distribute_line_indices(line_count: int, scene_count: int) -> list[list[int
 
 
 def _fallback_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
-    base = _fallback_short_plan(request)
+    base = _fallback_scaffold_plan(request)
     target = request.resolved_target_duration_seconds()
-    scene_count = 1 if target <= 90.0 else min(40, max(2, math.ceil(target / 75.0)))
-    scene_duration = target / scene_count
-    lines: list[PlannedDialogueLine] = list(base.lines)
-    if scene_count > 1 and request.source_mode != SourceMode.SCRIPT_LOCKED:
-        first = base.characters[0].name
-        second = base.characters[min(1, len(base.characters) - 1)].name
-        lines = []
-        for sequence in range(1, scene_count + 1):
-            lines.extend(
-                [
-                    PlannedDialogueLine(
-                        speaker=first,
-                        text=f"第{sequence}处线索，和我们最初知道的不一样。",
-                    ),
-                    PlannedDialogueLine(
-                        speaker=second,
-                        text=f"因为有人只让你看到第{sequence}层答案。",
-                    ),
-                    PlannedDialogueLine(
-                        speaker=first,
-                        text=f"那这一场留下的问题，究竟指向谁？",
-                    ),
-                    PlannedDialogueLine(
-                        speaker=second,
-                        text=f"先看完第{sequence}份记录，再决定相信谁。",
-                    ),
-                ]
-            )
+    # Use the minimum valid container. Creative scene segmentation belongs to the Agent.
+    scene_count = 1
+    scene_duration = target
+    lines = list(base.lines)
     line_buckets = _distribute_line_indices(len(lines), scene_count)
-    arcs = (
-        "用可辨认的异常建立本集核心问题",
-        "让第一份证据改变人物对关系的判断",
-        "用行动后果扩大冲突并暴露新的信息缺口",
-        "让人物选择付出代价，推动关系重新站队",
-        "揭示此前线索的另一层含义并形成反转",
-        "让反转产生现实后果而不是停留在解释",
-        "回收关键道具与人物承诺",
-        "完成本集主要回答，同时留下下一集可追的问题",
-    )
     setting = base.locations[0].name
     scenes = [
         PlannedSceneContract(
@@ -2214,14 +2022,16 @@ def _fallback_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
             heading=(
                 base.scene_heading
                 if scene_count == 1
-                else f"{base.scene_heading}·段落 {sequence:02d}"
+                else f"制作单元 {sequence:02d}；具体场景由 Agent 决定"
             ),
-            summary=f"{base.scene_summary}；第 {sequence} 场沿因果链继续推进。",
-            narrative_purpose=arcs[(sequence - 1) % len(arcs)],
-            playable_actions=[
-                f"人物因第 {sequence} 场的新信息改变当下选择",
-                f"让这个选择立即产生可见后果并推向下一场",
-            ],
+            summary=(
+                f"{base.scene_summary}；这是本地回退划分的第 {sequence} 个可编辑制作单元，"
+                "不代表最终叙事结构。"
+            )[:1600],
+            narrative_purpose=(
+                "保留用户输入与锁定事实，为 Agent 后续补全本单元的剧情、Style 和节奏"
+            ),
+            playable_actions=[],
             target_duration_seconds=(
                 round(scene_duration, 3)
                 if sequence < scene_count
@@ -2253,8 +2063,6 @@ def _fallback_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
         style=base.style,
         scenes=scenes,
     )
-
-
 def _story_blueprint(
     request: CreateProjectRequest,
     outline: EpisodeOutline,
@@ -2276,8 +2084,9 @@ def _fallback_directed_scene_plan(
     scene: PlannedSceneContract,
     handoff_in: SceneContinuitySummary,
 ) -> SceneShotPlan:
-    base = _fallback_short_plan(request)
-    preferred_count = 5 if request.production_profile == ProductionProfile.DOUYIN_SHORT_DRAMA else 4
+    base = _fallback_scaffold_plan(request)
+    # Use one placeholder shot unless locked-text capacity requires another container.
+    preferred_count = max(1, math.ceil(len(scene.dialogue_line_indices) / 40))
     shots = _retime_shots(
         base.shots,
         target_duration_seconds=scene.target_duration_seconds,
@@ -2432,8 +2241,11 @@ def create_story_architecture(
     if client is None:
         return StoryArchitectureResult(
             outline=_story_blueprint(request, _fallback_episode_outline(request)),
-            source="deterministic story architect fallback",
-            warnings=["GPT-5.6-sol 未配置，Story Architect 已使用本地可复现大纲。"],
+            source="deterministic structure scaffold",
+            warnings=[
+                "GPT-5.6-sol 未配置；Story Architect 仅建立了不补写创意的"
+                "本地结构骨架。"
+            ],
         )
     image_urls, image_warnings = _planner_image_urls(request)
     warnings = list(image_warnings)
@@ -2472,9 +2284,10 @@ def create_story_architecture(
             )
     except (LanguageProviderError, ValueError) as error:
         outline = _story_blueprint(request, _fallback_episode_outline(request))
-        source = "deterministic story architect fallback"
+        source = "deterministic structure scaffold"
         warnings.append(
-            "故事统筹 Agent 未通过，已使用本地可复现大纲并继续逐场规划："
+            "故事统筹 Agent 未通过；已保留输入并使用无创意补写的"
+            "本地结构骨架继续逐场规划："
             + _compact_error(error)
         )
     return StoryArchitectureResult(outline=outline, source=source, warnings=warnings)
@@ -3230,7 +3043,7 @@ def direct_story_scene(
             repaired=False,
             used_fallback=True,
             warnings=[
-                f"场景 {scene.sequence:02d} 未调用语言模型，已使用本地可复现分镜。"
+                f"场景 {scene.sequence:02d} 未调用语言模型，仅建立了本地分镜结构骨架。"
             ],
         )
     instructions, input_text = _scene_director_prompt(
@@ -3471,8 +3284,11 @@ def create_production_plan(
     if client is None:
         return ProductionPlanningResult(
             plan=_fallback_plan(request),
-            planner="deterministic-multi-agent-fallback-v2",
-            warnings=["GPT-5.6-sol 未配置，已使用可复现的本地规划回退。"],
+            planner="deterministic-structure-scaffold-v3",
+            warnings=[
+                "GPT-5.6-sol 未配置；仅建立不补写创意的本地结构骨架，"
+                "具体内容、Style 与节奏需要由 Agent 完成。"
+            ],
         )
     if request.resolved_target_duration_seconds() > 90.0:
         return _create_multi_agent_production_plan(request, client)
@@ -3488,10 +3304,10 @@ def create_production_plan(
     except LanguageProviderError as exc:
         return ProductionPlanningResult(
             plan=_fallback_plan(request),
-            planner="deterministic-fallback-v1",
+            planner="deterministic-structure-scaffold-v3",
             warnings=[
                 *image_warnings,
-                f"GPT-5.6-sol 规划未通过，已自动回退：{exc}",
+                f"GPT-5.6-sol 规划未通过；已保留输入并建立无创意补写的结构骨架：{exc}",
             ],
         )
     try:
@@ -3535,10 +3351,11 @@ def create_production_plan(
         except (LanguageProviderError, ValueError) as repair_error:
             return ProductionPlanningResult(
                 plan=_fallback_plan(request),
-                planner="deterministic-fallback-v1",
+                planner="deterministic-structure-scaffold-v3",
                 warnings=[
                     *image_warnings,
-                    "GPT-5.6-sol 规划与一次自动修复均未通过，已使用本地回退："
+                    "GPT-5.6-sol 规划与一次自动修复均未通过；"
+                    "已保留输入并建立无创意补写的结构骨架："
                     f"first={first_error}; repair={repair_error}",
                 ],
             )
@@ -3607,7 +3424,7 @@ def _default_reference_needs(
     lowered = context.lower()
     close_up = any(token in lowered for token in ("特写", "近景", "close-up", "close up"))
     profile = any(token in lowered for token in ("侧面", "侧脸", "profile", "三分之四"))
-    moving = shot.duration_seconds >= 12 or any(
+    moving = any(
         token in lowered
         for token in ("跟拍", "跟随", "行走", "走廊", "track", "dolly", "移动")
     )
@@ -3640,9 +3457,9 @@ def _default_reference_needs(
                 preferred_framings=framings,
                 tags=["identity", "wardrobe"],
                 purpose=(
-                    "长时移动表演中的身份、服装和全身比例连续"
+                    "长时运动中当前 Style 声明的角色身份与造型锚点连续"
                     if moving
-                    else "当前景别和机位中的角色身份与服装连续"
+                    else "当前画面中项目声明的角色身份与造型锚点连续"
                 ),
             )
         )
@@ -3708,6 +3525,8 @@ def build_project_document_from_plan(
     planning: ProductionPlanningResult,
     created_at: str,
     planning_run_id: str | None = None,
+    planning_status: PlanningRunStatus = PlanningRunStatus.COMPLETE,
+    owner_agent_run_id: str | None = None,
 ) -> ProjectDocument:
     plan = planning.plan
     planned_lines = (
@@ -3807,9 +3626,9 @@ def build_project_document_from_plan(
                 PlannedCharacter(
                     name=line.speaker,
                     age=30,
-                    appearance="真实自然的都市人物，面部特征清晰",
-                    wardrobe="低饱和都市通勤装",
-                    performance="自然克制，服从当前对白节拍",
+                    appearance="与当前项目 Style 一致、身份特征清晰的故事人物",
+                    wardrobe="符合人物、场景和当前 Style 的稳定造型",
+                    performance="表现方式服从当前剧情节拍与视觉语言",
                     voice_identity=f"S{len(planned_characters) + 1}",
                 )
             )
@@ -3854,7 +3673,7 @@ def build_project_document_from_plan(
         locations=location_profiles,
         props=prop_profiles,
         style=StyleProfile(
-            medium=production_skill(request.production_profile).medium,
+            medium=plan.style.medium,
             genre=plan.style.genre,
             cinematography=plan.style.cinematography,
             color=plan.style.color,
@@ -3868,6 +3687,7 @@ def build_project_document_from_plan(
 
     assets: list[Asset] = []
     for index, character in enumerate(planned_characters, start=1):
+        age_descriptor = f"{character.age}岁；" if character.age > 0 else ""
         assets.append(
             _asset(
                 project_id=project_id,
@@ -3875,7 +3695,7 @@ def build_project_document_from_plan(
                 kind=AssetKind.CHARACTER,
                 name=f"{character.name}定妆",
                 descriptor=(
-                    f"{character.age}岁；{character.appearance}；{character.wardrobe}；"
+                    f"{age_descriptor}{character.appearance}；{character.wardrobe}；"
                     f"表演：{character.performance}；声线：{character.voice_identity}"
                 ),
                 planner=planning.planner,
@@ -4073,6 +3893,13 @@ def build_project_document_from_plan(
     )
     document = ProjectDocument(
         project=project,
+        planning=ProjectPlanningMetadata(
+            run_id=planning_run_id,
+            status=planning_status,
+            planner=planning.planner,
+            warnings=list(dict.fromkeys(planning.warnings)),
+            owner_agent_run_id=owner_agent_run_id,
+        ),
         script_versions=[script],
         bible_versions=[bible],
         assets=assets,
@@ -4248,7 +4075,7 @@ def _fallback_reference_requirements_for_document(
     profile = any(
         token in lowered for token in ("侧面", "侧脸", "profile", "三分之四")
     )
-    moving = shot.duration_seconds >= 12 or any(
+    moving = any(
         token in lowered
         for token in ("跟拍", "跟随", "行走", "走廊", "track", "dolly", "移动")
     )
@@ -4301,9 +4128,9 @@ def _fallback_reference_requirements_for_document(
             )
             tags = ["identity", "wardrobe"]
             purpose = (
-                "长时移动表演中的身份、服装和全身比例连续"
+                "长时运动中当前 Style 声明的角色身份与造型锚点连续"
                 if moving
-                else "当前景别和机位中的角色身份与服装连续"
+                else "当前画面中项目声明的角色身份与造型锚点连续"
             )
         elif asset.kind == AssetKind.LOCATION:
             roles = (

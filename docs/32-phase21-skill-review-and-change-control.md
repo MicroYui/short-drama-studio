@@ -1,5 +1,7 @@
 # Phase 21：Skill 驱动审阅、来源诊断与 AI-native 修改控制面
 
+> 历史记录：本文中基于 `/planning-runs/*` 的编辑与复审接口已删除。当前修改入口是 AgentRun 与统一 Tool Registry，PlanningRun 只是 Agent 内部子流程。
+
 ## 目标
 
 本轮解决四个通用问题：

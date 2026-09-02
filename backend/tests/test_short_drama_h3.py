@@ -34,6 +34,7 @@ from short_drama.h3_models import (
 from short_drama.models import (
     ActionBeat,
     AssetKind,
+    CreateProjectRequest,
     DirectorRepairDecision,
     DirectorRepairStrategy,
     EvidencePurpose,
@@ -45,9 +46,14 @@ from short_drama.models import (
     ReferenceRequirement,
     ReferenceRole,
     SpatialInteractionConstraint,
+    SourceMode,
     SurfaceAttachmentConstraint,
     TaskStatus,
     VideoGenerationRoute,
+)
+from short_drama.production_planner import (
+    build_project_document_from_plan,
+    create_production_plan,
 )
 from short_drama.reference_planner import (
     DirectorRepairDecisionRequest,
@@ -334,6 +340,15 @@ def test_h3_prompt_carries_structured_contact_and_rigid_attachments() -> None:
 
 def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> None:
     document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    bible = next(
+        item
+        for item in document.bible_versions
+        if item.id == document.project.current_bible_version_id
+    )
+    bible.style.medium = "纸雕与水墨混合视觉"
+    bible.style.cinematography = "平面构图按叙事关系变化"
+    bible.style.color = "低饱和墨色与单一强调色"
+    bible.style.texture = "纸张纤维与墨色层次"
     dialogue_shot = next(shot for shot in document.shots if shot.sequence == 2)
     voiceover_shot = next(shot for shot in document.shots if shot.sequence == 5)
     first = H3MediaInput(
@@ -388,6 +403,9 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
     )
 
     assert direct.startswith("integrated_multimodal_description:")
+    assert "medium=纸雕与水墨混合视觉" in direct
+    assert "texture=纸张纤维与墨色层次" in direct
+    assert "Live-action and cinematic" not in direct
     assert "(S1) says in Mandarin Chinese: <d>[Chinese]" in direct
     assert frame.startswith(
         "For the target video, at 0.00 seconds into the target video, "
@@ -397,6 +415,8 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
         "How the reference pictures align with the target video — "
         "Picture 1 (from Shot 1) aligns with the 0.00-second mark"
     )
+    assert "continuous observable path" not in first_last
+    assert "temporal behavior declared by the ShotPlan" in first_last
     fields = [
         "subject_definitions:",
         "summary:",
@@ -409,8 +429,35 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
         referenced.index(field) for field in fields
     )
     assert "<Picture 1>" in referenced
+    assert "medium=纸雕与水墨混合视觉" in referenced
     assert "says in an off-screen voiceover" in voiceover
     assert "lips remain completely closed" in voiceover
+
+
+def test_h3_compiler_omits_unresolved_scaffold_style() -> None:
+    request = CreateProjectRequest(
+        name="未定视觉方向",
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        input_text="用户只提供了一个内容想法",
+        target_duration_seconds=12,
+    )
+    planning = create_production_plan(request, None)
+    document = build_project_document_from_plan(
+        project_id="project-unresolved-style",
+        request=request,
+        planning=planning,
+        created_at="2026-09-01T00:00:00Z",
+    )
+
+    prompt = build_h3_prompt(
+        document,
+        document.shots[0],
+        route=VideoGenerationRoute.DIRECT,
+        duration_seconds=12,
+    )
+
+    assert "未指定" not in prompt
+    assert "Follow the project's declared style" not in prompt
 
 
 def test_h3_compiler_enforces_routes_before_network() -> None:

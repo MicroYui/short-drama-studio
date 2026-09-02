@@ -1,5 +1,7 @@
 # Phase 5：无人值守运行器与视频观察工具
 
+> 历史阶段文档，仅记录当时实现，不是当前运行入口。现行架构见 [Phase 29](./40-agent-skill-tool-runtime-migration.md)，共享生产流程见 [`end_to_end.md`](../backend/short_drama/skills/workflows/end_to_end.md)。
+
 ## 结果
 
 Phase 5 已把四种输入统一为一个生产入口：什么都不给、只给图片、一句话和锁定剧本。`AUTO_DRAFT` 会在没有中间用户操作的情况下完成结构化策划、输入资产登记、Mock 镜头生成、候选选择、`TimelineManifest` 和可选导出；`GUIDED` 仍可只建立可编辑项目。

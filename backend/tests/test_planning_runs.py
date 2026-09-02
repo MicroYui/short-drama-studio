@@ -3,21 +3,16 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+import pytest
+from PIL import Image
 
-from _routes.short_drama import router as short_drama_router
-from short_drama.deps import get_short_drama_service
 from short_drama.models import (
-    AutonomousExecutionTarget,
-    AutonomousRunRecord,
-    AutonomousRunStatus,
-    AutonomousRunStep,
-    PlanningRunCreateRequest,
-    PlanningOutlineAgentRevisionRequest,
-    PlanningOutlineDirectEditRequest,
+    CreateProjectRequest,
+    CreativeInputImage,
     PlanningRunStatus,
     PlanningRunStep,
     ReviewRepairOwner,
@@ -33,6 +28,7 @@ from short_drama.models import (
     ScriptReviewIssue,
     ScriptReviewReport,
     ScriptReviewSeverity,
+    SceneContinuitySummary,
     SourceMode,
     StoryRepairAction,
     StoryRepairDiagnosis,
@@ -43,8 +39,13 @@ from short_drama.models import (
 )
 from short_drama.production_planner import (
     EpisodeOutline,
-    _fallback_directed_scene_plan,
-    _fallback_episode_outline,
+    PlannedCharacter,
+    PlannedDialogueLine,
+    PlannedLocation,
+    PlannedSceneContract,
+    PlannedShot,
+    PlannedStyle,
+    SceneShotPlan,
 )
 from short_drama.providers.language_config import LanguageProviderConfigUpdate
 from short_drama.providers.openai_compatible_language_client import (
@@ -53,17 +54,143 @@ from short_drama.providers.openai_compatible_language_client import (
 from short_drama.service import ShortDramaService
 from short_drama.script_documents import (
     EpisodeScenePatch,
-    PlanningSceneRevisionRequest,
     ScriptRevisionContextPlan,
     ScriptRevisionScope,
     scene_dialogue_lines,
 )
 
 
+def _staged_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
+    """Build explicit creative test data without borrowing production fallbacks."""
+
+    target_duration = request.resolved_target_duration_seconds()
+    scene_duration = target_duration / 4
+    dialogue = [
+        ("林夏", "录音里的时间，比停电早了十分钟。"),
+        ("周衡", "那就说明有人提前进过控制室。"),
+        ("林夏", "门禁记录只留下了你的名字。"),
+        ("周衡", "别看名字，看最后一段波形。"),
+    ]
+    lines = [
+        PlannedDialogueLine(speaker=speaker, text=text)
+        for speaker, text in dialogue
+    ]
+    scenes: list[PlannedSceneContract] = []
+    for sequence in range(1, 5):
+        duration = (
+            scene_duration
+            if sequence < 4
+            else target_duration - scene_duration * 3
+        )
+        scenes.append(
+            PlannedSceneContract(
+                sequence=sequence,
+                heading=f"测试控制室·场次 {sequence}",
+                summary=f"林夏与周衡核对第 {sequence} 段证据。",
+                narrative_purpose=f"推进第 {sequence} 段因果链。",
+                playable_actions=[f"核对第 {sequence} 段记录"],
+                target_duration_seconds=duration,
+                dialogue_line_indices=[sequence],
+                location_names=["测试控制室"],
+                continuity_in=SceneContinuitySummary(
+                    setting="测试控制室",
+                    character_states=[f"两人准备核对第 {sequence} 段证据"],
+                    prop_states=[f"第 {sequence} 段记录待查"],
+                    known_facts=[f"前 {sequence - 1} 段证据已核对"],
+                    open_threads=[f"第 {sequence} 段证据是否成立"],
+                ),
+                continuity_out=SceneContinuitySummary(
+                    setting="测试控制室",
+                    character_states=[f"两人已完成第 {sequence} 段核对"],
+                    prop_states=[f"第 {sequence} 段记录已标记"],
+                    known_facts=[f"第 {sequence} 段证据成立"],
+                    open_threads=(
+                        [f"继续核对第 {sequence + 1} 段证据"]
+                        if sequence < 4
+                        else []
+                    ),
+                ),
+            )
+        )
+    return EpisodeOutline(
+        title=request.name or "可恢复规划测试短剧",
+        story_summary="两人通过四段记录拼出停电事件的真相。",
+        target_duration_seconds=target_duration,
+        lines=lines,
+        characters=[
+            PlannedCharacter(
+                name="林夏",
+                age=28,
+                appearance="短发，表情专注",
+                wardrobe="浅色外套",
+                performance="先质疑，再逐步确认证据",
+                voice_identity="S1",
+            ),
+            PlannedCharacter(
+                name="周衡",
+                age=32,
+                appearance="短发，神情冷静",
+                wardrobe="深色外套",
+                performance="克制地提供关键信息",
+                voice_identity="S2",
+            ),
+        ],
+        locations=[
+            PlannedLocation(
+                name="测试控制室",
+                layout="两人隔桌查看同一台终端",
+                lighting="柔和顶光",
+                palette="蓝灰与暖白",
+                key_views=["终端与两人关系的建立画面"],
+            )
+        ],
+        props=[],
+        style=PlannedStyle(
+            medium="二维图形化悬疑短剧",
+            genre="悬疑",
+            cinematography="竖屏构图，用画面层次突出证据关系",
+            color="蓝灰主色，关键证据使用暖色提示",
+            texture="清晰的平面图形与轻微纸张纹理",
+            forbidden=["无动机的风格漂移"],
+        ),
+        scenes=scenes,
+    )
+
+
+def _staged_scene_plan(scene: PlannedSceneContract) -> SceneShotPlan:
+    continuity_out = scene.continuity_out.model_copy(deep=True)
+    continuity_out.known_facts.append(f"staged-scene-{scene.sequence}-complete")
+    return SceneShotPlan(
+        scene_sequence=scene.sequence,
+        shots=[
+            PlannedShot(
+                scene_sequence=scene.sequence,
+                duration_seconds=scene.target_duration_seconds,
+                narrative_purpose=f"staged-scene-{scene.sequence}: {scene.narrative_purpose}",
+                visual=f"林夏与周衡在终端上核对第 {scene.sequence} 段记录。",
+                framing="能同时读取人物反应与证据的双人构图",
+                camera="保持稳定，仅在证据揭示时轻微重构图",
+                audio_intent="保留本场对白与必要的室内环境声",
+                dialogue_line_indices=list(scene.dialogue_line_indices),
+                character_positions="林夏与周衡分别位于终端两侧",
+                eyeline="两人在终端与对方之间切换视线",
+                prop_state_in=f"第 {scene.sequence} 段记录待查",
+                prop_state_out=f"第 {scene.sequence} 段记录已标记",
+                action_in="两人开始核对当前记录",
+                action_out="两人确认当前证据并准备继续",
+                transition_out="转入下一段记录",
+                merge_candidate=False,
+                local_rework_risk="低",
+            )
+        ],
+        continuity_out=continuity_out,
+    )
+
+
 class StagedLanguageClient:
     def __init__(
         self,
-        request: PlanningRunCreateRequest,
+        request: CreateProjectRequest,
         *,
         revision_rounds_required: int = 0,
         fail_scene_once: int | None = None,
@@ -71,7 +198,7 @@ class StagedLanguageClient:
         fail_judge: bool = False,
     ) -> None:
         self.request = request
-        self.outline = _fallback_episode_outline(request)
+        self.outline = _staged_episode_outline(request)
         blueprint_payload = self.outline.model_dump(mode="python")
         if request.source_mode != SourceMode.SCRIPT_LOCKED:
             blueprint_payload["lines"] = []
@@ -97,18 +224,10 @@ class StagedLanguageClient:
         self.local_revision_calls: list[int] = []
         self.local_revision_inputs: list[dict[str, object]] = []
         self._failed_scene = False
-        self.scene_plans = {}
-        handoff = self.outline.scenes[0].continuity_in.model_copy(deep=True)
+        self.scene_plans: dict[int, SceneShotPlan] = {}
         for scene in self.outline.scenes:
-            plan = _fallback_directed_scene_plan(request, self.outline, scene, handoff)
-            plan.shots[0].narrative_purpose = (
-                f"staged-scene-{scene.sequence}: " + plan.shots[0].narrative_purpose
-            )
-            plan.continuity_out.known_facts.append(
-                f"staged-scene-{scene.sequence}-complete"
-            )
+            plan = _staged_scene_plan(scene)
             self.scene_plans[scene.sequence] = plan
-            handoff = plan.continuity_out.model_copy(deep=True)
 
     def validate_credentials(self) -> None:
         pass
@@ -419,7 +538,7 @@ class CriticOverreachRepairClient(StagedLanguageClient):
 
 
 class MalformedCriticJsonClient(StagedLanguageClient):
-    def __init__(self, request: PlanningRunCreateRequest) -> None:
+    def __init__(self, request: CreateProjectRequest) -> None:
         super().__init__(request)
         self.invalid_critic_sent = False
 
@@ -456,7 +575,7 @@ class MalformedCriticJsonClient(StagedLanguageClient):
 
 
 class RevisionRegressionClient(StagedLanguageClient):
-    def __init__(self, request: PlanningRunCreateRequest) -> None:
+    def __init__(self, request: CreateProjectRequest) -> None:
         super().__init__(request, revision_rounds_required=1)
         self.targeted_repair_calls = 0
 
@@ -510,12 +629,12 @@ class RevisionRegressionClient(StagedLanguageClient):
         )
 
 
-def _request(target_seconds: int = 300) -> PlanningRunCreateRequest:
-    return PlanningRunCreateRequest(
+def _request(target_seconds: int = 300) -> CreateProjectRequest:
+    return CreateProjectRequest(
         name=f"可恢复 {target_seconds} 秒短剧",
         source_mode=SourceMode.AUTO_ORIGINAL,
         target_duration_seconds=target_seconds,
-        run_mode=RunMode.GUIDED,
+        run_mode=RunMode.AUTO_DRAFT,
     )
 
 
@@ -532,6 +651,20 @@ def _service(
         LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
     )
     return service
+
+
+def _start_owned_planning(
+    service: ShortDramaService,
+    request: CreateProjectRequest,
+):
+    project = service.create_project(
+        request,
+        project_id=f"project-test-{uuid4().hex[:12]}",
+        owner_agent_run_id=f"agent-run-test-{uuid4().hex[:12]}",
+    )
+    assert project.document.planning is not None
+    assert project.document.planning.run_id is not None
+    return service.get_planning_run(project.document.planning.run_id)
 
 
 def _finish(service: ShortDramaService, run_id: str, *, max_steps: int = 30):
@@ -565,9 +698,10 @@ def test_long_form_planning_advances_one_agent_stage_or_scene_at_a_time(
     language = StagedLanguageClient(request)
     service = _service(tmp_path, language)
 
-    started = service.create_planning_run(request)
+    started = _start_owned_planning(service, request)
     assert started.run.current_step == PlanningRunStep.STORY_ARCHITECT
-    assert started.project is None
+    assert started.project is not None
+    assert started.project.document.project.stage.value == "INPUT"
 
     after_architect = service.advance_planning_run(started.run.id)
     assert after_architect.run.current_step == PlanningRunStep.SCENE_WRITER
@@ -602,12 +736,14 @@ def test_long_form_planning_advances_one_agent_stage_or_scene_at_a_time(
     completed = _finish(service, started.run.id)
     assert completed.project is not None
     assert completed.project.document.project.target_duration_seconds == 430
-    assert completed.project.document.autonomous_runs == []
+    assert "autonomous_runs" not in completed.project.document.model_dump()
     assert len(completed.project.document.script_versions[0].structured_scenes) == len(
         language.outline.scenes
     )
     assert language.scene_calls == list(range(1, len(language.outline.scenes) + 1))
     assert service.repository.list_image_tasks(completed.project.document.project.id) == []
+
+
     assert service.repository.list_provider_runs(
         completed.project.document.project.id
     ) == []
@@ -673,56 +809,262 @@ def test_long_form_planning_advances_one_agent_stage_or_scene_at_a_time(
     assert latest_script.lines[2].spoken_text.endswith("别急。")
 
 
-def test_batch_dialogue_revision_rebuilds_active_h3_route_before_generation(
+def test_agent_owned_long_project_starts_as_scaffold_and_finalizes_without_legacy_run(
     tmp_path: Path,
 ) -> None:
-    request = _request(180)
-    service = _service(tmp_path, StagedLanguageClient(request))
-    project = service.initialize_fixture()
-    document = project.document
-    document.autonomous_runs.append(
-        AutonomousRunRecord(
-            id="active-dialogue-revision-run",
-            project_id=document.project.id,
-            status=AutonomousRunStatus.RUNNING,
-            current_step=AutonomousRunStep.GENERATE,
-            completed_steps=[
-                AutonomousRunStep.NORMALIZE_INPUT,
-                AutonomousRunStep.PLAN,
-                AutonomousRunStep.PREPARE_ASSETS,
-                AutonomousRunStep.PLAN_ROUTES,
-            ],
-            planner="test",
-            execution_target=AutonomousExecutionTarget.REAL_H3,
-            route_plan_id="old-dialogue-route-plan",
-            render_export=True,
-            created_at="2026-08-27T00:00:00Z",
-            updated_at="2026-08-27T00:00:00Z",
+    planning_request = CreateProjectRequest(
+        name="Agent 可恢复长规划",
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=120,
+        run_mode=RunMode.AUTO_DRAFT,
+    )
+    language = StagedLanguageClient(planning_request)
+    service = _service(tmp_path, language)
+    project_id = "project-agent-owned-planning"
+    owner_agent_run_id = "agent-run-owner"
+
+    scaffold = service.create_project(
+        planning_request,
+        project_id=project_id,
+        owner_agent_run_id=owner_agent_run_id,
+    )
+
+    assert scaffold.document.project.stage.value == "INPUT"
+    assert scaffold.document.planning is not None
+    assert scaffold.document.planning.status == PlanningRunStatus.RUNNING
+    assert scaffold.document.planning.owner_agent_run_id == owner_agent_run_id
+    assert scaffold.document.planning.run_id is not None
+    run = service.get_planning_run(scaffold.document.planning.run_id).run
+    assert run.project_id == project_id
+    assert run.owner_agent_run_id == owner_agent_run_id
+    assert run.request == planning_request
+
+    advanced = service.advance_planning_run(run.id)
+    running_project = service.get_project(project_id).document
+    assert advanced.run.status == PlanningRunStatus.RUNNING
+    assert running_project.planning is not None
+    assert running_project.planning.status == PlanningRunStatus.RUNNING
+    assert running_project.planning.planner is not None
+    assert running_project.planning.planner.startswith("multi-agent:")
+    assert running_project.planning.warnings == advanced.run.warnings
+
+    completed = _finish(service, run.id)
+
+    assert completed.project is not None
+    assert completed.project.document.project.stage.value == "PLANNED"
+    assert completed.project.document.planning is not None
+    assert completed.project.document.planning.status == PlanningRunStatus.COMPLETE
+    assert completed.project.document.planning.run_id == run.id
+    assert completed.project.document.planning.owner_agent_run_id == owner_agent_run_id
+    assert "autonomous_runs" not in completed.project.document.model_dump()
+
+
+def test_agent_owned_planning_failure_is_visible_on_the_project_scaffold(
+    tmp_path: Path,
+) -> None:
+    class FailingStoryArchitectClient(StagedLanguageClient):
+        def generate_text(
+            self,
+            *,
+            instructions: str,
+            input_text: str,
+            image_urls: list[str] | None = None,
+            max_output_tokens: int = 2200,
+        ) -> str:
+            if "story-architect Agent" in instructions:
+                raise RuntimeError("story architect unavailable")
+            return super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+
+    planning_request = CreateProjectRequest(
+        name="Agent 规划异常可见",
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=120,
+        run_mode=RunMode.AUTO_DRAFT,
+    )
+    service = _service(tmp_path, FailingStoryArchitectClient(planning_request))
+    scaffold = service.create_project(
+        planning_request,
+        project_id="project-agent-planning-error",
+        owner_agent_run_id="agent-run-error-owner",
+    )
+    assert scaffold.document.planning is not None
+    assert scaffold.document.planning.run_id is not None
+
+    response = service.advance_planning_run(scaffold.document.planning.run_id)
+
+    assert response.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert response.run.error_message == "story architect unavailable"
+    assert response.project is not None
+    assert response.project.document.planning is not None
+    assert response.project.document.planning.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert response.project.document.planning.warnings == response.run.warnings
+
+
+def test_owned_planning_run_and_project_metadata_update_roll_back_together(
+    tmp_path: Path,
+) -> None:
+    planning_request = CreateProjectRequest(
+        name="Agent 规划原子保存",
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=120,
+        run_mode=RunMode.AUTO_DRAFT,
+    )
+    service = _service(tmp_path, StagedLanguageClient(planning_request))
+    scaffold = service.create_project(
+        planning_request,
+        project_id="project-atomic-planning-state",
+        owner_agent_run_id="agent-run-atomic-owner",
+    )
+    assert scaffold.document.planning is not None
+    assert scaffold.document.planning.run_id is not None
+    run_id = scaffold.document.planning.run_id
+    run = service.repository.get_planning_run(run_id)
+    document = service.repository.get_project(scaffold.document.project.id)
+    assert run is not None
+    assert document is not None and document.planning is not None
+
+    run.status = PlanningRunStatus.NEEDS_ATTENTION
+    run.error_message = "forced atomic save failure"
+    document.planning = document.planning.model_copy(
+        update={"status": PlanningRunStatus.NEEDS_ATTENTION}
+    )
+    with sqlite3.connect(service.repository.database_path) as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER reject_owned_project_status_update
+            BEFORE UPDATE ON projects
+            BEGIN
+                SELECT RAISE(ABORT, 'forced project update failure');
+            END
+            """
         )
-    )
-    service.repository.save_project(document)
-    line = document.script_versions[-1].lines[0]
 
-    revised = service.revise_script_lines(
-        document.project.id,
-        ReviseScriptLinesRequest(
-            revisions=[
-                ScriptLineRevision(
-                    line_id=line.id,
-                    spoken_text="你先听我把话说完。",
-                    subtitle_text="你先听我把话说完。",
-                )
-            ],
-            change_reason="视频生成前调整真人口语",
-        ),
-    )
+    with pytest.raises(sqlite3.IntegrityError, match="forced project update failure"):
+        service.repository.save_planning_run_with_project(run, document)
 
-    run = revised.document.autonomous_runs[-1]
-    assert run.status == AutonomousRunStatus.RUNNING
-    assert run.current_step == AutonomousRunStep.PLAN_ROUTES
-    assert run.route_plan_id is None
-    assert AutonomousRunStep.PLAN_ROUTES not in run.completed_steps
-    assert service.repository.list_tasks(document.project.id) == []
+    persisted_run = service.repository.get_planning_run(run_id)
+    persisted_project = service.repository.get_project(scaffold.document.project.id)
+    assert persisted_run is not None
+    assert persisted_project is not None and persisted_project.planning is not None
+    assert persisted_run.status == PlanningRunStatus.RUNNING
+    assert persisted_run.error_message is None
+    assert persisted_project.planning.status == PlanningRunStatus.RUNNING
+
+
+def test_explicit_advance_resumes_a_failed_owned_planning_run(
+    tmp_path: Path,
+) -> None:
+    planning_request = CreateProjectRequest(
+        name="Agent 规划显式恢复",
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=120,
+        run_mode=RunMode.AUTO_DRAFT,
+    )
+    service = _service(tmp_path, StagedLanguageClient(planning_request))
+    scaffold = service.create_project(
+        planning_request,
+        project_id="project-resume-failed-planning",
+        owner_agent_run_id="agent-run-resume-owner",
+    )
+    assert scaffold.document.planning is not None
+    assert scaffold.document.planning.run_id is not None
+    run = service.repository.get_planning_run(scaffold.document.planning.run_id)
+    document = service.repository.get_project(scaffold.document.project.id)
+    assert run is not None
+    assert document is not None and document.planning is not None
+    run.status = PlanningRunStatus.FAILED
+    run.error_message = "provider was unavailable"
+    document.planning = document.planning.model_copy(
+        update={"status": PlanningRunStatus.FAILED}
+    )
+    service.repository.save_planning_run_with_project(run, document)
+
+    resumed = service.advance_planning_run(run.id)
+
+    assert resumed.run.status == PlanningRunStatus.RUNNING
+    assert resumed.run.current_step == PlanningRunStep.SCENE_WRITER
+    assert resumed.run.error_message is None
+    assert resumed.project is not None
+    assert resumed.project.document.planning is not None
+    assert resumed.project.document.planning.status == PlanningRunStatus.RUNNING
+
+
+def test_owner_finalize_retry_reuses_already_imported_input_image(
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "owner-finalize-seed.png"
+    Image.new("RGB", (36, 52), "#334455").save(image_path)
+    planning_request = CreateProjectRequest(
+        name="Agent FINALIZE 重入",
+        source_mode=SourceMode.IMAGE_SEEDED,
+        target_duration_seconds=120,
+        input_images=[
+            CreativeInputImage(
+                local_path=str(image_path),
+                descriptor="雨夜车站的冷蓝视觉种子",
+            )
+        ],
+        run_mode=RunMode.AUTO_DRAFT,
+    )
+    service = _service(tmp_path, StagedLanguageClient(planning_request))
+    scaffold = service.create_project(
+        planning_request,
+        project_id="project-owner-finalize-retry",
+        owner_agent_run_id="agent-run-finalize-owner",
+    )
+    assert scaffold.document.planning is not None
+    assert scaffold.document.planning.run_id is not None
+    run_id = scaffold.document.planning.run_id
+    _advance_to_step(service, run_id, PlanningRunStep.FINALIZE)
+    with sqlite3.connect(service.repository.database_path) as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER reject_owner_finalize_cursor_update
+            BEFORE UPDATE ON planning_runs
+            BEGIN
+                SELECT RAISE(ABORT, 'forced planning update failure');
+            END
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="forced planning update failure"):
+        service.advance_planning_run(run_id)
+
+    interrupted = service.get_project(scaffold.document.project.id).document
+    seed_assets = [
+        asset
+        for asset in interrupted.assets
+        if asset.name.startswith("输入视觉种子 1 ·")
+    ]
+    assert interrupted.project.stage.value == "PLANNED"
+    assert interrupted.planning is not None
+    assert interrupted.planning.status == PlanningRunStatus.RUNNING
+    assert len(seed_assets) == 1
+    imported_asset_id = seed_assets[0].id
+    persisted_run = service.get_planning_run(run_id).run
+    assert persisted_run.current_step == PlanningRunStep.FINALIZE
+    assert persisted_run.status == PlanningRunStatus.RUNNING
+
+    with sqlite3.connect(service.repository.database_path) as connection:
+        connection.execute("DROP TRIGGER reject_owner_finalize_cursor_update")
+
+    completed = service.advance_planning_run(run_id)
+
+    assert completed.run.status == PlanningRunStatus.COMPLETE
+    assert completed.project is not None
+    assert completed.project.document.planning is not None
+    assert completed.project.document.planning.status == PlanningRunStatus.COMPLETE
+    retried_seed_assets = [
+        asset
+        for asset in completed.project.document.assets
+        if asset.name.startswith("输入视觉种子 1 ·")
+    ]
+    assert [asset.id for asset in retried_seed_assets] == [imported_asset_id]
 
 
 def test_planning_run_persists_revision_and_scene_progress_across_restart(
@@ -731,7 +1073,7 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     request = _request()
     language = StagedLanguageClient(request, revision_rounds_required=1)
     first = _service(tmp_path, language)
-    run = first.create_planning_run(request).run
+    run = _start_owned_planning(first, request).run
 
     assert first.advance_planning_run(run.id).run.current_step == PlanningRunStep.SCENE_WRITER
     first_script_scene = first.advance_planning_run(run.id)
@@ -764,15 +1106,13 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     assert language.scene_inputs[1]["previous_actual_handoff"]["known_facts"][-1] == (
         "staged-scene-1-complete"
     )
-    history = restarted.get_planning_run_script_quality(run.id)
-    assert [item.revision_round for item in history.outline_snapshots] == [0, 1]
-    assert [item.review_round for item in history.review_snapshots] == [1, 2]
-    assert all(item.disposition is not None for item in history.review_snapshots)
-    assert [item.total_issues for item in history.comparison.rounds] == [1, 0]
-    assert history.comparison.trend.value == "FEWER_REPORTED_ISSUES"
-    assert history.comparison.total_issue_delta == -1
-    assert history.comparison.high_issue_delta == -1
-    assert history.revision_judge is None
+    outlines = restarted.repository.list_planning_outline_snapshots(run.id)
+    reviews = restarted.repository.list_planning_review_snapshots(run.id)
+    assert [item.revision_round for item in outlines] == [0, 1]
+    assert [item.review_round for item in reviews] == [1, 2]
+    assert all(item.disposition is not None for item in reviews)
+    assert [len(item.report.issues) for item in reviews] == [1, 0]
+    assert completed.run.revision_judge is None
     assert language.judge_calls == 0
 
 
@@ -780,7 +1120,7 @@ def test_story_revision_refreshes_persisted_scene_count(tmp_path: Path) -> None:
     request = _request()
     language = SceneCountRevisionClient(request, revision_rounds_required=1)
     service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
+    run = _start_owned_planning(service, request).run
 
     architect = service.advance_planning_run(run.id)
     original_count = architect.run.total_scenes
@@ -793,125 +1133,13 @@ def test_story_revision_refreshes_persisted_scene_count(tmp_path: Path) -> None:
     assert len(EpisodeOutline.model_validate_json(revised.run.outline_json).scenes) == revised.run.total_scenes
 
 
-def test_user_can_replace_outline_and_only_downstream_planning_is_invalidated(
-    tmp_path: Path,
-) -> None:
-    request = _request(180)
-    language = StagedLanguageClient(request)
-    service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
-    architect = service.advance_planning_run(run.id)
-    assert architect.run.outline_json is not None
-    edited = EpisodeOutline.model_validate_json(architect.run.outline_json).model_copy(
-        deep=True,
-        update={"title": "用户直接编辑后的标题"},
-    )
-
-    response = service.replace_planning_outline(
-        run.id,
-        PlanningOutlineDirectEditRequest(
-            outline_json=edited.model_dump_json(),
-            change_reason="调整标题并保留其余剧本",
-        ),
-    )
-
-    assert response.run.revision_round == 1
-    assert response.run.current_step == PlanningRunStep.SCENE_WRITER
-    assert response.run.completed_steps == [PlanningRunStep.STORY_ARCHITECT]
-    assert response.run.directed_scene_json == []
-    assert response.run.review_report is None
-    assert response.run.latest_repair_plan is None
-    assert response.run.source_contract is not None
-    assert any(
-        "调整标题并保留其余剧本" in item
-        for item in response.run.source_contract.authoritative_user_overrides
-    )
-    assert EpisodeOutline.model_validate_json(response.run.outline_json or "").title == (
-        "用户直接编辑后的标题"
-    )
-    assert service.repository.list_planning_outline_snapshots(run.id) == []
-    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_CRITIC)
-    snapshots = service.repository.list_planning_outline_snapshots(run.id)
-    assert [item.revision_round for item in snapshots] == [1]
-    assert snapshots[-1].source == "User direct outline edit"
-    assert snapshots[-1].source_contract is not None
-    assert snapshots[-1].source_contract.authoritative_user_overrides
-
-
-def test_agent_directed_outline_edit_clears_stale_scene_work_and_returns_to_review(
-    tmp_path: Path,
-) -> None:
-    request = _request(180)
-    language = UserDirectedRevisionClient(request)
-    service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
-    _advance_to_step(service, run.id, PlanningRunStep.SCENE_DIRECTOR)
-    with_scene = service.advance_planning_run(run.id)
-    assert with_scene.run.directed_scene_json
-
-    response = service.revise_planning_outline_with_agent(
-        run.id,
-        PlanningOutlineAgentRevisionRequest(
-            instruction="精简因果，但保留题材、人物和总时长。",
-        ),
-    )
-
-    assert response.run.current_step == PlanningRunStep.SCRIPT_CRITIC
-    assert response.run.revision_round == 1
-    assert response.run.directed_scene_json == []
-    assert response.run.next_scene_sequence == 1
-    assert response.run.review_report is None
-    assert response.run.review_disposition is None
-    assert response.run.source_contract is not None
-    assert any(
-        "精简因果，但保留题材、人物和总时长" in item
-        for item in response.run.source_contract.authoritative_user_overrides
-    )
-    assert EpisodeOutline.model_validate_json(response.run.outline_json or "").title == (
-        "用户定向修改后的标题"
-    )
-
-
-def test_scene_revision_tool_patches_only_user_selected_scene(tmp_path: Path) -> None:
-    request = _request(180)
-    language = StagedLanguageClient(request)
-    service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
-    ready = _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_CRITIC)
-    original = EpisodeOutline.model_validate_json(ready.run.outline_json or "")
-    first_before = scene_dialogue_lines(original, original.scenes[0])
-    second_before = scene_dialogue_lines(original, original.scenes[1])
-
-    response = service.revise_planning_scenes_with_agent(
-        run.id,
-        PlanningSceneRevisionRequest(
-            instruction="只把第二场的第一句改得更直接。",
-            scene_sequences=[2],
-        ),
-    )
-
-    revised = EpisodeOutline.model_validate_json(response.run.outline_json or "")
-    assert response.run.current_step == PlanningRunStep.SCRIPT_CRITIC
-    assert response.run.revision_round == 1
-    assert scene_dialogue_lines(revised, revised.scenes[0]) == first_before
-    second_after = scene_dialogue_lines(revised, revised.scenes[1])
-    assert second_after[0].text == second_before[0].text + "（局部改稿）"
-    assert all(
-        after == before
-        for after, before in zip(second_after[1:], second_before[1:], strict=True)
-    )
-    assert any("局部修改范围：[2]" in warning for warning in response.run.warnings)
-    assert service.repository.list_planning_script_documents(run.id, 0)
-    assert service.repository.list_planning_script_documents(run.id, 1)
-
-
 def test_repair_planner_can_reject_unsupported_critic_findings_without_rewrite(
     tmp_path: Path,
 ) -> None:
     request = _request(180)
     language = CriticOverreachRepairClient(request, revision_rounds_required=1)
     service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
+    run = _start_owned_planning(service, request).run
     _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_CRITIC)
     routed = service.advance_planning_run(run.id)
     assert routed.run.current_step == PlanningRunStep.STORY_REVISION
@@ -934,7 +1162,7 @@ def test_repair_planner_receives_prior_round_context_and_writer_receives_plan(
     request = _request(180)
     language = StagedLanguageClient(request, revision_rounds_required=2)
     service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
+    run = _start_owned_planning(service, request).run
     for _ in range(20):
         response = service.advance_planning_run(run.id)
         if (
@@ -964,16 +1192,16 @@ def test_source_contract_is_compiled_once_and_reaches_repair_writer_and_verifier
     tmp_path: Path,
 ) -> None:
     source = "乔曼带着多名被骗买家闯入避暑山庄，并争抢最后的冷气。"
-    request = PlanningRunCreateRequest(
+    request = CreateProjectRequest(
         name="来源承诺传播测试",
         source_mode=SourceMode.IDEA_EXPANSION,
         input_text=source,
         target_duration_seconds=180,
-        run_mode=RunMode.GUIDED,
+        run_mode=RunMode.AUTO_DRAFT,
     )
     language = StagedLanguageClient(request, revision_rounds_required=1)
     service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
+    run = _start_owned_planning(service, request).run
     _advance_to_step(service, run.id, PlanningRunStep.STORY_REVISION)
 
     revised = service.advance_planning_run(run.id)
@@ -1003,7 +1231,7 @@ def test_critic_json_structure_is_repaired_without_dropping_the_review(
     request = _request(180)
     language = MalformedCriticJsonClient(request)
     service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
+    run = _start_owned_planning(service, request).run
     _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_CRITIC)
 
     reviewed = service.advance_planning_run(run.id)
@@ -1020,7 +1248,7 @@ def test_revision_verifier_triggers_one_targeted_writer_repair_before_acceptance
     request = _request(180)
     language = RevisionRegressionClient(request)
     service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
+    run = _start_owned_planning(service, request).run
     _advance_to_step(service, run.id, PlanningRunStep.STORY_REVISION)
 
     revised = service.advance_planning_run(run.id)
@@ -1037,35 +1265,13 @@ def test_revision_verifier_triggers_one_targeted_writer_repair_before_acceptance
     assert snapshots[-1].revision_verification.accepted is True
 
 
-def test_supervising_agent_can_revise_the_latest_routed_review_as_a_tool(
-    tmp_path: Path,
-) -> None:
-    request = _request(180)
-    language = StagedLanguageClient(request, revision_rounds_required=1)
-    service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
-    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_CRITIC)
-    reviewed = service.advance_planning_run(run.id)
-    assert reviewed.run.current_step == PlanningRunStep.STORY_REVISION
-
-    revised = service.revise_planning_outline_from_review(run.id)
-
-    assert revised.run.current_step == PlanningRunStep.SCRIPT_CRITIC
-    assert revised.run.revision_round == 1
-    assert revised.run.latest_repair_plan is not None
-    assert revised.run.latest_revision_verification is not None
-    assert revised.run.latest_revision_verification.accepted is True
-    assert revised.run.review_report is None
-    assert revised.run.review_disposition is None
-
-
 def test_transient_scene_failure_keeps_the_same_local_retry_point(
     tmp_path: Path,
 ) -> None:
     request = _request()
     language = StagedLanguageClient(request, fail_scene_once=2)
     service = _service(tmp_path, language)
-    run = service.create_planning_run(request).run
+    run = _start_owned_planning(service, request).run
     _advance_to_step(service, run.id, PlanningRunStep.SCENE_DIRECTOR)
     service.advance_planning_run(run.id)
 
@@ -1092,7 +1298,7 @@ def test_latest_review_regression_is_advisory_and_does_not_block(
         review_issue_counts=[4, 2, 1, 3],
     )
     service = _service(tmp_path, language)
-    run_id = service.create_planning_run(request).run.id
+    run_id = _start_owned_planning(service, request).run.id
     response = _advance_to_step(
         service,
         run_id,
@@ -1110,16 +1316,12 @@ def test_latest_review_regression_is_advisory_and_does_not_block(
     assert restored.run.revision_judge == judged.run.revision_judge
     completed = _finish(restarted, run_id)
 
-    history = restarted.get_planning_run_script_quality(completed.run.id)
-    assert [item.total_issues for item in history.comparison.rounds] == [4, 2, 1, 3]
-    assert history.comparison.total_issue_delta == -1
-    assert history.comparison.latest_total_issue_delta == 2
-    assert history.comparison.latest_high_issue_delta == 0
-    assert history.comparison.latest_report_regression_risk is True
-    assert history.revision_judge is not None
-    assert history.revision_judge.recommended_revision_round == 2
-    assert history.revision_judge.alternative_revision_round == 3
-    assert history.revision_judge.advisory_only is True
+    reviews = restarted.repository.list_planning_review_snapshots(completed.run.id)
+    assert [len(item.report.issues) for item in reviews] == [4, 2, 1, 3]
+    assert completed.run.revision_judge is not None
+    assert completed.run.revision_judge.recommended_revision_round == 2
+    assert completed.run.revision_judge.alternative_revision_round == 3
+    assert completed.run.revision_judge.advisory_only is True
     assert language.judge_calls == 1
     assert completed.run.status == PlanningRunStatus.COMPLETE
     assert PlanningRunStep.REVISION_JUDGE in completed.run.completed_steps
@@ -1151,164 +1353,15 @@ def test_revision_judge_provider_failure_does_not_block_latest_outline(
     service = _service(tmp_path, language)
     completed = _finish(
         service,
-        service.create_planning_run(request).run.id,
+        _start_owned_planning(service, request).run.id,
     )
 
-    history = service.get_planning_run_script_quality(completed.run.id)
-    assert history.comparison.latest_report_regression_risk is True
-    assert history.revision_judge is None
+    reviews = service.repository.list_planning_review_snapshots(completed.run.id)
+    assert [len(item.report.issues) for item in reviews] == [4, 2, 1, 3]
+    assert completed.run.revision_judge is None
     assert language.judge_calls == 1
     assert completed.run.status == PlanningRunStatus.COMPLETE
     assert completed.run.outline_json is not None
     assert completed.run.revision_round == 3
     assert "（局部改稿）" in completed.run.outline_json
     assert any("Revision Judge 不可用" in item for item in completed.run.warnings)
-
-
-def test_planning_run_api_can_finish_with_local_script_only_fallback(
-    tmp_path: Path,
-) -> None:
-    service = ShortDramaService(
-        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
-        workspace_root=tmp_path / "workspace",
-    )
-    app = FastAPI()
-    app.include_router(short_drama_router)
-    app.dependency_overrides[get_short_drama_service] = lambda: service
-
-    with TestClient(app) as client:
-        created = client.post(
-            "/api/short-drama/planning-runs",
-            json=_request(300).model_dump(mode="json"),
-        )
-        assert created.status_code == 200, created.text
-        run_id = created.json()["run"]["id"]
-        for _ in range(30):
-            advanced = client.post(
-                f"/api/short-drama/planning-runs/{run_id}/advance"
-            )
-            assert advanced.status_code == 200, advanced.text
-            if advanced.json()["run"]["status"] == "COMPLETE":
-                break
-        else:
-            raise AssertionError("local planning API did not complete")
-
-        listed = client.get("/api/short-drama/planning-runs")
-        restored = client.get(f"/api/short-drama/planning-runs/{run_id}")
-        quality = client.get(
-            f"/api/short-drama/planning-runs/{run_id}/script-quality"
-        )
-        search = client.post(
-            f"/api/short-drama/planning-runs/{run_id}/agent-tools/search-script",
-            json={"query": "因果链", "limit": 4, "include_story_bible": False},
-        )
-
-    assert listed.status_code == 200
-    assert listed.json()["runs"][0]["id"] == run_id
-    assert restored.status_code == 200
-    assert restored.json()["project"]["document"]["project"][
-        "target_duration_seconds"
-    ] == 300
-    assert any(
-        "未配置" in warning
-        for warning in restored.json()["run"]["warnings"]
-    )
-    assert quality.status_code == 200
-    assert quality.json()["comparison"]["rounds"] == []
-    assert quality.json()["comparison"]["trend"] == "NOT_COMPARABLE"
-    assert search.status_code == 200
-    assert search.json()["run_id"] == run_id
-    assert search.json()["hits"]
-
-
-def test_auto_mode_planning_stops_before_image_or_h3_generation(
-    tmp_path: Path,
-) -> None:
-    request = PlanningRunCreateRequest(
-        name="先完成剧本再进入制片",
-        source_mode=SourceMode.AUTO_ORIGINAL,
-        target_duration_seconds=300,
-        run_mode=RunMode.AUTO_DRAFT,
-        execution_target=AutonomousExecutionTarget.REAL_H3,
-    )
-    language = StagedLanguageClient(request)
-    service = _service(tmp_path, language)
-
-    completed = _finish(
-        service,
-        service.create_planning_run(request).run.id,
-    )
-
-    assert completed.project is not None
-    autonomous = completed.project.document.autonomous_runs[-1]
-    assert autonomous.current_step == AutonomousRunStep.PREPARE_ASSETS
-    assert completed.run.autonomous_run_id == autonomous.id
-    assert service.repository.list_image_tasks(
-        completed.project.document.project.id
-    ) == []
-    assert service.repository.list_tasks(completed.project.document.project.id) == []
-    assert service.repository.list_provider_runs(
-        completed.project.document.project.id
-    ) == []
-
-
-def test_script_quality_api_compares_multiple_custom_duration_runs(
-    tmp_path: Path,
-) -> None:
-    requests = [
-        PlanningRunCreateRequest(
-            name="180 秒都市误会",
-            source_mode=SourceMode.IDEA_EXPANSION,
-            input_text="婚礼当天，女主发现新郎只是替别人出席。",
-            target_duration_seconds=180,
-            run_mode=RunMode.GUIDED,
-        ),
-        PlanningRunCreateRequest(
-            name="430 秒职场悬疑",
-            source_mode=SourceMode.AUTO_ORIGINAL,
-            target_duration_seconds=430,
-            run_mode=RunMode.GUIDED,
-        ),
-        PlanningRunCreateRequest(
-            name="900 秒家庭反转",
-            source_mode=SourceMode.IDEA_EXPANSION,
-            input_text="父亲的遗嘱要求三个子女在旧屋共住一夜才能继承遗产。",
-            target_duration_seconds=900,
-            run_mode=RunMode.GUIDED,
-        ),
-    ]
-    run_ids: list[str] = []
-    for request in requests:
-        language = StagedLanguageClient(request, revision_rounds_required=1)
-        service = _service(tmp_path, language)
-        run = service.create_planning_run(request).run
-        completed = _finish(service, run.id)
-        assert completed.project is not None
-        run_ids.append(run.id)
-
-    service = _service(tmp_path, StagedLanguageClient(requests[-1]))
-    app = FastAPI()
-    app.include_router(short_drama_router)
-    app.dependency_overrides[get_short_drama_service] = lambda: service
-    with TestClient(app) as client:
-        catalog = client.get("/api/short-drama/script-quality")
-        detail = client.get(
-            f"/api/short-drama/planning-runs/{run_ids[1]}/script-quality"
-        )
-
-    assert catalog.status_code == 200, catalog.text
-    evaluations = catalog.json()["evaluations"]
-    assert {item["target_duration_seconds"] for item in evaluations} == {
-        180.0,
-        430.0,
-        900.0,
-    }
-    assert all(item["trend"] == "FEWER_REPORTED_ISSUES" for item in evaluations)
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["comparison"]["target_duration_seconds"] == 430.0
-    assert [
-        item["revision_round"] for item in detail.json()["outline_snapshots"]
-    ] == [0, 1]
-    assert [
-        item["review_round"] for item in detail.json()["review_snapshots"]
-    ] == [1, 2]

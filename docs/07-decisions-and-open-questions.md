@@ -50,9 +50,9 @@ LTX Desktop 已确定为唯一底座 Spike 和正式工程历史来源，保留�
 
 首个固定样片用真人都市题材验证质量上限，重点暴露人脸、肢体表演、服装、空间、声线、口型和跨镜连续性问题。该决定只锁定首个标杆，不自动决定首版是否同时交付漫剧。
 
-### D13. 首版只交付真人，但不复制风格工作流
+### D13. 历史首版验收曾限定真人标杆（已由 D47 覆盖）
 
-首版产品和验收只优化真人都市短剧。未来漫剧继续使用同一套剧本、ProjectBible、ShotPlan、GenerationTask、Take 和 TimelineManifest；差异通过风格资产、提示编译、执行路线、模型能力和 QA Profile 表达。漫剧不进入首版验收，但架构不能把“真人”硬编码进通用领域模型。
+早期首版验收曾只用真人都市短剧验证质量上限，但从未允许把“真人”硬编码进通用领域模型。当前产品决定以 D47 为准：AI 原生短剧不预设真人或动画，具体视觉、运动和声音选择由 Agent 写入项目 Bible Style，不同形态仍共用剧本、资产、分镜、生成、Take 和时间线主线。
 
 ### D14. 首版验收单集完整闭环
 
@@ -186,9 +186,9 @@ Mock 阶段直接实现当前完整闭环所需的 schema、模块边界、API �
 
 Planner 先声明镜头实际需要的主体、角色、角度、景别和状态，Asset Agent 再搜索当前/跨项目目录、检查覆盖、复用已批准资产或调用 GPT Image 从当前母版派生缺失视图，然后语义审查、登记系谱并为每镜选择最小参考集。不同剧本默认项目隔离：目录搜索默认只返回当前项目，自动母版复用只能从 `linked_asset_project_ids` 显式关联的系列/续集项目取用；全局跨项目搜索及导入仍是 Agent 或用户明确调用的可选 Tool，导入后须在目标项目重新审查。同一项目内也按镜头实际入镜范围选择资产：显式场景需求作为锚点，连续镜头继承最近的当前地点，不把对白里提到但未出场的人物、下一场地点或明确留在画外的道具一起塞进生成输入。场景默认先建单张 Master Wide；反打、局部、交互区和角色三视图只在分镜需要时生成。Agent 推荐可被用户忽略，不形成硬阻断或样片专用规则。
 
-### D47. 通用视频与抖音短剧使用同一运行时的不同 Prompt Policy
+### D47. 通用视频与 AI 原生短剧使用同一运行时的不同 Production Skill
 
-项目创建时选择通用视频或抖音短剧。两者共享项目、资产、H3、QA 和时间线实现；当前 Profile 为 Concept、Writer、Planner、Critic、Review Router、Director、Asset Reviewer、H3 Route/Prompt Compiler 和 Episode Reviewer 编译各自 role rubric。抖音模式强调好奇缺口前置、因果推进、可见状态变化和结尾回收；通用模式允许氛围、留白与长镜头。合同、签名、融资、付款流程等旧样片经验不再属于抖音模式的固定规则，只在当前题材与职责实际命中时作为可忽略经验追加。分镜不设置固定镜头数、动作数或“每 N 秒新信息”门控，Agent 不为提高密度机械增加内容。
+项目创建时可以选择通用视频或 AI 原生短剧。两者共享项目、资产、H3、QA 和时间线实现；当前 Profile 为 Concept、Writer、Planner、Critic、Review Router、Director、Asset Reviewer、H3 Route/Prompt Compiler 和 Episode Reviewer 编译各自 role rubric。AI 短剧 Skill 描述连续叙事、生成式工件和局部返修等稳定目标，具体视觉、运动与声音风格由 Agent 写入 ProjectBible Style，不预设写实真人或动画。合同、签名、融资、付款流程等旧样片经验不进入格式 Skill；只有当前项目真实执行产生、带结果依据的经验才由 AgentRuntime `ExperienceMemory` 按项目和 Skill 召回。分镜不设置固定镜头数、动作数或“每 N 秒新信息”门控，Agent 不为提高密度机械增加内容。
 
 ### D48. H3 视频参考是 Route Agent 工具，不是连续性门控
 
@@ -196,7 +196,7 @@ Planner 先声明镜头实际需要的主体、角色、角度、景别和状态
 
 ### D49. 多分钟 AUTO_DRAFT 复用同一 Orchestrator，返工额度按镜头计算
 
-超过 90 秒的 `PlanningRun` 在 FINALIZE 后直接建立正式 Project 和原有 `AutonomousRun`，继续复用 Asset Agent、H3 continuity wave、视频 QA、Director、Take、TimelineManifest 与导出，不建立第二运行时。Scene Director 上下文保持为整集资产契约、当前场、当前对白、上一场 compact handoff 和下一场入口。`repair_round` 仅为全剧累计进度，`max_repair_rounds` 是单镜自动修复上限；一个镜头的返工不消耗其他镜头额度。达到上限只触发现有可恢复状态或明确可见的 best-effort，不构成创意审批门。
+这条决定记录 Phase 19 当时的实现：超过 90 秒的 `PlanningRun` 在 FINALIZE 后建立 Project 与 `AutonomousRun`。Phase 29 已将默认新建和新自动制作迁移到 AgentRun，由 Production Manager 复用同一 Asset、H3、QA、Director、Take、TimelineManifest 与导出 Tools；旧 AutonomousRun 控制面已经删除，独立 PlanningRun 也不再对外开放。长内容只保留 Agent-owned PlanningRun 作为 `planning.advance` 背后的可恢复内容规划子流程，Provider 对账由 GenerationTask/H3 任务状态机负责。Scene Director 的整集资产契约、当前场、当前对白、compact handoff，以及每镜独立返工额度等领域语义保持不变。
 
 ### D50. 整集 QA 使用分层 Reviewer，报告不成为门控
 
@@ -204,9 +204,9 @@ Planner 先声明镜头实际需要的主体、角色、角度、景别和状态
 
 ### D51. 产品采用 Agent + Skills + Tools，workflow 只作执行底座
 
-用户面对的是能理解自然语言目标并自主完成制片的 Agent，不是节点编排器。抖音短剧和后续内容形态作为 Production Skills，分别封装领域目标、上下文、角色分工、可用 Tools 与评审原则；Multi-Agent 委派、单场/单镜规划、资产检索/生成/编辑、H3、视频观察、连续性检查和时间线局部更新均作为可独立组合的 Tools 或 Harness 能力。持久化 PlanningRun、AutonomousRun 和任务状态机继续负责推进、并发、重试、恢复与 Provider 对账，但不规定唯一创作路径，也不要求用户逐节点操作。
+用户面对的是能理解自然语言目标并自主完成制片的 Agent，不是节点编排器。AI 短剧和后续内容形态作为 Production Skills，封装领域目标、角色分工、共享流程上的类型重点与评审原则；具体 Style 属于项目工件而不是新 workflow。Multi-Agent 委派、单场/单镜规划、资产检索/生成/编辑、H3、视频观察、连续性检查和时间线局部更新均作为可独立组合的 Tools 或 Harness 能力。持久化 AgentRun、PlanRevision、Action、WorkOrder 和 Provider 任务状态机负责推进、重规划、恢复与对账；Agent-owned PlanningRun 只负责长文本规划的可恢复游标，不规定不同内容形态的完整创作流程。
 
-PoC 不建设动态 Skill Registry；当前静态 `Profile → ProductionSkill` Catalog 就是最小 Skill 目录。Skill 保存稳定 constitution、按职责选择的 role rubric、按当前上下文召回的经验与可覆盖 playbook，但不限制 Tool Catalog，也不负责重试、恢复或 Provider 副作用。数字人口播等新 Skill 在抖音短剧 PoC 验收后再做，不改变核心架构。自然语言局部修改由 Agent 解析实体、属性和适用范围，再利用按需编译的 `ProjectIndex` 与版本依赖生成 `ImpactPlan`，只重算实际受影响的资产、关键帧、镜头、Take 和时间线分支。例如换一个角色在特定场景中的衣服颜色，不应重做未出现该服装的镜头，也不应无故重做台词、声音或字幕。用户可调整范围、指定镜头或忽略建议。当前已实现只读 `SemanticChangePlan` Agent Tool：LLM 只选语义根对象，Harness 校验真实 ID 并计算资产、台词、场次、镜头与 Take 依赖，返回可编辑且不直接执行的 Tool 计划；后续 Change Executor 复用现有版本、图像、ReferencePlan、H3 与 Timeline Tools，不为单例修改增加专用 workflow 或领域字段。
+PoC 不建设动态 Skill Registry；当前文件化 `Profile → ProductionSkill` Catalog 就是最小 Skill 目录。Skill 保存稳定类型原则、按职责选择的角色 Prompt 和共享流程上的可覆盖制作重点，但不保存项目案例经验、不限制 Tool Catalog，也不负责重试、恢复或 Provider 副作用。数字人口播和动漫 Skill 已按同一合同加入，不改变核心架构。自然语言局部修改由 Agent 解析实体、属性和适用范围，再利用按需编译的 `ProjectIndex` 与版本依赖生成 `ImpactPlan`，只重算实际受影响的资产、关键帧、镜头、Take 和时间线分支。例如换一个角色在特定场景中的衣服颜色，不应重做未出现该服装的镜头，也不应无故重做台词、声音或字幕。用户可调整范围、指定镜头或忽略建议。当前已实现 `change.preview` 与 `change.apply` Agent Tools：LLM 只选语义根对象，Harness 校验真实 ID 并计算资产、台词、场次、镜头与 Take 依赖，Change Executor 再复用现有版本、图像、ReferencePlan、H3 与 Timeline Tools，不为单例修改增加专用 workflow 或领域字段。
 
 ### D52. 语义修改优先设计为按需索引和影响计划
 
@@ -256,7 +256,7 @@ Critic 自动修订优先按 Repair Plan 的 `affected_scene_sequences` 执行�
 
 ### Q1. 首个样片美术方向（已确认）
 
-已选择真人都市短剧，见 D12；首版也已确认只交付真人，见 D13。
+首个固定质量样片已选择真人都市短剧，见 D12。这是历史实验输入，不是当前 AI 原生短剧的默认 Style；当前范围见 D47。
 
 ### Q2. 首个版本目标时长
 

@@ -53,7 +53,7 @@ SQLite schema 版本 2 增加：
 
 ## 请求编译与能力校验
 
-`build_h3_prompt` 从当前 `ScriptVersion`、`ProjectBible`、`ShotPlan` 和连续性起止状态编译中文真人都市短剧提示，锁定人物、服装、便利店空间、红色录音笔、动作方向、台词说话人与禁止项。用户可以显式覆盖 prompt，但不静默修改锁定剧本。
+Phase 2 当时的 `build_h3_prompt` 针对固定样片《别相信我》，从 `ScriptVersion`、`ProjectBible`、`ShotPlan` 和连续性起止状态编译人物、服装、便利店空间、红色录音笔、动作方向与台词说话人。这些都是该样片的项目内容，不是 H3 通用默认。当前 Prompt Compiler 只翻译项目已声明的 Style、镜头职责和连续性事实，不自行追加真人、电影感、皮肤质感或固定运动。用户可以显式覆盖 prompt，但不静默修改锁定剧本。
 
 联网前执行：
 

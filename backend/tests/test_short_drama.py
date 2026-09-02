@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import imageio_ffmpeg
 from PIL import Image
@@ -27,6 +28,68 @@ def _initialize_fixture(client):
     response = client.post("/api/short-drama/fixtures/dont-trust-me")
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _create_agent_project(
+    client,
+    project: dict[str, Any],
+    *,
+    render_export: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    response = client.post(
+        "/api/short-drama/agent-projects",
+        json={
+            "project": project,
+            "execution_target": "MOCK",
+            "render_export": render_export,
+        },
+    )
+    assert response.status_code == 200, response.text
+    created = response.json()
+    fetched = client.get(f"/api/short-drama/projects/{created['project_id']}")
+    assert fetched.status_code == 200, fetched.text
+    return fetched.json(), created["run"]
+
+
+def _run_mock_agent_to_completion(
+    client,
+    project_id: str,
+    *,
+    render_export: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    created = client.post(
+        f"/api/short-drama/projects/{project_id}/agent-runs",
+        json={
+            "objective": "生成完整 Mock 制片结果",
+            "unattended": True,
+            "execution_target": "MOCK",
+            "render_export": render_export,
+        },
+    )
+    assert created.status_code == 200, created.text
+    return _advance_agent_run_to_completion(client, project_id, created.json())
+
+
+def _advance_agent_run_to_completion(
+    client,
+    project_id: str,
+    current: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    run_id = current["snapshot"]["run"]["id"]
+    for _ in range(16):
+        if current["snapshot"]["run"]["status"] == "COMPLETED":
+            break
+        advanced = client.post(
+            f"/api/short-drama/agent-runs/{run_id}/advance",
+            json={"max_actions": 8},
+        )
+        assert advanced.status_code == 200, advanced.text
+        current = advanced.json()["run"]
+    else:
+        raise AssertionError("Agent Mock production did not complete")
+    fetched = client.get(f"/api/short-drama/projects/{project_id}")
+    assert fetched.status_code == 200, fetched.text
+    return fetched.json(), current
 
 
 def _render_export_source(
@@ -74,6 +137,46 @@ def _render_export_source(
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_legacy_workflow_routes_are_not_exposed(client) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+    removed_operations = {
+        ("/api/short-drama/projects", "post"),
+        ("/api/short-drama/planning-runs", "get"),
+        ("/api/short-drama/planning-runs", "post"),
+        ("/api/short-drama/planning-runs/{run_id}", "get"),
+        ("/api/short-drama/planning-runs/{run_id}/advance", "post"),
+        ("/api/short-drama/planning-runs/{run_id}/outline", "put"),
+        ("/api/short-drama/planning-runs/{run_id}/outline/agent-revise", "post"),
+        (
+            "/api/short-drama/planning-runs/{run_id}/outline/revise-from-review",
+            "post",
+        ),
+        ("/api/short-drama/planning-runs/{run_id}/script-quality", "get"),
+        (
+            "/api/short-drama/planning-runs/{run_id}/agent-tools/search-script",
+            "post",
+        ),
+        (
+            "/api/short-drama/planning-runs/{run_id}/agent-tools/revise-scenes",
+            "post",
+        ),
+        ("/api/short-drama/script-quality", "get"),
+        ("/api/short-drama/projects/autonomous-draft", "post"),
+        (
+            "/api/short-drama/projects/{source_project_id}/autonomous-repeats",
+            "post",
+        ),
+        (
+            "/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance",
+            "post",
+        ),
+        ("/api/short-drama/projects/{project_id}/auto-draft", "post"),
+    }
+    assert all(method not in paths.get(path, {}) for path, method in removed_operations)
+    assert "post" in paths["/api/short-drama/agent-projects"]
+    assert "post" in paths["/api/short-drama/tasks/{task_id}/advance"]
 
 
 def test_timeline_export_normalizes_heterogeneous_take_media(tmp_path: Path) -> None:
@@ -232,7 +335,7 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
     assert len(fixture["document"]["script_versions"][0]["lines"]) == 5
     assert fixture["document"]["project"]["source_mode"] == "SCRIPT_LOCKED"
     assert fixture["document"]["project"]["production_profile"] == (
-        "DOUYIN_SHORT_DRAMA"
+        "AI_SHORT_DRAMA"
     )
     assert {
         entry["strategy"] for entry in fixture["document"]["execution_plan"]
@@ -244,9 +347,9 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
     }
 
     idea_text = "雨夜，一张过期车票让两名陌生人发现他们认识彼此。"
-    idea_response = client.post(
-        "/api/short-drama/projects",
-        json={
+    idea, _idea_run = _create_agent_project(
+        client,
+        {
             "name": "一句话输入",
             "source_mode": "IDEA_EXPANSION",
             "production_profile": "GENERAL_VIDEO",
@@ -254,32 +357,43 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
             "run_mode": "GUIDED",
         },
     )
-    assert idea_response.status_code == 200, idea_response.text
-    idea = idea_response.json()
     assert idea["document"]["project"]["input_text"] == idea_text
     assert idea["document"]["project"]["production_profile"] == "GENERAL_VIDEO"
     assert idea["document"]["script_versions"][0]["original_text"] == idea_text
 
     locked_text = "林夏：不要动那支录音笔。"
-    locked_response = client.post(
-        "/api/short-drama/projects",
-        json={
+    locked, _locked_run = _create_agent_project(
+        client,
+        {
             "name": "已有剧本输入",
             "source_mode": "SCRIPT_LOCKED",
             "input_text": locked_text,
             "run_mode": "AUTO_DRAFT",
         },
     )
-    assert locked_response.status_code == 200, locked_response.text
-    locked = locked_response.json()
     assert locked["document"]["project"]["production_profile"] == (
-        "DOUYIN_SHORT_DRAMA"
+        "AI_SHORT_DRAMA"
     )
     script = locked["document"]["script_versions"][0]
     assert script["original_text"] == locked_text
     assert script["lines"][0]["original_text"] == "不要动那支录音笔。"
     assert script["lines"][0]["spoken_text"] == "不要动那支录音笔。"
     assert script["lines"][0]["subtitle_text"] == "不要动那支录音笔。"
+
+    for created in (idea, locked):
+        project_id = created["document"]["project"]["id"]
+        agent_runs = client.get(
+            f"/api/short-drama/projects/{project_id}/agent-runs"
+        )
+        assert agent_runs.status_code == 200, agent_runs.text
+        snapshots = agent_runs.json()["runs"]
+        assert len(snapshots) == 1
+        assert snapshots[0]["snapshot"]["run"]["project_id"] == project_id
+        assert any(
+            action["tool_name"] == "project.create"
+            and action["status"] == "SUCCEEDED"
+            for action in snapshots[0]["snapshot"]["actions"]
+        )
 
     listed = client.get("/api/short-drama/projects")
     assert listed.status_code == 200
@@ -298,27 +412,29 @@ def test_empty_and_image_inputs_share_the_same_planning_contract(
     client,
     tmp_path: Path,
 ) -> None:
-    empty = client.post(
-        "/api/short-drama/projects",
-        json={
+    empty_body, _empty_run = _create_agent_project(
+        client,
+        {
             "source_mode": "AUTO_ORIGINAL",
             "input_text": "",
             "run_mode": "GUIDED",
         },
     )
-    assert empty.status_code == 200, empty.text
-    empty_body = empty.json()
     assert empty_body["document"]["project"]["source_mode"] == "AUTO_ORIGINAL"
     assert empty_body["document"]["project"]["name"]
     assert empty_body["document"]["project"]["target_duration_seconds"] == 300
-    assert len(empty_body["document"]["script_versions"][0]["structured_scenes"]) == 4
-    assert len(empty_body["document"]["shots"]) == 20
+    structured_scenes = empty_body["document"]["script_versions"][0][
+        "structured_scenes"
+    ]
+    assert len(structured_scenes) == 1
+    assert len(empty_body["document"]["shots"]) == len(structured_scenes)
+    assert "0岁" not in str(empty_body["document"]["assets"])
 
     image_path = tmp_path / "visual-seed.png"
     Image.new("RGB", (96, 128), "#2d415b").save(image_path)
-    seeded = client.post(
-        "/api/short-drama/projects",
-        json={
+    body, _seeded_run = _create_agent_project(
+        client,
+        {
             "name": "图片输入",
             "source_mode": "IMAGE_SEEDED",
             "input_text": "保留冷蓝夜景与人物剪影关系。",
@@ -331,8 +447,6 @@ def test_empty_and_image_inputs_share_the_same_planning_contract(
             "run_mode": "GUIDED",
         },
     )
-    assert seeded.status_code == 200, seeded.text
-    body = seeded.json()
     reference_asset = next(
         asset
         for asset in body["document"]["assets"]
@@ -352,66 +466,71 @@ def test_empty_and_image_inputs_share_the_same_planning_contract(
     )
 
 
-def test_five_minute_autonomous_create_runs_to_manifest_without_user_stops(client) -> None:
-    response = client.post(
-        "/api/short-drama/projects/autonomous-draft",
-        json={
+def test_five_minute_agent_project_runs_to_manifest_without_user_stops(client) -> None:
+    created, run = _create_agent_project(
+        client,
+        {
             "source_mode": "AUTO_ORIGINAL",
             "input_text": "",
             "run_mode": "AUTO_DRAFT",
-            "render_export": False,
         },
     )
+    body, completed = _advance_agent_run_to_completion(
+        client,
+        created["document"]["project"]["id"],
+        run,
+    )
 
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["run"]["status"] == "COMPLETE"
-    assert body["run"]["current_step"] == "COMPLETE"
-    assert body["run"]["planner"] == "deterministic-multi-agent-fallback-v2"
-    assert body["project"]["document"]["project"]["target_duration_seconds"] == 300
-    assert body["project"]["progress"]["shots_with_selected_take"] == 20
-    assert body["project"]["progress"]["manifest_ready"] is True
-    assert "AUDIO_QA" not in body["run"]["completed_steps"]
-    assert body["export"] is None
+    assert completed["snapshot"]["run"]["status"] == "COMPLETED"
+    assert body["document"]["project"]["target_duration_seconds"] == 300
+    assert body["progress"]["shots_with_selected_take"] == len(
+        body["document"]["shots"]
+    )
+    assert body["progress"]["manifest_ready"] is True
+    assert "autonomous_runs" not in body["document"]
+    assert body["exports"] == []
 
 
 def test_general_profile_silent_fallback_runs_to_manifest(client) -> None:
-    response = client.post(
-        "/api/short-drama/projects/autonomous-draft",
-        json={
+    created, run = _create_agent_project(
+        client,
+        {
             "source_mode": "AUTO_ORIGINAL",
             "production_profile": "GENERAL_VIDEO",
             "input_text": "",
             "run_mode": "AUTO_DRAFT",
-            "render_export": False,
         },
     )
+    body, completed = _advance_agent_run_to_completion(
+        client,
+        created["document"]["project"]["id"],
+        run,
+    )
 
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["run"]["status"] == "COMPLETE"
-    assert body["project"]["document"]["project"]["production_profile"] == (
+    assert completed["snapshot"]["run"]["status"] == "COMPLETED"
+    assert body["document"]["project"]["production_profile"] == (
         "GENERAL_VIDEO"
     )
-    assert len(body["project"]["document"]["shots"]) == 4
-    assert body["project"]["document"]["script_versions"][0]["lines"] == []
-    assert body["project"]["progress"]["manifest_ready"] is True
+    assert len(body["document"]["shots"]) == len(
+        body["document"]["script_versions"][0]["structured_scenes"]
+    )
+    assert body["document"]["script_versions"][0]["lines"] == []
+    assert body["progress"]["manifest_ready"] is True
+    assert "autonomous_runs" not in body["document"]
 
 
 def test_locked_script_preserves_more_than_ten_dialogue_lines(client) -> None:
     lines = [f"角色{i % 2 + 1}：第{i}句锁定对白。" for i in range(1, 13)]
-    response = client.post(
-        "/api/short-drama/projects",
-        json={
+    body, _run = _create_agent_project(
+        client,
+        {
             "name": "长对白锁定剧本",
             "source_mode": "SCRIPT_LOCKED",
             "input_text": "\n".join(lines),
             "run_mode": "GUIDED",
         },
     )
-
-    assert response.status_code == 200, response.text
-    script_lines = response.json()["document"]["script_versions"][0]["lines"]
+    script_lines = body["document"]["script_versions"][0]["lines"]
     assert len(script_lines) == 12
     assert [item["original_text"] for item in script_lines] == [
         f"第{i}句锁定对白。" for i in range(1, 13)
@@ -543,11 +662,7 @@ def test_worker_recovers_running_and_interrupted_submit_after_restart(tmp_path: 
 def test_episode_review_endpoint_persists_non_blocking_unavailable_report(client) -> None:
     initialized = _initialize_fixture(client)
     project_id = initialized["document"]["project"]["id"]
-    auto = client.post(
-        f"/api/short-drama/projects/{project_id}/auto-draft",
-        json={"render_export": False},
-    )
-    assert auto.status_code == 200, auto.text
+    _run_mock_agent_to_completion(client, project_id, render_export=False)
 
     reviewed = client.post(
         f"/api/short-drama/projects/{project_id}/review-episode",
@@ -567,14 +682,12 @@ def test_complete_eight_shot_mock_timeline_export_and_local_invalidation(client)
     initialized = _initialize_fixture(client)
     project_id = initialized["document"]["project"]["id"]
 
-    auto = client.post(
-        f"/api/short-drama/projects/{project_id}/auto-draft",
-        json={"render_export": True},
+    project, _run = _run_mock_agent_to_completion(
+        client,
+        project_id,
+        render_export=True,
     )
-    assert auto.status_code == 200, auto.text
-    body = auto.json()
-    project = body["project"]
-    export = body["export"]
+    export = project["exports"][-1]
     assert project["progress"] == {
         "total_shots": 8,
         "shots_with_selected_take": 8,

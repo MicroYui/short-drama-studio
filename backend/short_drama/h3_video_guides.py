@@ -109,16 +109,16 @@ def append_h3_video_guide_guidance(prompt: str, guide: H3VideoGuide) -> str:
         if guide.previs_base_source == H3VideoGuideBaseSource.TARGET_START_FRAME:
             guidance = (
                 f"<Video 1>是从本镜头已批准起始构图生成的低保真二维机位预演（{motion}）。"
-                "保留其起始人物身份、服装、场景、站位和构图关系，只参考粗略摄影机路径与"
-                "节奏；不得模仿静帧感、二维变焦、压缩质感或缺失的人体运动。最终画面按"
-                "本镜头计划自主生成自然表演、景深和三维遮挡。"
+                "保留其起始主体、场景、位置和构图关系，只参考 ShotPlan 明确需要的粗略"
+                "摄影机路径与节奏；预演自身的低保真压缩和插值伪影不是风格要求。最终画面"
+                "的媒介、静动关系、表演和空间表达全部服从本镜头与项目 Style。"
             )
         else:
             guidance = (
                 f"<Video 1>是从前镜边界画面生成的低保真二维机位预演（{motion}），只参考"
-                "粗略摄影机路径与节奏；不得模仿其静帧感、二维变焦、压缩质感或缺失的"
-                "人体运动。最终画面继续遵循本镜头的真人电影级写实要求，并自主生成自然"
-                "表演和三维遮挡。"
+                "ShotPlan 明确需要的粗略摄影机路径与节奏；预演自身的低保真压缩和插值"
+                "伪影不是风格要求。最终画面的媒介、静动关系、表演和空间表达全部服从"
+                "本镜头与项目 Style。"
             )
     return f"{prompt} 视频连续性参考：{guidance}"
 
@@ -301,7 +301,7 @@ class H3VideoGuideBuilder:
             )
             previs_rationale = (
                 "Preview the Director's coarse camera path from the preceding boundary frame; "
-                "H3 should use its motion only and retain the current photoreal production style."
+                "H3 should use only the requested motion and retain the project's declared style."
             )
             previs_warnings = [
                 *common_warnings,

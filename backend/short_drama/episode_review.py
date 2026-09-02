@@ -152,15 +152,9 @@ def review_scene(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.EPISODE_REVIEWER,),
-        context="\n".join(
-            (
-                scene.model_dump_json(),
-                json.dumps(shot_evidence, ensure_ascii=False),
-            )
-        ),
     )
     instructions = (
-        "You are a scene-level episode-review Agent for a live-action vertical production. "
+        "You are a scene-level episode-review Agent for the active video-production medium. "
         f"{skill_prompt.text} Return JSON only and match SceneReviewAgentOutput. Review the supplied "
         "scene as edited, using "
         "the locked scene purpose, chronological ShotPlans, selected Takes, timeline clips, and "
@@ -240,15 +234,9 @@ def review_episode(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.EPISODE_REVIEWER,),
-        context="\n".join(
-            (
-                script.model_dump_json(),
-                *(item.model_dump_json() for item in scene_reviews),
-            )
-        ),
     )
     instructions = (
-        "You are an episode-level reviewer Agent for a live-action vertical production. "
+        "You are an episode-level reviewer Agent for the active video-production medium. "
         f"{skill_prompt.text} Return JSON only and match EpisodeReviewAgentOutput. Compare the locked "
         "script, scene entry/exit states, "
         "timeline order, and the independent scene reviews. Find only cross-scene or episode-level "

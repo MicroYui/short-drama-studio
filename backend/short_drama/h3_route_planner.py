@@ -70,6 +70,7 @@ from short_drama.reference_planner import (
     compile_keyframe_brief,
     preview_reference_plan,
 )
+from short_drama.style_context import declared_style_value
 
 
 class RoutePlanningError(ValueError):
@@ -1265,32 +1266,18 @@ def _choose_with_language_agent(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ROUTE_PLANNER,),
-        context=json.dumps(
-            {
-                "project_name": document.project.name,
-                "shots": [shot.model_dump(mode="json") for shot in shots],
-                "risks": {
-                    shot.id: {
-                        "risk_ids": risks_by_shot[shot.id][0],
-                        "categories": [
-                            item.value for item in risks_by_shot[shot.id][1]
-                        ],
-                    }
-                    for shot in shots
-                },
-            },
-            ensure_ascii=False,
-        ),
         include_constitution=False,
     )
     instructions = (
-        "You are a production route agent for a live-action vertical production. "
+        "You are a production route agent for an AI-native vertical video production. "
         f"{skill_prompt.text} Return JSON "
         "only, matching the supplied schema. Choose exactly one supplied candidate per shot. "
         "Never invent routes, asset IDs, Take IDs, or provider capabilities. A current-version "
         "human-reviewed reusable Take is normally preferred over paying to regenerate. For gaps, "
         "compare empirical route evidence, approved visual bindings, action complexity, and QA "
-        "risk. Recommendations and warnings are advisory and dismissible. Long shots require "
+        "risk. Follow the current Bible's declared medium and style; never add visual-medium, "
+        "surface, camera, or motion assumptions that are absent upstream. Recommendations and warnings "
+        "are advisory and dismissible. Long shots require "
         "temporal and boundary observation; do not claim sparse frames prove an action absent."
         " Optional video-guide candidates are visual-only controls derived from the selected "
         "preceding Take in the same scene or from the current shot's approved start frame. Treat "
@@ -1318,7 +1305,7 @@ def _choose_with_language_agent(
             "id": document.project.id,
             "genre": next(
                 (
-                    bible.style.genre
+                    declared_style_value(bible.style.genre) or ""
                     for bible in document.bible_versions
                     if bible.id == document.project.current_bible_version_id
                 ),

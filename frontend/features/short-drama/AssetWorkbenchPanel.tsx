@@ -80,12 +80,17 @@ function versionUrl(version: AssetVersion | undefined): string | null {
   return version.external_url ?? null
 }
 
-function defaultPrompt(asset: Asset): string {
+function defaultPrompt(project: ProjectAggregate, asset: Asset): string {
   const descriptor = currentVersion(asset).descriptor
-  if (asset.kind === 'CHARACTER') return `基于以下设定生成一张单幅真人全身身份母版：${descriptor}。正面略带四分之三角度，完整展示脸、发型、体型、鞋和整套服装，背景干净中性，竖屏9:16。不要宫格、拼贴、多人、文字、logo或水印。`
-  if (asset.kind === 'LOCATION') return `基于以下设定生成一张单幅真人空场 Master Wide：${descriptor}。清楚交代总布局、摄影轴线、入口、出口、通道、门窗、桌椅和主光源，竖屏9:16。不要人物、拼贴、多个冲突机位、文字、logo或水印。`
-  if (asset.kind === 'PROP') return `基于以下设定生成一张单幅三分之四角度产品母版：${descriptor}。清楚展示真实尺度、形状、颜色、部件数量和材质，背景干净中性。不要完整人物、场景、额外部件、文字、logo或水印。`
-  return `真人都市短剧的高质量写实参考素材：${descriptor}。保持所有已批准身份与空间关系，单幅构图，无文字、logo或水印。`
+  const bible = project.document.bible_versions.find((item) => item.id === project.document.project.current_bible_version_id)
+  const style = bible?.style
+  const styleContext = style
+    ? `服从当前项目 Style：视觉媒介=${style.medium}；镜头语言=${style.cinematography}；色彩=${style.color}；质感=${style.texture}。`
+    : '服从当前项目已经声明的视觉媒介与风格。'
+  if (asset.kind === 'CHARACTER') return `基于以下设定生成一张能稳定表达角色身份与造型的单幅母版：${descriptor}。取景、角度、比例和细节由当前 Style 与后续镜头需要决定。${styleContext}不要宫格、拼贴、无关人物、文字、logo或水印。`
+  if (asset.kind === 'LOCATION') return `基于以下设定生成一张能稳定表达场景规则与镜头所需关系的单幅母版：${descriptor}。空间、层次、透视或图形组织方式由当前 Style 决定。${styleContext}不要无关人物、拼贴、冲突视角、文字、logo或水印。`
+  if (asset.kind === 'PROP') return `基于以下设定生成一张能稳定表达道具身份与剧情所需结构的单幅母版：${descriptor}。构图、形态、颜色和材质由当前 Style 与资产描述决定。${styleContext}不要无关人物、场景、额外部件、文字、logo或水印。`
+  return `基于以下描述生成符合当前项目 Style 的单幅视觉参考：${descriptor}。${styleContext}保持已批准的身份与关系，无文字、logo或水印。`
 }
 
 function defaultDescriptor(asset: Asset): string {
@@ -197,7 +202,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     if (!asset) return
     const active = currentVersion(asset)
     setSelectedVersionId(active.id)
-    setPrompt(defaultPrompt(asset))
+    setPrompt(defaultPrompt(project, asset))
     setDescriptor(defaultDescriptor(asset))
     const isProp = asset.kind === 'PROP'
     setSize(isProp ? '1024x1024' : '768x1344')
@@ -210,7 +215,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     setStockCandidates([])
     setStockWarnings([])
     setStockImportMode(asset.kind === 'CHARACTER' ? 'DERIVE' : 'AUTO')
-  }, [asset?.id])
+  }, [asset?.id, project.document.project.current_bible_version_id])
 
   const perform = async <T,>(label: string, action: () => Promise<ResultLike<T>>, onSuccess: (value: T) => void) => {
     setBusy(label)

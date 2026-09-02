@@ -26,6 +26,7 @@ from short_drama.models import (
     VideoGenerationRoute,
 )
 from short_drama.production_profiles import production_skill
+from short_drama.style_context import declared_style_value
 
 
 _BASE_FIELDS = (
@@ -225,9 +226,10 @@ def _compile_base_prompt(
         ),
         VideoGenerationRoute.FRAME_FIRST_LAST: (
             "The shot begins in the exact visible state and composition of <Picture 1>, "
-            "then follows a continuous observable path and progressively converges on the "
-            "exact pose, object state, spacing, camera angle, lighting, and composition of "
-            "<Picture 2> at the end. "
+            "then follows the temporal behavior declared by the ShotPlan—including stillness, "
+            "limited or discontinuous change, or continuous motion—and reaches the exact pose, "
+            "object state, spacing, camera angle, lighting, and composition of <Picture 2> at "
+            "the end. "
         ),
     }[route]
     description = _timeline_description(document, shot, duration=duration)
@@ -280,8 +282,35 @@ def _timeline_description(
     duration: int,
 ) -> str:
     hidden_props = _reference_plan_omits_visible_props(document, shot)
+    bible = next(
+        (
+            item
+            for item in document.bible_versions
+            if item.id == document.project.current_bible_version_id
+        ),
+        document.bible_versions[-1],
+    )
+    style = bible.style
+    style_fields = [
+        f"{label}={value}"
+        for label, raw_value in (
+            ("medium", style.medium),
+            ("cinematography", style.cinematography),
+            ("color", style.color),
+            ("texture", style.texture),
+        )
+        if (value := declared_style_value(raw_value)) is not None
+    ]
+    opening = f"Compose the shot for a 9:16 vertical frame over {duration} seconds."
+    if style_fields:
+        opening = (
+            "Follow the project's declared style: "
+            + "; ".join(style_fields)
+            + ". "
+            + opening
+        )
     parts = [
-        f"Live-action and cinematic, composed for a 9:16 vertical frame over {duration} seconds.",
+        opening,
         f"The {shot.framing} composition shows the following observable scene: {shot.visual}.",
         f"Narrative purpose: {shot.narrative_purpose}.",
         f"Camera direction: {shot.camera}.",
@@ -298,8 +327,9 @@ def _timeline_description(
     else:
         parts.extend(
             [
-                f"The performance develops continuously from {shot.continuity.action_in} "
-                f"to {shot.continuity.action_out}.",
+                f"The visible state develops from {shot.continuity.action_in} "
+                f"to {shot.continuity.action_out}, using only the form and amount of motion "
+                "required by the ShotPlan and project style.",
                 "Visible continuity: "
                 f"the opening state is {shot.continuity.prop_state_in}; "
                 f"the ending state is {shot.continuity.prop_state_out}.",
@@ -490,8 +520,8 @@ def _retention_sentence(reference: _PromptReference) -> str:
         if reference.video_guide.kind == H3VideoGuideKind.CAMERA_PREVIS:
             return (
                 f"{reference.label} transfers only the coarse camera path and pacing; its "
-                "low-fidelity texture, frozen performance, compression, and missing body motion "
-                "are not retained."
+                "low-fidelity compression and interpolation artifacts are not retained. The "
+                "project's declared style and intended amount of motion remain authoritative."
             )
         return (
             f"{reference.label} transfers only the terminal motion state, screen direction, "

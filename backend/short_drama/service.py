@@ -5,11 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import shutil
 import threading
 from copy import deepcopy
 from pathlib import Path
-from typing import cast
 from uuid import uuid4
+
+from PIL import Image, UnidentifiedImageError
 
 from short_drama.asset_workbench import (
     AssetProviderConfigurationError,
@@ -19,30 +21,26 @@ from short_drama.asset_workbench import (
     ImageProviderFactory,
     default_image_provider_factory,
 )
-from short_drama.asset_inspection import (
-    SemanticAssetReview,
-    build_base_asset_prompt,
-    build_stock_grounded_asset_prompt,
-    build_keyframe_correction_prompt,
-    canonical_base_asset_descriptor,
-    inspect_asset_image,
-)
 from short_drama.asset_catalog import (
     AssetCatalogImportRequest,
     AssetCatalogSearchRequest,
     AssetCatalogSearchResponse,
     AssetCoverageResponse,
-    ReferenceViewNeed,
-    build_reference_view_prompt,
-    ensure_base_reference_pack_entries,
     recommended_reusable_reference_views,
     search_asset_catalog,
 )
+from short_drama.agent_runtime import AgentRuntime, AgentRuntimeStore, ContextCompiler
 from short_drama.audio_inspection import AudioInspector, AudioSemanticService
 from short_drama.change_planner import (
     SemanticChangePlan,
     SemanticChangePlanRequest,
     plan_semantic_change,
+)
+from short_drama.change_executor import (
+    ChangeExecutionError,
+    SemanticChangeApplyRequest,
+    SemanticChangeApplyResponse,
+    prepare_semantic_change,
 )
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
@@ -66,11 +64,9 @@ from short_drama.h3_models import (
     H3ProviderRunsResponse,
     H3ReconciliationCandidatesResponse,
     H3RoutePlanStatus,
-    H3RouteAssetPreparation,
     H3RouteAssetPreparationStatus,
     H3ShotRouteAction,
     H3ShotRouteExecutionStatus,
-    H3ShotRoutePlan,
     H3ShotRouteReadiness,
     H3TakeReviewRequest,
     H3TakeReviewResponse,
@@ -96,14 +92,11 @@ from short_drama.image_models import (
     AssetMutationResponse,
     AssetReviewDecision,
     AssetReviewRequest,
-    ImageGenerationTask,
-    ImageOperation,
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
     ImageTaskCreateRequest,
     ImageTaskListResponse,
     ImageTaskResponse,
-    ImageTaskStatus,
 )
 from short_drama.language_models import (
     LanguagePromptCompileRequest,
@@ -118,27 +111,18 @@ from short_drama.hierarchical_script import (
     revise_story_scene,
     write_story_scene,
 )
-from short_drama.media import MediaGenerationError, MockMediaRenderer, TimelineExporter
+from short_drama.media import MockMediaRenderer, TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
-    AudioInspectionReport,
     AudioInspectionRequest,
     AudioInspectionResponse,
     Asset,
     AssetKind,
     AssetVersion,
     AssetMediaType,
-    AutoDraftResponse,
-    AutonomousExecutionTarget,
-    AutonomousDraftCreateRequest,
-    AutonomousRepeatCreateRequest,
-    AutonomousDraftResponse,
-    AutonomousRunAdvanceRequest,
-    AutonomousRunRecord,
-    AutonomousRunStatus,
-    AutonomousRunStep,
     CharacterProfile,
     CreateProjectRequest,
+    CreativeInputImage,
     DirectorRepairDecision,
     DirectorRepairRecord,
     DirectorRepairStrategy,
@@ -158,45 +142,31 @@ from short_drama.models import (
     OperationKind,
     OutputSpec,
     PlanningOutlineSnapshot,
-    PlanningOutlineAgentRevisionRequest,
-    PlanningOutlineDirectEditRequest,
     PlanningReviewSnapshot,
-    PlanningRunCreateRequest,
-    PlanningRunListResponse,
     PlanningRunRecord,
     PlanningRunResponse,
     PlanningRunStatus,
     PlanningRunStep,
     ProgressSummary,
     ProjectAggregate,
-    ProjectBibleVersion,
     ProjectDocument,
     ProjectListResponse,
+    ProjectPlanningMetadata,
     ProjectStage,
     ReferencePack,
     ReferencePackEntry,
-    ReferenceRole,
     ReferenceBinding,
     ReferencePlanEntry,
     RouteEvidence,
     RunMode,
     QaFailureCategory,
-    QaIssue,
     QaStatus,
     ReviseScriptLineRequest,
     ReviseScriptLinesRequest,
     ScriptLineRevision,
-    ScriptQualityCatalogResponse,
-    ScriptQualityComparison,
-    ScriptQualityHistoryResponse,
-    ScriptQualityRoundSummary,
-    ScriptQualityTrend,
     ScriptReviewReport,
     ScriptReviewDispositionAction,
     ScriptReviewSeverity,
-    StoryRepairPlan,
-    StorySourceContract,
-    StoryRevisionVerification,
     StructuredScene,
     ScriptVersion,
     SemanticReviewStatus,
@@ -237,7 +207,6 @@ from short_drama.production_planner import (
     scene_review_handoff,
     story_revision_history_entry,
     story_revision_review,
-    revise_story_outline_from_instruction,
     revise_story_outline,
     verify_story_revision,
 )
@@ -303,14 +272,29 @@ from short_drama.providers.openai_compatible_language_client import (
     default_language_provider_factory,
     is_loopback_openai_url,
 )
+from short_drama.production_manager import (
+    AgentAdvanceResponse,
+    AgentCapabilityCatalog,
+    AgentProjectCreateRequest,
+    AgentProjectCreateResponse,
+    AgentRunAdvanceRequest,
+    AgentRunCreateRequest,
+    AgentRunListResponse,
+    AgentRunReplanRequest,
+    AgentRunView,
+    AgentUserInputRequest,
+    AgentWorkOrderResultRequest,
+    AgentWorkOrderResultResponse,
+    AgentWorkOrderView,
+    ProductionManager,
+    ProductionPlannerFactory,
+    ProjectArtifactResolver,
+    default_production_planner_factory,
+)
 from short_drama.repository import ShortDramaRepository
 from short_drama.script_documents import (
     EpisodeOutlinePatch,
     EpisodeScenePatch,
-    PlanningSceneRevisionRequest,
-    PlanningScriptSearchRequest,
-    PlanningScriptSearchResponse,
-    ScriptRevisionContextPlan,
     ScriptRevisionScope,
     apply_episode_outline_patch,
     build_planning_script_documents,
@@ -328,6 +312,7 @@ from short_drama.stock_assets import (
     StockProviderConfigStore,
     StockProviderConfigUpdate,
 )
+from short_drama.tools import ToolRegistry, build_default_tool_registry
 from short_drama.video_inspection import VideoInspector
 from short_drama.voice_models import (
     VoiceReferenceMutationResponse,
@@ -357,91 +342,14 @@ _TERMINAL_TASK_STATUSES = {
     TaskStatus.FAILED,
     TaskStatus.CANCELLED,
 }
-_MAX_AUTONOMOUS_IMAGE_ATTEMPTS = 3
-_MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS = 3
 _MAX_EPISODE_REVIEW_ATTEMPTS = 3
 _DIRECTOR_ADVICE_MAX_OUTPUT_TOKENS = 7200
-_BOUNDED_BEST_EFFORT_CHECK = "bounded-auto-draft-best-effort-waiver"
-_REFERENCE_VIEW_MARKER_PREFIX = "AUTO_REFERENCE_VIEW:"
-_REFERENCE_VIEW_SKIP_PREFIX = "reference-view-skipped:"
+_CREATIVE_INPUT_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+_MAX_CREATIVE_INPUT_IMAGE_BYTES = 256 * 1024 * 1024
 
 
 def _take_is_timeline_eligible(take: Take) -> bool:
-    return take.qa_status == QaStatus.PASSED or (
-        _BOUNDED_BEST_EFFORT_CHECK in take.qa_report.checks
-    )
-
-
-def _next_h3_continuity_wave(
-    document: ProjectDocument,
-    takes: list[Take],
-) -> list[str]:
-    """Return the next uncovered shot in each scene.
-
-    This lets later shots use an accepted preceding Take as an optional Route Agent
-    input without forcing reference-video generation or serializing unrelated scenes.
-    """
-
-    covered = {
-        take.shot_id
-        for take in takes
-        if take.is_selected
-        and take.freshness == Freshness.CURRENT
-        and take.availability == TakeAvailability.AVAILABLE
-        and _take_is_timeline_eligible(take)
-    }
-    selected_scenes: set[str] = set()
-    result: list[str] = []
-    for shot in sorted(document.shots, key=lambda item: item.sequence):
-        if shot.id in covered:
-            continue
-        scene_key = shot.scene_id or "__UNSCOPED_SCENE__"
-        if scene_key in selected_scenes:
-            continue
-        selected_scenes.add(scene_key)
-        result.append(shot.id)
-    return result
-
-
-def _missing_timeline_shot_ids(
-    document: ProjectDocument,
-    takes: list[Take],
-    *,
-    restrict_to: set[str] | None = None,
-) -> list[str]:
-    covered = {
-        take.shot_id
-        for take in takes
-        if take.is_selected
-        and take.freshness == Freshness.CURRENT
-        and take.availability == TakeAvailability.AVAILABLE
-        and _take_is_timeline_eligible(take)
-    }
-    return [
-        shot.id
-        for shot in sorted(document.shots, key=lambda item: item.sequence)
-        if shot.id not in covered
-        and (restrict_to is None or shot.id in restrict_to)
-    ]
-
-
-def _autonomous_director_repair_attempts(
-    document: ProjectDocument,
-    shot_id: str,
-) -> int:
-    """Count post-Take automatic repair attempts for one shot.
-
-    Pre-production or inherited Director decisions have no source Take and therefore
-    do not consume this runtime retry allowance.
-    """
-
-    return sum(
-        1
-        for repair in document.repair_history
-        if repair.source_shot_id == shot_id
-        and repair.source_take_id is not None
-        and repair.decision == DirectorRepairDecision.APPLIED
-    )
+    return take.qa_status == QaStatus.PASSED
 
 
 def _timeline_clip_window(shot: ShotPlan, take: Take) -> tuple[float, float]:
@@ -467,255 +375,6 @@ def _timeline_clip_window(shot: ShotPlan, take: Take) -> tuple[float, float]:
     return source_in_seconds, clip_duration
 
 
-def _can_receive_bounded_best_effort_waiver(
-    take: Take,
-    evidence: RouteEvidence | None,
-) -> bool:
-    if (
-        take.freshness != Freshness.CURRENT
-        or take.availability != TakeAvailability.AVAILABLE
-        or take.qa_status != QaStatus.REJECTED
-        or take.qa_report.score < 2.5
-        or _BOUNDED_BEST_EFFORT_CHECK in take.qa_report.checks
-        or evidence is None
-        or evidence.technical_passed is not True
-        or evidence.purpose == EvidencePurpose.CONTRACT_SMOKE
-    ):
-        return False
-    high_issues: list[QaIssue] = []
-    for issue in take.qa_report.issues:
-        severity = issue.severity.upper()
-        if severity in {"ERROR", "CRITICAL", "FATAL"}:
-            return False
-        if severity in {"HIGH", "MAJOR"}:
-            high_issues.append(issue)
-    if len(high_issues) > 1:
-        return False
-    non_waivable_categories = {
-        QaFailureCategory.TECHNICAL_MEDIA,
-        QaFailureCategory.CONTACT_CONTINUITY,
-        QaFailureCategory.SPATIAL_CONTINUITY,
-        QaFailureCategory.CHARACTER_ORIENTATION,
-        QaFailureCategory.IDENTITY_CONTINUITY,
-    }
-    for issue in high_issues:
-        if issue.category in non_waivable_categories:
-            return False
-        if issue.category == QaFailureCategory.PROP_CONTINUITY and any(
-            token in issue.code.upper()
-            for token in (
-                "DUPLICAT",
-                "STATE",
-                "CONTACT",
-                "HAND",
-                "MISSING",
-                "ORIENTATION",
-                "TOPOLOGY",
-            )
-        ):
-            return False
-    return True
-
-
-def _order_keyframe_reference_versions(
-    bound: list[tuple[Asset, AssetVersion]],
-    reference_plan: ReferencePlanEntry,
-    preferred_version_ids: list[str],
-) -> list[tuple[Asset, AssetVersion]]:
-    """Keep the Agent/reference-plan priority when choosing an image-edit anchor."""
-
-    by_version_id = {version.id: (asset, version) for asset, version in bound}
-    by_asset_id = {asset.id: (asset, version) for asset, version in bound}
-    ordered: list[tuple[Asset, AssetVersion]] = []
-    seen: set[str] = set()
-
-    def append(candidate: tuple[Asset, AssetVersion] | None) -> None:
-        if candidate is None or candidate[1].id in seen:
-            return
-        ordered.append(candidate)
-        seen.add(candidate[1].id)
-
-    for version_id in preferred_version_ids:
-        append(by_version_id.get(version_id))
-    for requirement in reference_plan.requirements:
-        append(by_asset_id.get(requirement.subject_asset_id))
-    for binding in reference_plan.bindings:
-        append(by_version_id.get(binding.target_id))
-    for candidate in bound:
-        append(candidate)
-    return ordered
-
-
-def _scope_keyframe_reference_versions(
-    document: ProjectDocument,
-    bound: list[tuple[Asset, AssetVersion]],
-    reference_plan: ReferencePlanEntry,
-    preferred_version_ids: list[str],
-) -> list[tuple[Asset, AssetVersion]]:
-    """Keep route preferences without dropping a visible subject's identity anchor."""
-
-    if not bound:
-        return []
-
-    subject_by_version_id: dict[str, str] = {}
-    for pack in document.reference_packs:
-        for entry in pack.entries:
-            subject_by_version_id[entry.asset_version_id] = pack.subject_asset_id
-    for asset, version in bound:
-        subject_by_version_id.setdefault(version.id, asset.id)
-
-    preferred_order = {
-        version_id: index for index, version_id in enumerate(preferred_version_ids)
-    }
-    preferred = sorted(
-        (item for item in bound if item[1].id in preferred_order),
-        key=lambda item: preferred_order[item[1].id],
-    )
-    candidates = [*preferred, *(item for item in bound if item not in preferred)]
-
-    required_subject_ids: list[str] = []
-
-    def require(subject_id: str) -> None:
-        if subject_id not in required_subject_ids:
-            required_subject_ids.append(subject_id)
-
-    for requirement in reference_plan.requirements:
-        if requirement.required:
-            require(requirement.subject_asset_id)
-    for beat in reference_plan.action_beats:
-        require(beat.actor_asset_id)
-    for interaction in reference_plan.interactions:
-        require(interaction.actor_asset_id)
-        require(interaction.target_asset_id)
-    for requirement in reference_plan.requirements:
-        require(requirement.subject_asset_id)
-
-    limit = max(1, reference_plan.max_reference_images)
-    if not required_subject_ids:
-        if preferred:
-            return preferred[:limit]
-        return _filter_generation_reference_versions(bound, reference_plan)[:limit]
-
-    selected: list[tuple[Asset, AssetVersion]] = []
-    seen_versions: set[str] = set()
-
-    def append(candidate: tuple[Asset, AssetVersion] | None) -> None:
-        if (
-            candidate is None
-            or candidate[1].id in seen_versions
-            or len(selected) >= limit
-        ):
-            return
-        selected.append(candidate)
-        seen_versions.add(candidate[1].id)
-
-    # Reserve one best available reference per visible/required subject. Several
-    # specialised location or prop views must not consume the whole provider input
-    # budget while character identity anchors silently disappear.
-    for subject_id in required_subject_ids:
-        append(
-            next(
-                (
-                    item
-                    for item in candidates
-                    if subject_by_version_id.get(item[1].id) == subject_id
-                ),
-                None,
-            )
-        )
-
-    # Use remaining capacity for the Agent's higher-resolution semantic views.
-    for candidate in preferred:
-        append(candidate)
-    for candidate in _filter_generation_reference_versions(bound, reference_plan):
-        append(candidate)
-    return selected
-
-
-def _prioritize_keyframe_canvas(
-    ordered: list[tuple[Asset, AssetVersion]],
-    shot: ShotPlan,
-) -> list[tuple[Asset, AssetVersion]]:
-    """Choose a composition-friendly edit canvas from the selected references."""
-
-    framing = shot.framing.lower()
-    if any(
-        token in framing
-        for token in ("道具", "手部", "物件", "产品", "insert", "product", "detail")
-    ):
-        preferred_kind = AssetKind.PROP
-    elif any(
-        token in framing
-        for token in ("双人", "多人", "群像", "全景", "远景", "wide", "two-shot", "master")
-    ):
-        preferred_kind = AssetKind.LOCATION
-    elif any(
-        token in framing
-        for token in ("面部", "胸像", "单人", "近景", "特写", "portrait", "close-up")
-    ):
-        preferred_kind = AssetKind.CHARACTER
-    else:
-        character_count = sum(asset.kind == AssetKind.CHARACTER for asset, _ in ordered)
-        preferred_kind = (
-            AssetKind.LOCATION if character_count > 1 else AssetKind.CHARACTER
-        )
-    primary = next(
-        (item for item in ordered if item[0].kind == preferred_kind),
-        None,
-    )
-    if primary is None:
-        return ordered
-    return [primary, *(item for item in ordered if item[1].id != primary[1].id)]
-
-
-def _filter_generation_reference_versions(
-    bound: list[tuple[Asset, AssetVersion]],
-    reference_plan: ReferencePlanEntry,
-) -> list[tuple[Asset, AssetVersion]]:
-    """Keep subjects selected by requirements, action structure, or scoped shot bindings."""
-
-    subject_ids = {
-        requirement.subject_asset_id for requirement in reference_plan.requirements
-    }
-    subject_by_version_id = {
-        version.id: asset.id for asset, version in bound
-    }
-    subject_ids.update(
-        subject_by_version_id[binding.target_id]
-        for binding in reference_plan.bindings
-        if binding.target_id in subject_by_version_id
-    )
-    subject_ids.update(beat.actor_asset_id for beat in reference_plan.action_beats)
-    for interaction in reference_plan.interactions:
-        subject_ids.add(interaction.actor_asset_id)
-        subject_ids.add(interaction.target_asset_id)
-    if not subject_ids:
-        return bound
-    filtered = [item for item in bound if item[0].id in subject_ids]
-    return filtered or bound
-
-
-def _remap_exact_identifiers(
-    value: object,
-    identifier_map: dict[str, str],
-) -> object:
-    """Remap domain identifiers without rewriting paths, prompts, or prose substrings."""
-
-    if isinstance(value, str):
-        return identifier_map.get(value, value)
-    if isinstance(value, list):
-        return [
-            _remap_exact_identifiers(item, identifier_map)
-            for item in cast(list[object], value)
-        ]
-    if isinstance(value, dict):
-        return {
-            key: _remap_exact_identifiers(item, identifier_map)
-            for key, item in cast(dict[str, object], value).items()
-        }
-    return value
-
-
 class ShortDramaService:
     """Owns the SQLite truth source, worker, Mock adapter, and manifest exporter."""
 
@@ -729,6 +388,10 @@ class ShortDramaService:
         language_provider_factory: LanguageProviderClientFactory | None = None,
         stock_asset_client: StockAssetSearchClient | None = None,
         audio_semantic_service: AudioSemanticService | None = None,
+        tool_registry: ToolRegistry | None = None,
+        production_planner_factory: ProductionPlannerFactory = (
+            default_production_planner_factory
+        ),
     ) -> None:
         self.repository = ShortDramaRepository(database_path)
         self.workspace_root = workspace_root
@@ -771,11 +434,86 @@ class ShortDramaService:
         )
         self._lock = threading.RLock()
         self._planning_run_locks: dict[str, threading.Lock] = {}
+        self.tool_registry = build_default_tool_registry(self, registry=tool_registry)
+        self.agent_runtime_store = AgentRuntimeStore(database_path)
+        self.agent_runtime = AgentRuntime(
+            self.agent_runtime_store,
+            ContextCompiler(
+                self.agent_runtime_store,
+                ProjectArtifactResolver(self.repository),
+            ),
+        )
+        self.production_manager = ProductionManager(
+            runtime=self.agent_runtime,
+            tools=self.tool_registry,
+            projects=self.repository,
+            language_client_resolver=self._configured_language_client,
+            planner_factory=production_planner_factory,
+        )
 
     def list_projects(self) -> ProjectListResponse:
         return ProjectListResponse(
             projects=[document.project for document in self.repository.list_projects()]
         )
+
+    def get_agent_capabilities(self) -> AgentCapabilityCatalog:
+        return self.production_manager.capability_catalog()
+
+    def create_agent_project(
+        self,
+        request: AgentProjectCreateRequest,
+    ) -> AgentProjectCreateResponse:
+        return self.production_manager.start_project_run(request)
+
+    def create_agent_run(
+        self,
+        project_id: str,
+        request: AgentRunCreateRequest,
+    ) -> AgentRunView:
+        return self.production_manager.start_run(project_id, request)
+
+    def list_agent_runs(self, project_id: str) -> AgentRunListResponse:
+        return self.production_manager.list_runs(project_id)
+
+    def get_agent_run(self, run_id: str) -> AgentRunView:
+        return self.production_manager.get_run(run_id)
+
+    def replan_agent_run(
+        self,
+        run_id: str,
+        request: AgentRunReplanRequest,
+    ) -> AgentRunView:
+        return self.production_manager.replan(run_id, request)
+
+    def advance_agent_run(
+        self,
+        run_id: str,
+        request: AgentRunAdvanceRequest,
+    ) -> AgentAdvanceResponse:
+        return self.production_manager.advance(run_id, request)
+
+    def get_agent_work_order(self, work_order_id: str) -> AgentWorkOrderView:
+        return self.production_manager.get_work_order(work_order_id)
+
+    def execute_agent_work_order(
+        self,
+        work_order_id: str,
+    ) -> AgentWorkOrderResultResponse:
+        return self.production_manager.execute_work_order(work_order_id)
+
+    def submit_agent_work_order_result(
+        self,
+        work_order_id: str,
+        request: AgentWorkOrderResultRequest,
+    ) -> AgentWorkOrderResultResponse:
+        return self.production_manager.submit_work_order_result(work_order_id, request)
+
+    def submit_agent_user_input(
+        self,
+        run_id: str,
+        request: AgentUserInputRequest,
+    ) -> AgentRunView:
+        return self.production_manager.submit_user_input(run_id, request)
 
     def preview_semantic_change(
         self,
@@ -794,425 +532,35 @@ class ShortDramaService:
             self._configured_language_client(),
         )
 
-    def list_planning_runs(self) -> PlanningRunListResponse:
-        return PlanningRunListResponse(runs=self.repository.list_planning_runs())
+    def apply_semantic_change(
+        self,
+        project_id: str,
+        request: SemanticChangeApplyRequest,
+    ) -> SemanticChangeApplyResponse:
+        """Apply an edited impact plan and invalidate its downstream dependency branch."""
+
+        with self._lock:
+            document = self._require_project_document(project_id)
+            try:
+                prepared = prepare_semantic_change(document, request)
+            except ChangeExecutionError as exc:
+                raise WorkflowConflictError(str(exc)) from exc
+            affected = prepared.result.invalidated_shot_ids
+            stale_take_ids = [
+                take.id
+                for take in self.repository.list_takes(project_id)
+                if take.shot_id in affected and take.freshness == Freshness.CURRENT
+            ]
+            self.repository.mark_takes_stale(project_id, affected)
+            prepared.result.stale_take_ids = stale_take_ids
+            self.repository.save_project(prepared.document)
+        return SemanticChangeApplyResponse(
+            result=prepared.result,
+            project=self.get_project(project_id),
+        )
 
     def get_planning_run(self, run_id: str) -> PlanningRunResponse:
         return self._planning_run_response(self._require_planning_run(run_id))
-
-    def get_planning_run_script_quality(
-        self,
-        run_id: str,
-    ) -> ScriptQualityHistoryResponse:
-        run = self._require_planning_run(run_id)
-        outlines = self.repository.list_planning_outline_snapshots(run_id)
-        reviews = self.repository.list_planning_review_snapshots(run_id)
-        return ScriptQualityHistoryResponse(
-            comparison=self._script_quality_comparison(run, reviews),
-            outline_snapshots=outlines,
-            review_snapshots=reviews,
-            revision_judge=run.revision_judge,
-        )
-
-    def search_planning_script_documents(
-        self,
-        run_id: str,
-        request: PlanningScriptSearchRequest,
-    ) -> PlanningScriptSearchResponse:
-        """Search one script version as an independently callable Agent tool."""
-
-        run = self._require_planning_run(run_id)
-        outline = self._planning_outline(run)
-        documents = self.repository.list_planning_script_documents(
-            run.id,
-            run.revision_round,
-        )
-        if not documents:
-            self._index_planning_outline(run, outline)
-        hits = self.repository.search_planning_script_documents(
-            run.id,
-            run.revision_round,
-            request.query,
-            limit=request.limit,
-            include_story_bible=request.include_story_bible,
-        )
-        return PlanningScriptSearchResponse(
-            run_id=run.id,
-            revision_round=run.revision_round,
-            query=request.query,
-            hits=hits,
-        )
-
-    def revise_planning_scenes_with_agent(
-        self,
-        run_id: str,
-        request: PlanningSceneRevisionRequest,
-    ) -> PlanningRunResponse:
-        """Apply independently generated scene patches without rerunning the episode."""
-
-        lock = self._planning_run_lock(run_id)
-        if not lock.acquire(blocking=False):
-            raise WorkflowConflictError(f"Planning run {run_id} is already advancing")
-        try:
-            run = self._require_planning_run(run_id)
-            outline = self._planning_outline(run)
-            known_sequences = {scene.sequence for scene in outline.scenes}
-            unknown = sorted(set(request.scene_sequences) - known_sequences)
-            if unknown:
-                raise WorkflowConflictError(
-                    f"Unknown scene sequences for local revision: {unknown}"
-                )
-            if not self.repository.list_planning_script_documents(
-                run.id,
-                run.revision_round,
-            ):
-                self._index_planning_outline(run, outline)
-            hits = self.repository.search_planning_script_documents(
-                run.id,
-                run.revision_round,
-                request.instruction,
-                limit=12,
-                include_story_bible=True,
-            )
-            client = self._configured_language_client()
-            if request.scene_sequences:
-                context_plan = ScriptRevisionContextPlan(
-                    scope=ScriptRevisionScope.SCENE_PATCH,
-                    affected_scene_sequences=list(request.scene_sequences),
-                    retrieval_query=request.instruction,
-                    rationale="用户已显式指定局部场次，覆盖 Agent 的范围建议。",
-                    preserve=["未指定场次", "全局资产契约", "目标总时长"],
-                )
-            else:
-                context_plan = recommend_script_revision_context(
-                    request.instruction,
-                    outline,
-                    hits,
-                    client,
-                )
-            create_request = CreateProjectRequest.model_validate(
-                run.request.model_dump(exclude={"render_export", "execution_target"})
-            )
-            if context_plan.scope == ScriptRevisionScope.FULL_OUTLINE:
-                revision = revise_story_outline_from_instruction(
-                    create_request,
-                    outline,
-                    request.instruction,
-                    client,
-                )
-                if not revision.revised:
-                    raise ProviderOperationError(" ".join(revision.warnings))
-                revised_outline = revision.outline
-                applied_sequences = [scene.sequence for scene in outline.scenes]
-                revision_warnings = list(revision.warnings)
-                source = "User-directed global blueprint revision"
-            else:
-                selected = context_plan.affected_scene_sequences
-                patches: list[EpisodeScenePatch] = []
-                revision_warnings: list[str] = []
-                for sequence in selected:
-                    scene = outline.scenes[sequence - 1]
-                    result = revise_story_scene(
-                        create_request,
-                        outline,
-                        scene,
-                        request.instruction,
-                        selected,
-                        hits,
-                        client,
-                    )
-                    revision_warnings.extend(result.warnings)
-                    if result.revised:
-                        patches.append(result.patch)
-                if not patches:
-                    raise ProviderOperationError(
-                        " ".join(revision_warnings)
-                        or "Scene revision Agent produced no applicable patch"
-                    )
-                revised_outline = apply_episode_outline_patch(
-                    outline,
-                    EpisodeOutlinePatch(
-                        base_revision_round=run.revision_round,
-                        rationale=context_plan.rationale,
-                        scene_patches=patches,
-                        preserve=context_plan.preserve,
-                    ),
-                )
-                applied_sequences = [patch.scene_sequence for patch in patches]
-                source = "User-directed scene patch"
-            source_contract = self._source_contract_after_user_edit(
-                run,
-                revised_outline,
-                request.instruction,
-            )
-            self._apply_planning_outline_edit(
-                run,
-                revised_outline,
-                source=source,
-                warning=(
-                    f"局部修改范围：{applied_sequences}。{context_plan.rationale} "
-                    + " ".join(revision_warnings)
-                ).strip(),
-                source_contract=source_contract,
-            )
-            self.repository.save_planning_run(run)
-            return self._planning_run_response(run)
-        finally:
-            lock.release()
-
-    def list_script_quality_evaluations(self) -> ScriptQualityCatalogResponse:
-        evaluations: list[ScriptQualityComparison] = []
-        for run in self.repository.list_planning_runs():
-            reviews = self.repository.list_planning_review_snapshots(run.id)
-            if not reviews:
-                continue
-            evaluations.append(self._script_quality_comparison(run, reviews))
-        return ScriptQualityCatalogResponse(evaluations=evaluations)
-
-    def create_planning_run(
-        self,
-        request: PlanningRunCreateRequest,
-    ) -> PlanningRunResponse:
-        now = utc_now()
-        run = PlanningRunRecord(
-            id=f"planning-run-{uuid4().hex}",
-            status=PlanningRunStatus.RUNNING,
-            current_step=PlanningRunStep.STORY_ARCHITECT,
-            request=request,
-            created_at=now,
-            updated_at=now,
-        )
-        self.repository.save_planning_run(run)
-        return PlanningRunResponse(run=run)
-
-    def replace_planning_outline(
-        self,
-        run_id: str,
-        request: PlanningOutlineDirectEditRequest,
-    ) -> PlanningRunResponse:
-        """Save a user-edited outline and invalidate only downstream planning."""
-
-        try:
-            outline = EpisodeOutline.model_validate_json(request.outline_json)
-        except ValueError as exc:
-            raise WorkflowConflictError(f"Invalid EpisodeOutline: {exc}") from exc
-        lock = self._planning_run_lock(run_id)
-        if not lock.acquire(blocking=False):
-            raise WorkflowConflictError(f"Planning run {run_id} is already advancing")
-        try:
-            run = self._require_planning_run(run_id)
-            source_contract = self._source_contract_after_user_edit(
-                run,
-                outline,
-                request.change_reason,
-            )
-            self._apply_planning_outline_edit(
-                run,
-                outline,
-                source="User direct outline edit",
-                warning=f"用户直接修改剧本：{request.change_reason.strip()}",
-                source_contract=source_contract,
-            )
-            self.repository.save_planning_run(run)
-            return self._planning_run_response(run)
-        finally:
-            lock.release()
-
-    def revise_planning_outline_with_agent(
-        self,
-        run_id: str,
-        request: PlanningOutlineAgentRevisionRequest,
-    ) -> PlanningRunResponse:
-        """Let a user or supervising Agent create a targeted outline version."""
-
-        lock = self._planning_run_lock(run_id)
-        if not lock.acquire(blocking=False):
-            raise WorkflowConflictError(f"Planning run {run_id} is already advancing")
-        try:
-            run = self._require_planning_run(run_id)
-            current = self._planning_outline(run)
-            create_request = CreateProjectRequest.model_validate(
-                run.request.model_dump(exclude={"render_export", "execution_target"})
-            )
-            revision = revise_story_outline_from_instruction(
-                create_request,
-                current,
-                request.instruction.strip(),
-                self._configured_language_client(),
-            )
-            if not revision.revised:
-                raise ProviderOperationError(" ".join(revision.warnings))
-            source_contract = self._source_contract_after_user_edit(
-                run,
-                revision.outline,
-                request.instruction,
-            )
-            self._apply_planning_outline_edit(
-                run,
-                revision.outline,
-                source="User-directed Story Architect revision",
-                warning=" ".join(revision.warnings),
-                source_contract=source_contract,
-            )
-            self.repository.save_planning_run(run)
-            return self._planning_run_response(run)
-        finally:
-            lock.release()
-
-    def revise_planning_outline_from_review(
-        self,
-        run_id: str,
-    ) -> PlanningRunResponse:
-        """Run the same repair-plan and verifier path on the latest routed review."""
-
-        lock = self._planning_run_lock(run_id)
-        if not lock.acquire(blocking=False):
-            raise WorkflowConflictError(f"Planning run {run_id} is already advancing")
-        try:
-            run = self._require_planning_run(run_id)
-            current = self._planning_outline(run)
-            if run.review_report is None or run.review_disposition is None:
-                raise WorkflowConflictError(
-                    "Planning run has no routed script review to revise"
-                )
-            revision_review = story_revision_review(
-                run.review_report,
-                run.review_disposition,
-            )
-            if not revision_review.issues:
-                raise WorkflowConflictError(
-                    "Latest review has no Story Architect findings"
-                )
-            create_request = CreateProjectRequest.model_validate(
-                run.request.model_dump(exclude={"render_export", "execution_target"})
-            )
-            revision = self._revise_story_outline_with_scene_tools(
-                run,
-                create_request,
-                current,
-                revision_review,
-                self._configured_language_client(),
-                revision_round=run.revision_round + 1,
-            )
-            if not revision.revised:
-                run.source_contract = revision.source_contract or run.source_contract
-                run.latest_repair_plan = revision.repair_plan
-                run.latest_revision_verification = revision.verification
-                run.warnings.extend(revision.warnings)
-                run.updated_at = utc_now()
-                self.repository.save_planning_run(run)
-                raise ProviderOperationError(" ".join(revision.warnings))
-            self._apply_planning_outline_edit(
-                run,
-                revision.outline,
-                source="Review-driven Story Architect revision",
-                warning=" ".join(revision.warnings),
-                repair_plan=revision.repair_plan,
-                revision_verification=revision.verification,
-                source_contract=revision.source_contract,
-            )
-            self.repository.save_planning_run(run)
-            return self._planning_run_response(run)
-        finally:
-            lock.release()
-
-    @staticmethod
-    def _source_contract_after_user_edit(
-        run: PlanningRunRecord,
-        outline: EpisodeOutline,
-        instruction: str,
-    ) -> StorySourceContract:
-        current = run.source_contract
-        if current is None:
-            source = run.request.input_text.strip() or outline.story_summary
-            current = StorySourceContract(
-                explicit_commitments=[source],
-                explicit_prohibitions=[],
-                open_creative_choices=[
-                    "未被用户输入或后续明确编辑固定的剧情细节仍可调整。"
-                ],
-            )
-        override = (
-            "用户已明确修改并认可当前 EpisodeOutline；若与更早来源承诺冲突，"
-            f"以本次指令和当前大纲为准。指令：{instruction.strip()}。"
-            f"当前标题：{outline.title}。当前故事摘要：{outline.story_summary}"
-        )[:2400]
-        overrides = list(
-            dict.fromkeys(
-                [*current.authoritative_user_overrides, override]
-            )
-        )[-20:]
-        return current.model_copy(
-            deep=True,
-            update={"authoritative_user_overrides": overrides},
-        )
-
-    def _apply_planning_outline_edit(
-        self,
-        run: PlanningRunRecord,
-        outline: EpisodeOutline,
-        *,
-        source: str,
-        warning: str,
-        repair_plan: StoryRepairPlan | None = None,
-        revision_verification: StoryRevisionVerification | None = None,
-        source_contract: StorySourceContract | None = None,
-    ) -> None:
-        if run.project_id is not None or run.status == PlanningRunStatus.COMPLETE:
-            raise WorkflowConflictError(
-                "Planning outline edits are only available before project finalization"
-            )
-        if run.outline_json is None:
-            raise WorkflowConflictError(
-                "Story Architect must create an outline before it can be edited"
-            )
-        if run.revision_round >= 20:
-            raise WorkflowConflictError("Planning run reached the editable revision history limit")
-        editing_blueprint = run.current_step == PlanningRunStep.SCENE_WRITER
-        run.revision_round += 1
-        run.outline_json = outline.model_dump_json()
-        run.outline_source = source
-        run.total_scenes = len(outline.scenes)
-        run.review_report = None
-        run.review_disposition = None
-        run.latest_repair_plan = repair_plan
-        run.latest_revision_verification = revision_verification
-        if source_contract is not None:
-            run.source_contract = source_contract
-        run.revision_judge = None
-        run.scene_script_json = []
-        run.next_script_scene_sequence = 1 if editing_blueprint else len(outline.scenes) + 1
-        run.directed_scene_json = []
-        run.next_scene_sequence = 1
-        run.used_scene_repair = False
-        run.used_scene_fallback = False
-        run.current_step = (
-            PlanningRunStep.SCENE_WRITER
-            if editing_blueprint
-            else PlanningRunStep.SCRIPT_CRITIC
-        )
-        run.completed_steps = [PlanningRunStep.STORY_ARCHITECT]
-        if not editing_blueprint:
-            run.completed_steps.append(PlanningRunStep.SCENE_WRITER)
-        run.status = PlanningRunStatus.RUNNING
-        run.error_message = None
-        if warning and warning not in run.warnings:
-            run.warnings.append(warning)
-        run.updated_at = utc_now()
-        if not editing_blueprint:
-            self.repository.save_planning_outline_snapshot(
-                run.id,
-                PlanningOutlineSnapshot(
-                    revision_round=run.revision_round,
-                    outline_json=run.outline_json,
-                    source=source,
-                    source_contract=run.source_contract,
-                    repair_plan=repair_plan,
-                    revision_verification=revision_verification,
-                    created_at=run.updated_at,
-                ),
-            )
-            self._index_planning_outline(run, outline)
 
     def advance_planning_run(self, run_id: str) -> PlanningRunResponse:
         lock = self._planning_run_lock(run_id)
@@ -1220,20 +568,27 @@ class ShortDramaService:
             raise WorkflowConflictError(f"Planning run {run_id} is already advancing")
         try:
             run = self._require_planning_run(run_id)
+            if run.owner_agent_run_id is None or run.project_id is None:
+                raise WorkflowConflictError(
+                    "Planning runs must belong to a Production Manager Agent run"
+                )
             if run.status == PlanningRunStatus.COMPLETE:
                 return self._planning_run_response(run)
-            if run.status == PlanningRunStatus.FAILED:
-                raise WorkflowConflictError(
-                    f"Planning run {run_id} failed and cannot be advanced"
-                )
             run.status = PlanningRunStatus.RUNNING
             run.error_message = None
             self._advance_planning_run_once(run)
             run.updated_at = utc_now()
-            self.repository.save_planning_run(run)
+            self._save_planning_run_state(run)
             return self._planning_run_response(run)
-        except WorkflowConflictError:
-            raise
+        except WorkflowConflictError as exc:
+            run = self.repository.get_planning_run(run_id)
+            if run is None:
+                raise
+            run.status = PlanningRunStatus.NEEDS_ATTENTION
+            run.error_message = str(exc)
+            run.updated_at = utc_now()
+            self._save_planning_run_state(run)
+            return self._planning_run_response(run)
         except Exception as exc:
             run = self.repository.get_planning_run(run_id)
             if run is None:
@@ -1241,15 +596,13 @@ class ShortDramaService:
             run.status = PlanningRunStatus.NEEDS_ATTENTION
             run.error_message = str(exc)
             run.updated_at = utc_now()
-            self.repository.save_planning_run(run)
+            self._save_planning_run_state(run)
             return self._planning_run_response(run)
         finally:
             lock.release()
 
     def _advance_planning_run_once(self, run: PlanningRunRecord) -> None:
-        request = CreateProjectRequest.model_validate(
-            run.request.model_dump(exclude={"render_export", "execution_target"})
-        )
+        request = run.request
         client = self._configured_language_client()
         if run.current_step == PlanningRunStep.STORY_ARCHITECT:
             architecture = create_story_architecture(request, client)
@@ -1470,6 +823,10 @@ class ShortDramaService:
             return
 
         if run.current_step == PlanningRunStep.FINALIZE:
+            if run.project_id is None or run.owner_agent_run_id is None:
+                raise WorkflowConflictError(
+                    "Planning runs must belong to a Production Manager Agent run"
+                )
             directed_scenes = [
                 SceneShotPlan.model_validate_json(value)
                 for value in run.directed_scene_json
@@ -1487,30 +844,24 @@ class ShortDramaService:
                 review_report=run.review_report,
                 review_disposition=run.review_disposition,
             )
-            if run.project_id is None:
-                run.project_id = f"project-{uuid4().hex[:12]}"
-                run.updated_at = utc_now()
-                self.repository.save_planning_run(run)
             document = build_project_document_from_plan(
                 project_id=run.project_id,
                 request=request,
                 planning=planning,
                 created_at=utc_now(),
                 planning_run_id=run.id,
+                planning_status=PlanningRunStatus.RUNNING,
+                owner_agent_run_id=run.owner_agent_run_id,
             )
             with self._lock:
-                self.repository.save_project(document)
-            if request.run_mode == RunMode.AUTO_DRAFT:
-                autonomous = self._initialize_autonomous_run(
-                    run.project_id,
-                    request=request,
-                    planning=planning,
-                    execution_target=run.request.execution_target,
-                    render_export=run.request.render_export,
-                    run_id=run.autonomous_run_id
-                    or f"autonomous-run-{run.id.removeprefix('planning-run-')}",
-                )
-                run.autonomous_run_id = autonomous.id
+                current = self.repository.get_project(run.project_id)
+                if current is None:
+                    raise WorkflowConflictError(
+                        f"Owner project is missing: {run.project_id}"
+                    )
+                if not self._owner_planning_project_is_prepared(current, run):
+                    self.repository.save_project(document)
+            self._ensure_creative_input_images_imported(run.project_id, request)
             self._complete_planning_step(
                 run,
                 PlanningRunStep.FINALIZE,
@@ -1957,13 +1308,57 @@ class ShortDramaService:
         )
 
     def _planning_run_response(self, run: PlanningRunRecord) -> PlanningRunResponse:
-        document = (
-            self.repository.get_project(run.project_id)
-            if run.project_id is not None
-            else None
+        if run.project_id is None or run.owner_agent_run_id is None:
+            raise WorkflowConflictError(
+                "Planning runs must belong to a Production Manager Agent run"
+            )
+        document = self.repository.get_project(run.project_id)
+        if document is None:
+            raise WorkflowConflictError(f"Owner project is missing: {run.project_id}")
+        return PlanningRunResponse(run=run, project=self._aggregate(document))
+
+    def _save_planning_run_state(self, run: PlanningRunRecord) -> None:
+        """Persist an owned run and its project-visible status as one DB commit."""
+
+        if run.owner_agent_run_id is None or run.project_id is None:
+            raise WorkflowConflictError(
+                "Planning runs must belong to a Production Manager Agent run"
+            )
+        with self._lock:
+            document = self.repository.get_project(run.project_id)
+            if document is None:
+                raise WorkflowConflictError(
+                    f"Owner project is missing: {run.project_id}"
+                )
+            existing = document.planning
+            planner = existing.planner if existing is not None else None
+            if planner is None and run.outline_source is not None:
+                planner = f"multi-agent:{run.outline_source}"
+            document.planning = ProjectPlanningMetadata(
+                run_id=run.id,
+                status=run.status,
+                planner=planner,
+                warnings=list(dict.fromkeys(run.warnings)),
+                owner_agent_run_id=run.owner_agent_run_id,
+            )
+            document.project.updated_at = run.updated_at
+            self.repository.save_planning_run_with_project(run, document)
+
+    @staticmethod
+    def _owner_planning_project_is_prepared(
+        document: ProjectDocument,
+        run: PlanningRunRecord,
+    ) -> bool:
+        """Recognize a FINALIZE payload left ready by an interrupted attempt."""
+
+        if document.project.stage != ProjectStage.PLANNED:
+            return False
+        if document.planning is None or document.planning.run_id != run.id:
+            return False
+        return any(
+            version.planning_run_id == run.id
+            for version in document.script_versions
         )
-        project = self._aggregate(document) if document is not None else None
-        return PlanningRunResponse(run=run, project=project)
 
     def _require_planning_run(self, run_id: str) -> PlanningRunRecord:
         run = self.repository.get_planning_run(run_id)
@@ -1978,133 +1373,6 @@ class ShortDramaService:
                 lock = threading.Lock()
                 self._planning_run_locks[run_id] = lock
             return lock
-
-    @staticmethod
-    def _script_quality_comparison(
-        run: PlanningRunRecord,
-        reviews: list[PlanningReviewSnapshot],
-    ) -> ScriptQualityComparison:
-        rounds = [
-            ScriptQualityRoundSummary(
-                review_round=snapshot.review_round,
-                revision_round=snapshot.revision_round,
-                total_issues=len(snapshot.report.issues),
-                high_issues=sum(
-                    issue.severity == ScriptReviewSeverity.HIGH
-                    for issue in snapshot.report.issues
-                ),
-                medium_issues=sum(
-                    issue.severity == ScriptReviewSeverity.MEDIUM
-                    for issue in snapshot.report.issues
-                ),
-                low_issues=sum(
-                    issue.severity == ScriptReviewSeverity.LOW
-                    for issue in snapshot.report.issues
-                ),
-                requires_revision=snapshot.report.requires_revision,
-                categories=list(
-                    dict.fromkeys(issue.category for issue in snapshot.report.issues)
-                ),
-            )
-            for snapshot in reviews
-        ]
-        if not rounds:
-            trend = ScriptQualityTrend.NOT_COMPARABLE
-            total_delta: int | None = None
-            high_delta: int | None = None
-            persistent: list[str] = []
-            absent: list[str] = []
-            newly_reported: list[str] = []
-            latest_total_delta: int | None = None
-            latest_high_delta: int | None = None
-            latest_regression_risk = False
-            advisory = (
-                "当前没有可用的语义审稿报告；结构校验结果不能替代 "
-                "Script Critic 的剧本质量建议。"
-            )
-        elif len(rounds) == 1:
-            trend = ScriptQualityTrend.NOT_COMPARABLE
-            total_delta = None
-            high_delta = None
-            persistent = []
-            absent = []
-            newly_reported = []
-            latest_total_delta = None
-            latest_high_delta = None
-            latest_regression_risk = False
-            advisory = (
-                "当前只有一轮独立审稿，尚不能比较修订前后变化；"
-                "报告仍是可忽略建议，不构成剧本通过门槛。"
-            )
-        else:
-            initial = rounds[0]
-            latest = rounds[-1]
-            total_delta = latest.total_issues - initial.total_issues
-            high_delta = latest.high_issues - initial.high_issues
-            initial_categories = set(initial.categories)
-            latest_categories = set(latest.categories)
-            persistent = sorted(initial_categories & latest_categories)
-            absent = sorted(initial_categories - latest_categories)
-            newly_reported = sorted(latest_categories - initial_categories)
-            previous = rounds[-2]
-            latest_total_delta = latest.total_issues - previous.total_issues
-            latest_high_delta = latest.high_issues - previous.high_issues
-            latest_regression_risk = (
-                latest_total_delta > 0 or latest_high_delta > 0
-            )
-            if total_delta == 0 and high_delta == 0:
-                trend = ScriptQualityTrend.UNCHANGED_REPORTED_ISSUES
-            elif (
-                total_delta < 0
-                and high_delta <= 0
-            ) or (
-                high_delta < 0
-                and total_delta <= 0
-            ):
-                trend = ScriptQualityTrend.FEWER_REPORTED_ISSUES
-            elif (
-                total_delta > 0
-                and high_delta >= 0
-            ) or (
-                high_delta > 0
-                and total_delta >= 0
-            ):
-                trend = ScriptQualityTrend.MORE_REPORTED_ISSUES
-            else:
-                trend = ScriptQualityTrend.MIXED_REPORTED_ISSUES
-            advisory = (
-                f"独立审稿报告从 {initial.total_issues} 项变为 "
-                f"{latest.total_issues} 项，高严重度从 "
-                f"{initial.high_issues} 项变为 {latest.high_issues} 项。"
-                "这只描述 Critic 各轮报告的变化；类别名消失不等于问题已解决，"
-                "新类别也可能是复审发现了更具体的问题。"
-            )
-            if latest_regression_risk:
-                advisory += (
-                    f" 最近一轮相比上一轮：总数 "
-                    f"{latest_total_delta:+d}，HIGH {latest_high_delta:+d}；"
-                    "Director Agent 应建议比较最近两版，不应因为轮次更新"
-                    "就默认最新版更好。"
-                )
-        return ScriptQualityComparison(
-            run_id=run.id,
-            project_id=run.project_id,
-            project_name=run.request.name or "未命名剧本",
-            production_profile=run.request.production_profile,
-            source_mode=run.request.source_mode,
-            target_duration_seconds=run.request.resolved_target_duration_seconds(),
-            rounds=rounds,
-            trend=trend,
-            total_issue_delta=total_delta,
-            high_issue_delta=high_delta,
-            latest_total_issue_delta=latest_total_delta,
-            latest_high_issue_delta=latest_high_delta,
-            latest_report_regression_risk=latest_regression_risk,
-            persistent_category_labels=persistent,
-            category_labels_no_longer_reported=absent,
-            newly_reported_category_labels=newly_reported,
-            advisory_summary=advisory,
-        )
 
     def search_asset_catalog(
         self,
@@ -2141,22 +1409,7 @@ class ShortDramaService:
 
     def inspect_asset_coverage(self, project_id: str) -> AssetCoverageResponse:
         document = self._require_project_document(project_id)
-        skipped_warnings = {
-            warning
-            for run in document.autonomous_runs
-            for warning in run.warnings
-            if warning.startswith(_REFERENCE_VIEW_SKIP_PREFIX)
-        }
-        missing = [
-            need
-            for need in recommended_reusable_reference_views(document)
-            if not any(
-                warning.startswith(
-                    f"{_REFERENCE_VIEW_SKIP_PREFIX}{self._reference_view_key(need)}:"
-                )
-                for warning in skipped_warnings
-            )
-        ]
+        missing = recommended_reusable_reference_views(document)
         return AssetCoverageResponse(
             project_id=project_id,
             ready=not missing,
@@ -2240,431 +1493,127 @@ class ShortDramaService:
                 self.repository.save_project(fixture)
             return self.get_project(fixture.project.id)
 
-    def create_project(self, request: CreateProjectRequest) -> ProjectAggregate:
-        project, _planning = self._create_planned_project(request)
-        self._import_creative_input_images(project.document.project.id, request)
-        return self.get_project(project.document.project.id)
-
-    def create_autonomous_draft(
+    def create_project(
         self,
-        request: AutonomousDraftCreateRequest,
-    ) -> AutonomousDraftResponse:
-        create_request = CreateProjectRequest.model_validate(
-            request.model_dump(exclude={"render_export", "execution_target"})
-        )
-        project, planning = self._create_planned_project(create_request)
-        project_id = project.document.project.id
-        run_id = f"autonomous-run-{uuid4().hex}"
-        try:
-            run = self._initialize_autonomous_run(
-                project_id,
-                request=create_request,
-                planning=planning,
-                execution_target=request.execution_target,
-                render_export=request.render_export,
-                run_id=run_id,
-            )
-            if request.execution_target == AutonomousExecutionTarget.REAL_H3:
-                return self.advance_autonomous_run(
-                    project_id,
-                    run.id,
-                    AutonomousRunAdvanceRequest(max_actions=1),
-                )
-            result = self._execute_auto_draft(
-                project_id,
-                render_export=request.render_export,
-                autonomous_run_id=run.id,
-            )
-        except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
-            if any(
-                item.id == run_id
-                for item in self._require_project_document(project_id).autonomous_runs
-            ):
-                self._finish_autonomous_run(
-                    project_id,
-                    run_id,
-                    status=AutonomousRunStatus.NEEDS_ATTENTION,
-                    error_message=str(exc),
-                )
-            raise
-        except Exception as exc:
-            if any(
-                item.id == run_id
-                for item in self._require_project_document(project_id).autonomous_runs
-            ):
-                self._finish_autonomous_run(
-                    project_id,
-                    run_id,
-                    status=AutonomousRunStatus.FAILED,
-                    error_message=str(exc),
-                )
-            raise
-        completed = self._require_autonomous_run(project_id, run_id)
-        return AutonomousDraftResponse(
-            project=result.project,
-            export=result.export,
-            run=completed,
-        )
-
-    def _initialize_autonomous_run(
-        self,
-        project_id: str,
-        *,
         request: CreateProjectRequest,
-        planning: ProductionPlanningResult,
-        execution_target: AutonomousExecutionTarget,
-        render_export: bool,
-        run_id: str | None = None,
-    ) -> AutonomousRunRecord:
-        resolved_run_id = run_id or f"autonomous-run-{uuid4().hex}"
-        with self._lock:
-            document = self._require_project_document(project_id)
-            existing = next(
-                (item for item in document.autonomous_runs if item.id == resolved_run_id),
-                None,
-            )
-            if existing is None:
-                now = utc_now()
-                existing = AutonomousRunRecord(
-                    id=resolved_run_id,
-                    project_id=project_id,
-                    status=AutonomousRunStatus.RUNNING,
-                    current_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
-                    completed_steps=[
-                        AutonomousRunStep.NORMALIZE_INPUT,
-                        AutonomousRunStep.PLAN,
-                    ],
-                    planner=planning.planner,
-                    execution_target=execution_target,
-                    render_export=render_export,
-                    warnings=list(planning.warnings),
-                    created_at=now,
-                    updated_at=now,
-                )
-                document.autonomous_runs.append(existing)
-                self.repository.save_project(document)
-        if existing.current_step == AutonomousRunStep.IMPORT_INPUT_ASSETS:
-            self._import_creative_input_images(project_id, request)
-            self._advance_autonomous_run(
-                project_id,
-                existing.id,
-                completed_step=AutonomousRunStep.IMPORT_INPUT_ASSETS,
-                next_step=(
-                    AutonomousRunStep.GENERATE
-                    if execution_target == AutonomousExecutionTarget.MOCK
-                    else AutonomousRunStep.PREPARE_ASSETS
-                ),
-            )
-        return self._require_autonomous_run(project_id, existing.id)
-
-    def create_autonomous_repeat(
-        self,
-        source_project_id: str,
-        request: AutonomousRepeatCreateRequest,
-    ) -> AutonomousDraftResponse:
-        """Start an independent generation run from one approved preproduction package."""
-
-        source = self._require_project_document(source_project_id)
-        source_script = next(
-            (
-                item
-                for item in source.script_versions
-                if item.id == source.project.current_script_version_id
-            ),
-            None,
-        )
-        source_bible = next(
-            (
-                item
-                for item in source.bible_versions
-                if item.id == source.project.current_bible_version_id
-            ),
-            None,
-        )
-        if source_script is None or source_bible is None:
-            raise WorkflowConflictError(
-                "The source project has no current approved script and ProjectBible"
-            )
+        *,
+        project_id: str | None = None,
+        owner_agent_run_id: str | None = None,
+    ) -> ProjectAggregate:
+        self._preflight_creative_input_images(request)
         if (
-            source_script.approval_status != ApprovalStatus.APPROVED
-            or source_bible.approval_status != ApprovalStatus.APPROVED
+            owner_agent_run_id is not None
+            and request.run_mode == RunMode.AUTO_DRAFT
+            and request.resolved_target_duration_seconds() > 90.0
+            and self._configured_language_client() is not None
         ):
-            raise WorkflowConflictError(
-                "The source script and ProjectBible must be approved before a repeat run"
-            )
-        if not source.shots or any(
-            item.approval_status != ApprovalStatus.APPROVED
-            or item.freshness != Freshness.CURRENT
-            for item in source.shots
-        ):
-            raise WorkflowConflictError(
-                "The source project needs a complete current approved shot plan"
-            )
-
-        source_assets = [
-            item
-            for item in source.assets
-            if item.kind in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}
-        ]
-        approved_assets: list[tuple[Asset, AssetVersion]] = []
-        for asset in source_assets:
-            approved = self._approved_image_version(asset)
-            if approved is None:
-                raise WorkflowConflictError(
-                    f"The source preproduction package lacks an approved image for {asset.name}"
-                )
-            if approved.local_path is not None:
-                path = Path(approved.local_path).expanduser().resolve()
-                if not path.is_file() or path.stat().st_size == 0:
-                    raise WorkflowConflictError(
-                        f"The approved source asset is unavailable: {asset.name}"
-                    )
-            approved_assets.append((asset, approved))
-        if not approved_assets:
-            raise WorkflowConflictError(
-                "The source preproduction package has no approved core visual assets"
-            )
-        copied_voice_reference_count = 0
-        voice_asset_ids = {item.asset_id for item in source.voice_references}
-        for asset in source.assets:
-            if asset.id not in voice_asset_ids:
-                continue
-            try:
-                approved_voice = self._require_approved_voice_audio(asset)
-            except WorkflowConflictError:
-                continue
-            approved_assets.append((asset, approved_voice))
-            copied_voice_reference_count += 1
-
-        project_id = f"project-{uuid4().hex[:12]}"
-        now = utc_now()
-        identifier_map: dict[str, str] = {
-            source.project.id: project_id,
-            source_script.id: f"{project_id}-script-v1",
-            source_bible.id: f"{project_id}-bible-v1",
-        }
-        identifier_map.update(
-            {
-                line.id: f"{project_id}-line-{index:02d}"
-                for index, line in enumerate(source_script.lines, start=1)
-            }
-        )
-        identifier_map.update(
-            {
-                scene.id: f"{project_id}-scene-{index:02d}"
-                for index, scene in enumerate(source_script.structured_scenes, start=1)
-            }
-        )
-        identifier_map.update(
-            {
-                shot.id: f"{project_id}-shot-{shot.sequence:02d}"
-                for shot in source.shots
-            }
-        )
-        identifier_map.update(
-            {
-                asset.id: f"{project_id}-asset-{asset.kind.value.lower()}-{index:02d}"
-                for index, (asset, _approved) in enumerate(approved_assets, start=1)
-            }
-        )
-
-        script = ScriptVersion.model_validate(
-            _remap_exact_identifiers(source_script.model_dump(mode="python"), identifier_map)
-        )
-        script.version = 1
-        script.parent_version_id = None
-        script.change_reason = (
-            f"Fixed preproduction repeat of {source_project_id}"
-        )
-        bible = ProjectBibleVersion.model_validate(
-            _remap_exact_identifiers(source_bible.model_dump(mode="python"), identifier_map)
-        )
-        bible.version = 1
-        bible.parent_version_id = None
-        shots = [
-            ShotPlan.model_validate(
-                _remap_exact_identifiers(item.model_dump(mode="python"), identifier_map)
-            )
-            for item in source.shots
-        ]
-        assets = [
-            Asset(
-                id=identifier_map[asset.id],
+            return self._create_agent_owned_planning_project(
+                request,
                 project_id=project_id,
-                kind=asset.kind,
-                name=asset.name,
-                current_version_id=approved.id,
-                approved_version_id=approved.id,
-                versions=[
-                    approved.model_copy(
-                        deep=True,
-                        update={"parent_version_id": None},
-                    )
-                ],
+                owner_agent_run_id=owner_agent_run_id,
             )
-            for asset, approved in approved_assets
-        ]
-        retained_version_ids = {
-            version.id for asset in assets for version in asset.versions
-        }
-        retained_asset_ids = {asset.id for asset in assets}
-        execution_plan = [
-            ExecutionPlanEntry.model_validate(
-                _remap_exact_identifiers(item.model_dump(mode="python"), identifier_map)
-            )
-            for item in source.execution_plan
-            if item.shot_id in identifier_map
-        ]
-        reference_plan: list[ReferencePlanEntry] = []
-        for source_plan in source.reference_plan:
-            if source_plan.shot_id not in identifier_map:
-                continue
-            plan = ReferencePlanEntry.model_validate(
-                _remap_exact_identifiers(
-                    source_plan.model_dump(mode="python"),
-                    identifier_map,
-                )
-            )
-            plan.bindings = [
-                item
-                for item in plan.bindings
-                if item.target_id in retained_version_ids
-            ]
-            plan.requirements = [
-                item
-                for item in plan.requirements
-                if item.subject_asset_id in retained_asset_ids
-            ]
-            plan.action_beats = [
-                item
-                for item in plan.action_beats
-                if item.actor_asset_id in retained_asset_ids
-            ]
-            plan.interactions = [
-                item
-                for item in plan.interactions
-                if item.actor_asset_id in retained_asset_ids
-                and item.target_asset_id in retained_asset_ids
-            ]
-            reference_plan.append(plan)
-        voice_references = [
-            VoiceReferenceBinding.model_validate(
-                _remap_exact_identifiers(
-                    item.model_dump(mode="python"),
-                    identifier_map,
-                )
-            )
-            for item in source.voice_references
-            if item.asset_id in identifier_map
-        ]
-
-        latest_applied_by_shot: dict[str, DirectorRepairRecord] = {}
-        for record in source.repair_history:
-            if record.decision == DirectorRepairDecision.APPLIED:
-                latest_applied_by_shot[record.source_shot_id] = record
-        inherited_repairs: list[DirectorRepairRecord] = []
-        for source_shot_id, record in latest_applied_by_shot.items():
-            mapped_source_shot_id = identifier_map.get(source_shot_id)
-            if mapped_source_shot_id is None:
-                continue
-            inherited_repairs.append(
-                DirectorRepairRecord(
-                    id=f"director-repair-{uuid4().hex}",
-                    source_shot_id=mapped_source_shot_id,
-                    strategy=record.strategy,
-                    decision=record.decision,
-                    reason=f"Inherited approved preproduction decision: {record.reason}",
-                    issue_codes=list(record.issue_codes),
-                    affected_shot_ids=[
-                        identifier_map[item]
-                        for item in record.affected_shot_ids
-                        if item in identifier_map
-                    ],
-                    created_at=now,
-                )
-            )
-
-        run = AutonomousRunRecord(
-            id=f"autonomous-run-{uuid4().hex}",
+        project, _planning = self._create_planned_project(
+            request,
             project_id=project_id,
-            status=AutonomousRunStatus.RUNNING,
-            current_step=AutonomousRunStep.PLAN_ROUTES,
-            completed_steps=[
-                AutonomousRunStep.NORMALIZE_INPUT,
-                AutonomousRunStep.PLAN,
-                AutonomousRunStep.IMPORT_INPUT_ASSETS,
-                AutonomousRunStep.PREPARE_ASSETS,
-            ],
-            planner=f"fixed-preproduction-repeat:{source_project_id}",
-            execution_target=AutonomousExecutionTarget.REAL_H3,
-            render_export=request.render_export,
-            warnings=[
-                "This run reuses the source project's approved script, ProjectBible, shot plan, "
-                "and core asset media; keyframes, H3 tasks, Takes, QA, timeline, and export are new.",
-                *(
-                    [
-                        f"Copied {copied_voice_reference_count} optional character voice reference(s)."
-                    ]
-                    if copied_voice_reference_count
-                    else []
-                ),
-            ],
-            created_at=now,
-            updated_at=now,
+            preflight=False,
         )
-        project = source.project.model_copy(
-            deep=True,
-            update={
-                "id": project_id,
-                "name": request.name or f"{source.project.name} · 独立重复",
-                "run_mode": RunMode.AUTO_DRAFT,
-                "stage": ProjectStage.PLANNED,
-                "current_script_version_id": script.id,
-                "current_bible_version_id": bible.id,
-                "current_manifest_id": None,
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
-        document = ProjectDocument(
-            project=project,
-            script_versions=[script],
-            bible_versions=[bible],
-            assets=assets,
-            shots=shots,
-            execution_plan=execution_plan,
-            reference_plan=reference_plan,
-            manifests=[],
-            reference_packs=[],
-            voice_references=voice_references,
-            repair_history=inherited_repairs,
-            autonomous_runs=[run],
-        )
-        with self._lock:
-            self.repository.save_project(document)
-        return self.advance_autonomous_run(
-            project_id,
-            run.id,
-            AutonomousRunAdvanceRequest(max_actions=1),
-        )
+        created_project_id = project.document.project.id
+        try:
+            self._import_creative_input_images(created_project_id, request)
+            return self.get_project(created_project_id)
+        except Exception:
+            self._discard_project_creation(created_project_id)
+            raise
 
     def _create_planned_project(
         self,
         request: CreateProjectRequest,
+        *,
+        project_id: str | None = None,
+        preflight: bool = True,
     ) -> tuple[ProjectAggregate, ProductionPlanningResult]:
+        if preflight:
+            self._preflight_creative_input_images(request)
+        resolved_project_id = project_id or f"project-{uuid4().hex[:12]}"
+        if project_id is not None and self.repository.project_exists(resolved_project_id):
+            raise WorkflowConflictError(
+                f"Project already exists: {resolved_project_id}"
+            )
         client = self._configured_language_client()
         planning = create_production_plan(request, client)
-        project_id = f"project-{uuid4().hex[:12]}"
         created_at = utc_now()
         document = build_project_document_from_plan(
-            project_id=project_id,
+            project_id=resolved_project_id,
             request=request,
             planning=planning,
             created_at=created_at,
         )
         with self._lock:
-            self.repository.save_project(document)
+            inserted = self.repository.insert_project(document)
+        if not inserted:
+            raise WorkflowConflictError(
+                f"Project already exists: {resolved_project_id}"
+            )
+        try:
             return self._aggregate(document), planning
+        except Exception:
+            self._discard_project_creation(resolved_project_id)
+            raise
+
+    def _create_agent_owned_planning_project(
+        self,
+        request: CreateProjectRequest,
+        *,
+        project_id: str | None,
+        owner_agent_run_id: str,
+    ) -> ProjectAggregate:
+        resolved_project_id = project_id or f"project-{uuid4().hex[:12]}"
+        if project_id is not None and self.repository.project_exists(resolved_project_id):
+            raise WorkflowConflictError(
+                f"Project already exists: {resolved_project_id}"
+            )
+        run_id = f"planning-run-{uuid4().hex}"
+        now = utc_now()
+        run = PlanningRunRecord(
+            id=run_id,
+            status=PlanningRunStatus.RUNNING,
+            current_step=PlanningRunStep.STORY_ARCHITECT,
+            request=request,
+            project_id=resolved_project_id,
+            owner_agent_run_id=owner_agent_run_id,
+            created_at=now,
+            updated_at=now,
+        )
+        provisional = create_production_plan(request, None)
+        document = build_project_document_from_plan(
+            project_id=resolved_project_id,
+            request=request,
+            planning=provisional,
+            created_at=now,
+            planning_run_id=run.id,
+            planning_status=PlanningRunStatus.RUNNING,
+            owner_agent_run_id=owner_agent_run_id,
+        )
+        document.project.stage = ProjectStage.INPUT
+        document.planning = ProjectPlanningMetadata(
+            run_id=run.id,
+            status=PlanningRunStatus.RUNNING,
+            owner_agent_run_id=owner_agent_run_id,
+        )
+        with self._lock:
+            inserted = self.repository.insert_project_with_planning_run(document, run)
+        if not inserted:
+            raise WorkflowConflictError(
+                f"Project already exists: {resolved_project_id}"
+            )
+        try:
+            return self._aggregate(document)
+        except Exception:
+            self._discard_project_creation(
+                resolved_project_id,
+                planning_run_id=run.id,
+            )
+            raise
 
     def _configured_language_client(self) -> LanguageProviderClient | None:
         api_key = self.language_config.api_key()
@@ -2675,23 +1624,207 @@ class ShortDramaService:
             else None
         )
 
+    @staticmethod
+    def _preflight_creative_input_images(request: CreateProjectRequest) -> None:
+        """Reject unusable local visual seeds before planning or persistence starts."""
+
+        for image in request.input_images:
+            if image.local_path is None:
+                continue
+            source_path = Path(image.local_path).expanduser().resolve()
+            if not source_path.is_file():
+                raise WorkflowConflictError(
+                    f"Local asset does not exist (input image): {source_path}"
+                )
+            try:
+                size_bytes = source_path.stat().st_size
+            except OSError as exc:
+                raise WorkflowConflictError(
+                    f"Local input image cannot be read: {source_path}"
+                ) from exc
+            if size_bytes <= 0 or size_bytes > _MAX_CREATIVE_INPUT_IMAGE_BYTES:
+                raise WorkflowConflictError(
+                    "Local input image must be between 1 byte and 256 MB"
+                )
+            if source_path.suffix.lower() not in _CREATIVE_INPUT_IMAGE_EXTENSIONS:
+                raise WorkflowConflictError(
+                    f"Unsupported local input image type: {source_path.suffix.lower() or 'none'}"
+                )
+            try:
+                with Image.open(source_path) as opened:
+                    opened.verify()
+            except (OSError, UnidentifiedImageError) as exc:
+                raise WorkflowConflictError(
+                    f"Invalid local input image: {source_path.name}"
+                ) from exc
+
+    def _discard_project_creation(
+        self,
+        project_id: str,
+        *,
+        planning_run_id: str | None = None,
+    ) -> None:
+        """Compensate a failed first-create without touching established projects."""
+
+        self.repository.delete_project_creation(
+            project_id,
+            planning_run_id=planning_run_id,
+        )
+        workspace_root = self.workspace_root.resolve()
+        project_root = (workspace_root / project_id).resolve()
+        if project_root.parent == workspace_root and project_root.is_dir():
+            shutil.rmtree(project_root)
+
+    @staticmethod
+    def _creative_input_asset_name(
+        index: int,
+        image: CreativeInputImage,
+    ) -> str:
+        source_name = (
+            Path(image.local_path).stem
+            if image.local_path is not None
+            else f"网络参考图 {index}"
+        )
+        return f"输入视觉种子 {index} · {source_name}"[:120]
+
+    @staticmethod
+    def _creative_input_source_uri(image: CreativeInputImage) -> str:
+        if image.local_path is not None:
+            return str(Path(image.local_path).expanduser().resolve())
+        assert image.external_url is not None
+        return image.external_url.strip()
+
+    def _ensure_creative_input_images_imported(
+        self,
+        project_id: str,
+        request: CreateProjectRequest,
+    ) -> None:
+        """Reconcile an interrupted FINALIZE without duplicating visual seeds."""
+
+        if not request.input_images:
+            return
+        document = self._require_project_document(project_id)
+        expected_names = {
+            self._creative_input_asset_name(index, image)
+            for index, image in enumerate(request.input_images, start=1)
+        }
+        imported_versions: list[tuple[str, str]] = []
+        for index, image in enumerate(request.input_images, start=1):
+            expected_name = self._creative_input_asset_name(index, image)
+            matches = [
+                asset
+                for asset in document.assets
+                if asset.kind == AssetKind.REFERENCE and asset.name == expected_name
+            ]
+            if len(matches) != 1:
+                break
+            asset = matches[0]
+            approved = next(
+                (
+                    version
+                    for version in asset.versions
+                    if version.id == asset.approved_version_id
+                ),
+                None,
+            )
+            if (
+                approved is None
+                or approved.approval_status != ApprovalStatus.APPROVED
+                or approved.media_type != AssetMediaType.IMAGE
+                or approved.source is None
+                or approved.source.source_uri
+                != self._creative_input_source_uri(image)
+            ):
+                break
+            imported_versions.append((approved.id, image.descriptor))
+        if len(imported_versions) == len(request.input_images):
+            self._bind_creative_input_versions(
+                project_id,
+                request,
+                imported_versions,
+            )
+            return
+
+        stale_assets = [
+            asset
+            for asset in document.assets
+            if asset.kind == AssetKind.REFERENCE and asset.name in expected_names
+        ]
+        if stale_assets:
+            stale_asset_ids = {asset.id for asset in stale_assets}
+            stale_version_ids = {
+                version.id
+                for asset in stale_assets
+                for version in asset.versions
+            }
+            self._discard_asset_directories(project_id, stale_asset_ids)
+            with self._lock:
+                refreshed = self._require_project_document(project_id)
+                refreshed.assets = [
+                    asset
+                    for asset in refreshed.assets
+                    if asset.id not in stale_asset_ids
+                ]
+                for plan in refreshed.reference_plan:
+                    plan.bindings = [
+                        binding
+                        for binding in plan.bindings
+                        if binding.target_id not in stale_version_ids
+                    ]
+                refreshed.project.updated_at = utc_now()
+                self.repository.save_project(refreshed)
+        self._import_creative_input_images(project_id, request)
+
     def _import_creative_input_images(
+        self,
+        project_id: str,
+        request: CreateProjectRequest,
+    ) -> None:
+        if not request.input_images:
+            return
+        baseline = self._require_project_document(project_id).model_copy(deep=True)
+        baseline_asset_ids = {asset.id for asset in baseline.assets}
+        try:
+            self._import_creative_input_images_unchecked(project_id, request)
+        except Exception:
+            current = self.repository.get_project(project_id)
+            created_asset_ids: set[str] = set()
+            if current is not None:
+                created_asset_ids = {
+                    asset.id
+                    for asset in current.assets
+                    if asset.id not in baseline_asset_ids
+                }
+            self.repository.save_project(baseline)
+            self._discard_asset_directories(project_id, created_asset_ids)
+            raise
+
+    def _discard_asset_directories(
+        self,
+        project_id: str,
+        asset_ids: set[str],
+    ) -> None:
+        project_root = (self.workspace_root.resolve() / project_id).resolve()
+        if project_root.parent != self.workspace_root.resolve():
+            return
+        assets_root = (project_root / "assets").resolve()
+        for asset_id in asset_ids:
+            asset_root = (assets_root / asset_id).resolve()
+            if asset_root.parent == assets_root and asset_root.is_dir():
+                shutil.rmtree(asset_root)
+
+    def _import_creative_input_images_unchecked(
         self,
         project_id: str,
         request: CreateProjectRequest,
     ) -> None:
         imported_versions: list[tuple[str, str]] = []
         for index, image in enumerate(request.input_images, start=1):
-            source_name = (
-                Path(image.local_path).stem
-                if image.local_path is not None
-                else f"网络参考图 {index}"
-            )
             created = self.create_asset(
                 project_id,
                 AssetCreateRequest(
                     kind=AssetKind.REFERENCE,
-                    name=f"输入视觉种子 {index} · {source_name}"[:120],
+                    name=self._creative_input_asset_name(index, image),
                     descriptor=image.descriptor,
                 ),
             )
@@ -2726,2385 +1859,44 @@ class ShortDramaService:
             )
             imported_versions.append((imported.version.id, image.descriptor))
         if imported_versions:
-            with self._lock:
-                document = self._require_project_document(project_id)
-                requirement = (
-                    "REQUIRED"
-                    if request.source_mode == SourceMode.IMAGE_SEEDED
-                    else "OPTIONAL"
-                )
-                for plan in document.reference_plan:
-                    known_targets = {binding.target_id for binding in plan.bindings}
-                    for version_id, descriptor in imported_versions:
-                        if version_id in known_targets:
-                            continue
-                        plan.bindings.append(
-                            ReferenceBinding(
-                                kind=AssetKind.REFERENCE.value,
-                                target_id=version_id,
-                                purpose=f"用户提供的跨镜视觉种子：{descriptor}",
-                                requirement=requirement,
-                            )
+            self._bind_creative_input_versions(
+                project_id,
+                request,
+                imported_versions,
+            )
+
+    def _bind_creative_input_versions(
+        self,
+        project_id: str,
+        request: CreateProjectRequest,
+        imported_versions: list[tuple[str, str]],
+    ) -> None:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            requirement = (
+                "REQUIRED"
+                if request.source_mode == SourceMode.IMAGE_SEEDED
+                else "OPTIONAL"
+            )
+            changed = False
+            for plan in document.reference_plan:
+                known_targets = {binding.target_id for binding in plan.bindings}
+                for version_id, descriptor in imported_versions:
+                    if version_id in known_targets:
+                        continue
+                    plan.bindings.append(
+                        ReferenceBinding(
+                            kind=AssetKind.REFERENCE.value,
+                            target_id=version_id,
+                            purpose=f"用户提供的跨镜视觉种子：{descriptor}",
+                            requirement=requirement,
                         )
+                    )
+                    known_targets.add(version_id)
+                    changed = True
+            if changed:
                 document.project.updated_at = utc_now()
                 self.repository.save_project(document)
-
-    def _require_autonomous_run(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> AutonomousRunRecord:
-        document = self._require_project_document(project_id)
-        run = next((item for item in document.autonomous_runs if item.id == run_id), None)
-        if run is None:
-            raise ArtifactNotFoundError(run_id)
-        return run
-
-    def _advance_autonomous_run(
-        self,
-        project_id: str,
-        run_id: str,
-        *,
-        completed_step: AutonomousRunStep,
-        next_step: AutonomousRunStep,
-    ) -> AutonomousRunRecord:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            run = next((item for item in document.autonomous_runs if item.id == run_id), None)
-            if run is None:
-                raise ArtifactNotFoundError(run_id)
-            if completed_step not in run.completed_steps:
-                run.completed_steps.append(completed_step)
-            run.status = AutonomousRunStatus.RUNNING
-            run.current_step = next_step
-            run.error_message = None
-            run.waiting_reason = None
-            run.updated_at = utc_now()
-            self.repository.save_project(document)
-            return run
-
-    def _finish_autonomous_run(
-        self,
-        project_id: str,
-        run_id: str,
-        *,
-        status: AutonomousRunStatus,
-        error_message: str | None = None,
-        export_id: str | None = None,
-        completed_steps: list[AutonomousRunStep] | None = None,
-    ) -> AutonomousRunRecord:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            run = next((item for item in document.autonomous_runs if item.id == run_id), None)
-            if run is None:
-                raise ArtifactNotFoundError(run_id)
-            for step in completed_steps or []:
-                if step not in run.completed_steps:
-                    run.completed_steps.append(step)
-            run.status = status
-            run.error_message = error_message
-            run.waiting_reason = error_message if status == AutonomousRunStatus.NEEDS_ATTENTION else None
-            run.export_id = export_id or run.export_id
-            now = utc_now()
-            run.updated_at = now
-            if status == AutonomousRunStatus.COMPLETE:
-                run.current_step = AutonomousRunStep.COMPLETE
-                if AutonomousRunStep.COMPLETE not in run.completed_steps:
-                    run.completed_steps.append(AutonomousRunStep.COMPLETE)
-                run.completed_at = now
-            self.repository.save_project(document)
-            return run
-
-    def advance_autonomous_run(
-        self,
-        project_id: str,
-        run_id: str,
-        request: AutonomousRunAdvanceRequest,
-    ) -> AutonomousDraftResponse:
-        run = self._require_autonomous_run(project_id, run_id)
-        if run.execution_target != AutonomousExecutionTarget.REAL_H3:
-            raise WorkflowConflictError("Only a REAL_H3 autonomous run uses resumable advance")
-        if run.status != AutonomousRunStatus.COMPLETE:
-            with self._lock:
-                document = self._require_project_document(project_id)
-                persisted = next(
-                    item for item in document.autonomous_runs if item.id == run_id
-                )
-                persisted.status = AutonomousRunStatus.RUNNING
-                persisted.error_message = None
-                persisted.waiting_reason = None
-                persisted.updated_at = utc_now()
-                self.repository.save_project(document)
-        try:
-            for _ in range(request.max_actions):
-                progressed, waiting = self._advance_real_autonomous_run_once(
-                    project_id,
-                    run_id,
-                )
-                run = self._require_autonomous_run(project_id, run_id)
-                if run.status in {
-                    AutonomousRunStatus.COMPLETE,
-                    AutonomousRunStatus.NEEDS_ATTENTION,
-                    AutonomousRunStatus.FAILED,
-                }:
-                    break
-                if waiting or not progressed:
-                    break
-        except (
-            WorkflowConflictError,
-            ProviderOperationError,
-            MediaGenerationError,
-        ) as exc:
-            run = self._finish_autonomous_run(
-                project_id,
-                run_id,
-                status=AutonomousRunStatus.NEEDS_ATTENTION,
-                error_message=str(exc),
-            )
-        except Exception as exc:
-            run = self._finish_autonomous_run(
-                project_id,
-                run_id,
-                status=AutonomousRunStatus.FAILED,
-                error_message=str(exc),
-            )
-            raise
-        else:
-            run = self._require_autonomous_run(project_id, run_id)
-        export = next(
-            (
-                item
-                for item in self.repository.list_exports(project_id)
-                if item.id == run.export_id
-            ),
-            None,
-        )
-        return AutonomousDraftResponse(
-            project=self.get_project(project_id),
-            export=export,
-            run=run,
-        )
-
-    def _advance_real_autonomous_run_once(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> tuple[bool, bool]:
-        run = self._require_autonomous_run(project_id, run_id)
-        if run.current_step == AutonomousRunStep.PREPARE_ASSETS:
-            return self._advance_base_asset_preparation(project_id, run_id)
-        if run.current_step == AutonomousRunStep.PLAN_ROUTES:
-            route_document = self._require_project_document(project_id)
-            wave_shot_ids = _next_h3_continuity_wave(
-                route_document,
-                self.repository.list_takes(project_id),
-            )
-            if not wave_shot_ids:
-                self._advance_autonomous_run(
-                    project_id,
-                    run_id,
-                    completed_step=AutonomousRunStep.PLAN_ROUTES,
-                    next_step=AutonomousRunStep.TIMELINE,
-                )
-                return True, False
-            response = self.compile_h3_production_route_plan(
-                project_id,
-                H3ProductionRoutePlanRequest(
-                    shot_ids=wave_shot_ids,
-                    use_language_agent=True,
-                    candidate_count=2,
-                    consider_video_guides=True,
-                ),
-            )
-            needs_asset = any(
-                decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
-                for decision in response.plan.decisions
-            )
-            with self._lock:
-                document = self._require_project_document(project_id)
-                persisted = next(
-                    item for item in document.autonomous_runs if item.id == run_id
-                )
-                persisted.route_plan_id = response.plan.id
-                if AutonomousRunStep.PLAN_ROUTES not in persisted.completed_steps:
-                    persisted.completed_steps.append(AutonomousRunStep.PLAN_ROUTES)
-                persisted.current_step = (
-                    AutonomousRunStep.PREPARE_SHOT_ASSETS
-                    if needs_asset
-                    else AutonomousRunStep.GENERATE
-                )
-                persisted.waiting_reason = None
-                persisted.updated_at = utc_now()
-                self.repository.save_project(document)
-            return True, False
-        if run.current_step == AutonomousRunStep.PREPARE_SHOT_ASSETS:
-            return self._advance_shot_asset_preparation(project_id, run_id)
-        if run.current_step == AutonomousRunStep.GENERATE:
-            return self._advance_real_video_generation(project_id, run_id)
-        if run.current_step == AutonomousRunStep.QA_AND_REPAIR:
-            return self._advance_real_qa_and_repair(project_id, run_id)
-        if run.current_step == AutonomousRunStep.TIMELINE:
-            self.rebuild_manifest(project_id)
-            with self._lock:
-                document = self._require_project_document(project_id)
-                persisted = next(
-                    item for item in document.autonomous_runs if item.id == run_id
-                )
-                persisted.episode_review_id = None
-                self.repository.save_project(document)
-            self._advance_autonomous_run(
-                project_id,
-                run_id,
-                completed_step=AutonomousRunStep.TIMELINE,
-                next_step=AutonomousRunStep.EPISODE_REVIEW,
-            )
-            return True, False
-        if run.current_step == AutonomousRunStep.EPISODE_REVIEW:
-            return self._advance_real_episode_review(project_id, run_id)
-        if run.current_step == AutonomousRunStep.AUDIO_QA:
-            # Backward-compatible resume for runs persisted before automatic audio QA
-            # was removed. Voice/audio inputs remain supported; audio inspection is manual.
-            if run.render_export:
-                self._advance_autonomous_run(
-                    project_id,
-                    run_id,
-                    completed_step=AutonomousRunStep.AUDIO_QA,
-                    next_step=AutonomousRunStep.EXPORT,
-                )
-            else:
-                self._finish_autonomous_run(
-                    project_id,
-                    run_id,
-                    status=AutonomousRunStatus.COMPLETE,
-                    completed_steps=[AutonomousRunStep.AUDIO_QA],
-                )
-            return True, False
-        if run.current_step == AutonomousRunStep.EXPORT:
-            export = self.export_project(project_id, rebuild_manifest=False)
-            self._finish_autonomous_run(
-                project_id,
-                run_id,
-                status=AutonomousRunStatus.COMPLETE,
-                export_id=export.id,
-                completed_steps=[AutonomousRunStep.EXPORT],
-            )
-            return True, False
-        if run.current_step == AutonomousRunStep.COMPLETE:
-            return False, False
-        raise WorkflowConflictError(
-            f"REAL_H3 run cannot advance from {run.current_step.value}"
-        )
-
-    def _advance_real_episode_review(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> tuple[bool, bool]:
-        run = self._require_autonomous_run(project_id, run_id)
-        report: EpisodeReviewReport
-        if run.episode_review_id is None:
-            document = self._require_project_document(project_id)
-            manifest = self._current_manifest(document)
-            report = self._get_or_create_episode_review(
-                document,
-                manifest,
-                force_new=False,
-            )
-            with self._lock:
-                document = self._require_project_document(project_id)
-                persisted = next(
-                    item for item in document.autonomous_runs if item.id == run_id
-                )
-                persisted.episode_review_id = report.id
-                persisted.updated_at = utc_now()
-                self.repository.save_project(document)
-        else:
-            loaded_report = self.repository.get_episode_review(run.episode_review_id)
-            if loaded_report is None or loaded_report.project_id != project_id:
-                raise ArtifactNotFoundError(run.episode_review_id)
-            report = loaded_report
-
-        if report.status == EpisodeReviewStatus.RUNNING:
-            report = self._advance_episode_review_report_once(report.id)
-            if report.status == EpisodeReviewStatus.RUNNING:
-                total_scenes = len(
-                    self._episode_review_scene_groups(
-                        self._require_project_document(project_id),
-                        script_version_id=report.source_script_version_id,
-                    )
-                )
-                self._set_autonomous_waiting(
-                    project_id,
-                    run_id,
-                    (
-                        f"Episode Reviewer saved {report.next_scene_index}/{total_scenes} "
-                        "scene review(s); AUTO_DRAFT will continue from the persisted cursor."
-                    ),
-                )
-                return True, True
-            if report.status == EpisodeReviewStatus.COMPLETE:
-                self._set_autonomous_waiting(
-                    project_id,
-                    run_id,
-                    "Episode review is complete; Director is considering linked local repairs.",
-                )
-                return True, True
-
-        if report.status == EpisodeReviewStatus.COMPLETE and not report.repairs_complete:
-            return self._advance_episode_review_repair_once(
-                project_id,
-                run_id,
-                report,
-            )
-
-        self._record_autonomous_episode_review(project_id, run_id, report)
-        self._finish_episode_review_step(project_id, run_id)
-        return True, False
-
-    def _advance_episode_review_repair_once(
-        self,
-        project_id: str,
-        run_id: str,
-        report: EpisodeReviewReport,
-    ) -> tuple[bool, bool]:
-        document = self._require_project_document(project_id)
-        run = self._require_autonomous_run(project_id, run_id)
-        shot_sequence = {item.id: item.sequence for item in document.shots}
-        candidate_shot_ids = sorted(
-            {
-                shot_id
-                for finding in report.findings
-                if finding.repair_recommended
-                for shot_id in finding.shot_ids
-                if shot_id in shot_sequence
-            },
-            key=shot_sequence.__getitem__,
-        )
-        considered = {
-            *report.repair_applied_shot_ids,
-            *report.repair_skipped_shot_ids,
-        }
-        next_shot_id = next(
-            (item for item in candidate_shot_ids if item not in considered),
-            None,
-        )
-        if next_shot_id is not None:
-            if (
-                _autonomous_director_repair_attempts(document, next_shot_id)
-                >= run.max_repair_rounds
-            ):
-                report.repair_skipped_shot_ids.append(next_shot_id)
-                report.warnings.append(
-                    f"Episode Reviewer repair skipped for {next_shot_id}: the per-shot "
-                    f"automatic repair limit ({run.max_repair_rounds}) is exhausted."
-                )
-                report.updated_at = utc_now()
-                self.repository.save_episode_review(report)
-                return True, True
-            source_take = next(
-                (
-                    take
-                    for take in self.repository.list_takes_for_shot(
-                        project_id,
-                        next_shot_id,
-                    )
-                    if take.is_selected
-                    and take.freshness == Freshness.CURRENT
-                    and take.availability == TakeAvailability.AVAILABLE
-                ),
-                None,
-            )
-            if source_take is None:
-                report.repair_skipped_shot_ids.append(next_shot_id)
-                report.warnings.append(
-                    f"Episode Reviewer repair skipped for {next_shot_id}: no current selected "
-                    "Take remains available."
-                )
-                report.updated_at = utc_now()
-                self.repository.save_episode_review(report)
-                return True, True
-            inspection = next(
-                (
-                    item
-                    for item in reversed(
-                        self.repository.list_video_inspections(project_id)
-                    )
-                    if item.take_id == source_take.id
-                ),
-                None,
-            )
-            linked = [
-                item for item in report.findings if next_shot_id in item.shot_ids
-            ]
-            direction = " ".join(
-                (
-                    f"Episode Reviewer evidence: {item.evidence} "
-                    f"Suggested action: {item.recommended_action}"
-                )
-                for item in linked
-            )[:2000]
-            try:
-                result = self.run_director_loop(
-                    project_id,
-                    next_shot_id,
-                    DirectorAdviceRequest(
-                        take_id=source_take.id,
-                        inspection_id=(inspection.id if inspection is not None else None),
-                        episode_review_id=report.id,
-                        user_direction=direction,
-                    ),
-                )
-            except (WorkflowConflictError, ProviderOperationError) as exc:
-                report.repair_skipped_shot_ids.append(next_shot_id)
-                report.warnings.append(
-                    f"Episode Reviewer Director repair skipped for {next_shot_id}: {exc}"
-                )
-            else:
-                if result.repair_applied:
-                    report.repair_applied_shot_ids.append(next_shot_id)
-                else:
-                    report.repair_skipped_shot_ids.append(next_shot_id)
-                    report.warnings.append(
-                        f"Episode Reviewer Director returned no executable local repair for "
-                        f"{next_shot_id}; the advisory remains visible."
-                    )
-            report.updated_at = utc_now()
-            self.repository.save_episode_review(report)
-            self._set_autonomous_waiting(
-                project_id,
-                run_id,
-                (
-                    f"Episode Reviewer considered {len(considered) + 1}/"
-                    f"{len(candidate_shot_ids)} linked shot repair(s)."
-                ),
-            )
-            return True, True
-
-        report.repairs_complete = True
-        report.updated_at = utc_now()
-        self.repository.save_episode_review(report)
-        self._record_autonomous_episode_review(project_id, run_id, report)
-        if report.repair_applied_shot_ids:
-            with self._lock:
-                document = self._require_project_document(project_id)
-                persisted = next(
-                    item for item in document.autonomous_runs if item.id == run_id
-                )
-                persisted.repair_round += 1
-                persisted.route_plan_id = None
-                persisted.episode_review_id = None
-                persisted.current_step = AutonomousRunStep.PLAN_ROUTES
-                persisted.waiting_reason = None
-                persisted.updated_at = utc_now()
-                self.repository.save_project(document)
-            return True, False
-        self._finish_episode_review_step(project_id, run_id)
-        return True, False
-
-    def _record_autonomous_episode_review(
-        self,
-        project_id: str,
-        run_id: str,
-        report: EpisodeReviewReport,
-    ) -> None:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            run = next(item for item in document.autonomous_runs if item.id == run_id)
-            prefix = f"Episode review {report.id}:"
-            run.warnings = [item for item in run.warnings if not item.startswith(prefix)]
-            run.warnings.append(
-                f"{prefix} status={report.status.value}, findings={len(report.findings)}, "
-                f"repairs={len(report.repair_applied_shot_ids)}. {report.summary}"
-            )
-            run.updated_at = utc_now()
-            self.repository.save_project(document)
-
-    def _finish_episode_review_step(self, project_id: str, run_id: str) -> None:
-        run = self._require_autonomous_run(project_id, run_id)
-        if run.render_export:
-            self._advance_autonomous_run(
-                project_id,
-                run_id,
-                completed_step=AutonomousRunStep.EPISODE_REVIEW,
-                next_step=AutonomousRunStep.EXPORT,
-            )
-            return
-        self._finish_autonomous_run(
-            project_id,
-            run_id,
-            status=AutonomousRunStatus.COMPLETE,
-            completed_steps=[AutonomousRunStep.EPISODE_REVIEW],
-        )
-
-    def _advance_base_asset_preparation(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> tuple[bool, bool]:
-        document = self._require_project_document(project_id)
-        if refresh_lightweight_reference_plans(document):
-            document.project.updated_at = utc_now()
-            self.repository.save_project(document)
-            return True, False
-        core_assets = [
-            asset
-            for asset in document.assets
-            if asset.kind in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}
-        ]
-        for asset in core_assets:
-            approved = self._approved_image_version(asset)
-            if approved is not None:
-                if self._rebind_asset_references(document, asset, approved):
-                    document.project.updated_at = utc_now()
-                    self.repository.save_project(document)
-                    return True, False
-                continue
-            imported_candidate = next(
-                (
-                    version
-                    for version in reversed(asset.versions)
-                    if version.media_type == AssetMediaType.IMAGE
-                    and version.image_task_id is None
-                    and version.approval_status == ApprovalStatus.DRAFT
-                    and (
-                        version.local_path is not None
-                        or version.external_url is not None
-                    )
-                ),
-                None,
-            )
-            stock_grounding = self._stock_derivation_candidate(
-                asset,
-                imported_candidate,
-            )
-            if imported_candidate is not None and stock_grounding is None:
-                _review, approved_by_agent = self._review_generated_asset(
-                    project_id=project_id,
-                    asset_id=asset.id,
-                    version_id=imported_candidate.id,
-                )
-                if approved_by_agent:
-                    refreshed = self._require_project_document(project_id)
-                    refreshed_asset = self._require_asset_in_document(
-                        refreshed,
-                        asset.id,
-                    )
-                    approved_version = self._approved_image_version(refreshed_asset)
-                    assert approved_version is not None
-                    self._rebind_asset_references(
-                        refreshed,
-                        refreshed_asset,
-                        approved_version,
-                    )
-                    refreshed.project.updated_at = utc_now()
-                    self.repository.save_project(refreshed)
-                return True, False
-            tasks = self.asset_workbench.list_image_tasks(project_id, asset.id)
-            latest = max(tasks, key=lambda item: item.created_at, default=None)
-            if latest is None:
-                if self._try_catalog_asset_reuse(document, asset):
-                    return True, False
-                self._enqueue_base_asset_image(
-                    document,
-                    asset,
-                    None,
-                    stock_grounding=stock_grounding,
-                )
-                return True, False
-            if latest.status in {ImageTaskStatus.QUEUED, ImageTaskStatus.SUBMITTING}:
-                self.advance_image_task(latest.id)
-                return True, False
-            if latest.status == ImageTaskStatus.OUTPUT_MISSING:
-                self.recover_image_task_output(latest.id)
-                return True, False
-            if latest.status == ImageTaskStatus.SUBMIT_UNKNOWN:
-                raise WorkflowConflictError(
-                    f"Image task {latest.id} has an unknown submission result; reconcile it before continuing"
-                )
-            if latest.status == ImageTaskStatus.SUCCEEDED:
-                version = self._find_asset_version(
-                    self._require_project_document(project_id),
-                    latest.output_version_id,
-                )[1]
-                if version.approval_status == ApprovalStatus.DRAFT:
-                    _review, approved_by_agent = self._review_generated_asset(
-                        project_id=project_id,
-                        asset_id=asset.id,
-                        version_id=version.id,
-                    )
-                    if approved_by_agent:
-                        refreshed = self._require_project_document(project_id)
-                        refreshed_asset = self._require_asset_in_document(refreshed, asset.id)
-                        approved_version = self._approved_image_version(refreshed_asset)
-                        assert approved_version is not None
-                        self._rebind_asset_references(
-                            refreshed,
-                            refreshed_asset,
-                            approved_version,
-                        )
-                        refreshed.project.updated_at = utc_now()
-                        self.repository.save_project(refreshed)
-                    return True, False
-                if version.approval_status == ApprovalStatus.REJECTED:
-                    if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
-                        raise WorkflowConflictError(
-                            f"Automatic visual asset retries exhausted for {asset.name}"
-                        )
-                    self._enqueue_base_asset_image(
-                        document,
-                        asset,
-                        latest,
-                        stock_grounding=stock_grounding,
-                    )
-                    return True, False
-            if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
-                if (
-                    latest.status == ImageTaskStatus.FAILED
-                    and latest.error_code == "moderation_blocked"
-                ):
-                    raise WorkflowConflictError(
-                        f"Image prompt for {asset.name} was blocked by the provider; "
-                        "revise the stable asset brief or choose another source before retrying"
-                    )
-                if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
-                    raise WorkflowConflictError(
-                        f"Image task retries exhausted for {asset.name}: {latest.error_message or latest.status.value}"
-                    )
-                self._enqueue_base_asset_image(
-                    document,
-                    asset,
-                    latest,
-                    stock_grounding=stock_grounding,
-                )
-                return True, False
-        now = utc_now()
-        if ensure_base_reference_pack_entries(document, now=now):
-            document.project.updated_at = now
-            self.repository.save_project(document)
-            return True, False
-        reference_result = self._advance_reference_pack_preparation(project_id, run_id)
-        if reference_result is not None:
-            return reference_result
-        self._advance_autonomous_run(
-            project_id,
-            run_id,
-            completed_step=AutonomousRunStep.PREPARE_ASSETS,
-            next_step=AutonomousRunStep.PLAN_ROUTES,
-        )
-        return True, False
-
-    def _enqueue_base_asset_image(
-        self,
-        document: ProjectDocument,
-        asset: Asset,
-        previous: ImageGenerationTask | None,
-        *,
-        stock_grounding: AssetVersion | None = None,
-    ) -> ImageGenerationTask:
-        previous_version: AssetVersion | None = None
-        if previous is not None and previous.status == ImageTaskStatus.SUCCEEDED:
-            try:
-                previous_version = self._find_asset_version(
-                    self._require_project_document(document.project.id),
-                    previous.output_version_id,
-                )[1]
-            except ArtifactNotFoundError:
-                previous_version = None
-        correction_input = (
-            previous_version
-            if previous_version is not None
-            and previous_version.approval_status == ApprovalStatus.REJECTED
-            and (
-                previous_version.local_path is not None
-                or previous_version.external_url is not None
-            )
-            else None
-        )
-        use_stock_input = (
-            correction_input is None
-            and stock_grounding is not None
-            and self._character_accepts_stock_image_input(document, asset)
-        )
-        input_version = (
-            correction_input
-            if correction_input is not None
-            else stock_grounding if use_stock_input else None
-        )
-        prompt = (
-            build_stock_grounded_asset_prompt(document, asset)
-            if use_stock_input
-            else build_base_asset_prompt(document, asset)
-        )
-        if correction_input is not None:
-            prompt += (
-                "\n\n输入图像是上一版候选资产，必须保留其已经正确的身份、"
-                "空间或物体结构，仅修复下方制片检查明确指出的可见问题。"
-            )
-        if (
-            asset.kind == AssetKind.CHARACTER
-            and not self._character_accepts_stock_image_input(document, asset)
-        ):
-            prompt += (
-                "\n家庭友好的中性演员定妆照，人物放松自然，画面明亮干净。"
-            )
-        if previous is not None:
-            if previous_version is not None and previous_version.review_notes:
-                prompt += (
-                    "\n\n上一候选未通过制片检查。仅修复以下问题，不改变资产身份："
-                    + previous_version.review_notes
-                )
-        descriptor = canonical_base_asset_descriptor(document, asset)
-        try:
-            return self.asset_workbench.enqueue_image_task(
-                document.project.id,
-                asset.id,
-                ImageTaskCreateRequest(
-                    operation=(
-                        ImageOperation.EDIT
-                        if input_version is not None
-                        else ImageOperation.GENERATE
-                    ),
-                    prompt=prompt,
-                    descriptor=descriptor,
-                    parent_version_id=(
-                        input_version.id if input_version is not None else None
-                    ),
-                    input_version_ids=(
-                        [input_version.id] if input_version is not None else []
-                    ),
-                    primary_input_version_id=(
-                        input_version.id if input_version is not None else None
-                    ),
-                ),
-                attempt=(previous.attempt + 1 if previous is not None else 1),
-                retry_of_task_id=previous.id if previous is not None else None,
-            )
-        except AssetProviderConfigurationError as exc:
-            raise WorkflowConflictError(
-                "请先在资产页配置 GPT Image 2 的 URL 和 API Key，再继续真人自动草稿。"
-            ) from exc
-        except AssetWorkbenchConflict as exc:
-            raise WorkflowConflictError(str(exc)) from exc
-
-    @staticmethod
-    def _stock_derivation_candidate(
-        asset: Asset,
-        imported_candidate: AssetVersion | None,
-    ) -> AssetVersion | None:
-        if (
-            imported_candidate is None
-            or imported_candidate.source is None
-            or imported_candidate.source.provider
-            not in {provider.value for provider in StockAssetProvider}
-        ):
-            return None
-        if imported_candidate.source.stock_import_mode == "DERIVE":
-            return imported_candidate
-        if asset.kind != AssetKind.CHARACTER:
-            return None
-        return imported_candidate
-
-    _stock_character_grounding_candidate = _stock_derivation_candidate
-
-    @staticmethod
-    def _character_accepts_stock_image_input(
-        document: ProjectDocument,
-        asset: Asset,
-    ) -> bool:
-        """Route minors through text generation without removing character support."""
-
-        if asset.kind != AssetKind.CHARACTER:
-            return True
-        bible = next(
-            item
-            for item in document.bible_versions
-            if item.id == document.project.current_bible_version_id
-        )
-        profile = next(
-            (
-                item
-                for item in bible.characters
-                if item.name == asset.name or item.name in asset.name
-            ),
-            None,
-        )
-        return profile is None or profile.age >= 18
-
-    def _minor_reference_derivation_unavailable(
-        self,
-        document: ProjectDocument,
-        asset: Asset,
-    ) -> bool:
-        if self._character_accepts_stock_image_input(document, asset):
-            return False
-        return any(
-            task.status == ImageTaskStatus.FAILED
-            and task.error_code == "moderation_blocked"
-            for task in self.asset_workbench.list_image_tasks(
-                document.project.id,
-                asset.id,
-            )
-        )
-
-    def _try_catalog_asset_reuse(self, document: ProjectDocument, asset: Asset) -> bool:
-        linked_project_ids = set(document.project.linked_asset_project_ids)
-        if not linked_project_ids:
-            return False
-        canonical_name = self._canonical_asset_name(asset.name)
-        if not canonical_name:
-            return False
-        canonical_roles = {
-            AssetKind.CHARACTER: [ReferenceRole.CHARACTER_BODY],
-            AssetKind.LOCATION: [ReferenceRole.LOCATION_MASTER],
-            AssetKind.PROP: [ReferenceRole.PROP_PRODUCT],
-        }.get(asset.kind, [])
-        if not canonical_roles:
-            return False
-        tried_sources = {
-            version.source.source_uri
-            for version in asset.versions
-            if version.source is not None and version.source.source_uri is not None
-        }
-        response = search_asset_catalog(
-            self.repository.list_projects(),
-            current_project_id=document.project.id,
-            request=AssetCatalogSearchRequest(
-                query=asset.name,
-                kinds=[asset.kind],
-                roles=canonical_roles,
-                include_current_project=False,
-                include_cross_project=True,
-                source_project_ids=sorted(linked_project_ids),
-                limit=20,
-            ),
-        )
-        candidate = next(
-            (
-                item
-                for item in response.candidates
-                if self._canonical_asset_name(item.subject_asset_name) == canonical_name
-                and (
-                    f"short-drama://projects/{item.source_project_id}/assets/"
-                    f"{item.subject_asset_id}/versions/{item.asset_version_id}"
-                )
-                not in tried_sources
-            ),
-            None,
-        )
-        if candidate is None:
-            return False
-        source_document = self._require_project_document(candidate.source_project_id)
-        source_asset, source_version = self._find_asset_version(
-            source_document,
-            candidate.asset_version_id,
-        )
-        self.asset_workbench.clone_catalog_image(
-            document.project.id,
-            asset.id,
-            source_project_id=source_document.project.id,
-            source_asset_id=source_asset.id,
-            source_asset_name=source_asset.name,
-            source_version=source_version,
-            descriptor=(
-                f"复用资产库中的已批准母版候选：{source_version.descriptor}"
-            ),
-        )
-        return True
-
-    @staticmethod
-    def _canonical_asset_name(value: str) -> str:
-        return "".join(character.lower() for character in value if character.isalnum())
-
-    def _advance_reference_pack_preparation(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> tuple[bool, bool] | None:
-        document = self._require_project_document(project_id)
-        run = self._require_autonomous_run(project_id, run_id)
-        for need in recommended_reusable_reference_views(document):
-            key = self._reference_view_key(need)
-            skip_prefix = f"{_REFERENCE_VIEW_SKIP_PREFIX}{key}:"
-            if any(warning.startswith(skip_prefix) for warning in run.warnings):
-                continue
-            subject = self._require_asset_in_document(
-                document,
-                need.subject_asset_id,
-            )
-            if self._minor_reference_derivation_unavailable(document, subject):
-                self._skip_reference_view(
-                    project_id,
-                    run_id,
-                    key,
-                    subject,
-                    "The configured image provider rejected this character's neutral base "
-                    "generation; keep the approved coarse reference and allow replacement "
-                    "through another provider, stock selection, or user upload.",
-                )
-                return True, False
-            root = self._find_asset_version(
-                document,
-                need.lineage_root_version_id,
-            )[1]
-            marker = f"{_REFERENCE_VIEW_MARKER_PREFIX}{key}"
-            target = next(
-                (
-                    asset
-                    for asset in document.assets
-                    if asset.kind == AssetKind.REFERENCE
-                    and any(marker in version.descriptor for version in asset.versions)
-                ),
-                None,
-            )
-            descriptor = self._reference_view_descriptor(subject, need, marker)
-            if target is None:
-                created = self.create_asset(
-                    project_id,
-                    AssetCreateRequest(
-                        kind=AssetKind.REFERENCE,
-                        name=f"{subject.name}·{need.role.value}",
-                        descriptor=descriptor,
-                    ),
-                )
-                self.asset_workbench.clone_catalog_image(
-                    project_id,
-                    created.asset.id,
-                    source_project_id=project_id,
-                    source_asset_id=subject.id,
-                    source_asset_name=subject.name,
-                    source_version=root,
-                    descriptor=descriptor,
-                )
-                return True, False
-
-            approved = self._approved_image_version(target)
-            if approved is not None:
-                self._register_reference_view(project_id, subject, approved, need)
-                return True, False
-
-            tasks = self.asset_workbench.list_image_tasks(project_id, target.id)
-            latest = max(tasks, key=lambda item: item.created_at, default=None)
-            if latest is None:
-                self._enqueue_reference_view_image(
-                    document,
-                    target,
-                    subject,
-                    need,
-                    previous=None,
-                )
-                return True, False
-            if latest.status in {ImageTaskStatus.QUEUED, ImageTaskStatus.SUBMITTING}:
-                self.advance_image_task(latest.id)
-                return True, False
-            if latest.status == ImageTaskStatus.OUTPUT_MISSING:
-                self.recover_image_task_output(latest.id)
-                return True, False
-            if latest.status == ImageTaskStatus.SUBMIT_UNKNOWN:
-                raise WorkflowConflictError(
-                    f"Image task {latest.id} has an unknown submission result; reconcile it before continuing"
-                )
-            if latest.status == ImageTaskStatus.SUCCEEDED:
-                refreshed = self._require_project_document(project_id)
-                output = self._find_asset_version(
-                    refreshed,
-                    latest.output_version_id,
-                )[1]
-                if output.approval_status == ApprovalStatus.DRAFT:
-                    refreshed_subject = self._require_asset_in_document(
-                        refreshed,
-                        subject.id,
-                    )
-                    refreshed_root = self._find_asset_version(
-                        refreshed,
-                        need.lineage_root_version_id,
-                    )[1]
-                    _review, approved_by_agent = self._review_generated_asset(
-                        project_id=project_id,
-                        asset_id=target.id,
-                        version_id=output.id,
-                        canonical_references_override=[
-                            (refreshed_subject, refreshed_root)
-                        ],
-                    )
-                    if approved_by_agent:
-                        self._register_reference_view(
-                            project_id,
-                            refreshed_subject,
-                            self._find_asset_version(
-                                self._require_project_document(project_id),
-                                output.id,
-                            )[1],
-                            need,
-                        )
-                    return True, False
-                if output.approval_status == ApprovalStatus.APPROVED:
-                    self._register_reference_view(project_id, subject, output, need)
-                    return True, False
-                if output.approval_status == ApprovalStatus.REJECTED:
-                    if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
-                        self._skip_reference_view(
-                            project_id,
-                            run_id,
-                            key,
-                            subject,
-                            latest.error_message or output.review_notes or "review rejected",
-                        )
-                        return True, False
-                    self._enqueue_reference_view_image(
-                        document,
-                        target,
-                        subject,
-                        need,
-                        previous=latest,
-                    )
-                    return True, False
-            if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
-                if (
-                    latest.status == ImageTaskStatus.FAILED
-                    and latest.error_code == "moderation_blocked"
-                ):
-                    self._skip_reference_view(
-                        project_id,
-                        run_id,
-                        key,
-                        subject,
-                        latest.error_message or "provider moderation blocked the view",
-                    )
-                    return True, False
-                if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
-                    self._skip_reference_view(
-                        project_id,
-                        run_id,
-                        key,
-                        subject,
-                        latest.error_message or latest.status.value,
-                    )
-                    return True, False
-                self._enqueue_reference_view_image(
-                    document,
-                    target,
-                    subject,
-                    need,
-                    previous=latest,
-                )
-                return True, False
-        return None
-
-    @staticmethod
-    def _reference_view_key(need: ReferenceViewNeed) -> str:
-        payload = json.dumps(
-            {
-                "subject": need.subject_asset_id,
-                "role": need.role.value,
-                "angle": need.angle.value,
-                "framing": need.framing.value,
-                "tags": need.tags,
-                "root": need.lineage_root_version_id,
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-
-    @staticmethod
-    def _reference_view_descriptor(
-        subject: Asset,
-        need: ReferenceViewNeed,
-        marker: str,
-    ) -> str:
-        tags = "、".join(need.tags) if need.tags else "无额外标签"
-        return (
-            f"{marker}\n从 {subject.name} 当前母版派生的同源参考视图；"
-            f"角色={need.role.value}；角度={need.angle.value}；"
-            f"景别={need.framing.value}；标签={tags}；用途={need.purpose}"
-        )
-
-    def _enqueue_reference_view_image(
-        self,
-        document: ProjectDocument,
-        target: Asset,
-        subject: Asset,
-        need: ReferenceViewNeed,
-        *,
-        previous: ImageGenerationTask | None,
-    ) -> ImageGenerationTask:
-        refreshed = self._require_project_document(document.project.id)
-        refreshed_target = self._require_asset_in_document(refreshed, target.id)
-        seed = next(
-            (
-                version
-                for version in reversed(refreshed_target.versions)
-                if version.media_type == AssetMediaType.IMAGE
-                and version.image_task_id is None
-                and (
-                    version.local_path is not None
-                    or version.external_url is not None
-                )
-            ),
-            None,
-        )
-        if seed is None:
-            raise WorkflowConflictError("Derived reference asset has no canonical seed image")
-        previous_output: AssetVersion | None = None
-        if previous is not None and previous.status == ImageTaskStatus.SUCCEEDED:
-            try:
-                previous_output = self._find_asset_version(
-                    refreshed,
-                    previous.output_version_id,
-                )[1]
-            except ArtifactNotFoundError:
-                previous_output = None
-        correction_input = (
-            previous_output
-            if previous_output is not None
-            and previous_output.approval_status == ApprovalStatus.REJECTED
-            and (
-                previous_output.local_path is not None
-                or previous_output.external_url is not None
-            )
-            else None
-        )
-        input_version = correction_input or seed
-        prompt = build_reference_view_prompt(refreshed, subject, need)
-        if correction_input is not None:
-            prompt += (
-                "\n\n输入图像是上一版同源参考候选，保留已经正确的身份、"
-                "视角与空间关系，仅修复制片检查明确指出的可见问题。"
-            )
-        if previous is not None:
-            if previous_output is not None and previous_output.review_notes:
-                prompt += (
-                    "\n\n上一候选未通过制片检查。仅修复以下问题，"
-                    "不改变母版身份或空间几何："
-                    + previous_output.review_notes
-                )
-        try:
-            return self.asset_workbench.enqueue_image_task(
-                refreshed.project.id,
-                refreshed_target.id,
-                ImageTaskCreateRequest(
-                    operation=ImageOperation.EDIT,
-                    prompt=prompt,
-                    descriptor=self._reference_view_descriptor(
-                        subject,
-                        need,
-                        f"{_REFERENCE_VIEW_MARKER_PREFIX}{self._reference_view_key(need)}",
-                    ),
-                    parent_version_id=input_version.id,
-                    input_version_ids=[input_version.id],
-                    primary_input_version_id=input_version.id,
-                ),
-                attempt=(previous.attempt + 1 if previous is not None else 1),
-                retry_of_task_id=previous.id if previous is not None else None,
-            )
-        except AssetProviderConfigurationError as exc:
-            raise WorkflowConflictError(
-                "请先在资产页配置 GPT Image 2 的 URL 和 API Key，再继续参考视图派生。"
-            ) from exc
-        except AssetWorkbenchConflict as exc:
-            raise WorkflowConflictError(str(exc)) from exc
-
-    def _register_reference_view(
-        self,
-        project_id: str,
-        subject: Asset,
-        approved: AssetVersion,
-        need: ReferenceViewNeed,
-    ) -> None:
-        shown_shot_ids = need.shot_ids[:8]
-        shot_summary = "、".join(shown_shot_ids)
-        if len(need.shot_ids) > len(shown_shot_ids):
-            shot_summary += f" 等（共 {len(need.shot_ids)} 镜）"
-        self.add_reference_pack_entry(
-            project_id,
-            ReferencePackEntryCreateRequest(
-                subject_asset_id=subject.id,
-                asset_version_id=approved.id,
-                lineage_root_version_id=need.lineage_root_version_id,
-                role=need.role,
-                angle=need.angle,
-                framing=need.framing,
-                tags=need.tags,
-                description=(
-                    f"同源母版派生视图，用于镜头 {shot_summary}：{need.purpose}"
-                )[:2000],
-                priority=80,
-            ),
-        )
-
-    def _skip_reference_view(
-        self,
-        project_id: str,
-        run_id: str,
-        key: str,
-        subject: Asset,
-        reason: str,
-    ) -> None:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            run = next((item for item in document.autonomous_runs if item.id == run_id), None)
-            if run is None:
-                raise ArtifactNotFoundError(run_id)
-            warning = (
-                f"{_REFERENCE_VIEW_SKIP_PREFIX}{key}: {subject.name} 的可选派生视图"
-                f"未在限定重试内收敛，已继续使用母版与现有参考；{reason}"
-            )
-            if warning not in run.warnings:
-                run.warnings.append(warning)
-            run.updated_at = utc_now()
-            document.project.updated_at = run.updated_at
-            self.repository.save_project(document)
-
-    def _advance_shot_asset_preparation(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> tuple[bool, bool]:
-        run = self._require_autonomous_run(project_id, run_id)
-        if run.route_plan_id is None:
-            raise WorkflowConflictError("REAL_H3 run has no production route plan")
-        plan = self.repository.get_h3_route_plan(run.route_plan_id)
-        if plan is None:
-            raise ArtifactNotFoundError(run.route_plan_id)
-        document = self._require_project_document(project_id)
-        for decision in sorted(plan.decisions, key=lambda item: item.shot_sequence):
-            if decision.readiness != H3ShotRouteReadiness.NEEDS_ASSET:
-                if self._refresh_rejected_keyframe_fallback(document, decision):
-                    plan.updated_at = utc_now()
-                    self.repository.save_h3_route_plan(plan)
-                    return True, False
-                continue
-            shot = self._require_shot_in_document(document, decision.shot_id)
-            for preparation in decision.asset_preparations:
-                if preparation.approved_version_id is not None:
-                    continue
-                if preparation.asset_id is None:
-                    self._create_keyframe_asset(document, plan, decision, preparation)
-                    return True, False
-                tasks = self.asset_workbench.list_image_tasks(
-                    project_id,
-                    preparation.asset_id,
-                )
-                latest = max(tasks, key=lambda item: item.created_at, default=None)
-                if latest is None:
-                    task = self._enqueue_keyframe_image(
-                        document,
-                        shot,
-                        preparation,
-                        None,
-                    )
-                    preparation.image_task_ids.append(task.id)
-                    preparation.status = H3RouteAssetPreparationStatus.GENERATING
-                    plan.updated_at = utc_now()
-                    self.repository.save_h3_route_plan(plan)
-                    return True, False
-                if latest.status in {ImageTaskStatus.QUEUED, ImageTaskStatus.SUBMITTING}:
-                    self.advance_image_task(latest.id)
-                    return True, False
-                if latest.status == ImageTaskStatus.OUTPUT_MISSING:
-                    self.recover_image_task_output(latest.id)
-                    return True, False
-                if latest.status == ImageTaskStatus.SUBMIT_UNKNOWN:
-                    raise WorkflowConflictError(
-                        f"Keyframe task {latest.id} has an unknown submission result"
-                    )
-                if latest.status == ImageTaskStatus.SUCCEEDED:
-                    version = self._find_asset_version(
-                        self._require_project_document(project_id),
-                        latest.output_version_id,
-                    )[1]
-                    if version.approval_status == ApprovalStatus.DRAFT:
-                        review, approved_by_agent = self._review_generated_asset(
-                            project_id=project_id,
-                            asset_id=preparation.asset_id,
-                            version_id=version.id,
-                            shot=shot,
-                            preparation=preparation,
-                        )
-                        preparation.review_summary = review.summary
-                        if approved_by_agent:
-                            preparation.status = H3RouteAssetPreparationStatus.READY
-                            preparation.approved_version_id = version.id
-                            media_input = self._h3_image_input(
-                                self._require_project_document(project_id),
-                                version.id,
-                                preparation.role,
-                            )
-                            decision.media_inputs = [
-                                item
-                                for item in decision.media_inputs
-                                if item.role != preparation.role
-                            ] + [media_input]
-                            decision.missing_inputs = [
-                                item
-                                for item in decision.missing_inputs
-                                if item != preparation.role.value
-                            ]
-                            decision.warnings = [
-                                item
-                                for item in decision.warnings
-                                if "needs an approved start frame" not in item
-                            ]
-                        else:
-                            preparation.status = H3RouteAssetPreparationStatus.REJECTED
-                        plan.updated_at = utc_now()
-                        self.repository.save_h3_route_plan(plan)
-                        return True, False
-                    if version.approval_status == ApprovalStatus.REJECTED:
-                        if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
-                            if self._fallback_failed_keyframe_preparation(
-                                document=self._require_project_document(project_id),
-                                plan=plan,
-                                decision=decision,
-                                failed_preparation=preparation,
-                                reason=(
-                                    f"Automatic keyframe review rejected {latest.attempt} "
-                                    "candidate(s)."
-                                ),
-                            ):
-                                return True, False
-                            raise WorkflowConflictError(
-                                f"Automatic keyframe retries exhausted for shot {shot.sequence}"
-                            )
-                        task = self._enqueue_keyframe_image(
-                            document,
-                            shot,
-                            preparation,
-                            latest,
-                        )
-                        preparation.image_task_ids.append(task.id)
-                        preparation.status = H3RouteAssetPreparationStatus.GENERATING
-                        plan.updated_at = utc_now()
-                        self.repository.save_h3_route_plan(plan)
-                        return True, False
-                if latest.status in {ImageTaskStatus.FAILED, ImageTaskStatus.CANCELLED}:
-                    if latest.attempt >= _MAX_AUTONOMOUS_IMAGE_ATTEMPTS:
-                        if self._fallback_failed_keyframe_preparation(
-                            document=self._require_project_document(project_id),
-                            plan=plan,
-                            decision=decision,
-                            failed_preparation=preparation,
-                            reason=(
-                                f"Keyframe provider task failed or was cancelled "
-                                f"{latest.attempt} time(s)."
-                            ),
-                        ):
-                            return True, False
-                        raise WorkflowConflictError(
-                            f"Keyframe task retries exhausted for shot {shot.sequence}"
-                        )
-                    task = self._enqueue_keyframe_image(
-                        document,
-                        shot,
-                        preparation,
-                        latest,
-                    )
-                    preparation.image_task_ids.append(task.id)
-                    preparation.status = H3RouteAssetPreparationStatus.GENERATING
-                    plan.updated_at = utc_now()
-                    self.repository.save_h3_route_plan(plan)
-                    return True, False
-            if all(
-                item.approved_version_id is not None
-                for item in decision.asset_preparations
-            ):
-                decision.readiness = (
-                    H3ShotRouteReadiness.READY_WITH_WARNINGS
-                    if decision.warnings
-                    else H3ShotRouteReadiness.READY
-                )
-                plan.updated_at = utc_now()
-                self.repository.save_h3_route_plan(plan)
-                return True, False
-        self._advance_autonomous_run(
-            project_id,
-            run_id,
-            completed_step=AutonomousRunStep.PREPARE_SHOT_ASSETS,
-            next_step=AutonomousRunStep.GENERATE,
-        )
-        plan.status = H3RoutePlanStatus.READY
-        plan.updated_at = utc_now()
-        self.repository.save_h3_route_plan(plan)
-        return True, False
-
-    def _fallback_failed_keyframe_preparation(
-        self,
-        *,
-        document: ProjectDocument,
-        plan: H3ProductionRoutePlan,
-        decision: H3ShotRoutePlan,
-        failed_preparation: H3RouteAssetPreparation,
-        reason: str,
-    ) -> bool:
-        built = self._build_keyframe_fallback_inputs(
-            document,
-            decision,
-            failed_preparation,
-        )
-        if built is None:
-            return False
-        bound, media_inputs = built
-
-        failed_preparation.input_version_ids = [
-            version.id for _asset, version in bound
-        ]
-        failed_preparation.status = H3RouteAssetPreparationStatus.REJECTED
-        fallback_warning = (
-            f"{reason} The advisory keyframe route was replaced with approved visual "
-            "references so AUTO_DRAFT can continue; the user may override this route."
-        )
-        failed_preparation.review_summary = " ".join(
-            item
-            for item in [failed_preparation.review_summary, fallback_warning]
-            if item
-        )
-        decision.route = VideoGenerationRoute.REFERENCE
-        decision.media_inputs = [
-            item
-            for item in decision.media_inputs
-            if item.role != H3MediaRole.REFERENCE_IMAGE
-        ] + media_inputs
-        decision.missing_inputs = []
-        decision.readiness = H3ShotRouteReadiness.READY_WITH_WARNINGS
-        decision.rationale = (
-            "Shot-specific keyframe preparation did not converge within the bounded automatic "
-            "retries. Continue with approved references for subjects the reference plan expects "
-            "to be visible, while retaining stricter continuity QA; this is an overridable "
-            "Director fallback."
-        )
-        decision.warnings = list(
-            dict.fromkeys(
-                [
-                    *(
-                        warning
-                        for warning in decision.warnings
-                        if "needs an approved start frame" not in warning.lower()
-                        and "起始帧" not in warning
-                    ),
-                    fallback_warning,
-                ]
-            )
-        )
-        plan.status = (
-            H3RoutePlanStatus.READY
-            if all(
-                item.readiness
-                in {
-                    H3ShotRouteReadiness.READY,
-                    H3ShotRouteReadiness.READY_WITH_WARNINGS,
-                }
-                for item in plan.decisions
-            )
-            else H3RoutePlanStatus.PARTIAL
-        )
-        plan.updated_at = utc_now()
-        self.repository.save_h3_route_plan(plan)
-        return True
-
-    def _build_keyframe_fallback_inputs(
-        self,
-        document: ProjectDocument,
-        decision: H3ShotRoutePlan,
-        failed_preparation: H3RouteAssetPreparation,
-    ) -> tuple[list[tuple[Asset, AssetVersion]], list[H3MediaInput]] | None:
-        reference_plan = self._require_reference_plan(document, decision.shot_id)
-        bound = _scope_keyframe_reference_versions(
-            document,
-            self._approved_bound_image_versions(document, decision.shot_id),
-            reference_plan,
-            failed_preparation.input_version_ids,
-        )
-        media_inputs = [
-            self._h3_image_input(
-                document,
-                version.id,
-                H3MediaRole.REFERENCE_IMAGE,
-            )
-            for _asset, version in bound[:9]
-        ]
-        if not media_inputs:
-            return None
-        try:
-            validate_h3_probe(
-                route=VideoGenerationRoute.REFERENCE,
-                prompt=decision.prompt,
-                duration_seconds=decision.duration_seconds,
-                media_inputs=media_inputs,
-            )
-        except H3CapabilityError:
-            return None
-        return bound, media_inputs
-
-    def _refresh_rejected_keyframe_fallback(
-        self,
-        document: ProjectDocument,
-        decision: H3ShotRoutePlan,
-    ) -> bool:
-        """Reconcile persisted fallbacks after the Agent's reference selection evolves."""
-
-        if decision.route != VideoGenerationRoute.REFERENCE:
-            return False
-        failed_preparation = next(
-            (
-                item
-                for item in decision.asset_preparations
-                if item.status == H3RouteAssetPreparationStatus.REJECTED
-            ),
-            None,
-        )
-        if failed_preparation is None:
-            return False
-        built = self._build_keyframe_fallback_inputs(
-            document,
-            decision,
-            failed_preparation,
-        )
-        if built is None:
-            return False
-        bound, media_inputs = built
-        new_version_ids = [version.id for _asset, version in bound]
-        current_reference_ids = [
-            item.asset_version_id
-            for item in decision.media_inputs
-            if item.role == H3MediaRole.REFERENCE_IMAGE
-            and item.asset_version_id is not None
-        ]
-        if (
-            current_reference_ids == new_version_ids
-            and failed_preparation.input_version_ids == new_version_ids
-        ):
-            return False
-        failed_preparation.input_version_ids = new_version_ids
-        decision.media_inputs = [
-            item
-            for item in decision.media_inputs
-            if item.role != H3MediaRole.REFERENCE_IMAGE
-        ] + media_inputs
-        return True
-
-    def _create_keyframe_asset(
-        self,
-        document: ProjectDocument,
-        plan: H3ProductionRoutePlan,
-        decision: H3ShotRoutePlan,
-        preparation: H3RouteAssetPreparation,
-    ) -> None:
-        reference_plan = self._require_reference_plan(document, decision.shot_id)
-        shot = self._require_shot_in_document(document, decision.shot_id)
-        bound = _scope_keyframe_reference_versions(
-            document,
-            self._approved_bound_image_versions(document, decision.shot_id),
-            reference_plan,
-            preparation.input_version_ids,
-        )
-        if not bound:
-            raise WorkflowConflictError(
-                f"Shot {decision.shot_sequence} has no approved visual base for keyframe editing"
-            )
-        ordered = _prioritize_keyframe_canvas(
-            _order_keyframe_reference_versions(
-                bound,
-                reference_plan,
-                preparation.input_version_ids,
-            ),
-            shot,
-        )
-        primary_asset, primary_version = ordered[0]
-        preparation.input_version_ids = [
-            version.id for _asset, version in ordered[:16]
-        ]
-        created = self.create_asset(
-            document.project.id,
-            AssetCreateRequest(
-                kind=AssetKind.REFERENCE,
-                name=preparation.name,
-                descriptor=preparation.descriptor,
-            ),
-        )
-        if primary_version.local_path is not None:
-            _seeded = self.import_local_asset_version(
-                document.project.id,
-                created.asset.id,
-                AssetImportLocalRequest(
-                    local_path=primary_version.local_path,
-                    descriptor=(
-                        f"镜头关键帧构图父图，来源于 {primary_asset.name} 的已批准版本"
-                    ),
-                ),
-            )
-        elif primary_version.external_url is not None:
-            _seeded = self.import_url_asset_version(
-                document.project.id,
-                created.asset.id,
-                AssetImportUrlRequest(
-                    external_url=primary_version.external_url,
-                    descriptor=(
-                        f"镜头关键帧构图父图，来源于 {primary_asset.name} 的已批准版本"
-                    ),
-                    media_type=AssetMediaType.IMAGE,
-                ),
-            )
-        else:
-            raise WorkflowConflictError("Approved keyframe base has no usable media")
-        preparation.asset_id = created.asset.id
-        plan.updated_at = utc_now()
-        self.repository.save_h3_route_plan(plan)
-
-    def _enqueue_keyframe_image(
-        self,
-        document: ProjectDocument,
-        shot: ShotPlan,
-        preparation: H3RouteAssetPreparation,
-        previous: ImageGenerationTask | None,
-    ) -> ImageGenerationTask:
-        if preparation.asset_id is None:
-            raise WorkflowConflictError("Keyframe preparation has no target asset")
-        refreshed = self._require_project_document(document.project.id)
-        target = self._require_asset_in_document(refreshed, preparation.asset_id)
-        parent = next(
-            (
-                item
-                for item in reversed(target.versions)
-                if item.media_type == AssetMediaType.IMAGE
-                and item.image_task_id is None
-            ),
-            None,
-        )
-        if parent is None:
-            raise WorkflowConflictError("Keyframe asset has no visual parent")
-        reference_plan = self._require_reference_plan(refreshed, shot.id)
-        bound = _scope_keyframe_reference_versions(
-            refreshed,
-            self._approved_bound_image_versions(refreshed, shot.id),
-            reference_plan,
-            preparation.input_version_ids,
-        )
-        ordered = _prioritize_keyframe_canvas(
-            _order_keyframe_reference_versions(
-                bound,
-                reference_plan,
-                preparation.input_version_ids,
-            ),
-            shot,
-        )
-        if not ordered:
-            raise WorkflowConflictError("Keyframe asset has no approved visual references")
-        primary_asset, primary_version = ordered[0]
-        input_ids = list(
-            dict.fromkeys(
-                [
-                    parent.id,
-                    *(
-                        version.id
-                        for _asset, version in ordered
-                        if version.id != primary_version.id
-                    ),
-                ]
-            )
-        )[:16]
-        reference_lines = [
-            (
-                "Image 1: PRIMARY EDIT INPUT copied exactly from the approved "
-                f"{primary_asset.kind.value} reference '{primary_asset.name}'. "
-                + self._keyframe_primary_reference_lock(primary_asset.kind)
-            ),
-            *[
-                (
-                    f"Image {index}: approved {asset.kind.value} reference "
-                    f"'{asset.name}'; use it only to preserve that subject's visible "
-                    "identity, appearance, geometry, or topology where requested by the shot."
-                )
-                for index, (asset, _version) in enumerate(
-                    (
-                        item
-                        for item in ordered
-                        if item[1].id != primary_version.id
-                    ),
-                    start=2,
-                )
-            ],
-        ]
-        prompt = (
-            build_keyframe_correction_prompt(
-                preparation,
-                preparation.review_summary if previous is not None else None,
-            )
-            + "\n\nACTUAL EDIT INPUT MAP:\n"
-            + "\n".join(reference_lines)
-            + "\nDo not blend different actors or replace the primary subject with a face "
-            "from another reference. Reference-sheet or turnaround layouts must be transformed "
-            "into the single cinematic frame requested above, never reproduced as a collage."
-        )
-        try:
-            return self.asset_workbench.enqueue_image_task(
-                refreshed.project.id,
-                target.id,
-                ImageTaskCreateRequest(
-                    operation=ImageOperation.EDIT,
-                    prompt=prompt,
-                    descriptor=preparation.descriptor,
-                    parent_version_id=parent.id,
-                    input_version_ids=input_ids,
-                    primary_input_version_id=parent.id,
-                ),
-                attempt=(previous.attempt + 1 if previous is not None else 1),
-                retry_of_task_id=previous.id if previous is not None else None,
-            )
-        except AssetProviderConfigurationError as exc:
-            raise WorkflowConflictError(
-                "请先在资产页配置 GPT Image 2 的 URL 和 API Key，再继续关键帧准备。"
-            ) from exc
-        except AssetWorkbenchConflict as exc:
-            raise WorkflowConflictError(str(exc)) from exc
-
-    def _review_generated_asset(
-        self,
-        *,
-        project_id: str,
-        asset_id: str,
-        version_id: str,
-        shot: ShotPlan | None = None,
-        preparation: H3RouteAssetPreparation | None = None,
-        canonical_references_override: list[tuple[Asset, AssetVersion]] | None = None,
-    ) -> tuple[SemanticAssetReview, bool]:
-        document = self._require_project_document(project_id)
-        asset = self._require_asset_in_document(document, asset_id)
-        version = self._find_asset_version(document, version_id)[1]
-        client = self._require_language_client()
-        canonical_references = list(canonical_references_override or [])
-        if shot is not None:
-            reference_plan = self._require_reference_plan(document, shot.id)
-            preferred_version_ids = (
-                preparation.input_version_ids if preparation is not None else []
-            )
-            canonical_references = _prioritize_keyframe_canvas(
-                _order_keyframe_reference_versions(
-                    _scope_keyframe_reference_versions(
-                        document,
-                        self._approved_bound_image_versions(document, shot.id),
-                        reference_plan,
-                        preferred_version_ids,
-                    ),
-                    reference_plan,
-                    preferred_version_ids,
-                ),
-                shot,
-            )
-        try:
-            review = inspect_asset_image(
-                document=document,
-                asset=asset,
-                version=version,
-                client=client,
-                shot=shot,
-                preparation=preparation,
-                canonical_references=canonical_references,
-            )
-        except (LanguageProviderError, ValueError) as exc:
-            raise ProviderOperationError(str(exc)) from exc
-        severe = any(
-            issue.severity.upper() in {"ERROR", "HIGH", "MAJOR", "CRITICAL", "FATAL"}
-            for issue in review.issues
-        )
-        approved = review.recommended and review.score >= 3.5 and not severe
-        issue_text = "; ".join(
-            f"{item.code}:{item.message}" for item in review.issues
-        )
-        notes = (
-            f"AUTO_DRAFT GPT-5.6-sol visual review score={review.score:.1f}; "
-            f"{review.summary}"
-            + (f"; issues={issue_text}" if issue_text else "")
-        )
-        self.review_asset_version(
-            project_id,
-            asset_id,
-            version_id,
-            AssetReviewRequest(
-                decision=(
-                    AssetReviewDecision.APPROVED
-                    if approved
-                    else AssetReviewDecision.REJECTED
-                ),
-                notes=notes,
-            ),
-        )
-        return review, approved
-
-    @staticmethod
-    def _keyframe_primary_reference_lock(kind: AssetKind) -> str:
-        if kind == AssetKind.CHARACTER:
-            return (
-                "Preserve the exact face identity, hair, wardrobe, and body appearance; "
-                "change only pose, crop, camera, and scene composition required by the shot."
-            )
-        if kind == AssetKind.LOCATION:
-            return (
-                "Preserve the location's topology, fixed anchors, materials, and lighting logic; "
-                "change only the camera framing required by the shot."
-            )
-        if kind == AssetKind.PROP:
-            return (
-                "Preserve the prop's exact shape, color, component placement, and material; "
-                "change only pose and placement required by the shot."
-            )
-        return "Preserve its approved visual facts while applying only the requested shot change."
-
-    def _advance_real_video_generation(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> tuple[bool, bool]:
-        run = self._require_autonomous_run(project_id, run_id)
-        if run.route_plan_id is None:
-            raise WorkflowConflictError("REAL_H3 run has no production route plan")
-        plan = self.repository.get_h3_route_plan(run.route_plan_id)
-        if plan is None:
-            raise ArtifactNotFoundError(run.route_plan_id)
-        has_unexecuted = any(
-            decision.execution_status == H3ShotRouteExecutionStatus.PLANNED
-            for decision in plan.decisions
-        )
-        if has_unexecuted:
-            self.execute_h3_production_route_plan(
-                project_id,
-                plan.id,
-                H3ProductionRouteExecuteRequest(
-                    reuse_passed_takes=True,
-                    enqueue_new_generations=True,
-                    adaptive_sequential=True,
-                    inspect_reused_takes=False,
-                    semantic_review=False,
-                    rebuild_manifest=False,
-                    render_export=False,
-                ),
-            )
-            return True, False
-        plan = self.repository.get_h3_route_plan(plan.id) or plan
-        all_project_tasks = self.repository.list_tasks(project_id)
-        retry_children: dict[str, list[GenerationTask]] = {}
-        for task in all_project_tasks:
-            if task.retry_of_task_id is not None:
-                retry_children.setdefault(task.retry_of_task_id, []).append(task)
-        plan_changed = False
-        for decision in plan.decisions:
-            planned_ids = set(decision.task_ids)
-            for parent_id in list(decision.task_ids):
-                children = retry_children.get(parent_id, [])
-                if not children:
-                    continue
-                earliest = min(children, key=lambda item: (item.created_at, item.id))
-                if earliest.id not in planned_ids:
-                    decision.task_ids.append(earliest.id)
-                    planned_ids.add(earliest.id)
-                    plan_changed = True
-        if plan_changed:
-            plan.updated_at = utc_now()
-            self.repository.save_h3_route_plan(plan)
-            return True, False
-
-        task_ids = [task_id for item in plan.decisions for task_id in item.task_ids]
-        tasks = [self._require_task(task_id) for task_id in task_ids]
-        pending_submission = next(
-            (
-                task
-                for task in tasks
-                if task.status in {TaskStatus.QUEUED, TaskStatus.SUBMITTING}
-            ),
-            None,
-        )
-        if pending_submission is not None:
-            self.advance_task(pending_submission.id)
-            return True, False
-
-        missing_output = next(
-            (task for task in tasks if task.status == TaskStatus.OUTPUT_MISSING),
-            None,
-        )
-        if missing_output is not None:
-            self.recover_task_output(missing_output.id)
-            return True, False
-
-        unknown_submission = next(
-            (task for task in tasks if task.status == TaskStatus.SUBMIT_UNKNOWN),
-            None,
-        )
-        if unknown_submission is not None:
-            raise WorkflowConflictError(
-                f"H3 task {unknown_submission.id} submission is unknown; reconcile it before continuing"
-            )
-
-        failed = next(
-            (
-                task
-                for task in tasks
-                if task.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}
-                and task.id not in retry_children
-            ),
-            None,
-        )
-        if failed is not None:
-            if failed.attempt >= 2:
-                raise WorkflowConflictError(
-                    f"H3 retries exhausted for shot {failed.shot_id}: "
-                    f"{failed.error_message or failed.status.value}"
-                )
-            retry = self.retry_task(failed.id)
-            decision = next(
-                item for item in plan.decisions if item.shot_id == failed.shot_id
-            )
-            decision.task_ids.append(retry.id)
-            plan.updated_at = utc_now()
-            self.repository.save_h3_route_plan(plan)
-            return True, False
-
-        running = min(
-            (
-                task
-                for task in tasks
-                if task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}
-            ),
-            key=lambda item: (item.updated_at, item.created_at, item.id),
-            default=None,
-        )
-        if running is not None:
-            advanced = self.advance_task(running.id)
-            waiting = advanced.status in {
-                TaskStatus.ACKNOWLEDGED,
-                TaskStatus.RUNNING,
-            }
-            if waiting:
-                self._set_autonomous_waiting(
-                    project_id,
-                    run_id,
-                    "MiniMax-H3 tasks are still running; the desktop will continue polling.",
-                )
-            return True, waiting
-        self._advance_autonomous_run(
-            project_id,
-            run_id,
-            completed_step=AutonomousRunStep.GENERATE,
-            next_step=AutonomousRunStep.QA_AND_REPAIR,
-        )
-        return True, False
-
-    def _advance_real_qa_and_repair(
-        self,
-        project_id: str,
-        run_id: str,
-    ) -> tuple[bool, bool]:
-        run = self._require_autonomous_run(project_id, run_id)
-        if run.route_plan_id is None:
-            raise WorkflowConflictError("REAL_H3 run has no production route plan")
-        plan = self.repository.get_h3_route_plan(run.route_plan_id)
-        if plan is None:
-            raise ArtifactNotFoundError(run.route_plan_id)
-        project = self.get_project(project_id)
-        task_ids = {task_id for item in plan.decisions for task_id in item.task_ids}
-        pending = sorted(
-            (
-                take
-                for take in project.takes
-                if take.task_id in task_ids
-                and take.freshness == Freshness.CURRENT
-                and take.qa_status == QaStatus.PENDING
-            ),
-            key=lambda item: next(
-                shot.sequence
-                for shot in project.document.shots
-                if shot.id == item.shot_id
-            ),
-        )
-        if pending:
-            take = pending[0]
-            decision = next(item for item in plan.decisions if item.shot_id == take.shot_id)
-            existing = next(
-                (
-                    report
-                    for report in reversed(project.video_inspections)
-                    if report.take_id == take.id
-                    and report.semantic_status == SemanticReviewStatus.COMPLETE
-                ),
-                None,
-            )
-            if existing is None:
-                response = self.inspect_take_video(
-                    take.id,
-                    VideoInspectionRequest(
-                        include_previous_boundary=True,
-                        semantic_review=True,
-                        max_frames=decision.inspection.max_frames,
-                        review_focus=decision.inspection.review_focus,
-                    ),
-                )
-                report = response.report
-            else:
-                report = existing
-            if report.semantic_status != SemanticReviewStatus.COMPLETE:
-                refreshed = self.get_project(project_id)
-                failed_attempts = sum(
-                    1
-                    for item in refreshed.video_inspections
-                    if item.take_id == take.id
-                    and item.semantic_status
-                    in {
-                        SemanticReviewStatus.FAILED,
-                        SemanticReviewStatus.UNAVAILABLE,
-                    }
-                )
-                if failed_attempts < _MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS:
-                    self._set_autonomous_waiting(
-                        project_id,
-                        run_id,
-                        (
-                            f"Semantic review for Take {take.id} was temporarily unavailable; "
-                            f"AUTO_DRAFT will retry ({failed_attempts}/"
-                            f"{_MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS})."
-                        ),
-                    )
-                    return True, True
-                raise WorkflowConflictError(
-                    f"Semantic video review remained unavailable for Take {take.id} "
-                    f"after {_MAX_AUTONOMOUS_SEMANTIC_REVIEW_ATTEMPTS} attempts"
-                )
-            self._apply_automatic_h3_review(take, report)
-            self._select_or_compare_current_shot_takes(
-                project_id,
-                take.shot_id,
-                review_focus=decision.inspection.review_focus,
-            )
-            decision.execution_status = H3ShotRouteExecutionStatus.GENERATED
-            if report.id not in decision.inspection_ids:
-                decision.inspection_ids.append(report.id)
-            decision.inspection_issue_codes = list(
-                dict.fromkeys(
-                    [
-                        *decision.inspection_issue_codes,
-                        *(item.code for item in report.issues),
-                    ]
-                )
-            )
-            plan.updated_at = utc_now()
-            self.repository.save_h3_route_plan(plan)
-            return True, False
-
-        for decision in sorted(plan.decisions, key=lambda item: item.shot_sequence):
-            self._select_or_compare_current_shot_takes(
-                project_id,
-                decision.shot_id,
-                review_focus=decision.inspection.review_focus,
-            )
-        aggregate = self.get_project(project_id)
-        planned_shot_ids = {item.shot_id for item in plan.decisions}
-        missing = _missing_timeline_shot_ids(
-            aggregate.document,
-            aggregate.takes,
-            restrict_to=planned_shot_ids,
-        )
-        if not missing:
-            self._complete_h3_wave_or_episode(
-                project_id=project_id,
-                run_id=run_id,
-                plan=plan,
-                aggregate=aggregate,
-            )
-            return True, False
-        next_candidate_decision = next(
-            (
-                decision
-                for decision in sorted(
-                    plan.decisions,
-                    key=lambda item: item.shot_sequence,
-                )
-                if decision.shot_id in missing
-                and self._should_generate_next_adaptive_candidate(
-                    decision,
-                    aggregate,
-                )
-            ),
-            None,
-        )
-        if next_candidate_decision is not None:
-            self._enqueue_next_adaptive_candidate(
-                project_id=project_id,
-                run_id=run_id,
-                plan=plan,
-                decision=next_candidate_decision,
-            )
-            return True, False
-        exhausted = [
-            shot_id
-            for shot_id in missing
-            if _autonomous_director_repair_attempts(aggregate.document, shot_id)
-            >= run.max_repair_rounds
-        ]
-        if exhausted:
-            waived_take_ids = self._apply_bounded_best_effort_waivers(
-                project_id,
-                run_id,
-                exhausted,
-            )
-            if waived_take_ids:
-                self._select_best_current_takes(project_id)
-                refreshed = self.get_project(project_id)
-                missing = _missing_timeline_shot_ids(
-                    refreshed.document,
-                    refreshed.takes,
-                    restrict_to=planned_shot_ids,
-                )
-                if not missing:
-                    self._complete_h3_wave_or_episode(
-                        project_id=project_id,
-                        run_id=run_id,
-                        plan=plan,
-                        aggregate=refreshed,
-                    )
-                    return True, False
-                aggregate = refreshed
-            still_exhausted = [
-                shot_id
-                for shot_id in missing
-                if _autonomous_director_repair_attempts(aggregate.document, shot_id)
-                >= run.max_repair_rounds
-            ]
-            if still_exhausted:
-                raise WorkflowConflictError(
-                    "REAL_H3 AUTO_DRAFT exhausted the per-shot Director repair limit for: "
-                    + ", ".join(still_exhausted)
-                )
-        repaired_shot_ids = self._run_autonomous_director_repairs(project_id, missing)
-        unrepaired = [shot_id for shot_id in missing if shot_id not in repaired_shot_ids]
-        if unrepaired:
-            raise WorkflowConflictError(
-                "REAL_H3 AUTO_DRAFT needs an executable Director repair for: "
-                + ", ".join(unrepaired)
-            )
-        with self._lock:
-            plan.status = H3RoutePlanStatus.PARTIAL
-            plan.updated_at = utc_now()
-            self.repository.save_h3_route_plan(plan)
-            document = self._require_project_document(project_id)
-            persisted = next(item for item in document.autonomous_runs if item.id == run_id)
-            persisted.repair_round += 1
-            persisted.route_plan_id = None
-            persisted.current_step = AutonomousRunStep.PLAN_ROUTES
-            persisted.waiting_reason = None
-            persisted.updated_at = utc_now()
-            self.repository.save_project(document)
-        return True, False
-
-    def _should_generate_next_adaptive_candidate(
-        self,
-        decision: H3ShotRoutePlan,
-        aggregate: ProjectAggregate,
-    ) -> bool:
-        if decision.action != H3ShotRouteAction.GENERATE:
-            return False
-        tasks_by_id = {task.id: task for task in aggregate.tasks}
-        root_tasks = [
-            tasks_by_id[task_id]
-            for task_id in decision.task_ids
-            if task_id in tasks_by_id
-            and tasks_by_id[task_id].retry_of_task_id is None
-        ]
-        if len(root_tasks) >= decision.candidate_count:
-            return False
-        current_takes = [
-            take
-            for take in aggregate.takes
-            if take.shot_id == decision.shot_id
-            and take.task_id in {task.id for task in root_tasks}
-            and take.freshness == Freshness.CURRENT
-        ]
-        if any(take.qa_status == QaStatus.PASSED for take in current_takes):
-            return False
-        rejected = [take for take in current_takes if take.qa_status == QaStatus.REJECTED]
-        if not rejected:
-            return False
-        latest = max(rejected, key=lambda item: (item.created_at, item.id))
-        structural_categories = {
-            QaFailureCategory.TECHNICAL_MEDIA,
-            QaFailureCategory.SPATIAL_CONTINUITY,
-            QaFailureCategory.CONTACT_CONTINUITY,
-            QaFailureCategory.CHARACTER_ORIENTATION,
-            QaFailureCategory.IDENTITY_CONTINUITY,
-            QaFailureCategory.PROP_CONTINUITY,
-            QaFailureCategory.DIALOGUE_AUDIO,
-        }
-        severe_structural_issue = any(
-            issue.category in structural_categories
-            and issue.severity.upper()
-            in {"ERROR", "HIGH", "MAJOR", "CRITICAL", "FATAL"}
-            for issue in latest.qa_report.issues
-        )
-        return not severe_structural_issue
-
-    def _enqueue_next_adaptive_candidate(
-        self,
-        *,
-        project_id: str,
-        run_id: str,
-        plan: H3ProductionRoutePlan,
-        decision: H3ShotRoutePlan,
-    ) -> GenerationTask:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            shot = self._require_shot_in_document(document, decision.shot_id)
-            media_inputs = self._resolve_approved_asset_inputs(
-                document,
-                decision.media_inputs,
-            )
-            try:
-                validate_h3_probe(
-                    route=decision.route,
-                    prompt=decision.prompt,
-                    duration_seconds=decision.duration_seconds,
-                    media_inputs=media_inputs,
-                )
-            except H3CapabilityError as exc:
-                raise WorkflowConflictError(str(exc)) from exc
-            existing_tasks = self.repository.list_tasks_for_shot(project_id, shot.id)
-            next_candidate = max(
-                (item.candidate_index for item in existing_tasks),
-                default=0,
-            ) + 1
-            task, provider_run, route_evidence = self._new_h3_task_and_run(
-                document=document,
-                shot_id=shot.id,
-                route=decision.route,
-                duration_seconds=decision.duration_seconds,
-                prompt=decision.prompt,
-                media_inputs=media_inputs,
-                purpose=EvidencePurpose.PRODUCTION,
-                learning_objective=None,
-                regression_case_id=None,
-                candidate_index=next_candidate,
-                attempt=1,
-                retry_of_task_id=None,
-            )
-            self.repository.save_task(task)
-            self.repository.save_provider_run(provider_run)
-            self.repository.save_route_evidence(route_evidence)
-            decision.task_ids.append(task.id)
-            decision.execution_status = H3ShotRouteExecutionStatus.QUEUED
-            plan.status = H3RoutePlanStatus.EXECUTING
-            plan.updated_at = utc_now()
-            self.repository.save_h3_route_plan(plan)
-            persisted = next(
-                item for item in document.autonomous_runs if item.id == run_id
-            )
-            persisted.current_step = AutonomousRunStep.GENERATE
-            persisted.waiting_reason = None
-            persisted.warnings.append(
-                f"Adaptive candidate {next_candidate}/{decision.candidate_count} queued for "
-                f"shot {shot.sequence} after the previous candidate remained unusable."
-            )
-            persisted.updated_at = utc_now()
-            self.repository.save_project(document)
-            return task
-
-    def _complete_h3_wave_or_episode(
-        self,
-        *,
-        project_id: str,
-        run_id: str,
-        plan: H3ProductionRoutePlan,
-        aggregate: ProjectAggregate,
-    ) -> None:
-        plan.status = H3RoutePlanStatus.COMPLETE
-        plan.updated_at = utc_now()
-        self.repository.save_h3_route_plan(plan)
-        remaining = _missing_timeline_shot_ids(
-            aggregate.document,
-            aggregate.takes,
-        )
-        if not remaining:
-            self._advance_autonomous_run(
-                project_id,
-                run_id,
-                completed_step=AutonomousRunStep.QA_AND_REPAIR,
-                next_step=AutonomousRunStep.TIMELINE,
-            )
-            return
-        with self._lock:
-            document = self._require_project_document(project_id)
-            persisted = next(
-                item for item in document.autonomous_runs if item.id == run_id
-            )
-            persisted.route_plan_id = None
-            persisted.current_step = AutonomousRunStep.PLAN_ROUTES
-            persisted.waiting_reason = None
-            persisted.updated_at = utc_now()
-            self.repository.save_project(document)
-
-    def _apply_automatic_h3_review(
-        self,
-        take: Take,
-        report: VideoInspectionReport,
-    ) -> None:
-        evidence = self.repository.get_route_evidence_for_take(take.id)
-        if evidence is None:
-            raise WorkflowConflictError(f"Route evidence for Take {take.id} is missing")
-        severe = [
-            issue
-            for issue in report.issues
-            if issue.severity.upper()
-            in {"ERROR", "HIGH", "MAJOR", "CRITICAL", "FATAL"}
-        ]
-        passed = evidence.technical_passed is True and not severe
-        medium_count = sum(
-            issue.severity.upper() in {"WARN", "WARNING", "MEDIUM", "MODERATE"}
-            for issue in report.issues
-        )
-        low_count = sum(
-            issue.severity.upper() in {"LOW", "MINOR"} for issue in report.issues
-        )
-        score = max(
-            0.0,
-            min(
-                5.0,
-                4.6 - len(severe) * 1.2 - medium_count * 0.45 - low_count * 0.2,
-            ),
-        )
-        issues = list(report.issues)
-        if not passed and not issues:
-            issues.append(
-                QaIssue(
-                    code="AUTOMATED_TECHNICAL_GATE_FAILED",
-                    severity="ERROR",
-                    message="Provider media did not pass the stored technical gate.",
-                    repair_layer="PROVIDER_RETRY",
-                    category=QaFailureCategory.TECHNICAL_MEDIA,
-                )
-            )
-        notes = (
-            f"AUTO_DRAFT visual candidate judge: {report.summary} "
-            "Audio-stream presence was checked here, but voice/audio QA is not run "
-            "automatically. Visible sound-source or dialogue-semantic contradictions remain "
-            "part of the content review. User override remains allowed."
-        )
-        self.review_h3_take(
-            take.id,
-            H3TakeReviewRequest(
-                hard_gate_passed=passed,
-                score=score,
-                notes=notes,
-                issues=issues,
-            ),
-        )
-
-    def _set_autonomous_waiting(
-        self,
-        project_id: str,
-        run_id: str,
-        reason: str,
-    ) -> None:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            run = next(item for item in document.autonomous_runs if item.id == run_id)
-            run.status = AutonomousRunStatus.RUNNING
-            run.waiting_reason = reason
-            run.updated_at = utc_now()
-            self.repository.save_project(document)
 
     def _require_language_client(self) -> LanguageProviderClient:
         api_key = self.language_config.api_key()
@@ -5114,22 +1906,6 @@ class ShortDramaService:
                 "GPT-5.6-sol is required for autonomous visual asset and video review"
             )
         return self.language_provider_factory(api_key, base_url)
-
-    @staticmethod
-    def _approved_image_version(asset: Asset) -> AssetVersion | None:
-        if asset.approved_version_id is None:
-            return None
-        return next(
-            (
-                item
-                for item in asset.versions
-                if item.id == asset.approved_version_id
-                and item.approval_status == ApprovalStatus.APPROVED
-                and item.media_type == AssetMediaType.IMAGE
-                and (item.local_path is not None or item.external_url is not None)
-            ),
-            None,
-        )
 
     @staticmethod
     def _require_approved_voice_audio(asset: Asset) -> AssetVersion:
@@ -5163,76 +1939,6 @@ class ShortDramaService:
                     "MiniMax-H3 voice reference exceeds 15 MB"
                 )
         return version
-
-    @staticmethod
-    def _rebind_asset_references(
-        document: ProjectDocument,
-        asset: Asset,
-        approved: AssetVersion,
-    ) -> bool:
-        version_ids = {item.id for item in asset.versions}
-        changed = False
-        for plan in document.reference_plan:
-            for binding in plan.bindings:
-                if binding.target_id in version_ids and binding.target_id != approved.id:
-                    binding.target_id = approved.id
-                    changed = True
-        return changed
-
-    def _approved_bound_image_versions(
-        self,
-        document: ProjectDocument,
-        shot_id: str,
-    ) -> list[tuple[Asset, AssetVersion]]:
-        plan = self._require_reference_plan(document, shot_id)
-        result: list[tuple[Asset, AssetVersion]] = []
-        seen: set[str] = set()
-        shot = self._require_shot_in_document(document, shot_id)
-        preview = preview_reference_plan(
-            document,
-            shot,
-            plan,
-            ReferencePlanPreviewRequest(),
-        )
-        for selection in preview.selected:
-            try:
-                asset, version = self._find_asset_version(
-                    document,
-                    selection.asset_version_id,
-                )
-            except ArtifactNotFoundError:
-                continue
-            if (
-                version.id in seen
-                or version.approval_status != ApprovalStatus.APPROVED
-                or version.media_type != AssetMediaType.IMAGE
-                or (version.local_path is None and version.external_url is None)
-            ):
-                continue
-            seen.add(version.id)
-            result.append((asset, version))
-        for binding in plan.bindings:
-            try:
-                asset, version = self._find_asset_version(document, binding.target_id)
-            except ArtifactNotFoundError:
-                continue
-            if (
-                version.id in seen
-                or version.approval_status != ApprovalStatus.APPROVED
-                or version.media_type != AssetMediaType.IMAGE
-                or (version.local_path is None and version.external_url is None)
-            ):
-                continue
-            seen.add(version.id)
-            result.append((asset, version))
-        if result:
-            return result
-        for asset in document.assets:
-            version = self._approved_image_version(asset)
-            if version is not None and version.id not in seen:
-                seen.add(version.id)
-                result.append((asset, version))
-        return result
 
     def _h3_image_input(
         self,
@@ -7269,60 +3975,6 @@ class ShortDramaService:
             for index, (scene, shots) in enumerate(ordered, start=1)
         ]
 
-    def _ensure_current_manifest_audio_inspection(
-        self,
-        project_id: str,
-    ) -> AudioInspectionReport:
-        document = self._require_project_document(project_id)
-        manifest = self._current_manifest(document)
-        existing = [
-            item
-            for item in self.repository.list_audio_inspections(project_id)
-            if item.manifest_id == manifest.id
-        ]
-        if existing:
-            latest = existing[-1]
-            if (
-                latest.semantic_status == SemanticReviewStatus.COMPLETE
-                or self.audio_semantic_service is None
-            ):
-                return latest
-        return self.inspect_current_manifest_audio(
-            project_id,
-            AudioInspectionRequest(
-                semantic_review=True,
-                speaker_continuity=True,
-            ),
-        ).report
-
-    def _record_autonomous_audio_findings(
-        self,
-        project_id: str,
-        run_id: str,
-        report: AudioInspectionReport,
-    ) -> None:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            run = next(
-                (item for item in document.autonomous_runs if item.id == run_id),
-                None,
-            )
-            if run is None:
-                raise ArtifactNotFoundError(run_id)
-            prefix = f"Audio QA {report.id}:"
-            run.warnings = [item for item in run.warnings if not item.startswith(prefix)]
-            severe = sum(
-                issue.severity.upper()
-                in {"ERROR", "HIGH", "MAJOR", "CRITICAL", "FATAL"}
-                for issue in report.issues
-            )
-            run.warnings.append(
-                f"{prefix} semantic={report.semantic_status.value}, "
-                f"severe_issues={severe}. {report.summary}"
-            )
-            run.updated_at = utc_now()
-            self.repository.save_project(document)
-
     def review_h3_take(
         self,
         take_id: str,
@@ -7469,43 +4121,6 @@ class ShortDramaService:
             ]
             self.repository.mark_takes_stale(project_id, affected_shot_ids)
             self._invalidate_current_manifests(document)
-            route_steps = {
-                AutonomousRunStep.PLAN_ROUTES,
-                AutonomousRunStep.PREPARE_SHOT_ASSETS,
-                AutonomousRunStep.GENERATE,
-                AutonomousRunStep.QA_AND_REPAIR,
-                AutonomousRunStep.TIMELINE,
-                AutonomousRunStep.EPISODE_REVIEW,
-                AutonomousRunStep.AUDIO_QA,
-                AutonomousRunStep.EXPORT,
-                AutonomousRunStep.COMPLETE,
-            }
-            for run in document.autonomous_runs:
-                if run.status not in {
-                    AutonomousRunStatus.RUNNING,
-                    AutonomousRunStatus.NEEDS_ATTENTION,
-                }:
-                    continue
-                if run.current_step not in route_steps and run.route_plan_id is None:
-                    continue
-                run.status = AutonomousRunStatus.RUNNING
-                run.current_step = AutonomousRunStep.PLAN_ROUTES
-                run.completed_steps = [
-                    step for step in run.completed_steps if step not in route_steps
-                ]
-                run.route_plan_id = None
-                run.episode_review_id = None
-                run.waiting_reason = None
-                run.error_message = None
-                run.export_id = None
-                run.completed_at = None
-                warning = (
-                    f"Script v{next_version_number} revised {len(revisions)} dialogue line(s); "
-                    "the H3 route plan will be rebuilt before generation."
-                )
-                if warning not in run.warnings:
-                    run.warnings.append(warning)
-                run.updated_at = now
             document.project.stage = ProjectStage.PLANNED
             document.project.updated_at = now
             self.repository.save_project(document)
@@ -7674,267 +4289,6 @@ class ShortDramaService:
             self.repository.save_project(document)
             return export
 
-    def auto_draft(self, project_id: str, render_export: bool) -> AutoDraftResponse:
-        document = self._require_project_document(project_id)
-        resumable = next(
-            (
-                run
-                for run in reversed(document.autonomous_runs)
-                if run.status
-                in {AutonomousRunStatus.RUNNING, AutonomousRunStatus.NEEDS_ATTENTION}
-            ),
-            None,
-        )
-        run_id = resumable.id if resumable is not None else None
-        try:
-            return self._execute_auto_draft(
-                project_id,
-                render_export=render_export,
-                autonomous_run_id=run_id,
-            )
-        except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
-            if run_id is not None:
-                self._finish_autonomous_run(
-                    project_id,
-                    run_id,
-                    status=AutonomousRunStatus.NEEDS_ATTENTION,
-                    error_message=str(exc),
-                )
-            raise
-
-    def _execute_auto_draft(
-        self,
-        project_id: str,
-        *,
-        render_export: bool,
-        autonomous_run_id: str | None,
-    ) -> AutoDraftResponse:
-        max_repair_rounds = 2
-        while True:
-            self.enqueue(project_id, EnqueueRequest())
-            drain_result = self.drain(project_id, max_steps=5000)
-            if drain_result.remaining_runnable > 0:
-                raise WorkflowConflictError("Worker did not reach an idle state")
-            aggregate = self.get_project(project_id)
-            if aggregate.progress.unresolved_tasks > 0:
-                raise WorkflowConflictError(
-                    "AUTO_DRAFT stopped at actionable task failures; reconcile, recover, or retry them first"
-                )
-            if autonomous_run_id is not None:
-                self._advance_autonomous_run(
-                    project_id,
-                    autonomous_run_id,
-                    completed_step=AutonomousRunStep.GENERATE,
-                    next_step=AutonomousRunStep.QA_AND_REPAIR,
-                )
-
-            self._select_best_current_takes(project_id)
-            aggregate = self.get_project(project_id)
-            missing_selected = [
-                shot.id
-                for shot in aggregate.document.shots
-                if not any(
-                    take.shot_id == shot.id
-                    and take.is_selected
-                    and take.freshness == Freshness.CURRENT
-                    and _take_is_timeline_eligible(take)
-                    for take in aggregate.takes
-                )
-            ]
-            if not missing_selected:
-                break
-            exhausted = [
-                shot_id
-                for shot_id in missing_selected
-                if _autonomous_director_repair_attempts(
-                    aggregate.document,
-                    shot_id,
-                )
-                >= max_repair_rounds
-            ]
-            if exhausted:
-                raise WorkflowConflictError(
-                    "AUTO_DRAFT exhausted the per-shot Director repair limit for: "
-                    + ", ".join(exhausted)
-                )
-            repaired_shot_ids = self._run_autonomous_director_repairs(
-                project_id,
-                missing_selected,
-            )
-            unrepaired = [
-                shot_id
-                for shot_id in missing_selected
-                if shot_id not in repaired_shot_ids
-            ]
-            if unrepaired:
-                raise WorkflowConflictError(
-                    "AUTO_DRAFT needs a passed Take or an executable Director repair for: "
-                    + ", ".join(unrepaired)
-                )
-            if autonomous_run_id is not None:
-                self._advance_autonomous_run(
-                    project_id,
-                    autonomous_run_id,
-                    completed_step=AutonomousRunStep.QA_AND_REPAIR,
-                    next_step=AutonomousRunStep.GENERATE,
-                )
-        if autonomous_run_id is not None:
-            self._advance_autonomous_run(
-                project_id,
-                autonomous_run_id,
-                completed_step=AutonomousRunStep.QA_AND_REPAIR,
-                next_step=AutonomousRunStep.TIMELINE,
-            )
-
-        self.rebuild_manifest(project_id)
-        if autonomous_run_id is not None:
-            if render_export:
-                self._advance_autonomous_run(
-                    project_id,
-                    autonomous_run_id,
-                    completed_step=AutonomousRunStep.TIMELINE,
-                    next_step=AutonomousRunStep.EXPORT,
-                )
-        export: ExportRecord | None = None
-        if render_export:
-            export = self.export_project(project_id, rebuild_manifest=False)
-        if autonomous_run_id is not None:
-            completed_steps = [AutonomousRunStep.TIMELINE]
-            if export is not None:
-                completed_steps.append(AutonomousRunStep.EXPORT)
-            self._finish_autonomous_run(
-                project_id,
-                autonomous_run_id,
-                status=AutonomousRunStatus.COMPLETE,
-                export_id=export.id if export is not None else None,
-                completed_steps=completed_steps,
-            )
-        return AutoDraftResponse(project=self.get_project(project_id), export=export)
-
-    def _run_autonomous_director_repairs(
-        self,
-        project_id: str,
-        shot_ids: list[str],
-    ) -> set[str]:
-        project = self.get_project(project_id)
-        if project.document.project.run_mode != RunMode.AUTO_DRAFT:
-            return set()
-        reports = project.video_inspections
-        applied_shot_ids: set[str] = set()
-        for shot_id in shot_ids:
-            candidates = [
-                take
-                for take in project.takes
-                if take.shot_id == shot_id and take.freshness == Freshness.CURRENT
-            ]
-            if not candidates:
-                continue
-            source_take = max(
-                candidates,
-                key=lambda take: (take.qa_report.score, take.created_at, take.id),
-            )
-            inspection = next(
-                (
-                    report
-                    for report in reversed(reports)
-                    if report.take_id == source_take.id
-                ),
-                None,
-            )
-            result = self.run_director_loop(
-                project_id,
-                shot_id,
-                DirectorAdviceRequest(
-                    take_id=source_take.id,
-                    inspection_id=inspection.id if inspection is not None else None,
-                    user_direction=(
-                        "Continue the autonomous draft. Preserve the narrative purpose and only "
-                        "apply a repair that addresses observed QA evidence. Compare prior applied "
-                        "repairs with the latest QA result; when the same failure remains, prefer a "
-                        "materially different strategy unless the actual inputs will change."
-                    ),
-                ),
-            )
-            if result.repair_applied:
-                applied_shot_ids.add(shot_id)
-        return applied_shot_ids
-
-    def _select_or_compare_current_shot_takes(
-        self,
-        project_id: str,
-        shot_id: str,
-        *,
-        review_focus: str | None,
-    ) -> None:
-        candidates = sorted(
-            (
-                take
-                for take in self.repository.list_takes_for_shot(project_id, shot_id)
-                if take.freshness == Freshness.CURRENT
-                and take.availability == TakeAvailability.AVAILABLE
-                and take.qa_status == QaStatus.PASSED
-            ),
-            key=lambda item: (item.candidate_index, item.created_at, item.id),
-        )
-        if not candidates:
-            return
-        if len(candidates) == 1:
-            if not candidates[0].is_selected:
-                self.select_take(candidates[0].id)
-            return
-        if len(candidates) > 5:
-            raise WorkflowConflictError(
-                f"Shot {shot_id} has more than five QA-passed candidates; "
-                "the Director Agent must narrow the comparison set"
-            )
-
-        candidate_ids = [take.id for take in candidates]
-        candidate_id_set = set(candidate_ids)
-        existing = next(
-            (
-                report
-                for report in reversed(
-                    self.repository.list_take_comparisons(project_id)
-                )
-                if report.shot_id == shot_id
-                and len(report.candidate_take_ids) == len(candidate_ids)
-                and set(report.candidate_take_ids) == candidate_id_set
-                and report.semantic_status == SemanticReviewStatus.COMPLETE
-            ),
-            None,
-        )
-        if existing is not None:
-            # A persisted comparison is a recommendation, not a lock. If the user has
-            # selected any still-eligible candidate since that report, preserve it.
-            if any(take.is_selected for take in candidates):
-                return
-            if (
-                existing.decision == TakeComparisonDecision.SELECT_TAKE
-                and existing.selected_take_id is not None
-            ):
-                selected = next(
-                    take
-                    for take in candidates
-                    if take.id == existing.selected_take_id
-                )
-                if not selected.is_selected:
-                    self.select_take(selected.id)
-            elif existing.decision == TakeComparisonDecision.NONE_ACCEPTABLE:
-                self._clear_take_selection_for_shot(project_id, shot_id)
-            return
-
-        self.compare_takes(
-            project_id,
-            TakeComparisonRequest(
-                shot_id=shot_id,
-                take_ids=candidate_ids,
-                inspect_missing=False,
-                include_previous_boundary=True,
-                review_focus=review_focus,
-                apply_selection=True,
-            ),
-        )
-
     def _clear_take_selection_for_shot(
         self,
         project_id: str,
@@ -7954,117 +4308,6 @@ class ShortDramaService:
                 document.project.stage = ProjectStage.REVIEW
                 document.project.updated_at = utc_now()
                 self.repository.save_project(document)
-
-    def _select_best_current_takes(self, project_id: str) -> None:
-        with self._lock:
-            document = self._require_project_document(project_id)
-            takes = self.repository.list_takes(project_id)
-            takes_by_shot: dict[str, list[Take]] = {}
-            for take in takes:
-                if take.freshness == Freshness.CURRENT and _take_is_timeline_eligible(take):
-                    takes_by_shot.setdefault(take.shot_id, []).append(take)
-            for shot in document.shots:
-                candidates = takes_by_shot.get(shot.id, [])
-                if not candidates:
-                    continue
-                best = max(
-                    candidates,
-                    key=lambda take: (
-                        take.qa_status == QaStatus.PASSED,
-                        take.qa_report.score,
-                        -take.candidate_index,
-                    ),
-                )
-                if not best.is_selected:
-                    self.repository.select_take(best.id)
-
-    def _apply_bounded_best_effort_waivers(
-        self,
-        project_id: str,
-        run_id: str,
-        shot_ids: list[str],
-    ) -> list[str]:
-        waived_take_ids: list[str] = []
-        with self._lock:
-            document = self._require_project_document(project_id)
-            run = next(
-                (item for item in document.autonomous_runs if item.id == run_id),
-                None,
-            )
-            if run is None:
-                raise ArtifactNotFoundError(run_id)
-            takes = self.repository.list_takes(project_id)
-            evidence_by_take = {
-                item.take_id: item
-                for item in self.repository.list_route_evidence(project_id)
-                if item.take_id is not None
-            }
-            now = utc_now()
-            for shot_id in shot_ids:
-                candidates = [
-                    take
-                    for take in takes
-                    if take.shot_id == shot_id
-                    and _can_receive_bounded_best_effort_waiver(
-                        take,
-                        evidence_by_take.get(take.id),
-                    )
-                ]
-                if not candidates:
-                    continue
-                best = max(
-                    candidates,
-                    key=lambda take: (
-                        take.qa_report.score,
-                        -sum(
-                            issue.severity.upper() in {"HIGH", "MAJOR"}
-                            for issue in take.qa_report.issues
-                        ),
-                        -take.candidate_index,
-                    ),
-                )
-                if _BOUNDED_BEST_EFFORT_CHECK not in best.qa_report.checks:
-                    best.qa_report.checks.append(_BOUNDED_BEST_EFFORT_CHECK)
-                issue_codes = [item.code for item in best.qa_report.issues]
-                repair_attempts = _autonomous_director_repair_attempts(
-                    document,
-                    shot_id,
-                )
-                waiver_note = (
-                    "AUTO_DRAFT bounded best-effort timeline waiver after "
-                    f"{repair_attempts} automatic Director repair attempt(s) for this shot; "
-                    "QA remains REJECTED and unresolved "
-                    "issues remain visible: "
-                    + (", ".join(issue_codes) if issue_codes else "none")
-                )
-                best.qa_report.reviewer_notes = " ".join(
-                    item
-                    for item in [best.qa_report.reviewer_notes, waiver_note]
-                    if item
-                )
-                self.repository.save_take(best)
-                self.repository.select_take(best.id)
-                evidence = evidence_by_take.get(best.id)
-                if evidence is not None:
-                    evidence.notes = " ".join(
-                        item
-                        for item in [evidence.notes, waiver_note]
-                        if item
-                    )
-                    self.repository.save_route_evidence(evidence)
-                warning = (
-                    f"Bounded best-effort selected {best.id} for {shot_id}; QA remains "
-                    f"REJECTED with hard_gate_passed=false. Unresolved: "
-                    + (", ".join(issue_codes) if issue_codes else "none")
-                )
-                if warning not in run.warnings:
-                    run.warnings.append(warning)
-                waived_take_ids.append(best.id)
-            if waived_take_ids:
-                run.updated_at = now
-                document.project.updated_at = now
-                self.repository.save_project(document)
-        return waived_take_ids
 
     def _resolve_h3_probe(
         self,

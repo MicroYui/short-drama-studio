@@ -366,19 +366,46 @@ class ShortDramaRepository:
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(11, datetime('now'))"
             )
 
-    def save_planning_run(self, run: PlanningRunRecord) -> None:
-        with self._lock, self._connection() as connection:
-            connection.execute(
-                """
-                INSERT INTO planning_runs(id, status, updated_at, record_json)
-                VALUES(?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    status = excluded.status,
-                    updated_at = excluded.updated_at,
-                    record_json = excluded.record_json
-                """,
-                (run.id, run.status.value, run.updated_at, run.model_dump_json()),
+    def save_planning_run_with_project(
+        self,
+        run: PlanningRunRecord,
+        document: ProjectDocument,
+    ) -> None:
+        """Atomically persist an owned planning cursor and its project summary."""
+
+        project = document.project
+        if run.project_id != project.id:
+            raise ValueError(
+                "Planning run project does not match the project document: "
+                f"{run.project_id!r} != {project.id!r}"
             )
+        with self._lock, self._connection() as connection:
+            run_cursor = connection.execute(
+                """
+                UPDATE planning_runs
+                SET status = ?, updated_at = ?, record_json = ?
+                WHERE id = ?
+                """,
+                (run.status.value, run.updated_at, run.model_dump_json(), run.id),
+            )
+            if run_cursor.rowcount != 1:
+                raise ValueError(f"Planning run does not exist: {run.id}")
+            project_cursor = connection.execute(
+                """
+                UPDATE projects
+                SET name = ?, stage = ?, updated_at = ?, document_json = ?
+                WHERE id = ?
+                """,
+                (
+                    project.name,
+                    project.stage.value,
+                    project.updated_at,
+                    document.model_dump_json(),
+                    project.id,
+                ),
+            )
+            if project_cursor.rowcount != 1:
+                raise ValueError(f"Project does not exist: {project.id}")
 
     def get_planning_run(self, run_id: str) -> PlanningRunRecord | None:
         with self._lock, self._connection() as connection:
@@ -388,16 +415,6 @@ class ShortDramaRepository:
         if row is None:
             return None
         return PlanningRunRecord.model_validate_json(cast(str, row["record_json"]))
-
-    def list_planning_runs(self) -> list[PlanningRunRecord]:
-        with self._lock, self._connection() as connection:
-            rows = connection.execute(
-                "SELECT record_json FROM planning_runs ORDER BY updated_at DESC, id ASC"
-            ).fetchall()
-        return [
-            PlanningRunRecord.model_validate_json(cast(str, row["record_json"]))
-            for row in rows
-        ]
 
     def save_planning_outline_snapshot(
         self,
@@ -674,6 +691,63 @@ class ShortDramaRepository:
                 ),
             )
 
+    def insert_project(self, document: ProjectDocument) -> bool:
+        """Insert a new project without allowing an existing id to be overwritten."""
+
+        project = document.project
+        try:
+            with self._lock, self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO projects(id, name, stage, updated_at, document_json)
+                    VALUES(?, ?, ?, ?, ?)
+                    """,
+                    (
+                        project.id,
+                        project.name,
+                        project.stage.value,
+                        project.updated_at,
+                        document.model_dump_json(),
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
+    def insert_project_with_planning_run(
+        self,
+        document: ProjectDocument,
+        run: PlanningRunRecord,
+    ) -> bool:
+        """Atomically create an Agent-owned planning scaffold and its cursor."""
+
+        project = document.project
+        try:
+            with self._lock, self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO projects(id, name, stage, updated_at, document_json)
+                    VALUES(?, ?, ?, ?, ?)
+                    """,
+                    (
+                        project.id,
+                        project.name,
+                        project.stage.value,
+                        project.updated_at,
+                        document.model_dump_json(),
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO planning_runs(id, status, updated_at, record_json)
+                    VALUES(?, ?, ?, ?)
+                    """,
+                    (run.id, run.status.value, run.updated_at, run.model_dump_json()),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
     def project_exists(self, project_id: str) -> bool:
         with self._lock, self._connection() as connection:
             row = connection.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone()
@@ -703,6 +777,35 @@ class ShortDramaRepository:
             cursor = connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             deleted = cursor.rowcount > 0
         return deleted
+
+    def delete_project_creation(
+        self,
+        project_id: str,
+        *,
+        planning_run_id: str | None = None,
+    ) -> bool:
+        """Remove a failed first-create write and its optional planning cursor."""
+
+        with self._lock, self._connection() as connection:
+            if planning_run_id is not None:
+                connection.execute(
+                    "DELETE FROM planning_script_documents_fts WHERE run_id = ?",
+                    (planning_run_id,),
+                )
+                connection.execute(
+                    "DELETE FROM planning_script_documents WHERE run_id = ?",
+                    (planning_run_id,),
+                )
+                connection.execute(
+                    "DELETE FROM planning_run_artifacts WHERE run_id = ?",
+                    (planning_run_id,),
+                )
+                connection.execute(
+                    "DELETE FROM planning_runs WHERE id = ?",
+                    (planning_run_id,),
+                )
+            cursor = connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        return cursor.rowcount > 0
 
     def save_task(self, task: GenerationTask) -> None:
         with self._lock, self._connection() as connection:

@@ -1,5 +1,7 @@
 # Phase 20：多分钟成片的整集 Reviewer 与 Director 闭环
 
+> 历史阶段文档，仅记录当时实现，不是当前运行入口。现行架构见 [Phase 29](./40-agent-skill-tool-runtime-migration.md)，共享生产流程见 [`end_to_end.md`](../backend/short_drama/skills/workflows/end_to_end.md)。
+
 ## 目标与边界
 
 逐镜视频抽帧可以发现人物、道具、动作和构图问题，相邻边界检查可以发现接续问题，但它们不能独立回答：故事是否容易理解、场次之间是否存在因果断裂、人物或道具状态是否跨场漂移、某段停留是否让整集节奏失去作用。

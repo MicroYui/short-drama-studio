@@ -656,6 +656,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/agent-projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Agent Project */
+        post: operations["create_agent_project_api_short_drama_agent_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Run */
+        get: operations["get_agent_run_api_short_drama_agent_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-runs/{run_id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Advance Agent Run */
+        post: operations["advance_agent_run_api_short_drama_agent_runs__run_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-runs/{run_id}/replan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replan Agent Run */
+        post: operations["replan_agent_run_api_short_drama_agent_runs__run_id__replan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-runs/{run_id}/user-input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Agent User Input */
+        post: operations["submit_agent_user_input_api_short_drama_agent_runs__run_id__user_input_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-runtime/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Capabilities */
+        get: operations["get_agent_capabilities_api_short_drama_agent_runtime_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-work-orders/{work_order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Work Order */
+        get: operations["get_agent_work_order_api_short_drama_agent_work_orders__work_order_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-work-orders/{work_order_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Agent Work Order */
+        post: operations["execute_agent_work_order_api_short_drama_agent_work_orders__work_order_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-work-orders/{work_order_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Agent Work Order Result */
+        post: operations["submit_agent_work_order_result_api_short_drama_agent_work_orders__work_order_id__result_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/asset-agent/tools/search-assets": {
         parameters: {
             query?: never;
@@ -775,160 +928,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/short-drama/planning-runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Planning Runs */
-        get: operations["list_planning_runs_api_short_drama_planning_runs_get"];
-        put?: never;
-        /** Create Planning Run */
-        post: operations["create_planning_run_api_short_drama_planning_runs_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Planning Run */
-        get: operations["get_planning_run_api_short_drama_planning_runs__run_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}/advance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Advance Planning Run */
-        post: operations["advance_planning_run_api_short_drama_planning_runs__run_id__advance_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}/agent-tools/revise-scenes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Revise Planning Scenes With Agent */
-        post: operations["revise_planning_scenes_with_agent_api_short_drama_planning_runs__run_id__agent_tools_revise_scenes_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}/agent-tools/search-script": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Search Planning Script Documents */
-        post: operations["search_planning_script_documents_api_short_drama_planning_runs__run_id__agent_tools_search_script_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}/outline": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Replace Planning Outline */
-        put: operations["replace_planning_outline_api_short_drama_planning_runs__run_id__outline_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}/outline/agent-revise": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Revise Planning Outline With Agent */
-        post: operations["revise_planning_outline_with_agent_api_short_drama_planning_runs__run_id__outline_agent_revise_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}/outline/revise-from-review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Revise Planning Outline From Review */
-        post: operations["revise_planning_outline_from_review_api_short_drama_planning_runs__run_id__outline_revise_from_review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/planning-runs/{run_id}/script-quality": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Planning Run Script Quality */
-        get: operations["get_planning_run_script_quality_api_short_drama_planning_runs__run_id__script_quality_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/short-drama/projects": {
         parameters: {
             query?: never;
@@ -939,25 +938,7 @@ export interface paths {
         /** List Projects */
         get: operations["list_projects_api_short_drama_projects_get"];
         put?: never;
-        /** Create Project */
-        post: operations["create_project_api_short_drama_projects_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/projects/autonomous-draft": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Autonomous Draft */
-        post: operations["create_autonomous_draft_api_short_drama_projects_autonomous_draft_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -977,6 +958,41 @@ export interface paths {
         post?: never;
         /** Delete Project */
         delete: operations["delete_project_api_short_drama_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/agent-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Runs */
+        get: operations["list_agent_runs_api_short_drama_projects__project_id__agent_runs_get"];
+        put?: never;
+        /** Create Agent Run */
+        post: operations["create_agent_run_api_short_drama_projects__project_id__agent_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/agent-tools/apply-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Semantic Change */
+        post: operations["apply_semantic_change_api_short_drama_projects__project_id__agent_tools_apply_change_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1163,40 +1179,6 @@ export interface paths {
         put?: never;
         /** Review Asset Version */
         post: operations["review_asset_version_api_short_drama_projects__project_id__assets__asset_id__versions__version_id__review_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/projects/{project_id}/auto-draft": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Auto Draft */
-        post: operations["auto_draft_api_short_drama_projects__project_id__auto_draft_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Advance Autonomous Run */
-        post: operations["advance_autonomous_run_api_short_drama_projects__project_id__autonomous_runs__run_id__advance_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1714,23 +1696,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/short-drama/projects/{source_project_id}/autonomous-repeats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Autonomous Repeat */
-        post: operations["create_autonomous_repeat_api_short_drama_projects__source_project_id__autonomous_repeats_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/short-drama/providers/gpt-image": {
         parameters: {
             query?: never;
@@ -1881,23 +1846,6 @@ export interface paths {
         put?: never;
         /** Update Stock Provider Config */
         post: operations["update_stock_provider_config_api_short_drama_providers_stock_assets__provider__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/short-drama/script-quality": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Script Quality Evaluations */
-        get: operations["list_script_quality_evaluations_api_short_drama_script_quality_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2159,12 +2107,326 @@ export interface components {
             /** Target Anchor */
             target_anchor?: string | null;
         };
+        /** ActionDigest */
+        ActionDigest: {
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Id */
+            id: string;
+            kind: components["schemas"]["ActionKind"];
+            status: components["schemas"]["ActionStatus"];
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * ActionKind
+         * @enum {string}
+         */
+        ActionKind: "TOOL_CALL" | "DELEGATION" | "ARTIFACT_PATCH" | "USER_INPUT" | "CHECKPOINT";
+        /**
+         * ActionRecord
+         * @description Current persisted state of one plan action; not an event log.
+         */
+        ActionRecord: {
+            /** Agent Id */
+            agent_id: string;
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Error Message */
+            error_message?: string | null;
+            /** Id */
+            id: string;
+            /** Input Summary */
+            input_summary: string;
+            kind: components["schemas"]["ActionKind"];
+            /** Output Summary */
+            output_summary?: string | null;
+            /** Plan Revision Id */
+            plan_revision_id?: string | null;
+            /** Plan Step Id */
+            plan_step_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Started At */
+            started_at?: string | null;
+            status: components["schemas"]["ActionStatus"];
+            /** Tool Name */
+            tool_name?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+            /** Work Order Id */
+            work_order_id?: string | null;
+        };
+        /**
+         * ActionStatus
+         * @enum {string}
+         */
+        ActionStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
         /** ActiveDownloadResponse */
         ActiveDownloadResponse: {
             /** Cp Ids */
             cp_ids: ("ltx-2.3-22b-distilled" | "ltx-2.3-22b-distilled-1.1" | "ltx-2.3-spatial-upscaler-x2-1.0" | "ltx-2.3-spatial-upscaler-x2-1.1" | "ltx-2.3-22b-ic-lora-union-control-ref0.5" | "dpt-hybrid-midas" | "yolox-l-torchscript" | "dw-ll-ucoco-384-bs5" | "gemma-3-12b-it-qat-q4_0-unquantized" | "z-image-turbo")[];
             /** Session Id */
             session_id: string | null;
+        };
+        /** AgentAdvanceResponse */
+        AgentAdvanceResponse: {
+            /** Created Work Order Ids */
+            created_work_order_ids: string[];
+            /** Executed Action Ids */
+            executed_action_ids: string[];
+            /** Notes */
+            notes: string[];
+            run: components["schemas"]["AgentRunView"];
+        };
+        /** AgentCapabilityCatalog */
+        AgentCapabilityCatalog: {
+            /** Skills */
+            skills: components["schemas"]["ProductionSkillDescriptor"][];
+            /** Tools */
+            tools: components["schemas"]["ToolDescriptor"][];
+        };
+        /**
+         * AgentPlanProposal
+         * @description A complete, replaceable plan authored by an Agent or supplied by a caller.
+         */
+        AgentPlanProposal: {
+            /**
+             * Goal Complete
+             * @default false
+             */
+            goal_complete: boolean;
+            /** Steps */
+            steps?: components["schemas"]["PlanStep"][];
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * AgentProjectCreateRequest
+         * @description Bootstrap a production run before its canonical project exists.
+         */
+        AgentProjectCreateRequest: {
+            /** @default MOCK */
+            execution_target: components["schemas"]["ProductionExecutionTarget"];
+            /** Objective */
+            objective?: string | null;
+            project: components["schemas"]["CreateProjectRequest"];
+            /**
+             * Render Export
+             * @default true
+             */
+            render_export: boolean;
+            /**
+             * Root Agent
+             * @default production-manager
+             */
+            root_agent: string;
+        };
+        /** AgentProjectCreateResponse */
+        AgentProjectCreateResponse: {
+            /** Project Id */
+            project_id: string;
+            run: components["schemas"]["AgentRunView"];
+        };
+        /**
+         * AgentResult
+         * @description Structured response returned from a delegated specialist agent.
+         */
+        AgentResult: {
+            /** Assumptions */
+            assumptions?: string[];
+            /** Concise Summary */
+            concise_summary: string;
+            /** Created Artifacts */
+            created_artifacts?: components["schemas"]["ArtifactRef"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Decisions */
+            decisions?: string[];
+            /** Evidence Refs */
+            evidence_refs?: components["schemas"]["ArtifactRef"][];
+            /** Findings */
+            findings?: string[];
+            /** Id */
+            id: string;
+            /** Recommended Next Actions */
+            recommended_next_actions?: string[];
+            status: components["schemas"]["AgentResultStatus"];
+            /** Unresolved Questions */
+            unresolved_questions?: string[];
+            /** Updated Artifacts */
+            updated_artifacts?: components["schemas"]["ArtifactRef"][];
+            /** Work Order Id */
+            work_order_id: string;
+        };
+        /**
+         * AgentResultStatus
+         * @enum {string}
+         */
+        AgentResultStatus: "COMPLETED" | "PARTIAL" | "FAILED";
+        /** AgentRun */
+        AgentRun: {
+            /** Active Skill Ids */
+            active_skill_ids?: string[];
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Current Plan Revision Id */
+            current_plan_revision_id?: string | null;
+            execution_target?: components["schemas"]["ProductionExecutionTarget"] | null;
+            /** Id */
+            id: string;
+            /** Objective */
+            objective: string;
+            /** Parent Run Id */
+            parent_run_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Root Agent */
+            root_agent: string;
+            /** @default RUNNING */
+            status: components["schemas"]["AgentRunStatus"];
+            /**
+             * Unattended
+             * @default false
+             */
+            unattended: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+        };
+        /** AgentRunAdvanceRequest */
+        AgentRunAdvanceRequest: {
+            /**
+             * Max Actions
+             * @default 1
+             */
+            max_actions: number;
+        };
+        /** AgentRunCreateRequest */
+        AgentRunCreateRequest: {
+            /**
+             * Auto Plan
+             * @default true
+             */
+            auto_plan: boolean;
+            execution_target?: components["schemas"]["ProductionExecutionTarget"] | null;
+            initial_plan?: components["schemas"]["AgentPlanProposal"] | null;
+            /** Objective */
+            objective: string;
+            /** Render Export */
+            render_export?: boolean | null;
+            /**
+             * Root Agent
+             * @default production-manager
+             */
+            root_agent: string;
+            /**
+             * Unattended
+             * @default false
+             */
+            unattended: boolean;
+        };
+        /** AgentRunListResponse */
+        AgentRunListResponse: {
+            /** Runs */
+            runs: components["schemas"]["AgentRunView"][];
+        };
+        /** AgentRunReplanRequest */
+        AgentRunReplanRequest: {
+            proposed_plan?: components["schemas"]["AgentPlanProposal"] | null;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * AgentRunSnapshot
+         * @description Minimum recoverable state needed to continue an interrupted run.
+         */
+        AgentRunSnapshot: {
+            /** Actions */
+            actions?: components["schemas"]["ActionRecord"][];
+            current_plan: components["schemas"]["PlanRevision"] | null;
+            memory: components["schemas"]["RunMemory"];
+            /** Pending Work Orders */
+            pending_work_orders?: components["schemas"]["WorkOrder"][];
+            run: components["schemas"]["AgentRun"];
+        };
+        /**
+         * AgentRunStatus
+         * @enum {string}
+         */
+        AgentRunStatus: "RUNNING" | "WAITING" | "COMPLETED" | "FAILED" | "CANCELLED";
+        /** AgentRunView */
+        AgentRunView: {
+            context: components["schemas"]["ContextPack"];
+            /** Ready Steps */
+            ready_steps: components["schemas"]["PlanStep"][];
+            snapshot: components["schemas"]["AgentRunSnapshot"];
+        };
+        /** AgentUserInputRequest */
+        AgentUserInputRequest: {
+            /** Action Id */
+            action_id: string;
+            /** Answer */
+            answer: string;
+            /**
+             * Remember As Decision
+             * @default true
+             */
+            remember_as_decision: boolean;
+        };
+        /** AgentWorkOrderResultRequest */
+        AgentWorkOrderResultRequest: {
+            /** Assumptions */
+            assumptions?: string[];
+            /** Concise Summary */
+            concise_summary: string;
+            /** Created Artifacts */
+            created_artifacts?: components["schemas"]["ArtifactRef"][];
+            /** Decisions */
+            decisions?: string[];
+            /** Evidence Refs */
+            evidence_refs?: components["schemas"]["ArtifactRef"][];
+            /** Findings */
+            findings?: string[];
+            /** Recommended Next Actions */
+            recommended_next_actions?: string[];
+            status: components["schemas"]["AgentResultStatus"];
+            /** Unresolved Questions */
+            unresolved_questions?: string[];
+            /** Updated Artifacts */
+            updated_artifacts?: components["schemas"]["ArtifactRef"][];
+        };
+        /** AgentWorkOrderResultResponse */
+        AgentWorkOrderResultResponse: {
+            result: components["schemas"]["AgentResult"];
+            run: components["schemas"]["AgentRunView"];
+        };
+        /** AgentWorkOrderView */
+        AgentWorkOrderView: {
+            context: components["schemas"]["ContextPack"];
+            /** System Prompt */
+            system_prompt: string;
+            work_order: components["schemas"]["WorkOrder"];
         };
         /** AppSettingsPatch */
         AppSettingsPatch: {
@@ -2206,6 +2468,31 @@ export interface components {
          * @enum {string}
          */
         ApprovalStatus: "DRAFT" | "APPROVED" | "REJECTED" | "SUPERSEDED";
+        /**
+         * ArtifactRef
+         * @description Stable pointer to a canonical project artifact, without duplicating it.
+         */
+        ArtifactRef: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Artifact Type */
+            artifact_type: string;
+            /** Project Id */
+            project_id: string;
+            /** Version */
+            version?: number | null;
+        };
+        /**
+         * ArtifactSummary
+         * @description Small context projection resolved from an :class:`ArtifactRef`.
+         */
+        ArtifactSummary: {
+            ref: components["schemas"]["ArtifactRef"];
+            /** Summary */
+            summary: string;
+            /** Title */
+            title?: string | null;
+        };
         /** Asset */
         Asset: {
             /** Approved Version Id */
@@ -2573,134 +2860,6 @@ export interface components {
             /** Url */
             url?: string | null;
         };
-        /** AutoDraftRequest */
-        AutoDraftRequest: {
-            /**
-             * Render Export
-             * @default true
-             */
-            render_export: boolean;
-        };
-        /** AutoDraftResponse */
-        AutoDraftResponse: {
-            export: components["schemas"]["ExportRecord"] | null;
-            project: components["schemas"]["ProjectAggregate"];
-        };
-        /** AutonomousDraftCreateRequest */
-        AutonomousDraftCreateRequest: {
-            /** @default MOCK */
-            execution_target: components["schemas"]["AutonomousExecutionTarget"];
-            /** Input Images */
-            input_images?: components["schemas"]["CreativeInputImage"][];
-            /**
-             * Input Text
-             * @default
-             */
-            input_text: string;
-            /** Linked Asset Project Ids */
-            linked_asset_project_ids?: string[];
-            /** Name */
-            name?: string | null;
-            /** @default DOUYIN_SHORT_DRAMA */
-            production_profile: components["schemas"]["ProductionProfile"];
-            /**
-             * Render Export
-             * @default true
-             */
-            render_export: boolean;
-            /** @default AUTO_DRAFT */
-            run_mode: components["schemas"]["RunMode"];
-            source_mode: components["schemas"]["SourceMode"];
-            /** Target Duration Seconds */
-            target_duration_seconds?: number | null;
-        };
-        /** AutonomousDraftResponse */
-        AutonomousDraftResponse: {
-            export: components["schemas"]["ExportRecord"] | null;
-            project: components["schemas"]["ProjectAggregate"];
-            run: components["schemas"]["AutonomousRunRecord"];
-        };
-        /**
-         * AutonomousExecutionTarget
-         * @enum {string}
-         */
-        AutonomousExecutionTarget: "MOCK" | "REAL_H3";
-        /** AutonomousRepeatCreateRequest */
-        AutonomousRepeatCreateRequest: {
-            /** Name */
-            name?: string | null;
-            /**
-             * Render Export
-             * @default true
-             */
-            render_export: boolean;
-        };
-        /** AutonomousRunAdvanceRequest */
-        AutonomousRunAdvanceRequest: {
-            /**
-             * Max Actions
-             * @default 24
-             */
-            max_actions: number;
-        };
-        /** AutonomousRunRecord */
-        AutonomousRunRecord: {
-            /** Completed At */
-            completed_at?: string | null;
-            /** Completed Steps */
-            completed_steps?: components["schemas"]["AutonomousRunStep"][];
-            /** Created At */
-            created_at: string;
-            current_step: components["schemas"]["AutonomousRunStep"];
-            /** Episode Review Id */
-            episode_review_id?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** @default MOCK */
-            execution_target: components["schemas"]["AutonomousExecutionTarget"];
-            /** Export Id */
-            export_id?: string | null;
-            /** Id */
-            id: string;
-            /**
-             * Max Repair Rounds
-             * @default 3
-             */
-            max_repair_rounds: number;
-            /** Planner */
-            planner: string;
-            /** Project Id */
-            project_id: string;
-            /**
-             * Render Export
-             * @default true
-             */
-            render_export: boolean;
-            /**
-             * Repair Round
-             * @default 0
-             */
-            repair_round: number;
-            /** Route Plan Id */
-            route_plan_id?: string | null;
-            status: components["schemas"]["AutonomousRunStatus"];
-            /** Updated At */
-            updated_at: string;
-            /** Waiting Reason */
-            waiting_reason?: string | null;
-            /** Warnings */
-            warnings?: string[];
-        };
-        /**
-         * AutonomousRunStatus
-         * @enum {string}
-         */
-        AutonomousRunStatus: "RUNNING" | "COMPLETE" | "NEEDS_ATTENTION" | "FAILED";
-        /**
-         * AutonomousRunStep
-         * @enum {string}
-         */
-        AutonomousRunStep: "NORMALIZE_INPUT" | "PLAN" | "IMPORT_INPUT_ASSETS" | "PREPARE_ASSETS" | "PLAN_ROUTES" | "PREPARE_SHOT_ASSETS" | "GENERATE" | "QA_AND_REPAIR" | "TIMELINE" | "EPISODE_REVIEW" | "AUDIO_QA" | "EXPORT" | "COMPLETE";
         /** Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post */
         Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post: {
             /** Descriptor */
@@ -2842,6 +3001,47 @@ export interface components {
             /** Size Bytes */
             size_bytes: number;
         };
+        /**
+         * ContextPack
+         * @description Bounded context assembled for one agent call.
+         */
+        ContextPack: {
+            /** Active Skill Ids */
+            active_skill_ids?: string[];
+            /** Artifacts */
+            artifacts?: components["schemas"]["ArtifactSummary"][];
+            /** Blockers */
+            blockers?: string[];
+            /**
+             * Compiled At
+             * Format: date-time
+             */
+            compiled_at?: string;
+            /** Constraints */
+            constraints?: string[];
+            /** Decisions */
+            decisions?: components["schemas"]["DecisionMemory"][];
+            /** Experiences */
+            experiences?: components["schemas"]["ExperienceMemory"][];
+            /** Next Actions */
+            next_actions?: string[];
+            /** Objective */
+            objective: string;
+            /** Open Questions */
+            open_questions?: string[];
+            /** Project Id */
+            project_id: string;
+            /** Project Summary */
+            project_summary?: string | null;
+            /** Recent Actions */
+            recent_actions?: components["schemas"]["ActionDigest"][];
+            /** Run Focus */
+            run_focus?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Unresolved Artifact Refs */
+            unresolved_artifact_refs?: components["schemas"]["ArtifactRef"][];
+        };
         /** ContinuityState */
         ContinuityState: {
             /** Action In */
@@ -2870,7 +3070,7 @@ export interface components {
             linked_asset_project_ids?: string[];
             /** Name */
             name?: string | null;
-            /** @default DOUYIN_SHORT_DRAMA */
+            /** @default AI_SHORT_DRAMA */
             production_profile: components["schemas"]["ProductionProfile"];
             /** @default AUTO_DRAFT */
             run_mode: components["schemas"]["RunMode"];
@@ -2890,6 +3090,31 @@ export interface components {
             /** Local Path */
             local_path?: string | null;
         };
+        /** DecisionMemory */
+        DecisionMemory: {
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Rationale */
+            rationale: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Statement */
+            statement: string;
+        };
+        /**
+         * DelegationStatus
+         * @enum {string}
+         */
+        DelegationStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "NEEDS_ATTENTION" | "FAILED" | "CANCELLED";
         /** DescribeCheckpointsRequest */
         DescribeCheckpointsRequest: {
             /** Cp Ids */
@@ -3365,6 +3590,39 @@ export interface components {
          * @enum {string}
          */
         ExecutionStrategy: "direct_audiovisual" | "image_guided" | "audio_driven" | "hybrid_repair";
+        /**
+         * ExperienceConfidence
+         * @enum {string}
+         */
+        ExperienceConfidence: "LOW" | "MEDIUM" | "HIGH";
+        /**
+         * ExperienceMemory
+         * @description Reusable lesson whose applicability remains explicit.
+         */
+        ExperienceMemory: {
+            /** Applicability */
+            applicability: string;
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            confidence: components["schemas"]["ExperienceConfidence"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Evidence */
+            evidence: string;
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Skill Id */
+            skill_id?: string | null;
+            /** Summary */
+            summary: string;
+            /** Tags */
+            tags?: string[];
+        };
         /** ExportRecord */
         ExportRecord: {
             /** Ass Path */
@@ -5750,291 +6008,62 @@ export interface components {
              */
             width: number;
         };
-        /** PlannedDialogueLine */
-        PlannedDialogueLine: {
-            /** @default DIALOGUE */
-            audio_kind: components["schemas"]["AudioKind"];
-            /** Speaker */
-            speaker: string;
-            /** Text */
-            text: string;
-        };
-        /** PlannedSceneContract */
-        PlannedSceneContract: {
-            continuity_in: components["schemas"]["SceneContinuitySummary"];
-            continuity_out: components["schemas"]["SceneContinuitySummary"];
-            /** Dialogue Line Indices */
-            dialogue_line_indices?: number[];
-            /** Heading */
-            heading: string;
-            /** Location Names */
-            location_names: string[];
-            /** Narrative Purpose */
-            narrative_purpose: string;
-            /** Playable Actions */
-            playable_actions?: string[];
-            /** Sequence */
-            sequence: number;
-            /** Summary */
-            summary: string;
-            /** Target Duration Seconds */
-            target_duration_seconds: number;
-        };
-        /** PlanningOutlineAgentRevisionRequest */
-        PlanningOutlineAgentRevisionRequest: {
-            /** Instruction */
-            instruction: string;
-        };
-        /** PlanningOutlineDirectEditRequest */
-        PlanningOutlineDirectEditRequest: {
-            /** Change Reason */
-            change_reason: string;
-            /** Outline Json */
-            outline_json: string;
-        };
-        /** PlanningOutlineSnapshot */
-        PlanningOutlineSnapshot: {
-            /** Created At */
-            created_at: string;
-            /** Outline Json */
-            outline_json: string;
-            repair_plan?: components["schemas"]["StoryRepairPlan"] | null;
-            /** Revision Round */
-            revision_round: number;
-            revision_verification?: components["schemas"]["StoryRevisionVerification"] | null;
-            /** Source */
-            source: string;
-            source_contract?: components["schemas"]["StorySourceContract"] | null;
-        };
-        /** PlanningReviewSnapshot */
-        PlanningReviewSnapshot: {
-            /** Created At */
-            created_at: string;
-            disposition?: components["schemas"]["ScriptReviewDisposition"] | null;
-            report: components["schemas"]["ScriptReviewReport"];
-            /** Review Round */
-            review_round: number;
-            /** Revision Round */
-            revision_round: number;
-        };
         /**
-         * PlanningRunCreateRequest
-         * @description Persisted duration-agnostic planning request before a project exists.
+         * PlanRevision
+         * @description A replaceable plan graph proposed by the agent for one run.
          */
-        PlanningRunCreateRequest: {
-            /** @default MOCK */
-            execution_target: components["schemas"]["AutonomousExecutionTarget"];
-            /** Input Images */
-            input_images?: components["schemas"]["CreativeInputImage"][];
+        PlanRevision: {
             /**
-             * Input Text
-             * @default
+             * Created At
+             * Format: date-time
              */
-            input_text: string;
-            /** Linked Asset Project Ids */
-            linked_asset_project_ids?: string[];
-            /** Name */
-            name?: string | null;
-            /** @default DOUYIN_SHORT_DRAMA */
-            production_profile: components["schemas"]["ProductionProfile"];
+            created_at?: string;
             /**
-             * Render Export
-             * @default true
-             */
-            render_export: boolean;
-            /** @default AUTO_DRAFT */
-            run_mode: components["schemas"]["RunMode"];
-            source_mode: components["schemas"]["SourceMode"];
-            /** Target Duration Seconds */
-            target_duration_seconds?: number | null;
-        };
-        /** PlanningRunListResponse */
-        PlanningRunListResponse: {
-            /** Runs */
-            runs: components["schemas"]["PlanningRunRecord"][];
-        };
-        /** PlanningRunRecord */
-        PlanningRunRecord: {
-            /** Autonomous Run Id */
-            autonomous_run_id?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Completed Steps */
-            completed_steps?: components["schemas"]["PlanningRunStep"][];
-            /** Created At */
-            created_at: string;
-            /**
-             * Critic Used
+             * Goal Complete
              * @default false
              */
-            critic_used: boolean;
-            current_step: components["schemas"]["PlanningRunStep"];
-            /** Directed Scene Json */
-            directed_scene_json?: string[];
-            /** Error Message */
-            error_message?: string | null;
+            goal_complete: boolean;
             /** Id */
             id: string;
-            latest_repair_plan?: components["schemas"]["StoryRepairPlan"] | null;
-            latest_revision_verification?: components["schemas"]["StoryRevisionVerification"] | null;
-            /**
-             * Max Revision Rounds
-             * @default 3
-             */
-            max_revision_rounds: number;
-            /**
-             * Next Scene Sequence
-             * @default 1
-             */
-            next_scene_sequence: number;
-            /**
-             * Next Script Scene Sequence
-             * @default 1
-             */
-            next_script_scene_sequence: number;
-            /** Outline Json */
-            outline_json?: string | null;
-            /** Outline Source */
-            outline_source?: string | null;
-            /** Project Id */
-            project_id?: string | null;
-            request: components["schemas"]["PlanningRunCreateRequest"];
-            review_disposition?: components["schemas"]["ScriptReviewDisposition"] | null;
-            review_report?: components["schemas"]["ScriptReviewReport"] | null;
-            revision_judge?: components["schemas"]["RevisionJudgeRecommendation"] | null;
-            /**
-             * Revision Round
-             * @default 0
-             */
-            revision_round: number;
-            /** Scene Script Json */
-            scene_script_json?: string[];
-            source_contract?: components["schemas"]["StorySourceContract"] | null;
-            status: components["schemas"]["PlanningRunStatus"];
-            /**
-             * Total Scenes
-             * @default 0
-             */
-            total_scenes: number;
-            /** Updated At */
-            updated_at: string;
-            /**
-             * Used Scene Fallback
-             * @default false
-             */
-            used_scene_fallback: boolean;
-            /**
-             * Used Scene Repair
-             * @default false
-             */
-            used_scene_repair: boolean;
-            /** Warnings */
-            warnings?: string[];
+            /** Revision */
+            revision: number;
+            /** Run Id */
+            run_id: string;
+            /** Steps */
+            steps?: components["schemas"]["PlanStep"][];
+            /** Summary */
+            summary: string;
         };
-        /** PlanningRunResponse */
-        PlanningRunResponse: {
-            project?: components["schemas"]["ProjectAggregate"] | null;
-            run: components["schemas"]["PlanningRunRecord"];
+        /**
+         * PlanStep
+         * @description One dynamically chosen unit in a dependency-aware agent plan.
+         */
+        PlanStep: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Assigned Agent */
+            assigned_agent: string;
+            /** Depends On */
+            depends_on?: string[];
+            /** Id */
+            id: string;
+            /** Instructions */
+            instructions: string;
+            kind: components["schemas"]["ActionKind"];
+            /** Title */
+            title: string;
+            /** Tool Name */
+            tool_name?: string | null;
         };
         /**
          * PlanningRunStatus
          * @enum {string}
          */
         PlanningRunStatus: "RUNNING" | "COMPLETE" | "NEEDS_ATTENTION" | "FAILED";
-        /**
-         * PlanningRunStep
-         * @enum {string}
-         */
-        PlanningRunStep: "STORY_ARCHITECT" | "SCENE_WRITER" | "SCRIPT_CRITIC" | "STORY_REVISION" | "REVISION_JUDGE" | "SCENE_DIRECTOR" | "FINALIZE" | "COMPLETE";
-        /**
-         * PlanningSceneRevisionRequest
-         * @description Natural-language local edit; explicit scenes override Agent scope selection.
-         */
-        PlanningSceneRevisionRequest: {
-            /** Instruction */
-            instruction: string;
-            /** Scene Sequences */
-            scene_sequences?: number[];
-        };
-        /**
-         * PlanningScriptDocument
-         * @description One versioned, retrieval-ready unit from a planning outline.
-         */
-        PlanningScriptDocument: {
-            /**
-             * Body
-             * @default
-             */
-            body: string;
-            /** Character Names */
-            character_names?: string[];
-            /** Created At */
-            created_at: string;
-            /** Document Id */
-            document_id: string;
-            kind: components["schemas"]["PlanningScriptDocumentKind"];
-            /** Lines */
-            lines?: components["schemas"]["PlannedDialogueLine"][];
-            /** Location Names */
-            location_names?: string[];
-            /** Prop Names */
-            prop_names?: string[];
-            /** Revision Round */
-            revision_round: number;
-            /** Run Id */
-            run_id: string;
-            scene?: components["schemas"]["PlannedSceneContract"] | null;
-            /** Scene Sequence */
-            scene_sequence?: number | null;
-            /**
-             * Search Metadata
-             * @default
-             */
-            search_metadata: string;
-            /** Summary */
-            summary: string;
-            /** Title */
-            title: string;
-        };
-        /**
-         * PlanningScriptDocumentKind
-         * @enum {string}
-         */
-        PlanningScriptDocumentKind: "STORY_BIBLE" | "SCENE";
-        /** PlanningScriptSearchHit */
-        PlanningScriptSearchHit: {
-            /** Bm25 Score */
-            bm25_score: number;
-            document: components["schemas"]["PlanningScriptDocument"];
-            /** Matched By */
-            matched_by?: string[];
-        };
-        /** PlanningScriptSearchRequest */
-        PlanningScriptSearchRequest: {
-            /**
-             * Include Story Bible
-             * @default true
-             */
-            include_story_bible: boolean;
-            /**
-             * Limit
-             * @default 8
-             */
-            limit: number;
-            /** Query */
-            query: string;
-        };
-        /** PlanningScriptSearchResponse */
-        PlanningScriptSearchResponse: {
-            /** Hits */
-            hits?: components["schemas"]["PlanningScriptSearchHit"][];
-            /** Query */
-            query: string;
-            /** Revision Round */
-            revision_round: number;
-            /** Run Id */
-            run_id: string;
-        };
         /** PreprocessingStep */
         PreprocessingStep: {
             /** Params */
@@ -6045,10 +6074,29 @@ export interface components {
             utility: string;
         };
         /**
+         * ProductionExecutionTarget
+         * @enum {string}
+         */
+        ProductionExecutionTarget: "MOCK" | "REAL_H3";
+        /**
          * ProductionProfile
          * @enum {string}
          */
-        ProductionProfile: "GENERAL_VIDEO" | "DOUYIN_SHORT_DRAMA";
+        ProductionProfile: "GENERAL_VIDEO" | "AI_SHORT_DRAMA" | "DIGITAL_HUMAN" | "ANIME";
+        /** ProductionSkillDescriptor */
+        ProductionSkillDescriptor: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Medium */
+            medium: string;
+            profile: components["schemas"]["ProductionProfile"];
+            /** Recommended Playbook */
+            recommended_playbook: string[];
+            /** Role Names */
+            role_names: string[];
+        };
         /** ProgressSummary */
         ProgressSummary: {
             /** Export Ready */
@@ -6119,14 +6167,13 @@ export interface components {
         ProjectDocument: {
             /** Assets */
             assets: components["schemas"]["Asset"][];
-            /** Autonomous Runs */
-            autonomous_runs?: components["schemas"]["AutonomousRunRecord"][];
             /** Bible Versions */
             bible_versions: components["schemas"]["ProjectBibleVersion"][];
             /** Execution Plan */
             execution_plan: components["schemas"]["ExecutionPlanEntry"][];
             /** Manifests */
             manifests: components["schemas"]["TimelineManifest"][];
+            planning?: components["schemas"]["ProjectPlanningMetadata"] | null;
             project: components["schemas"]["ProjectRecord"];
             /** Reference Packs */
             reference_packs?: components["schemas"]["ReferencePack"][];
@@ -6145,6 +6192,21 @@ export interface components {
         ProjectListResponse: {
             /** Projects */
             projects: components["schemas"]["ProjectRecord"][];
+        };
+        /**
+         * ProjectPlanningMetadata
+         * @description Persisted planning provenance and resumable planning ownership.
+         */
+        ProjectPlanningMetadata: {
+            /** Owner Agent Run Id */
+            owner_agent_run_id?: string | null;
+            /** Planner */
+            planner?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            status: components["schemas"]["PlanningRunStatus"];
+            /** Warnings */
+            warnings?: string[];
         };
         /** ProjectRecord */
         ProjectRecord: {
@@ -6176,7 +6238,7 @@ export interface components {
             linked_asset_project_ids?: string[];
             /** Name */
             name: string;
-            /** @default DOUYIN_SHORT_DRAMA */
+            /** @default AI_SHORT_DRAMA */
             production_profile: components["schemas"]["ProductionProfile"];
             run_mode: components["schemas"]["RunMode"];
             source_mode: components["schemas"]["SourceMode"];
@@ -6469,7 +6531,7 @@ export interface components {
          * ReferenceRole
          * @enum {string}
          */
-        ReferenceRole: "CHARACTER_FACE" | "CHARACTER_BODY" | "CHARACTER_PROFILE" | "CHARACTER_BACK" | "LOCATION_MASTER" | "LOCATION_REVERSE" | "LOCATION_INTERACTION" | "PROP_PRODUCT" | "PROP_IN_HAND" | "PROP_STATE";
+        ReferenceRole: "CANONICAL_MASTER" | "CHARACTER_FACE" | "CHARACTER_BODY" | "CHARACTER_PROFILE" | "CHARACTER_BACK" | "LOCATION_MASTER" | "LOCATION_REVERSE" | "LOCATION_INTERACTION" | "PROP_PRODUCT" | "PROP_IN_HAND" | "PROP_STATE";
         /** ReferenceSelection */
         ReferenceSelection: {
             angle: components["schemas"]["ReferenceAngle"];
@@ -6798,30 +6860,6 @@ export interface components {
             /** Revisions */
             revisions: components["schemas"]["ScriptLineRevision"][];
         };
-        /**
-         * RevisionJudgeConfidence
-         * @enum {string}
-         */
-        RevisionJudgeConfidence: "LOW" | "MEDIUM" | "HIGH";
-        /** RevisionJudgeRecommendation */
-        RevisionJudgeRecommendation: {
-            /**
-             * Advisory Only
-             * @default true
-             */
-            advisory_only: boolean;
-            /** Alternative Revision Round */
-            alternative_revision_round: number;
-            confidence: components["schemas"]["RevisionJudgeConfidence"];
-            /** Evidence */
-            evidence?: string[];
-            /** Recommended Revision Round */
-            recommended_revision_round: number;
-            /** Summary */
-            summary: string;
-            /** Tradeoffs */
-            tradeoffs?: string[];
-        };
         /** RouteEvidence */
         RouteEvidence: {
             /** Created At */
@@ -6855,6 +6893,34 @@ export interface components {
             task_id: string;
             /** Technical Passed */
             technical_passed?: boolean | null;
+        };
+        /**
+         * RunMemory
+         * @description Mutable working checkpoint used to resume an agent run.
+         */
+        RunMemory: {
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Blockers */
+            blockers?: string[];
+            /** Completed Action Ids */
+            completed_action_ids?: string[];
+            /**
+             * Current Focus
+             * @default
+             */
+            current_focus: string;
+            /** Next Actions */
+            next_actions?: string[];
+            /** Open Questions */
+            open_questions?: string[];
+            /** Run Id */
+            run_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
         };
         /**
          * RunMode
@@ -6919,81 +6985,6 @@ export interface components {
             /** Subtitle Text */
             subtitle_text: string;
         };
-        /** ScriptQualityCatalogResponse */
-        ScriptQualityCatalogResponse: {
-            /** Evaluations */
-            evaluations: components["schemas"]["ScriptQualityComparison"][];
-        };
-        /** ScriptQualityComparison */
-        ScriptQualityComparison: {
-            /** Advisory Summary */
-            advisory_summary: string;
-            /** Category Labels No Longer Reported */
-            category_labels_no_longer_reported?: string[];
-            /** High Issue Delta */
-            high_issue_delta?: number | null;
-            /** Latest High Issue Delta */
-            latest_high_issue_delta?: number | null;
-            /**
-             * Latest Report Regression Risk
-             * @default false
-             */
-            latest_report_regression_risk: boolean;
-            /** Latest Total Issue Delta */
-            latest_total_issue_delta?: number | null;
-            /** Newly Reported Category Labels */
-            newly_reported_category_labels?: string[];
-            /** Persistent Category Labels */
-            persistent_category_labels?: string[];
-            production_profile: components["schemas"]["ProductionProfile"];
-            /** Project Id */
-            project_id?: string | null;
-            /** Project Name */
-            project_name: string;
-            /** Rounds */
-            rounds?: components["schemas"]["ScriptQualityRoundSummary"][];
-            /** Run Id */
-            run_id: string;
-            source_mode: components["schemas"]["SourceMode"];
-            /** Target Duration Seconds */
-            target_duration_seconds: number;
-            /** Total Issue Delta */
-            total_issue_delta?: number | null;
-            trend: components["schemas"]["ScriptQualityTrend"];
-        };
-        /** ScriptQualityHistoryResponse */
-        ScriptQualityHistoryResponse: {
-            comparison: components["schemas"]["ScriptQualityComparison"];
-            /** Outline Snapshots */
-            outline_snapshots?: components["schemas"]["PlanningOutlineSnapshot"][];
-            /** Review Snapshots */
-            review_snapshots?: components["schemas"]["PlanningReviewSnapshot"][];
-            revision_judge?: components["schemas"]["RevisionJudgeRecommendation"] | null;
-        };
-        /** ScriptQualityRoundSummary */
-        ScriptQualityRoundSummary: {
-            /** Categories */
-            categories?: string[];
-            /** High Issues */
-            high_issues: number;
-            /** Low Issues */
-            low_issues: number;
-            /** Medium Issues */
-            medium_issues: number;
-            /** Requires Revision */
-            requires_revision: boolean;
-            /** Review Round */
-            review_round: number;
-            /** Revision Round */
-            revision_round: number;
-            /** Total Issues */
-            total_issues: number;
-        };
-        /**
-         * ScriptQualityTrend
-         * @enum {string}
-         */
-        ScriptQualityTrend: "NOT_COMPARABLE" | "FEWER_REPORTED_ISSUES" | "MIXED_REPORTED_ISSUES" | "MORE_REPORTED_ISSUES" | "UNCHANGED_REPORTED_ISSUES";
         /**
          * ScriptReviewDisposition
          * @description Skill-aware routing recommendation; users may always override it.
@@ -7087,8 +7078,72 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * SemanticArtifactPatch
+         * @description A small typed field patch produced by an Agent or edited by the user.
+         */
+        SemanticArtifactPatch: {
+            /** @default SET_FIELDS */
+            operation: components["schemas"]["SemanticPatchOperation"];
+            /** Target Id */
+            target_id: string;
+            target_kind: components["schemas"]["ChangeTargetKind"];
+            /** Updates */
+            updates: {
+                [key: string]: string;
+            };
+        };
+        /** SemanticChangeApplyRequest */
+        SemanticChangeApplyRequest: {
+            /** Change Reason */
+            change_reason: string;
+            /** Patches */
+            patches: components["schemas"]["SemanticArtifactPatch"][];
+            plan: components["schemas"]["SemanticChangePlan-Input"];
+        };
+        /** SemanticChangeApplyResponse */
+        SemanticChangeApplyResponse: {
+            project: components["schemas"]["ProjectAggregate"];
+            result: components["schemas"]["SemanticChangeApplyResult"];
+        };
+        /** SemanticChangeApplyResult */
+        SemanticChangeApplyResult: {
+            /** Applied Patch Count */
+            applied_patch_count: number;
+            /** Asset Version Ids */
+            asset_version_ids?: string[];
+            /** Bible Version Id */
+            bible_version_id?: string | null;
+            /** Invalidated Shot Ids */
+            invalidated_shot_ids?: string[];
+            /** Project Id */
+            project_id: string;
+            /** Script Version Id */
+            script_version_id?: string | null;
+            /** Stale Manifest Ids */
+            stale_manifest_ids?: string[];
+            /** Stale Take Ids */
+            stale_take_ids?: string[];
+            verification: components["schemas"]["SemanticChangeVerification"];
+        };
         /** SemanticChangeIntent */
-        SemanticChangeIntent: {
+        "SemanticChangeIntent-Input": {
+            /**
+             * Needs User Clarification
+             * @default false
+             */
+            needs_user_clarification: boolean;
+            /** Preserve */
+            preserve?: string[];
+            /** Requested Change */
+            requested_change: string;
+            /** Summary */
+            summary: string;
+            /** Targets */
+            targets?: components["schemas"]["SemanticChangeTarget"][];
+        };
+        /** SemanticChangeIntent */
+        "SemanticChangeIntent-Output": {
             /**
              * Needs User Clarification
              * @default false
@@ -7104,7 +7159,7 @@ export interface components {
             targets?: components["schemas"]["SemanticChangeTarget"][];
         };
         /** SemanticChangePlan */
-        SemanticChangePlan: {
+        "SemanticChangePlan-Input": {
             /** Affected Asset Ids */
             affected_asset_ids?: string[];
             /** Affected Scene Ids */
@@ -7120,7 +7175,39 @@ export interface components {
             applies_changes: boolean;
             /** Instruction */
             instruction: string;
-            intent: components["schemas"]["SemanticChangeIntent"];
+            intent: components["schemas"]["SemanticChangeIntent-Input"];
+            /** Project Id */
+            project_id: string;
+            /** Stale Take Ids */
+            stale_take_ids?: string[];
+            /** Steps */
+            steps?: components["schemas"]["ChangeImpactStep"][];
+            /**
+             * User Editable
+             * @default true
+             */
+            user_editable: boolean;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** SemanticChangePlan */
+        "SemanticChangePlan-Output": {
+            /** Affected Asset Ids */
+            affected_asset_ids?: string[];
+            /** Affected Scene Ids */
+            affected_scene_ids?: string[];
+            /** Affected Script Line Ids */
+            affected_script_line_ids?: string[];
+            /** Affected Shot Ids */
+            affected_shot_ids?: string[];
+            /**
+             * Applies Changes
+             * @default false
+             */
+            applies_changes: boolean;
+            /** Instruction */
+            instruction: string;
+            intent: components["schemas"]["SemanticChangeIntent-Output"];
             /** Project Id */
             project_id: string;
             /** Stale Take Ids */
@@ -7150,6 +7237,22 @@ export interface components {
             /** Target Id */
             target_id: string;
         };
+        /** SemanticChangeVerification */
+        SemanticChangeVerification: {
+            /** Applied Target Ids */
+            applied_target_ids: string[];
+            /** Invalidated Shot Ids */
+            invalidated_shot_ids: string[];
+            /** Messages */
+            messages: string[];
+            /** Unchanged Requested Target Ids */
+            unchanged_requested_target_ids: string[];
+        };
+        /**
+         * SemanticPatchOperation
+         * @enum {string}
+         */
+        SemanticPatchOperation: "SET_FIELDS";
         /**
          * SemanticReviewStatus
          * @enum {string}
@@ -7535,103 +7638,6 @@ export interface components {
              */
             clear_api_key: boolean;
         };
-        /**
-         * StoryRepairAction
-         * @description One evidence-backed recommendation; it is not an execution gate.
-         */
-        StoryRepairAction: {
-            /** Affected Scene Sequences */
-            affected_scene_sequences?: number[];
-            diagnosis: components["schemas"]["StoryRepairDiagnosis"];
-            /** Issue Index */
-            issue_index: number;
-            /** Preserve */
-            preserve?: string[];
-            /** Rationale */
-            rationale: string;
-            /** Recommended Change */
-            recommended_change: string;
-            /** Remove Or Simplify */
-            remove_or_simplify?: string[];
-            /** Should Revise */
-            should_revise: boolean;
-            /** Validation Questions */
-            validation_questions?: string[];
-        };
-        /**
-         * StoryRepairDiagnosis
-         * @description Where a routed story issue actually originates after a second look.
-         * @enum {string}
-         */
-        StoryRepairDiagnosis: "SOURCE_CONCEPT_GAP" | "OUTLINE_DEFECT" | "CRITIC_OVERREACH";
-        /**
-         * StoryRepairPlan
-         * @description Cross-round diagnosis and minimal repair plan prepared before rewriting.
-         */
-        StoryRepairPlan: {
-            /** Actions */
-            actions?: components["schemas"]["StoryRepairAction"][];
-            /** Invariants */
-            invariants?: string[];
-            /** Source Promise */
-            source_promise: string;
-            /** Summary */
-            summary: string;
-            /**
-             * User Overridable
-             * @default true
-             */
-            user_overridable: boolean;
-        };
-        /**
-         * StoryRevisionVerification
-         * @description Narrow check that a Writer followed its repair brief without regressions.
-         */
-        StoryRevisionVerification: {
-            /** Accepted */
-            accepted: boolean;
-            /** Satisfied Issue Indices */
-            satisfied_issue_indices?: number[];
-            /** Summary */
-            summary: string;
-            /**
-             * User Overridable
-             * @default true
-             */
-            user_overridable: boolean;
-            /** Violations */
-            violations?: components["schemas"]["StoryRevisionViolation"][];
-        };
-        /** StoryRevisionViolation */
-        StoryRevisionViolation: {
-            /** Category */
-            category: string;
-            /** Observation */
-            observation: string;
-            /** Repair Instruction */
-            repair_instruction: string;
-            /** Scene Sequences */
-            scene_sequences?: number[];
-        };
-        /**
-         * StorySourceContract
-         * @description Explicit user promises separated from creative choices left to the Agents.
-         */
-        StorySourceContract: {
-            /** Authoritative User Overrides */
-            authoritative_user_overrides?: string[];
-            /** Explicit Commitments */
-            explicit_commitments: string[];
-            /** Explicit Prohibitions */
-            explicit_prohibitions?: string[];
-            /** Open Creative Choices */
-            open_creative_choices?: string[];
-            /**
-             * User Overridable
-             * @default true
-             */
-            user_overridable: boolean;
-        };
         /** StructuredScene */
         StructuredScene: {
             entry_state?: components["schemas"]["SceneContinuitySummary"] | null;
@@ -7961,6 +7967,43 @@ export interface components {
             /** Transition Out */
             transition_out: string;
         };
+        /**
+         * ToolCategory
+         * @enum {string}
+         */
+        ToolCategory: "project" | "planning" | "artifact" | "script" | "shot" | "image" | "video" | "audio" | "timeline" | "qa" | "task" | "route" | "agent" | "change";
+        /**
+         * ToolDescriptor
+         * @description Serializable discovery view of a registered ToolSpec.
+         */
+        ToolDescriptor: {
+            category: components["schemas"]["ToolCategory"];
+            /** Description */
+            description: string;
+            effect: components["schemas"]["ToolEffect"];
+            /** Id */
+            id: string;
+            /** Idempotent */
+            idempotent: boolean;
+            /** Input Schema */
+            input_schema: {
+                [key: string]: unknown;
+            };
+            /** Output Schema */
+            output_schema: {
+                [key: string]: unknown;
+            };
+            /** Tags */
+            tags: string[];
+            /** Version */
+            version: number;
+        };
+        /**
+         * ToolEffect
+         * @description The broadest side effect an invocation may perform.
+         * @enum {string}
+         */
+        ToolEffect: "READ" | "WRITE" | "EXTERNAL";
         /** VideoFrameSample */
         VideoFrameSample: {
             /** Image Path */
@@ -8121,6 +8164,50 @@ export interface components {
         VoiceReferenceUpdateRequest: {
             /** Asset Id */
             asset_id?: string | null;
+        };
+        /**
+         * WorkOrder
+         * @description Concise, self-contained contract for delegating work to another agent.
+         */
+        WorkOrder: {
+            /** Acceptance Criteria */
+            acceptance_criteria?: string[];
+            /** Confirmed Decisions */
+            confirmed_decisions?: string[];
+            /** Constraints */
+            constraints?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Expected Output Schema */
+            expected_output_schema?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Id */
+            id: string;
+            /** Objective */
+            objective: string;
+            /** Open Questions */
+            open_questions?: string[];
+            /** Parent Run Id */
+            parent_run_id: string;
+            /** Recipient Role */
+            recipient_role: string;
+            /** Scope */
+            scope?: components["schemas"]["ArtifactRef"][];
+            /** Sender */
+            sender: string;
+            /** @default PENDING */
+            status: components["schemas"]["DelegationStatus"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+            /** Why Now */
+            why_now: string;
         };
         /** WorkerDrainRequest */
         WorkerDrainRequest: {
@@ -9674,6 +9761,382 @@ export interface operations {
             };
         };
     };
+    create_agent_project_api_short_drama_agent_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentProjectCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentProjectCreateResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_agent_run_api_short_drama_agent_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunView"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    advance_agent_run_api_short_drama_agent_runs__run_id__advance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunAdvanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAdvanceResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    replan_agent_run_api_short_drama_agent_runs__run_id__replan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunReplanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunView"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_agent_user_input_api_short_drama_agent_runs__run_id__user_input_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUserInputRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunView"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_agent_capabilities_api_short_drama_agent_runtime_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCapabilityCatalog"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_agent_work_order_api_short_drama_agent_work_orders__work_order_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentWorkOrderView"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    execute_agent_work_order_api_short_drama_agent_work_orders__work_order_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentWorkOrderResultResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_agent_work_order_result_api_short_drama_agent_work_orders__work_order_id__result_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentWorkOrderResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentWorkOrderResultResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     search_asset_catalog_api_short_drama_asset_agent_tools_search_assets_post: {
         parameters: {
             query?: {
@@ -9958,422 +10421,6 @@ export interface operations {
             };
         };
     };
-    list_planning_runs_api_short_drama_planning_runs_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunListResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    create_planning_run_api_short_drama_planning_runs_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlanningRunCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    get_planning_run_api_short_drama_planning_runs__run_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    advance_planning_run_api_short_drama_planning_runs__run_id__advance_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    revise_planning_scenes_with_agent_api_short_drama_planning_runs__run_id__agent_tools_revise_scenes_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlanningSceneRevisionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    search_planning_script_documents_api_short_drama_planning_runs__run_id__agent_tools_search_script_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlanningScriptSearchRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningScriptSearchResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    replace_planning_outline_api_short_drama_planning_runs__run_id__outline_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlanningOutlineDirectEditRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    revise_planning_outline_with_agent_api_short_drama_planning_runs__run_id__outline_agent_revise_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlanningOutlineAgentRevisionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    revise_planning_outline_from_review_api_short_drama_planning_runs__run_id__outline_revise_from_review_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanningRunResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    get_planning_run_script_quality_api_short_drama_planning_runs__run_id__script_quality_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScriptQualityHistoryResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
     list_projects_api_short_drama_projects_get: {
         parameters: {
             query?: never;
@@ -10390,90 +10437,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectListResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    create_project_api_short_drama_projects_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateProjectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectAggregate"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    create_autonomous_draft_api_short_drama_projects_autonomous_draft_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutonomousDraftCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutonomousDraftResponse"];
                 };
             };
             /** @description Client Error */
@@ -10576,6 +10539,134 @@ export interface operations {
             };
         };
     };
+    list_agent_runs_api_short_drama_projects__project_id__agent_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_agent_run_api_short_drama_projects__project_id__agent_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunView"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    apply_semantic_change_api_short_drama_projects__project_id__agent_tools_apply_change_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SemanticChangeApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticChangeApplyResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     compare_takes_api_short_drama_projects__project_id__agent_tools_compare_takes_post: {
         parameters: {
             query?: never;
@@ -10641,7 +10732,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SemanticChangePlan"];
+                    "application/json": components["schemas"]["SemanticChangePlan-Output"];
                 };
             };
             /** @description Client Error */
@@ -11035,95 +11126,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetMutationResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    auto_draft_api_short_drama_projects__project_id__auto_draft_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutoDraftRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutoDraftResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    advance_autonomous_run_api_short_drama_projects__project_id__autonomous_runs__run_id__advance_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutonomousRunAdvanceRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutonomousDraftResponse"];
                 };
             };
             /** @description Client Error */
@@ -12507,50 +12509,6 @@ export interface operations {
             };
         };
     };
-    create_autonomous_repeat_api_short_drama_projects__source_project_id__autonomous_repeats_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                source_project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutonomousRepeatCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutonomousDraftResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
     get_image_provider_config_api_short_drama_providers_gpt_image_get: {
         parameters: {
             query?: never;
@@ -13003,44 +12961,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StockProviderConfigResponse"];
-                };
-            };
-            /** @description Client Error */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-            /** @description Server Error */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPErrorResponse"];
-                };
-            };
-        };
-    };
-    list_script_quality_evaluations_api_short_drama_script_quality_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScriptQualityCatalogResponse"];
                 };
             };
             /** @description Client Error */

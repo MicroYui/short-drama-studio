@@ -36,8 +36,6 @@ from short_drama.models import (
     OperationKind,
     ProductionProfile,
     QAReport,
-    QaFailureCategory,
-    QaIssue,
     QaStatus,
     Take,
     TakeAvailability,
@@ -51,11 +49,6 @@ from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.service import (
     ShortDramaService,
     WorkflowConflictError,
-    _BOUNDED_BEST_EFFORT_CHECK,
-    _can_receive_bounded_best_effort_waiver,
-    _next_h3_continuity_wave,
-    _prioritize_keyframe_canvas,
-    _scope_keyframe_reference_versions,
     _timeline_clip_window,
 )
 
@@ -201,43 +194,6 @@ def test_route_agent_batches_by_scene_and_bounded_size(tmp_path: Path) -> None:
         {"scene-1"},
         {"scene-1"},
         {"scene-2"},
-    ]
-
-
-def test_next_h3_continuity_wave_selects_one_uncovered_shot_per_scene(
-    tmp_path: Path,
-) -> None:
-    service = _service(tmp_path)
-    project = service.initialize_fixture()
-    document = project.document
-    document.shots[0].scene_id = "scene-a"
-    document.shots[1].scene_id = "scene-a"
-    for shot in document.shots[2:]:
-        shot.scene_id = "scene-b"
-
-    assert _next_h3_continuity_wave(document, []) == [
-        document.shots[0].id,
-        document.shots[2].id,
-    ]
-
-    video = tmp_path / "wave-source.mp4"
-    _render_video(video, duration=4.0)
-    first = _persist_passed_h3_take(
-        service,
-        shot_id=document.shots[0].id,
-        media_path=video,
-        selected=True,
-    )
-    third = _persist_passed_h3_take(
-        service,
-        shot_id=document.shots[2].id,
-        media_path=video,
-        selected=True,
-    )
-
-    assert _next_h3_continuity_wave(document, [first, third]) == [
-        document.shots[1].id,
-        document.shots[3].id,
     ]
 
 
@@ -418,11 +374,11 @@ def test_route_agent_can_choose_tail_window_without_making_it_a_gate(
     assert fake.calls
     assert "never mandatory" in fake.calls[0][0]
     assert (
-        "Active Production Skill: live-action Douyin vertical short drama."
+        "当前制片技能：AI 原生短剧。"
         in fake.calls[0][0]
     )
-    assert "Route Planner rubric:" in fake.calls[0][0]
-    assert "Production constitution:" not in fake.calls[0][0]
+    assert "生成路线规划职责准则：" in fake.calls[0][0]
+    assert "类型创作原则：" not in fake.calls[0][0]
 
     general_document = service.repository.get_project(project.document.project.id)
     assert general_document is not None
@@ -437,9 +393,9 @@ def test_route_agent_can_choose_tail_window_without_making_it_a_gate(
         ),
     )
     general_instructions = fake.calls[-1][0]
-    assert "Active Production Skill: general live-action vertical video." in general_instructions
-    assert "Route Planner rubric:" in general_instructions
-    assert "live-action Douyin vertical short drama" not in general_instructions
+    assert "当前制片技能：通用视频。" in general_instructions
+    assert "生成路线规划职责准则：" in general_instructions
+    assert "AI 原生短剧" not in general_instructions
 
     updated = service.repository.get_project(project.document.project.id)
     assert updated is not None
@@ -610,72 +566,6 @@ def test_lightweight_bindings_become_executable_reference_candidate(
     assert all(item.asset_version_id is not None for item in decision.media_inputs)
 
 
-def test_failed_advisory_keyframe_can_fall_back_to_approved_references(
-    tmp_path: Path,
-) -> None:
-    service = _service(tmp_path)
-    project = service.initialize_fixture()
-    document = project.document
-    for index, asset in enumerate(document.assets, start=1):
-        image_path = tmp_path / f"fallback-reference-{index}.png"
-        Image.new("RGB", (768, 1344), f"#{index:02x}5566").save(image_path)
-        version = asset.versions[0]
-        version.media_type = AssetMediaType.IMAGE
-        version.local_path = str(image_path)
-        asset.approved_version_id = version.id
-    shot = next(item for item in document.shots if item.sequence == 3)
-    shot.local_rework_risk = "中；关键帧建议可被替代"
-    service.repository.save_project(document)
-    compiled = service.compile_h3_production_route_plan(
-        document.project.id,
-        H3ProductionRoutePlanRequest(
-            shot_ids=[shot.id],
-            use_language_agent=False,
-        ),
-    )
-    decision = compiled.plan.decisions[0]
-    preparation = decision.asset_preparations[0]
-    persisted_document = service.repository.get_project(document.project.id)
-    assert persisted_document is not None
-
-    changed = service._fallback_failed_keyframe_preparation(
-        document=persisted_document,
-        plan=compiled.plan,
-        decision=decision,
-        failed_preparation=preparation,
-        reason="Three keyframe candidates failed semantic review.",
-    )
-
-    assert changed is True
-    assert decision.route == VideoGenerationRoute.REFERENCE
-    assert decision.readiness == H3ShotRouteReadiness.READY_WITH_WARNINGS
-    assert decision.media_inputs
-    assert decision.override_allowed is True
-    assert "user may override" in decision.warnings[-1]
-    assert all("起始帧" not in warning for warning in decision.warnings)
-    expected_reference_ids = [
-        item.asset_version_id
-        for item in decision.media_inputs
-        if item.asset_version_id is not None
-    ]
-    assert preparation.input_version_ids == expected_reference_ids
-
-    decision.media_inputs = []
-    assert service._refresh_rejected_keyframe_fallback(
-        persisted_document,
-        decision,
-    ) is True
-    assert [
-        item.asset_version_id
-        for item in decision.media_inputs
-        if item.asset_version_id is not None
-    ] == expected_reference_ids
-    assert service._refresh_rejected_keyframe_fallback(
-        persisted_document,
-        decision,
-    ) is False
-
-
 def test_applied_change_keyframe_repair_is_executed_by_next_route_plan(
     tmp_path: Path,
 ) -> None:
@@ -755,104 +645,6 @@ def test_applied_change_camera_repair_prepares_matching_frame_control(
     assert decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
     assert decision.asset_preparations[0].role.value == "first_frame"
     assert decision.override_allowed is True
-
-
-def test_keyframe_reference_scope_and_primary_canvas_follow_route_and_framing(
-    tmp_path: Path,
-) -> None:
-    service = _service(tmp_path)
-    project = service.initialize_fixture()
-    document = project.document
-    lin = next(item for item in document.assets if item.name == "林夏定妆")
-    zhou = next(item for item in document.assets if item.name == "周衡定妆")
-    location = next(item for item in document.assets if item.kind.value == "LOCATION")
-    prop = next(item for item in document.assets if item.kind.value == "PROP")
-    bound = [
-        (lin, lin.versions[0]),
-        (zhou, zhou.versions[0]),
-        (location, location.versions[0]),
-        (prop, prop.versions[0]),
-    ]
-    shot_one = next(item for item in document.shots if item.sequence == 1)
-    shot_four = next(item for item in document.shots if item.sequence == 4)
-    shot_five = next(item for item in document.shots if item.sequence == 5)
-    plan = next(item for item in document.reference_plan if item.shot_id == shot_one.id)
-
-    scoped = _scope_keyframe_reference_versions(
-        document,
-        bound,
-        plan,
-        [lin.versions[0].id, location.versions[0].id],
-    )
-
-    assert [version.id for _asset, version in scoped] == [
-        lin.versions[0].id,
-        location.versions[0].id,
-    ]
-    assert _prioritize_keyframe_canvas(bound, shot_one)[0][0].kind.value == "LOCATION"
-    assert _prioritize_keyframe_canvas(bound, shot_four)[0][0].kind.value == "CHARACTER"
-    assert _prioritize_keyframe_canvas(bound, shot_five)[0][0].kind.value == "PROP"
-
-
-def test_bounded_best_effort_keeps_rejected_qa_visible_but_allows_timeline(
-    tmp_path: Path,
-) -> None:
-    service = _service(tmp_path)
-    project = service.initialize_fixture()
-    video = tmp_path / "best-effort.mp4"
-    _render_video(video)
-    takes = [
-        _persist_passed_h3_take(
-            service,
-            shot_id=shot.id,
-            media_path=video,
-            selected=True,
-        )
-        for shot in project.document.shots
-    ]
-    best_effort = takes[0]
-    best_effort.qa_status = QaStatus.REJECTED
-    best_effort.qa_report.status = QaStatus.REJECTED
-    best_effort.qa_report.hard_gate_passed = False
-    best_effort.qa_report.score = 2.95
-    best_effort.qa_report.issues = [
-        QaIssue(
-            code="PROP_APPEARANCE_REFERENCE_DRIFT",
-            severity="HIGH",
-            message="The prop appearance drifted but remained singular and correctly held.",
-            repair_layer="PROP_ASSET",
-            category=QaFailureCategory.PROP_CONTINUITY,
-        )
-    ]
-    evidence = service.repository.get_route_evidence_for_take(best_effort.id)
-    assert evidence is not None
-    evidence.hard_gate_passed = False
-    service.repository.save_route_evidence(evidence)
-
-    assert _can_receive_bounded_best_effort_waiver(best_effort, evidence) is True
-    best_effort.qa_report.checks.append(_BOUNDED_BEST_EFFORT_CHECK)
-    service.repository.save_take(best_effort)
-
-    manifest = service.rebuild_manifest(project.document.project.id)
-
-    assert len(manifest.video_clips) == len(project.document.shots)
-    aggregate = service.get_project(project.document.project.id)
-    persisted = next(item for item in aggregate.takes if item.id == best_effort.id)
-    assert persisted.qa_status == QaStatus.REJECTED
-    assert persisted.qa_report.hard_gate_passed is False
-    assert aggregate.progress.shots_with_selected_take == len(project.document.shots)
-
-    best_effort.qa_report.checks.remove(_BOUNDED_BEST_EFFORT_CHECK)
-    best_effort.qa_report.issues = [
-        QaIssue(
-            code="CHARACTER_REFERENCE_DRIFT",
-            severity="HIGH",
-            message="The lead identity drifted from the approved character asset.",
-            repair_layer="CHARACTER_GENERATION",
-            category=QaFailureCategory.IDENTITY_CONTINUITY,
-        )
-    ]
-    assert _can_receive_bounded_best_effort_waiver(best_effort, evidence) is False
 
 
 def test_route_execution_invokes_intra_shot_and_boundary_observation_tools(
@@ -956,63 +748,6 @@ def test_route_plan_adaptive_execution_queues_only_the_first_candidate(
     assert executed.queued_tasks[0].candidate_index == 1
     assert executed.plan.decisions[0].candidate_count == 3
     assert executed.plan.decisions[0].task_ids == [executed.queued_tasks[0].id]
-
-
-def test_adaptive_candidate_policy_retries_quality_but_not_structural_failure(
-    tmp_path: Path,
-) -> None:
-    service = _service(tmp_path)
-    project = service.initialize_fixture()
-    shot = project.document.shots[0]
-    compiled = service.compile_h3_production_route_plan(
-        project.document.project.id,
-        H3ProductionRoutePlanRequest(
-            shot_ids=[shot.id],
-            use_language_agent=False,
-            candidate_count=2,
-        ),
-    )
-    decision = compiled.plan.decisions[0]
-    take = _persist_passed_h3_take(
-        service,
-        shot_id=shot.id,
-        media_path=tmp_path / "candidate.mp4",
-    )
-    decision.task_ids = [take.task_id]
-    take.qa_status = QaStatus.REJECTED
-    take.qa_report.status = QaStatus.REJECTED
-    take.qa_report.hard_gate_passed = False
-    take.qa_report.issues = [
-        QaIssue(
-            code="COMPOSITION_WEAK",
-            severity="MAJOR",
-            message="The generated composition is visibly weak.",
-            repair_layer="VIDEO_DIRECTOR",
-            category=QaFailureCategory.COMPOSITION_QUALITY,
-        )
-    ]
-    service.repository.save_take(take)
-
-    assert service._should_generate_next_adaptive_candidate(
-        decision,
-        service.get_project(project.document.project.id),
-    )
-
-    take.qa_report.issues = [
-        QaIssue(
-            code="SPATIAL_LAYOUT_CONTRADICTION",
-            severity="MAJOR",
-            message="The generated space contradicts the approved layout.",
-            repair_layer="VIDEO_DIRECTOR",
-            category=QaFailureCategory.SPATIAL_CONTINUITY,
-        )
-    ]
-    service.repository.save_take(take)
-
-    assert not service._should_generate_next_adaptive_candidate(
-        decision,
-        service.get_project(project.document.project.id),
-    )
 
 
 def test_route_plan_becomes_stale_after_shot_revision_changes(tmp_path: Path) -> None:

@@ -231,34 +231,6 @@ def test_compare_takes_none_acceptable_clears_automatic_selection(
     )
 
 
-def test_automatic_take_selection_uses_and_reuses_relative_comparison(
-    tmp_path: Path,
-) -> None:
-    language = FakeTakeComparisonLanguageProvider(
-        decision=TakeComparisonDecision.SELECT_TAKE,
-        winner_index=1,
-    )
-    service = _service(tmp_path, language)
-    project_id, shot_id, take_ids = _prepare_two_candidates(service, tmp_path)
-
-    service._select_or_compare_current_shot_takes(
-        project_id,
-        shot_id,
-        review_focus="Prefer the candidate with stronger edit continuity.",
-    )
-    service.select_take(take_ids[0])
-    service._select_or_compare_current_shot_takes(
-        project_id,
-        shot_id,
-        review_focus="Prefer the candidate with stronger edit continuity.",
-    )
-
-    project = service.get_project(project_id)
-    assert len(language.calls) == 1
-    assert len(project.take_comparisons) == 1
-    assert next(take for take in project.takes if take.id == take_ids[0]).is_selected
-
-
 def test_compare_takes_agent_tool_endpoint_is_thin_and_user_controllable(
     tmp_path: Path,
 ) -> None:

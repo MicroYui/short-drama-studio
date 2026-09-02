@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 
 from short_drama.h3_models import H3MediaInput, H3MediaRole
 from short_drama.models import ProjectDocument, ShotPlan, VideoGenerationRoute
@@ -12,6 +13,7 @@ from short_drama.production_profiles import (
     compile_production_prompt,
     production_skill,
 )
+from short_drama.skills.loader import load_provider_prompt_skills
 from short_drama.providers.h3_prompt_skill import (
     prompt_schema_for_route,
     validate_h3_prompt_ir,
@@ -22,25 +24,12 @@ class LanguagePromptValidationError(ValueError):
     """The generated prompt changed or omitted a locked production fact."""
 
 
-_SYSTEM_RULES = """只输出可直接提交给视频模型的最终 Prompt IR，不要解释、Markdown 或代码块。
-严格遵守 required_prompt_schema 的字段名和顺序。说明字段使用自然、具体的英文；锁定对白、歌词和画面内文字保留原语言，不得翻译或改写。
-DIRECT 使用 T2VA 三字段结构；FRAME_FIRST 使用 I2VA 官方首帧对齐行和三字段结构；FRAME_FIRST_LAST 使用 FL2VA 官方首尾帧对齐行和三字段结构；REFERENCE 使用 Ref2VA 六字段结构。
-说话人使用跨本镜头稳定的 (S1)、(S2) 编号，对白写成 <d>[Chinese] 原文</d>。画外音必须使用精确短语 says in an off-screen voiceover，并明确所有画面人物嘴唇保持闭合。
-后续切镜只有在 locked_shot 本身明确包含多镜时才允许，并使用 [Shot 2] At 00:03.500 这种严格递增时间；单镜计划不得自行加切镜。
-运镜写成自然句子中的 motion type、必要时的 amplitude 和 speed，不堆砌标签。
-锁定镜头事实、对白、说话人、左右手、角色身份、服装、道具状态、场景布局、时长和画幅都不可改写。
-route 已由上游规划器选定，不得在提示词编译阶段改换生成路线。
-visible_assets 是本镜头可见资产的权威清单；项目 Bible 只是这些资产的消歧资料。未列入 visible_assets 的人物或道具不得入画，即使其在对白、相邻镜头或项目 Bible 中出现。
-route_media_bindings 描述本次路线实际绑定的媒体。first_frame 是不可改写的开场画面，last_frame 是不可改写的结束画面，reference media 只锚定其明确描述的身份、空间、道具或声音；提示词不得与这些媒体的描述冲突。
-previous_shot_terminal_state 只用于承接上一镜的物理终态；不得把上一镜独有的人物、道具或事件带入当前镜头。
-structured_scene_context 是故事统筹 Agent 为本场声明的剧情目的、目标时长和跨场入场/出场摘要；它用于理解本镜在全场中的作用，但不得覆盖 locked_shot 或已批准媒体。
-structured_action_plan 是导演 Agent 为当前镜头声明的动作顺序和物理交互关系。按顺序执行已声明动作；当 contact_persists 为 true 时，保持接触到最终帧或后续动作节拍明确改变该状态。刚性附件始终属于声明的物体表面并随主体同步运动，不得消失、换面、复制或漂移。不得据此增加未声明动作。
-把镜头按播放顺序写清起始状态、动作节拍、摄影机运动、同步声音和结束状态。优先提高真人感、物理动作连续性、身份与道具稳定性、构图和运镜可执行性。
-动作和运镜不得超出 locked_shot 与 source_prompt 已明确规定的范围；不得自行添加任何未声明的大动作、复杂交互、出入画或场景转换。
-根据镜头意图、时长和已声明动作安排自然节奏；不要套用固定动作拍数阈值。若信息密度较高，仍忠实编译用户已经选择的镜头方案，不得擅自删动作或拆镜。除非锁定事实明确要求立即开始或压尾结束，否则给起止留出自然呼吸空间。
-对白必须逐字保留并明确普通话说话人；画外音时画面人物不得误开口。禁止字幕、水印、画面内可读文字、无关对白、切镜、瞬移和无动机越轴。
-REFERENCE 中必须用 subject_definitions 定义每个 <Picture N>/<Video N>/<Audio N>，并在 retention_analysis 说明保留、转移和明确不复制的内容。
-最终 Prompt IR 必须包含 9:16、精确时长，并控制在 7000 个字符以内。"""
+@lru_cache(maxsize=1)
+def _h3_prompt_skill_instructions() -> str:
+    for skill in load_provider_prompt_skills():
+        if skill.provider == "minimax_h3":
+            return skill.instructions
+    raise RuntimeError("MiniMax H3 Provider Prompt Skill is not configured")
 
 
 def _structured_action_plan(
@@ -260,13 +249,12 @@ def build_language_prompt_input(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.VIDEO_PROMPT_COMPILER,),
-        context="\n".join((shot.model_dump_json(), source_prompt)),
         include_constitution=False,
     )
     instructions = (
         f"你是 MiniMax-H3 的模型专属 Prompt Compiler，当前制作类型为{skill.medium}。\n"
         "制作类型策略只用于忠实编译已经锁定的镜头，不得在此阶段改写导演意图："
-        f"{skill_prompt.text}\n{_SYSTEM_RULES}"
+        f"{skill_prompt.text}\n{_h3_prompt_skill_instructions()}"
     )
     script = next(
         version

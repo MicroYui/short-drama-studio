@@ -77,7 +77,7 @@ If you have 32GB+ of total RAM but still see API-only mode: close memory-heavy a
 
 ## Install
 
-1. Download the latest installer from GitHub Releases: [Releases](../../releases)
+1. Download the latest installer from GitHub Releases: [Releases](https://github.com/Lightricks/LTX-Desktop/releases)
 2. Install and launch **LTX Desktop**
 3. Complete first-run setup
 
@@ -196,6 +196,11 @@ Prereqs:
 - `uv` (Python package manager)
 - Python 3.12+
 - Git
+
+On Microsoft-managed development machines, use `./scripts/pnpm-project.sh` in
+place of `pnpm` in the commands below. The wrapper installs the pinned pnpm
+version through the Microsoft package feed configured in `.npmrc`, so Corepack
+does not attempt a direct public-registry download.
 
 Setup:
 

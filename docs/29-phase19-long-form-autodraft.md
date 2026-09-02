@@ -1,5 +1,7 @@
 # Phase 19：多分钟短剧的无人值守制片衔接
 
+> 历史阶段文档，仅记录当时实现，不是当前运行入口。现行架构见 [Phase 29](./40-agent-skill-tool-runtime-migration.md)，共享生产流程见 [`end_to_end.md`](../backend/short_drama/skills/workflows/end_to_end.md)。
+
 ## 目标与边界
 
 本阶段把已经可恢复的长篇剧本规划接到现有真人 `AUTO_DRAFT`，验证 2–5 分钟项目是否能在用户不操作中间节点的情况下继续完成：

@@ -24,8 +24,8 @@ from short_drama.models import (
 from short_drama.production_profiles import (
     ProductionSkillRole,
     compile_production_prompt,
-    production_skill,
 )
+from short_drama.style_context import declared_style_value
 
 
 class AssetCatalogSearchRequest(DomainModel):
@@ -102,22 +102,22 @@ _DEFAULT_PACK_ROLE: dict[
     tuple[ReferenceRole, ReferenceAngle, ReferenceFraming, list[str]],
 ] = {
     AssetKind.CHARACTER: (
-        ReferenceRole.CHARACTER_BODY,
-        ReferenceAngle.FRONT,
-        ReferenceFraming.FULL_BODY,
-        ["identity", "wardrobe"],
+        ReferenceRole.CANONICAL_MASTER,
+        ReferenceAngle.NOT_APPLICABLE,
+        ReferenceFraming.NOT_APPLICABLE,
+        ["canonical"],
     ),
     AssetKind.LOCATION: (
-        ReferenceRole.LOCATION_MASTER,
+        ReferenceRole.CANONICAL_MASTER,
         ReferenceAngle.NOT_APPLICABLE,
-        ReferenceFraming.WIDE,
-        ["master"],
+        ReferenceFraming.NOT_APPLICABLE,
+        ["canonical"],
     ),
     AssetKind.PROP: (
-        ReferenceRole.PROP_PRODUCT,
+        ReferenceRole.CANONICAL_MASTER,
         ReferenceAngle.NOT_APPLICABLE,
-        ReferenceFraming.DETAIL,
-        ["neutral"],
+        ReferenceFraming.NOT_APPLICABLE,
+        ["canonical"],
     ),
 }
 
@@ -349,22 +349,24 @@ def build_reference_view_prompt(
         if item.id == document.project.current_bible_version_id
     )
     tags = "、".join(need.tags) if need.tags else "无额外标签"
-    skill = production_skill(document.project.production_profile)
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
-        context="\n".join((subject.name, need.purpose, tags)),
         include_constitution=False,
     )
+    style = bible.style
+    medium = declared_style_value(style.medium)
     shared = (
-        f"基于输入的当前批准母版，生成一张单幅、9:16 的{skill.medium}制片参考图。"
-        "母版是身份或空间几何的唯一来源；保持同一人物、服装、物体实例、材质、"
-        "灯光状态和左右关系。不要宫格、拼贴、说明文字、箭头、品牌、水印或可读标牌。"
+        "基于输入的当前批准母版，生成一张单幅、9:16 的"
+        + (f"{medium}制片参考图。" if medium is not None else "制片参考图。")
+        + "母版是已声明身份、造型或空间关系的来源；只保持当前 Style 与参考职责要求的"
+        "主体、物体、材质、状态和方向关系。不要宫格、拼贴、说明文字、箭头、品牌、"
+        "水印或可读标牌。"
     )
     if subject.kind == AssetKind.CHARACTER:
         task = (
-            f"输出同一角色的{need.angle.value}、{need.framing.value}视图；背景干净中性。"
-            "不得换脸、换发型、换装、改变年龄体型或复制人物。"
+            f"输出同一角色的{need.angle.value}、{need.framing.value}视图；背景服从参考职责。"
+            "保持项目为该角色声明的身份与造型锚点，不自行补充或替换未声明特征。"
         )
     elif subject.kind == AssetKind.LOCATION:
         task = (
@@ -377,10 +379,24 @@ def build_reference_view_prompt(
             f"输出同一道具的{need.role.value}、{need.framing.value}状态，状态标签：{tags}。"
             "保持形状、颜色、尺度、部件数量和材质；若需要手持比例，只出现匿名裁切手部。"
         )
+    style_fields = [
+        f"{label}={value}"
+        for label, raw_value in (
+            ("媒介", style.medium),
+            ("镜头语言", style.cinematography),
+            ("色彩", style.color),
+            ("质感", style.texture),
+        )
+        if (value := declared_style_value(raw_value)) is not None
+    ]
     style_context = (
-        f"\n项目摄影：{bible.style.cinematography}\n色彩：{bible.style.color}"
-        if subject.kind == AssetKind.LOCATION
-        else "\n光线与背景：中性柔光，不引入剧情环境或临时表演状态。"
+        "\n项目 Style：" + "；".join(style_fields) + "。"
+        if style_fields
+        else "\n项目尚未声明具体视觉 Style。"
+    )
+    style_context += (
+        "背景、光线和细节只按当前 Style 与参考职责决定，"
+        "不另加默认审美。"
     )
     return (
         f"{shared}\n{task}\n资产：{subject.name}\n用途：{need.purpose}\n"

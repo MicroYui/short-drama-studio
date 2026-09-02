@@ -848,7 +848,7 @@ export function H3LabPanel({
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">镜头路线证据矩阵</h3></div><span className="text-xs text-zinc-600">镜头 1–8</span></div>
+          <div className="flex items-center justify-between"><div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-blue-400" /><h3 className="font-medium text-white">镜头路线证据矩阵</h3></div><span className="text-xs text-zinc-600">共 {availableShots.length} 个镜头</span></div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {availableShots.map((shot) => {
               const shotEvidence = routeEvidence.filter((evidence) => (

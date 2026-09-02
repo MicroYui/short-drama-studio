@@ -1,16 +1,18 @@
 # Phase 22：任意时长分层剧本 Tools 与局部 Patch
 
+> 历史记录：本文中直接挂在 `/planning-runs/*` 下的 Tool HTTP 接口已删除；可复用的剧本领域实现仍供新 Agent Tools 组合调用。
+
 ## 结论
 
 剧本时长不再用“短片”和“长篇”切成两种生成方法。约 4 秒的单节点内容、3 分钟短剧与数十分钟剧本都使用：
 
 `Global Blueprint → Scene Writer → Script Critic/Repair → Scene Director`
 
-时长只影响场次节点数、单场时长和需要反复取回的上下文量，不引入另一套长篇 workflow。具体节点数仍由 Story Architect 按内容决定，不固定成几个时长档或场次配额。界面允许用户填写不少于 4 秒的任意目标时长，默认全部进入同一个可恢复 PlanningRun。
+时长只影响场次节点数、单场时长和需要反复取回的上下文量，不引入另一套长篇 workflow。具体节点数仍由 Story Architect 按内容决定，不固定成几个时长档或场次配额。界面允许用户填写不少于 4 秒的任意目标时长；当前默认入口统一建立可恢复 AgentRun，再由 Production Manager 组合这里的分层剧本 Tools。
 
-PlanningRun 只是默认无人值守编排器和断点恢复载体。底层是可单独调用的 Agent Tools，用户或上层 Agent 可以跳过默认顺序，直接检索、改写或重新审阅某个场次。
+在 Phase 22 中，PlanningRun 是默认无人值守编排器和断点恢复载体；Phase 29 后它只作为 Agent-owned `planning.advance` 背后的内部恢复载体。底层 Agent Tools 继续作为当前能力实现，用户或上层 Agent 可以通过统一 Agent 控制面检索、改写或重新审阅某个场次。
 
-Tools 本身不固定创作风格。`production_profile` 选中的 Production Skill 才会向 Writer、Critic、Director 注入对应策略：高信息密度、短促口语和稍快语速只属于 `DOUYIN_SHORT_DRAMA`；`GENERAL_VIDEO` 保留氛围、留白和长镜头的合法性。未来数字人口播使用独立 Skill，用户自定义品类则使用其选定或自定义策略，不继承抖音短剧偏好。
+Tools 本身不固定创作风格。`production_profile` 选中的 Production Skill 向 Writer、Critic 和 Director 提供对应的思考维度：`AI_SHORT_DRAMA` 关注观看承诺、状态变化、可读性、张弛与回报，但信息疏密、口语长短、语速、停顿和镜头节奏由 Agent 结合当前内容与 Bible Style 决定，不是 Profile 默认值。`GENERAL_VIDEO` 同样可以快速、高密度或长镜头，只要符合项目自己的意图。未来数字人口播使用独立 Skill，用户自定义品类则使用其选定或自定义策略。
 
 Phase 23 已将这里的概念落实为显式 `ProductionSkill` 与静态 Catalog，并加入可覆盖的建议式 playbook；PlanningRun 不把它解释为强制状态迁移。
 

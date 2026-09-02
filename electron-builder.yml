@@ -22,6 +22,7 @@ extraResources:
     to: backend
     filter:
       - "**/*.py"
+      - "short_drama/skills/**/*.md"
       - pyproject.toml
       - runtime_config/lora_catalog.json
       - "!**/__pycache__/**"

@@ -12,11 +12,12 @@ from short_drama.hierarchical_script import (
     write_story_scene,
 )
 from short_drama.models import (
-    PlanningRunCreateRequest,
+    CreateProjectRequest,
     RunMode,
     SourceMode,
 )
 from short_drama.production_planner import (
+    EpisodeOutline,
     PlannedDialogueLine,
     create_story_architecture,
 )
@@ -31,8 +32,8 @@ from short_drama.script_documents import (
 )
 
 
-def _request(seconds: int) -> PlanningRunCreateRequest:
-    return PlanningRunCreateRequest(
+def _request(seconds: int) -> CreateProjectRequest:
+    return CreateProjectRequest(
         name=f"{seconds} 秒分层剧本",
         source_mode=SourceMode.AUTO_ORIGINAL,
         target_duration_seconds=seconds,
@@ -57,13 +58,69 @@ def _scene_patch(outline, sequence: int, suffix: str) -> EpisodeScenePatch:
     )
 
 
+def _explicit_multi_scene_blueprint(
+    request: CreateProjectRequest,
+    *,
+    scene_count: int,
+) -> EpisodeOutline:
+    """Build the explicit multi-scene model output required by these tests."""
+
+    outline = create_story_architecture(request, None).outline
+    template = outline.scenes[0]
+    scene_duration = request.resolved_target_duration_seconds() / scene_count
+    scenes = []
+    for sequence in range(1, scene_count + 1):
+        continuity_in = template.continuity_in.model_copy(
+            deep=True,
+            update={
+                "known_facts": (
+                    [] if sequence == 1 else [f"第 {sequence - 1} 场已完成"]
+                ),
+                "open_threads": [f"第 {sequence} 场待推进"],
+            },
+        )
+        continuity_out = template.continuity_out.model_copy(
+            deep=True,
+            update={
+                "known_facts": [f"第 {sequence} 场已完成"],
+                "open_threads": (
+                    [f"第 {sequence + 1} 场待推进"]
+                    if sequence < scene_count
+                    else []
+                ),
+            },
+        )
+        scenes.append(
+            template.model_copy(
+                deep=True,
+                update={
+                    "sequence": sequence,
+                    "heading": f"第 {sequence} 场",
+                    "summary": f"第 {sequence} 场因果链",
+                    "narrative_purpose": f"推进第 {sequence} 场因果链",
+                    "playable_actions": [f"完成第 {sequence} 场行动"],
+                    "target_duration_seconds": scene_duration,
+                    "dialogue_line_indices": [],
+                    "continuity_in": continuity_in,
+                    "continuity_out": continuity_out,
+                },
+            )
+        )
+    return EpisodeOutline.model_validate(
+        {
+            **outline.model_dump(mode="python"),
+            "scenes": [scene.model_dump(mode="python") for scene in scenes],
+        }
+    )
+
+
 def test_four_seconds_through_sixty_minutes_share_the_same_scene_node_tools() -> None:
     brief_request = _request(4)
     short_request = _request(180)
     long_request = _request(3600)
-    brief_blueprint = create_story_architecture(brief_request, None).outline
-    short_blueprint = create_story_architecture(short_request, None).outline
-    long_blueprint = create_story_architecture(long_request, None).outline
+    brief_blueprint = _explicit_multi_scene_blueprint(brief_request, scene_count=1)
+    short_blueprint = _explicit_multi_scene_blueprint(short_request, scene_count=3)
+    long_blueprint = _explicit_multi_scene_blueprint(long_request, scene_count=6)
 
     assert brief_blueprint.lines == []
     assert short_blueprint.lines == []
@@ -132,7 +189,7 @@ def test_scope_recommendation_compacts_search_text_but_keeps_long_edit_valid() -
 
 def test_scene_patch_merge_does_not_regenerate_unrelated_scenes() -> None:
     request = _request(180)
-    blueprint = create_story_architecture(request, None).outline
+    blueprint = _explicit_multi_scene_blueprint(request, scene_count=3)
     initial = assemble_written_scenes(
         blueprint,
         [_scene_patch(blueprint, scene.sequence, "初稿") for scene in blueprint.scenes],
@@ -161,7 +218,7 @@ def test_versioned_script_search_is_isolated_by_run_and_revision(
 ) -> None:
     repository = ShortDramaRepository(tmp_path / "short-drama.sqlite3")
     request = _request(180)
-    blueprint = create_story_architecture(request, None).outline
+    blueprint = _explicit_multi_scene_blueprint(request, scene_count=3)
     outline = assemble_written_scenes(
         blueprint,
         [_scene_patch(blueprint, scene.sequence, "搜索文本") for scene in blueprint.scenes],

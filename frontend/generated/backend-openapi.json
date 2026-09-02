@@ -49,6 +49,211 @@
         "title": "ActionBeat",
         "type": "object"
       },
+      "ActionDigest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Artifact Refs",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ActionKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ActionStatus"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "summary"
+        ],
+        "title": "ActionDigest",
+        "type": "object"
+      },
+      "ActionKind": {
+        "enum": [
+          "TOOL_CALL",
+          "DELEGATION",
+          "ARTIFACT_PATCH",
+          "USER_INPUT",
+          "CHECKPOINT"
+        ],
+        "title": "ActionKind",
+        "type": "string"
+      },
+      "ActionRecord": {
+        "additionalProperties": false,
+        "description": "Current persisted state of one plan action; not an event log.",
+        "properties": {
+          "agent_id": {
+            "minLength": 1,
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Artifact Refs",
+            "type": "array"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "input_summary": {
+            "minLength": 1,
+            "title": "Input Summary",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ActionKind"
+          },
+          "output_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Summary"
+          },
+          "plan_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Revision Id"
+          },
+          "plan_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Step Id"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ActionStatus"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "work_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Order Id"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "kind",
+          "status",
+          "agent_id",
+          "input_summary"
+        ],
+        "title": "ActionRecord",
+        "type": "object"
+      },
+      "ActionStatus": {
+        "enum": [
+          "PENDING",
+          "RUNNING",
+          "SUCCEEDED",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "title": "ActionStatus",
+        "type": "string"
+      },
       "ActiveDownloadResponse": {
         "properties": {
           "cp_ids": {
@@ -87,6 +292,712 @@
           "cp_ids"
         ],
         "title": "ActiveDownloadResponse",
+        "type": "object"
+      },
+      "AgentAdvanceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_work_order_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Created Work Order Ids",
+            "type": "array"
+          },
+          "executed_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Executed Action Ids",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "run": {
+            "$ref": "#/components/schemas/AgentRunView"
+          }
+        },
+        "required": [
+          "run",
+          "executed_action_ids",
+          "created_work_order_ids",
+          "notes"
+        ],
+        "title": "AgentAdvanceResponse",
+        "type": "object"
+      },
+      "AgentCapabilityCatalog": {
+        "additionalProperties": false,
+        "properties": {
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionSkillDescriptor"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolDescriptor"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools",
+          "skills"
+        ],
+        "title": "AgentCapabilityCatalog",
+        "type": "object"
+      },
+      "AgentPlanProposal": {
+        "additionalProperties": false,
+        "description": "A complete, replaceable plan authored by an Agent or supplied by a caller.",
+        "properties": {
+          "goal_complete": {
+            "default": false,
+            "title": "Goal Complete",
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            },
+            "maxItems": 48,
+            "title": "Steps",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "AgentPlanProposal",
+        "type": "object"
+      },
+      "AgentProjectCreateRequest": {
+        "additionalProperties": false,
+        "description": "Bootstrap a production run before its canonical project exists.",
+        "properties": {
+          "execution_target": {
+            "$ref": "#/components/schemas/ProductionExecutionTarget",
+            "default": "MOCK"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "maxLength": 12000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "project": {
+            "$ref": "#/components/schemas/CreateProjectRequest"
+          },
+          "render_export": {
+            "default": true,
+            "title": "Render Export",
+            "type": "boolean"
+          },
+          "root_agent": {
+            "default": "production-manager",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Root Agent",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "title": "AgentProjectCreateRequest",
+        "type": "object"
+      },
+      "AgentProjectCreateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/AgentRunView"
+          }
+        },
+        "required": [
+          "project_id",
+          "run"
+        ],
+        "title": "AgentProjectCreateResponse",
+        "type": "object"
+      },
+      "AgentResult": {
+        "additionalProperties": false,
+        "description": "Structured response returned from a delegated specialist agent.",
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "concise_summary": {
+            "minLength": 1,
+            "title": "Concise Summary",
+            "type": "string"
+          },
+          "created_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Created Artifacts",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "recommended_next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Next Actions",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentResultStatus"
+          },
+          "unresolved_questions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Questions",
+            "type": "array"
+          },
+          "updated_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Updated Artifacts",
+            "type": "array"
+          },
+          "work_order_id": {
+            "minLength": 1,
+            "title": "Work Order Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "work_order_id",
+          "status",
+          "concise_summary"
+        ],
+        "title": "AgentResult",
+        "type": "object"
+      },
+      "AgentResultStatus": {
+        "enum": [
+          "COMPLETED",
+          "PARTIAL",
+          "FAILED"
+        ],
+        "title": "AgentResultStatus",
+        "type": "string"
+      },
+      "AgentRun": {
+        "additionalProperties": false,
+        "properties": {
+          "active_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Active Skill Ids",
+            "type": "array"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_plan_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Plan Revision Id"
+          },
+          "execution_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionExecutionTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "objective": {
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "root_agent": {
+            "minLength": 1,
+            "title": "Root Agent",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus",
+            "default": "RUNNING"
+          },
+          "unattended": {
+            "default": false,
+            "title": "Unattended",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "objective",
+          "root_agent"
+        ],
+        "title": "AgentRun",
+        "type": "object"
+      },
+      "AgentRunAdvanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "max_actions": {
+            "default": 1,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Max Actions",
+            "type": "integer"
+          }
+        },
+        "title": "AgentRunAdvanceRequest",
+        "type": "object"
+      },
+      "AgentRunCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_plan": {
+            "default": true,
+            "title": "Auto Plan",
+            "type": "boolean"
+          },
+          "execution_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionExecutionTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "initial_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentPlanProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "objective": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "render_export": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Export"
+          },
+          "root_agent": {
+            "default": "production-manager",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Root Agent",
+            "type": "string"
+          },
+          "unattended": {
+            "default": false,
+            "title": "Unattended",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "objective"
+        ],
+        "title": "AgentRunCreateRequest",
+        "type": "object"
+      },
+      "AgentRunListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRunView"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "AgentRunListResponse",
+        "type": "object"
+      },
+      "AgentRunReplanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "proposed_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentPlanProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "AgentRunReplanRequest",
+        "type": "object"
+      },
+      "AgentRunSnapshot": {
+        "additionalProperties": false,
+        "description": "Minimum recoverable state needed to continue an interrupted run.",
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ActionRecord"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "current_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanRevision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memory": {
+            "$ref": "#/components/schemas/RunMemory"
+          },
+          "pending_work_orders": {
+            "items": {
+              "$ref": "#/components/schemas/WorkOrder"
+            },
+            "title": "Pending Work Orders",
+            "type": "array"
+          },
+          "run": {
+            "$ref": "#/components/schemas/AgentRun"
+          }
+        },
+        "required": [
+          "run",
+          "current_plan",
+          "memory"
+        ],
+        "title": "AgentRunSnapshot",
+        "type": "object"
+      },
+      "AgentRunStatus": {
+        "enum": [
+          "RUNNING",
+          "WAITING",
+          "COMPLETED",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "title": "AgentRunStatus",
+        "type": "string"
+      },
+      "AgentRunView": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/ContextPack"
+          },
+          "ready_steps": {
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            },
+            "title": "Ready Steps",
+            "type": "array"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/AgentRunSnapshot"
+          }
+        },
+        "required": [
+          "snapshot",
+          "ready_steps",
+          "context"
+        ],
+        "title": "AgentRunView",
+        "type": "object"
+      },
+      "AgentUserInputRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Action Id",
+            "type": "string"
+          },
+          "answer": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Answer",
+            "type": "string"
+          },
+          "remember_as_decision": {
+            "default": true,
+            "title": "Remember As Decision",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action_id",
+          "answer"
+        ],
+        "title": "AgentUserInputRequest",
+        "type": "object"
+      },
+      "AgentWorkOrderResultRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "concise_summary": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Concise Summary",
+            "type": "string"
+          },
+          "created_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Created Artifacts",
+            "type": "array"
+          },
+          "decisions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Decisions",
+            "type": "array"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Findings",
+            "type": "array"
+          },
+          "recommended_next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Recommended Next Actions",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentResultStatus"
+          },
+          "unresolved_questions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Unresolved Questions",
+            "type": "array"
+          },
+          "updated_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Updated Artifacts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "concise_summary"
+        ],
+        "title": "AgentWorkOrderResultRequest",
+        "type": "object"
+      },
+      "AgentWorkOrderResultResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/AgentResult"
+          },
+          "run": {
+            "$ref": "#/components/schemas/AgentRunView"
+          }
+        },
+        "required": [
+          "result",
+          "run"
+        ],
+        "title": "AgentWorkOrderResultResponse",
+        "type": "object"
+      },
+      "AgentWorkOrderView": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/ContextPack"
+          },
+          "system_prompt": {
+            "title": "System Prompt",
+            "type": "string"
+          },
+          "work_order": {
+            "$ref": "#/components/schemas/WorkOrder"
+          }
+        },
+        "required": [
+          "work_order",
+          "context",
+          "system_prompt"
+        ],
+        "title": "AgentWorkOrderView",
         "type": "object"
       },
       "AppSettingsPatch": {
@@ -289,6 +1200,77 @@
         ],
         "title": "ApprovalStatus",
         "type": "string"
+      },
+      "ArtifactRef": {
+        "additionalProperties": false,
+        "description": "Stable pointer to a canonical project artifact, without duplicating it.",
+        "properties": {
+          "artifact_id": {
+            "minLength": 1,
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "artifact_type": {
+            "minLength": 1,
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "project_id",
+          "artifact_type",
+          "artifact_id"
+        ],
+        "title": "ArtifactRef",
+        "type": "object"
+      },
+      "ArtifactSummary": {
+        "additionalProperties": false,
+        "description": "Small context projection resolved from an :class:`ArtifactRef`.",
+        "properties": {
+          "ref": {
+            "$ref": "#/components/schemas/ArtifactRef"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "ref",
+          "summary"
+        ],
+        "title": "ArtifactSummary",
+        "type": "object"
       },
       "Asset": {
         "additionalProperties": false,
@@ -1498,367 +2480,6 @@
         "title": "AuthorSpec",
         "type": "object"
       },
-      "AutoDraftRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "render_export": {
-            "default": true,
-            "title": "Render Export",
-            "type": "boolean"
-          }
-        },
-        "title": "AutoDraftRequest",
-        "type": "object"
-      },
-      "AutoDraftResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "export": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ExportRecord"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "project": {
-            "$ref": "#/components/schemas/ProjectAggregate"
-          }
-        },
-        "required": [
-          "project",
-          "export"
-        ],
-        "title": "AutoDraftResponse",
-        "type": "object"
-      },
-      "AutonomousDraftCreateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "execution_target": {
-            "$ref": "#/components/schemas/AutonomousExecutionTarget",
-            "default": "MOCK"
-          },
-          "input_images": {
-            "items": {
-              "$ref": "#/components/schemas/CreativeInputImage"
-            },
-            "maxItems": 8,
-            "title": "Input Images",
-            "type": "array"
-          },
-          "input_text": {
-            "default": "",
-            "maxLength": 50000,
-            "title": "Input Text",
-            "type": "string"
-          },
-          "linked_asset_project_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 32,
-            "title": "Linked Asset Project Ids",
-            "type": "array"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 120,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "production_profile": {
-            "$ref": "#/components/schemas/ProductionProfile",
-            "default": "DOUYIN_SHORT_DRAMA"
-          },
-          "render_export": {
-            "default": true,
-            "title": "Render Export",
-            "type": "boolean"
-          },
-          "run_mode": {
-            "$ref": "#/components/schemas/RunMode",
-            "default": "AUTO_DRAFT"
-          },
-          "source_mode": {
-            "$ref": "#/components/schemas/SourceMode"
-          },
-          "target_duration_seconds": {
-            "anyOf": [
-              {
-                "minimum": 4.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Duration Seconds"
-          }
-        },
-        "required": [
-          "source_mode"
-        ],
-        "title": "AutonomousDraftCreateRequest",
-        "type": "object"
-      },
-      "AutonomousDraftResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "export": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ExportRecord"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "project": {
-            "$ref": "#/components/schemas/ProjectAggregate"
-          },
-          "run": {
-            "$ref": "#/components/schemas/AutonomousRunRecord"
-          }
-        },
-        "required": [
-          "project",
-          "export",
-          "run"
-        ],
-        "title": "AutonomousDraftResponse",
-        "type": "object"
-      },
-      "AutonomousExecutionTarget": {
-        "enum": [
-          "MOCK",
-          "REAL_H3"
-        ],
-        "title": "AutonomousExecutionTarget",
-        "type": "string"
-      },
-      "AutonomousRepeatCreateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 120,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "render_export": {
-            "default": true,
-            "title": "Render Export",
-            "type": "boolean"
-          }
-        },
-        "title": "AutonomousRepeatCreateRequest",
-        "type": "object"
-      },
-      "AutonomousRunAdvanceRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "max_actions": {
-            "default": 24,
-            "maximum": 200.0,
-            "minimum": 1.0,
-            "title": "Max Actions",
-            "type": "integer"
-          }
-        },
-        "title": "AutonomousRunAdvanceRequest",
-        "type": "object"
-      },
-      "AutonomousRunRecord": {
-        "additionalProperties": false,
-        "properties": {
-          "completed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Completed At"
-          },
-          "completed_steps": {
-            "items": {
-              "$ref": "#/components/schemas/AutonomousRunStep"
-            },
-            "title": "Completed Steps",
-            "type": "array"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "current_step": {
-            "$ref": "#/components/schemas/AutonomousRunStep"
-          },
-          "episode_review_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Episode Review Id"
-          },
-          "error_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error Message"
-          },
-          "execution_target": {
-            "$ref": "#/components/schemas/AutonomousExecutionTarget",
-            "default": "MOCK"
-          },
-          "export_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Export Id"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "max_repair_rounds": {
-            "default": 3,
-            "maximum": 5.0,
-            "minimum": 0.0,
-            "title": "Max Repair Rounds",
-            "type": "integer"
-          },
-          "planner": {
-            "title": "Planner",
-            "type": "string"
-          },
-          "project_id": {
-            "title": "Project Id",
-            "type": "string"
-          },
-          "render_export": {
-            "default": true,
-            "title": "Render Export",
-            "type": "boolean"
-          },
-          "repair_round": {
-            "default": 0,
-            "minimum": 0.0,
-            "title": "Repair Round",
-            "type": "integer"
-          },
-          "route_plan_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Route Plan Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/AutonomousRunStatus"
-          },
-          "updated_at": {
-            "title": "Updated At",
-            "type": "string"
-          },
-          "waiting_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Waiting Reason"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Warnings",
-            "type": "array"
-          }
-        },
-        "required": [
-          "id",
-          "project_id",
-          "status",
-          "current_step",
-          "planner",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "AutonomousRunRecord",
-        "type": "object"
-      },
-      "AutonomousRunStatus": {
-        "enum": [
-          "RUNNING",
-          "COMPLETE",
-          "NEEDS_ATTENTION",
-          "FAILED"
-        ],
-        "title": "AutonomousRunStatus",
-        "type": "string"
-      },
-      "AutonomousRunStep": {
-        "enum": [
-          "NORMALIZE_INPUT",
-          "PLAN",
-          "IMPORT_INPUT_ASSETS",
-          "PREPARE_ASSETS",
-          "PLAN_ROUTES",
-          "PREPARE_SHOT_ASSETS",
-          "GENERATE",
-          "QA_AND_REPAIR",
-          "TIMELINE",
-          "EPISODE_REVIEW",
-          "AUDIO_QA",
-          "EXPORT",
-          "COMPLETE"
-        ],
-        "title": "AutonomousRunStep",
-        "type": "string"
-      },
       "Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post": {
         "properties": {
           "descriptor": {
@@ -2227,6 +2848,128 @@
         "title": "CheckpointDescriptor",
         "type": "object"
       },
+      "ContextPack": {
+        "additionalProperties": false,
+        "description": "Bounded context assembled for one agent call.",
+        "properties": {
+          "active_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Active Skill Ids",
+            "type": "array"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactSummary"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "compiled_at": {
+            "format": "date-time",
+            "title": "Compiled At",
+            "type": "string"
+          },
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionMemory"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "experiences": {
+            "items": {
+              "$ref": "#/components/schemas/ExperienceMemory"
+            },
+            "title": "Experiences",
+            "type": "array"
+          },
+          "next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Actions",
+            "type": "array"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "open_questions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Summary"
+          },
+          "recent_actions": {
+            "items": {
+              "$ref": "#/components/schemas/ActionDigest"
+            },
+            "title": "Recent Actions",
+            "type": "array"
+          },
+          "run_focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Focus"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "unresolved_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Unresolved Artifact Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "project_id",
+          "objective"
+        ],
+        "title": "ContextPack",
+        "type": "object"
+      },
       "ContinuityState": {
         "additionalProperties": false,
         "properties": {
@@ -2306,7 +3049,7 @@
           },
           "production_profile": {
             "$ref": "#/components/schemas/ProductionProfile",
-            "default": "DOUYIN_SHORT_DRAMA"
+            "default": "AI_SHORT_DRAMA"
           },
           "run_mode": {
             "$ref": "#/components/schemas/RunMode",
@@ -2373,6 +3116,74 @@
         },
         "title": "CreativeInputImage",
         "type": "object"
+      },
+      "DecisionMemory": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Artifact Refs",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "statement": {
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "statement",
+          "rationale"
+        ],
+        "title": "DecisionMemory",
+        "type": "object"
+      },
+      "DelegationStatus": {
+        "enum": [
+          "PENDING",
+          "IN_PROGRESS",
+          "COMPLETED",
+          "NEEDS_ATTENTION",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "title": "DelegationStatus",
+        "type": "string"
       },
       "DescribeCheckpointsRequest": {
         "properties": {
@@ -3777,6 +4588,94 @@
         ],
         "title": "ExecutionStrategy",
         "type": "string"
+      },
+      "ExperienceConfidence": {
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH"
+        ],
+        "title": "ExperienceConfidence",
+        "type": "string"
+      },
+      "ExperienceMemory": {
+        "additionalProperties": false,
+        "description": "Reusable lesson whose applicability remains explicit.",
+        "properties": {
+          "applicability": {
+            "minLength": 1,
+            "title": "Applicability",
+            "type": "string"
+          },
+          "artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Artifact Refs",
+            "type": "array"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/ExperienceConfidence"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "minLength": 1,
+            "title": "Evidence",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "skill_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Id"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "summary",
+          "applicability",
+          "evidence",
+          "confidence"
+        ],
+        "title": "ExperienceMemory",
+        "type": "object"
       },
       "ExportRecord": {
         "additionalProperties": false,
@@ -10214,612 +11113,125 @@
         "title": "OutputSpec",
         "type": "object"
       },
-      "PlannedDialogueLine": {
+      "PlanRevision": {
         "additionalProperties": false,
-        "properties": {
-          "audio_kind": {
-            "$ref": "#/components/schemas/AudioKind",
-            "default": "DIALOGUE"
-          },
-          "speaker": {
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Speaker",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "speaker",
-          "text"
-        ],
-        "title": "PlannedDialogueLine",
-        "type": "object"
-      },
-      "PlannedSceneContract": {
-        "additionalProperties": false,
-        "properties": {
-          "continuity_in": {
-            "$ref": "#/components/schemas/SceneContinuitySummary"
-          },
-          "continuity_out": {
-            "$ref": "#/components/schemas/SceneContinuitySummary"
-          },
-          "dialogue_line_indices": {
-            "items": {
-              "type": "integer"
-            },
-            "maxItems": 500,
-            "title": "Dialogue Line Indices",
-            "type": "array"
-          },
-          "heading": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Heading",
-            "type": "string"
-          },
-          "location_names": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 6,
-            "minItems": 1,
-            "title": "Location Names",
-            "type": "array"
-          },
-          "narrative_purpose": {
-            "maxLength": 800,
-            "minLength": 1,
-            "title": "Narrative Purpose",
-            "type": "string"
-          },
-          "playable_actions": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 24,
-            "title": "Playable Actions",
-            "type": "array"
-          },
-          "sequence": {
-            "minimum": 1.0,
-            "title": "Sequence",
-            "type": "integer"
-          },
-          "summary": {
-            "maxLength": 1600,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          },
-          "target_duration_seconds": {
-            "minimum": 4.0,
-            "title": "Target Duration Seconds",
-            "type": "number"
-          }
-        },
-        "required": [
-          "sequence",
-          "heading",
-          "summary",
-          "narrative_purpose",
-          "target_duration_seconds",
-          "location_names",
-          "continuity_in",
-          "continuity_out"
-        ],
-        "title": "PlannedSceneContract",
-        "type": "object"
-      },
-      "PlanningOutlineAgentRevisionRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "instruction": {
-            "maxLength": 8000,
-            "minLength": 1,
-            "title": "Instruction",
-            "type": "string"
-          }
-        },
-        "required": [
-          "instruction"
-        ],
-        "title": "PlanningOutlineAgentRevisionRequest",
-        "type": "object"
-      },
-      "PlanningOutlineDirectEditRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "change_reason": {
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Change Reason",
-            "type": "string"
-          },
-          "outline_json": {
-            "maxLength": 250000,
-            "minLength": 2,
-            "title": "Outline Json",
-            "type": "string"
-          }
-        },
-        "required": [
-          "outline_json",
-          "change_reason"
-        ],
-        "title": "PlanningOutlineDirectEditRequest",
-        "type": "object"
-      },
-      "PlanningOutlineSnapshot": {
-        "additionalProperties": false,
+        "description": "A replaceable plan graph proposed by the agent for one run.",
         "properties": {
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
-          "outline_json": {
-            "title": "Outline Json",
-            "type": "string"
-          },
-          "repair_plan": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StoryRepairPlan"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "revision_round": {
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Revision Round",
-            "type": "integer"
-          },
-          "revision_verification": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StoryRevisionVerification"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "source": {
-            "maxLength": 240,
-            "minLength": 1,
-            "title": "Source",
-            "type": "string"
-          },
-          "source_contract": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StorySourceContract"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "revision_round",
-          "outline_json",
-          "source",
-          "created_at"
-        ],
-        "title": "PlanningOutlineSnapshot",
-        "type": "object"
-      },
-      "PlanningReviewSnapshot": {
-        "additionalProperties": false,
-        "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "disposition": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScriptReviewDisposition"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "report": {
-            "$ref": "#/components/schemas/ScriptReviewReport"
-          },
-          "review_round": {
-            "maximum": 21.0,
-            "minimum": 1.0,
-            "title": "Review Round",
-            "type": "integer"
-          },
-          "revision_round": {
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Revision Round",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "review_round",
-          "revision_round",
-          "report",
-          "created_at"
-        ],
-        "title": "PlanningReviewSnapshot",
-        "type": "object"
-      },
-      "PlanningRunCreateRequest": {
-        "additionalProperties": false,
-        "description": "Persisted duration-agnostic planning request before a project exists.",
-        "properties": {
-          "execution_target": {
-            "$ref": "#/components/schemas/AutonomousExecutionTarget",
-            "default": "MOCK"
-          },
-          "input_images": {
-            "items": {
-              "$ref": "#/components/schemas/CreativeInputImage"
-            },
-            "maxItems": 8,
-            "title": "Input Images",
-            "type": "array"
-          },
-          "input_text": {
-            "default": "",
-            "maxLength": 50000,
-            "title": "Input Text",
-            "type": "string"
-          },
-          "linked_asset_project_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 32,
-            "title": "Linked Asset Project Ids",
-            "type": "array"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 120,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "production_profile": {
-            "$ref": "#/components/schemas/ProductionProfile",
-            "default": "DOUYIN_SHORT_DRAMA"
-          },
-          "render_export": {
-            "default": true,
-            "title": "Render Export",
-            "type": "boolean"
-          },
-          "run_mode": {
-            "$ref": "#/components/schemas/RunMode",
-            "default": "AUTO_DRAFT"
-          },
-          "source_mode": {
-            "$ref": "#/components/schemas/SourceMode"
-          },
-          "target_duration_seconds": {
-            "anyOf": [
-              {
-                "minimum": 4.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Duration Seconds"
-          }
-        },
-        "required": [
-          "source_mode"
-        ],
-        "title": "PlanningRunCreateRequest",
-        "type": "object"
-      },
-      "PlanningRunListResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "runs": {
-            "items": {
-              "$ref": "#/components/schemas/PlanningRunRecord"
-            },
-            "title": "Runs",
-            "type": "array"
-          }
-        },
-        "required": [
-          "runs"
-        ],
-        "title": "PlanningRunListResponse",
-        "type": "object"
-      },
-      "PlanningRunRecord": {
-        "additionalProperties": false,
-        "properties": {
-          "autonomous_run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Autonomous Run Id"
-          },
-          "completed_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Completed At"
-          },
-          "completed_steps": {
-            "items": {
-              "$ref": "#/components/schemas/PlanningRunStep"
-            },
-            "title": "Completed Steps",
-            "type": "array"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "critic_used": {
+          "goal_complete": {
             "default": false,
-            "title": "Critic Used",
+            "title": "Goal Complete",
             "type": "boolean"
-          },
-          "current_step": {
-            "$ref": "#/components/schemas/PlanningRunStep"
-          },
-          "directed_scene_json": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 500,
-            "title": "Directed Scene Json",
-            "type": "array"
-          },
-          "error_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error Message"
           },
           "id": {
+            "minLength": 1,
             "title": "Id",
             "type": "string"
           },
-          "latest_repair_plan": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StoryRepairPlan"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "latest_revision_verification": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StoryRevisionVerification"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "max_revision_rounds": {
-            "default": 3,
-            "maximum": 3.0,
-            "minimum": 0.0,
-            "title": "Max Revision Rounds",
-            "type": "integer"
-          },
-          "next_scene_sequence": {
-            "default": 1,
-            "maximum": 501.0,
+          "revision": {
             "minimum": 1.0,
-            "title": "Next Scene Sequence",
+            "title": "Revision",
             "type": "integer"
           },
-          "next_script_scene_sequence": {
-            "default": 1,
-            "maximum": 501.0,
-            "minimum": 1.0,
-            "title": "Next Script Scene Sequence",
-            "type": "integer"
-          },
-          "outline_json": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Outline Json"
-          },
-          "outline_source": {
-            "anyOf": [
-              {
-                "maxLength": 240,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Outline Source"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "request": {
-            "$ref": "#/components/schemas/PlanningRunCreateRequest"
-          },
-          "review_disposition": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScriptReviewDisposition"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "review_report": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScriptReviewReport"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "revision_judge": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RevisionJudgeRecommendation"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "revision_round": {
-            "default": 0,
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Revision Round",
-            "type": "integer"
-          },
-          "scene_script_json": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 500,
-            "title": "Scene Script Json",
-            "type": "array"
-          },
-          "source_contract": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StorySourceContract"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "status": {
-            "$ref": "#/components/schemas/PlanningRunStatus"
-          },
-          "total_scenes": {
-            "default": 0,
-            "maximum": 500.0,
-            "minimum": 0.0,
-            "title": "Total Scenes",
-            "type": "integer"
-          },
-          "updated_at": {
-            "title": "Updated At",
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
             "type": "string"
           },
-          "used_scene_fallback": {
-            "default": false,
-            "title": "Used Scene Fallback",
-            "type": "boolean"
-          },
-          "used_scene_repair": {
-            "default": false,
-            "title": "Used Scene Repair",
-            "type": "boolean"
-          },
-          "warnings": {
+          "steps": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/PlanStep"
             },
-            "title": "Warnings",
+            "title": "Steps",
             "type": "array"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
           }
         },
         "required": [
           "id",
-          "status",
-          "current_step",
-          "request",
-          "created_at",
-          "updated_at"
+          "run_id",
+          "revision",
+          "summary"
         ],
-        "title": "PlanningRunRecord",
+        "title": "PlanRevision",
         "type": "object"
       },
-      "PlanningRunResponse": {
+      "PlanStep": {
         "additionalProperties": false,
+        "description": "One dynamically chosen unit in a dependency-aware agent plan.",
         "properties": {
-          "project": {
+          "arguments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Arguments",
+            "type": "object"
+          },
+          "artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Artifact Refs",
+            "type": "array"
+          },
+          "assigned_agent": {
+            "minLength": 1,
+            "title": "Assigned Agent",
+            "type": "string"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Depends On",
+            "type": "array"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "minLength": 1,
+            "title": "Instructions",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ActionKind"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "tool_name": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ProjectAggregate"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
-          },
-          "run": {
-            "$ref": "#/components/schemas/PlanningRunRecord"
+            ],
+            "title": "Tool Name"
           }
         },
         "required": [
-          "run"
+          "id",
+          "title",
+          "kind",
+          "assigned_agent",
+          "instructions"
         ],
-        "title": "PlanningRunResponse",
+        "title": "PlanStep",
         "type": "object"
       },
       "PlanningRunStatus": {
@@ -10831,262 +11243,6 @@
         ],
         "title": "PlanningRunStatus",
         "type": "string"
-      },
-      "PlanningRunStep": {
-        "enum": [
-          "STORY_ARCHITECT",
-          "SCENE_WRITER",
-          "SCRIPT_CRITIC",
-          "STORY_REVISION",
-          "REVISION_JUDGE",
-          "SCENE_DIRECTOR",
-          "FINALIZE",
-          "COMPLETE"
-        ],
-        "title": "PlanningRunStep",
-        "type": "string"
-      },
-      "PlanningSceneRevisionRequest": {
-        "additionalProperties": false,
-        "description": "Natural-language local edit; explicit scenes override Agent scope selection.",
-        "properties": {
-          "instruction": {
-            "maxLength": 8000,
-            "minLength": 1,
-            "title": "Instruction",
-            "type": "string"
-          },
-          "scene_sequences": {
-            "items": {
-              "type": "integer"
-            },
-            "maxItems": 40,
-            "title": "Scene Sequences",
-            "type": "array"
-          }
-        },
-        "required": [
-          "instruction"
-        ],
-        "title": "PlanningSceneRevisionRequest",
-        "type": "object"
-      },
-      "PlanningScriptDocument": {
-        "additionalProperties": false,
-        "description": "One versioned, retrieval-ready unit from a planning outline.",
-        "properties": {
-          "body": {
-            "default": "",
-            "maxLength": 60000,
-            "title": "Body",
-            "type": "string"
-          },
-          "character_names": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 32,
-            "title": "Character Names",
-            "type": "array"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "document_id": {
-            "maxLength": 240,
-            "minLength": 1,
-            "title": "Document Id",
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/PlanningScriptDocumentKind"
-          },
-          "lines": {
-            "items": {
-              "$ref": "#/components/schemas/PlannedDialogueLine"
-            },
-            "maxItems": 500,
-            "title": "Lines",
-            "type": "array"
-          },
-          "location_names": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 32,
-            "title": "Location Names",
-            "type": "array"
-          },
-          "prop_names": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 32,
-            "title": "Prop Names",
-            "type": "array"
-          },
-          "revision_round": {
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Revision Round",
-            "type": "integer"
-          },
-          "run_id": {
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Run Id",
-            "type": "string"
-          },
-          "scene": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PlannedSceneContract"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "scene_sequence": {
-            "anyOf": [
-              {
-                "maximum": 500.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scene Sequence"
-          },
-          "search_metadata": {
-            "default": "",
-            "maxLength": 12000,
-            "title": "Search Metadata",
-            "type": "string"
-          },
-          "summary": {
-            "maxLength": 4000,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          },
-          "title": {
-            "maxLength": 240,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "run_id",
-          "revision_round",
-          "document_id",
-          "kind",
-          "title",
-          "summary",
-          "created_at"
-        ],
-        "title": "PlanningScriptDocument",
-        "type": "object"
-      },
-      "PlanningScriptDocumentKind": {
-        "enum": [
-          "STORY_BIBLE",
-          "SCENE"
-        ],
-        "title": "PlanningScriptDocumentKind",
-        "type": "string"
-      },
-      "PlanningScriptSearchHit": {
-        "additionalProperties": false,
-        "properties": {
-          "bm25_score": {
-            "title": "Bm25 Score",
-            "type": "number"
-          },
-          "document": {
-            "$ref": "#/components/schemas/PlanningScriptDocument"
-          },
-          "matched_by": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 12,
-            "title": "Matched By",
-            "type": "array"
-          }
-        },
-        "required": [
-          "document",
-          "bm25_score"
-        ],
-        "title": "PlanningScriptSearchHit",
-        "type": "object"
-      },
-      "PlanningScriptSearchRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "include_story_bible": {
-            "default": true,
-            "title": "Include Story Bible",
-            "type": "boolean"
-          },
-          "limit": {
-            "default": 8,
-            "maximum": 24.0,
-            "minimum": 1.0,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "query": {
-            "maxLength": 8000,
-            "minLength": 1,
-            "title": "Query",
-            "type": "string"
-          }
-        },
-        "required": [
-          "query"
-        ],
-        "title": "PlanningScriptSearchRequest",
-        "type": "object"
-      },
-      "PlanningScriptSearchResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "hits": {
-            "items": {
-              "$ref": "#/components/schemas/PlanningScriptSearchHit"
-            },
-            "maxItems": 24,
-            "title": "Hits",
-            "type": "array"
-          },
-          "query": {
-            "title": "Query",
-            "type": "string"
-          },
-          "revision_round": {
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Revision Round",
-            "type": "integer"
-          },
-          "run_id": {
-            "title": "Run Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "run_id",
-          "revision_round",
-          "query"
-        ],
-        "title": "PlanningScriptSearchResponse",
-        "type": "object"
       },
       "PreprocessingStep": {
         "properties": {
@@ -11108,13 +11264,67 @@
         "title": "PreprocessingStep",
         "type": "object"
       },
+      "ProductionExecutionTarget": {
+        "enum": [
+          "MOCK",
+          "REAL_H3"
+        ],
+        "title": "ProductionExecutionTarget",
+        "type": "string"
+      },
       "ProductionProfile": {
         "enum": [
           "GENERAL_VIDEO",
-          "DOUYIN_SHORT_DRAMA"
+          "AI_SHORT_DRAMA",
+          "DIGITAL_HUMAN",
+          "ANIME"
         ],
         "title": "ProductionProfile",
         "type": "string"
+      },
+      "ProductionSkillDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "medium": {
+            "title": "Medium",
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ProductionProfile"
+          },
+          "recommended_playbook": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Playbook",
+            "type": "array"
+          },
+          "role_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Role Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "profile",
+          "label",
+          "medium",
+          "recommended_playbook",
+          "role_names"
+        ],
+        "title": "ProductionSkillDescriptor",
+        "type": "object"
       },
       "ProgressSummary": {
         "additionalProperties": false,
@@ -11337,13 +11547,6 @@
             "title": "Assets",
             "type": "array"
           },
-          "autonomous_runs": {
-            "items": {
-              "$ref": "#/components/schemas/AutonomousRunRecord"
-            },
-            "title": "Autonomous Runs",
-            "type": "array"
-          },
           "bible_versions": {
             "items": {
               "$ref": "#/components/schemas/ProjectBibleVersion"
@@ -11364,6 +11567,16 @@
             },
             "title": "Manifests",
             "type": "array"
+          },
+          "planning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectPlanningMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "project": {
             "$ref": "#/components/schemas/ProjectRecord"
@@ -11441,6 +11654,60 @@
         "title": "ProjectListResponse",
         "type": "object"
       },
+      "ProjectPlanningMetadata": {
+        "additionalProperties": false,
+        "description": "Persisted planning provenance and resumable planning ownership.",
+        "properties": {
+          "owner_agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Agent Run Id"
+          },
+          "planner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planner"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlanningRunStatus"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ProjectPlanningMetadata",
+        "type": "object"
+      },
       "ProjectRecord": {
         "additionalProperties": false,
         "properties": {
@@ -11507,7 +11774,7 @@
           },
           "production_profile": {
             "$ref": "#/components/schemas/ProductionProfile",
-            "default": "DOUYIN_SHORT_DRAMA"
+            "default": "AI_SHORT_DRAMA"
           },
           "run_mode": {
             "$ref": "#/components/schemas/RunMode"
@@ -12302,6 +12569,7 @@
       },
       "ReferenceRole": {
         "enum": [
+          "CANONICAL_MASTER",
           "CHARACTER_FACE",
           "CHARACTER_BODY",
           "CHARACTER_PROFILE",
@@ -13246,70 +13514,6 @@
         "title": "ReviseScriptLinesRequest",
         "type": "object"
       },
-      "RevisionJudgeConfidence": {
-        "enum": [
-          "LOW",
-          "MEDIUM",
-          "HIGH"
-        ],
-        "title": "RevisionJudgeConfidence",
-        "type": "string"
-      },
-      "RevisionJudgeRecommendation": {
-        "additionalProperties": false,
-        "properties": {
-          "advisory_only": {
-            "default": true,
-            "title": "Advisory Only",
-            "type": "boolean"
-          },
-          "alternative_revision_round": {
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Alternative Revision Round",
-            "type": "integer"
-          },
-          "confidence": {
-            "$ref": "#/components/schemas/RevisionJudgeConfidence"
-          },
-          "evidence": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 8,
-            "title": "Evidence",
-            "type": "array"
-          },
-          "recommended_revision_round": {
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Recommended Revision Round",
-            "type": "integer"
-          },
-          "summary": {
-            "maxLength": 1200,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          },
-          "tradeoffs": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 8,
-            "title": "Tradeoffs",
-            "type": "array"
-          }
-        },
-        "required": [
-          "recommended_revision_round",
-          "alternative_revision_round",
-          "confidence",
-          "summary"
-        ],
-        "title": "RevisionJudgeRecommendation",
-        "type": "object"
-      },
       "RouteEvidence": {
         "additionalProperties": false,
         "properties": {
@@ -13437,6 +13641,67 @@
           "created_at"
         ],
         "title": "RouteEvidence",
+        "type": "object"
+      },
+      "RunMemory": {
+        "additionalProperties": false,
+        "description": "Mutable working checkpoint used to resume an agent run.",
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Artifact Refs",
+            "type": "array"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "completed_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Completed Action Ids",
+            "type": "array"
+          },
+          "current_focus": {
+            "default": "",
+            "title": "Current Focus",
+            "type": "string"
+          },
+          "next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Actions",
+            "type": "array"
+          },
+          "open_questions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "RunMemory",
         "type": "object"
       },
       "RunMode": {
@@ -13632,268 +13897,6 @@
         ],
         "title": "ScriptLineRevision",
         "type": "object"
-      },
-      "ScriptQualityCatalogResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "evaluations": {
-            "items": {
-              "$ref": "#/components/schemas/ScriptQualityComparison"
-            },
-            "title": "Evaluations",
-            "type": "array"
-          }
-        },
-        "required": [
-          "evaluations"
-        ],
-        "title": "ScriptQualityCatalogResponse",
-        "type": "object"
-      },
-      "ScriptQualityComparison": {
-        "additionalProperties": false,
-        "properties": {
-          "advisory_summary": {
-            "maxLength": 1200,
-            "minLength": 1,
-            "title": "Advisory Summary",
-            "type": "string"
-          },
-          "category_labels_no_longer_reported": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 30,
-            "title": "Category Labels No Longer Reported",
-            "type": "array"
-          },
-          "high_issue_delta": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "High Issue Delta"
-          },
-          "latest_high_issue_delta": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest High Issue Delta"
-          },
-          "latest_report_regression_risk": {
-            "default": false,
-            "title": "Latest Report Regression Risk",
-            "type": "boolean"
-          },
-          "latest_total_issue_delta": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Total Issue Delta"
-          },
-          "newly_reported_category_labels": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 30,
-            "title": "Newly Reported Category Labels",
-            "type": "array"
-          },
-          "persistent_category_labels": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 30,
-            "title": "Persistent Category Labels",
-            "type": "array"
-          },
-          "production_profile": {
-            "$ref": "#/components/schemas/ProductionProfile"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "project_name": {
-            "title": "Project Name",
-            "type": "string"
-          },
-          "rounds": {
-            "items": {
-              "$ref": "#/components/schemas/ScriptQualityRoundSummary"
-            },
-            "maxItems": 21,
-            "title": "Rounds",
-            "type": "array"
-          },
-          "run_id": {
-            "title": "Run Id",
-            "type": "string"
-          },
-          "source_mode": {
-            "$ref": "#/components/schemas/SourceMode"
-          },
-          "target_duration_seconds": {
-            "title": "Target Duration Seconds",
-            "type": "number"
-          },
-          "total_issue_delta": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Total Issue Delta"
-          },
-          "trend": {
-            "$ref": "#/components/schemas/ScriptQualityTrend"
-          }
-        },
-        "required": [
-          "run_id",
-          "project_name",
-          "production_profile",
-          "source_mode",
-          "target_duration_seconds",
-          "trend",
-          "advisory_summary"
-        ],
-        "title": "ScriptQualityComparison",
-        "type": "object"
-      },
-      "ScriptQualityHistoryResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "comparison": {
-            "$ref": "#/components/schemas/ScriptQualityComparison"
-          },
-          "outline_snapshots": {
-            "items": {
-              "$ref": "#/components/schemas/PlanningOutlineSnapshot"
-            },
-            "maxItems": 21,
-            "title": "Outline Snapshots",
-            "type": "array"
-          },
-          "review_snapshots": {
-            "items": {
-              "$ref": "#/components/schemas/PlanningReviewSnapshot"
-            },
-            "maxItems": 21,
-            "title": "Review Snapshots",
-            "type": "array"
-          },
-          "revision_judge": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RevisionJudgeRecommendation"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "comparison"
-        ],
-        "title": "ScriptQualityHistoryResponse",
-        "type": "object"
-      },
-      "ScriptQualityRoundSummary": {
-        "additionalProperties": false,
-        "properties": {
-          "categories": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 30,
-            "title": "Categories",
-            "type": "array"
-          },
-          "high_issues": {
-            "minimum": 0.0,
-            "title": "High Issues",
-            "type": "integer"
-          },
-          "low_issues": {
-            "minimum": 0.0,
-            "title": "Low Issues",
-            "type": "integer"
-          },
-          "medium_issues": {
-            "minimum": 0.0,
-            "title": "Medium Issues",
-            "type": "integer"
-          },
-          "requires_revision": {
-            "title": "Requires Revision",
-            "type": "boolean"
-          },
-          "review_round": {
-            "maximum": 21.0,
-            "minimum": 1.0,
-            "title": "Review Round",
-            "type": "integer"
-          },
-          "revision_round": {
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Revision Round",
-            "type": "integer"
-          },
-          "total_issues": {
-            "minimum": 0.0,
-            "title": "Total Issues",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "review_round",
-          "revision_round",
-          "total_issues",
-          "high_issues",
-          "medium_issues",
-          "low_issues",
-          "requires_revision"
-        ],
-        "title": "ScriptQualityRoundSummary",
-        "type": "object"
-      },
-      "ScriptQualityTrend": {
-        "enum": [
-          "NOT_COMPARABLE",
-          "FEWER_REPORTED_ISSUES",
-          "MIXED_REPORTED_ISSUES",
-          "MORE_REPORTED_ISSUES",
-          "UNCHANGED_REPORTED_ISSUES"
-        ],
-        "title": "ScriptQualityTrend",
-        "type": "string"
       },
       "ScriptReviewDisposition": {
         "additionalProperties": false,
@@ -14178,7 +14181,162 @@
         "title": "ScriptVersion",
         "type": "object"
       },
-      "SemanticChangeIntent": {
+      "SemanticArtifactPatch": {
+        "additionalProperties": false,
+        "description": "A small typed field patch produced by an Agent or edited by the user.",
+        "properties": {
+          "operation": {
+            "$ref": "#/components/schemas/SemanticPatchOperation",
+            "default": "SET_FIELDS"
+          },
+          "target_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_kind": {
+            "$ref": "#/components/schemas/ChangeTargetKind"
+          },
+          "updates": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 16,
+            "minProperties": 1,
+            "title": "Updates",
+            "type": "object"
+          }
+        },
+        "required": [
+          "target_kind",
+          "target_id",
+          "updates"
+        ],
+        "title": "SemanticArtifactPatch",
+        "type": "object"
+      },
+      "SemanticChangeApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change_reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Change Reason",
+            "type": "string"
+          },
+          "patches": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticArtifactPatch"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Patches",
+            "type": "array"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/SemanticChangePlan-Input"
+          }
+        },
+        "required": [
+          "plan",
+          "patches",
+          "change_reason"
+        ],
+        "title": "SemanticChangeApplyRequest",
+        "type": "object"
+      },
+      "SemanticChangeApplyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          },
+          "result": {
+            "$ref": "#/components/schemas/SemanticChangeApplyResult"
+          }
+        },
+        "required": [
+          "result",
+          "project"
+        ],
+        "title": "SemanticChangeApplyResponse",
+        "type": "object"
+      },
+      "SemanticChangeApplyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_patch_count": {
+            "title": "Applied Patch Count",
+            "type": "integer"
+          },
+          "asset_version_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Asset Version Ids",
+            "type": "array"
+          },
+          "bible_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bible Version Id"
+          },
+          "invalidated_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Invalidated Shot Ids",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "script_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Script Version Id"
+          },
+          "stale_manifest_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Manifest Ids",
+            "type": "array"
+          },
+          "stale_take_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Take Ids",
+            "type": "array"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/SemanticChangeVerification"
+          }
+        },
+        "required": [
+          "project_id",
+          "applied_patch_count",
+          "verification"
+        ],
+        "title": "SemanticChangeApplyResult",
+        "type": "object"
+      },
+      "SemanticChangeIntent-Input": {
         "additionalProperties": false,
         "properties": {
           "needs_user_clarification": {
@@ -14222,7 +14380,51 @@
         "title": "SemanticChangeIntent",
         "type": "object"
       },
-      "SemanticChangePlan": {
+      "SemanticChangeIntent-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "needs_user_clarification": {
+            "default": false,
+            "title": "Needs User Clarification",
+            "type": "boolean"
+          },
+          "preserve": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Preserve",
+            "type": "array"
+          },
+          "requested_change": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Requested Change",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticChangeTarget"
+            },
+            "maxItems": 64,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "summary",
+          "requested_change"
+        ],
+        "title": "SemanticChangeIntent",
+        "type": "object"
+      },
+      "SemanticChangePlan-Input": {
         "additionalProperties": false,
         "properties": {
           "affected_asset_ids": {
@@ -14267,7 +14469,96 @@
             "type": "string"
           },
           "intent": {
-            "$ref": "#/components/schemas/SemanticChangeIntent"
+            "$ref": "#/components/schemas/SemanticChangeIntent-Input"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "stale_take_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Stale Take Ids",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeImpactStep"
+            },
+            "maxItems": 12,
+            "title": "Steps",
+            "type": "array"
+          },
+          "user_editable": {
+            "default": true,
+            "title": "User Editable",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "instruction",
+          "intent"
+        ],
+        "title": "SemanticChangePlan",
+        "type": "object"
+      },
+      "SemanticChangePlan-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Affected Asset Ids",
+            "type": "array"
+          },
+          "affected_scene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Affected Scene Ids",
+            "type": "array"
+          },
+          "affected_script_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Affected Script Line Ids",
+            "type": "array"
+          },
+          "affected_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Affected Shot Ids",
+            "type": "array"
+          },
+          "applies_changes": {
+            "default": false,
+            "title": "Applies Changes",
+            "type": "boolean"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/SemanticChangeIntent-Output"
           },
           "project_id": {
             "title": "Project Id",
@@ -14361,6 +14652,54 @@
         ],
         "title": "SemanticChangeTarget",
         "type": "object"
+      },
+      "SemanticChangeVerification": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applied Target Ids",
+            "type": "array"
+          },
+          "invalidated_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Invalidated Shot Ids",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "unchanged_requested_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unchanged Requested Target Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied_target_ids",
+          "unchanged_requested_target_ids",
+          "invalidated_shot_ids",
+          "messages"
+        ],
+        "title": "SemanticChangeVerification",
+        "type": "object"
+      },
+      "SemanticPatchOperation": {
+        "enum": [
+          "SET_FIELDS"
+        ],
+        "title": "SemanticPatchOperation",
+        "type": "string"
       },
       "SemanticReviewStatus": {
         "enum": [
@@ -15458,262 +15797,6 @@
         "title": "StockProviderConfigUpdate",
         "type": "object"
       },
-      "StoryRepairAction": {
-        "additionalProperties": false,
-        "description": "One evidence-backed recommendation; it is not an execution gate.",
-        "properties": {
-          "affected_scene_sequences": {
-            "items": {
-              "type": "integer"
-            },
-            "maxItems": 12,
-            "title": "Affected Scene Sequences",
-            "type": "array"
-          },
-          "diagnosis": {
-            "$ref": "#/components/schemas/StoryRepairDiagnosis"
-          },
-          "issue_index": {
-            "minimum": 1.0,
-            "title": "Issue Index",
-            "type": "integer"
-          },
-          "preserve": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 12,
-            "title": "Preserve",
-            "type": "array"
-          },
-          "rationale": {
-            "maxLength": 1200,
-            "minLength": 1,
-            "title": "Rationale",
-            "type": "string"
-          },
-          "recommended_change": {
-            "maxLength": 1600,
-            "minLength": 1,
-            "title": "Recommended Change",
-            "type": "string"
-          },
-          "remove_or_simplify": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 12,
-            "title": "Remove Or Simplify",
-            "type": "array"
-          },
-          "should_revise": {
-            "title": "Should Revise",
-            "type": "boolean"
-          },
-          "validation_questions": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 12,
-            "title": "Validation Questions",
-            "type": "array"
-          }
-        },
-        "required": [
-          "issue_index",
-          "diagnosis",
-          "should_revise",
-          "rationale",
-          "recommended_change"
-        ],
-        "title": "StoryRepairAction",
-        "type": "object"
-      },
-      "StoryRepairDiagnosis": {
-        "description": "Where a routed story issue actually originates after a second look.",
-        "enum": [
-          "SOURCE_CONCEPT_GAP",
-          "OUTLINE_DEFECT",
-          "CRITIC_OVERREACH"
-        ],
-        "title": "StoryRepairDiagnosis",
-        "type": "string"
-      },
-      "StoryRepairPlan": {
-        "additionalProperties": false,
-        "description": "Cross-round diagnosis and minimal repair plan prepared before rewriting.",
-        "properties": {
-          "actions": {
-            "items": {
-              "$ref": "#/components/schemas/StoryRepairAction"
-            },
-            "maxItems": 30,
-            "title": "Actions",
-            "type": "array"
-          },
-          "invariants": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 20,
-            "title": "Invariants",
-            "type": "array"
-          },
-          "source_promise": {
-            "maxLength": 1200,
-            "minLength": 1,
-            "title": "Source Promise",
-            "type": "string"
-          },
-          "summary": {
-            "maxLength": 1600,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          },
-          "user_overridable": {
-            "default": true,
-            "title": "User Overridable",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "summary",
-          "source_promise"
-        ],
-        "title": "StoryRepairPlan",
-        "type": "object"
-      },
-      "StoryRevisionVerification": {
-        "additionalProperties": false,
-        "description": "Narrow check that a Writer followed its repair brief without regressions.",
-        "properties": {
-          "accepted": {
-            "title": "Accepted",
-            "type": "boolean"
-          },
-          "satisfied_issue_indices": {
-            "items": {
-              "type": "integer"
-            },
-            "maxItems": 30,
-            "title": "Satisfied Issue Indices",
-            "type": "array"
-          },
-          "summary": {
-            "maxLength": 1600,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          },
-          "user_overridable": {
-            "default": true,
-            "title": "User Overridable",
-            "type": "boolean"
-          },
-          "violations": {
-            "items": {
-              "$ref": "#/components/schemas/StoryRevisionViolation"
-            },
-            "maxItems": 20,
-            "title": "Violations",
-            "type": "array"
-          }
-        },
-        "required": [
-          "accepted",
-          "summary"
-        ],
-        "title": "StoryRevisionVerification",
-        "type": "object"
-      },
-      "StoryRevisionViolation": {
-        "additionalProperties": false,
-        "properties": {
-          "category": {
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Category",
-            "type": "string"
-          },
-          "observation": {
-            "maxLength": 1200,
-            "minLength": 1,
-            "title": "Observation",
-            "type": "string"
-          },
-          "repair_instruction": {
-            "maxLength": 1200,
-            "minLength": 1,
-            "title": "Repair Instruction",
-            "type": "string"
-          },
-          "scene_sequences": {
-            "items": {
-              "type": "integer"
-            },
-            "maxItems": 12,
-            "title": "Scene Sequences",
-            "type": "array"
-          }
-        },
-        "required": [
-          "category",
-          "observation",
-          "repair_instruction"
-        ],
-        "title": "StoryRevisionViolation",
-        "type": "object"
-      },
-      "StorySourceContract": {
-        "additionalProperties": false,
-        "description": "Explicit user promises separated from creative choices left to the Agents.",
-        "properties": {
-          "authoritative_user_overrides": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 20,
-            "title": "Authoritative User Overrides",
-            "type": "array"
-          },
-          "explicit_commitments": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 30,
-            "minItems": 1,
-            "title": "Explicit Commitments",
-            "type": "array"
-          },
-          "explicit_prohibitions": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 20,
-            "title": "Explicit Prohibitions",
-            "type": "array"
-          },
-          "open_creative_choices": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 20,
-            "title": "Open Creative Choices",
-            "type": "array"
-          },
-          "user_overridable": {
-            "default": true,
-            "title": "User Overridable",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "explicit_commitments"
-        ],
-        "title": "StorySourceContract",
-        "type": "object"
-      },
       "StructuredScene": {
         "additionalProperties": false,
         "properties": {
@@ -16609,6 +16692,94 @@
         "title": "TimelineVideoClip",
         "type": "object"
       },
+      "ToolCategory": {
+        "enum": [
+          "project",
+          "planning",
+          "artifact",
+          "script",
+          "shot",
+          "image",
+          "video",
+          "audio",
+          "timeline",
+          "qa",
+          "task",
+          "route",
+          "agent",
+          "change"
+        ],
+        "title": "ToolCategory",
+        "type": "string"
+      },
+      "ToolDescriptor": {
+        "additionalProperties": false,
+        "description": "Serializable discovery view of a registered ToolSpec.",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ToolCategory"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/ToolEffect"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "idempotent": {
+            "title": "Idempotent",
+            "type": "boolean"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "output_schema": {
+            "additionalProperties": true,
+            "title": "Output Schema",
+            "type": "object"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "category",
+          "description",
+          "effect",
+          "idempotent",
+          "tags",
+          "input_schema",
+          "output_schema"
+        ],
+        "title": "ToolDescriptor",
+        "type": "object"
+      },
+      "ToolEffect": {
+        "description": "The broadest side effect an invocation may perform.",
+        "enum": [
+          "READ",
+          "WRITE",
+          "EXTERNAL"
+        ],
+        "title": "ToolEffect",
+        "type": "string"
+      },
       "VideoFrameSample": {
         "additionalProperties": false,
         "properties": {
@@ -17125,6 +17296,108 @@
           }
         },
         "title": "VoiceReferenceUpdateRequest",
+        "type": "object"
+      },
+      "WorkOrder": {
+        "additionalProperties": false,
+        "description": "Concise, self-contained contract for delegating work to another agent.",
+        "properties": {
+          "acceptance_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acceptance Criteria",
+            "type": "array"
+          },
+          "confirmed_decisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Confirmed Decisions",
+            "type": "array"
+          },
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expected_output_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Expected Output Schema",
+            "type": "object"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "objective": {
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "open_questions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
+          "parent_run_id": {
+            "minLength": 1,
+            "title": "Parent Run Id",
+            "type": "string"
+          },
+          "recipient_role": {
+            "minLength": 1,
+            "title": "Recipient Role",
+            "type": "string"
+          },
+          "scope": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Scope",
+            "type": "array"
+          },
+          "sender": {
+            "minLength": 1,
+            "title": "Sender",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DelegationStatus",
+            "default": "PENDING"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "why_now": {
+            "minLength": 1,
+            "title": "Why Now",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parent_run_id",
+          "sender",
+          "recipient_role",
+          "objective",
+          "why_now"
+        ],
+        "title": "WorkOrder",
         "type": "object"
       },
       "WorkerDrainRequest": {
@@ -19061,6 +19334,502 @@
         ]
       }
     },
+    "/api/short-drama/agent-projects": {
+      "post": {
+        "operationId": "create_agent_project_api_short_drama_agent_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentProjectCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProjectCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Agent Project",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-runs/{run_id}": {
+      "get": {
+        "operationId": "get_agent_run_api_short_drama_agent_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Agent Run",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-runs/{run_id}/advance": {
+      "post": {
+        "operationId": "advance_agent_run_api_short_drama_agent_runs__run_id__advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunAdvanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAdvanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Advance Agent Run",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-runs/{run_id}/replan": {
+      "post": {
+        "operationId": "replan_agent_run_api_short_drama_agent_runs__run_id__replan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunReplanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Replan Agent Run",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-runs/{run_id}/user-input": {
+      "post": {
+        "operationId": "submit_agent_user_input_api_short_drama_agent_runs__run_id__user_input_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentUserInputRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Submit Agent User Input",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-runtime/capabilities": {
+      "get": {
+        "operationId": "get_agent_capabilities_api_short_drama_agent_runtime_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentCapabilityCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Agent Capabilities",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-work-orders/{work_order_id}": {
+      "get": {
+        "operationId": "get_agent_work_order_api_short_drama_agent_work_orders__work_order_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work_order_id",
+            "required": true,
+            "schema": {
+              "title": "Work Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkOrderView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Get Agent Work Order",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-work-orders/{work_order_id}/execute": {
+      "post": {
+        "operationId": "execute_agent_work_order_api_short_drama_agent_work_orders__work_order_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work_order_id",
+            "required": true,
+            "schema": {
+              "title": "Work Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkOrderResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Execute Agent Work Order",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/agent-work-orders/{work_order_id}/result": {
+      "post": {
+        "operationId": "submit_agent_work_order_result_api_short_drama_agent_work_orders__work_order_id__result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "work_order_id",
+            "required": true,
+            "schema": {
+              "title": "Work Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentWorkOrderResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkOrderResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Submit Agent Work Order Result",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/asset-agent/tools/search-assets": {
       "post": {
         "operationId": "search_asset_catalog_api_short_drama_asset_agent_tools_search_assets_post",
@@ -19430,552 +20199,6 @@
         ]
       }
     },
-    "/api/short-drama/planning-runs": {
-      "get": {
-        "operationId": "list_planning_runs_api_short_drama_planning_runs_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "List Planning Runs",
-        "tags": [
-          "short-drama"
-        ]
-      },
-      "post": {
-        "operationId": "create_planning_run_api_short_drama_planning_runs_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanningRunCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Create Planning Run",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}": {
-      "get": {
-        "operationId": "get_planning_run_api_short_drama_planning_runs__run_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Get Planning Run",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}/advance": {
-      "post": {
-        "operationId": "advance_planning_run_api_short_drama_planning_runs__run_id__advance_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Advance Planning Run",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}/agent-tools/revise-scenes": {
-      "post": {
-        "operationId": "revise_planning_scenes_with_agent_api_short_drama_planning_runs__run_id__agent_tools_revise_scenes_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanningSceneRevisionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Revise Planning Scenes With Agent",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}/agent-tools/search-script": {
-      "post": {
-        "operationId": "search_planning_script_documents_api_short_drama_planning_runs__run_id__agent_tools_search_script_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanningScriptSearchRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningScriptSearchResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Search Planning Script Documents",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}/outline": {
-      "put": {
-        "operationId": "replace_planning_outline_api_short_drama_planning_runs__run_id__outline_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanningOutlineDirectEditRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Replace Planning Outline",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}/outline/agent-revise": {
-      "post": {
-        "operationId": "revise_planning_outline_with_agent_api_short_drama_planning_runs__run_id__outline_agent_revise_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlanningOutlineAgentRevisionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Revise Planning Outline With Agent",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}/outline/revise-from-review": {
-      "post": {
-        "operationId": "revise_planning_outline_from_review_api_short_drama_planning_runs__run_id__outline_revise_from_review_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanningRunResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Revise Planning Outline From Review",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/planning-runs/{run_id}/script-quality": {
-      "get": {
-        "operationId": "get_planning_run_script_quality_api_short_drama_planning_runs__run_id__script_quality_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScriptQualityHistoryResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Get Planning Run Script Quality",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
     "/api/short-drama/projects": {
       "get": {
         "operationId": "list_projects_api_short_drama_projects_get",
@@ -20012,106 +20235,6 @@
           }
         },
         "summary": "List Projects",
-        "tags": [
-          "short-drama"
-        ]
-      },
-      "post": {
-        "operationId": "create_project_api_short_drama_projects_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProjectRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectAggregate"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Create Project",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/projects/autonomous-draft": {
-      "post": {
-        "operationId": "create_autonomous_draft_api_short_drama_projects_autonomous_draft_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutonomousDraftCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutonomousDraftResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Create Autonomous Draft",
         "tags": [
           "short-drama"
         ]
@@ -20219,6 +20342,180 @@
         ]
       }
     },
+    "/api/short-drama/projects/{project_id}/agent-runs": {
+      "get": {
+        "operationId": "list_agent_runs_api_short_drama_projects__project_id__agent_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Agent Runs",
+        "tags": [
+          "short-drama"
+        ]
+      },
+      "post": {
+        "operationId": "create_agent_run_api_short_drama_projects__project_id__agent_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Agent Run",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/agent-tools/apply-change": {
+      "post": {
+        "operationId": "apply_semantic_change_api_short_drama_projects__project_id__agent_tools_apply_change_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticChangeApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticChangeApplyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Apply Semantic Change",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
     "/api/short-drama/projects/{project_id}/agent-tools/compare-takes": {
       "post": {
         "operationId": "compare_takes_api_short_drama_projects__project_id__agent_tools_compare_takes_post",
@@ -20310,7 +20607,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SemanticChangePlan"
+                  "$ref": "#/components/schemas/SemanticChangePlan-Output"
                 }
               }
             },
@@ -20921,139 +21218,6 @@
           }
         },
         "summary": "Review Asset Version",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/projects/{project_id}/auto-draft": {
-      "post": {
-        "operationId": "auto_draft_api_short_drama_projects__project_id__auto_draft_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "title": "Project Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutoDraftRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoDraftResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Auto Draft",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/projects/{project_id}/autonomous-runs/{run_id}/advance": {
-      "post": {
-        "operationId": "advance_autonomous_run_api_short_drama_projects__project_id__autonomous_runs__run_id__advance_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutonomousRunAdvanceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutonomousDraftResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Advance Autonomous Run",
         "tags": [
           "short-drama"
         ]
@@ -23080,68 +23244,6 @@
         ]
       }
     },
-    "/api/short-drama/projects/{source_project_id}/autonomous-repeats": {
-      "post": {
-        "operationId": "create_autonomous_repeat_api_short_drama_projects__source_project_id__autonomous_repeats_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "source_project_id",
-            "required": true,
-            "schema": {
-              "title": "Source Project Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutonomousRepeatCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutonomousDraftResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "Create Autonomous Repeat",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
     "/api/short-drama/providers/gpt-image": {
       "get": {
         "operationId": "get_image_provider_config_api_short_drama_providers_gpt_image_get",
@@ -23673,47 +23775,6 @@
           }
         },
         "summary": "Update Stock Provider Config",
-        "tags": [
-          "short-drama"
-        ]
-      }
-    },
-    "/api/short-drama/script-quality": {
-      "get": {
-        "operationId": "list_script_quality_evaluations_api_short_drama_script_quality_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ScriptQualityCatalogResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Client Error"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPErrorResponse"
-                }
-              }
-            },
-            "description": "Server Error"
-          }
-        },
-        "summary": "List Script Quality Evaluations",
         "tags": [
           "short-drama"
         ]

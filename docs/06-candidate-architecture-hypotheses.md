@@ -1,5 +1,7 @@
 # 当前架构与技术设计
 
+> 后续状态：Phase 29 已将创作控制面迁移为 Production Manager、Markdown Skills、统一 Tool Registry 与动态 AgentRuntime。本文保留领域模型、Provider 和媒体闭环设计；最新 Agent/Skill/Tool 分层以 [Phase 29 最终架构](40-agent-skill-tool-runtime-migration.md) 为准。
+
 这是当前已确认的产品架构与技术设计。核心结构按真实闭环需要正常实现和迁移；H3 内部路线、GPT Image 覆盖范围、声音路线、镜头分组及后处理根据实际制片证据持续调整，只有结论不清或需要形成跨项目默认时才做受控比较。即梦、可灵、LTX Studio 和纳逗 Pro 只贡献产品机制，不进入运行时。
 
 ## 1. 产品原则
@@ -13,7 +15,7 @@
 7. 模型能力由 Capability 明确表达，项目状态、任务状态、计费状态和 QA 状态彼此分开；
 8. 开源项目或 ComfyUI 若被采用，只承担清楚边界，不形成第二套项目真相源。
 9. 首版是单用户、受信环境；内容确认与访问权限是两件事，不为生产状态机引入账号、角色或租户模型。
-10. 首版只交付真人都市短剧；真人与漫剧共用项目、剧本、资产、分镜、任务、候选和时间线主线，差异由 `StyleProfile`、Prompt Compiler、ExecutionPlan、Provider Capability 与 QA Profile 表达，不复制第二套工作流。
+10. 首个固定质量标杆曾选择真人都市短剧，这只限定历史验收样片，不是当前产品的 Style 默认。不同视觉形态共用项目、剧本、资产、分镜、任务、候选和时间线主线，具体选择由项目 Bible Style、Prompt Compiler、ExecutionPlan 与 Provider Capability 表达，不复制第二套工作流。
 11. 首版验收单集完整闭环；ProjectBible 中的角色、场景、服装、道具和可选声线继续版本化、可跨项目或剧集复用，但暂不把多集连续性纳入首版验收矩阵。
 12. 首版内容语言锁定普通话中文；通用 schema 保留 `language`、`locale` 与原始文本，但方言和多语言必须在各自声音、口型、STT、字幕和质量基准建立后才对外支持。
 13. 默认 `AUTO_DRAFT` 从无输入、若干图片、一句话或已有剧本运行到完整可观看草稿，自动完成创作补全、选择 Take、QA、导演修复、定向重试和时间线组装；默认只向用户展示一个或少量完整最终版。`GUIDED` 才在剧本、定妆、分镜和候选处暂停并显示可忽略建议。只有从草稿标记为正式通过需要人工动作，草稿生成与导出不受阻。
@@ -375,13 +377,13 @@ P008 已确认短剧生产时间线，A004 已确认本地桌面优先，因此�
 
 ### Phase 13：制作类型 Prompt Policy
 
-新建项目选择 `GENERAL_VIDEO` 或 `DOUYIN_SHORT_DRAMA`，同一 Agent Runtime 根据项目 Profile 为 Concept、Writer、Planner、Critic、Review Router、Director、Asset Reviewer、H3 Route/Prompt Compiler 和 Episode Reviewer 编译各自策略。通用视频允许氛围、留白和有意义的长镜头；抖音短剧强调好奇缺口、因果推进、可见状态变化和回收。项目、资产、H3、QA 与时间线实现仍然共用；抽帧观察、Take 比较、Schema 和 Provider 技术合同不注入品类偏好。
+新建项目选择 `GENERAL_VIDEO` 或 `AI_SHORT_DRAMA`，同一 Agent Runtime 根据项目 Profile 为 Concept、Writer、Planner、Critic、Review Router、Director、Asset Reviewer、H3 Route/Prompt Compiler 和 Episode Reviewer 编译各自策略。通用视频允许氛围、留白和有意义的长镜头；抖音短剧强调好奇缺口、因果推进、可见状态变化和回收。项目、资产、H3、QA 与时间线实现仍然共用；抽帧观察、Take 比较、Schema 和 Provider 技术合同不注入品类偏好。
 
 Planner 不再硬限定 6–10 镜，Director 也不使用固定动作数、固定信息间隔或长镜头拒绝规则。系统只保留 45–60 秒交付目标和 H3 单段 4–15 秒的当前技术边界；“镜头是否赚到时长”由 Agent 结合意图与观察证据判断，建议始终可覆盖。
 
 ### Phase 14：自定义时长与分层 Multi-Agent 长篇规划
 
-45–60 秒只保留为首个验收样片的历史范围，不再是新项目限制。桌面端允许用户填写不少于 4 秒的任意目标时长；3/5/10/15 分钟只是抖音短剧快捷值，默认 5 分钟，通用视频默认 60 秒。快捷值不改变底层 Tools 或 PlanningRun。
+45–60 秒只保留为首个验收样片的历史范围，不再是新项目限制。桌面端允许用户填写不少于 4 秒的任意目标时长；3/5/10/15 分钟只是抖音短剧快捷值，默认 5 分钟，通用视频默认 60 秒。快捷值不改变底层 Tools 或 AgentRun 的动态编排语义。
 
 超过 90 秒时，Planner 分为 Story Architect、Script Critic、Review Router 与逐场 Scene Director。Story Architect 维护整集因果、全局资产、对白和场次契约；Script Critic 只报告有证据的因果、动机、伏笔回收和节奏观察；当前 Production Skill 的 Review Router 决定哪些问题确实需要整集修订，哪些下放导演、资产、视频、时间线或保留为可选建议。只有 Story Architect 归属的问题进入最多三轮整集修订与逐轮复审，其他问题随相关场次 handoff，不用增加解释来修复执行层问题。Scene Director 只展开当前场，并通过人物、道具、事实和待回应问题组成的 compact handoff 顺序传递连续性。所有路由可由用户覆盖，场次失败只局部修复或回退，不把整集重新丢给一个超长 Prompt。本阶段主要检查剧本和结构，不调用 GPT Image 或 H3。
 

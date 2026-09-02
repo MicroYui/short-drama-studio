@@ -150,13 +150,6 @@ def _scene_writer_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.WRITER,),
-        context="\n".join(
-            (
-                request.input_text,
-                scene.model_dump_json(),
-                *(patch.model_dump_json() for patch in previous_patches[-2:]),
-            )
-        ),
     )
     previous_full = previous_patches[-2:]
     older_summaries = [
@@ -172,7 +165,7 @@ def _scene_writer_prompt(
         for item in blueprint.scenes[scene.sequence : scene.sequence + 2]
     ]
     instructions = (
-        "You are the Scene Writer Agent for a Mandarin live-action vertical production. Return "
+        "You are the Scene Writer Agent for the active video-production medium. Return "
         "JSON only and match EpisodeScenePatch exactly. Expand only the supplied scene node into "
         "finished dialogue while preserving its sequence, heading, summary, narrative_purpose, "
         "playable_actions, duration, locations, and continuity contract verbatim. Do not rewrite "
@@ -458,14 +451,6 @@ def revise_story_scene(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.WRITER,),
-        context="\n".join(
-            (
-                request.input_text,
-                instruction,
-                original.model_dump_json(),
-                *(hit.document.body for hit in related_hits[:8]),
-            )
-        ),
     )
     instructions = (
         "You are a scene-local screenplay revision Agent. Return JSON only and match "

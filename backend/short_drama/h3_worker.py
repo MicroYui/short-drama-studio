@@ -444,7 +444,7 @@ class PersistentH3Worker:
                 f"duration={media.duration_seconds:.3f}s",
                 f"fps={media.fps:.3f}",
                 f"audio={'present' if media.audio_present else 'missing'}",
-                "真人身份、表演、对白、声线、口型与连续性等待人工审片",
+                "视觉风格、主体表现、对白、声音与项目声明的连续性等待人工审片",
             ],
             created_at=now,
         )

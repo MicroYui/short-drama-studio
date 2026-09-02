@@ -27,35 +27,14 @@ class RunMode(StrEnum):
 
 class ProductionProfile(StrEnum):
     GENERAL_VIDEO = "GENERAL_VIDEO"
-    DOUYIN_SHORT_DRAMA = "DOUYIN_SHORT_DRAMA"
+    AI_SHORT_DRAMA = "AI_SHORT_DRAMA"
+    DIGITAL_HUMAN = "DIGITAL_HUMAN"
+    ANIME = "ANIME"
 
 
-class AutonomousExecutionTarget(StrEnum):
+class ProductionExecutionTarget(StrEnum):
     MOCK = "MOCK"
     REAL_H3 = "REAL_H3"
-
-
-class AutonomousRunStatus(StrEnum):
-    RUNNING = "RUNNING"
-    COMPLETE = "COMPLETE"
-    NEEDS_ATTENTION = "NEEDS_ATTENTION"
-    FAILED = "FAILED"
-
-
-class AutonomousRunStep(StrEnum):
-    NORMALIZE_INPUT = "NORMALIZE_INPUT"
-    PLAN = "PLAN"
-    IMPORT_INPUT_ASSETS = "IMPORT_INPUT_ASSETS"
-    PREPARE_ASSETS = "PREPARE_ASSETS"
-    PLAN_ROUTES = "PLAN_ROUTES"
-    PREPARE_SHOT_ASSETS = "PREPARE_SHOT_ASSETS"
-    GENERATE = "GENERATE"
-    QA_AND_REPAIR = "QA_AND_REPAIR"
-    TIMELINE = "TIMELINE"
-    EPISODE_REVIEW = "EPISODE_REVIEW"
-    AUDIO_QA = "AUDIO_QA"
-    EXPORT = "EXPORT"
-    COMPLETE = "COMPLETE"
 
 
 class PlanningRunStatus(StrEnum):
@@ -91,14 +70,6 @@ class EpisodeReviewDimension(StrEnum):
     SOUND_SOURCE_SEMANTICS = "SOUND_SOURCE_SEMANTICS"
     PACING = "PACING"
     OTHER = "OTHER"
-
-
-class ScriptQualityTrend(StrEnum):
-    NOT_COMPARABLE = "NOT_COMPARABLE"
-    FEWER_REPORTED_ISSUES = "FEWER_REPORTED_ISSUES"
-    MIXED_REPORTED_ISSUES = "MIXED_REPORTED_ISSUES"
-    MORE_REPORTED_ISSUES = "MORE_REPORTED_ISSUES"
-    UNCHANGED_REPORTED_ISSUES = "UNCHANGED_REPORTED_ISSUES"
 
 
 class RevisionJudgeConfidence(StrEnum):
@@ -262,6 +233,7 @@ class AssetMediaType(StrEnum):
 
 
 class ReferenceRole(StrEnum):
+    CANONICAL_MASTER = "CANONICAL_MASTER"
     CHARACTER_FACE = "CHARACTER_FACE"
     CHARACTER_BODY = "CHARACTER_BODY"
     CHARACTER_PROFILE = "CHARACTER_PROFILE"
@@ -372,7 +344,7 @@ class ProjectRecord(DomainModel):
     name: str
     source_mode: SourceMode
     run_mode: RunMode
-    production_profile: ProductionProfile = ProductionProfile.DOUYIN_SHORT_DRAMA
+    production_profile: ProductionProfile = ProductionProfile.AI_SHORT_DRAMA
     language: str = "zh-CN"
     aspect_ratio: str = "9:16"
     target_duration_seconds: float = 50.0
@@ -599,61 +571,6 @@ class RevisionJudgeRecommendation(DomainModel):
         if not self.advisory_only:
             raise ValueError("Revision Judge recommendations must remain advisory")
         return self
-
-
-class ScriptQualityRoundSummary(DomainModel):
-    review_round: int = Field(ge=1, le=21)
-    revision_round: int = Field(ge=0, le=20)
-    total_issues: int = Field(ge=0)
-    high_issues: int = Field(ge=0)
-    medium_issues: int = Field(ge=0)
-    low_issues: int = Field(ge=0)
-    requires_revision: bool
-    categories: list[str] = Field(default_factory=list[str], max_length=30)
-
-
-class ScriptQualityComparison(DomainModel):
-    run_id: str
-    project_id: str | None = None
-    project_name: str
-    production_profile: ProductionProfile
-    source_mode: SourceMode
-    target_duration_seconds: float
-    rounds: list[ScriptQualityRoundSummary] = Field(
-        default_factory=list[ScriptQualityRoundSummary],
-        max_length=21,
-    )
-    trend: ScriptQualityTrend
-    total_issue_delta: int | None = None
-    high_issue_delta: int | None = None
-    latest_total_issue_delta: int | None = None
-    latest_high_issue_delta: int | None = None
-    latest_report_regression_risk: bool = False
-    persistent_category_labels: list[str] = Field(default_factory=list[str], max_length=30)
-    category_labels_no_longer_reported: list[str] = Field(
-        default_factory=list[str], max_length=30
-    )
-    newly_reported_category_labels: list[str] = Field(
-        default_factory=list[str], max_length=30
-    )
-    advisory_summary: str = Field(min_length=1, max_length=1200)
-
-
-class ScriptQualityHistoryResponse(DomainModel):
-    comparison: ScriptQualityComparison
-    outline_snapshots: list[PlanningOutlineSnapshot] = Field(
-        default_factory=list[PlanningOutlineSnapshot],
-        max_length=21,
-    )
-    review_snapshots: list[PlanningReviewSnapshot] = Field(
-        default_factory=list[PlanningReviewSnapshot],
-        max_length=21,
-    )
-    revision_judge: RevisionJudgeRecommendation | None = None
-
-
-class ScriptQualityCatalogResponse(DomainModel):
-    evaluations: list[ScriptQualityComparison]
 
 
 class ScriptVersion(DomainModel):
@@ -1008,32 +925,19 @@ class DirectorRepairRecord(DomainModel):
     created_at: str
 
 
-class AutonomousRunRecord(DomainModel):
-    id: str
-    project_id: str
-    status: AutonomousRunStatus
-    current_step: AutonomousRunStep
-    completed_steps: list[AutonomousRunStep] = Field(
-        default_factory=list[AutonomousRunStep]
-    )
-    planner: str
-    execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
-    route_plan_id: str | None = None
-    episode_review_id: str | None = None
-    repair_round: int = Field(default=0, ge=0)
-    max_repair_rounds: int = Field(default=3, ge=0, le=5)
-    render_export: bool = True
-    waiting_reason: str | None = None
+class ProjectPlanningMetadata(DomainModel):
+    """Persisted planning provenance and resumable planning ownership."""
+
+    run_id: str | None = None
+    status: PlanningRunStatus
+    planner: str | None = None
     warnings: list[str] = Field(default_factory=list[str])
-    error_message: str | None = None
-    export_id: str | None = None
-    created_at: str
-    updated_at: str
-    completed_at: str | None = None
+    owner_agent_run_id: str | None = None
 
 
 class ProjectDocument(DomainModel):
     project: ProjectRecord
+    planning: ProjectPlanningMetadata | None = None
     script_versions: list[ScriptVersion]
     bible_versions: list[ProjectBibleVersion]
     assets: list[Asset]
@@ -1048,11 +952,6 @@ class ProjectDocument(DomainModel):
     repair_history: list[DirectorRepairRecord] = Field(
         default_factory=list[DirectorRepairRecord]
     )
-    autonomous_runs: list[AutonomousRunRecord] = Field(
-        default_factory=list[AutonomousRunRecord]
-    )
-
-
 class GenerationTask(DomainModel):
     id: str
     project_id: str
@@ -1473,7 +1372,7 @@ class ProjectListResponse(DomainModel):
 class CreateProjectRequest(DomainModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     source_mode: SourceMode
-    production_profile: ProductionProfile = ProductionProfile.DOUYIN_SHORT_DRAMA
+    production_profile: ProductionProfile = ProductionProfile.AI_SHORT_DRAMA
     target_duration_seconds: float | None = Field(default=None, ge=4.0)
     input_text: str = Field(default="", max_length=50000)
     input_images: list[CreativeInputImage] = Field(
@@ -1498,7 +1397,7 @@ class CreateProjectRequest(DomainModel):
     def resolved_target_duration_seconds(self) -> float:
         if self.target_duration_seconds is not None:
             return self.target_duration_seconds
-        if self.production_profile == ProductionProfile.DOUYIN_SHORT_DRAMA:
+        if self.production_profile == ProductionProfile.AI_SHORT_DRAMA:
             return 300.0
         return 60.0
 
@@ -1536,25 +1435,6 @@ class EpisodeReviewRequest(DomainModel):
     force_new: bool = False
 
 
-class AutonomousDraftCreateRequest(CreateProjectRequest):
-    run_mode: RunMode = RunMode.AUTO_DRAFT
-    render_export: bool = True
-    execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
-
-    @model_validator(mode="after")
-    def require_auto_mode(self) -> AutonomousDraftCreateRequest:
-        if self.run_mode != RunMode.AUTO_DRAFT:
-            raise ValueError("Autonomous draft creation requires AUTO_DRAFT")
-        return self
-
-
-class PlanningRunCreateRequest(CreateProjectRequest):
-    """Persisted duration-agnostic planning request before a project exists."""
-
-    render_export: bool = True
-    execution_target: AutonomousExecutionTarget = AutonomousExecutionTarget.MOCK
-
-
 class PlanningRunRecord(DomainModel):
     id: str
     status: PlanningRunStatus
@@ -1562,7 +1442,7 @@ class PlanningRunRecord(DomainModel):
     completed_steps: list[PlanningRunStep] = Field(
         default_factory=list[PlanningRunStep]
     )
-    request: PlanningRunCreateRequest
+    request: CreateProjectRequest
     outline_json: str | None = None
     review_report: ScriptReviewReport | None = None
     review_disposition: ScriptReviewDisposition | None = None
@@ -1584,33 +1464,15 @@ class PlanningRunRecord(DomainModel):
     warnings: list[str] = Field(default_factory=list[str])
     error_message: str | None = None
     project_id: str | None = None
-    autonomous_run_id: str | None = None
+    owner_agent_run_id: str | None = None
     created_at: str
     updated_at: str
     completed_at: str | None = None
 
 
-class PlanningRunListResponse(DomainModel):
-    runs: list[PlanningRunRecord]
-
-
 class PlanningRunResponse(DomainModel):
     run: PlanningRunRecord
     project: ProjectAggregate | None = None
-
-
-class PlanningOutlineDirectEditRequest(DomainModel):
-    outline_json: str = Field(min_length=2, max_length=250000)
-    change_reason: str = Field(min_length=1, max_length=2000)
-
-
-class PlanningOutlineAgentRevisionRequest(DomainModel):
-    instruction: str = Field(min_length=1, max_length=8000)
-
-
-class AutonomousRepeatCreateRequest(DomainModel):
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    render_export: bool = True
 
 
 class EnqueueRequest(DomainModel):
@@ -1666,23 +1528,6 @@ class LocalReworkRequest(DomainModel):
 
 class ExportRequest(DomainModel):
     rebuild_manifest: bool = True
-
-
-class AutoDraftRequest(DomainModel):
-    render_export: bool = True
-
-
-class AutonomousRunAdvanceRequest(DomainModel):
-    max_actions: int = Field(default=24, ge=1, le=200)
-
-
-class AutoDraftResponse(DomainModel):
-    project: ProjectAggregate
-    export: ExportRecord | None
-
-
-class AutonomousDraftResponse(AutoDraftResponse):
-    run: AutonomousRunRecord
 
 
 class VideoInspectionResponse(DomainModel):

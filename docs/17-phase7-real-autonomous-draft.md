@@ -1,5 +1,7 @@
 # Phase 7：从零真人 AUTO_DRAFT
 
+> 历史阶段文档，仅记录当时实现，不是当前运行入口。现行架构见 [Phase 29](./40-agent-skill-tool-runtime-migration.md)，共享生产流程见 [`end_to_end.md`](../backend/short_drama/skills/workflows/end_to_end.md)。
+
 ## 目标
 
 Phase 7 把现有的输入规划、资产工作台、H3 Route Planner、持久化 Worker、视频观察、Director Agent、TimelineManifest 和导出串成一条可恢复的真人草稿流水线。用户可以只给一句话、几张图、完整剧本或不提供内容；启动后不需要逐镜确认，系统最多把若干完整成片交给用户最终选择。

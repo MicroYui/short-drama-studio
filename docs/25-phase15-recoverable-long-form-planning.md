@@ -1,5 +1,7 @@
 # Phase 15：可恢复的长篇剧本规划
 
+> 历史记录：本文记载的独立 PlanningRun HTTP 接口和前端轮询已删除。当前只保留 Agent-owned PlanningRun，由 `planning.advance` 作为内部可恢复子流程推进。
+
 ## 目标
 
 Phase 14 已证明分层 Multi-Agent 能生成多分钟剧本，但一次项目创建仍会同步执行 Story Architect、Script Critic、最多两轮修订和所有 Scene Director。真实 5 分钟样本需要多次、每次几十秒到数分钟的语言模型调用；在这些调用全部结束前，前端只能显示一个笼统等待状态，也没有可供重启恢复的项目。

@@ -7,13 +7,13 @@
 同一套本地制片系统支持两种创作取向，用户在新建项目时选择：
 
 - `GENERAL_VIDEO`：节奏服从内容，允许氛围、留白、观察和有意义的长镜头；
-- `DOUYIN_SHORT_DRAMA`：强调前置冲突或好奇缺口、因果悬念链、关系/认知变化和结尾回收。
+- `AI_SHORT_DRAMA`：强调前置冲突或好奇缺口、因果悬念链、关系/认知变化和结尾回收。
 
 这不是两套产品，也不是把 Profile 直接塞给 H3。两种类型继续共享资产库、ReferencePlan、Director、H3 路线、Take、QA、时间线和导出；差异只进入 Writer、Production Planner 和 Director 的 Agent 判断。
 
 ## 实现
 
-项目请求和持久化 `ProjectRecord` 新增 `production_profile`。旧项目缺少该字段时按本产品既有语义读取为 `DOUYIN_SHORT_DRAMA`，独立重复会继承源项目 Profile。
+项目请求和持久化 `ProjectRecord` 新增 `production_profile`。旧项目缺少该字段时按本产品既有语义读取为 `AI_SHORT_DRAMA`，独立重复会继承源项目 Profile。
 
 `production_profiles.py` 集中维护两套 Prompt Policy：
 
@@ -25,7 +25,7 @@
 
 当前 Writer 与 Production Planner 仍在同一次结构化规划调用中协作，避免为了角色名额复制一套运行时；Director 在候选 QA 后读取同一项目 Profile。
 
-未配置 GPT 时，本地回退也读取 Profile：抖音短剧保留都市悬疑模板；通用视频使用 4 镜、50 秒、无对白的生活观察模板，并已验证可以继续完成 Mock 候选、时间线和导出准备。
+Phase 13 当时的本地回退曾分别使用“都市悬疑”和“4 镜、50 秒生活观察”模板，用于验证 Mock 候选、时间线和导出链路。后续已移除这些默认创作选择：当前回退只产生满足 Schema 的最小结构骨架，未指定的 Style 保持未指定，场景、镜头、时长和节奏由 Agent 结合当前项目决定。
 
 ## 分镜边界
 

@@ -63,9 +63,9 @@ def test_prop_reference_prompt_excludes_full_people_and_story_context(tmp_path) 
     assert "不得为了丰富画面凭空增加部件" in prompt
     assert "不生成乱码或可读正文" in prompt
     assert "视觉色彩与材质" not in prompt
-    assert "Active Production Skill: live-action Douyin vertical short drama." in prompt
-    assert "Asset Reviewer rubric:" in prompt
-    assert "Production constitution:" not in prompt
+    assert "当前制片技能：AI 原生短剧。" in prompt
+    assert "资产审核职责准则：" in prompt
+    assert "类型创作原则：" not in prompt
 
     image_path = tmp_path / "prop.png"
     Image.new("RGB", (32, 56), (150, 20, 20)).save(image_path)
@@ -94,23 +94,45 @@ def test_prop_reference_prompt_excludes_full_people_and_story_context(tmp_path) 
     assert "otherwise attractive image does not cancel" in client.instructions
     assert "explicitly places an actor, hand, prop, or state offscreen" in client.instructions
     assert "its absence is compliant evidence" in client.instructions
-    assert "Active Production Skill: live-action Douyin vertical short drama." in client.instructions
-    assert "Asset Reviewer rubric:" in client.instructions
-    assert "Production constitution:" not in client.instructions
+    assert "当前制片技能：AI 原生短剧。" in client.instructions
+    assert "资产审核职责准则：" in client.instructions
+    assert "类型创作原则：" not in client.instructions
 
 
-def test_base_asset_prompt_uses_general_profile_without_douyin_policy() -> None:
+def test_base_asset_prompt_uses_general_profile_without_ai_short_drama_policy() -> None:
     document = build_dont_trust_me_fixture("2026-08-17T00:00:00Z")
     document.project.production_profile = ProductionProfile.GENERAL_VIDEO
     character = next(item for item in document.assets if item.kind == AssetKind.CHARACTER)
 
     prompt = build_base_asset_prompt(document, character)
 
-    assert "真人竖屏视频制片参考资产" in prompt
-    assert "Active Production Skill: general live-action vertical video." in prompt
-    assert "Asset Reviewer rubric:" in prompt
-    assert "Neutral reference views and quiet imagery are valid" in prompt
-    assert "live-action Douyin vertical short drama" not in prompt
+    assert "按项目声明的视觉媒介制片参考资产" in prompt
+    assert "当前制片技能：通用视频。" in prompt
+    assert "资产审核职责准则：" in prompt
+    assert "中性参考视图与安静画面同样有效" in prompt
+    assert "AI 原生短剧" not in prompt
+
+
+def test_base_asset_prompt_obeys_project_style_without_injecting_realism() -> None:
+    document = build_dont_trust_me_fixture("2026-08-17T00:00:00Z")
+    bible = next(
+        item
+        for item in document.bible_versions
+        if item.id == document.project.current_bible_version_id
+    )
+    bible.style.medium = "纸雕与水墨混合视觉"
+    bible.style.cinematography = "平面构图随叙事关系变化"
+    bible.style.color = "项目自定义色彩"
+    bible.style.texture = "纸张纤维与墨色层次"
+    character = next(item for item in document.assets if item.kind == AssetKind.CHARACTER)
+
+    prompt = build_base_asset_prompt(document, character)
+
+    assert "视觉媒介=纸雕与水墨混合视觉" in prompt
+    assert "纸张纤维与墨色层次" in prompt
+    assert "真实皮肤" not in prompt
+    assert "真人全身身份母版" not in prompt
+    assert "不要擅自追加当前 Style 未声明的视觉媒介" in prompt
 
 
 def test_location_prompt_allows_only_explicitly_required_diegetic_label() -> None:

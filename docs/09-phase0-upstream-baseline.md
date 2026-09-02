@@ -30,17 +30,13 @@ Phase 0 只建立可复现的上游工程基线，不改短剧业务逻辑：
 - PyPI：`https://packagefeedproxy.microsoft.io/pypi/simple/`。
 
 Corepack 不继承 npm 的 registry，并且内部 npm Feed 不提供 Corepack 查询的
-`/pnpm/<version>` 元数据路径。因此本机不使用 Corepack 下载 pnpm，而是让已经配置好
-内部源的 npm 运行锁定版本。pnpm 本身仍严格使用上游要求的 `10.30.3`：
+`/pnpm/<version>` 元数据路径。因此本机不使用 Corepack 下载 pnpm，而是通过项目脚本
+显式指定微软 npm Feed，再由 npm 运行锁定版本。pnpm 本身仍严格使用上游要求的
+`10.30.3`：
 
 ```bash
-pnpm_phase0() {
-  npm_config_registry=https://packagefeedproxy.microsoft.io/npm/ \
-    npm exec --yes --package=pnpm@10.30.3 -- pnpm "$@"
-}
-
-pnpm_phase0 --version
-pnpm_phase0 install --frozen-lockfile
+./scripts/pnpm-project.sh --version
+./scripts/pnpm-project.sh install --frozen-lockfile
 ```
 
 上游 `uv.lock` 把 PyPI wheel 的公网制品 URL 一并锁入文件；只设置
@@ -65,19 +61,19 @@ cd ..
 
 ## 完整验证命令
 
-以下命令接在上面的 `pnpm_phase0` 函数和依赖安装之后：
+以下命令接在上面的依赖安装之后：
 
 ```bash
-pnpm_phase0 typecheck
-pnpm_phase0 openapi:check
-pnpm_phase0 backend:test
-pnpm_phase0 build:frontend
+./scripts/pnpm-project.sh typecheck
+./scripts/pnpm-project.sh openapi:check
+./scripts/pnpm-project.sh backend:test
+./scripts/pnpm-project.sh build:frontend
 
 PIP_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple/ \
   UV_DEFAULT_INDEX=https://packagefeedproxy.microsoft.io/pypi/simple/ \
-  pnpm_phase0 prepare:python
+  ./scripts/pnpm-project.sh prepare:python
 
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm_phase0 build:fast
+CSC_IDENTITY_AUTO_DISCOVERY=false ./scripts/pnpm-project.sh build:fast
 ```
 
 `build:fast` 生成 ad-hoc 签名、未公证的 macOS unpacked app，用于本地工程基线和

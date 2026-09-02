@@ -1,5 +1,7 @@
 # Phase 28：Production Skill 分层与统一角色注入
 
+> 后续状态：Phase 29 已将 constitution、role rubric 和类型制作重点迁入中文 Markdown，并由 Production Manager 与动态 AgentRuntime 编排统一 Tools。本文记录的静态 `ProductionExperience` Catalog 已删除；具体项目经验只通过 AgentRuntime `ExperienceMemory` 沉淀。最新实现见 [Phase 29 最终架构](40-agent-skill-tool-runtime-migration.md)。
+
 ## 结果
 
 Phase 28 把此前逐次实验累积的 Production Skill Prompt 收敛为三个独立层次：
@@ -67,7 +69,7 @@ H3 最终 Prompt Compiler 是翻译边界，不是第二个导演：路线已经
 
 - `ProductionSkill` 不拥有任务状态、Provider 调用、版本依赖或时间线副作用；
 - Tools 仍可被用户或 Agent 单独调用，PlanningRun/AutonomousRun 只是默认无人值守编排与恢复；
-- `GENERAL_VIDEO` 与 `DOUYIN_SHORT_DRAMA` 共享同一项目、资产、H3、QA 和时间线实现，但各 Agent 使用不同 rubric；
+- `GENERAL_VIDEO` 与 `AI_SHORT_DRAMA` 共享同一项目、资产、H3、QA 和时间线实现，但各 Agent 使用不同 rubric；
 - 观察工具、Schema、真实 ID、依赖计算和 H3 4–15 秒技术合同保持品类中立；
 - 没有增加 hash 冻结、审批门、动态 Skill 服务或第二套状态源。
 
@@ -104,8 +106,8 @@ H3 最终 Prompt Compiler 是翻译边界，不是第二个导演：路线已经
 - Vite 前端、Electron main 和 preload 生产构建：通过；
 - `git diff --check`：通过。
 
-由于当前 shell 的 Corepack 仍会绕过公司 npm registry 直连 npmjs.org，前端验证直接调用项目已安装的 `node_modules/.bin/tsc` 与 `node_modules/.bin/vite`，没有重装或修改依赖。构建仅提示本地 `caniuse-lite` 数据较旧，不影响结果。
+该阶段验证时，Corepack 会绕过公司 npm registry 直连 npmjs.org，因此当时直接调用了项目已安装的 `node_modules/.bin/tsc` 与 `node_modules/.bin/vite`。当前项目已统一改用 `scripts/pnpm-project.sh`：脚本显式指定微软 npm Feed 并运行锁定的 pnpm 版本，不再依赖 Corepack 下载。构建仅提示本地 `caniuse-lite` 数据较旧，不影响结果。
 
-## 下一步
+## 后续方向
 
-原计划中的“带时间证据的 Repair Planner 与轻量 H3 Capability Playbook”顺延到 Phase 29。它可以消费 Phase 27 的视觉输入报告和现有 VideoInspection，但仍应采用同样边界：观察负责证据，Production Skill 负责解释，Repair Planner 给可覆盖方案，执行由现有 Tools 完成。
+带时间证据的 Repair Planner 与轻量 H3 Capability Playbook 没有被塞入 Phase 29 架构迁移，仍是后续可选产品能力。它们可消费 Phase 27 的视觉输入报告和现有 VideoInspection，并保持同一边界：观察负责证据，Production Skill 负责解释，Repair Planner 给可覆盖方案，执行由现有 Tools 完成。

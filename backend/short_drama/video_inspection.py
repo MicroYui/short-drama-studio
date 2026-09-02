@@ -653,8 +653,8 @@ class VideoInspector:
             "but a secondary action, environmental motion, coverage preference, framing target, or "
             "polish detail was not achieved. Do not promote a secondary deviation to HIGH merely "
             "because it appears in the ShotPlan. Use stable generic QA categories rather than "
-            "scene-specific fields. When canonical asset references are supplied, compare visible "
-            "character identity, hair, wardrobe, location geometry, and prop appearance against "
+            "scene-specific fields. When canonical asset references are supplied, compare the visible "
+            "character anchors declared by the project, required location relationships, and prop appearance against "
             "the relevant reference; report clear drift, but do not require details that are hidden "
             "or too small to judge."
         )

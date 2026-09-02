@@ -15,6 +15,10 @@ from short_drama.change_planner import (
     SemanticChangePlan,
     SemanticChangePlanRequest,
 )
+from short_drama.change_executor import (
+    SemanticChangeApplyRequest,
+    SemanticChangeApplyResponse,
+)
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
     H3NotSubmittedResolutionRequest,
@@ -56,13 +60,6 @@ from short_drama.media import MediaGenerationError
 from short_drama.models import (
     AudioInspectionRequest,
     AudioInspectionResponse,
-    AutoDraftRequest,
-    AutoDraftResponse,
-    AutonomousDraftCreateRequest,
-    AutonomousRepeatCreateRequest,
-    AutonomousDraftResponse,
-    AutonomousRunAdvanceRequest,
-    CreateProjectRequest,
     EnqueueRequest,
     EpisodeReviewRequest,
     EpisodeReviewResponse,
@@ -70,13 +67,6 @@ from short_drama.models import (
     ExportRequest,
     LocalReworkRequest,
     OperationKind,
-    PlanningRunCreateRequest,
-    PlanningOutlineAgentRevisionRequest,
-    PlanningOutlineDirectEditRequest,
-    PlanningRunListResponse,
-    PlanningRunResponse,
-    ScriptQualityCatalogResponse,
-    ScriptQualityHistoryResponse,
     ProjectAggregate,
     ProjectListResponse,
     ReviseScriptLineRequest,
@@ -92,10 +82,21 @@ from short_drama.models import (
     WorkerDrainResponse,
 )
 from short_drama.quality_learning import H3CapabilityProfileResponse
-from short_drama.script_documents import (
-    PlanningSceneRevisionRequest,
-    PlanningScriptSearchRequest,
-    PlanningScriptSearchResponse,
+from short_drama.production_manager import (
+    AgentAdvanceResponse,
+    AgentCapabilityCatalog,
+    AgentProjectCreateRequest,
+    AgentProjectCreateResponse,
+    AgentRunAdvanceRequest,
+    AgentRunCreateRequest,
+    AgentRunListResponse,
+    AgentRunReplanRequest,
+    AgentRunView,
+    AgentUserInputRequest,
+    AgentWorkOrderResultRequest,
+    AgentWorkOrderResultResponse,
+    AgentWorkOrderView,
+    ProductionManagerError,
 )
 from short_drama.reference_planner import (
     DirectorAdviceRequest,
@@ -150,11 +151,168 @@ def _translate_error(error: Exception) -> HTTPError:
         return HTTPError(404, str(error.args[0]), code="SHORT_DRAMA_NOT_FOUND")
     if isinstance(error, WorkflowConflictError):
         return HTTPError(409, str(error), code="SHORT_DRAMA_STATE_CONFLICT")
+    if isinstance(error, ProductionManagerError):
+        return HTTPError(409, str(error), code="SHORT_DRAMA_AGENT_CONFLICT")
     if isinstance(error, ProviderOperationError):
         return HTTPError(502, str(error), code="SHORT_DRAMA_PROVIDER_FAILED")
     if isinstance(error, MediaGenerationError):
         return HTTPError(500, str(error), code="SHORT_DRAMA_MEDIA_FAILED")
     return HTTPError(500, str(error), code="SHORT_DRAMA_INTERNAL_ERROR")
+
+
+@router.get(
+    "/agent-runtime/capabilities",
+    response_model=AgentCapabilityCatalog,
+)
+def get_agent_capabilities(
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentCapabilityCatalog:
+    return service.get_agent_capabilities()
+
+
+@router.post(
+    "/agent-projects",
+    response_model=AgentProjectCreateResponse,
+)
+def create_agent_project(
+    request: AgentProjectCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentProjectCreateResponse:
+    try:
+        return service.create_agent_project(request)
+    except (ProductionManagerError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/agent-runs",
+    response_model=AgentRunView,
+)
+def create_agent_run(
+    project_id: str,
+    request: AgentRunCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentRunView:
+    try:
+        return service.create_agent_run(project_id, request)
+    except ProductionManagerError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/agent-runs",
+    response_model=AgentRunListResponse,
+)
+def list_agent_runs(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentRunListResponse:
+    try:
+        return service.list_agent_runs(project_id)
+    except ProductionManagerError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/agent-runs/{run_id}",
+    response_model=AgentRunView,
+)
+def get_agent_run(
+    run_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentRunView:
+    try:
+        return service.get_agent_run(run_id)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.post(
+    "/agent-runs/{run_id}/replan",
+    response_model=AgentRunView,
+)
+def replan_agent_run(
+    run_id: str,
+    request: AgentRunReplanRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentRunView:
+    try:
+        return service.replan_agent_run(run_id, request)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.post(
+    "/agent-runs/{run_id}/advance",
+    response_model=AgentAdvanceResponse,
+)
+def advance_agent_run(
+    run_id: str,
+    request: AgentRunAdvanceRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentAdvanceResponse:
+    try:
+        return service.advance_agent_run(run_id, request)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.post(
+    "/agent-runs/{run_id}/user-input",
+    response_model=AgentRunView,
+)
+def submit_agent_user_input(
+    run_id: str,
+    request: AgentUserInputRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentRunView:
+    try:
+        return service.submit_agent_user_input(run_id, request)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.get(
+    "/agent-work-orders/{work_order_id}",
+    response_model=AgentWorkOrderView,
+)
+def get_agent_work_order(
+    work_order_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentWorkOrderView:
+    try:
+        return service.get_agent_work_order(work_order_id)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.post(
+    "/agent-work-orders/{work_order_id}/execute",
+    response_model=AgentWorkOrderResultResponse,
+)
+def execute_agent_work_order(
+    work_order_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentWorkOrderResultResponse:
+    try:
+        return service.execute_agent_work_order(work_order_id)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.post(
+    "/agent-work-orders/{work_order_id}/result",
+    response_model=AgentWorkOrderResultResponse,
+)
+def submit_agent_work_order_result(
+    work_order_id: str,
+    request: AgentWorkOrderResultRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentWorkOrderResultResponse:
+    try:
+        return service.submit_agent_work_order_result(work_order_id, request)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
 
 
 @router.post(
@@ -732,209 +890,18 @@ def preview_semantic_change(
         raise _translate_error(exc) from exc
 
 
-@router.get("/planning-runs", response_model=PlanningRunListResponse)
-def list_planning_runs(
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunListResponse:
-    return service.list_planning_runs()
-
-
-@router.post("/planning-runs", response_model=PlanningRunResponse)
-def create_planning_run(
-    request: PlanningRunCreateRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunResponse:
-    return service.create_planning_run(request)
-
-
-@router.get("/planning-runs/{run_id}", response_model=PlanningRunResponse)
-def get_planning_run(
-    run_id: str,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunResponse:
-    try:
-        return service.get_planning_run(run_id)
-    except ArtifactNotFoundError as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post("/planning-runs/{run_id}/advance", response_model=PlanningRunResponse)
-def advance_planning_run(
-    run_id: str,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunResponse:
-    try:
-        return service.advance_planning_run(run_id)
-    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.put(
-    "/planning-runs/{run_id}/outline",
-    response_model=PlanningRunResponse,
-)
-def replace_planning_outline(
-    run_id: str,
-    request: PlanningOutlineDirectEditRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunResponse:
-    try:
-        return service.replace_planning_outline(run_id, request)
-    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
-        raise _translate_error(exc) from exc
-
-
 @router.post(
-    "/planning-runs/{run_id}/outline/agent-revise",
-    response_model=PlanningRunResponse,
+    "/projects/{project_id}/agent-tools/apply-change",
+    response_model=SemanticChangeApplyResponse,
 )
-def revise_planning_outline_with_agent(
-    run_id: str,
-    request: PlanningOutlineAgentRevisionRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunResponse:
-    try:
-        return service.revise_planning_outline_with_agent(run_id, request)
-    except (
-        ArtifactNotFoundError,
-        WorkflowConflictError,
-        ProviderOperationError,
-    ) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/planning-runs/{run_id}/outline/revise-from-review",
-    response_model=PlanningRunResponse,
-)
-def revise_planning_outline_from_review(
-    run_id: str,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunResponse:
-    try:
-        return service.revise_planning_outline_from_review(run_id)
-    except (
-        ArtifactNotFoundError,
-        WorkflowConflictError,
-        ProviderOperationError,
-    ) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.get(
-    "/planning-runs/{run_id}/script-quality",
-    response_model=ScriptQualityHistoryResponse,
-)
-def get_planning_run_script_quality(
-    run_id: str,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> ScriptQualityHistoryResponse:
-    try:
-        return service.get_planning_run_script_quality(run_id)
-    except ArtifactNotFoundError as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/planning-runs/{run_id}/agent-tools/search-script",
-    response_model=PlanningScriptSearchResponse,
-)
-def search_planning_script_documents(
-    run_id: str,
-    request: PlanningScriptSearchRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningScriptSearchResponse:
-    try:
-        return service.search_planning_script_documents(run_id, request)
-    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/planning-runs/{run_id}/agent-tools/revise-scenes",
-    response_model=PlanningRunResponse,
-)
-def revise_planning_scenes_with_agent(
-    run_id: str,
-    request: PlanningSceneRevisionRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> PlanningRunResponse:
-    try:
-        return service.revise_planning_scenes_with_agent(run_id, request)
-    except (
-        ArtifactNotFoundError,
-        WorkflowConflictError,
-        ProviderOperationError,
-    ) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.get("/script-quality", response_model=ScriptQualityCatalogResponse)
-def list_script_quality_evaluations(
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> ScriptQualityCatalogResponse:
-    return service.list_script_quality_evaluations()
-
-
-@router.post("/projects", response_model=ProjectAggregate)
-def create_project(
-    request: CreateProjectRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> ProjectAggregate:
-    return service.create_project(request)
-
-
-@router.post("/projects/autonomous-draft", response_model=AutonomousDraftResponse)
-def create_autonomous_draft(
-    request: AutonomousDraftCreateRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> AutonomousDraftResponse:
-    try:
-        return service.create_autonomous_draft(request)
-    except (WorkflowConflictError, ProviderOperationError, MediaGenerationError) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/projects/{source_project_id}/autonomous-repeats",
-    response_model=AutonomousDraftResponse,
-)
-def create_autonomous_repeat(
-    source_project_id: str,
-    request: AutonomousRepeatCreateRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> AutonomousDraftResponse:
-    try:
-        return service.create_autonomous_repeat(source_project_id, request)
-    except (
-        ProjectNotFoundError,
-        ArtifactNotFoundError,
-        WorkflowConflictError,
-        ProviderOperationError,
-        MediaGenerationError,
-    ) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post(
-    "/projects/{project_id}/autonomous-runs/{run_id}/advance",
-    response_model=AutonomousDraftResponse,
-)
-def advance_autonomous_run(
+def apply_semantic_change(
     project_id: str,
-    run_id: str,
-    request: AutonomousRunAdvanceRequest,
+    request: SemanticChangeApplyRequest,
     service: ShortDramaService = Depends(get_short_drama_service),
-) -> AutonomousDraftResponse:
+) -> SemanticChangeApplyResponse:
     try:
-        return service.advance_autonomous_run(project_id, run_id, request)
-    except (
-        ProjectNotFoundError,
-        ArtifactNotFoundError,
-        WorkflowConflictError,
-        ProviderOperationError,
-        MediaGenerationError,
-    ) as exc:
+        return service.apply_semantic_change(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 
 
@@ -1462,17 +1429,5 @@ def export_project(
 ) -> ExportRecord:
     try:
         return service.export_project(project_id, request.rebuild_manifest)
-    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError, MediaGenerationError) as exc:
-        raise _translate_error(exc) from exc
-
-
-@router.post("/projects/{project_id}/auto-draft", response_model=AutoDraftResponse)
-def auto_draft(
-    project_id: str,
-    request: AutoDraftRequest,
-    service: ShortDramaService = Depends(get_short_drama_service),
-) -> AutoDraftResponse:
-    try:
-        return service.auto_draft(project_id, request.render_export)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError, MediaGenerationError) as exc:
         raise _translate_error(exc) from exc

@@ -179,12 +179,12 @@ def _build_bible(project_id: str, created_at: str) -> ProjectBibleVersion:
             )
         ],
         style=StyleProfile(
-            medium="真人都市短剧",
+            medium="AI 生成写实人物的都市短剧",
             genre="都市悬疑",
             cinematography="9:16，写实电影感，克制推镜，遵守对话轴线",
             color="冷白室内光与蓝色雨夜霓虹，红色道具作为视觉锚点",
-            texture="真实皮肤、自然布料、湿玻璃反光",
-            forbidden=["动漫化", "过度磨皮", "角色换脸", "左右手道具跳变", "无动机越轴"],
+            texture="符合角色与雨夜场景的材质细节、湿玻璃反光",
+            forbidden=["无意的风格漂移", "角色身份漂移", "左右手道具跳变", "无动机越轴"],
         ),
         approval_status=ApprovalStatus.APPROVED,
         freshness=Freshness.CURRENT,

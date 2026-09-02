@@ -10,6 +10,7 @@ from short_drama.models import (
     CreateProjectRequest,
     ProductionProfile,
     ProjectDocument,
+    ReferenceFraming,
     ReferenceRequirement,
     ReferenceRole,
     ReviewRepairOwner,
@@ -29,8 +30,10 @@ from short_drama.models import (
 from short_drama.production_planner import (
     PlannedCharacter,
     PlannedLocation,
+    PlannedProp,
     PlannedReferenceNeed,
     ProductionPlan,
+    _default_reference_needs,
     _fallback_directed_scene_plan,
     _fallback_episode_outline,
     _fallback_plan,
@@ -54,7 +57,6 @@ from short_drama.production_profiles import (
     compile_production_prompt,
     production_skill,
     production_skill_catalog,
-    retrieve_production_experiences,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderError
 from short_drama.script_documents import EpisodeScenePatch, scene_dialogue_lines
@@ -145,6 +147,24 @@ class MultiAgentLanguageClient:
         self.critic_revision_rounds_required = critic_revision_rounds_required
         self.invalid_first_revision = invalid_first_revision
         self.outline = _fallback_episode_outline(request)
+        # Multi-Agent communication tests need an explicit multi-scene model result;
+        # production fallback intentionally no longer invents that segmentation.
+        outline_payload = self.outline.model_dump(mode="python")
+        scene_template = self.outline.scenes[0]
+        scene_duration = request.resolved_target_duration_seconds() / 3
+        outline_payload["scenes"] = [
+            scene_template.model_copy(
+                deep=True,
+                update={
+                    "sequence": sequence,
+                    "heading": f"Agent 规划场景 {sequence}",
+                    "target_duration_seconds": scene_duration,
+                    "dialogue_line_indices": [],
+                },
+            ).model_dump(mode="python")
+            for sequence in range(1, 4)
+        ]
+        self.outline = type(self.outline).model_validate(outline_payload)
         blueprint_payload = self.outline.model_dump(mode="python")
         if request.source_mode != SourceMode.SCRIPT_LOCKED:
             blueprint_payload["lines"] = []
@@ -390,31 +410,29 @@ def _request() -> CreateProjectRequest:
 
 def test_production_skills_are_advisory_and_share_independent_tools() -> None:
     catalog = production_skill_catalog()
-    assert {skill.profile for skill in catalog} == {
-        ProductionProfile.GENERAL_VIDEO,
-        ProductionProfile.DOUYIN_SHORT_DRAMA,
-    }
+    assert {skill.profile for skill in catalog} == set(ProductionProfile)
     assert all(skill.user_overridable for skill in catalog)
-    assert all(
-        "write or revise only the scenes needed" in " ".join(skill.recommended_playbook)
-        for skill in catalog
-    )
-    assert all(
-        "review the script and route findings" in " ".join(skill.recommended_playbook)
-        for skill in catalog
-    )
+    assert all(skill.recommended_playbook for skill in catalog)
 
-    douyin = production_skill(ProductionProfile.DOUYIN_SHORT_DRAMA)
+    douyin = production_skill(ProductionProfile.AI_SHORT_DRAMA)
     general = production_skill(ProductionProfile.GENERAL_VIDEO)
-    assert douyin.profile == ProductionProfile.DOUYIN_SHORT_DRAMA
+    digital_human = production_skill(ProductionProfile.DIGITAL_HUMAN)
+    anime = production_skill(ProductionProfile.ANIME)
+    assert douyin.profile == ProductionProfile.AI_SHORT_DRAMA
     assert general.profile == ProductionProfile.GENERAL_VIDEO
-    assert douyin.recommended_playbook == general.recommended_playbook
+    assert digital_human.profile == ProductionProfile.DIGITAL_HUMAN
+    assert anime.profile == ProductionProfile.ANIME
+    assert len({skill.recommended_playbook for skill in catalog}) == len(catalog)
     assert douyin.writer != general.writer
     assert douyin.constitution != general.constitution
     assert douyin.asset_reviewer != general.asset_reviewer
     assert douyin.route_planner != general.route_planner
     assert douyin.video_prompt_compiler != general.video_prompt_compiler
     assert douyin.episode_reviewer != general.episode_reviewer
+    assert "口型同步" in digital_human.constitution
+    assert "角色造型基准" in anime.constitution
+    assert digital_human.director != douyin.director
+    assert anime.director != douyin.director
 
 
 def test_production_skills_inject_distinct_policies_without_fixed_shot_count() -> None:
@@ -424,7 +442,7 @@ def test_production_skills_inject_distinct_policies_without_fixed_shot_count() -
     )
     douyin_request = CreateProjectRequest(
         source_mode=SourceMode.AUTO_ORIGINAL,
-        production_profile=ProductionProfile.DOUYIN_SHORT_DRAMA,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
     )
 
     general_instructions, general_input = _planner_prompt(general_request)
@@ -432,30 +450,36 @@ def test_production_skills_inject_distinct_policies_without_fixed_shot_count() -
     general_payload = json.loads(general_input)
     douyin_payload = json.loads(douyin_input)
 
-    assert "Atmosphere, silence" in general_instructions
-    assert "Do not invent conflict" in general_instructions
-    assert "curiosity gap" in douyin_instructions
-    assert "compare several materially different premises" in douyin_instructions
-    assert "office, document, recording" not in douyin_instructions
-    assert "borrowed signatures" not in douyin_instructions
-    assert "particular plot promise" in douyin_instructions
-    assert "ordinary syntax, pronouns, particles" in douyin_instructions
-    assert "ordinary syntax, pronouns, particles" not in general_instructions
-    assert "not from compressed, unnatural dialogue" in douyin_instructions
-    assert "Not every line must add a fact" in douyin_instructions
-    assert "read-aloud test" in production_skill(
-        ProductionProfile.DOUYIN_SHORT_DRAMA
+    assert "留白、静默" in general_instructions
+    assert "不要仅为模仿短剧公式" in general_instructions
+    assert "好奇缺口" in douyin_instructions
+    assert "比较若干个实质不同的构想" in douyin_instructions
+    assert "办公室、文件、录音" not in douyin_instructions
+    assert "借用签名" not in douyin_instructions
+    assert "本故事独有的承诺" in douyin_instructions
+    assert "日常语序、代词、语气词" in douyin_instructions
+    assert "日常语序、代词、语气词" not in general_instructions
+    assert "而不是把对白压缩得不自然" in douyin_instructions
+    assert "不要求每句台词都新增事实" in douyin_instructions
+    assert "朗读检查" in production_skill(
+        ProductionProfile.AI_SHORT_DRAMA
     ).critic
-    assert "telegraphic speech" in production_skill(
-        ProductionProfile.DOUYIN_SHORT_DRAMA
+    assert "电报式" in production_skill(
+        ProductionProfile.AI_SHORT_DRAMA
     ).critic
-    assert "Never add shots" in douyin_instructions
+    assert "不得为提高密度而机械增加镜头" in douyin_instructions
+    assert "ProductionProfile supplies production guidance" in douyin_instructions
+    assert "do not require human anatomy" in douyin_instructions
+    assert "真实皮肤" not in douyin_instructions
     assert general_payload["production_profile"] == "GENERAL_VIDEO"
-    assert douyin_payload["production_profile"] == "DOUYIN_SHORT_DRAMA"
+    assert douyin_payload["production_profile"] == "AI_SHORT_DRAMA"
     assert general_payload["target_duration_seconds"] == 60
     assert douyin_payload["target_duration_seconds"] == 300
     assert general_payload["requirements"]["shots"] == (
         "choose the smallest coherent executable set; no fixed count"
+    )
+    assert general_payload["requirements"]["medium"].startswith(
+        "derive the project's concrete visual medium"
     )
     assert "Editorial shots may be shorter than 4 seconds or longer than 15 seconds" in (
         general_instructions
@@ -470,7 +494,7 @@ def test_production_skills_inject_distinct_policies_without_fixed_shot_count() -
 def test_douyin_long_form_prompts_audit_effective_story_duration_without_a_hard_gate() -> None:
     request = CreateProjectRequest(
         source_mode=SourceMode.IDEA_EXPANSION,
-        production_profile=ProductionProfile.DOUYIN_SHORT_DRAMA,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
         input_text="一把不该出现的红伞打断融资签约。",
         target_duration_seconds=180,
     )
@@ -506,28 +530,28 @@ def test_douyin_long_form_prompts_audit_effective_story_duration_without_a_hard_
     scene_payload = json.loads(scene_input)
     revision_payload = json.loads(revision_input)
 
-    assert "audiovisual dramatic unit" in architect_instructions
-    assert "not from compressed, unnatural dialogue" in architect_instructions
+    assert "单独生成、检查、替换和重新剪辑" in architect_instructions
+    assert "而不是把对白压缩得不自然" in architect_instructions
     assert "scene-duration arithmetic" in architect_instructions
-    assert "[grounded-institutional-causality]" in architect_instructions
-    assert "[separate-consequence-domains]" in architect_instructions
+    assert "[grounded-institutional-causality]" not in architect_instructions
+    assert "[separate-consequence-domains]" not in architect_instructions
     assert "Do not approve an episode merely because" in critic_instructions
-    assert "repeated proof of one conclusion" in critic_instructions
-    assert "ordinary viewers can understand" in critic_instructions
-    assert "financing or partnership" in critic_instructions
+    assert "对同一结论的重复证明" in critic_instructions
+    assert "当前行动、因果和人物后果是否可见可懂" in critic_instructions
+    assert "审核实际作品，不按预设答案找错" in critic_instructions
     assert critic_payload["pacing_evidence"]["target_duration_seconds"] == 180
     assert critic_payload["pacing_evidence"]["purpose"].startswith(
         "Rough descriptive evidence"
     )
     assert len(critic_payload["pacing_evidence"]["scenes"]) == len(outline.scenes)
     assert "generic looking, waiting, walking" in scene_instructions
-    assert "Director rubric" in scene_instructions
-    assert "regeneration, keyframe change, shot split" in scene_instructions
+    assert "导演职责准则" in scene_instructions
+    assert "重新生成、更换关键帧、拆分镜头" in scene_instructions
     assert scene_payload["scene_pacing_evidence"]["scene_sequence"] == 1
     assert "replacing empty atmosphere" in revision_instructions
     assert "collapse it to the smallest plain-language mechanism" in revision_instructions
-    assert "[grounded-institutional-causality]" in revision_instructions
-    assert "[separate-consequence-domains]" in revision_instructions
+    assert "[grounded-institutional-causality]" not in revision_instructions
+    assert "[separate-consequence-domains]" not in revision_instructions
     assert revision_payload["current_pacing_evidence"][
         "target_duration_seconds"
     ] == 180
@@ -545,46 +569,12 @@ def test_general_video_critic_does_not_treat_quiet_time_as_a_density_failure() -
     instructions, payload_json = _story_critic_prompt(request, outline)
     payload = json.loads(payload_json)
 
-    assert "quiet material is not defective merely because it is quiet" in instructions
+    assert "安静内容不会仅因为安静就构成缺陷" in instructions
     assert payload["pacing_evidence"]["target_duration_seconds"] == 180
 
 
-def test_production_experience_is_retrieved_only_for_matching_context() -> None:
-    unrelated = compile_production_prompt(
-        ProductionProfile.DOUYIN_SHORT_DRAMA,
-        roles=(ProductionSkillRole.WRITER, ProductionSkillRole.CRITIC),
-        context="闺蜜骗我极寒设备，我却在避暑山庄囤制冷机。",
-    )
-    institutional = compile_production_prompt(
-        ProductionProfile.DOUYIN_SHORT_DRAMA,
-        roles=(ProductionSkillRole.WRITER, ProductionSkillRole.CRITIC),
-        context="融资签约前发现合同签名和付款流程被人动过。",
-    )
-    general = retrieve_production_experiences(
-        ProductionProfile.GENERAL_VIDEO,
-        roles=(ProductionSkillRole.WRITER, ProductionSkillRole.CRITIC),
-        context="融资签约、合同签名、付款流程",
-    )
-    broad_words_only = compile_production_prompt(
-        ProductionProfile.DOUYIN_SHORT_DRAMA,
-        roles=(ProductionSkillRole.WRITER, ProductionSkillRole.CRITIC),
-        context="办公室里，两个人重新考虑彼此的关系。",
-    )
-
-    assert unrelated.experience_ids == ()
-    assert "borrowed signatures" not in unrelated.text
-    assert institutional.experience_ids == (
-        "grounded-institutional-causality",
-        "simplify-procedural-overload",
-        "separate-consequence-domains",
-    )
-    assert "Relevant retrieved production experience" in institutional.text
-    assert broad_words_only.experience_ids == ()
-    assert general == ()
-
-
 @pytest.mark.parametrize("target_seconds", [180, 300, 430, 600, 900])
-def test_douyin_fallback_scales_to_multi_minute_scene_contracts(
+def test_ai_short_drama_scaffold_preserves_multi_minute_duration_contract(
     target_seconds: int,
 ) -> None:
     request = CreateProjectRequest(
@@ -743,6 +733,7 @@ def test_script_critic_can_trigger_one_story_architect_revision_before_scene_pla
         created_at="2026-08-21T00:00:00Z",
     )
     assert document.script_versions[0].review_report == planning.review_report
+    assert document.bible_versions[0].style.medium == planning.plan.style.medium
 
 
 def test_story_revision_repairs_invalid_json_before_returning_to_critic() -> None:
@@ -847,12 +838,12 @@ def test_general_profile_accepts_silent_long_take_plan_without_density_gate() ->
         production_profile=ProductionProfile.GENERAL_VIDEO,
     )
     fallback = _fallback_plan(request)
-    assert len(fallback.shots) == 4
+    assert len(fallback.shots) == 1
     assert fallback.lines == []
-    assert fallback.style.genre == "都市生活观察"
+    assert fallback.style.genre == "未指定"
     payload = fallback.model_dump(mode="json")
     payload["lines"] = []
-    payload["shots"] = payload["shots"][:3]
+    payload["shots"] = [payload["shots"][0] for _ in range(3)]
     for shot in payload["shots"]:
         shot["duration_seconds"] = 20.0
         shot["dialogue_line_indices"] = []
@@ -862,6 +853,35 @@ def test_general_profile_accepts_silent_long_take_plan_without_density_gate() ->
     assert len(plan.shots) == 3
     assert sum(shot.duration_seconds for shot in plan.shots) == 60.0
     assert plan.lines == []
+
+
+def test_local_scaffold_does_not_choose_style_or_profile_specific_rhythm() -> None:
+    common = {
+        "source_mode": SourceMode.AUTO_ORIGINAL,
+        "input_text": "一段尚未定稿的用户想法",
+        "target_duration_seconds": 60,
+    }
+    ai_plan = _fallback_plan(
+        CreateProjectRequest(
+            **common,
+            production_profile=ProductionProfile.AI_SHORT_DRAMA,
+        )
+    )
+    general_plan = _fallback_plan(
+        CreateProjectRequest(
+            **common,
+            production_profile=ProductionProfile.GENERAL_VIDEO,
+        )
+    )
+
+    assert len(ai_plan.scenes) == len(general_plan.scenes)
+    assert len(ai_plan.shots) == len(general_plan.shots)
+    assert ai_plan.style == general_plan.style
+    assert ai_plan.style.medium == "未指定"
+    assert ai_plan.style.forbidden == []
+    serialized = ai_plan.model_dump_json()
+    for hardcoded_choice in ("都市", "悬疑", "真人", "电影感", "真实皮肤", "冷白", "蓝黑"):
+        assert hardcoded_choice not in serialized
 
 
 def test_editorial_retiming_does_not_split_at_h3_request_boundary() -> None:
@@ -881,6 +901,33 @@ def test_editorial_retiming_does_not_split_at_h3_request_boundary() -> None:
     assert [shot.duration_seconds for shot in shots] == [25.0, 25.0, 25.0]
 
 
+def test_stationary_long_shot_does_not_force_full_body_reference() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
+    )
+    plan = _fallback_plan(request)
+    shot = plan.shots[0].model_copy(
+        deep=True,
+        update={
+            "duration_seconds": 20.0,
+            "visual": "一个稳定画面承载信息变化",
+            "framing": "由当前 Style 决定",
+            "camera": "保持稳定",
+            "character_positions": plan.characters[0].name,
+        },
+    )
+
+    needs = _default_reference_needs(
+        plan=plan,
+        shot=shot,
+        line_speakers={plan.characters[0].name},
+    )
+
+    character_need = next(item for item in needs if item.subject_name == plan.characters[0].name)
+    assert ReferenceFraming.FULL_BODY not in character_need.preferred_framings
+
+
 def test_legacy_project_document_defaults_to_douyin_profile() -> None:
     request = _request()
     planning = create_production_plan(request, None)
@@ -895,7 +942,7 @@ def test_legacy_project_document_defaults_to_douyin_profile() -> None:
 
     restored = ProjectDocument.model_validate(payload)
 
-    assert restored.project.production_profile == ProductionProfile.DOUYIN_SHORT_DRAMA
+    assert restored.project.production_profile == ProductionProfile.AI_SHORT_DRAMA
 
 
 def test_locked_dialogue_ignores_metadata_and_classifies_recorded_voice() -> None:
@@ -1032,13 +1079,23 @@ def test_invalid_language_plan_gets_one_structured_repair() -> None:
 def test_lightweight_reference_enrichment_uses_declared_shot_intent() -> None:
     request = _request()
     planning = create_production_plan(request, None)
+    planning.plan.props.append(
+        PlannedProp(
+            name="红色录音笔",
+            appearance="锁定剧本声明的红色录音笔",
+        )
+    )
+    planned_shot = planning.plan.shots[0]
+    planned_shot.visual += "；红色录音笔在画面中承担证据作用"
+    planned_shot.prop_state_in = "红色录音笔可见"
+    planned_shot.prop_state_out = "红色录音笔仍可见"
     document = build_project_document_from_plan(
         project_id="project-lightweight-reference",
         request=request,
         planning=planning,
         created_at="2026-08-17T00:00:00Z",
     )
-    shot = next(item for item in document.shots if item.sequence == 5)
+    shot = document.shots[0]
     plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
     prop = next(item for item in document.assets if item.kind.value == "PROP")
     prop_version_ids = {item.id for item in prop.versions}

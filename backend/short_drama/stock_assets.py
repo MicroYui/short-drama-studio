@@ -493,7 +493,7 @@ class RequestsStockAssetSearchClient:
             ),
             advisory_notes=(
                 [
-                    "建议提取真实摄影质感、年龄、体型、发型和服装方向，再生成新的虚构角色身份。",
+                    "建议只提取与当前项目 Style 和角色目标有关的视觉线索，再生成新的虚构角色身份。",
                     "用户确认拥有肖像授权时，可以覆盖建议并保留人物身份。",
                 ]
                 if character

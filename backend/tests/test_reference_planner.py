@@ -25,9 +25,6 @@ from short_drama.models import (
     EnqueueRequest,
     Freshness,
     ProductionProfile,
-    QaFailureCategory,
-    QaIssue,
-    QaStatus,
     ReferenceAngle,
     ReferenceBinding,
     ReferenceFraming,
@@ -47,7 +44,6 @@ from short_drama.reference_planner import (
 from short_drama.service import (
     ShortDramaService,
     WorkflowConflictError,
-    _scope_keyframe_reference_versions,
 )
 
 
@@ -632,23 +628,6 @@ def test_keyframe_scope_preserves_one_reference_per_required_subject(
     assert character_version_id in {
         item.asset_version_id for item in preview.selected
     }
-    bound = service._approved_bound_image_versions(document, shot.id)
-    scoped = _scope_keyframe_reference_versions(
-        document,
-        bound,
-        plan,
-        [master_version_id, interaction_version_id],
-    )
-
-    scoped_ids = [version.id for _asset, version in scoped]
-    assert len(scoped_ids) == 2
-    assert character_version_id in scoped_ids
-    assert any(
-        version_id in scoped_ids
-        for version_id in (master_version_id, interaction_version_id)
-    )
-
-
 def test_director_agent_recommends_without_creating_a_generation_gate(
     tmp_path: Path,
 ) -> None:
@@ -949,83 +928,6 @@ def test_director_agent_receives_prior_applied_repairs_as_strategy_evidence(
     assert prior_repairs[0]["affected_shot_ids"] == [shot.id]
 
 
-def test_auto_draft_repairs_rejected_takes_and_regenerates_without_user_pause(
-    tmp_path: Path,
-) -> None:
-    fake = FakeDirectorLanguageProvider(
-        """{
-          "advisories": [],
-          "repair_options": [
-            {
-              "strategy": "CHANGE_CAMERA",
-              "summary": "Use simpler coverage.",
-              "rationale": "It addresses the observed orientation failure.",
-              "tradeoff": "The new angle reveals less facial detail.",
-              "recommended": true,
-              "dismissible": true
-            }
-          ],
-          "recommended_strategy": "CHANGE_CAMERA",
-          "proposed_repair": {
-            "decision": "APPLIED",
-            "strategy": "CHANGE_CAMERA",
-            "reason": "Use stable rear coverage while preserving the narrative beat.",
-            "issue_codes": ["AUTO_ORIENTATION_FAILURE"],
-            "shot_patch": {"camera": "stable rear coverage"},
-            "split_shots": []
-          }
-        }"""
-    )
-    service = ShortDramaService(
-        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
-        workspace_root=tmp_path / "workspace",
-        language_provider_factory=lambda _api_key, _base_url: fake,
-    )
-    project = service.initialize_fixture()
-    project_id = project.document.project.id
-    initial = service.auto_draft(project_id, render_export=False).project
-    shot = initial.document.shots[-1]
-    rejected_ids: list[str] = []
-    for take in [item for item in initial.takes if item.shot_id == shot.id]:
-        rejected_ids.append(take.id)
-        take.qa_status = QaStatus.REJECTED
-        take.qa_report.status = QaStatus.REJECTED
-        take.qa_report.hard_gate_passed = False
-        take.qa_report.score = 2.0
-        take.qa_report.issues = [
-            QaIssue(
-                code="AUTO_ORIENTATION_FAILURE",
-                severity="HIGH",
-                message="The character orientation visibly conflicts with the shot intent.",
-                repair_layer="DIRECTOR",
-                category=QaFailureCategory.CHARACTER_ORIENTATION,
-            )
-        ]
-        take.is_selected = False
-        service.repository.save_take(take)
-    service.update_language_provider_config(
-        LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1")
-    )
-
-    repaired = service.auto_draft(project_id, render_export=False).project
-
-    repaired_shot = next(item for item in repaired.document.shots if item.id == shot.id)
-    assert repaired_shot.camera == "stable rear coverage"
-    assert repaired_shot.revision == 2
-    assert repaired.document.repair_history[-1].decision == DirectorRepairDecision.APPLIED
-    old_takes = [item for item in repaired.takes if item.id in rejected_ids]
-    assert all(item.freshness == Freshness.STALE for item in old_takes)
-    current = [
-        item
-        for item in repaired.takes
-        if item.shot_id == shot.id and item.freshness == Freshness.CURRENT
-    ]
-    assert len(current) == 2
-    assert sum(item.is_selected for item in current) == 1
-    assert repaired.progress.manifest_ready is True
-    assert len(fake.generations) == 1
-
-
 def test_director_recommendation_and_executable_repair_must_match() -> None:
     with pytest.raises(ValueError, match="invalid advisory JSON"):
         parse_director_advice(
@@ -1210,10 +1112,10 @@ def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
     assert result.status_code == 200, result.text
     body = result.json()
     director_instructions, director_input = fake.generations[0]
-    assert "general live-action vertical video" in director_instructions
-    assert "Director rubric:" in director_instructions
-    assert "Judge staging and pacing against the intended experience" in director_instructions
-    assert "live-action Douyin vertical short drama" not in director_instructions
+    assert "当前制片技能：通用视频。" in director_instructions
+    assert "导演职责准则：" in director_instructions
+    assert "根据预期体验判断调度与节奏" in director_instructions
+    assert "AI 原生短剧" not in director_instructions
     assert json.loads(director_input)["production_profile"] == "GENERAL_VIDEO"
     assert body["repair_applied"] is False
     assert body["next_action"] == "AWAIT_USER"

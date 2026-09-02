@@ -1,5 +1,7 @@
 # Phase 22：三分钟真人都市短剧最终候选稿
 
+> 历史阶段文档，仅记录当时项目与验收状态，不是当前运行入口。现行架构见 [Phase 29](./40-agent-skill-tool-runtime-migration.md)，共享生产流程见 [`end_to_end.md`](../backend/short_drama/skills/workflows/end_to_end.md)。
+
 > 状态：`script-v4` 对白已由用户确认，29 镜分镜和项目级视觉资产已完成。对白修订后的 H3 路由已重新编译，AutonomousRun 当前停在 `GENERATE`，尚未提交 MiniMax-H3 视频任务，等待用户验收视觉资产后继续。
 
 ## 《她骗我囤极寒舱，我却用废舱挡住热浪》

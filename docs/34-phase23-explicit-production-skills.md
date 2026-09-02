@@ -1,6 +1,6 @@
 # Phase 23：显式 Production Skills 与建议式 Playbook
 
-> 后续状态：Phase 28 已把单体 Production Skill Prompt 拆成稳定 constitution、角色级 rubric 和按当前上下文召回的经验层，并补齐资产、H3 与整集 Review 的角色注入。本文保留 Phase 23 建立显式 Skill Catalog 时的实现记录。
+> 后续状态：Phase 29 已将稳定 constitution、角色级 rubric 和类型制作重点迁入可审阅的中文 Markdown Skill 目录，并引入统一 Tool Registry 和动态 AgentRuntime。静态案例经验已从格式 Skill 移除，运行经验由 `ExperienceMemory` 管理。本文保留 Phase 23 的历史实现记录；最新边界见 [Phase 29 最终架构](40-agent-skill-tool-runtime-migration.md)。
 
 ## 结论
 
@@ -33,16 +33,16 @@ Skill 中的 playbook 只是默认制片建议，例如：来源合同 → 全�
 - 剧本规划、逐场写作、语义修改和 Director 修复等现有调用均从选中的 Skill 获取策略；
 - `user_overridable=true` 是 Skill 的固定语义，建议不能阻止用户继续原方案。
 
-## 当前范围
+## Phase 23 当时范围
 
-- PoC 不建设动态 Skill Registry、插件发现、Skill 服务或通用 workflow 引擎；静态 Catalog 足以验证架构；
-- 数字人口播等后续品类新增独立 Skill，不复制项目、资产、Take、任务或时间线核心；
-- 当前 PlanningRun 仍以普通代码保存默认恢复步骤。它消费各创作 Tool 中注入的 Skill 策略，但不会把 `recommended_playbook` 解释为硬状态迁移；
-- 若未来需要 Agent 自主重新规划整条制片路径，应让 Harness 记录实际 Tool Call 与结果，而不是不断扩张 `PlanningRunStep` 或为每种修改增加专用 workflow。
+- 当时 PoC 不建设动态 Skill Registry、插件发现、Skill 服务或通用 workflow 引擎，以 Python 静态 Catalog 验证分层；
+- 数字人口播等品类被作为后续独立 Skill，原则上不复制项目、资产、Take、任务或时间线核心；
+- PlanningRun 以普通代码保存默认恢复步骤，不把 `recommended_playbook` 解释为硬状态迁移；
+- 本文提出的后续方向已在 Phase 29 落地：Harness 现在通过 AgentRun、PlanRevision 和 ActionRecord 记录实际计划与 Tool Call，无需继续扩张 `PlanningRunStep`。
 
 ## 验证
 
-- 静态 Catalog 同时提供 `GENERAL_VIDEO` 与 `DOUYIN_SHORT_DRAMA`；
+- 静态 Catalog 同时提供 `GENERAL_VIDEO` 与 `AI_SHORT_DRAMA`；
 - 两个 Skill 都明确允许用户覆盖，并共享可组合能力而非 Tool allowlist；
 - 两种 Skill 的 Writer 等领域策略保持不同；
 - 既有 Planner、分层剧本、Reference Planner 和语义修改回归保持通过。
