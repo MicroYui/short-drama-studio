@@ -155,8 +155,8 @@ def test_planning_metadata_persists_and_old_documents_remain_readable(
     assert planning.status == PlanningRunStatus.COMPLETE
     assert planning.planner == "deterministic-structure-scaffold-v3"
     assert planning.warnings == [
-        "GPT-5.6-sol 未配置；仅建立不补写创意的本地结构骨架，"
-        "具体内容、Style 与节奏需要由 Agent 完成。"
+        "仅建立不补写创意的本地结构骨架；语言创作必须由 AgentRun "
+        "持有的 Content Planning Job 逐步完成。"
     ]
 
     restarted = _service(tmp_path)

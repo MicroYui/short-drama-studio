@@ -15,7 +15,6 @@ from pydantic import Field, model_validator
 
 from short_drama.models import (
     Asset,
-    AssetKind,
     DomainModel,
     Freshness,
     ProjectBibleVersion,
@@ -155,6 +154,7 @@ def _project_index(
             line.id,
             name=f"{line.speaker}台词",
             speaker=line.speaker,
+            speaker_character_id=line.speaker_character_id,
             text=line.spoken_text,
         )
     for scene in script.structured_scenes:
@@ -194,6 +194,7 @@ def _project_index(
             asset.id,
             name=asset.name,
             asset_kind=asset.kind.value,
+            bible_entity_id=asset.bible_entity_id,
             descriptor=_asset_descriptor(asset),
             current_version_id=asset.current_version_id,
         )
@@ -236,16 +237,14 @@ def _intent_prompt(
 ) -> tuple[str, str]:
     profile = production_skill(document.project.production_profile)
     instructions = (
-        "You are a Semantic Change Planner Agent in an AI-native video-production harness. "
-        "Return JSON only and match SemanticChangeIntent exactly. Interpret the user's requested "
-        "change and select only the semantic root targets from the supplied project index. Do not "
-        "enumerate downstream shots merely because they depend on a character, location, prop, "
-        "script line, or asset; the harness computes dependency impact. Use only exact target_id and "
-        "kind pairs from the index. Preserve all unspecified identity, performance, story, staging, "
-        "audio, and edit decisions. If the request is genuinely ambiguous, set "
-        "needs_user_clarification=true instead of inventing a target. This is a user-editable plan, "
-        "not a gate and not permission to mutate files. "
-        f"Active Production Skill: {profile.label}."
+        "你是 AI-native 视频制作 Harness 中的语义变更规划 Agent。只返回 JSON，"
+        "并严格匹配 SemanticChangeIntent。完整理解用户要求的变更，只从项目索引中选择"
+        "语义根目标。不要仅因为镜头依赖某个角色、地点、道具、台词或资产就穷举下游镜头；"
+        "Harness 会根据结构化依赖计算影响范围。只能使用索引中精确的 target_id 与 kind 组合。"
+        "保留用户未要求改变的身份、表演、故事、调度、声音和剪辑决定。若指令确实存在无法消解的歧义，"
+        "将 needs_user_clarification 设为 true，不要臆造目标。这是可由用户编辑的计划，"
+        "不是质量门禁，也不代表获得了修改文件的权限。"
+        f"当前 Production Skill：{profile.label}。"
     )
     payload = {
         "instruction": request.instruction,
@@ -296,38 +295,18 @@ def _fallback_intent(
         item = by_id.get(target_id)
         if item is not None and item not in selected:
             selected.append(item)
-    if not selected:
-        instruction = request.instruction.casefold()
-        preferred_kinds = {
-            ChangeTargetKind.CHARACTER.value,
-            ChangeTargetKind.LOCATION.value,
-            ChangeTargetKind.PROP.value,
-            ChangeTargetKind.SCENE.value,
-            ChangeTargetKind.SHOT.value,
-        }
-        selected = [
-            item
-            for item in index
-            if str(item.get("kind")) in preferred_kinds
-            and len(str(item.get("name", ""))) >= 2
-            and str(item.get("name", "")).casefold() in instruction
-        ]
-    if not selected and any(token in request.instruction for token in ("全片", "全部镜头")):
-        selected = [
-            item for item in index if item["kind"] == ChangeTargetKind.TIMELINE.value
-        ]
     return SemanticChangeIntent(
         summary=(
-            "已根据显式目标或项目名称匹配变更根对象。"
+            "已根据请求中的显式结构化目标建立变更意图。"
             if selected
-            else "无法在未配置语义 Agent 时可靠确定变更目标。"
+            else "当前没有语义 Agent 结果或显式目标 ID，不从用户文本猜测项目对象。"
         ),
         requested_change=request.instruction,
         targets=[
             SemanticChangeTarget(
                 kind=ChangeTargetKind(str(item["kind"])),
                 target_id=str(item["target_id"]),
-                reason="用户显式选择或指令中直接命中该项目对象。",
+                reason="请求中显式提供了该项目对象的稳定 ID。",
             )
             for item in selected
         ],
@@ -339,23 +318,20 @@ def _fallback_intent(
 def _linked_asset_ids(
     document: ProjectDocument,
     target: SemanticChangeTarget,
-    metadata: dict[str, object],
 ) -> set[str]:
     if target.kind == ChangeTargetKind.ASSET:
         return {target.target_id}
-    name = str(metadata.get("name", ""))
-    result: set[str] = set()
-    for asset in document.assets:
-        if target.kind == ChangeTargetKind.CHARACTER:
-            if asset.kind == AssetKind.CHARACTER and asset.name.removesuffix("定妆") == name:
-                result.add(asset.id)
-        elif target.kind == ChangeTargetKind.LOCATION:
-            if asset.kind == AssetKind.LOCATION and asset.name == name:
-                result.add(asset.id)
-        elif target.kind == ChangeTargetKind.PROP:
-            if asset.kind == AssetKind.PROP and asset.name == name:
-                result.add(asset.id)
-    return result
+    if target.kind not in {
+        ChangeTargetKind.CHARACTER,
+        ChangeTargetKind.LOCATION,
+        ChangeTargetKind.PROP,
+    }:
+        return set()
+    return {
+        asset.id
+        for asset in document.assets
+        if asset.bible_entity_id == target.target_id
+    }
 
 
 def _resolve_impact(
@@ -391,15 +367,9 @@ def _resolve_impact(
     scene_ids: set[str] = set()
     shot_ids: set[str] = set()
     selected_take_ids: set[str] = set()
-    character_names: set[str] = set()
-    prop_names: set[str] = set()
-    location_names: set[str] = set()
-    scene_scope_names: set[str] = set()
-
     for target in intent.targets:
         metadata = by_key[(target.kind, target.target_id)]
-        asset_ids.update(_linked_asset_ids(document, target, metadata))
-        name = str(metadata.get("name", ""))
+        asset_ids.update(_linked_asset_ids(document, target))
         if target.kind == ChangeTargetKind.SCRIPT_LINE:
             line_ids.add(target.target_id)
         elif target.kind == ChangeTargetKind.SCENE:
@@ -409,30 +379,12 @@ def _resolve_impact(
                 line_ids.update(
                     str(value) for value in cast(list[object], raw_line_ids)
                 )
-        elif target.kind in {
-            ChangeTargetKind.CHARACTER,
-            ChangeTargetKind.LOCATION,
-            ChangeTargetKind.PROP,
-        }:
-            if target.kind == ChangeTargetKind.CHARACTER:
-                character_names.add(name)
-                line_ids.update(
-                    line.id for line in script.lines if line.speaker == name
-                )
-            elif target.kind == ChangeTargetKind.LOCATION:
-                location_names.add(name)
-                scene_scope_names.add(name)
-            else:
-                prop_names.add(name)
-        elif target.kind == ChangeTargetKind.ASSET:
-            asset_kind = str(metadata.get("asset_kind", ""))
-            if asset_kind == AssetKind.CHARACTER.value:
-                character_names.add(name.removesuffix("定妆"))
-            elif asset_kind == AssetKind.LOCATION.value:
-                location_names.add(name)
-                scene_scope_names.add(name)
-            elif asset_kind == AssetKind.PROP.value:
-                prop_names.add(name)
+        elif target.kind == ChangeTargetKind.CHARACTER:
+            line_ids.update(
+                line.id
+                for line in script.lines
+                if line.speaker_character_id == target.target_id
+            )
         elif target.kind == ChangeTargetKind.SHOT:
             shot_ids.add(target.target_id)
         elif target.kind == ChangeTargetKind.TAKE:
@@ -444,30 +396,14 @@ def _resolve_impact(
             shot_ids.update(shot.id for shot in document.shots)
 
     for scene in script.structured_scenes:
-        if scene.id in scene_ids or any(
-            name and name in f"{scene.heading}\n{scene.summary}"
-            for name in scene_scope_names
-        ):
-            scene_ids.add(scene.id)
-            line_ids.update(scene.line_ids if scene.id in scene_ids else [])
+        if scene.id in scene_ids:
+            line_ids.update(scene.line_ids)
 
     for shot in document.shots:
-        prop_context = "\n".join(
-            (
-                shot.visual,
-                shot.continuity.prop_state_in,
-                shot.continuity.prop_state_out,
-                shot.continuity.action_in,
-                shot.continuity.action_out,
-            )
-        )
         if (
             shot.scene_id in scene_ids
             or bool(set(shot.dialogue_line_ids) & line_ids)
             or bool(reference_assets_by_shot.get(shot.id, set()) & asset_ids)
-            or any(name and name in shot.visual for name in character_names)
-            or any(name and name in prop_context for name in prop_names)
-            or any(name and name in shot.visual for name in location_names)
         ):
             shot_ids.add(shot.id)
 
@@ -551,7 +487,7 @@ def plan_semantic_change(
     elif client is None:
         intent = _fallback_intent(request, index)
         warnings.append(
-            "语义变更 Agent 未配置，仅使用项目名称和显式目标匹配；计划仍可由用户修改。"
+            "语义变更 Agent 未配置，且请求未提供显式目标 ID；未根据文本猜测目标。"
         )
     else:
         instructions, input_text = _intent_prompt(document, request, index)
@@ -569,7 +505,7 @@ def plan_semantic_change(
         except (LanguageProviderError, ValueError) as error:
             intent = _fallback_intent(request, index)
             warnings.append(
-                "语义变更 Agent 不可用，已退回名称匹配且未修改任何资产："
+                "语义变更 Agent 不可用，未根据指令文本猜测项目对象，也未修改任何资产："
                 + str(error)[:800]
             )
 

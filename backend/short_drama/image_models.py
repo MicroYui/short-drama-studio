@@ -10,7 +10,11 @@ from short_drama.models import (
     Asset,
     AssetKind,
     AssetMediaType,
+    AssetReferenceStrategy,
+    AssetSheetInputPolicy,
+    AssetStandardView,
     AssetVersion,
+    CoreAssetBrief,
     DomainModel,
     ProjectAggregate,
 )
@@ -58,6 +62,11 @@ class AssetCreateRequest(DomainModel):
     kind: AssetKind
     name: str = Field(min_length=1, max_length=120)
     descriptor: str = Field(min_length=1, max_length=4000)
+    brief: CoreAssetBrief | None = None
+
+
+class AssetBriefUpdateRequest(DomainModel):
+    brief: CoreAssetBrief
 
 
 class AssetImportLocalRequest(DomainModel):
@@ -76,6 +85,27 @@ class AssetImportUrlRequest(DomainModel):
 class AssetReviewRequest(DomainModel):
     decision: AssetReviewDecision
     notes: str = Field(min_length=1, max_length=4000)
+
+
+class AssetReferenceSheetCellRequest(DomainModel):
+    asset_version_id: str = Field(min_length=1, max_length=200)
+    view: AssetStandardView
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class AssetReferenceSheetComposeRequest(DomainModel):
+    strategy: AssetReferenceStrategy
+    cells: list[AssetReferenceSheetCellRequest] = Field(min_length=2, max_length=9)
+    descriptor: str = Field(min_length=1, max_length=4000)
+    parent_version_id: str | None = None
+    input_policy: AssetSheetInputPolicy = AssetSheetInputPolicy.EXPLICIT_VERSIONS
+    columns: int = Field(default=2, ge=1, le=3)
+
+    @model_validator(mode="after")
+    def validate_layout(self) -> AssetReferenceSheetComposeRequest:
+        if self.columns > len(self.cells):
+            raise ValueError("Reference sheet columns cannot exceed its cell count")
+        return self
 
 
 class ImageProviderRequest(DomainModel):
@@ -164,6 +194,10 @@ class ImageTaskCreateRequest(DomainModel):
         if self.mask_version_id in self.input_version_ids:
             raise ValueError("Edit mask must not also be listed as a visual input")
         return self
+
+
+class ImageNotSubmittedResolutionRequest(DomainModel):
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class ImageTokenDetails(DomainModel):

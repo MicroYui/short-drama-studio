@@ -280,6 +280,8 @@ class ContextCompiler:
             project_id=run.project_id,
             objective=objective,
             active_skill_ids=run.active_skill_ids,
+            execution_target=run.execution_target,
+            render_export=run.render_export,
             project_summary=project_summary,
             run_focus=run_focus,
             constraints=bounded_constraints,

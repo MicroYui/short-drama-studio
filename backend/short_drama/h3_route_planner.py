@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,24 +21,27 @@ from short_drama.h3_models import (
     H3RouteAssetPreparation,
     H3RouteAssetPreparationStatus,
     H3RoutePlanStatus,
+    H3ShotRouteDirective,
     H3ShotRouteAction,
     H3ShotRoutePlan,
     H3ShotRouteReadiness,
     H3VideoGuide,
     H3VideoGuideKind,
     H3ProviderRun,
+    derive_h3_reference_alias,
 )
 from short_drama.models import (
     ApprovalStatus,
+    AssetKind,
     AssetMediaType,
     DirectorRepairDecision,
     DirectorRepairStrategy,
     DomainModel,
     EvidencePurpose,
-    EvidenceStatus,
     Freshness,
     GenerationTask,
     ProjectDocument,
+    QAReport,
     QaFailureCategory,
     QaStatus,
     ReferencePlanEntry,
@@ -46,6 +49,7 @@ from short_drama.models import (
     ShotPlan,
     Take,
     TakeAvailability,
+    TaskStatus,
     VideoGenerationRoute,
     VideoInspectionReport,
     VideoInspectionScope,
@@ -66,11 +70,16 @@ from short_drama.providers.openai_compatible_language_client import (
 from short_drama.reference_planner import (
     KeyframeBriefCompileRequest,
     KeyframePosition,
-    ReferencePlanPreviewRequest,
+    ReferenceSelection,
     compile_keyframe_brief,
-    preview_reference_plan,
 )
 from short_drama.style_context import declared_style_value
+from short_drama.visual_input_quality import (
+    ReferenceVisualCandidate,
+    ReferenceVisualRerankRequest,
+    VisualInputContractError,
+    build_reference_visual_candidates,
+)
 
 
 class RoutePlanningError(ValueError):
@@ -80,6 +89,7 @@ class RoutePlanningError(ValueError):
 class _AgentRouteChoice(DomainModel):
     shot_id: str
     candidate_id: str
+    reference_selection_candidate_ids: list[str] | None = None
     rationale: str = Field(min_length=1, max_length=3000)
     qa_focus_categories: list[QaFailureCategory] = Field(
         default_factory=list[QaFailureCategory],
@@ -92,6 +102,13 @@ class _AgentRouteChoices(DomainModel):
     choices: list[_AgentRouteChoice]
 
 
+class _RouteDecisionEvidence(DomainModel):
+    take_quality: QAReport | None = None
+    take_qa_status: QaStatus | None = None
+    take_is_selected: bool | None = None
+    prior_route_evidence: RouteEvidence | None = None
+
+
 @dataclass
 class _RouteCandidate:
     id: str
@@ -101,11 +118,16 @@ class _RouteCandidate:
     duration_seconds: int
     media_inputs: list[H3MediaInput]
     rationale: str
-    quality_score: float
     reuse_take_id: str | None = None
     video_guide_id: str | None = None
     video_guide: H3VideoGuide | None = None
     evidence_ids: list[str] = field(default_factory=list[str])
+    decision_evidence: _RouteDecisionEvidence | None = None
+    reference_selection_candidates: list[ReferenceVisualCandidate] = field(
+        default_factory=list[ReferenceVisualCandidate]
+    )
+    reference_max_selected: int | None = None
+    selected_reference_candidate_ids: list[str] = field(default_factory=list[str])
     warnings: list[str] = field(default_factory=list[str])
     missing_inputs: list[str] = field(default_factory=list[str])
     preparations: list[H3RouteAssetPreparation] = field(default_factory=list[H3RouteAssetPreparation])
@@ -129,6 +151,7 @@ def build_h3_production_route_plan(
     prepared_media_inputs: dict[str, list[H3MediaInput]] | None = None,
     video_guides: dict[str, list[H3VideoGuide]] | None = None,
     video_guide_warnings: list[str] | None = None,
+    shot_directives: list[H3ShotRouteDirective] | None = None,
 ) -> H3ProductionRoutePlan:
     selected_ids = set(shot_ids)
     known_ids = {shot.id for shot in document.shots}
@@ -142,6 +165,15 @@ def build_h3_production_route_plan(
     ]
     if not shots:
         raise RoutePlanningError("A production route plan requires at least one shot")
+    directive_by_shot = {
+        item.shot_id: item for item in (shot_directives or [])
+    }
+    unexpected_directives = sorted(set(directive_by_shot) - {item.id for item in shots})
+    if unexpected_directives:
+        raise RoutePlanningError(
+            "Shot route directives refer to shots outside this plan: "
+            + ", ".join(unexpected_directives)
+        )
 
     task_by_id = {item.id: item for item in tasks}
     run_by_task = {item.task_id: item for item in provider_runs}
@@ -183,12 +215,8 @@ def build_h3_production_route_plan(
         )
 
     agent_choices: dict[str, _AgentRouteChoice] = {}
-    planner = "evidence-first-route-agent-v1"
-    needs_route_judgment = any(
-        not any(item.action == H3ShotRouteAction.REUSE_TAKE for item in candidates)
-        for candidates in candidates_by_shot.values()
-    )
-    if language_client is not None and needs_route_judgment:
+    planner = "evidence-first-route-agent-v2"
+    if language_client is not None:
         used_language_agent = False
         for batch in _route_agent_batches(shots):
             try:
@@ -206,19 +234,31 @@ def build_h3_production_route_plan(
                 global_warnings.append(
                     "GPT-5.6-sol route advice unavailable for shots "
                     + ", ".join(shot.id for shot in batch)
-                    + f"; deterministic evidence ranking used: {exc}"
+                    + "; the technical baseline remains visible for debugging, but these "
+                    + f"shots are waiting for a structured route decision: {exc}"
                 )
         if used_language_agent:
             planner += "+gpt-5.6-sol"
 
     decisions: list[H3ShotRoutePlan] = []
     new_seconds = 0
+    has_unresolved_route = False
     for shot in shots:
         candidates = candidates_by_shot[shot.id]
-        chosen = _fallback_candidate(candidates)
+        current_reference_plan = plan_by_shot.get(
+            shot.id,
+            ReferencePlanEntry(
+                shot_id=shot.id,
+                bindings=[],
+                capability_valid=True,
+                validation_notes=[],
+            ),
+        )
+        chosen = _technical_baseline_candidate(candidates)
         agent_choice = agent_choices.get(shot.id)
         choice_warnings: list[str] = []
         choice_focus: list[QaFailureCategory] = []
+        has_structured_route_choice = False
         if agent_choice is not None:
             selected = next(
                 (item for item in candidates if item.id == agent_choice.candidate_id),
@@ -226,44 +266,80 @@ def build_h3_production_route_plan(
             )
             if selected is None:
                 choice_warnings.append(
-                    "Language agent returned an unknown candidate; evidence ranking was retained."
+                    "Language agent returned an unknown candidate; the direct technical baseline was retained."
                 )
-            elif chosen.action != H3ShotRouteAction.REUSE_TAKE:
-                chosen = selected
-                chosen.rationale = agent_choice.rationale
-                choice_warnings.extend(agent_choice.warnings)
-                choice_focus.extend(agent_choice.qa_focus_categories)
+            else:
+                try:
+                    chosen = _materialize_reference_selection(
+                        document=document,
+                        shot=shot,
+                        plan=current_reference_plan,
+                        candidate=selected,
+                        selection_candidate_ids=(
+                            agent_choice.reference_selection_candidate_ids
+                        ),
+                    )
+                except ValueError as exc:
+                    choice_warnings.append(
+                        "Route Agent returned an invalid typed reference selection; "
+                        f"this shot remains unresolved: {exc}"
+                    )
+                else:
+                    has_structured_route_choice = True
+                    chosen.rationale = agent_choice.rationale
+                    choice_warnings.extend(agent_choice.warnings)
+                    choice_focus.extend(agent_choice.qa_focus_categories)
 
-        applied_repair_strategy = _applied_director_strategy(document, shot.id)
-        if (
-            applied_repair_strategy
-            in {
-                DirectorRepairStrategy.CHANGE_KEYFRAME,
-                DirectorRepairStrategy.CHANGE_CAMERA,
-            }
-            and chosen.action == H3ShotRouteAction.GENERATE
-            and chosen.route
-            not in {
-                VideoGenerationRoute.FRAME_FIRST,
-                VideoGenerationRoute.FRAME_FIRST_LAST,
-            }
-        ):
-            frame_candidates = [
-                item
-                for item in candidates
-                if item.route
-                in {
-                    VideoGenerationRoute.FRAME_FIRST,
-                    VideoGenerationRoute.FRAME_FIRST_LAST,
-                }
-            ]
-            if frame_candidates:
-                chosen = _fallback_candidate(frame_candidates)
-                choice_warnings.append(
-                    "The latest applied Director repair changes the keyframe or camera, so "
-                    "AUTO_DRAFT will execute it with a matching frame-controlled route. The "
-                    "user may override the repair."
+        directive = directive_by_shot.get(shot.id)
+        if directive is not None and directive.candidate_id is not None:
+            explicit_candidate = next(
+                (item for item in candidates if item.id == directive.candidate_id),
+                None,
+            )
+            if explicit_candidate is None:
+                raise RoutePlanningError(
+                    f"Explicit H3 route candidate {directive.candidate_id} is unavailable "
+                    f"for shot {shot.id}"
                 )
+            try:
+                chosen = _materialize_reference_selection(
+                    document=document,
+                    shot=shot,
+                    plan=current_reference_plan,
+                    candidate=explicit_candidate,
+                    selection_candidate_ids=(
+                        directive.reference_selection_candidate_ids
+                    ),
+                )
+            except ValueError as exc:
+                raise RoutePlanningError(
+                    f"Explicit H3 reference selection is invalid for shot {shot.id}: {exc}"
+                ) from exc
+            has_structured_route_choice = True
+        elif directive is not None and directive.reuse_take_id is not None:
+            explicit_reuse = next(
+                (
+                    item
+                    for item in candidates
+                    if item.action == H3ShotRouteAction.REUSE_TAKE
+                    and item.reuse_take_id == directive.reuse_take_id
+                ),
+                None,
+            )
+            if explicit_reuse is None:
+                raise RoutePlanningError(
+                    f"Explicit reuse Take {directive.reuse_take_id} is unavailable for shot {shot.id}"
+                )
+            chosen = explicit_reuse
+            has_structured_route_choice = True
+
+        if not has_structured_route_choice:
+            has_unresolved_route = True
+            choice_warnings.append(
+                "No structured Route Agent decision or explicit route directive was available. "
+                "DIRECT is shown only as a provider-compatible technical baseline for debugging; "
+                "this shot is waiting for an Agent decision and cannot be executed."
+            )
 
         risk_ids, risk_focus = risks_by_shot[shot.id]
         focus = list(dict.fromkeys([*risk_focus, *choice_focus]))
@@ -274,7 +350,15 @@ def build_h3_production_route_plan(
             warnings.append(
                 f"Reusable Take already has {len(prior_inspections)} persisted video inspection(s)."
             )
-        if chosen.action == H3ShotRouteAction.GENERATE:
+        decision_readiness = (
+            chosen.readiness
+            if has_structured_route_choice
+            else H3ShotRouteReadiness.NEEDS_AGENT_DECISION
+        )
+        if (
+            has_structured_route_choice
+            and chosen.action == H3ShotRouteAction.GENERATE
+        ):
             new_seconds += chosen.duration_seconds * candidate_count
         decisions.append(
             H3ShotRoutePlan(
@@ -303,13 +387,16 @@ def build_h3_production_route_plan(
                     for item in (video_guides or {}).get(shot.id, [])
                 ],
                 selected_video_guide_id=chosen.video_guide_id,
+                reference_selection_candidate_ids=list(
+                    chosen.selected_reference_candidate_ids
+                ),
                 candidate_count=(
                     1
                     if chosen.action == H3ShotRouteAction.REUSE_TAKE
                     else candidate_count
                 ),
                 inspection=inspection,
-                readiness=chosen.readiness,
+                readiness=decision_readiness,
             )
         )
 
@@ -322,6 +409,8 @@ def build_h3_production_route_plan(
         )
         else H3RoutePlanStatus.PARTIAL
     )
+    if has_unresolved_route:
+        planner += "+awaiting-agent-decision"
     return H3ProductionRoutePlan(
         id=f"h3-route-plan-{uuid4().hex}",
         project_id=document.project.id,
@@ -408,31 +497,24 @@ def _build_candidates(
         take
         for take in takes
         if take.shot_id == shot.id
-        and _take_is_reusable(
+        and _take_is_available_for_reuse(
             document=document,
             shot=shot,
             take=take,
             task=task_by_id.get(take.task_id),
-            evidence=evidence_by_take.get(take.id),
         )
     ]
-    if reusable:
-        best = max(
-            reusable,
-            key=lambda item: (
-                item.is_selected,
-                item.qa_report.score,
-                -item.candidate_index,
-                item.created_at,
-            ),
-        )
-        route_evidence = evidence_by_take[best.id]
-        run = run_by_task.get(best.task_id)
+    for take in sorted(
+        reusable,
+        key=lambda item: (item.candidate_index, item.created_at, item.id),
+    ):
+        route_evidence = evidence_by_take.get(take.id)
+        run = run_by_task.get(take.task_id)
         candidates.append(
             _RouteCandidate(
-                id=f"reuse:{best.id}",
+                id=f"reuse:{take.id}",
                 action=H3ShotRouteAction.REUSE_TAKE,
-                route=best.route,
+                route=take.route,
                 prompt=run.prompt if run is not None else direct_prompt,
                 duration_seconds=duration,
                 media_inputs=(
@@ -440,13 +522,16 @@ def _build_candidates(
                     if run is not None
                     else []
                 ),
-                reuse_take_id=best.id,
-                evidence_ids=[route_evidence.id],
-                rationale=(
-                    "Reuse the current-version H3 Take that already passed technical and "
-                    "human quality review; no provider generation is needed."
+                reuse_take_id=take.id,
+                evidence_ids=(
+                    [route_evidence.id] if route_evidence is not None else []
                 ),
-                quality_score=1000.0 + best.qa_report.score,
+                rationale=(
+                    "This current, locally available H3 Take can be reused without another "
+                    "provider generation. Its recorded QA is decision evidence for the Route "
+                    "Agent, not an automatic eligibility gate."
+                ),
+                decision_evidence=_take_decision_evidence(take, route_evidence),
                 warnings=duration_warnings,
             )
         )
@@ -456,40 +541,43 @@ def _build_candidates(
     for item in evidence:
         if (
             item.shot_id != shot.id
-            or item.status != EvidenceStatus.REVIEWED
-            or item.hard_gate_passed is not True
             or item.purpose == EvidencePurpose.CONTRACT_SMOKE
         ):
             continue
         task = task_by_id.get(item.task_id)
         run = run_by_task.get(item.task_id)
-        if task is None or run is None or not _task_matches(document, shot, task):
+        if (
+            task is None
+            or run is None
+            or task.status != TaskStatus.SUCCEEDED
+            or item.technical_passed is False
+            or not _task_matches(document, shot, task)
+        ):
             continue
         templates.append((item, run))
-    if templates and supported:
-        template_evidence, template_run = max(
-            templates,
-            key=lambda item: (item[0].score or 0.0, item[0].reviewed_at or ""),
-        )
-        template_inputs = _refresh_media_inputs(template_run.media_inputs, approved_inputs)
-        template_prompt = build_h3_prompt(
-            document,
-            shot,
-            route=template_run.route,
-            duration_seconds=duration,
-            media_inputs=template_inputs,
-            video_guides=video_guides,
-        )
-        try:
-            validate_h3_probe(
+    if supported:
+        for template_evidence, template_run in templates:
+            template_inputs = _refresh_media_inputs(
+                template_run.media_inputs,
+                approved_inputs,
+            )
+            template_prompt = build_h3_prompt(
+                document,
+                shot,
                 route=template_run.route,
-                prompt=template_prompt,
                 duration_seconds=duration,
                 media_inputs=template_inputs,
+                video_guides=video_guides,
             )
-        except H3CapabilityError:
-            pass
-        else:
+            try:
+                validate_h3_probe(
+                    route=template_run.route,
+                    prompt=template_prompt,
+                    duration_seconds=duration,
+                    media_inputs=template_inputs,
+                )
+            except H3CapabilityError:
+                continue
             candidates.append(
                 _RouteCandidate(
                     id=f"template:{template_evidence.id}",
@@ -499,11 +587,14 @@ def _build_candidates(
                     duration_seconds=duration,
                     media_inputs=template_inputs,
                     evidence_ids=[template_evidence.id],
-                    rationale=(
-                        "Reuse the highest-scoring reviewed route condition while compiling a "
-                        "fresh prompt from the current ShotPlan."
+                    decision_evidence=_RouteDecisionEvidence(
+                        prior_route_evidence=template_evidence,
                     ),
-                    quality_score=700.0 + (template_evidence.score or 0.0),
+                    rationale=(
+                        "This prior technically usable route condition can be regenerated with "
+                        "the current ShotPlan. Its review outcome is evidence for the Route Agent, "
+                        "not an automatic ranking signal."
+                    ),
                     warnings=duration_warnings,
                 )
             )
@@ -554,7 +645,6 @@ def _build_candidates(
                         "interaction or local rework risk benefits from stronger composition and "
                         "continuity control. The user may still override this recommendation."
                     ),
-                    quality_score=900.0 if frame_control_repair_applied else 600.0,
                     warnings=[
                         *duration_warnings,
                         "The recommended Frame-first route needs an approved start frame before submission.",
@@ -597,7 +687,6 @@ def _build_candidates(
                             "composition, action readiness, and continuity without constraining "
                             "the terminal performance with a last frame."
                         ),
-                        quality_score=950.0 if frame_control_repair_applied else 650.0,
                         warnings=duration_warnings,
                         preparations=[selected_preparation],
                     )
@@ -642,7 +731,6 @@ def _build_candidates(
                     "Direct H3 generation is the always-executable fallback. Missing visual "
                     "anchors remain advisory quality risks and do not block the user."
                 ),
-                quality_score=100.0,
                 warnings=[
                     *duration_warnings,
                     *(
@@ -667,7 +755,6 @@ def _build_candidates(
                     "The current ShotPlan cannot be represented by one H3 request without "
                     "changing its duration; splitting is recommended but remains a Director choice."
                 ),
-                quality_score=-1000.0,
                 warnings=duration_warnings,
                 missing_inputs=["H3 supports 4–15 seconds per request"],
                 preparations=preparations,
@@ -685,42 +772,74 @@ def _reference_candidate(
     duration: int,
     approved_inputs: dict[str, tuple[AssetMediaType, H3MediaSource]],
 ) -> _RouteCandidate | None:
-    preview = preview_reference_plan(
-        document,
-        shot,
-        plan,
-        ReferencePlanPreviewRequest(),
-    )
-    inputs: list[H3MediaInput] = []
-    for selected in preview.selected:
-        approved = approved_inputs.get(selected.asset_version_id)
-        if approved is None:
-            continue
-        media_type, source = approved
-        kind_and_role = {
-            AssetMediaType.IMAGE: (H3MediaKind.IMAGE, H3MediaRole.REFERENCE_IMAGE),
-            AssetMediaType.VIDEO: (H3MediaKind.VIDEO, H3MediaRole.REFERENCE_VIDEO),
-            AssetMediaType.AUDIO: (H3MediaKind.AUDIO, H3MediaRole.REFERENCE_AUDIO),
-        }.get(media_type)
-        if kind_and_role is None:
-            continue
-        kind, role = kind_and_role
-        inputs.append(
-            H3MediaInput(
-                kind=kind,
-                role=role,
-                source=source.model_copy(deep=True),
-                asset_version_id=selected.asset_version_id,
+    try:
+        selection_candidates, max_selected, selection_warnings = (
+            build_reference_visual_candidates(
+                document=document,
+                shot=shot,
+                plan=plan,
+                request=ReferenceVisualRerankRequest(),
+                bound_candidates=False,
             )
         )
+    except VisualInputContractError:
+        selection_candidates = []
+        max_selected = plan.max_reference_images
+        selection_warnings = []
+
+    voice_inputs: list[H3MediaInput] = []
+    used_aliases: set[str] = set()
     voice_references, voice_warnings = _voice_reference_inputs(
         document=document,
         shot=shot,
         approved_inputs=approved_inputs,
     )
-    inputs.extend(item for _character_name, item in voice_references)
-    if not inputs:
+    for _character_name, item in voice_references:
+        voice_inputs.append(_route_media_with_unique_alias(item, used_aliases))
+    if not selection_candidates and not voice_inputs:
         return None
+
+    warnings: list[str] = list(
+        dict.fromkeys(
+            [
+                *selection_warnings,
+                *voice_warnings,
+                *(
+                    [
+                        "Using custom voice input selects H3 Reference mode; it cannot be "
+                        "combined with first/last-frame roles in the same request."
+                    ]
+                    if voice_references
+                    else []
+                ),
+            ]
+        )
+    )
+    if selection_candidates:
+        return _RouteCandidate(
+            id=f"reference:{shot.id}",
+            action=H3ShotRouteAction.GENERATE,
+            route=VideoGenerationRoute.REFERENCE,
+            prompt=build_h3_prompt(
+                document,
+                shot,
+                route=VideoGenerationRoute.DIRECT,
+                duration_seconds=duration,
+            ),
+            duration_seconds=duration,
+            media_inputs=voice_inputs,
+            rationale=(
+                "REFERENCE 路线有多个合法的结构化视觉候选。"
+                "Route Agent 需根据镜头职责显式选择 candidate id；"
+                "候选分数及原因只是证据，不代表本地自动结论。"
+            ),
+            reference_selection_candidates=selection_candidates,
+            reference_max_selected=max_selected,
+            warnings=warnings,
+            readiness=H3ShotRouteReadiness.NEEDS_AGENT_DECISION,
+        )
+
+    inputs = [item.model_copy(deep=True) for item in voice_inputs]
     compiled_prompt = build_h3_prompt(
         document,
         shot,
@@ -739,7 +858,7 @@ def _reference_candidate(
         return None
     readiness = (
         H3ShotRouteReadiness.READY_WITH_WARNINGS
-        if preview.missing_requirement_ids or preview.warnings or voice_warnings
+        if warnings
         else H3ShotRouteReadiness.READY
     )
     return _RouteCandidate(
@@ -750,36 +869,261 @@ def _reference_candidate(
         duration_seconds=duration,
         media_inputs=inputs,
         rationale=(
-            "Bind the best approved reference-pack entries selected for the current shot"
-            + (
-                " and the optional character voice reference supplied by the user."
-                if voice_references
-                else "."
-            )
+            "Use the typed character voice reference explicitly supplied by the user for this "
+            "speaking shot. No visual reference candidate is available to select."
         ),
-        quality_score=(
-            (850.0 if voice_references else 500.0)
-            - len(preview.missing_requirement_ids) * 50.0
-        ),
-        warnings=list(
-            dict.fromkeys(
-                [
-                    *preview.warnings,
-                    *voice_warnings,
-                    *(
-                        [
-                            "Using custom voice input selects H3 Reference mode; it cannot be "
-                            "combined with first/last-frame roles in the same request."
-                        ]
-                        if voice_references
-                        else []
-                    ),
-                ]
-            )
-        ),
-        missing_inputs=list(preview.missing_requirement_ids),
+        warnings=warnings,
         readiness=readiness,
     )
+
+
+def _materialize_reference_selection(
+    *,
+    document: ProjectDocument,
+    shot: ShotPlan,
+    plan: ReferencePlanEntry,
+    candidate: _RouteCandidate,
+    selection_candidate_ids: list[str] | None,
+) -> _RouteCandidate:
+    if candidate.route != VideoGenerationRoute.REFERENCE:
+        if selection_candidate_ids:
+            raise ValueError(
+                "reference_selection_candidate_ids may only accompany a REFERENCE candidate"
+            )
+        return candidate
+    if not candidate.reference_selection_candidates:
+        if selection_candidate_ids:
+            raise ValueError("This REFERENCE candidate has no visual selection candidates")
+        return candidate
+    if selection_candidate_ids is None:
+        raise ValueError(
+            "REFERENCE candidates with visual options require "
+            "reference_selection_candidate_ids"
+        )
+    if len(selection_candidate_ids) != len(set(selection_candidate_ids)):
+        raise ValueError("Reference selection candidate IDs must be unique")
+    max_selected = candidate.reference_max_selected or plan.max_reference_images
+    if len(selection_candidate_ids) > max_selected:
+        raise ValueError(
+            f"At most {max_selected} visual reference candidates may be selected"
+        )
+    candidates_by_id = {
+        item.candidate_id: item for item in candidate.reference_selection_candidates
+    }
+    unknown = [
+        item for item in selection_candidate_ids if item not in candidates_by_id
+    ]
+    if unknown:
+        raise ValueError(
+            "Unknown reference selection candidate IDs: " + ", ".join(unknown)
+        )
+
+    approved_inputs = _approved_media_inputs(document)
+    selected_candidates = [
+        candidates_by_id[item] for item in selection_candidate_ids
+    ]
+    inputs: list[H3MediaInput] = []
+    used_aliases: set[str] = set()
+    for selected_candidate in selected_candidates:
+        inputs.append(
+            _reference_selection_media_input(
+                document=document,
+                shot=shot,
+                plan=plan,
+                selected=selected_candidate,
+                approved_inputs=approved_inputs,
+                used_aliases=used_aliases,
+            )
+        )
+    for item in candidate.media_inputs:
+        inputs.append(_route_media_with_unique_alias(item, used_aliases))
+    if not inputs:
+        raise ValueError("The explicit REFERENCE selection produced no media inputs")
+
+    prompt = build_h3_prompt(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=candidate.duration_seconds,
+        media_inputs=inputs,
+    )
+    validate_h3_probe(
+        route=VideoGenerationRoute.REFERENCE,
+        prompt=prompt,
+        duration_seconds=candidate.duration_seconds,
+        media_inputs=inputs,
+    )
+
+    covered_requirement_ids = {
+        requirement_id
+        for item in selected_candidates
+        for requirement_id in item.requirement_ids
+    }
+    missing_requirement_ids = [
+        requirement.id
+        for requirement in plan.requirements
+        if requirement.required and requirement.id not in covered_requirement_ids
+    ]
+    warnings = list(candidate.warnings)
+    if missing_requirement_ids:
+        warnings.append(
+            "Route Agent selected a usable REFERENCE set that does not cover these declared "
+            "requirements: " + ", ".join(missing_requirement_ids)
+        )
+    return replace(
+        candidate,
+        prompt=prompt,
+        media_inputs=inputs,
+        selected_reference_candidate_ids=list(selection_candidate_ids),
+        warnings=list(dict.fromkeys(warnings)),
+        missing_inputs=missing_requirement_ids,
+        readiness=(
+            H3ShotRouteReadiness.READY_WITH_WARNINGS
+            if warnings or missing_requirement_ids
+            else H3ShotRouteReadiness.READY
+        ),
+    )
+
+
+def _reference_selection_media_input(
+    *,
+    document: ProjectDocument,
+    shot: ShotPlan,
+    plan: ReferencePlanEntry,
+    selected: ReferenceVisualCandidate,
+    approved_inputs: dict[str, tuple[AssetMediaType, H3MediaSource]],
+    used_aliases: set[str],
+) -> H3MediaInput:
+    approved = approved_inputs.get(selected.asset_version_id)
+    if approved is None:
+        raise ValueError(
+            f"Reference candidate {selected.candidate_id} no longer has approved media"
+        )
+    media_type, source = approved
+    kind_and_role = {
+        AssetMediaType.IMAGE: (H3MediaKind.IMAGE, H3MediaRole.REFERENCE_IMAGE),
+        AssetMediaType.VIDEO: (H3MediaKind.VIDEO, H3MediaRole.REFERENCE_VIDEO),
+        AssetMediaType.AUDIO: (H3MediaKind.AUDIO, H3MediaRole.REFERENCE_AUDIO),
+    }.get(media_type)
+    if kind_and_role is None:
+        raise ValueError(
+            f"Reference candidate {selected.candidate_id} has unsupported media"
+        )
+    selection = ReferenceSelection(
+        pack_id=selected.pack_id,
+        entry_id=selected.entry_id,
+        subject_asset_id=selected.subject_asset_id,
+        asset_version_id=selected.asset_version_id,
+        role=selected.role,
+        angle=selected.angle,
+        framing=selected.framing,
+        tags=list(selected.tags),
+        description=selected.description,
+        requirement_ids=list(selected.requirement_ids),
+        score=selected.deterministic_score,
+        reasons=list(selected.deterministic_reasons),
+    )
+    alias, purpose = _selected_reference_metadata(document, shot, plan, selection)
+    alias = _unique_route_reference_alias(
+        alias,
+        stable_id=selected.candidate_id,
+        used_aliases=used_aliases,
+    )
+    used_aliases.add(alias)
+    kind, role = kind_and_role
+    return H3MediaInput(
+        kind=kind,
+        role=role,
+        source=source.model_copy(deep=True),
+        asset_version_id=selected.asset_version_id,
+        subject_asset_id=selected.subject_asset_id,
+        reference_alias=alias,
+        binding_purpose=purpose,
+        reference_tags=list(selected.tags),
+    )
+
+
+def _selected_reference_metadata(
+    document: ProjectDocument,
+    shot: ShotPlan,
+    plan: ReferencePlanEntry,
+    selected: ReferenceSelection,
+) -> tuple[str, str]:
+    subject = next(
+        (asset for asset in document.assets if asset.id == selected.subject_asset_id),
+        None,
+    )
+    subject_name = subject.name if subject is not None else selected.subject_asset_id
+    matching_cues = [
+        (beat.start_seconds, cue)
+        for beat in shot.timeline_beats
+        for cue in beat.references
+        if cue.subject_asset_id == selected.subject_asset_id
+        and set(cue.required_tags).issubset(selected.tags)
+    ]
+    if matching_cues:
+        _start, cue = max(
+            matching_cues,
+            key=lambda item: (len(item[1].required_tags), -item[0]),
+        )
+        return cue.alias, cue.purpose
+    alias_parts = [subject_name, *selected.tags[:2]]
+    if len(alias_parts) == 1:
+        alias_parts.append(selected.role.value.lower())
+    requirement_purposes = [
+        requirement.purpose
+        for requirement in plan.requirements
+        if requirement.id in selected.requirement_ids
+    ]
+    return "_".join(alias_parts), "；".join(requirement_purposes) or selected.description
+
+
+def _route_reference_alias(value: str) -> str:
+    """Normalize generated route aliases while respecting H3's 80-character limit."""
+
+    return derive_h3_reference_alias(value)
+
+
+def _unique_route_reference_alias(
+    value: str,
+    *,
+    stable_id: str,
+    used_aliases: set[str],
+) -> str:
+    alias = _route_reference_alias(value)
+    if alias not in used_aliases:
+        return alias
+    suffix = _route_reference_alias(stable_id)[-16:]
+    alias = _route_reference_alias(
+        f"{alias[: max(1, 79 - len(suffix))]}_{suffix}"
+    )
+    if alias in used_aliases:
+        raise RoutePlanningError(
+            f"Reference selections produced duplicate semantic alias @{alias}"
+        )
+    return alias
+
+
+def _route_media_with_unique_alias(
+    media: H3MediaInput,
+    used_aliases: set[str],
+) -> H3MediaInput:
+    raw_alias = media.reference_alias or f"{media.kind.value}_{media.role.value}"
+    stable_id = (
+        media.subject_asset_id
+        or media.asset_version_id
+        or media.video_guide_id
+        or raw_alias
+    )
+    alias = _unique_route_reference_alias(
+        raw_alias,
+        stable_id=stable_id,
+        used_aliases=used_aliases,
+    )
+    used_aliases.add(alias)
+    if alias == media.reference_alias:
+        return media
+    return media.model_copy(update={"reference_alias": alias})
 
 
 def _video_guide_candidates(
@@ -796,22 +1140,29 @@ def _video_guide_candidates(
         approved_inputs=approved_inputs,
     )
     result: list[_RouteCandidate] = []
-    score_hints = {
-        H3VideoGuideKind.PREVIOUS_TAKE: 90.0,
-        H3VideoGuideKind.TAIL_WINDOW: 95.0,
-        H3VideoGuideKind.CAMERA_PREVIS: 85.0,
-    }
     for guide in guides:
         guide_input = H3MediaInput(
             kind=H3MediaKind.VIDEO,
             role=H3MediaRole.REFERENCE_VIDEO,
             source=H3MediaSource(local_path=guide.media_path),
             video_guide_id=guide.id,
+            reference_alias=_route_reference_alias(
+                f"camera_previs_{guide.source_shot_id}"
+                if guide.kind == H3VideoGuideKind.CAMERA_PREVIS
+                else f"motion_continuity_{guide.source_shot_id}"
+            ),
+            binding_purpose=(
+                "只锚定粗略运镜路径与节奏"
+                if guide.kind == H3VideoGuideKind.CAMERA_PREVIS
+                else "只锚定前镜终态、运动方向与兼容的镜头惯性"
+            ),
         )
-        media_inputs = [
-            guide_input,
-            *(item for _character_name, item in voice_references),
-        ]
+        used_aliases: set[str] = set()
+        media_inputs = [_route_media_with_unique_alias(guide_input, used_aliases)]
+        media_inputs.extend(
+            _route_media_with_unique_alias(item, used_aliases)
+            for _character_name, item in voice_references
+        )
         compiled_prompt = build_h3_prompt(
             document,
             shot,
@@ -841,10 +1192,6 @@ def _video_guide_candidates(
                 video_guide_id=guide.id,
                 video_guide=guide,
                 rationale=guide.rationale,
-                quality_score=(
-                    score_hints[guide.kind]
-                    + min(0.9, guide.source_quality_score / 10.0)
-                ),
                 warnings=warnings,
                 readiness=(
                     H3ShotRouteReadiness.READY_WITH_WARNINGS
@@ -883,6 +1230,7 @@ def _voice_reference_inputs(
     if script is None or bible is None:
         return [], []
     lines = {item.id: item for item in script.lines}
+    characters = {item.id: item for item in bible.characters}
     bindings = {item.character_id: item for item in document.voice_references}
     assets = {item.id: item for item in document.assets}
     resolved: list[tuple[str, H3MediaInput]] = []
@@ -893,14 +1241,10 @@ def _voice_reference_inputs(
         line = lines.get(line_id)
         if line is None:
             continue
-        character = max(
-            (
-                item
-                for item in bible.characters
-                if item.name == line.speaker or item.name in line.speaker
-            ),
-            key=lambda item: len(item.name),
-            default=None,
+        character = (
+            characters.get(line.speaker_character_id)
+            if line.speaker_character_id is not None
+            else None
         )
         if character is None or character.id in seen_characters:
             continue
@@ -948,6 +1292,15 @@ def _voice_reference_inputs(
             )
             continue
         _media_type, source = approved
+        character_asset = next(
+            (
+                candidate
+                for candidate in document.assets
+                if candidate.kind == AssetKind.CHARACTER
+                and candidate.bible_entity_id == character.id
+            ),
+            None,
+        )
         resolved.append(
             (
                 character.name,
@@ -956,6 +1309,11 @@ def _voice_reference_inputs(
                     role=H3MediaRole.REFERENCE_AUDIO,
                     source=source.model_copy(deep=True),
                     asset_version_id=approved_version_id,
+                    subject_asset_id=(
+                        character_asset.id if character_asset is not None else None
+                    ),
+                    reference_alias=_route_reference_alias(f"{character.name}声线"),
+                    binding_purpose=f"只锚定{character.name}的声线与声音质感",
                 ),
             )
         )
@@ -964,30 +1322,37 @@ def _voice_reference_inputs(
     return resolved, warnings
 
 
-def _take_is_reusable(
+def _take_is_available_for_reuse(
     *,
     document: ProjectDocument,
     shot: ShotPlan,
     take: Take,
     task: GenerationTask | None,
-    evidence: RouteEvidence | None,
 ) -> bool:
     if (
         take.provider != "minimax"
         or take.model != "MiniMax-H3"
         or take.freshness != Freshness.CURRENT
-        or take.qa_status != QaStatus.PASSED
         or take.availability != TakeAvailability.AVAILABLE
         or task is None
-        or evidence is None
-        or evidence.purpose == EvidencePurpose.CONTRACT_SMOKE
-        or evidence.status != EvidenceStatus.REVIEWED
-        or evidence.hard_gate_passed is not True
+        or task.status != TaskStatus.SUCCEEDED
         or not _task_matches(document, shot, task)
     ):
         return False
     path = Path(take.media_path).expanduser()
     return path.is_file() and path.stat().st_size > 0
+
+
+def _take_decision_evidence(
+    take: Take,
+    route_evidence: RouteEvidence | None,
+) -> _RouteDecisionEvidence:
+    return _RouteDecisionEvidence(
+        take_quality=take.qa_report,
+        take_qa_status=take.qa_status,
+        take_is_selected=take.is_selected,
+        prior_route_evidence=route_evidence,
+    )
 
 
 def _task_matches(
@@ -1055,12 +1420,7 @@ def _asset_preparations(
     *,
     force_start: bool = False,
 ) -> list[H3RouteAssetPreparation]:
-    risk_level = _declared_risk_level(shot.local_rework_risk)
-    if (
-        not force_start
-        and risk_level not in {"MEDIUM", "HIGH"}
-        and not plan.interactions
-    ):
+    if not force_start and not plan.interactions:
         return []
     result: list[H3RouteAssetPreparation] = []
     try:
@@ -1131,10 +1491,6 @@ def _shot_risks(
                 QaFailureCategory.SPATIAL_CONTINUITY,
             ]
         )
-    if len(plan.action_beats) >= 2:
-        categories.append(QaFailureCategory.CHARACTER_ORIENTATION)
-    if _declared_risk_level(shot.local_rework_risk) == "HIGH":
-        categories.append(QaFailureCategory.COMPOSITION_QUALITY)
     failed_take_ids = {
         item.take_id
         for item in evidence
@@ -1186,17 +1542,6 @@ def _inspection_policy(
     )
 
 
-def _declared_risk_level(value: str) -> str:
-    normalized = value.strip().lower()
-    if normalized.startswith(("高", "high")):
-        return "HIGH"
-    if normalized.startswith(("中", "medium", "moderate")):
-        return "MEDIUM"
-    if normalized.startswith(("低", "low")):
-        return "LOW"
-    return "UNKNOWN"
-
-
 def _applied_director_strategy(
     document: ProjectDocument,
     shot_id: str,
@@ -1230,21 +1575,36 @@ def _duration_for_h3(duration_seconds: float) -> tuple[int, list[str], bool]:
     return rounded, [], True
 
 
-def _fallback_candidate(candidates: list[_RouteCandidate]) -> _RouteCandidate:
-    return max(candidates, key=lambda item: item.quality_score)
+def _technical_baseline_candidate(
+    candidates: list[_RouteCandidate],
+) -> _RouteCandidate:
+    baseline = next(
+        (
+            item
+            for item in candidates
+            if item.action == H3ShotRouteAction.GENERATE
+            and item.route == VideoGenerationRoute.DIRECT
+            and not item.media_inputs
+            and item.decision_evidence is None
+        ),
+        None,
+    )
+    if baseline is None:
+        raise RoutePlanningError(
+            "H3 route candidates did not include a provider-compatible DIRECT baseline"
+        )
+    return baseline
 
 
 def _route_agent_batches(
     shots: list[ShotPlan],
-    *,
-    maximum_size: int = 20,
 ) -> list[list[ShotPlan]]:
     batches: list[list[ShotPlan]] = []
     current: list[ShotPlan] = []
     current_scene_id: str | None = None
     for shot in shots:
         scene_changed = bool(current) and shot.scene_id != current_scene_id
-        if scene_changed or len(current) >= maximum_size:
+        if scene_changed:
             batches.append(current)
             current = []
         if not current:
@@ -1269,35 +1629,34 @@ def _choose_with_language_agent(
         include_constitution=False,
     )
     instructions = (
-        "You are a production route agent for an AI-native vertical video production. "
-        f"{skill_prompt.text} Return JSON "
-        "only, matching the supplied schema. Choose exactly one supplied candidate per shot. "
-        "Never invent routes, asset IDs, Take IDs, or provider capabilities. A current-version "
-        "human-reviewed reusable Take is normally preferred over paying to regenerate. For gaps, "
-        "compare empirical route evidence, approved visual bindings, action complexity, and QA "
-        "risk. Follow the current Bible's declared medium and style; never add visual-medium, "
-        "surface, camera, or motion assumptions that are absent upstream. Recommendations and warnings "
-        "are advisory and dismissible. Long shots require "
-        "temporal and boundary observation; do not claim sparse frames prove an action absent."
-        " Optional video-guide candidates are visual-only controls derived from the selected "
-        "preceding Take in the same scene or from the current shot's approved start frame. Treat "
-        "raw preceding-video references as likely to continue or repeat their visible action even "
-        "when the prompt asks otherwise. Choose TAIL_WINDOW or PREVIOUS_TAKE mainly when the target "
-        "genuinely continues the same action and similar coverage: TAIL_WINDOW for boundary pose, "
-        "prop state, screen direction, or camera momentum; PREVIOUS_TAKE when wider choreography "
-        "and location context justify its larger error-inheritance surface. When the target changes "
-        "coverage, reverses angle, or begins a new action, compare frame-controlled candidates first. "
-        "A CAMERA_PREVIS rooted in TARGET_START_FRAME can test coarse camera path while retaining the "
-        "approved target composition; one rooted in PREVIOUS_BOUNDARY_FRAME may preserve the wrong "
-        "coverage. A 2D previs cannot validate body blocking or guarantee the planned end action. "
-        "Avoid a guide whose source QA issues are likely to propagate. These candidates are never "
-        "mandatory. quality_score_hint is only a "
-        "conservative deterministic fallback ordering, not a learned quality score."
-        " When the user supplied a character voice reference for a speaking shot, normally "
-        "prefer the ready candidate carrying reference_audio unless an applied Director repair "
-        "or stronger frame-control need outweighs it."
-        " When an applied Director repair strategy is supplied, choose a candidate that actually "
-        "executes that repair unless a current-version reviewed Take is being reused."
+        "你是 AI 原生竖屏视频制片流程中的生成路线 Agent。"
+        f"{skill_prompt.text} 只返回符合给定 schema 的 JSON；每个镜头从已提供的候选中"
+        "选择一个，不得发明路线、资产 ID、Take ID 或供应商能力。当前版本且本地技术可用"
+        "的 Take 只是一个创作选项，不会因 QA 结果自动入选或排除；只有当它的实际成片比可用的新生成"
+        "路线更适合当前镜头时才选择复用。逐镜综合真实路线证据、已批准的视觉绑定、动作"
+        "复杂度与 QA 风险。遵守当前 Bible 已声明的媒介和 Style，不补写上游没有声明的"
+        "视觉媒介、表面、摄影或运动假设。你的建议和警告都是可覆盖的。长镜头需要结合"
+        "时间过程和镜头边界观察，不能用稀疏抽帧断言某个动作没有发生。"
+        "可选 video-guide 候选只是一种视觉控制，来源要么是同场景中已选定的前一条 Take，"
+        "要么是当前镜头已批准的起始帧。即使提示词要求不要重复，原始前镜视频仍可能延续"
+        "或复现其可见动作，因此需要判断错误继承面。只有目标镜头确实延续相同动作与相近"
+        "机位时，才重点比较 TAIL_WINDOW 或 PREVIOUS_TAKE：前者适合承接边界姿态、道具"
+        "状态、银幕方向或摄影机惯性，后者只在更大范围的调度与场景信息确有价值时使用。"
+        "如果目标镜头改变景别、反打或开始新动作，应优先比较帧控制候选。以 "
+        "TARGET_START_FRAME 为底图的 CAMERA_PREVIS 可以在保留批准构图的同时试验粗略"
+        "运镜；以 PREVIOUS_BOUNDARY_FRAME 为底图时可能继承错误机位。二维预演不能验证"
+        "真实身体调度，也不能保证计划中的终态动作。若来源 Take 的 QA 问题可能传播，"
+        "应避免选择相应 guide；所有 guide 都不是必选项。已有 Take 与历史"
+        "路线的 QA 信息只是结构化决策证据，不是候选资格门禁或人工排序分。"
+        "如果说话镜头有用户提供的角色声线参考，应把携带 reference_audio 的就绪候选纳入"
+        "重点比较，但仍由本镜头的表演、已应用的 Director 修复和帧控制需要共同决定。"
+        "如果提供了已应用的 Director 修复策略，应选择真正执行该修复的候选；只有明确判断"
+        "现有 Take 已经满足修复后的创作意图时，才选择复用。"
+        "当 REFERENCE 候选提供 reference_selection_candidates 时，必须在 "
+        "reference_selection_candidate_ids 中显式返回你选择的候选 ID；可选择一个或多个，"
+        "也可以在同时存在声线输入时明确返回空列表。请根据每项候选的主体、职责、角度、景别、"
+        "标签、需求覆盖和具体理由作出选择。deterministic_score 及其 reasons 只是检索证据，"
+        "不能代替你的语义判断，也不要求选择分数最高者。非 REFERENCE 候选不要返回该字段。"
     )
     payload = {
         "output_schema": _AgentRouteChoices.model_json_schema(),
@@ -1338,7 +1697,11 @@ def _choose_with_language_agent(
                         "action": candidate.action.value,
                         "route": candidate.route.value,
                         "rationale": candidate.rationale,
-                        "quality_score_hint": candidate.quality_score,
+                        "decision_evidence": (
+                            candidate.decision_evidence.model_dump(mode="json")
+                            if candidate.decision_evidence is not None
+                            else None
+                        ),
                         "reuse_take_id": candidate.reuse_take_id,
                         "evidence_ids": candidate.evidence_ids,
                         "media_roles": [
@@ -1347,6 +1710,32 @@ def _choose_with_language_agent(
                         "media_assets": [
                             _media_input_label(document, item)
                             for item in candidate.media_inputs
+                        ],
+                        "reference_selection_max_selected": (
+                            candidate.reference_max_selected
+                        ),
+                        "reference_selection_candidates": [
+                            {
+                                "selection_candidate_id": item.candidate_id,
+                                "candidate_id": item.candidate_id,
+                                "pack_id": item.pack_id,
+                                "entry_id": item.entry_id,
+                                "subject_asset_id": item.subject_asset_id,
+                                "asset_version_id": item.asset_version_id,
+                                "role": item.role.value,
+                                "angle": item.angle.value,
+                                "framing": item.framing.value,
+                                "tags": item.tags,
+                                "description": item.description,
+                                "requirement_ids": item.requirement_ids,
+                                "decision_evidence": {
+                                    "deterministic_score": item.deterministic_score,
+                                    "deterministic_reasons": (
+                                        item.deterministic_reasons
+                                    ),
+                                },
+                            }
+                            for item in candidate.reference_selection_candidates
                         ],
                         "warnings": candidate.warnings,
                         "missing_inputs": candidate.missing_inputs,

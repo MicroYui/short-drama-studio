@@ -11,6 +11,7 @@ from short_drama.asset_catalog import (
     AssetCoverageResponse,
 )
 from short_drama.image_models import (
+    AssetBriefUpdateRequest,
     AssetCreateRequest,
     AssetImportLocalRequest,
     AssetImportUrlRequest,
@@ -42,6 +43,13 @@ class ArtifactToolService(Protocol):
         self,
         project_id: str,
         request: AssetCreateRequest,
+    ) -> AssetMutationResponse: ...
+
+    def update_asset_brief(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetBriefUpdateRequest,
     ) -> AssetMutationResponse: ...
 
     def search_asset_catalog(
@@ -102,6 +110,12 @@ class ArtifactToolService(Protocol):
 class AssetCreateInput(ToolModel):
     project_id: str
     request: AssetCreateRequest
+
+
+class AssetBriefUpdateInput(ToolModel):
+    project_id: str
+    asset_id: str
+    request: AssetBriefUpdateRequest
 
 
 class AssetCatalogSearchInput(ToolModel):
@@ -192,6 +206,36 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             output_model=AssetMutationResponse,
             handler=create_asset,
             tags=frozenset({"asset", "project"}),
+        )
+    )
+
+    def update_brief(
+        request: AssetBriefUpdateInput,
+    ) -> ToolExecution[AssetMutationResponse]:
+        return _asset_mutation_execution(
+            request.project_id,
+            service.update_asset_brief(
+                request.project_id,
+                request.asset_id,
+                request.request,
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.update_brief",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "Set structured identity, visual, material, texture, continuity, and "
+                "optional reference-view strategy for an existing canonical asset."
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=True,
+            input_model=AssetBriefUpdateInput,
+            output_model=AssetMutationResponse,
+            handler=update_brief,
+            tags=frozenset({"asset", "brief", "continuity", "planning"}),
         )
     )
 
@@ -426,6 +470,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
 
 __all__ = [
+    "AssetBriefUpdateInput",
     "AssetCatalogImportInput",
     "AssetCatalogSearchInput",
     "AssetCoverageInput",

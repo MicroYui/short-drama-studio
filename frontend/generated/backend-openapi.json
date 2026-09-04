@@ -127,6 +127,31 @@
             "title": "Created At",
             "type": "string"
           },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_kind": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Kind"
+          },
           "error_message": {
             "anyOf": [
               {
@@ -391,8 +416,7 @@
         "description": "Bootstrap a production run before its canonical project exists.",
         "properties": {
           "execution_target": {
-            "$ref": "#/components/schemas/ProductionExecutionTarget",
-            "default": "MOCK"
+            "$ref": "#/components/schemas/ProductionExecutionTarget"
           },
           "objective": {
             "anyOf": [
@@ -411,7 +435,6 @@
             "$ref": "#/components/schemas/CreateProjectRequest"
           },
           "render_export": {
-            "default": true,
             "title": "Render Export",
             "type": "boolean"
           },
@@ -424,7 +447,9 @@
           }
         },
         "required": [
-          "project"
+          "project",
+          "execution_target",
+          "render_export"
         ],
         "title": "AgentProjectCreateRequest",
         "type": "object"
@@ -622,6 +647,17 @@
             "minLength": 1,
             "title": "Project Id",
             "type": "string"
+          },
+          "render_export": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Export"
           },
           "root_agent": {
             "minLength": 1,
@@ -830,6 +866,16 @@
       "AgentRunView": {
         "additionalProperties": false,
         "properties": {
+          "content_planning_trace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentPlanningTraceView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "context": {
             "$ref": "#/components/schemas/ContextPack"
           },
@@ -1286,6 +1332,28 @@
             ],
             "title": "Approved Version Id"
           },
+          "bible_entity_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bible Entity Id"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoreAssetBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "current_version_id": {
             "title": "Current Version Id",
             "type": "string"
@@ -1613,6 +1681,16 @@
       "AssetCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoreAssetBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "descriptor": {
             "maxLength": 4000,
             "minLength": 1,
@@ -1749,6 +1827,93 @@
         "title": "AssetMutationResponse",
         "type": "object"
       },
+      "AssetPresentationMode": {
+        "description": "Explicit rendering intent for an asset master; absence stays unknown.",
+        "enum": [
+          "PHYSICAL_MASTER",
+          "SCREEN_CONTENT_PLATE"
+        ],
+        "title": "AssetPresentationMode",
+        "type": "string"
+      },
+      "AssetReferenceSheet": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/AssetReferenceSheetCell"
+            },
+            "maxItems": 9,
+            "minItems": 2,
+            "title": "Cells",
+            "type": "array"
+          },
+          "columns": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Columns",
+            "type": "integer"
+          },
+          "input_policy": {
+            "$ref": "#/components/schemas/AssetSheetInputPolicy"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/AssetReferenceStrategy"
+          }
+        },
+        "required": [
+          "strategy",
+          "input_policy",
+          "columns",
+          "cells"
+        ],
+        "title": "AssetReferenceSheet",
+        "type": "object"
+      },
+      "AssetReferenceSheetCell": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "source_asset_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source Asset Id",
+            "type": "string"
+          },
+          "source_version_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Source Version Id",
+            "type": "string"
+          },
+          "view": {
+            "$ref": "#/components/schemas/AssetStandardView"
+          }
+        },
+        "required": [
+          "view",
+          "label",
+          "source_asset_id",
+          "source_version_id"
+        ],
+        "title": "AssetReferenceSheetCell",
+        "type": "object"
+      },
+      "AssetReferenceStrategy": {
+        "description": "How much canonical visual coverage one asset needs for the current work.",
+        "enum": [
+          "LIGHTWEIGHT",
+          "CHARACTER_STANDARD_VIEWS",
+          "SCENE_COVERAGE"
+        ],
+        "title": "AssetReferenceStrategy",
+        "type": "string"
+      },
       "AssetReviewDecision": {
         "enum": [
           "APPROVED",
@@ -1776,6 +1941,15 @@
         ],
         "title": "AssetReviewRequest",
         "type": "object"
+      },
+      "AssetSheetInputPolicy": {
+        "description": "Whether a local reference sheet may use explicitly selected draft versions.",
+        "enum": [
+          "APPROVED_ONLY",
+          "EXPLICIT_VERSIONS"
+        ],
+        "title": "AssetSheetInputPolicy",
+        "type": "string"
       },
       "AssetSourceRecord": {
         "additionalProperties": false,
@@ -1932,6 +2106,26 @@
         "title": "AssetSourceRecord",
         "type": "object"
       },
+      "AssetStandardView": {
+        "description": "Reusable view labels for canonical character, location, and prop images.",
+        "enum": [
+          "CANONICAL_MASTER",
+          "CHARACTER_FRONT",
+          "CHARACTER_LEFT_PROFILE",
+          "CHARACTER_RIGHT_PROFILE",
+          "CHARACTER_BACK",
+          "CHARACTER_WARDROBE_DETAIL",
+          "SCENE_MASTER",
+          "SCENE_OVERHEAD",
+          "SCENE_REVERSE",
+          "SCENE_INTERACTION_ZONE",
+          "PROP_PRODUCT",
+          "PROP_IN_HAND",
+          "PROP_STATE"
+        ],
+        "title": "AssetStandardView",
+        "type": "string"
+      },
       "AssetVersion": {
         "additionalProperties": false,
         "properties": {
@@ -2048,6 +2242,16 @@
               }
             ],
             "title": "Parent Version Id"
+          },
+          "reference_sheet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetReferenceSheet"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "review_notes": {
             "anyOf": [
@@ -2848,6 +3052,265 @@
         "title": "CheckpointDescriptor",
         "type": "object"
       },
+      "ContentPlanningOutput": {
+        "enum": [
+          "SCRIPT_ONLY",
+          "SCRIPT_AND_SHOTS"
+        ],
+        "title": "ContentPlanningOutput",
+        "type": "string"
+      },
+      "ContentPlanningTraceView": {
+        "additionalProperties": false,
+        "description": "Structured creative evidence exposed for human-readable Agent traces.\n\nThis projection deliberately excludes retry counters and orchestration plan\nrevisions.  It reports the semantic work produced by the creative Agents;\ncallers must not treat it as a second source of canonical story content.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "completed_steps": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningRunStep"
+            },
+            "title": "Completed Steps",
+            "type": "array"
+          },
+          "critic_used": {
+            "default": false,
+            "title": "Critic Used",
+            "type": "boolean"
+          },
+          "current_step": {
+            "$ref": "#/components/schemas/PlanningRunStep"
+          },
+          "final_cold_read_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final_cold_read_used": {
+            "default": false,
+            "title": "Final Cold Read Used",
+            "type": "boolean"
+          },
+          "issue_ledger": {
+            "items": {
+              "$ref": "#/components/schemas/StoryIssueLedgerEntry"
+            },
+            "title": "Issue Ledger",
+            "type": "array"
+          },
+          "latest_repair_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryRepairPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_revision_changed_scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Latest Revision Changed Scene Sequences",
+            "type": "array"
+          },
+          "latest_revision_target_scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Latest Revision Target Scene Sequences",
+            "type": "array"
+          },
+          "latest_revision_verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryRevisionVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_story_metadata_patch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryMetadataRevisionPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "narrative_skill_decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narrative Skill Decision"
+          },
+          "outline_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outline Json"
+          },
+          "outline_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outline Source"
+          },
+          "planning_run_id": {
+            "title": "Planning Run Id",
+            "type": "string"
+          },
+          "review_disposition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewDisposition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_changed_scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Revision Changed Scene Sequences",
+            "type": "array"
+          },
+          "revision_judge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionJudgeRecommendation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_round": {
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          },
+          "revision_scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Revision Scene Sequences",
+            "type": "array"
+          },
+          "scene_draft_json": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scene Draft Json",
+            "type": "array"
+          },
+          "scene_timing_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/SceneTimingAssessmentRecord"
+            },
+            "title": "Scene Timing Assessments",
+            "type": "array"
+          },
+          "selected_narrative_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Narrative Skill Ids",
+            "type": "array"
+          },
+          "skill_selection_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skill Selection Reasons",
+            "type": "array"
+          },
+          "source_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorySourceContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlanningRunStatus"
+          },
+          "story_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "planning_run_id",
+          "status",
+          "current_step",
+          "completed_steps",
+          "revision_round"
+        ],
+        "title": "ContentPlanningTraceView",
+        "type": "object"
+      },
       "ContextPack": {
         "additionalProperties": false,
         "description": "Bounded context assembled for one agent call.",
@@ -2891,6 +3354,16 @@
             },
             "title": "Decisions",
             "type": "array"
+          },
+          "execution_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionExecutionTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "experiences": {
             "items": {
@@ -2939,6 +3412,17 @@
             "title": "Recent Actions",
             "type": "array"
           },
+          "render_export": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Render Export"
+          },
           "run_focus": {
             "anyOf": [
               {
@@ -2969,6 +3453,16 @@
         ],
         "title": "ContextPack",
         "type": "object"
+      },
+      "ContinuationPreference": {
+        "description": "What the user explicitly asked for before the story Agent decides.",
+        "enum": [
+          "SERIES",
+          "STANDALONE",
+          "AGENT_DECIDES"
+        ],
+        "title": "ContinuationPreference",
+        "type": "string"
       },
       "ContinuityState": {
         "additionalProperties": false,
@@ -3009,9 +3503,133 @@
         "title": "ContinuityState",
         "type": "object"
       },
+      "CoreAssetBrief": {
+        "additionalProperties": false,
+        "description": "Structured identity and continuity anchors shared by all asset versions.",
+        "properties": {
+          "background_constraints": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Background Constraints",
+            "type": "array"
+          },
+          "continuity_anchors": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Continuity Anchors",
+            "type": "array"
+          },
+          "identity_anchor": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Identity Anchor",
+            "type": "string"
+          },
+          "named_views_or_zones": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Named Views Or Zones",
+            "type": "array"
+          },
+          "presentation_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetPresentationMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_strategy": {
+            "$ref": "#/components/schemas/AssetReferenceStrategy",
+            "default": "LIGHTWEIGHT"
+          },
+          "requested_views": {
+            "items": {
+              "$ref": "#/components/schemas/AssetStandardView"
+            },
+            "maxItems": 12,
+            "title": "Requested Views",
+            "type": "array"
+          },
+          "required_visible_text": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Visible Text",
+            "type": "array"
+          },
+          "strategy_rationale": {
+            "anyOf": [
+              {
+                "maxLength": 1200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Rationale"
+          },
+          "texture_constraints": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Texture Constraints",
+            "type": "array"
+          },
+          "tone_or_temperament": {
+            "anyOf": [
+              {
+                "maxLength": 1200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone Or Temperament"
+          },
+          "visual_attributes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Visual Attributes",
+            "type": "array"
+          },
+          "wardrobe_or_materials": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Wardrobe Or Materials",
+            "type": "array"
+          }
+        },
+        "required": [
+          "identity_anchor",
+          "visual_attributes"
+        ],
+        "title": "CoreAssetBrief",
+        "type": "object"
+      },
       "CreateProjectRequest": {
         "additionalProperties": false,
         "properties": {
+          "content_planning_output": {
+            "$ref": "#/components/schemas/ContentPlanningOutput",
+            "default": "SCRIPT_AND_SHOTS"
+          },
           "input_images": {
             "items": {
               "$ref": "#/components/schemas/CreativeInputImage"
@@ -3032,6 +3650,14 @@
             },
             "maxItems": 32,
             "title": "Linked Asset Project Ids",
+            "type": "array"
+          },
+          "locked_dialogue": {
+            "items": {
+              "$ref": "#/components/schemas/StoryLockedDialogueLine"
+            },
+            "maxItems": 5000,
+            "title": "Locked Dialogue",
             "type": "array"
           },
           "name": {
@@ -3699,7 +4325,7 @@
           "shot_patch": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ShotPlanPatch"
+                "$ref": "#/components/schemas/ShotPlanPatch-Input"
               },
               {
                 "type": "null"
@@ -3771,7 +4397,7 @@
           "shot_patch": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ShotPlanPatch"
+                "$ref": "#/components/schemas/ShotPlanPatch-Output"
               },
               {
                 "type": "null"
@@ -4120,6 +4746,73 @@
         "title": "DownloadVariant",
         "type": "object"
       },
+      "EndingContract": {
+        "additionalProperties": false,
+        "description": "Episode payoff and continuation policy protected across later revisions.",
+        "properties": {
+          "allowed_open_threads": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Allowed Open Threads",
+            "type": "array"
+          },
+          "continuation_hook": {
+            "anyOf": [
+              {
+                "maxLength": 1200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Hook"
+          },
+          "decision_basis": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Decision Basis",
+            "type": "string"
+          },
+          "episode_payoff": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Episode Payoff",
+            "type": "string"
+          },
+          "final_button": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Final Button",
+            "type": "string"
+          },
+          "requested_preference": {
+            "$ref": "#/components/schemas/ContinuationPreference",
+            "default": "AGENT_DECIDES"
+          },
+          "required_closures": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Required Closures",
+            "type": "array"
+          },
+          "resolved_mode": {
+            "$ref": "#/components/schemas/ResolvedEndingMode"
+          }
+        },
+        "required": [
+          "resolved_mode",
+          "episode_payoff",
+          "final_button",
+          "decision_basis"
+        ],
+        "title": "EndingContract",
+        "type": "object"
+      },
       "EnhancePromptRequest": {
         "description": "Regular-LoRA, IC-LoRA, and built-in conditioning-type selection are mutually exclusive UI\nsurfaces — a request never carries more than one of loraCatalogIds/icLoraId/conditioningType.",
         "properties": {
@@ -4222,7 +4915,6 @@
           },
           "candidate_count": {
             "default": 2,
-            "maximum": 4.0,
             "minimum": 1.0,
             "title": "Candidate Count",
             "type": "integer"
@@ -4329,7 +5021,6 @@
         "properties": {
           "active_stage_attempts": {
             "default": 0,
-            "maximum": 3.0,
             "minimum": 0.0,
             "title": "Active Stage Attempts",
             "type": "integer"
@@ -4444,7 +5135,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 128,
             "title": "Warnings",
             "type": "array"
           }
@@ -5649,14 +6339,60 @@
             ],
             "title": "Asset Version Id"
           },
+          "binding_purpose": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Purpose"
+          },
           "kind": {
             "$ref": "#/components/schemas/H3MediaKind"
+          },
+          "reference_alias": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Alias"
+          },
+          "reference_tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Reference Tags",
+            "type": "array"
           },
           "role": {
             "$ref": "#/components/schemas/H3MediaRole"
           },
           "source": {
             "$ref": "#/components/schemas/H3MediaSource"
+          },
+          "subject_asset_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Asset Id"
           },
           "video_guide_id": {
             "anyOf": [
@@ -5926,11 +6662,6 @@
       "H3ProductionRouteExecuteRequest": {
         "additionalProperties": false,
         "properties": {
-          "adaptive_sequential": {
-            "default": false,
-            "title": "Adaptive Sequential",
-            "type": "boolean"
-          },
           "enqueue_new_generations": {
             "default": false,
             "title": "Enqueue New Generations",
@@ -6159,7 +6890,7 @@
         "properties": {
           "candidate_count": {
             "default": 1,
-            "maximum": 5.0,
+            "description": "Number of candidates the calling Agent requests in this action.",
             "minimum": 1.0,
             "title": "Candidate Count",
             "type": "integer"
@@ -6168,6 +6899,14 @@
             "default": true,
             "title": "Consider Video Guides",
             "type": "boolean"
+          },
+          "shot_directives": {
+            "items": {
+              "$ref": "#/components/schemas/H3ShotRouteDirective"
+            },
+            "maxItems": 500,
+            "title": "Shot Directives",
+            "type": "array"
           },
           "shot_ids": {
             "items": {
@@ -6778,6 +7517,73 @@
         "title": "H3ShotRouteAction",
         "type": "string"
       },
+      "H3ShotRouteDirective": {
+        "additionalProperties": false,
+        "description": "Explicit per-shot production intent supplied by the calling Agent or user.",
+        "properties": {
+          "camera_previs_motion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3CameraMotionPreset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_id": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Id"
+          },
+          "reference_selection_candidate_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Selection Candidate Ids"
+          },
+          "reuse_take_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reuse Take Id"
+          },
+          "shot_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id"
+        ],
+        "title": "H3ShotRouteDirective",
+        "type": "object"
+      },
       "H3ShotRouteExecutionStatus": {
         "enum": [
           "PLANNED",
@@ -6805,7 +7611,7 @@
           },
           "candidate_count": {
             "default": 1,
-            "maximum": 5.0,
+            "description": "Number of candidates requested by this explicit route-plan action.",
             "minimum": 1.0,
             "title": "Candidate Count",
             "type": "integer"
@@ -6897,6 +7703,13 @@
           "readiness": {
             "$ref": "#/components/schemas/H3ShotRouteReadiness"
           },
+          "reference_selection_candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reference Selection Candidate Ids",
+            "type": "array"
+          },
           "reuse_take_id": {
             "anyOf": [
               {
@@ -6951,7 +7764,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 10,
             "title": "Task Ids",
             "type": "array"
           },
@@ -6993,6 +7805,7 @@
         "enum": [
           "READY",
           "READY_WITH_WARNINGS",
+          "NEEDS_AGENT_DECISION",
           "NEEDS_ASSET",
           "UNSUPPORTED"
         ],
@@ -8682,6 +9495,22 @@
           "updated_at"
         ],
         "title": "ImageGenerationTask",
+        "type": "object"
+      },
+      "ImageNotSubmittedResolutionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ImageNotSubmittedResolutionRequest",
         "type": "object"
       },
       "ImageOperation": {
@@ -11011,6 +11840,7 @@
           "MANUAL",
           "UPLOAD",
           "LIBRARY_IMPORT",
+          "LOCAL_DERIVED",
           "AI_GENERATED",
           "AI_EDITED",
           "FIXTURE"
@@ -11207,6 +12037,16 @@
           "kind": {
             "$ref": "#/components/schemas/ActionKind"
           },
+          "production_skill_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionSkillRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "title": {
             "minLength": 1,
             "title": "Title",
@@ -11242,6 +12082,28 @@
           "FAILED"
         ],
         "title": "PlanningRunStatus",
+        "type": "string"
+      },
+      "PlanningRunStep": {
+        "enum": [
+          "STORY_ORIENTATION",
+          "STORY_ARCHITECT",
+          "SCENE_WRITER",
+          "SCRIPT_CRITIC",
+          "REVIEW_ROUTER",
+          "SOURCE_CONTRACT",
+          "STORY_REVISION",
+          "STORY_METADATA_REVISION",
+          "REVISION_SCOPE",
+          "SCENE_REVISION",
+          "REVISION_VERIFIER",
+          "REVISION_JUDGE",
+          "FINAL_COLD_READ",
+          "SCENE_DIRECTOR",
+          "FINALIZE",
+          "COMPLETE"
+        ],
+        "title": "PlanningRunStep",
         "type": "string"
       },
       "PreprocessingStep": {
@@ -11325,6 +12187,25 @@
         ],
         "title": "ProductionSkillDescriptor",
         "type": "object"
+      },
+      "ProductionSkillRole": {
+        "enum": [
+          "CONCEPT",
+          "WRITER",
+          "PLANNER",
+          "CRITIC",
+          "STORY_REPAIR",
+          "REVISION_VERIFIER",
+          "FINAL_COLD_READ",
+          "REVIEW_ROUTER",
+          "DIRECTOR",
+          "ASSET_REVIEWER",
+          "ROUTE_PLANNER",
+          "VIDEO_PROMPT_COMPILER",
+          "EPISODE_REVIEWER"
+        ],
+        "title": "ProductionSkillRole",
+        "type": "string"
       },
       "ProgressSummary": {
         "additionalProperties": false,
@@ -11656,7 +12537,7 @@
       },
       "ProjectPlanningMetadata": {
         "additionalProperties": false,
-        "description": "Persisted planning provenance and resumable planning ownership.",
+        "description": "Project-visible projection of planning provenance or an owned planning job.",
         "properties": {
           "owner_agent_run_id": {
             "anyOf": [
@@ -11679,6 +12560,18 @@
               }
             ],
             "title": "Planner"
+          },
+          "planning_job_kind": {
+            "anyOf": [
+              {
+                "const": "CONTENT_PLANNING",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planning Job Kind"
           },
           "run_id": {
             "anyOf": [
@@ -11715,6 +12608,10 @@
             "default": "9:16",
             "title": "Aspect Ratio",
             "type": "string"
+          },
+          "content_planning_output": {
+            "$ref": "#/components/schemas/ContentPlanningOutput",
+            "default": "SCRIPT_AND_SHOTS"
           },
           "created_at": {
             "title": "Created At",
@@ -11819,6 +12716,7 @@
       "ProjectStage": {
         "enum": [
           "INPUT",
+          "SCRIPT_READY",
           "PLANNED",
           "GENERATING",
           "REVIEW",
@@ -12077,16 +12975,16 @@
         "additionalProperties": false,
         "properties": {
           "kind": {
-            "title": "Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/AssetKind"
           },
           "purpose": {
             "title": "Purpose",
             "type": "string"
           },
-          "requirement": {
-            "title": "Requirement",
-            "type": "string"
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
           },
           "target_id": {
             "title": "Target Id",
@@ -12096,8 +12994,7 @@
         "required": [
           "kind",
           "target_id",
-          "purpose",
-          "requirement"
+          "purpose"
         ],
         "title": "ReferenceBinding",
         "type": "object"
@@ -13217,6 +14114,14 @@
               }
             ]
           },
+          "timeline_beats": {
+            "items": {
+              "$ref": "#/components/schemas/ShotTimelineBeat"
+            },
+            "maxItems": 24,
+            "title": "Timeline Beats",
+            "type": "array"
+          },
           "transition_out": {
             "minLength": 1,
             "title": "Transition Out",
@@ -13318,6 +14223,14 @@
               }
             ]
           },
+          "timeline_beats": {
+            "items": {
+              "$ref": "#/components/schemas/ShotTimelineBeat"
+            },
+            "maxItems": 24,
+            "title": "Timeline Beats",
+            "type": "array"
+          },
           "transition_out": {
             "minLength": 1,
             "title": "Transition Out",
@@ -13342,6 +14255,15 @@
         ],
         "title": "ReplacementShotDraft",
         "type": "object"
+      },
+      "ResolvedEndingMode": {
+        "description": "The concrete episode shape selected by the Story Architect.",
+        "enum": [
+          "SERIES",
+          "STANDALONE"
+        ],
+        "title": "ResolvedEndingMode",
+        "type": "string"
       },
       "RetakeCancelledResponse": {
         "properties": {
@@ -13512,6 +14434,68 @@
           "change_reason"
         ],
         "title": "ReviseScriptLinesRequest",
+        "type": "object"
+      },
+      "RevisionJudgeConfidence": {
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH"
+        ],
+        "title": "RevisionJudgeConfidence",
+        "type": "string"
+      },
+      "RevisionJudgeRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_only": {
+            "default": true,
+            "title": "Advisory Only",
+            "type": "boolean"
+          },
+          "alternative_revision_round": {
+            "minimum": 0.0,
+            "title": "Alternative Revision Round",
+            "type": "integer"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/RevisionJudgeConfidence"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "recommended_revision_round": {
+            "minimum": 0.0,
+            "title": "Recommended Revision Round",
+            "type": "integer"
+          },
+          "summary": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "tradeoffs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Tradeoffs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recommended_revision_round",
+          "alternative_revision_round",
+          "confidence",
+          "summary"
+        ],
+        "title": "RevisionJudgeRecommendation",
         "type": "object"
       },
       "RouteEvidence": {
@@ -13834,6 +14818,51 @@
         "title": "SceneEpisodeReview",
         "type": "object"
       },
+      "SceneTimingAssessmentRecord": {
+        "additionalProperties": false,
+        "description": "One Writer timing self-assessment kept as inspectable evidence.\n\nThe record does not approve, reject, or route creative work.  Later Agents\nremain responsible for their own semantic reading of the screenplay.",
+        "properties": {
+          "assessment": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Assessment",
+            "type": "string"
+          },
+          "revision_round": {
+            "minimum": 0.0,
+            "title": "Revision Round",
+            "type": "integer"
+          },
+          "scene_sequence": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Scene Sequence",
+            "type": "integer"
+          },
+          "stage": {
+            "enum": [
+              "INITIAL_WRITE",
+              "REVISION"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "target_duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Target Duration Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "scene_sequence",
+          "stage",
+          "revision_round",
+          "target_duration_seconds",
+          "assessment"
+        ],
+        "title": "SceneTimingAssessmentRecord",
+        "type": "object"
+      },
       "ScriptLine": {
         "additionalProperties": false,
         "properties": {
@@ -13851,6 +14880,17 @@
           "speaker": {
             "title": "Speaker",
             "type": "string"
+          },
+          "speaker_character_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Character Id"
           },
           "spoken_text": {
             "title": "Spoken Text",
@@ -13951,11 +14991,27 @@
             "title": "Category",
             "type": "string"
           },
+          "issue_id": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Id"
+          },
           "observation": {
             "maxLength": 1200,
             "minLength": 1,
             "title": "Observation",
             "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/ReviewRepairOwner"
           },
           "recommendation": {
             "maxLength": 1200,
@@ -13967,7 +15023,6 @@
             "items": {
               "type": "integer"
             },
-            "maxItems": 12,
             "title": "Scene Sequences",
             "type": "array"
           },
@@ -13978,6 +15033,7 @@
         "required": [
           "category",
           "severity",
+          "owner",
           "observation",
           "recommendation"
         ],
@@ -14013,6 +15069,18 @@
       "ScriptReviewReport": {
         "additionalProperties": false,
         "properties": {
+          "followup_rationale": {
+            "anyOf": [
+              {
+                "maxLength": 1200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followup Rationale"
+          },
           "issues": {
             "items": {
               "$ref": "#/components/schemas/ScriptReviewIssue"
@@ -14021,8 +15089,24 @@
             "title": "Issues",
             "type": "array"
           },
+          "performance_timing_assessment": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performance Timing Assessment"
+          },
+          "recommended_followup": {
+            "$ref": "#/components/schemas/StoryReviewFollowup",
+            "default": "FINALIZE"
+          },
           "requires_revision": {
-            "default": false,
             "title": "Requires Revision",
             "type": "boolean"
           },
@@ -14042,7 +15126,8 @@
           }
         },
         "required": [
-          "summary"
+          "summary",
+          "requires_revision"
         ],
         "title": "ScriptReviewReport",
         "type": "object"
@@ -14076,6 +15161,26 @@
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "ending_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndingContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final_cold_read_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
@@ -14141,12 +15246,37 @@
               }
             ]
           },
+          "screenplay_text": {
+            "default": "",
+            "title": "Screenplay Text",
+            "type": "string"
+          },
+          "source_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorySourceContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_mode": {
             "$ref": "#/components/schemas/SourceMode"
           },
           "spoken_text": {
             "title": "Spoken Text",
             "type": "string"
+          },
+          "story_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "structured_scenes": {
             "items": {
@@ -14910,6 +16040,14 @@
             "title": "Sequence",
             "type": "integer"
           },
+          "timeline_beats": {
+            "items": {
+              "$ref": "#/components/schemas/ShotTimelineBeat"
+            },
+            "maxItems": 24,
+            "title": "Timeline Beats",
+            "type": "array"
+          },
           "transition_out": {
             "title": "Transition Out",
             "type": "string"
@@ -14940,7 +16078,7 @@
         "title": "ShotPlan",
         "type": "object"
       },
-      "ShotPlanPatch": {
+      "ShotPlanPatch-Input": {
         "additionalProperties": false,
         "properties": {
           "audio_intent": {
@@ -15050,6 +16188,20 @@
             ],
             "title": "Narrative Purpose"
           },
+          "timeline_beats": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ShotTimelineBeat"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Beats"
+          },
           "transition_out": {
             "anyOf": [
               {
@@ -15076,6 +16228,197 @@
           }
         },
         "title": "ShotPlanPatch",
+        "type": "object"
+      },
+      "ShotPlanPatch-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_intent": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Intent"
+          },
+          "camera": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera"
+          },
+          "continuity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContinuityState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dialogue_line_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dialogue Line Ids"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "framing": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framing"
+          },
+          "local_rework_risk": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Rework Risk"
+          },
+          "merge_candidate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merge Candidate"
+          },
+          "narrative_purpose": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narrative Purpose"
+          },
+          "timeline_beats": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ShotTimelineBeat"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Beats"
+          },
+          "transition_out": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transition Out"
+          },
+          "visual": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visual"
+          }
+        },
+        "title": "ShotPlanPatch",
+        "type": "object"
+      },
+      "ShotReferenceCue": {
+        "additionalProperties": false,
+        "description": "Semantic reference requested by one time-bounded part of a shot.",
+        "properties": {
+          "alias": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Alias",
+            "type": "string"
+          },
+          "purpose": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "required_tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Required Tags",
+            "type": "array"
+          },
+          "subject_asset_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Subject Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_asset_id",
+          "alias",
+          "purpose"
+        ],
+        "title": "ShotReferenceCue",
         "type": "object"
       },
       "ShotReferencePlanUpdateRequest-Input": {
@@ -15170,6 +16513,111 @@
           }
         },
         "title": "ShotReferencePlanUpdateRequest",
+        "type": "object"
+      },
+      "ShotTimelineBeat": {
+        "additionalProperties": false,
+        "description": "One observable camera/action/performance phase inside an editorial shot.",
+        "properties": {
+          "action": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "camera": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Camera",
+            "type": "string"
+          },
+          "dialogue_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Dialogue Line Ids",
+            "type": "array"
+          },
+          "emotion": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emotion"
+          },
+          "end_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "framing": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Framing",
+            "type": "string"
+          },
+          "performance": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performance"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ShotReferenceCue"
+            },
+            "maxItems": 12,
+            "title": "References",
+            "type": "array"
+          },
+          "sound": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sound"
+          },
+          "start_seconds": {
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "visual": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Visual",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_seconds",
+          "end_seconds",
+          "visual",
+          "framing",
+          "camera",
+          "action"
+        ],
+        "title": "ShotTimelineBeat",
         "type": "object"
       },
       "SourceMode": {
@@ -15362,6 +16810,88 @@
         ],
         "title": "SpeakerVoiceContinuityCheck",
         "type": "object"
+      },
+      "SpecialistTurnRecord": {
+        "additionalProperties": false,
+        "description": "Recoverable trace for one specialist decision followed by one Tool action.",
+        "properties": {
+          "arguments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Arguments",
+            "type": "object"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SpecialistTurnStatus",
+            "default": "REQUESTED"
+          },
+          "tool_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "tool_name",
+          "reason"
+        ],
+        "title": "SpecialistTurnRecord",
+        "type": "object"
+      },
+      "SpecialistTurnStatus": {
+        "description": "Persisted lifecycle of one Tool request made by a specialist Agent.",
+        "enum": [
+          "REQUESTED",
+          "IN_PROGRESS",
+          "COMPLETED",
+          "INTERRUPTED"
+        ],
+        "title": "SpecialistTurnStatus",
+        "type": "string"
       },
       "StatusMessage": {
         "additionalProperties": false,
@@ -15797,6 +17327,826 @@
         "title": "StockProviderConfigUpdate",
         "type": "object"
       },
+      "StoryCharacterMetadataPatch": {
+        "additionalProperties": false,
+        "description": "Sparse descriptive updates for one existing character selected by stable ID.",
+        "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appearance"
+          },
+          "character_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Character Id",
+            "type": "string"
+          },
+          "performance": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performance"
+          },
+          "voice_identity": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Identity"
+          },
+          "wardrobe": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wardrobe"
+          }
+        },
+        "required": [
+          "character_id"
+        ],
+        "title": "StoryCharacterMetadataPatch",
+        "type": "object"
+      },
+      "StoryIntent": {
+        "additionalProperties": false,
+        "description": "Versioned creative direction for one story, not a quality gate.",
+        "properties": {
+          "audience_experience": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Audience Experience",
+            "type": "string"
+          },
+          "dramatic_engine": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Dramatic Engine",
+            "type": "string"
+          },
+          "drift_risks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Drift Risks",
+            "type": "array"
+          },
+          "progression_strategy": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Progression Strategy",
+            "type": "string"
+          },
+          "protected_elements": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Protected Elements",
+            "type": "array"
+          },
+          "tone_and_plausibility": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Tone And Plausibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audience_experience",
+          "dramatic_engine",
+          "progression_strategy",
+          "tone_and_plausibility"
+        ],
+        "title": "StoryIntent",
+        "type": "object"
+      },
+      "StoryIssueLedgerEntry": {
+        "additionalProperties": false,
+        "description": "Natural-language history for one semantic story concern, never a gate.",
+        "properties": {
+          "accepted_tradeoff": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Tradeoff"
+          },
+          "evolution_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evolution Notes",
+            "type": "array"
+          },
+          "fix_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fix Evidence",
+            "type": "array"
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff"
+          },
+          "issue_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "observation": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Observation",
+            "type": "string"
+          },
+          "semantic_cluster": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Semantic Cluster",
+            "type": "string"
+          },
+          "state": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "State",
+            "type": "string"
+          },
+          "text_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Text Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "issue_id",
+          "semantic_cluster",
+          "state",
+          "observation"
+        ],
+        "title": "StoryIssueLedgerEntry",
+        "type": "object"
+      },
+      "StoryLocationMetadataPatch": {
+        "additionalProperties": false,
+        "description": "Sparse descriptive updates for one existing location selected by stable ID.",
+        "properties": {
+          "key_views": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Views"
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "maxLength": 800,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layout"
+          },
+          "lighting": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighting"
+          },
+          "location_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Location Id",
+            "type": "string"
+          },
+          "palette": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Palette"
+          }
+        },
+        "required": [
+          "location_id"
+        ],
+        "title": "StoryLocationMetadataPatch",
+        "type": "object"
+      },
+      "StoryLockedDialogueLine": {
+        "additionalProperties": false,
+        "description": "One user-locked spoken line structured by the intake Agent or API caller.",
+        "properties": {
+          "audio_kind": {
+            "$ref": "#/components/schemas/AudioKind",
+            "default": "DIALOGUE"
+          },
+          "speaker": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Speaker",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker",
+          "text"
+        ],
+        "title": "StoryLockedDialogueLine",
+        "type": "object"
+      },
+      "StoryMetadataRevisionPatch": {
+        "additionalProperties": false,
+        "description": "Typed, sparse patch for global story metadata only.\n\nStable entity IDs are selectors, not editable values. Scene contracts, dialogue,\nand target duration are intentionally absent from this schema.",
+        "properties": {
+          "character_patches": {
+            "items": {
+              "$ref": "#/components/schemas/StoryCharacterMetadataPatch"
+            },
+            "maxItems": 12,
+            "title": "Character Patches",
+            "type": "array"
+          },
+          "location_patches": {
+            "items": {
+              "$ref": "#/components/schemas/StoryLocationMetadataPatch"
+            },
+            "maxItems": 20,
+            "title": "Location Patches",
+            "type": "array"
+          },
+          "prop_patches": {
+            "items": {
+              "$ref": "#/components/schemas/StoryPropMetadataPatch"
+            },
+            "maxItems": 20,
+            "title": "Prop Patches",
+            "type": "array"
+          },
+          "story_summary": {
+            "anyOf": [
+              {
+                "maxLength": 2400,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Story Summary"
+          },
+          "style": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryStyleMetadataPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "StoryMetadataRevisionPatch",
+        "type": "object"
+      },
+      "StoryPropMetadataPatch": {
+        "additionalProperties": false,
+        "description": "Sparse descriptive updates for one existing prop selected by stable ID.",
+        "properties": {
+          "appearance": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Appearance",
+            "type": "string"
+          },
+          "prop_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Prop Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prop_id",
+          "appearance"
+        ],
+        "title": "StoryPropMetadataPatch",
+        "type": "object"
+      },
+      "StoryRepairAction": {
+        "additionalProperties": false,
+        "description": "One evidence-backed recommendation; it is not an execution gate.",
+        "properties": {
+          "affected_scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Affected Scene Sequences",
+            "type": "array"
+          },
+          "diagnosis": {
+            "$ref": "#/components/schemas/StoryRepairDiagnosis"
+          },
+          "issue_id": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Id"
+          },
+          "issue_index": {
+            "minimum": 1.0,
+            "title": "Issue Index",
+            "type": "integer"
+          },
+          "preserve": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Preserve",
+            "type": "array"
+          },
+          "rationale": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "recommended_change": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Recommended Change",
+            "type": "string"
+          },
+          "remove_or_simplify": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Remove Or Simplify",
+            "type": "array"
+          },
+          "should_revise": {
+            "title": "Should Revise",
+            "type": "boolean"
+          },
+          "target_duration_change_required": {
+            "default": false,
+            "title": "Target Duration Change Required",
+            "type": "boolean"
+          },
+          "validation_questions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Validation Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "issue_index",
+          "diagnosis",
+          "should_revise",
+          "rationale",
+          "recommended_change"
+        ],
+        "title": "StoryRepairAction",
+        "type": "object"
+      },
+      "StoryRepairDiagnosis": {
+        "description": "Where a routed story issue actually originates after a second look.",
+        "enum": [
+          "SOURCE_CONCEPT_GAP",
+          "OUTLINE_DEFECT",
+          "CRITIC_OVERREACH"
+        ],
+        "title": "StoryRepairDiagnosis",
+        "type": "string"
+      },
+      "StoryRepairPlan": {
+        "additionalProperties": false,
+        "description": "Cross-round diagnosis and minimal repair plan prepared before rewriting.",
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/StoryRepairAction"
+            },
+            "maxItems": 30,
+            "title": "Actions",
+            "type": "array"
+          },
+          "invariants": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Invariants",
+            "type": "array"
+          },
+          "source_promise": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Source Promise",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "summary",
+          "source_promise"
+        ],
+        "title": "StoryRepairPlan",
+        "type": "object"
+      },
+      "StoryReviewFollowup": {
+        "description": "Agent-recommended continuation after a complete story read or repair check.",
+        "enum": [
+          "FINALIZE",
+          "FINAL_COLD_READ"
+        ],
+        "title": "StoryReviewFollowup",
+        "type": "string"
+      },
+      "StoryRevisionVerification": {
+        "additionalProperties": false,
+        "description": "Repair verification plus a natural cold read of the revised screenplay.",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "followup_rationale": {
+            "anyOf": [
+              {
+                "maxLength": 1200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Followup Rationale"
+          },
+          "recommended_followup": {
+            "$ref": "#/components/schemas/StoryReviewFollowup",
+            "default": "FINALIZE"
+          },
+          "satisfied_issue_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Satisfied Issue Ids",
+            "type": "array"
+          },
+          "satisfied_issue_indices": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 30,
+            "title": "Satisfied Issue Indices",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 1600,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/StoryRevisionViolation"
+            },
+            "maxItems": 20,
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accepted",
+          "summary"
+        ],
+        "title": "StoryRevisionVerification",
+        "type": "object"
+      },
+      "StoryRevisionViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "issue_id": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Id"
+          },
+          "observation": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Observation",
+            "type": "string"
+          },
+          "repair_instruction": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Repair Instruction",
+            "type": "string"
+          },
+          "scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Scene Sequences",
+            "type": "array"
+          },
+          "target_duration_change_required": {
+            "default": false,
+            "title": "Target Duration Change Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "observation",
+          "repair_instruction"
+        ],
+        "title": "StoryRevisionViolation",
+        "type": "object"
+      },
+      "StorySourceContract": {
+        "additionalProperties": false,
+        "description": "Explicit user promises separated from creative choices left to the Agents.",
+        "properties": {
+          "authoritative_user_overrides": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Authoritative User Overrides",
+            "type": "array"
+          },
+          "continuation_preference": {
+            "$ref": "#/components/schemas/ContinuationPreference",
+            "default": "AGENT_DECIDES"
+          },
+          "explicit_commitments": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Explicit Commitments",
+            "type": "array"
+          },
+          "explicit_prohibitions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Explicit Prohibitions",
+            "type": "array"
+          },
+          "locked_dialogue": {
+            "items": {
+              "$ref": "#/components/schemas/StoryLockedDialogueLine"
+            },
+            "maxItems": 5000,
+            "title": "Locked Dialogue",
+            "type": "array"
+          },
+          "open_creative_choices": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Open Creative Choices",
+            "type": "array"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "explicit_commitments"
+        ],
+        "title": "StorySourceContract",
+        "type": "object"
+      },
+      "StoryStyleMetadataPatch": {
+        "additionalProperties": false,
+        "description": "Sparse updates to the existing global style record.",
+        "properties": {
+          "cinematography": {
+            "anyOf": [
+              {
+                "maxLength": 800,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cinematography"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "forbidden": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 12,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forbidden"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "medium": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Medium"
+          },
+          "texture": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Texture"
+          }
+        },
+        "title": "StoryStyleMetadataPatch",
+        "type": "object"
+      },
       "StructuredScene": {
         "additionalProperties": false,
         "properties": {
@@ -15846,6 +18196,11 @@
             ],
             "title": "Narrative Purpose"
           },
+          "screenplay_text": {
+            "default": "",
+            "title": "Screenplay Text",
+            "type": "string"
+          },
           "summary": {
             "title": "Summary",
             "type": "string"
@@ -15853,7 +18208,7 @@
           "target_duration_seconds": {
             "anyOf": [
               {
-                "minimum": 4.0,
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -16229,7 +18584,6 @@
             "items": {
               "$ref": "#/components/schemas/TakeComparisonCandidateReview"
             },
-            "maxItems": 5,
             "title": "Candidate Reviews",
             "type": "array"
           },
@@ -16237,7 +18591,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 5,
             "minItems": 2,
             "title": "Candidate Take Ids",
             "type": "array"
@@ -16257,7 +18610,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 10,
             "minItems": 2,
             "title": "Inspection Ids",
             "type": "array"
@@ -16362,7 +18714,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 5,
             "title": "Take Ids",
             "type": "array"
           }
@@ -17357,6 +19708,16 @@
             "title": "Parent Run Id",
             "type": "string"
           },
+          "production_skill_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionSkillRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recipient_role": {
             "minLength": 1,
             "title": "Recipient Role",
@@ -17373,6 +19734,13 @@
             "minLength": 1,
             "title": "Sender",
             "type": "string"
+          },
+          "specialist_turns": {
+            "items": {
+              "$ref": "#/components/schemas/SpecialistTurnRecord"
+            },
+            "title": "Specialist Turns",
+            "type": "array"
           },
           "status": {
             "$ref": "#/components/schemas/DelegationStatus",
@@ -20142,6 +22510,68 @@
           }
         },
         "summary": "Recover Image Task Output",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/image-tasks/{task_id}/resolve-not-submitted": {
+      "post": {
+        "operationId": "resolve_image_not_submitted_api_short_drama_image_tasks__task_id__resolve_not_submitted_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageNotSubmittedResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Resolve Image Not Submitted",
         "tags": [
           "short-drama"
         ]

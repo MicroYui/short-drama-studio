@@ -9,6 +9,7 @@ from typing import TypeAlias, cast
 
 from short_drama.models import ProductionProfile
 from short_drama.skills.models import (
+    ComposableProductionSkill,
     ProviderPromptSkill,
     ProductionSkill,
     ProductionSkillRole,
@@ -23,6 +24,8 @@ DEFAULT_PRODUCTION_WORKFLOW_PATH = (
     Path(__file__).resolve().parent / "workflows" / "end_to_end.md"
 )
 DEFAULT_PROVIDER_SKILLS_ROOT = Path(__file__).resolve().parent / "providers"
+DEFAULT_SHARED_SKILL_ROOT = Path(__file__).resolve().parent / "shared"
+DEFAULT_NARRATIVE_SKILLS_ROOT = Path(__file__).resolve().parent / "narrative"
 
 
 def _parse_frontmatter_value(raw_value: str, *, path: Path) -> FrontmatterValue:
@@ -136,10 +139,40 @@ def load_production_workflow(
     return body
 
 
-def _load_role_prompts(skill_directory: Path) -> dict[ProductionSkillRole, str]:
+def _declared_roles(
+    metadata: Frontmatter,
+    *,
+    path: Path,
+) -> tuple[ProductionSkillRole, ...]:
+    values = _optional_string_list(metadata, "roles", path=path)
+    if not values:
+        raise ValueError(
+            f"Frontmatter field 'roles' must declare at least one role in {path}"
+        )
+    roles: list[ProductionSkillRole] = []
+    for value in values:
+        try:
+            role = ProductionSkillRole(value)
+        except ValueError as exc:
+            raise ValueError(f"Unknown Production Skill role '{value}' in {path}") from exc
+        if role not in roles:
+            roles.append(role)
+    return tuple(roles)
+
+
+def _load_role_prompts(
+    skill_directory: Path,
+    *,
+    roles: tuple[ProductionSkillRole, ...] | None = None,
+) -> dict[ProductionSkillRole, str]:
     prompts: dict[ProductionSkillRole, str] = {}
-    for role in ProductionSkillRole:
+    requested_roles = tuple(ProductionSkillRole) if roles is None else roles
+    for role in requested_roles:
         role_path = skill_directory / "roles" / f"{role.value.casefold()}.md"
+        if not role_path.is_file():
+            raise ValueError(
+                f"Production Skill declares role {role.value} but has no role file: {role_path}"
+            )
         metadata, body = _read_markdown(role_path)
         references = _optional_string_list(metadata, "references", path=role_path)
         sections = [body]
@@ -155,6 +188,51 @@ def _load_role_prompts(skill_directory: Path) -> dict[ProductionSkillRole, str]:
             )
         prompts[role] = "\n\n".join(sections)
     return prompts
+
+
+def load_shared_role_prompts(
+    root: Path = DEFAULT_SHARED_SKILL_ROOT,
+) -> dict[ProductionSkillRole, str]:
+    """Load the medium-neutral Chinese responsibility of every Agent role."""
+
+    return _load_role_prompts(root)
+
+
+def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
+    skill_path = skill_directory / "SKILL.md"
+    metadata, constitution = _read_markdown(skill_path)
+    roles = _declared_roles(metadata, path=skill_path)
+    return ComposableProductionSkill(
+        id=_required_string(metadata, "id", path=skill_path),
+        label=_required_string(metadata, "label", path=skill_path),
+        description=_required_string(metadata, "description", path=skill_path),
+        constitution=constitution,
+        role_prompts=_load_role_prompts(skill_directory, roles=roles),
+        source_path=str(skill_path),
+        user_overridable=_optional_bool(
+            metadata,
+            "user_overridable",
+            default=True,
+            path=skill_path,
+        ),
+    )
+
+
+def load_narrative_skills(
+    root: Path = DEFAULT_NARRATIVE_SKILLS_ROOT,
+) -> tuple[ComposableProductionSkill, ...]:
+    """Load optional narrative methods without deciding when they apply."""
+
+    skill_directories = sorted(
+        path.parent for path in root.glob("*/SKILL.md") if path.is_file()
+    )
+    if not skill_directories:
+        raise ValueError(f"No narrative Production Skills found in {root}")
+    skills = tuple(_load_composable_skill(path) for path in skill_directories)
+    skill_ids = [skill.id for skill in skills]
+    if len(skill_ids) != len(set(skill_ids)):
+        raise ValueError(f"Duplicate narrative Production Skill id in {root}")
+    return skills
 
 
 def _load_skill(skill_directory: Path) -> ProductionSkill:
@@ -180,6 +258,9 @@ def _load_skill(skill_directory: Path) -> ProductionSkill:
         writer=prompts[ProductionSkillRole.WRITER],
         planner=prompts[ProductionSkillRole.PLANNER],
         critic=prompts[ProductionSkillRole.CRITIC],
+        story_repair=prompts[ProductionSkillRole.STORY_REPAIR],
+        revision_verifier=prompts[ProductionSkillRole.REVISION_VERIFIER],
+        final_cold_read=prompts[ProductionSkillRole.FINAL_COLD_READ],
         review_router=prompts[ProductionSkillRole.REVIEW_ROUTER],
         director=prompts[ProductionSkillRole.DIRECTOR],
         asset_reviewer=prompts[ProductionSkillRole.ASSET_REVIEWER],

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -26,12 +27,14 @@ from short_drama.h3_models import (
     H3ProbeRequest,
     H3ProviderConfigUpdate,
     H3QueryResponse,
+    H3ReconciliationCandidatesResponse,
     H3RemoteStatus,
     H3RemoteTask,
     H3TakeReviewRequest,
     H3TaskContent,
     H3TaskUsage,
     H3VideoRequest,
+    derive_h3_reference_alias,
 )
 from short_drama.models import (
     ActionBeat,
@@ -48,6 +51,9 @@ from short_drama.models import (
     QaStatus,
     ReferenceRequirement,
     ReferenceRole,
+    ShotPlan,
+    ShotReferenceCue,
+    ShotTimelineBeat,
     SpatialInteractionConstraint,
     SourceMode,
     SurfaceAttachmentConstraint,
@@ -63,12 +69,18 @@ from short_drama.reference_planner import (
     ShotPlanPatch,
 )
 from short_drama.providers.minimax_h3_client import H3SubmissionUnknown
+from short_drama.providers.h3_media_bindings import resolve_h3_media_bindings
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
     build_h3_prompt,
     compile_h3_request,
 )
-from short_drama.service import ShortDramaService, WorkflowConflictError
+from short_drama.service import (
+    ArtifactNotFoundError,
+    ShortDramaService,
+    WorkflowConflictError,
+)
+from short_drama.tools import ToolCallStatus
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "minimax_h3"
@@ -454,6 +466,305 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
     assert "lips remain completely closed" in voiceover
 
 
+def test_shot_timeline_beats_require_contiguous_ranges_and_preserve_dialogue() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    source = next(shot for shot in document.shots if shot.sequence == 2)
+    line_id = source.dialogue_line_ids[0]
+    base_payload = source.model_dump(mode="python")
+    base_payload["timeline_beats"] = [
+        ShotTimelineBeat(
+            start_seconds=0.0,
+            end_seconds=3.0,
+            visual="林夏稳定地看向周衡",
+            framing="近景",
+            camera="固定机位",
+            action="林夏抬眼确认对方反应",
+            performance="语气克制",
+            emotion="警觉",
+            dialogue_line_ids=[line_id],
+            sound="便利店环境音",
+        ),
+        ShotTimelineBeat(
+            start_seconds=3.0,
+            end_seconds=8.0,
+            visual="林夏说完后保持视线",
+            framing="近景",
+            camera="末段轻微推近",
+            action="林夏停住动作等待回应",
+            performance="呼吸稳定",
+            emotion="压迫感上升",
+        ),
+    ]
+
+    validated = ShotPlan.model_validate(base_payload)
+    assert validated.timeline_beats[-1].end_seconds == source.duration_seconds
+
+    gap_payload = validated.model_dump(mode="python")
+    gap_payload["timeline_beats"][1]["start_seconds"] = 3.2
+    with pytest.raises(ValueError, match="contiguous and ordered"):
+        ShotPlan.model_validate(gap_payload)
+
+    missing_dialogue_payload = validated.model_dump(mode="python")
+    missing_dialogue_payload["timeline_beats"][0]["dialogue_line_ids"] = []
+    with pytest.raises(ValueError, match="every shot dialogue line exactly once and in order"):
+        ShotPlan.model_validate(missing_dialogue_payload)
+
+
+def test_h3_reference_prompt_emits_timed_beats_and_normalized_semantic_alias() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    source = next(shot for shot in document.shots if shot.sequence == 2)
+    character_asset = next(
+        asset for asset in document.assets if asset.kind == AssetKind.CHARACTER
+    )
+    line_id = source.dialogue_line_ids[0]
+    shot_payload = source.model_dump(mode="python")
+    shot_payload["timeline_beats"] = [
+        ShotTimelineBeat(
+            start_seconds=0.0,
+            end_seconds=4.0,
+            visual="林夏侧身站在柜台前",
+            framing="中近景",
+            camera="缓慢向前推近",
+            action="林夏抬眼看向周衡",
+            performance="语气平静但目光专注",
+            emotion="克制的警觉",
+            dialogue_line_ids=[line_id],
+            sound="雨声与便利店底噪",
+            references=[
+                ShotReferenceCue(
+                    subject_asset_id=character_asset.id,
+                    alias="林夏定妆",
+                    purpose="锁定林夏的身份和服饰",
+                )
+            ],
+        ),
+        ShotTimelineBeat(
+            start_seconds=4.0,
+            end_seconds=8.0,
+            visual="林夏说完后观察周衡的反应",
+            framing="近景",
+            camera="焦点保持在林夏眼神",
+            action="林夏保持姿态不动",
+            performance="台词结束后留出反应空间",
+            emotion="对峙感持续",
+            references=[
+                ShotReferenceCue(
+                    subject_asset_id=character_asset.id,
+                    alias="林夏定妆",
+                    purpose="继续锁定林夏的身份和服饰",
+                )
+            ],
+        ),
+    ]
+    shot = ShotPlan.model_validate(shot_payload)
+    media = H3MediaInput(
+        kind=H3MediaKind.IMAGE,
+        role=H3MediaRole.REFERENCE_IMAGE,
+        source=H3MediaSource(
+            external_url="https://example.invalid/linxia-reference.png"
+        ),
+        asset_version_id=character_asset.versions[0].id,
+        subject_asset_id=character_asset.id,
+        reference_alias="＠ 林夏 / 定妆 ",
+        binding_purpose="锁定林夏的身份、发型和服饰",
+    )
+
+    prompt = build_h3_prompt(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=8,
+        media_inputs=[media],
+    )
+
+    assert media.reference_alias == "林夏_定妆"
+    assert "@林夏_定妆 = <Picture 1>" in prompt
+    assert "[0.00-4.00 seconds]" in prompt
+    assert "[4.00-8.00 seconds]" in prompt
+    assert "@林夏_定妆 (<Picture 1>)" in prompt
+
+
+def test_h3_reference_prompt_rejects_alias_collisions_after_normalization() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    shot = next(shot for shot in document.shots if shot.sequence == 2)
+    first_asset, second_asset = document.assets[:2]
+    media_inputs = [
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(external_url="https://example.invalid/first.png"),
+            asset_version_id=first_asset.versions[0].id,
+            subject_asset_id=first_asset.id,
+            reference_alias="食堂 / 窗口",
+        ),
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(external_url="https://example.invalid/second.png"),
+            asset_version_id=second_asset.versions[0].id,
+            subject_asset_id=second_asset.id,
+            reference_alias="食堂 窗口",
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="identifies multiple media inputs"):
+        build_h3_prompt(
+            document,
+            shot,
+            route=VideoGenerationRoute.REFERENCE,
+            duration_seconds=8,
+            media_inputs=media_inputs,
+        )
+
+
+def test_generated_h3_aliases_truncate_after_nfkc_normalization() -> None:
+    alias = derive_h3_reference_alias("ﬃ" * 80)
+
+    assert len(alias) == 80
+    assert alias.startswith("ffiffi")
+
+
+def test_shot_reference_cues_normalize_readable_aliases_and_reject_punctuation() -> None:
+    cue = ShotReferenceCue(
+        subject_asset_id="asset-cafeteria-window",
+        alias="食堂 / 窗口",
+        purpose="锁定打饭窗口空间",
+    )
+    assert cue.alias == "食堂_窗口"
+
+    with pytest.raises(ValueError, match="readable name"):
+        ShotReferenceCue(
+            subject_asset_id="asset-invalid",
+            alias="///",
+            purpose="无效别名",
+        )
+
+
+def test_legacy_h3_bindings_reject_repeated_final_alias_and_identity() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    shot = document.shots[0]
+    asset = document.assets[0]
+    media_inputs = [
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(external_url=source_url),
+            asset_version_id=version_id,
+            subject_asset_id=asset.id,
+        )
+        for source_url, version_id in [
+            ("https://example.invalid/1.png", asset.versions[0].id),
+            ("https://example.invalid/2.png", "legacy-version-2"),
+            ("https://example.invalid/2.png", "legacy-version-2"),
+        ]
+    ]
+
+    with pytest.raises(ValueError, match="duplicates semantic binding"):
+        build_h3_prompt(
+            document,
+            shot,
+            route=VideoGenerationRoute.REFERENCE,
+            duration_seconds=5,
+            media_inputs=media_inputs,
+        )
+
+
+def test_legacy_h3_bindings_keep_distinct_naked_urls_separate() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    shot = document.shots[0]
+    media_inputs = [
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(
+                external_url=f"https://example.invalid/legacy-{index}.png"
+            ),
+        )
+        for index in range(1, 3)
+    ]
+
+    prompt = build_h3_prompt(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=5,
+        media_inputs=media_inputs,
+    )
+    bindings = resolve_h3_media_bindings(document, media_inputs, [])
+
+    assert len(bindings) == 2
+    assert bindings[0].alias != bindings[1].alias
+    assert bindings[0].provider_label == "<Picture 1>"
+    assert bindings[1].provider_label == "<Picture 2>"
+    assert f"@{bindings[0].alias} = <Picture 1>" in prompt
+    assert f"@{bindings[1].alias} = <Picture 2>" in prompt
+
+
+def test_empty_h3_reference_metadata_preserves_legacy_request_fingerprint(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, FakeH3Client())
+    project = service.initialize_fixture()
+    document = project.document
+    shot = document.shots[0]
+    source_url = "https://example.invalid/legacy-reference.png"
+    media = H3MediaInput(
+        kind=H3MediaKind.IMAGE,
+        role=H3MediaRole.REFERENCE_IMAGE,
+        source=H3MediaSource(external_url=source_url),
+    )
+
+    task, _run, _evidence = service._new_h3_task_and_run(
+        document=document,
+        shot_id=shot.id,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=5,
+        prompt="legacy-compatible prompt",
+        media_inputs=[media],
+        purpose=EvidencePurpose.CONTRACT_SMOKE,
+        learning_objective=None,
+        regression_case_id=None,
+        candidate_index=1,
+        attempt=1,
+        retry_of_task_id=None,
+    )
+    legacy_request = {
+        "provider": "minimax",
+        "model": "MiniMax-H3",
+        "project_id": document.project.id,
+        "shot_id": shot.id,
+        "route": VideoGenerationRoute.REFERENCE.value,
+        "resolution": "768P",
+        "duration": 5,
+        "prompt": "legacy-compatible prompt",
+        "media_inputs": [
+            {
+                "kind": H3MediaKind.IMAGE.value,
+                "role": H3MediaRole.REFERENCE_IMAGE.value,
+                "source": {"external_url": source_url},
+            }
+        ],
+        "candidate_index": 1,
+        "script_version_id": document.project.current_script_version_id,
+        "bible_version_id": document.project.current_bible_version_id,
+        "shot_revision": shot.revision,
+        "voice_reference_revision": document.project.voice_reference_revision,
+        "learning_objective": None,
+        "regression_case_id": None,
+        "attempt": 1,
+    }
+    expected = hashlib.sha256(
+        json.dumps(
+            legacy_request,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    assert task.request_fingerprint == expected
+
+
 def test_h3_compiler_omits_unresolved_scaffold_style() -> None:
     request = CreateProjectRequest(
         name="未定视觉方向",
@@ -808,6 +1119,19 @@ def test_running_h3_output_is_stale_after_director_changes_shot_plan(
     project = service.initialize_fixture()
     project_id = project.document.project.id
     shot = project.document.shots[0]
+    shot.timeline_beats = [
+        ShotTimelineBeat(
+            start_seconds=0.0,
+            end_seconds=shot.duration_seconds,
+            visual=shot.visual,
+            framing=shot.framing,
+            camera=shot.camera,
+            action=shot.continuity.action_out,
+            dialogue_line_ids=list(shot.dialogue_line_ids),
+            sound=shot.audio_intent,
+        )
+    ]
+    service.repository.save_project(project.document)
     probe = service.enqueue_h3_probe(
         project_id,
         H3ProbeRequest(shot_id=shot.id),
@@ -836,6 +1160,7 @@ def test_running_h3_output_is_stale_after_director_changes_shot_plan(
     current_shot = next(item for item in updated.document.shots if item.id == shot.id)
     assert current_shot.revision == 2
     assert current_shot.continuity.eyeline == "rear coverage eyeline"
+    assert current_shot.timeline_beats == []
 
     fake.set_status(acknowledged.provider_task_id, H3RemoteStatus.SUCCEEDED)
     assert service.advance_task(probe.task.id).status == TaskStatus.SUCCEEDED
@@ -869,6 +1194,43 @@ def test_running_h3_output_is_stale_after_director_changes_shot_plan(
     assert orientation_risk.evidence_take_ids == [take.id]
     with pytest.raises(WorkflowConflictError, match="stale"):
         service.select_take(take.id)
+
+
+def test_director_repair_rejects_invalid_timeline_beats_atomically(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, FakeH3Client())
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = next(item for item in project.document.shots if item.sequence == 2)
+    original_revision = shot.revision
+
+    invalid_beat = ShotTimelineBeat(
+        start_seconds=0.0,
+        end_seconds=shot.duration_seconds - 1.0,
+        visual=shot.visual,
+        framing=shot.framing,
+        camera=shot.camera,
+        action=shot.continuity.action_out,
+        dialogue_line_ids=list(shot.dialogue_line_ids),
+        sound=shot.audio_intent,
+    )
+    with pytest.raises(WorkflowConflictError, match="Invalid ShotPlan repair"):
+        service.decide_director_repair(
+            project_id,
+            shot.id,
+            DirectorRepairDecisionRequest(
+                decision=DirectorRepairDecision.APPLIED,
+                strategy=DirectorRepairStrategy.CHANGE_KEYFRAME,
+                reason="Attempt an invalid partial timeline update.",
+                shot_patch=ShotPlanPatch(timeline_beats=[invalid_beat]),
+            ),
+        )
+
+    persisted = service.get_project(project_id).document
+    persisted_shot = next(item for item in persisted.shots if item.id == shot.id)
+    assert persisted_shot.revision == original_revision
+    assert persisted_shot.timeline_beats == []
 
 
 def test_h3_prepare_submit_and_retry_reject_stale_inputs(tmp_path: Path) -> None:
@@ -941,6 +1303,11 @@ def test_h3_submit_unknown_never_blindly_reposts(tmp_path: Path) -> None:
     assert len(fake.submitted_requests) == 1
     candidates = service.list_h3_reconciliation_candidates()
     assert [item.id for item in candidates.tasks] == ["remote-1"]
+    scoped_candidates = service.list_h3_reconciliation_candidates_for_task(
+        project.document.project.id,
+        probe.task.id,
+    )
+    assert [item.id for item in scoped_candidates.tasks] == ["remote-1"]
 
     resolved = service.resolve_h3_submission(probe.task.id, "remote-1")
     assert resolved.task.status == TaskStatus.ACKNOWLEDGED
@@ -950,6 +1317,105 @@ def test_h3_submit_unknown_never_blindly_reposts(tmp_path: Path) -> None:
     ) == 1
     assert len(fake.submitted_requests) == 1
     assert resolved.project.route_evidence[0].status == EvidenceStatus.AWAITING_OUTPUT
+
+
+def test_h3_reconciliation_tool_is_scoped_to_one_compatible_unknown_task(
+    tmp_path: Path,
+) -> None:
+    fake = FakeH3Client()
+    fake.submit_unknown_once = True
+    service = _service(tmp_path, fake)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    probe = service.enqueue_h3_probe(
+        project_id,
+        H3ProbeRequest(
+            shot_id=project.document.shots[0].id,
+            duration_seconds=6,
+        ),
+    )
+    assert service.advance_task(probe.task.id).status == TaskStatus.SUBMITTING
+    assert service.advance_task(probe.task.id).status == TaskStatus.SUBMIT_UNKNOWN
+
+    compatible = H3RemoteTask(
+        id="compatible-template",
+        status=H3RemoteStatus.QUEUED,
+        resolution="768P",
+        duration=6,
+        ratio="9:16",
+        task_type="generation",
+        modality="video",
+    )
+    fake.remote_tasks["wrong-model"] = compatible.model_copy(
+        update={"id": "wrong-model", "model": "Another-Model"}
+    )
+    fake.remote_tasks["wrong-resolution"] = compatible.model_copy(
+        update={"id": "wrong-resolution", "resolution": "1080P"}
+    )
+    fake.remote_tasks["wrong-duration"] = compatible.model_copy(
+        update={"id": "wrong-duration", "duration": 10}
+    )
+    fake.remote_tasks["wrong-ratio"] = compatible.model_copy(
+        update={"id": "wrong-ratio", "ratio": "16:9"}
+    )
+    fake.remote_tasks["wrong-task-type"] = compatible.model_copy(
+        update={"id": "wrong-task-type", "task_type": "upscale"}
+    )
+    fake.remote_tasks["wrong-modality"] = compatible.model_copy(
+        update={"id": "wrong-modality", "modality": "image"}
+    )
+    fake.remote_tasks["compatible-unknown-fields"] = H3RemoteTask(
+        id="compatible-unknown-fields",
+        status=H3RemoteStatus.QUEUED,
+    )
+
+    candidates = service.list_h3_reconciliation_candidates_for_task(
+        project_id,
+        probe.task.id,
+    )
+    assert [item.id for item in candidates.tasks] == [
+        "remote-1",
+        "compatible-unknown-fields",
+    ]
+
+    result = service.tool_registry.invoke(
+        "route.list_h3_reconciliation",
+        {"project_id": project_id, "task_id": probe.task.id},
+    )
+    assert result.status == ToolCallStatus.SUCCEEDED
+    assert result.output is not None
+    tool_candidates = H3ReconciliationCandidatesResponse.model_validate(result.output)
+    assert [item.id for item in tool_candidates.tasks] == [
+        "remote-1",
+        "compatible-unknown-fields",
+    ]
+    assert [
+        (ref.project_id, ref.artifact_type, ref.artifact_id)
+        for ref in result.artifact_refs
+    ] == [(project_id, "generation_task", probe.task.id)]
+
+    other_project = service.create_project(
+        CreateProjectRequest(
+            name="Other reconciliation project",
+            source_mode=SourceMode.IDEA_EXPANSION,
+            input_text="Another project must not inspect this task through its Agent Tool.",
+        )
+    ).document.project
+    with pytest.raises(ArtifactNotFoundError):
+        service.list_h3_reconciliation_candidates_for_task(
+            other_project.id,
+            probe.task.id,
+        )
+
+    queued = service.enqueue_h3_probe(
+        project_id,
+        H3ProbeRequest(shot_id=project.document.shots[0].id),
+    )
+    with pytest.raises(WorkflowConflictError, match="not waiting for reconciliation"):
+        service.list_h3_reconciliation_candidates_for_task(project_id, queued.task.id)
+
+    with pytest.raises(WorkflowConflictError, match="different aspect ratio"):
+        service.resolve_h3_submission(probe.task.id, "wrong-ratio")
 
 
 def test_h3_duplicate_local_task_reuses_acknowledged_submission_before_post(

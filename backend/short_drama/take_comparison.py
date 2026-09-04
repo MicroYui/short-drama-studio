@@ -11,7 +11,6 @@ from pydantic import Field, model_validator
 from short_drama.models import (
     DomainModel,
     ProjectDocument,
-    QaStatus,
     SemanticReviewStatus,
     ShotPlan,
     Take,
@@ -27,10 +26,7 @@ from short_drama.video_inspection import image_data_url, semantic_reference_imag
 class TakeComparisonJudgment(DomainModel):
     decision: TakeComparisonDecision
     selected_take_id: str | None = None
-    candidate_reviews: list[TakeComparisonCandidateReview] = Field(
-        min_length=2,
-        max_length=5,
-    )
+    candidate_reviews: list[TakeComparisonCandidateReview] = Field(min_length=2)
     summary: str = Field(min_length=1, max_length=3000)
 
     @model_validator(mode="after")
@@ -57,8 +53,6 @@ def compare_take_candidates(
 
     if len(takes) < 2:
         raise ValueError("Take comparison requires at least two candidates")
-    if len(takes) > 5:
-        raise ValueError("Take comparison accepts at most five candidates")
     if len({take.id for take in takes}) != len(takes):
         raise ValueError("Take comparison candidates must be unique")
     if any(take.project_id != document.project.id or take.shot_id != shot.id for take in takes):
@@ -113,18 +107,15 @@ def compare_take_candidates(
         )
 
     instructions = (
-        "You are a pairwise Take comparison tool for a film-director Agent. Return JSON only "
-        "and match the supplied schema. Compare all candidate timelines against the same ShotPlan, "
-        "canonical references, and previous-shot boundary. Judge relative differences in character "
-        "identity and wardrobe, scene and prop continuity, action and screen direction, dialogue or "
-        "sound-source semantics, and cinematography. Do not choose a candidate merely because it is "
-        "the least bad: return NONE_ACCEPTABLE when every candidate has a visible contradiction that "
-        "makes it unsafe for the intended edit. Only a candidate already marked QA PASSED is eligible "
-        "for SELECT_TAKE; the comparison does not override technical or semantic rejection. Sparse "
-        "frames cannot prove an unseen event. Keep observations evidence-based, make no repair "
-        "decision, and remember that the report is advisory and user-overridable. Use the full 0-5 "
-        "relative_score range only to explain the comparison; do not pretend scores are calibrated "
-        "across different comparison calls."
+        "你是服务于电影导演 Agent 的同镜头 Take 对比工具。只返回 JSON，并严格匹配"
+        "给定 schema。将所有候选时间线放在同一 ShotPlan、标准参考和前一镜边界下比较。"
+        "阅读 QA 状态和问题作为证据，但不要把语义、连续性或审美标签当成不可覆盖的资格门禁。"
+        "比较角色身份与服装、场景与道具连续性、动作与屏幕方向、台词/声源语义和摄影的相对差异。"
+        "不要只因为某个候选‘没那么差’就选它；当所有候选都有会破坏当前剪辑意图的可见矛盾时，"
+        "返回 NONE_ACCEPTABLE。若你选择一个带有 QA 警告的 Take，必须在该候选的 strengths/weaknesses "
+        "和 summary 中说明为何这个创作取舍在当前目标下可接受。稀疏抽帧不能证明未被看到的事件。"
+        "所有观察都必须有证据，本工具不做修复决定；报告只是建议，Agent 和用户可覆盖。"
+        "relative_score 的 0–5 只用于解释本次相对比较，不要声称它能跨调用校准。"
     )
     payload = {
         "output_schema": TakeComparisonJudgment.model_json_schema(),
@@ -156,9 +147,7 @@ def compare_take_candidates(
             }
             for take in takes
         ],
-        "eligible_take_ids": [
-            take.id for take in takes if take.qa_status == QaStatus.PASSED
-        ],
+        "technically_available_take_ids": [take.id for take in takes],
         "review_focus": review_focus,
         "image_map": image_map,
     }
@@ -180,12 +169,6 @@ def compare_take_candidates(
         )
         if selected is None:
             raise ValueError("Take comparison selected an unknown candidate")
-        if selected.qa_status != QaStatus.PASSED:
-            raise ValueError("Take comparison selected a QA-rejected candidate")
-    if judgment.decision == TakeComparisonDecision.SELECT_TAKE and not any(
-        take.qa_status == QaStatus.PASSED for take in takes
-    ):
-        raise ValueError("Take comparison cannot select when no candidate passed QA")
 
     return TakeComparisonReport(
         id=f"take-comparison-{uuid4().hex}",

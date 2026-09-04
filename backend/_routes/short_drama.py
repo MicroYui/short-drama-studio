@@ -46,6 +46,7 @@ from short_drama.image_models import (
     AssetReviewRequest,
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
+    ImageNotSubmittedResolutionRequest,
     ImageTaskCreateRequest,
     ImageTaskListResponse,
     ImageTaskResponse,
@@ -1079,6 +1080,21 @@ def retry_image_task(
 ) -> ImageTaskResponse:
     try:
         return service.retry_image_task(task_id)
+    except (ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/image-tasks/{task_id}/resolve-not-submitted",
+    response_model=ImageTaskResponse,
+)
+def resolve_image_not_submitted(
+    task_id: str,
+    request: ImageNotSubmittedResolutionRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ImageTaskResponse:
+    try:
+        return service.resolve_image_not_submitted(task_id, request)
     except (ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 

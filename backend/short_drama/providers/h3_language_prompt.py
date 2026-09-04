@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import re
 from functools import lru_cache
 
-from short_drama.h3_models import H3MediaInput, H3MediaRole
-from short_drama.models import ProjectDocument, ShotPlan, VideoGenerationRoute
+from short_drama.h3_models import H3MediaInput
+from short_drama.models import AssetKind, ProjectDocument, ShotPlan, VideoGenerationRoute
 from short_drama.production_profiles import (
     ProductionSkillRole,
     compile_production_prompt,
@@ -18,6 +17,7 @@ from short_drama.providers.h3_prompt_skill import (
     prompt_schema_for_route,
     validate_h3_prompt_ir,
 )
+from short_drama.providers.h3_media_bindings import resolve_h3_media_bindings
 
 
 class LanguagePromptValidationError(ValueError):
@@ -84,64 +84,100 @@ def _structured_action_plan(
     }
 
 
-def _contains_name_or_core(text: str, name: str) -> bool:
-    if name in text:
-        return True
-    compact = re.sub(r"[\s·\-_]", "", name)
-    return any(
-        compact[start : start + width] in text
-        for width in range(min(4, len(compact)), 2, -1)
-        for start in range(0, len(compact) - width + 1)
+def _explicit_shot_asset_ids(
+    document: ProjectDocument,
+    shot: ShotPlan,
+    media_inputs: list[H3MediaInput],
+) -> list[str]:
+    """Return only asset ids selected by typed upstream fields."""
+
+    selected: list[str] = []
+
+    def add(asset_id: str | None) -> None:
+        if asset_id is not None and asset_id not in selected:
+            selected.append(asset_id)
+
+    version_to_asset_id = {
+        version.id: asset.id
+        for asset in document.assets
+        for version in asset.versions
+    }
+    plan = next(
+        (item for item in document.reference_plan if item.shot_id == shot.id),
+        None,
     )
+    if plan is not None:
+        for requirement in plan.requirements:
+            add(requirement.subject_asset_id)
+        for beat in plan.action_beats:
+            add(beat.actor_asset_id)
+        for interaction in plan.interactions:
+            add(interaction.actor_asset_id)
+            add(interaction.target_asset_id)
+        for binding in plan.bindings:
+            add(version_to_asset_id.get(binding.target_id))
+    for beat in shot.timeline_beats:
+        for cue in beat.references:
+            add(cue.subject_asset_id)
+    for media in media_inputs:
+        if media.asset_version_id is not None:
+            add(version_to_asset_id.get(media.asset_version_id))
+    return selected
 
 
 def _visible_bible_payload(
     document: ProjectDocument,
     shot: ShotPlan,
+    media_inputs: list[H3MediaInput],
 ) -> tuple[list[str], dict[str, object]]:
     bible = next(
         version
         for version in document.bible_versions
         if version.id == document.project.current_bible_version_id
     )
-    visual_facts = "。".join(
-        (
-            shot.narrative_purpose,
-            shot.visual,
-            shot.continuity.action_in,
-            shot.continuity.action_out,
-            shot.continuity.prop_state_in,
-            shot.continuity.prop_state_out,
-        )
-    )
-    visual_subject = re.split(r"[，,。；;]", shot.visual, maxsplit=1)[0]
-    character_facts = "。".join((shot.narrative_purpose, visual_subject))
+    explicit_asset_ids = set(_explicit_shot_asset_ids(document, shot, media_inputs))
+    selected_assets = [
+        asset for asset in document.assets if asset.id in explicit_asset_ids
+    ]
+    selected_character_ids = {
+        asset.bible_entity_id
+        for asset in selected_assets
+        if asset.kind == AssetKind.CHARACTER and asset.bible_entity_id is not None
+    }
+    selected_location_ids = {
+        asset.bible_entity_id
+        for asset in selected_assets
+        if asset.kind == AssetKind.LOCATION and asset.bible_entity_id is not None
+    }
+    selected_prop_ids = {
+        asset.bible_entity_id
+        for asset in selected_assets
+        if asset.kind == AssetKind.PROP and asset.bible_entity_id is not None
+    }
     visible_characters = [
-        character for character in bible.characters if character.name in character_facts
+        character for character in bible.characters if character.id in selected_character_ids
     ]
-    if not visible_characters and any(
-        marker in visual_facts for marker in ("两人", "二人", "双方", "对峙")
-    ):
-        visible_characters = list(bible.characters)
-
     visible_props = [
-        prop for prop in bible.props if _contains_name_or_core(visual_facts, prop.name)
+        prop for prop in bible.props if prop.id in selected_prop_ids
     ]
-    matching_locations = [
-        location
-        for location in bible.locations
-        if _contains_name_or_core(visual_facts, location.name)
+    visible_locations = [
+        location for location in bible.locations if location.id in selected_location_ids
     ]
-    visible_locations = (
-        matching_locations
-        if matching_locations
-        else list(bible.locations) if len(bible.locations) == 1 else []
-    )
-    visible_names = [
-        *(character.name for character in visible_characters),
-        *(location.name for location in visible_locations),
-        *(prop.name for prop in visible_props),
-    ]
+    bible_names: dict[tuple[AssetKind, str], str] = {}
+    for entity in bible.characters:
+        bible_names[(AssetKind.CHARACTER, entity.id)] = entity.name
+    for entity in bible.locations:
+        bible_names[(AssetKind.LOCATION, entity.id)] = entity.name
+    for entity in bible.props:
+        bible_names[(AssetKind.PROP, entity.id)] = entity.name
+    visible_names: list[str] = []
+    for asset in selected_assets:
+        if asset.bible_entity_id is None:
+            visible_names.append(asset.name)
+        else:
+            visible_names.append(
+                bible_names.get((asset.kind, asset.bible_entity_id), asset.name)
+            )
     return visible_names, {
         "characters": [
             {
@@ -179,19 +215,18 @@ def _route_media_bindings(
         for asset in document.assets
         for version in asset.versions
     }
-    role_purpose = {
-        H3MediaRole.FIRST_FRAME: "不可改写的镜头开场画面与构图",
-        H3MediaRole.LAST_FRAME: "不可改写的镜头结束画面与构图",
-        H3MediaRole.REFERENCE_IMAGE: "只锚定描述中明确对应的视觉元素",
-        H3MediaRole.REFERENCE_VIDEO: "只锚定描述中明确对应的动态或视觉元素",
-        H3MediaRole.REFERENCE_AUDIO: "只锚定描述中明确对应的声音元素",
-    }
     bindings: list[dict[str, object]] = []
-    for media in media_inputs:
+    for resolved in resolve_h3_media_bindings(document, media_inputs, []):
+        media = resolved.media
         binding: dict[str, object] = {
             "role": media.role.value,
             "kind": media.kind.value,
-            "purpose": role_purpose[media.role],
+            "provider_label": resolved.provider_label,
+            "reference_alias": f"@{resolved.alias}",
+            "subject": resolved.subject,
+            "subject_asset_id": resolved.subject_asset_id,
+            "reference_tags": list(resolved.tags),
+            "purpose": resolved.purpose,
         }
         if media.asset_version_id is not None:
             binding["asset_version_id"] = media.asset_version_id
@@ -277,8 +312,13 @@ def build_language_prompt_input(
         VideoGenerationRoute.FRAME_FIRST_LAST: "首尾帧均已批准；连续完成中间动作，不改变两端已确定的身份、构图和道具状态。",
         VideoGenerationRoute.REFERENCE: "参考素材用于身份、空间或道具锚定；保持其外观，但不要把参考图理解成额外镜头或新增主体。",
     }[route]
-    visible_asset_names, visible_bible = _visible_bible_payload(document, shot)
-    route_media = _route_media_bindings(document, media_inputs or [])
+    resolved_media_inputs = media_inputs or []
+    visible_asset_names, visible_bible = _visible_bible_payload(
+        document,
+        shot,
+        resolved_media_inputs,
+    )
+    route_media = _route_media_bindings(document, resolved_media_inputs)
     payload = {
         "task": "在不改变任何锁定事实的前提下，把 source_prompt 编译为 required_prompt_schema 指定的 MiniMax-H3 Prompt IR。",
         "production_profile": document.project.production_profile.value,
@@ -296,6 +336,9 @@ def build_language_prompt_input(
             "framing": shot.framing,
             "camera": shot.camera,
             "audio_intent": shot.audio_intent,
+            "timeline_beats": [
+                beat.model_dump(mode="json") for beat in shot.timeline_beats
+            ],
             "continuity": shot.continuity.model_dump(mode="json"),
             "transition_out": shot.transition_out,
         },
@@ -313,6 +356,7 @@ def build_language_prompt_input(
         "locked_dialogue": [
             {
                 "speaker": line.speaker,
+                "speaker_character_id": line.speaker_character_id,
                 "spoken_text": line.spoken_text,
                 "audio_kind": line.audio_kind.value,
             }

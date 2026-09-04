@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Protocol
 
 from short_drama.image_models import (
+    AssetMutationResponse,
+    AssetReferenceSheetComposeRequest,
+    ImageNotSubmittedResolutionRequest,
     ImageTaskCreateRequest,
     ImageTaskListResponse,
     ImageTaskResponse,
@@ -21,6 +24,13 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class ImageToolService(Protocol):
+    def compose_asset_reference_sheet(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetReferenceSheetComposeRequest,
+    ) -> AssetMutationResponse: ...
+
     def enqueue_image_task(
         self,
         project_id: str,
@@ -40,6 +50,12 @@ class ImageToolService(Protocol):
 
     def retry_image_task(self, task_id: str) -> ImageTaskResponse: ...
 
+    def resolve_image_not_submitted(
+        self,
+        task_id: str,
+        request: ImageNotSubmittedResolutionRequest,
+    ) -> ImageTaskResponse: ...
+
     def recover_image_task_output(self, task_id: str) -> ImageTaskResponse: ...
 
 
@@ -49,6 +65,12 @@ class ImageEnqueueInput(ToolModel):
     request: ImageTaskCreateRequest
 
 
+class ImageReferenceSheetComposeInput(ToolModel):
+    project_id: str
+    asset_id: str
+    request: AssetReferenceSheetComposeRequest
+
+
 class ImageListInput(ToolModel):
     project_id: str
     asset_id: str | None = None
@@ -56,6 +78,11 @@ class ImageListInput(ToolModel):
 
 class ImageTaskActionInput(ToolModel):
     task_id: str
+
+
+class ImageNotSubmittedInput(ToolModel):
+    task_id: str
+    request: ImageNotSubmittedResolutionRequest
 
 
 def _task_execution(result: ImageTaskResponse) -> ToolExecution[ImageTaskResponse]:
@@ -83,6 +110,49 @@ def _task_execution(result: ImageTaskResponse) -> ToolExecution[ImageTaskRespons
 
 
 def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
+    def compose_reference_sheet(
+        request: ImageReferenceSheetComposeInput,
+    ) -> ToolExecution[AssetMutationResponse]:
+        result = service.compose_asset_reference_sheet(
+            request.project_id,
+            request.asset_id,
+            request.request,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="asset",
+                    artifact_id=result.asset.id,
+                ),
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="asset_version",
+                    artifact_id=result.version.id,
+                    version=result.version.version,
+                ),
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="image.compose_reference_sheet",
+            version=1,
+            category=ToolCategory.IMAGE,
+            description=(
+                "Deterministically compose explicitly selected local AssetVersions "
+                "into one labeled character, scene, or lightweight reference sheet."
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=ImageReferenceSheetComposeInput,
+            output_model=AssetMutationResponse,
+            handler=compose_reference_sheet,
+            tags=frozenset({"asset", "image", "reference-sheet", "local"}),
+        )
+    )
+
     def enqueue(request: ImageEnqueueInput) -> ToolExecution[ImageTaskResponse]:
         return _task_execution(
             service.enqueue_image_task(
@@ -168,10 +238,35 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             )
         )
 
+    registry.register(
+        ToolSpec(
+            id="image.resolve_not_submitted",
+            version=1,
+            category=ToolCategory.IMAGE,
+            description=(
+                "Record that an uncertain image submission was not created so an "
+                "explicit lineage-preserving retry can be made."
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=ImageNotSubmittedInput,
+            output_model=ImageTaskResponse,
+            handler=lambda request: _task_execution(
+                service.resolve_image_not_submitted(
+                    request.task_id,
+                    request.request,
+                )
+            ),
+            tags=frozenset({"image", "reconciliation", "task"}),
+        )
+    )
+
 
 __all__ = [
     "ImageEnqueueInput",
     "ImageListInput",
+    "ImageNotSubmittedInput",
+    "ImageReferenceSheetComposeInput",
     "ImageTaskActionInput",
     "register_tools",
 ]

@@ -336,6 +336,7 @@ def build_reference_visual_candidates(
     shot: ShotPlan,
     plan: ReferencePlanEntry,
     request: ReferenceVisualRerankRequest,
+    bound_candidates: bool = True,
 ) -> tuple[list[ReferenceVisualCandidate], int, list[str]]:
     requirements = _filtered_requirements(plan, request.requirement_ids)
     max_selected = request.max_selected or plan.max_reference_images
@@ -459,21 +460,22 @@ def build_reference_visual_candidates(
     candidates.sort(
         key=lambda item: (-item.deterministic_score, item.subject_asset_id, item.candidate_id)
     )
-    default_budget = min(
-        32,
-        max(4, max_selected * 3, len(requirements) * 3),
-    )
-    budget = request.max_candidates or default_budget
-    available_count = len(candidates)
-    candidates = _bounded_with_subject_coverage(candidates, relevant_subjects, budget)
-    if len(candidates) < available_count:
-        warnings.append(
-            f"This multimodal comparison used {len(candidates)} of {available_count} eligible candidates; "
-            "the Agent may run another comparison with an explicit candidate set."
+    if bound_candidates:
+        default_budget = min(
+            32,
+            max(4, max_selected * 3, len(requirements) * 3),
         )
+        budget = request.max_candidates or default_budget
+        available_count = len(candidates)
+        candidates = _bounded_with_subject_coverage(candidates, relevant_subjects, budget)
+        if len(candidates) < available_count:
+            warnings.append(
+                f"本次多模态比较使用了 {available_count} 个可用候选项中的 {len(candidates)} 个；"
+                "Agent 可以指定候选集后再次比较。"
+            )
     if len(candidates) == 1:
         warnings.append(
-            "Only one usable candidate is available; the Tool can still reject it but cannot make a relative visual ranking."
+            "只有一个可用候选项；Tool 仍可判断其不可用，但无法进行相对视觉排序。"
         )
     return candidates, max_selected, warnings
 
@@ -509,17 +511,14 @@ def rerank_reference_visuals(
         )
 
     instructions = (
-        "You are a visual reference reranking Tool for a film-director Agent. Return JSON only "
-        "and match the supplied schema. First describe what each image visibly contains without "
-        "assuming it satisfies the requested answer; only then compare it with the ShotPlan and "
-        "ReferencePlan. Select the smallest useful set whose members have explicit, non-overlapping "
-        "responsibilities. Prefer identity, wardrobe, camera angle, framing, scene topology, prop "
-        "state, recency and shared lineage that actually support this shot. Report conflicting "
-        "identities, clothing, layouts, object construction, embedded scene geometry and redundant "
-        "views. Do not select an image merely because it is the least bad: return NONE_ACCEPTABLE "
-        "when the set would create a material contradiction. Do not require a three-view sheet or "
-        "use every available slot. The result is advisory and user-overridable; do not mutate assets "
-        "or approve media. Relative scores explain this call only and are not calibrated globally."
+        "你是供电影导演 Agent 调用的视觉参考图重排 Tool。只返回 JSON，并严格匹配所给 schema。"
+        "先分别描述每张图片中实际可见的内容，不要预设它满足目标答案；随后再与 ShotPlan 和 "
+        "ReferencePlan 比较。选择能发挥作用的最小图片集合，每个成员都应承担清晰且互不重叠的"
+        "职责。优先考虑真正支持当前镜头的人物身份、服装、机位角度、构图、场景拓扑、道具状态、"
+        "版本新旧和共同谱系。指出互相冲突的人物身份、服装、布局、物体结构、图片内嵌的场景几何"
+        "以及冗余视图。不要仅仅因为某张图相对没那么差就选择它；如果组合会造成实质矛盾，返回 "
+        "NONE_ACCEPTABLE。不要默认要求三视图，也不要为了用满名额而选图。结果仅为建议，用户可以"
+        "覆盖；不得修改资产或审批媒体。相对评分只解释本次比较，不具有全局可比性。"
     )
     payload = {
         "output_schema": ReferenceVisualRerankJudgment.model_json_schema(),
@@ -567,7 +566,7 @@ def rerank_reference_visuals(
     )
     if missing_required_subjects:
         warnings.append(
-            "The recommended set does not cover required subject assets: "
+            "建议集合未覆盖必需的主体资产："
             + ", ".join(missing_required_subjects)
         )
 
@@ -644,16 +643,13 @@ def compare_keyframe_candidates(
         )
 
     instructions = (
-        "You are a relative keyframe comparison Tool for a film-director Agent. Return JSON only "
-        "and match the supplied schema. Observe each candidate independently before comparing it "
-        "with the expected keyframe state. Compare identity, wardrobe, scene topology, prop state, "
-        "camera side, framing, action phase, contact point, previous-shot boundary and whether the "
-        "still gives a clear, physically reachable start or end state for video generation. Do not "
-        "infer invisible facts and do not mark a candidate correct merely because its prompt asked "
-        "for the answer. Attractive composition cannot cancel a visible state contradiction. Return "
-        "NONE_ACCEPTABLE when all candidates would send the video model into a contradictory or "
-        "ambiguous motion problem. The result is advisory, does not approve or reject any AssetVersion, "
-        "and can be ignored by the user. Relative scores are local to this comparison."
+        "你是供电影导演 Agent 调用的关键帧相对比较 Tool。只返回 JSON，并严格匹配所给 schema。"
+        "先独立观察每个候选帧，再与预期关键帧状态比较。比较人物身份、服装、场景拓扑、道具状态、"
+        "机位方向、构图、动作阶段、接触点、前一镜头边界，以及静帧是否为视频生成提供了清楚且"
+        "物理上可达的起始或结束状态。不要推断画面中不可见的事实，也不要因为候选帧的生成提示词"
+        "要求了某个结果，就认定画面已经做到。好看的构图不能抵消可见的状态矛盾。如果所有候选帧"
+        "都会让视频模型面对矛盾或含混的运动问题，返回 NONE_ACCEPTABLE。结果仅为建议，不会审批"
+        "或拒绝任何 AssetVersion，用户可以忽略。相对评分只在本次比较内有意义。"
     )
     payload = {
         "output_schema": KeyframeComparisonJudgment.model_json_schema(),
@@ -684,7 +680,7 @@ def compare_keyframe_candidates(
     if judgment.selected_version_id is not None and judgment.selected_version_id not in candidate_ids:
         raise ValueError("Keyframe comparison selected an unknown AssetVersion")
     warnings = [
-        f"{version.id} is currently {version.approval_status.value}; this advisory does not change approval state."
+        f"{version.id} 当前状态为 {version.approval_status.value}；本建议不会改变审批状态。"
         for _asset, version in candidates
         if version.approval_status != ApprovalStatus.APPROVED
     ]
@@ -757,17 +753,14 @@ def check_input_compatibility(
 
     technical_warnings = _technical_route_warnings(request)
     instructions = (
-        "You are an input compatibility checking Tool for a film-director Agent. Return JSON only "
-        "and match the supplied schema. This is not an answer-key validator. First record the visible "
-        "state of every supplied image without looking for the requested conclusion; then compare "
-        "those observations with the ShotPlan, ordered action beats, continuity state and route. "
-        "Check whether identity, layout, prop state, camera side, action start, action end, contact "
-        "and previous-shot boundary can coexist and whether the motion path is physically plausible "
-        "within the intended generated segment. If evidence is ambiguous, say so instead of assuming "
-        "success. Recommend CHANGE_KEYFRAME, CHANGE_ROUTE or SPLIT_SHOT only when that changes the "
-        "control variable most related to the observed problem. Do not invent door-, handle- or "
-        "region-specific fields. All creative recommendations are advisory and user-overridable; "
-        "Provider duration and media-combination contracts are enforced later by the H3 adapter."
+        "你是供电影导演 Agent 调用的输入兼容性检查 Tool。只返回 JSON，并严格匹配所给 schema。"
+        "这不是标准答案校验器。先记录每张输入图片中的可见状态，不要先寻找预期结论；随后再把这些"
+        "观察与 ShotPlan、有序动作节拍、连续性状态和生成路线进行比较。判断人物身份、布局、道具"
+        "状态、机位方向、动作起点、动作终点、接触关系和前一镜头边界能否同时成立，以及运动路径"
+        "在预期生成片段内是否物理合理。证据含混时应明确说明，不要假设已经满足。只有当改变关键帧、"
+        "路线或拆分镜头确实能调整与已观察问题最相关的控制变量时，才建议 CHANGE_KEYFRAME、"
+        "CHANGE_ROUTE 或 SPLIT_SHOT。不要虚构门、把手或区域专属字段。所有创作建议都只是建议，"
+        "用户可以覆盖；Provider 的时长和媒体组合契约由 H3 adapter 在后续阶段执行。"
     )
     payload = {
         "output_schema": InputCompatibilityJudgment.model_json_schema(),
@@ -1006,24 +999,24 @@ def _technical_route_warnings(request: InputCompatibilityRequest) -> list[str]:
             or request.end_version_id is not None
             or request.reference_version_ids
         ):
-            warnings.append("DIRECT does not consume image inputs; choose an image-guided route or remove them.")
+            warnings.append("DIRECT 不使用图像输入；请改用图像引导路线或移除这些输入。")
     elif request.route == VideoGenerationRoute.FRAME_FIRST:
         if request.start_version_id is None:
-            warnings.append("FRAME_FIRST requires a start frame before H3 submission.")
+            warnings.append("FRAME_FIRST 在提交 H3 之前需要起始帧。")
         if request.end_version_id is not None:
-            warnings.append("FRAME_FIRST does not consume an end frame; use FRAME_FIRST_LAST if the end state is required.")
+            warnings.append("FRAME_FIRST 不使用结束帧；如果需要锁定结束状态，请使用 FRAME_FIRST_LAST。")
         if request.reference_version_ids:
-            warnings.append("H3 frame and reference-image modes cannot be mixed in one request.")
+            warnings.append("同一次 H3 请求中不能混用帧模式和参考图模式。")
     elif request.route == VideoGenerationRoute.FRAME_FIRST_LAST:
         if request.start_version_id is None or request.end_version_id is None:
-            warnings.append("FRAME_FIRST_LAST requires both start and end frames before H3 submission.")
+            warnings.append("FRAME_FIRST_LAST 在提交 H3 之前同时需要起始帧和结束帧。")
         if request.reference_version_ids:
-            warnings.append("H3 frame and reference-image modes cannot be mixed in one request.")
+            warnings.append("同一次 H3 请求中不能混用帧模式和参考图模式。")
     elif request.route == VideoGenerationRoute.REFERENCE:
         if not request.reference_version_ids:
-            warnings.append("REFERENCE requires at least one reference image before H3 submission.")
+            warnings.append("REFERENCE 在提交 H3 之前至少需要一张参考图。")
         if request.start_version_id is not None or request.end_version_id is not None:
-            warnings.append("H3 reference-image and frame modes cannot be mixed in one request.")
+            warnings.append("同一次 H3 请求中不能混用参考图模式和帧模式。")
     return warnings
 
 

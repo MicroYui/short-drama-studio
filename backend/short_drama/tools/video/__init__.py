@@ -97,7 +97,8 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
             version=1,
             category=ToolCategory.VIDEO,
             description=(
-                "Queue deterministic Mock video candidates for selected project shots; "
+                "Queue the calling Agent's explicit deterministic Mock candidate batch for "
+                "selected project shots; "
                 "real MiniMax-H3 runs use route.execute_h3_plan instead."
             ),
             effect=ToolEffect.WRITE,
@@ -196,7 +197,10 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
             id="video.compare_takes",
             version=1,
             category=ToolCategory.VIDEO,
-            description="Compare current candidate Takes and optionally apply the selection.",
+            description=(
+                "Compare the calling Agent's explicit same-shot candidate Take set and "
+                "optionally apply the selection."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=VideoCompareTakesInput,

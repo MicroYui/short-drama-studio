@@ -1,6 +1,6 @@
 # 制片 Skill 研究与增补边界
 
-> 复核日期：2026-09-01。本文把 MiniMax H3、Dreamina/Seedance、LTX Studio/LTX-2、Toonflow、ViMax 和 ComfyUI 的公开资料映射到本项目当前的 Agent / Skill / Tool 架构。它不是新的阶段 workflow，也不把闭源产品宣传写成已实现能力。
+> 复核日期：2026-09-03。本文把 MiniMax H3、Dreamina/Seedance、LTX Studio/LTX-2、Toonflow、ViMax 和 ComfyUI 的公开资料映射到本项目当前的 Agent / Skill / Tool 架构。它不是新的阶段 workflow，也不把闭源产品宣传写成已实现能力。
 
 ## 结论
 
@@ -17,12 +17,23 @@
 ```text
 用户目标 + ProjectDocument
   → Production Manager 动态计划
-  → 格式 Skill 提供稳定创作差异
+  → StorySourceContract + StoryIntent + EndingContract
+  → 共享中文角色 + 宽粒度 Format Skill + Agent 选中的 Narrative Skills
   → Provider Skill 翻译模型语法
   → Tool 执行类型化能力
   → AssetVersion / Shot / Take / Timeline 等项目工件
   → 检查结果驱动局部返工或重新规划
 ```
+
+其中 AgentRun 是一次制片目标的总调度，`ProjectDocument` 及其版本化领域工件是唯一项目内容真相。长文本首次规划是 AgentRun 拥有的 **Content Planning Job**；当前运行时代码与持久化合同仍使用兼容名称 `PlanningRun`，它只提供大纲、逐场写作、审校和导演规划的持久化游标与恢复点，不形成第二套项目内容或端到端编排。场景总数与跨场修订范围不再使用 40/12 这类低常数创作上限，长任务以场次和修订单元持续保存进度。当前不抽象通用 `ChildJob`，待多个同级领域作业出现可验证的共同生命周期后再提取最小合同。
+
+`ProductionProfile` 只区分 AI 短剧、通用视频、数字人、动漫这类宽粒度媒介/生产方法。Story Orientation Agent 先从完整用户输入形成 `StorySourceContract` 和 `StoryIntent`，再按项目语义选择零个或多个 Narrative Skills；Loader 不做关键词/正则路由、题材枚举或必选数量。`SCRIPT_LOCKED` 普通文本中的锁定台词也由 Story Orientation Agent 语义结构化到 `StorySourceContract.locked_dialogue`，或由调用方直接提交结构化条目；代码只做逐字与顺序保护，不猜 speaker/旁白。`EndingContract` 保护本集兑现与续集策略，`ProjectBible.style` 保存视觉/摄影/声音/材质表达，不代替叙事意图。
+
+专业委派同样保持语义选择边界：`assigned_agent` 只是接收者身份，Production Manager 基于完整目标显式给出 `production_skill_role`，运行时只按这个字段加载中文职责 Prompt，不从 Agent 名称或用户文本关键词推断角色。
+
+专业 Agent 需要 Tool 时使用 `WorkOrder.specialist_turns` 单步持久化。一次外部执行只完成模型决策或一个已记录的 Tool 调用；请求和结果分步保存，下一次再让 Agent 基于历史继续。重启时未落盘结果的 `IN_PROGRESS` turn 变为 `INTERRUPTED`，由 Agent 检查规范状态后决定对账或重试，不自动重放。这是恢复边界，不是固定调用次数。
+
+Critic 的可迁移经验不是“多审几轮就更好”，而是以目标观众视角阅读完整文本，用稳定 issue ID 追踪同一语义问题的证据、修复和已接受取舍。Production Manager 执行 Critic/Verifier 的语义结论，只在存在需要脱离大纲元数据重新通读的具体疑点时选择最终冷读；它不是必经门禁。系统不叠加严重度、问题数、关键词、固定轮数或总超时门槛。需要修订时以受影响场次为单位持久化，不用一次整稿重写覆盖进度。
 
 ## 证据口径
 
@@ -31,6 +42,7 @@
 | `OFFICIAL-DOC` | 厂商官方产品、模型或 API 文档明确说明；可确认公开接口或产品行为，不能据此推断闭源内部实现 |
 | `SOURCE-CONFIRMED` | 在固定 commit 的公开源码中确认 |
 | `PAPER-REPORTED` | 论文作者报告的方法或结果，未在本项目复现 |
+| `USER-PROVIDED-EXAMPLE` | 用户提供的 Prompt、样片或工作稿；可用于归纳方法，不等于厂商官方合同或通用最佳实践 |
 | `CURRENT` | 当前仓库已经存在对应领域模型、Tool 或运行时路径 |
 | `UNKNOWN` | 公开资料不足，或仍需在本项目 Provider 与样片上验证 |
 
@@ -74,6 +86,27 @@ MiniMax 官方把 H3 描述为可理解文本、图像、视频和音频上下�
 
 不把官方示例中的 choice card、固定重试次数或某一版本参数复制到 Production Skill。官方页面之间若出现模式枚举或组合说明不一致，以当前 Tool Schema、Capability Profile 和真实 Provider 预检为准，并把未确认项标为 `UNKNOWN`。
 
+### 用户提供的 15 秒角色预告 Prompt：取舍记录
+
+用户提供的 `MiniMax H3.pdf` 是一份“15 秒、精确 13 切、AAA 动作游戏角色亮相片”的具体 Prompt，不是 H3 官方文档。它对当前项目的价值是展示了如何把一个明确的成片概念写成参数、主体约束、时间分段、剪辑和声音设计。`USER-PROVIDED-EXAMPLE`
+
+| 样例中的做法 | 本项目的取舍 |
+| --- | --- |
+| 先要求设计好角色，并让参考图决定身份、比例、服装、材质和色彩 | 采用“先建立结构化核心资产、再生成运动镜头”；但以当前 ReferencePlan 中多份已批准 AssetVersion 的明确职责为准，不固定只能有一张“唯一权威图” |
+| 把可替换文字和成片指令分开 | 采用结构化参数、锁定事实与创作内容分层；但不要求所有项目拥有该样例的英文字卡参数 |
+| 按 `0.00–1.10s`、`1.10–2.20s` 等时间段写每个镜头/节拍 | 采用“完整剧本 → 时间线分段 → 逐段定镜”，每段聚焦镜头、动作、台词/声音、情绪/表演和媒体绑定 |
+| 行动、字卡、英雄时刻与终幕身份卡交替 | 采用“每段有可观察作用、画面/文字/声音可交替主导”；但字卡和身份卡只在作品风格需要时使用 |
+| 硬切、图形匹配、甩镜、定格、前景擦过和速度渐变与音乐击打点同步 | 采用转场、动作和声音对齐可见变化；拒绝把这组特效当作通用必填清单 |
+| 固定 15 秒、13 切、AAA 游戏预告语气、黑白/冰蓝/霓虹黄/暖金配色，并禁止慢溶解与长连续动作 | 全部保留为该角色预告片的风格选择，不沉淀为 AI 视频、H3 或 AI 短剧的硬规则 |
+
+因此，该样例带来的通用范式是“核心资产锁定 + 时间轴结构 + 每段单一可读作用 + 真实媒体绑定 + 声画共同组织节奏”，而不是其中的任意固定数字或美术语汇。
+
+这些范式的落点必须在故事之后分层：资产 Agent 决定核心角色是用四视图还是群像轻量图，并决定场景是否需要俯视布局、全景 master 与功能区 coverage；导演/分镜 Agent 把完整剧本按时间线拆成镜头、动作、台词/声音与情绪/表演；Provider 层再将语义 `@` alias 解析为请求真实携带的媒体。共享 Story Architect 只负责故事承诺、人物选择、因果推进与结尾意图，不注入 PDF/H3 的下游表达规则。
+
+当前 `ShotPlan.timeline_beats` 可选地保存一个连续 editorial shot 内部的时间阶段；非空时必须从 0 连续覆盖整镜时长，并按原顺序恰好分配该镜头对白。每个 beat 可结构化保存画面、景别、摄影机、动作、表演、情绪、声音与 `ShotReferenceCue`；简单镜头和旧文档可留空并沿用镜头级概要。Beats 不是多镜容器，任何显式切镜、独立生成或独立剪辑边界仍映射为相邻 ShotPlan。`CURRENT`
+
+`ShotReferenceCue` 用 `subject_asset_id`、不带 `@` 的 alias、`required_tags` 和 purpose 表达某个时间段的语义引用；H3 Route 将解析后的语义写入 `H3MediaInput.reference_alias` / `binding_purpose`。alias 只服务于 `@资产名` 这类人和 Agent 可读映射，不是文件路径、AssetVersion 或上传编号。真实 H3 绑定仍由选定的 AssetVersion/`source`、媒体输入顺序和顺序生成的 `<Picture N>`、`<Video N>`、`<Audio N>` Provider label 共同确定；Prompt 只能引用请求实际携带的媒体。旧输入可不提供 alias，由解析器生成稳定后备名称。`CURRENT`
+
 ### 当前落点
 
 - H3 Provider Skill：[skills/providers/minimax_h3/SKILL.md](../backend/short_drama/skills/providers/minimax_h3/SKILL.md)
@@ -110,6 +143,8 @@ Seedance 1.0 官方页面确认文本/图像生成和模型级原生多镜头；
 ### 当前落点
 
 - 项目、资产、镜头、候选与时间线真相：[models.py](../backend/short_drama/models.py)
+- 核心资产的结构化 brief 和轻量/角色标准视图/场景 coverage 策略：[tools/artifact](../backend/short_drama/tools/artifact)
+- 把显式选定的本地 AssetVersion 确定性组成带源格子记录的 DRAFT 参考板：[tools/image](../backend/short_drama/tools/image)
 - 参考视觉比较与兼容性检查：[tools/qa](../backend/short_drama/tools/qa)
 - 图像资产任务：[tools/image](../backend/short_drama/tools/image)
 - 音频与时间线检查：[tools/audio](../backend/short_drama/tools/audio)、[tools/timeline](../backend/short_drama/tools/timeline)
@@ -234,7 +269,10 @@ ComfyUI 的 workflow JSON 是节点和连接组成的 DAG。执行器只把请�
 | 结论类型 | 应落位置 | 示例 |
 | --- | --- | --- |
 | 所有视频制片长期成立的方法 | 共享 workflow | 先读取当前项目真相；检查后局部返工；时间线验收后再导出 |
-| 某一视频格式长期稳定的创作差异 | `formats/<format>/SKILL.md`、角色 Prompt、类型补充 playbook | AI 短剧的连续叙事与生成式生产判断；数字人口播的说话人、字幕和声画可信度。具体 Style 不写死在格式 Skill 中 |
+| 所有剧本角色共享的职责 | `skills/shared/roles` | Story Architect 保护故事承诺与因果，Writer 交付可读场景，Critic 以目标观众冷读 |
+| 某一视频格式长期稳定的媒介/生产差异 | `formats/<format>/SKILL.md`、类型补充 playbook | AI 短剧的冷启动可读性、竖屏与生成式制作；数字人口播的说话人、字幕和声画可信度 |
+| 可在多种格式中组合的叙事方法 | `skills/narrative/<skill>` | 概念放大、递进兑现、荒诞喜剧；由 Agent 按项目语义选择，不做关键词路由 |
+| 本项目的故事承诺、叙事意图、结尾与视听风格 | ProjectDocument 领域工件 | `StorySourceContract`、`StoryIntent`、`EndingContract`、`ProjectBible.style` 分工，不相互代替 |
 | 某个 Provider 的 Prompt 语法 | Provider Skill / Prompt Compiler | H3 的 T2VA、FL2VA、Ref2VA 表达和引用标签 |
 | 会随 API 变化的能力与限制 | Tool Schema / capability / Provider adapter | 时长、分辨率、文件数量、可组合输入、任务状态 |
 | 项目中产生的事实和版本 | ProjectDocument 领域工件 | ScriptVersion、AssetVersion、ReferencePlan、Take、TimelineManifest |
@@ -248,8 +286,11 @@ ComfyUI 的 workflow JSON 是节点和连接组成的 DAG。执行器只把请�
 | 制片关注点 | 当前实现位置 | 当前判断 |
 | --- | --- | --- |
 | 完整端到端生产方法 | [skills/workflows/end_to_end.md](../backend/short_drama/skills/workflows/end_to_end.md) | `CURRENT`：供 Planner 读取，可跳过、合并、重排和局部进入，不是固定节点图 |
-| 视频类型差异 | [skills/formats](../backend/short_drama/skills/formats) | `CURRENT`：只保留稳定差异、角色 rubric 和类型补充 playbook |
-| 动态计划与专业委派 | [production_manager.py](../backend/short_drama/production_manager.py)、[agent_runtime](../backend/short_drama/agent_runtime) | `CURRENT`：PlanRevision、ContextPack、WorkOrder/AgentResult、目标反馈和经验记忆 |
+| 视频类型差异 | [skills/formats](../backend/short_drama/skills/formats) | `CURRENT`：只保留宽粒度格式/生产差异，不枚举题材或预设具体 Style |
+| 通用角色与叙事组合 | [skills/shared](../backend/short_drama/skills/shared)、[skills/narrative](../backend/short_drama/skills/narrative)、[production_profiles.py](../backend/short_drama/production_profiles.py) | `CURRENT`：中文共享职责；Agent 显式选择 Narrative Skills，Loader 只验证 ID 和角色支持 |
+| 故事定向与审校记忆 | [models.py](../backend/short_drama/models.py)、[production_planner.py](../backend/short_drama/production_planner.py) | `CURRENT`：`StorySourceContract`/`StoryIntent`/`EndingContract`、`SCRIPT_LOCKED` 语义结构化与逐字/顺序保护、Narrative Skill 选择、Critic Issue Ledger、局部 Repair/Verifier 和按需最终冷读已有持久化合同 |
+| 动态计划与专业委派 | [production_manager.py](../backend/short_drama/production_manager.py)、[agent_runtime](../backend/short_drama/agent_runtime) | `CURRENT`：PlanRevision、ContextPack、显式 `production_skill_role` 的 WorkOrder/AgentResult、`specialist_turns` 单步持久化及中断恢复、目标反馈和经验记忆；`assigned_agent` 不用于职责推断 |
+| 可恢复内容规划 | [production_manager.py](../backend/short_drama/production_manager.py)、[models.py](../backend/short_drama/models.py) | `CURRENT`：AgentRun 总调度；Content Planning Job（兼容实现名 `PlanningRun`）只保存内容规划游标和恢复所需中间工件，最终内容回写唯一 ProjectDocument；场景及跨场修订无 40/12 低常数创作上限；当前不抽象通用 ChildJob |
 | 可组合能力目录 | [tools/README.md](../backend/short_drama/tools/README.md)、[tools/defaults.py](../backend/short_drama/tools/defaults.py) | `CURRENT`：全格式共享 Tool Catalog，由 Agent 按当前缺口选择 |
 | 项目工件与版本 | [models.py](../backend/short_drama/models.py) | `CURRENT`：项目、剧本、资产版本、镜头、任务、Take、时间线和导出记录是业务真相 |
 | H3 路线与 Prompt | [H3 Provider Skill](../backend/short_drama/skills/providers/minimax_h3/SKILL.md)、[h3_route_planner.py](../backend/short_drama/h3_route_planner.py)、[providers/h3_prompt_skill.py](../backend/short_drama/providers/h3_prompt_skill.py)、[tools/route](../backend/short_drama/tools/route) | `CURRENT`：格式事实与 Provider 语法分层；能力变化留在 route/provider 层 |
@@ -258,6 +299,8 @@ ComfyUI 的 workflow JSON 是节点和连接组成的 DAG。执行器只把请�
 | 语义修改与局部重算 | [tools/change](../backend/short_drama/tools/change) | `CURRENT`：先预览影响，再只失效相关下游；继续使用领域对象，不引入节点图 |
 | 外部任务恢复 | [tools/task](../backend/short_drama/tools/task)、[tools/image](../backend/short_drama/tools/image) | `CURRENT`：推进、取消、重试、对账和输出恢复保持为真实任务状态机 |
 | 时间线、音频和成片 | [tools/audio](../backend/short_drama/tools/audio)、[tools/timeline](../backend/short_drama/tools/timeline) | `CURRENT`：从选定 Take 重建 TimelineManifest，检查音频并记录导出 |
+
+上表的 `CURRENT` 只表示当前代码已有对应工件、编译或 Tool 路径。Narrative Skill 是否选对、`StoryIntent` 是否真正改善不同观众体验、Critic 是否减少过度挑错、局部修订是否保护原稿优点，以及四视图/场景 coverage/真实 H3 绑定是否提高完整成片连贯性，仍属于需用真实语言模型、图像、H3 和完整播放验证的产品结论。
 
 ## 后续增补原则
 

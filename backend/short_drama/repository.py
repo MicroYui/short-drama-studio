@@ -15,6 +15,7 @@ from short_drama.image_models import ImageGenerationTask, ImageTaskStatus
 from short_drama.models import (
     AudioInspectionReport,
     EpisodeReviewReport,
+    EvidencePurpose,
     EvidenceStatus,
     ExportRecord,
     Freshness,
@@ -774,9 +775,47 @@ class ShortDramaRepository:
 
     def delete_project(self, project_id: str) -> bool:
         with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT document_json FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            document = ProjectDocument.model_validate_json(
+                cast(str, row["document_json"])
+            )
+            if document.planning is not None and document.planning.run_id is not None:
+                self._delete_planning_job_rows(
+                    connection,
+                    document.planning.run_id,
+                )
             cursor = connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             deleted = cursor.rowcount > 0
         return deleted
+
+    @staticmethod
+    def _delete_planning_job_rows(
+        connection: sqlite3.Connection,
+        run_id: str,
+    ) -> None:
+        """Delete the persisted cursor and intermediate content-planning artifacts."""
+
+        connection.execute(
+            "DELETE FROM planning_script_documents_fts WHERE run_id = ?",
+            (run_id,),
+        )
+        connection.execute(
+            "DELETE FROM planning_script_documents WHERE run_id = ?",
+            (run_id,),
+        )
+        connection.execute(
+            "DELETE FROM planning_run_artifacts WHERE run_id = ?",
+            (run_id,),
+        )
+        connection.execute(
+            "DELETE FROM planning_runs WHERE id = ?",
+            (run_id,),
+        )
 
     def delete_project_creation(
         self,
@@ -788,52 +827,41 @@ class ShortDramaRepository:
 
         with self._lock, self._connection() as connection:
             if planning_run_id is not None:
-                connection.execute(
-                    "DELETE FROM planning_script_documents_fts WHERE run_id = ?",
-                    (planning_run_id,),
-                )
-                connection.execute(
-                    "DELETE FROM planning_script_documents WHERE run_id = ?",
-                    (planning_run_id,),
-                )
-                connection.execute(
-                    "DELETE FROM planning_run_artifacts WHERE run_id = ?",
-                    (planning_run_id,),
-                )
-                connection.execute(
-                    "DELETE FROM planning_runs WHERE id = ?",
-                    (planning_run_id,),
-                )
+                self._delete_planning_job_rows(connection, planning_run_id)
             cursor = connection.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         return cursor.rowcount > 0
 
     def save_task(self, task: GenerationTask) -> None:
         with self._lock, self._connection() as connection:
-            connection.execute(
-                """
-                INSERT INTO generation_tasks(
-                    id, project_id, shot_id, provider, status, candidate_index,
-                    request_fingerprint, created_at, updated_at, record_json
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    provider = excluded.provider,
-                    status = excluded.status,
-                    updated_at = excluded.updated_at,
-                    record_json = excluded.record_json
-                """,
-                (
-                    task.id,
-                    task.project_id,
-                    task.shot_id,
-                    task.provider,
-                    task.status.value,
-                    task.candidate_index,
-                    task.request_fingerprint,
-                    task.created_at,
-                    task.updated_at,
-                    task.model_dump_json(),
-                ),
-            )
+            self._write_task(connection, task)
+
+    @staticmethod
+    def _write_task(connection: sqlite3.Connection, task: GenerationTask) -> None:
+        connection.execute(
+            """
+            INSERT INTO generation_tasks(
+                id, project_id, shot_id, provider, status, candidate_index,
+                request_fingerprint, created_at, updated_at, record_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                provider = excluded.provider,
+                status = excluded.status,
+                updated_at = excluded.updated_at,
+                record_json = excluded.record_json
+            """,
+            (
+                task.id,
+                task.project_id,
+                task.shot_id,
+                task.provider,
+                task.status.value,
+                task.candidate_index,
+                task.request_fingerprint,
+                task.created_at,
+                task.updated_at,
+                task.model_dump_json(),
+            ),
+        )
 
     def get_task(self, task_id: str) -> GenerationTask | None:
         with self._lock, self._connection() as connection:
@@ -1100,23 +1128,30 @@ class ShortDramaRepository:
 
     def save_provider_run(self, run: H3ProviderRun) -> None:
         with self._lock, self._connection() as connection:
-            connection.execute(
-                """
-                INSERT INTO provider_runs(
-                    id, task_id, project_id, provider, updated_at, record_json
-                ) VALUES(?, ?, ?, 'minimax', ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    updated_at = excluded.updated_at,
-                    record_json = excluded.record_json
-                """,
-                (
-                    run.id,
-                    run.task_id,
-                    run.project_id,
-                    run.updated_at,
-                    run.model_dump_json(),
-                ),
-            )
+            self._write_provider_run(connection, run)
+
+    @staticmethod
+    def _write_provider_run(
+        connection: sqlite3.Connection,
+        run: H3ProviderRun,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO provider_runs(
+                id, task_id, project_id, provider, updated_at, record_json
+            ) VALUES(?, ?, ?, 'minimax', ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                updated_at = excluded.updated_at,
+                record_json = excluded.record_json
+            """,
+            (
+                run.id,
+                run.task_id,
+                run.project_id,
+                run.updated_at,
+                run.model_dump_json(),
+            ),
+        )
 
     def get_provider_run(self, task_id: str) -> H3ProviderRun | None:
         with self._lock, self._connection() as connection:
@@ -1174,25 +1209,32 @@ class ShortDramaRepository:
 
     def save_route_evidence(self, evidence: RouteEvidence) -> None:
         with self._lock, self._connection() as connection:
-            connection.execute(
-                """
-                INSERT INTO route_evidence(
-                    id, project_id, shot_id, task_id, status, created_at, record_json
-                ) VALUES(?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    status = excluded.status,
-                    record_json = excluded.record_json
-                """,
-                (
-                    evidence.id,
-                    evidence.project_id,
-                    evidence.shot_id,
-                    evidence.task_id,
-                    evidence.status.value,
-                    evidence.created_at,
-                    evidence.model_dump_json(),
-                ),
-            )
+            self._write_route_evidence(connection, evidence)
+
+    @staticmethod
+    def _write_route_evidence(
+        connection: sqlite3.Connection,
+        evidence: RouteEvidence,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO route_evidence(
+                id, project_id, shot_id, task_id, status, created_at, record_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                record_json = excluded.record_json
+            """,
+            (
+                evidence.id,
+                evidence.project_id,
+                evidence.shot_id,
+                evidence.task_id,
+                evidence.status.value,
+                evidence.created_at,
+                evidence.model_dump_json(),
+            ),
+        )
 
     def get_route_evidence_for_take(self, take_id: str) -> RouteEvidence | None:
         with self._lock, self._connection() as connection:
@@ -1508,26 +1550,86 @@ class ShortDramaRepository:
 
     def save_h3_route_plan(self, plan: H3ProductionRoutePlan) -> None:
         with self._lock, self._connection() as connection:
-            connection.execute(
+            self._write_h3_route_plan(connection, plan)
+
+    @staticmethod
+    def _write_h3_route_plan(
+        connection: sqlite3.Connection,
+        plan: H3ProductionRoutePlan,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO h3_route_plans(
+                id, project_id, version, status, created_at, updated_at, record_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                updated_at = excluded.updated_at,
+                record_json = excluded.record_json
+            """,
+            (
+                plan.id,
+                plan.project_id,
+                plan.version,
+                plan.status.value,
+                plan.created_at,
+                plan.updated_at,
+                plan.model_dump_json(),
+            ),
+        )
+
+    def save_h3_route_task_bundle(
+        self,
+        *,
+        task: GenerationTask,
+        run: H3ProviderRun,
+        evidence: RouteEvidence,
+        plan: H3ProductionRoutePlan,
+    ) -> None:
+        """Atomically persist a planned H3 candidate and its route ownership."""
+
+        matching_decisions = [
+            decision for decision in plan.decisions if task.id in decision.task_ids
+        ]
+        if not (
+            task.provider == "minimax"
+            and task.model == "MiniMax-H3"
+            and task.provider_run_id == run.id
+            and run.task_id == task.id
+            and evidence.task_id == task.id
+            and task.project_id == run.project_id == evidence.project_id == plan.project_id
+            and task.shot_id == run.shot_id == evidence.shot_id
+            and task.route == run.route == evidence.route
+            and evidence.provider == "minimax"
+            and evidence.model == "MiniMax-H3"
+            and evidence.purpose == EvidencePurpose.PRODUCTION
+            and len(matching_decisions) == 1
+            and matching_decisions[0].shot_id == task.shot_id
+            and matching_decisions[0].route == task.route
+        ):
+            raise ValueError("H3 route task bundle contains inconsistent ownership")
+        with self._lock, self._connection() as connection:
+            self._write_task(connection, task)
+            self._write_provider_run(connection, run)
+            self._write_route_evidence(connection, evidence)
+            cursor = connection.execute(
                 """
-                INSERT INTO h3_route_plans(
-                    id, project_id, version, status, created_at, updated_at, record_json
-                ) VALUES(?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    status = excluded.status,
-                    updated_at = excluded.updated_at,
-                    record_json = excluded.record_json
+                UPDATE h3_route_plans SET
+                    status = ?,
+                    updated_at = ?,
+                    record_json = ?
+                WHERE id = ? AND project_id = ?
                 """,
                 (
-                    plan.id,
-                    plan.project_id,
-                    plan.version,
                     plan.status.value,
-                    plan.created_at,
                     plan.updated_at,
                     plan.model_dump_json(),
+                    plan.id,
+                    plan.project_id,
                 ),
             )
+            if cursor.rowcount != 1:
+                raise ValueError(f"H3 route plan {plan.id} is not persisted")
 
     def get_h3_route_plan(self, plan_id: str) -> H3ProductionRoutePlan | None:
         with self._lock, self._connection() as connection:

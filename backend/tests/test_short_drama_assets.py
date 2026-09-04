@@ -20,6 +20,7 @@ from short_drama.image_models import (
     ImageBackground,
     ImageOperation,
     ImageProviderConfigUpdate,
+    ImageNotSubmittedResolutionRequest,
     ImageTaskCreateRequest,
     ImageTaskStatus,
     ImageTokenDetails,
@@ -342,6 +343,24 @@ def test_interrupted_submission_recovers_without_automatic_resubmit(tmp_path: Pa
     recovered = restarted.list_image_tasks(asset.project_id).tasks[0]
     assert recovered.status == ImageTaskStatus.SUBMIT_UNKNOWN
     assert fake.calls == []
+
+    with pytest.raises(WorkflowConflictError, match="direct retry is disabled"):
+        restarted.retry_image_task(recovered.id)
+
+    resolved = restarted.resolve_image_not_submitted(
+        recovered.id,
+        ImageNotSubmittedResolutionRequest(
+            reason="Provider dashboard confirms that no image request was created."
+        ),
+    )
+    assert resolved.task.status == ImageTaskStatus.FAILED
+    assert resolved.task.error_code == "IMAGE_SUBMISSION_NOT_CREATED"
+
+    retry = restarted.retry_image_task(recovered.id)
+    assert retry.task.retry_of_task_id == recovered.id
+    assert retry.task.attempt == 2
+    persisted = restarted.list_image_tasks(asset.project_id).tasks
+    assert [item.id for item in persisted] == [retry.task.id, recovered.id]
 
 
 def test_asset_and_image_task_product_api(tmp_path: Path) -> None:

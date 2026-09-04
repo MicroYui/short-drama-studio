@@ -9,13 +9,19 @@
 其中：
 
 - **Tool** 是可独立调用的稳定能力，负责读取、修改、生成、检查或组装真实工件；
-- **Skill** 是可审阅、可编辑的内容类型知识，负责品类原则、角色 Prompt 和共享流程上的类型制作重点；
+- **Skill** 是可审阅、可编辑的文件化知识：共享中文角色保存通用职责，宽粒度 Format Skill 保存媒介/生产差异，Narrative Skills 保存可组合叙事方法；
 - **Agent** 理解用户目标，根据当前工件动态制定或修订计划，组合 Tools，并在需要专业角色时委派子 Agent；制作类型由用户或请求选择 `ProductionProfile`，再由 Production Manager 确定对应的 Skill 映射，不由 Agent 自行更换格式 Skill；
 - **Agent Harness** 只保留运行时所需的类型、依赖、持久化、恢复、有限推进和外部任务对账，不替 Agent 写死创作流程。
 
-项目、剧本、资产、分镜、Take 和时间线仍是业务真相源。AgentRuntime 只保存“当前要做什么、为什么、做到哪里、接下来做什么”，不复制第二份 ProjectDocument。桌面端的默认新建项目和新 `AUTO_DRAFT` 制作已切到 AgentRun：调用 `POST /api/short-drama/agent-projects`，先建立 AgentRun，再由共享 `project.create` Tool 创建权威项目。
+`ProjectDocument` 及其版本化剧本、资产、分镜、Take 和时间线工件仍是唯一项目内容真相源。AgentRuntime 只保存“当前要做什么、为什么、做到哪里、接下来做什么”，不复制第二份 ProjectDocument。桌面端的默认新建项目和新 `AUTO_DRAFT` 制作已切到 AgentRun：调用 `POST /api/short-drama/agent-projects`，先建立负责总调度的 AgentRun，再由共享 `project.create` Tool 创建权威项目。
 
-`PlanningRun` 不是第二套项目控制面。它作为 `planning.advance` Tool 背后的可恢复长规划作业：当已配置语言模型且 `AUTO_DRAFT` 目标超过 90 秒时，`project.create` 先写入同一项目 ID 的 `INPUT` scaffold 与 Agent-owned `PlanningRun`，随后 Production Manager 每个 Action 只推进一个规划单元；FINALIZE 再把同一 ProjectDocument 更新为 `PLANNED`。独立 PlanningRun 的公开 API 已删除，只允许所属 AgentRun 通过 `planning.advance` 进入这个内部子流程。旧 `AutonomousRun` 控制面、ProjectDocument 字段、领域模型、服务分支和脚本均已删除；Provider Task 继续使用自己的任务状态机完成提交、轮询、下载和结果对账。
+首次剧本规划在职责上称为 **Content Planning Job**，当前代码、SQLite 记录和内部合同继续沿用兼容实现名 `PlanningRun`，本次不做全量类型重命名。它不是第二套项目控制面，只是 `planning.advance` Tool 背后的领域子任务和持久化内容规划游标：已配置语言模型的 Agent-owned 创作无论时长或 `GUIDED/AUTO_DRAFT` 模式，`project.create` 都先写入同一项目 ID 的 `INPUT` scaffold 与当前 AgentRun 拥有的 Content Planning Job，随后 Production Manager 每个 Action 只推进一个规划单元；FINALIZE 再把同一 ProjectDocument 更新为 `PLANNED` 或 `SCRIPT_READY`。不带 owner 的兼容创建只建立不补写创意的本地 scaffold，不允许语言 Provider 走同步整稿入口。AgentRun 决定是否、何时推进以及作业结束后的下一步；Content Planning Job 只拥有恢复内容规划所需的游标和中间工件，不拥有资产、生成、检查或时间线编排。旧 `AutonomousRun` 控制面已删除；Provider Task 继续使用自己的任务状态机完成提交、轮询、下载和结果对账。
+
+内容作业的 Story Orientation Agent 先保存 `StorySourceContract`（用户承诺/禁区/开放选择）与 `StoryIntent`（观众体验、戏剧引擎、推进策略、调性/可信度、受保护元素和偏移风险），再语义选择零个或多个 Narrative Skills。`SCRIPT_LOCKED` 普通文本中的有声台词由该 Agent 按完整语义结构化到 `StorySourceContract.locked_dialogue`；调用方也可以直接传入结构化条目。确定性代码只检查文本逐字存在、原始顺序和调用方结构未被改变，不用正则、冒号格式或关键词推断 speaker、旁白或内心音。`EndingContract` 另行保护本集兑现、线索闭合与续集策略；`ProjectBible.style` 只保存视觉、摄影、材质、色彩与声音表达。四者都是项目工件的不同责任，不相互代替。
+
+当前不抽象通用 `ChildJob`。Content Planning Job 与 Provider Task 的状态、结果和恢复语义不同；在尚未出现多个具有相同生命周期的同级领域作业前，提取共同父模型只会模糊责任。未来只有在资产规划、批量生成等作业真实出现重复的创建、推进、取消和恢复合同时，再从已有实现中提取最小公共接口。
+
+当前 Content Planning Job 按可恢复游标推进 Story Orientation、轻量 Blueprint、逐场 Writer、当前整稿 Critic，以及语义需要时的 Repair/Verifier 或最终冷读。最终冷读只处理需要脱离大纲元数据重新通读的具体疑点，不是固定收尾门。Critic 为同一语义问题保留稳定 ID，在 Issue Ledger 中累积状态、文本/修复证据、演变、取舍和下游 handoff。它的 `requires_revision` 是目标观众视角的语义判断，Production Manager 直接执行；不再叠加一个严重度/问题数门槛或空的 Review Router Agent。修订以受影响场次为单位持久化，不使用一次性整稿覆盖；原先 40 场、跨场 12 场这类低常数创作上限已经移除，长任务按场次与修订单元推进；审校/修订不设固定轮数、问题清零目标或总超时。
 
 ## 1. 最终分层
 
@@ -28,9 +34,11 @@ flowchart TB
     PM --> SK["Markdown Production Skills"]
     PM --> WO["WorkOrder / AgentResult"]
     PM --> TR["Typed Tool Registry"]
+    PM --> CPJ["Content Planning Job<br/>(PlanningRun compatibility name)"]
     CP --> MEM["Project / Run / Decision / Experience Memory"]
     CP --> AR["Canonical ArtifactRef"]
     TR --> DS["Domain Services"]
+    CPJ --> DS
     DS --> DB["SQLite ProjectDocument / Tasks / Takes"]
     DS --> PP["Provider Adapters"]
     DS --> MP["FFmpeg / Media Inspection"]
@@ -55,9 +63,9 @@ Production Manager 是一次制片目标的根 Agent，负责：
 
 它不是“Story Architect 后必须进 Critic”这类固定转移表。当用户只要修改第三场的一句台词时，Agent 可以直接计划“语义影响分析 → 局部 Patch → 受影响镜头复核”，无需重跑整部剧的默认 playbook。
 
-对应实现位于 `backend/short_drama/production_manager.py`。`LanguageProductionPlanner` 可使用已配置语言模型生成计划；用户或测试也可直接提交类型化 `AgentPlanProposal`。未配置语言模型时，`LocalProductionPlanner` 使用当前项目 stage、当前 Run 的制作目标和已注册 Tools 生成小而确定的后续计划：GUIDED bootstrap 在建立后即等待用户编辑，已有 GUIDED 项目可以另起明确的 Mock/REAL_H3 Run；Mock 路径可继续候选生成、任务推进、时间线与导出，H3 路径直接从权威 Task Repository 召回全部非终态任务，不从经过裁剪的 recent actions 反推任务集。当当前 Run 没有制作目标，或必须由人/专业 Agent 做内容判断时，它返回 `USER_INPUT`，不继承旧 Run 的执行目标，也不伪装成已完成创作。
+对应实现位于 `backend/short_drama/production_manager.py`。`LanguageProductionPlanner` 使用已配置语言模型基于完整语义生成计划；用户或测试也可直接提交类型化 `AgentPlanProposal`。未配置语言模型时，`LocalProductionPlanner` 只确认已经存在的终态事实，例如导出已完成、或调用方明确不要求导出且时间线已就绪；GUIDED bootstrap 建立项目后也可以结束在用户可继续编辑的状态。任何尚需创作、选择 Provider 路线、挑选候选或安排下游 Tool 的非终态目标，都必须由语言 Planner 或调用方显式计划，Local fallback 不根据 stage、目标文字、关键词或 Tool Catalog 猜路线。
 
-`PlanRevision.goal_complete` 是 Agent 对“整个 Run 目标是否已满足”的显式反馈，不是“当前计划的 Steps 是否跑完”的别名。当当前 PlanGraph 完成但 `goal_complete=false` 时，Production Manager 会用最新 ContextPack 自动追加新 PlanRevision；只有 `goal_complete=true` 才将 AgentRun 置为 `COMPLETED`。同一次 advance 内的自动重规划有普通的次数上限，超过后转为 `WAITING`，避免单次 HTTP 请求无界执行。
+`PlanRevision.goal_complete` 是 Agent 对“整个 Run 目标是否已满足”的显式反馈，不是“当前计划的 Steps 是否跑完”的别名。当当前 PlanGraph 完成但 `goal_complete=false` 时，Production Manager 会用最新 ContextPack 自动追加新 PlanRevision；只有 `goal_complete=true` 才将 AgentRun 置为 `COMPLETED`。单次 advance 的有限执行只是 HTTP 返回与进度可观察性边界，不是剧本质量门禁；审校/修订本身不用固定轮数、问题数或总超时代替 Agent 的语义判断。
 
 ### 1.3 AgentRuntime
 
@@ -72,7 +80,7 @@ AgentRuntime 是格式中立的可恢复控制面：
 
 Plan 是 Agent 可修订的工作假设，不是业务真相源。每次重新规划追加新的 `PlanRevision`，不覆盖项目工件，也不要求预先枚举所有可能的创作分支。旧持久化 PlanRevision 没有 `goal_complete` 字段时按 `false` 恢复，不需要为此写一次性数据迁移。
 
-进程重启时，已持久化的完成、等待和用户输入状态原样恢复；遗留的 `IN_PROGRESS` WorkOrder 转为 `NEEDS_ATTENTION`，可由专业 Agent 重试。`project.create` 和 `planning.advance` 会先根据已持久化的 ProjectDocument 与 PlanningRun 游标对账：领域结果已经存在时补记 Action 完成并从最新游标继续，确实无法确认的 Tool Action 才进入等待和重新规划。
+进程重启时，已持久化的完成、等待和用户输入状态原样恢复；遗留的 `IN_PROGRESS` WorkOrder 转为 `NEEDS_ATTENTION`。其中正在执行且结果尚未持久化的 specialist turn 标记为 `INTERRUPTED` 并写入结果未知证据，交给专业 Agent 检查规范项目状态后决定对账、重试或换路线，不自动重放 Tool。`project.create` 和 `planning.advance` 会先根据已持久化的 ProjectDocument 与 Content Planning Job（当前 `PlanningRun`）游标对账：领域结果已经存在时补记 Action 完成并从最新游标继续，确实无法确认的 Tool Action 才进入等待和重新规划。
 
 ### 1.4 Agent API
 
@@ -113,9 +121,9 @@ Plan 是 Agent 可修订的工作假设，不是业务真相源。每次重新�
 → POST /agent-projects
 → 预分配 project_id 并创建 AgentRun
 → project.create Tool
-  ├─ 短内容或本地 fallback：直接写入 PLANNED ProjectDocument
-  └─ 已配置语言模型的 >90 秒 AUTO_DRAFT：写入 INPUT scaffold + Agent-owned PlanningRun
-→ 若存在未完成 PlanningRun，由 planning.advance 每个 Action 推进一个持久化规划单元
+  ├─ 未配置语言模型的兼容创建：只写入无创意补写的本地 scaffold
+  └─ 已配置语言模型的 Agent-owned 创作：写入 INPUT scaffold + Content Planning Job（PlanningRun）
+→ 若存在未完成 Content Planning Job，由 planning.advance 每个 Action 推进一个持久化规划单元
 → FINALIZE 在同一 project_id 上写入 PLANNED ProjectDocument
 → 编译对应 Markdown Skill
 → LanguageProductionPlanner 或 LocalProductionPlanner 产生下一个 PlanRevision
@@ -125,7 +133,7 @@ Plan 是 Agent 可修订的工作假设，不是业务真相源。每次重新�
 
 用户在已有项目上点击新的 Agent 制作任务时，直接调用 `POST /projects/{project_id}/agent-runs`。桌面端只为本次从默认入口启动的 `AUTO_DRAFT` Run 保持自动续跑：Mock 可快速执行当前就绪步骤；真实 H3 每轮只执行一个 Agent Action，并根据项目阶段、MiniMax 任务状态、Take、Manifest 与 Export 的实际变化决定是否重置等待时间，状态未变化时按 3/6/12/15 秒退避。续跑持续到完成、失败、需要 WorkOrder/用户输入或进入需人工处理状态；GUIDED 与 Agent 面板手动 Run 保持停靠式交互。
 
-同一项目无人值守推进期间，桌面端保留项目切换、刷新、Agent Run/WorkOrder 只读查看，但不挂载会主动写入的 Script、Assets、Shots、H3、Takes、Timeline 与 QA 面板，并在父级写处理器再次校验运行状态；这样 H3 面板的内部轮询也不会与 Agent 同时修改 `ProjectDocument`。当前桌面窗口一次只启动一个无人值守续跑，新建项目或启动另一个 `AUTO_DRAFT` 会等当前 Run 完成或暂停。进程重启后只恢复最新项目未结束且显式标记为 `unattended` 的 AgentRun；等待 WorkOrder 或用户输入的 Run 继续由 Agent 控制面展示。桌面端不查询、展示或推进独立 PlanningRun；Agent-owned PlanningRun 只由所属 AgentRun 通过 `planning.advance` 推进。
+同一项目无人值守推进期间，桌面端保留项目切换、刷新、Agent Run/WorkOrder 只读查看，但不挂载会主动写入的 Script、Assets、Shots、H3、Takes、Timeline 与 QA 面板，并在父级写处理器再次校验运行状态；这样 H3 面板的内部轮询也不会与 Agent 同时修改 `ProjectDocument`。当前桌面窗口一次只启动一个无人值守续跑，新建项目或启动另一个 `AUTO_DRAFT` 会等当前 Run 完成或暂停。进程重启后只恢复最新项目未结束且显式标记为 `unattended` 的 AgentRun；等待 WorkOrder 或用户输入的 Run 继续由 Agent 控制面展示。桌面端不查询、展示或推进独立 PlanningRun；Agent-owned Content Planning Job（当前 `PlanningRun`）只由所属 AgentRun 通过 `planning.advance` 推进。
 
 ### 1.7 这几层与 workflow 的关系
 
@@ -137,7 +145,7 @@ Plan 是 Agent 可修订的工作假设，不是业务真相源。每次重新�
 | PlanRevision / PlanGraph | 本次目标的动态执行计划 | 根 Agent 根据 ContextPack、Skill 和 Tools 生成并可随时替换 |
 | Markdown Skill / playbook | 某类视频与某角色的制作方法、Prompt 和建议路径 | Agent 参考，不是可执行 DSL 或强制状态机 |
 | Typed Tool | 原子、稳定、跨视频类型复用的业务能力 | Agent 选择调用；Tool 内不决定整部视频流程 |
-| PlanningRun / Provider Task | 需要断点恢复、严格游标或外部对账的小型子流程 | Agent 决定何时推进，子流程内部只约束必要顺序 |
+| Content Planning Job（当前 `PlanningRun`）/ Provider Task | 分别处理内容规划游标或外部任务对账的领域子流程；当前不共享通用 `ChildJob` | AgentRun 决定何时推进，子流程内部只约束各自必要顺序 |
 
 因此数字人口播、AI 短剧和动漫共享同一套项目、剧本、资产、生成、检查与时间线 Tools；区别主要来自加载的 Markdown Skill、角色 system prompt、当前目标与工件上下文。具体 Style 是项目工件，不由 Profile 写死。只有“上一规划单元必须先持久化”“Provider 任务必须先提交再轮询”这类正确性顺序留在状态机里。
 
@@ -191,38 +199,32 @@ Production Manager 在计划接收和 Tool 真正调用前都校验当前项目�
 ```text
 backend/short_drama/skills/
 ├── README.md
+├── shared/roles/*.md
 ├── workflows/
 │   └── end_to_end.md
+├── narrative/<skill>/
+│   ├── SKILL.md
+│   └── roles/*.md
 ├── formats/<format>/
 │   ├── SKILL.md
 │   ├── playbooks/default.md
 │   ├── references/*.md
-│   └── roles/
-│       ├── concept.md
-│       ├── writer.md
-│       ├── planner.md
-│       ├── critic.md
-│       ├── review_router.md
-│       ├── director.md
-│       ├── asset_reviewer.md
-│       ├── route_planner.md
-│       ├── video_prompt_compiler.md
-│       └── episode_reviewer.md
+│   └── roles/*.md
 └── providers/<provider>/
     ├── SKILL.md
     └── references/*.md
 ```
 
-`workflows/end_to_end.md` 保存“内容→资产→分镜→生成→审片→时间线→导出”的中文通用方法；格式 `SKILL.md` 保存 profile、显示名称、媒介、默认 playbook 路径和稳定类型原则；`playbooks/default.md` 逐阶段说明输入、判断、Tool、产物和返工；`roles/*.md` 保存专业角色职责，并通过 frontmatter 只加载它需要的 `references/*.md`。Provider Skill 只负责把 provider-neutral 镜头事实翻译成特定模型语法，不承担剧情、镜头决策或请求提交。
+`workflows/end_to_end.md` 保存“内容→资产→分镜→生成→审片→时间线→导出”的中文通用方法；`shared/roles` 保存 Story Architect、Writer、Critic、Director 等中文通用职责；格式 `SKILL.md` 保存 profile、媒介、默认 playbook 路径和宽粒度稳定原则；`formats/*/roles` 只补充该格式差异；`narrative/<skill>` 保存可组合的叙事方法与支持角色。Provider Skill 只负责把 provider-neutral 镜头事实翻译成特定模型语法，不承担剧情、镜头决策或请求提交。
 
-Loader 将 Markdown 编译成强类型 `ProductionSkill` 和 `ProviderPromptSkill`。`compile_production_prompt()` 在 Planner 角色中统一注入共享流程与完整类型 Playbook，其他角色只加载各自职责和明确引用的方法；H3 GPT 编译入口再叠加 `providers/minimax_h3` 的 Prompt Skill。项目运行中产生的具体经验不再放进格式 Skill，只通过 AgentRuntime 的 `ExperienceMemory` 按项目与 Skill 范围沉淀和召回。
+Story Orientation Agent 先阅读 Narrative Skill Catalog 的紧凑说明和支持角色，根据完整项目语义显式选择零个或多个 Skill。Loader/编译器只检查目录、ID 与角色支持，不使用关键词、正则、题材枚举或必选数量替 Agent 做选择。角色 Prompt 按“共享中文职责 → 宽粒度 Format Skill/Playbook → Agent 选中的 Narrative Skills → `StoryIntent` 与当前任务数据”组合；相关 `ExperienceMemory` 按需召回。H3 GPT 编译入口另叠加 `providers/minimax_h3` Prompt Skill。
 
 ### 3.2 Skill 负责与不负责的事
 
 Skill 负责：
 
-- 该类成片的长期原则和用户体验；
-- Writer、Scene Director、Critic、Asset Reviewer 等角色的不同 Prompt；
+- 该类媒介/生产方式的长期原则；
+- 共享中文角色职责、格式角色补充和 Agent 可组合的叙事方法；
 - 共享流程上的详细类型制作方法；
 - 对共享 Tools 的使用重点与结果解释。
 
@@ -231,7 +233,10 @@ Skill 不负责：
 - 不保存项目状态、Agent 进度或 Provider 任务；
 - 不定义第二套 Tool Schema；
 - 不直接发起外部调用；
+- 不用题材枚举、关键词路由或固定数量选择 Narrative Skills；
 - playbook 不是可执行 DSL、强制工作流、Tool allowlist 或内容审批门。
+
+`StorySourceContract`、`StoryIntent`、`EndingContract` 与 `ProjectBible.style` 均是项目工件，不是 Skill 默认值。四视图或轻量群像资产、场景俯视/全景/功能区 coverage、时间线分镜的镜头/动作/台词/情绪拆分，以及 H3 中将 `@` alias 解析为真实 AssetVersion 与 Provider 媒体标签，分别属于资产、导演和 Provider 层。共享 Story Architect 不加载这些下游规则，免得为某个模型的输入格式反向改写故事。
 
 ## 4. 多视频类型：共享能力，分离制作方法
 
@@ -240,11 +245,11 @@ Skill 不负责：
 | ProductionProfile | 内容重心 | Scene Director 等角色的差异 |
 | --- | --- | --- |
 | `GENERAL_VIDEO` | 按用户意图选择节奏、氛围与视听形式 | 不强加短剧冲突、密度或剪辑偏好 |
-| `AI_SHORT_DRAMA` | 连续短剧叙事与生成式生产，视觉 Style 由项目自由描述 | 关注承诺、选择、回报、可生成镜头职责和局部返修，不预设真人或动画语法 |
+| `AI_SHORT_DRAMA` | 连续短剧消费场景、竖屏可读性与生成式生产 | 关注冷启动理解、多模态节奏、可生成镜头职责和局部返修，不预设爽剧、真人或动画答案 |
 | `DIGITAL_HUMAN` | 信息准确、主播身份稳定、自然语音、口型和辅助视觉的可读性 | 关注镜头视线、口播节奏、手势与 B-roll/图形是否真正帮助理解 |
 | `ANIME` | 角色设定、线条/材质、色彩、构图、动作与风格化一致性 | 关注 silhouette、pose、layout、镜头语言与有限动画资源分配，不照搬真人覆盖逻辑 |
 
-四种 profile 使用同一项目、剧本、资产、分镜、生成任务、Take、QA 和时间线核心。差异通过 Skill 的类型原则、角色 Prompt、制作重点以及当前项目上下文表达。
+四种 profile 使用同一项目、剧本、资产、分镜、生成任务、Take、QA 和时间线核心。差异通过宽粒度 Format Skill 和当前项目上下文表达；叙事特化来自 `StoryIntent` 与 Agent 选中的 Narrative Skills，视听特化来自 `ProjectBible.style`。
 
 “存在数字人或动漫 Skill”只证明 Agent 已能使用相应制作方法规划和评审，不自动证明专用虚拟主播、口型、补帧或动画 Provider 已经接入或达到成片质量。
 
@@ -296,6 +301,8 @@ ContextPack
 - 期望输出 Schema；
 - 可检查的验收条件。
 
+`assigned_agent`/`recipient_role` 只记录接收任务的 Agent 身份，不承载专业职责。每个专业委派都由 Production Manager 根据完整目标语义显式选择 `production_skill_role`；WorkOrder Prompt 编译只读取这个字段，不根据接收者名字或用户文本做关键词路由。
+
 子 Agent 返回结构化 `AgentResult`：
 
 - 一段简洁结论；
@@ -308,9 +315,13 @@ ContextPack
 
 ### 6.1 Tool-capable specialist
 
-内置 `LanguageSpecialistAgent` 不只能根据静态 Prompt 返回文本。它获得与 Production Manager 同一份 Tool Catalog，可在返回最终 AgentResult 前请求单次 Tool 调用，并把 ToolResult 和累积的 ArtifactRef 带入下一轮。默认最多进行 4 轮 Tool 调用，每轮只执行一个明确 Tool，之后必须给出当前最佳结果。这个边界是防止一次委派无界循环的调度限制，不是 Tool 权限门。
+内置 `LanguageSpecialistAgent` 不只能根据静态 Prompt 返回文本。它获得与 Production Manager 同一份 Tool Catalog，但一次外部 `execute` 不运行隐藏循环：若当前没有待执行请求，本次只让模型决定返回 AgentResult 还是请求一个 Tool；若 Agent 请求 Tool，系统先把 Tool 名称、参数和理由作为 `REQUESTED` turn 写入 `WorkOrder.specialist_turns` 并返回。下一次 `execute` 只把该 turn 标为 `IN_PROGRESS`、执行一个 Tool、持久化结果为 `COMPLETED` 后返回；再下一次才让 Agent 读取累积历史并继续判断。
 
-专业 Agent 仍需要已配置的语言模型。`LocalProductionPlanner` 只为根 Agent 生成确定性的本地后续计划，不伪造一个“本地专业导演”；未配置语言模型而计划确实需要 DELEGATION 时，运行进入可解释的等待/配置状态。
+这是一条单步持久化和可观察性边界，不是 Tool 次数上限。专业 Agent 可以在后续调用中基于新证据继续请求 Tool，直到它或 Production Manager 认为目标已完成、需要改计划或确实需要用户输入。
+
+若进程在 Tool 执行中重启，恢复逻辑将对应 turn 标为 `INTERRUPTED`，把结果未知写入同一条 turn，并将 WorkOrder 置为 `NEEDS_ATTENTION`。下一次只把中断记录作为历史交回 Agent，由它检查规范项目状态并语义决定对账、重试或换路线；Harness 不自动重放可能已经产生副作用的 Tool。
+
+专业 Agent 仍需要已配置的语言模型。`LocalProductionPlanner` 不为根 Agent 编写非终态路线，也不伪造一个“本地专业导演”；未配置语言模型且调用方没有提交显式计划时，运行保留当前工件并进入可解释的等待/配置状态。
 
 专业 Agent 的 Tool 调用使用同一个项目范围 invoker，不绕过根 Agent 的 ID 归属和 ArtifactRef 结果检查。
 
@@ -359,33 +370,38 @@ Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更�
 | 6. 多格式 Skill | General、AI 短剧、数字人、动漫共享 Tools，使用独立角色 Prompt；具体 Style 属于项目 Bible | `skills/formats/` |
 | 7. 默认路径收口 | 新建 GUIDED/AUTO_DRAFT 经 `/agent-projects` 进入 AgentRun；删除旧 Run 公开路由与桌面端恢复链 | Agent API / desktop Agent panel |
 
-此次迁移采取增量内部切换：先将稳定领域能力包装为 Tools，再把 Skill 从 Python 数据结构移到 Markdown，最后引入 AgentRuntime 和 Production Manager。旧 PlanningRun/AutonomousRun 接口不保留兼容入口；独立 PlanningRun 与 AutonomousRun 控制面均已删除。内部只保留同一 ProjectDocument、Agent-owned PlanningRun 和 Provider Task 的必要恢复语义，不重建第二套数据源。
+此次迁移采取增量内部切换：先将稳定领域能力包装为 Tools，再把 Skill 从 Python 数据结构移到 Markdown，最后引入 AgentRuntime 和 Production Manager。旧 PlanningRun/AutonomousRun 接口不保留兼容入口；独立 PlanningRun 与 AutonomousRun 控制面均已删除。内部只保留同一 ProjectDocument、AgentRun 拥有的 Content Planning Job（当前兼容实现名 `PlanningRun`）和 Provider Task 的必要恢复语义，不重建第二套数据源，也不提前建立通用 `ChildJob`。
 
 ## 9. 已实现与待 Provider 验证的边界
 
 ### 已实现的工程能力
 
 - 可发现、强类型、可注入的 Tool Registry 及现有能力适配器；
-- 四类文件化 Production Skills 与按角色 Prompt 编译；
+- 四类宽粒度 Format Skills、中文共享角色、开放目录 Narrative Skills，以及 Agent 显式选择后的分角色 Prompt 编译；
+- Story Orientation 形成并持久化 `StorySourceContract`、`StoryIntent` 和 Narrative Skill 选择理由；`SCRIPT_LOCKED` 普通文本被语义结构化为 `locked_dialogue`，代码只做逐字/顺序保护；`EndingContract` 与剧本版本共同保存；
+- Critic Issue Ledger、逐场定向修订、Revision Verifier 和按需最终冷读的可恢复游标；
 - 动态 PlanGraph、计划修订、Action 记录、SQLite 恢复和有界 ContextPack；
 - `goal_complete` 驱动的目标反馈循环，以及 Tool 失败、WorkOrder 返回和用户输入后的动态重规划；
 - Project/Run/Decision/Experience 四层记忆，包括当前 Run 优先的项目跨 Run 决策召回、结果经验沉淀和去重；
 - 默认 24,000 字符内容预算及 ArtifactSummary/ActionDigest/记忆文本截断；
-- WorkOrder/AgentResult 委派闭环、完成合同校验与可调用共享 Tools 的内置专业 Agent；
+- WorkOrder/AgentResult 委派闭环、显式 `production_skill_role` 职责装载、`specialist_turns` 单步请求/结果持久化、中断恢复、完成合同校验与可调用共享 Tools 的内置专业 Agent；
 - 语义变更的无副作用 plan 和局部 apply；
 - capability catalog、Agent 项目 bootstrap、AgentRun 创建/查询/重新规划/推进/用户回复与 WorkOrder 回传 API；
-- 未配置语言模型时基于 stage 和 Tool Catalog 的 `LocalProductionPlanner` fallback；
+- 未配置语言模型时只确认终态事实、不推断创作或 Provider 路线的 `LocalProductionPlanner` fallback；
 - 桌面端默认新建与新自动制作进入 AgentRun/Agent 面板；
-- 保留 Agent-owned PlanningRun 恢复、ProjectDocument、Provider Task 和 Timeline 的数据语义；不保留旧公开接口。
+- 保留 AgentRun 拥有的 Content Planning Job（当前 `PlanningRun`）恢复、ProjectDocument、Provider Task 和 Timeline 的数据语义；场景及跨场修订不再受 40/12 低常数创作上限约束；不保留旧公开接口。
 
 ### 仍需真实 Provider 或跨项目样本确认的能力
 
+- Story Orientation 对 Narrative Skill 的选择是否稳定命中用户意图，不同 `StoryIntent` 是否真正改善爽感、喜剧、悬念或其他目标体验；
+- Critic 是否减少重复挑错、过度现实主义和不必要修订，局部 Repair/Verifier 是否在改正问题的同时保护原稿优点；
+- 角色四视图/群像轻量资产、场景 coverage、分镜 timeline beats 和真实 H3 媒体绑定的组合是否在完整播放中提高连贯性；
 - 数字人主播的身份稳定、长口播口型、声线与稳定演播；
 - 动漫角色 model sheet、线条/材质一致、风格化动作与补帧路线；
 - 不同内容类型下默认 Tool 组合的成片质量与稳定性；
 - 真实多 Agent 长运行中的上下文量、委派粒度与重新规划策略。
 
-这些是产品/质量验证项，不影响当前架构分层成立，也不应被 Mock、Prompt 文档或类型检查提前宣称为已达到生产质量。
+这些是产品/质量验证项，不影响当前架构分层成立，也不应被 Mock、Prompt 文档、Schema 或类型检查提前宣称为已达到生产质量。
 
 ## 10. 普通产品工程边界
 
@@ -405,14 +421,14 @@ Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更�
 
 1. 桌面端新建 GUIDED/AUTO_DRAFT 通过 `POST /api/short-drama/agent-projects` 创建 AgentRun，再由 `project.create` 产生权威 ProjectDocument；
 2. Tool Registry 可列出和调用已注册能力，错误参数、未知 Tool 与处理失败都返回统一结果；
-3. 新增或修改内容类型的创作策略只需审阅 `skills/formats/<format>/` 下的 Markdown；同一 Scene Director 在不同 profile 获得不同角色 Prompt，但调用相同 Tool 合同；
+3. 通用角色职责、宽粒度格式差异和可组合叙事方法分别在 `skills/shared/`、`skills/formats/`、`skills/narrative/` 的 Markdown 中审阅；Agent 可显式选择不同 Narrative Skills，但各角色仍调用相同 Tool 合同；
 4. Agent 可创建带依赖的计划、计算就绪步骤并替换计划；当当前 PlanGraph 完成但 `goal_complete=false` 时继续重新规划，只有 `goal_complete=true` 才完成整个 Run；
 5. 进程重启后可恢复当前 PlanRevision、Action、RunMemory 和待回复 WorkOrder；计划记录缺失 `goal_complete` 时使用模型默认值 `false`；
 6. 新 Run 能按“当前 Run 优先”召回项目内已确认决定，完成的有价值 AgentResult 能按 project/skill scope 沉淀并去重经验；
 7. ContextPack 除条目数之外受默认字符预算约束，会截断 ArtifactSummary、ActionDigest 与记忆文本，但保留稳定 ID 和 ArtifactRef；
 8. WorkOrder/AgentResult 能完成上下文编译、专业 Agent 的 Tool 调用与结果回传，并对完成结果执行比例适当的 Schema/完成性校验；
 9. `plan-change` 保持无副作用，`apply-change` 保留旧版本并只失效真正受影响分支，不隐式调用付费 Provider；
-10. 独立 PlanningRun 与 AutonomousRun 的接口、前端链路、ProjectDocument 字段、领域模型、服务分支和旧脚本均已删除；已配置语言模型的超过 90 秒 `AUTO_DRAFT` 由当前 AgentRun 拥有并通过 `planning.advance` 逐步推进可恢复 PlanningRun，Provider Task 状态机仍独立对账；
+10. AutonomousRun 旧控制面已删除；已配置语言模型的 Agent-owned 创作无论时长都由当前 AgentRun 拥有，并通过 `planning.advance` 逐步推进 Content Planning Job（当前兼容实现名 `PlanningRun`）；语言 Provider 不再有同步整稿规划入口，Provider Task 状态机仍独立对账；
 11. 全量回归包含后端测试、Pyright strict、TypeScript strict、OpenAPI 产物、前端构建、文档链接和 `git diff --check`。
 
 验收结果由最终交付轮次按实际命令更新；当前不用真实付费媒体 Provider 调用来代替架构和回归验收，也不将未完成的数字人/动漫真实质量实验记为通过。

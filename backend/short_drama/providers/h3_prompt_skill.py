@@ -9,8 +9,6 @@ only the model adapter at the final prompt boundary.
 from __future__ import annotations
 
 import math
-import re
-from dataclasses import dataclass
 
 from short_drama.h3_models import (
     H3MediaInput,
@@ -23,9 +21,14 @@ from short_drama.models import (
     AudioKind,
     ProjectDocument,
     ShotPlan,
+    ShotTimelineBeat,
     VideoGenerationRoute,
 )
 from short_drama.production_profiles import production_skill
+from short_drama.providers.h3_media_bindings import (
+    ResolvedH3MediaBinding,
+    resolve_h3_media_bindings,
+)
 from short_drama.style_context import declared_style_value
 
 
@@ -42,17 +45,6 @@ _REFERENCE_FIELDS = (
     "overall_soundscape:",
     "non_diegetic_music:",
 )
-
-
-@dataclass(frozen=True)
-class _PromptReference:
-    label: str
-    media: H3MediaInput
-    subject: str
-    descriptor: str
-    purpose: str
-    video_guide: H3VideoGuide | None = None
-
 
 def compile_h3_prompt_ir(
     document: ProjectDocument,
@@ -132,13 +124,15 @@ def validate_h3_prompt_ir(
         if not stripped.startswith(alignment):
             raise ValueError("H3 FL2VA prompt omitted the official first/last alignment line")
 
-    duration_patterns = (
-        rf"\b{duration_seconds}-second\b",
-        rf"\b{duration_seconds}\s+seconds?\b",
-        rf"\b{duration_seconds:.2f}-second\b",
-        rf"{duration_seconds}\s*秒",
+    duration_markers = (
+        f"{duration_seconds}-second",
+        f"{duration_seconds} second",
+        f"{duration_seconds} seconds",
+        f"{duration_seconds:.2f}-second",
+        f"{duration_seconds}秒",
+        f"{duration_seconds} 秒",
     )
-    if not any(re.search(pattern, stripped) for pattern in duration_patterns):
+    if not any(marker in stripped for marker in duration_markers):
         raise ValueError(f"H3 prompt omitted the locked {duration_seconds}-second duration")
 
     script = next(
@@ -161,9 +155,40 @@ def validate_h3_prompt_ir(
             raise ValueError(f"H3 prompt changed or omitted locked speaker {line.speaker}")
 
     if route == VideoGenerationRoute.REFERENCE:
-        for reference in _reference_labels(media_inputs or []):
-            if reference not in stripped:
-                raise ValueError(f"H3 Ref2VA prompt omitted reference label {reference}")
+        references = resolve_h3_media_bindings(document, media_inputs or [], [])
+        for reference in references:
+            if reference.provider_label not in stripped:
+                raise ValueError(
+                    "H3 Ref2VA prompt omitted reference label "
+                    f"{reference.provider_label}"
+                )
+            binding = f"@{reference.alias} = {reference.provider_label}"
+            if reference.media.reference_alias is not None and binding not in stripped:
+                raise ValueError(f"H3 Ref2VA prompt omitted semantic binding {binding}")
+
+    if "[Shot 2]" in stripped:
+        raise ValueError("One ShotPlan cannot compile undeclared additional editorial shots")
+    beat_markers = [
+        _beat_time_marker(beat.start_seconds, beat.end_seconds)
+        for beat in shot.timeline_beats
+    ]
+    for index, (beat, marker) in enumerate(zip(shot.timeline_beats, beat_markers, strict=True)):
+        marker = _beat_time_marker(beat.start_seconds, beat.end_seconds)
+        marker_position = stripped.find(marker)
+        if marker_position < 0:
+            raise ValueError(f"H3 prompt omitted locked timeline range {marker}")
+        next_position = (
+            stripped.find(beat_markers[index + 1], marker_position + len(marker))
+            if index + 1 < len(beat_markers)
+            else len(stripped)
+        )
+        segment = stripped[marker_position:next_position]
+        for line_id in beat.dialogue_line_ids:
+            line = line_by_id.get(line_id)
+            if line is not None and line.spoken_text not in segment:
+                raise ValueError(
+                    f"H3 prompt moved dialogue for {line.speaker} outside its locked time range"
+                )
 
     return [
         "official MiniMax-H3 prompt field order preserved",
@@ -184,6 +209,9 @@ def prompt_schema_for_route(route: VideoGenerationRoute) -> dict[str, object]:
             "mode": "Ref2VA",
             "fields_in_order": list(_REFERENCE_FIELDS),
             "rewrite_language": "English, except original dialogue and visible text",
+            "reference_binding": (
+                "Preserve every supplied @semantic_alias = <Picture|Video|Audio N> mapping"
+            ),
         }
     mode = {
         VideoGenerationRoute.DIRECT: "T2VA",
@@ -250,17 +278,23 @@ def _compile_reference_prompt(
     video_guides: list[H3VideoGuide],
 ) -> str:
     skill = production_skill(document.project.production_profile)
-    references = _resolve_references(document, media_inputs, video_guides)
+    references = resolve_h3_media_bindings(document, media_inputs, video_guides)
     definitions = " ".join(
-        f"{item.label} defines {item.subject}: {item.descriptor}."
+        f"@{item.alias} = {item.provider_label}; {item.provider_label} defines "
+        f"{item.subject}: {item.descriptor}."
         for item in references
     ) or "No external reference media is declared."
     retention = " ".join(_retention_sentence(item) for item in references) or "N/A"
     bindings = " ".join(
-        f"{item.subject} follows {item.label} for {item.purpose}."
+        f"{item.subject} follows @{item.alias} ({item.provider_label}) for {item.purpose}."
         for item in references
     )
-    timeline = _timeline_description(document, shot, duration=duration)
+    timeline = _timeline_description(
+        document,
+        shot,
+        duration=duration,
+        references=references,
+    )
     if bindings:
         timeline = f"{timeline} Reference use: {bindings}"
     return (
@@ -280,6 +314,7 @@ def _timeline_description(
     shot: ShotPlan,
     *,
     duration: int,
+    references: list[ResolvedH3MediaBinding] | None = None,
 ) -> str:
     hidden_props = _reference_plan_omits_visible_props(document, shot)
     bible = next(
@@ -340,11 +375,33 @@ def _timeline_description(
     action_constraints = _structured_action_constraints(document, shot)
     if action_constraints:
         parts.append(action_constraints)
-    dialogue = _dialogue_description(document, shot)
-    if dialogue:
-        parts.append(dialogue)
+    if shot.timeline_beats:
+        parts.append(
+            "The following ranges are continuous phases inside this single editorial shot; "
+            "they do not authorize an undeclared cut or a second shot."
+        )
+        parts.extend(
+            _timeline_beat_description(
+                document,
+                shot,
+                beat_index=index,
+                references=references or [],
+            )
+            for index in range(len(shot.timeline_beats))
+        )
+        if duration > shot.duration_seconds + 0.05:
+            parts.append(
+                f"From {shot.duration_seconds:.2f} to {duration:.2f} seconds, preserve the "
+                "declared end state as a clean trimming handle without adding action or dialogue."
+            )
     else:
-        parts.append("No one speaks; only the declared ambient and physical sounds are heard.")
+        dialogue = _dialogue_description(document, shot)
+        if dialogue:
+            parts.append(dialogue)
+        else:
+            parts.append(
+                "No one speaks; only the declared ambient and physical sounds are heard."
+            )
     parts.extend(
         [
             "Do not introduce undeclared characters, props, actions, scene changes, or dialogue.",
@@ -354,7 +411,70 @@ def _timeline_description(
     return " ".join(parts)
 
 
-def _dialogue_description(document: ProjectDocument, shot: ShotPlan) -> str:
+def _beat_time_marker(start_seconds: float, end_seconds: float) -> str:
+    return f"[{start_seconds:.2f}-{end_seconds:.2f} seconds]"
+
+
+def _timeline_beat_description(
+    document: ProjectDocument,
+    shot: ShotPlan,
+    *,
+    beat_index: int,
+    references: list[ResolvedH3MediaBinding],
+) -> str:
+    beat: ShotTimelineBeat = shot.timeline_beats[beat_index]
+    parts = [
+        _beat_time_marker(beat.start_seconds, beat.end_seconds),
+        f"Framing: {beat.framing}.",
+        f"Camera and focus: {beat.camera}.",
+        f"Observable image: {beat.visual}.",
+        f"Action: {beat.action}.",
+    ]
+    if beat.performance is not None:
+        parts.append(f"Performance: {beat.performance}.")
+    if beat.emotion is not None:
+        parts.append(f"Emotion or atmosphere: {beat.emotion}.")
+    dialogue = _dialogue_description(document, shot, beat.dialogue_line_ids)
+    if dialogue:
+        parts.append(f"Dialogue in this range only: {dialogue}")
+    if beat.sound is not None:
+        parts.append(f"Sound in this range: {beat.sound}.")
+    reference_text = _timeline_reference_cues(document, beat, references)
+    if reference_text:
+        parts.append(f"Reference cues: {reference_text}")
+    return " ".join(parts)
+
+
+def _timeline_reference_cues(
+    document: ProjectDocument,
+    beat: ShotTimelineBeat,
+    references: list[ResolvedH3MediaBinding],
+) -> str:
+    asset_names = {asset.id: asset.name for asset in document.assets}
+    rendered: list[str] = []
+    for cue in beat.references:
+        matches = [
+            item
+            for item in references
+            if item.subject_asset_id == cue.subject_asset_id
+            and set(cue.required_tags).issubset(item.tags)
+        ]
+        if matches:
+            selected = min(matches, key=lambda item: (len(item.tags), item.alias))
+            rendered.append(
+                f"@{selected.alias} ({selected.provider_label}) for {cue.purpose}"
+            )
+        else:
+            subject = asset_names.get(cue.subject_asset_id, cue.alias)
+            rendered.append(f"{subject} for {cue.purpose}")
+    return "; ".join(rendered)
+
+
+def _dialogue_description(
+    document: ProjectDocument,
+    shot: ShotPlan,
+    line_ids: list[str] | None = None,
+) -> str:
     script = next(
         version
         for version in document.script_versions
@@ -363,13 +483,19 @@ def _dialogue_description(document: ProjectDocument, shot: ShotPlan) -> str:
     line_by_id = {line.id: line for line in script.lines}
     lines = [
         line_by_id[line_id]
-        for line_id in shot.dialogue_line_ids
+        for line_id in (shot.dialogue_line_ids if line_ids is None else line_ids)
         if line_id in line_by_id
     ]
     speaker_ids: dict[str, str] = {}
     rendered: list[str] = []
     for line in lines:
-        speaker_id = speaker_ids.setdefault(line.speaker, f"S{len(speaker_ids) + 1}")
+        # Display names remain presentation text. Only a typed character binding may
+        # assert that separate lines share one speaker identity.
+        speaker_key = line.speaker_character_id or line.id
+        speaker_id = speaker_ids.setdefault(
+            speaker_key,
+            f"S{len(speaker_ids) + 1}",
+        )
         if line.audio_kind == AudioKind.VOICEOVER:
             rendered.append(
                 f"The voice identified as {line.speaker} ({speaker_id}) says in an off-screen "
@@ -448,114 +574,38 @@ def _soundscape(shot: ShotPlan) -> str:
     )
 
 
-def _resolve_references(
-    document: ProjectDocument,
-    media_inputs: list[H3MediaInput],
-    video_guides: list[H3VideoGuide],
-) -> list[_PromptReference]:
-    version_index = {
-        version.id: (asset, version)
-        for asset in document.assets
-        for version in asset.versions
-    }
-    guide_index = {guide.id: guide for guide in video_guides}
-    counters = {H3MediaKind.IMAGE: 0, H3MediaKind.VIDEO: 0, H3MediaKind.AUDIO: 0}
-    result: list[_PromptReference] = []
-    for media in media_inputs:
-        counters[media.kind] += 1
-        prefix = {
-            H3MediaKind.IMAGE: "Picture",
-            H3MediaKind.VIDEO: "Video",
-            H3MediaKind.AUDIO: "Audio",
-        }[media.kind]
-        label = f"<{prefix} {counters[media.kind]}>"
-        guide = guide_index.get(media.video_guide_id or "")
-        if guide is not None:
-            result.append(
-                _PromptReference(
-                    label=label,
-                    media=media,
-                    subject="the Route Agent's motion and continuity guide",
-                    descriptor=guide.rationale,
-                    purpose=(
-                        "camera path and pacing only"
-                        if guide.kind == H3VideoGuideKind.CAMERA_PREVIS
-                        else "the immediately preceding motion state and screen direction only"
-                    ),
-                    video_guide=guide,
-                )
-            )
-            continue
-        resolved = version_index.get(media.asset_version_id or "")
-        if resolved is None:
-            subject = {
-                H3MediaKind.IMAGE: "the declared visual reference",
-                H3MediaKind.VIDEO: "the declared motion reference",
-                H3MediaKind.AUDIO: "the declared voice or audio reference",
-            }[media.kind]
-            descriptor = f"A {media.role.value} input bound by the Route Agent"
-        else:
-            asset, version = resolved
-            subject = asset.name
-            descriptor = version.descriptor
-        purpose = {
-            H3MediaKind.IMAGE: "identity, wardrobe, object appearance, or location geometry",
-            H3MediaKind.VIDEO: "declared motion, timing, camera behavior, or continuity",
-            H3MediaKind.AUDIO: "voice identity and acoustic character, not copied words",
-        }[media.kind]
-        result.append(
-            _PromptReference(
-                label=label,
-                media=media,
-                subject=subject,
-                descriptor=descriptor,
-                purpose=purpose,
-            )
-        )
-    return result
-
-
-def _retention_sentence(reference: _PromptReference) -> str:
+def _retention_sentence(reference: ResolvedH3MediaBinding) -> str:
     if reference.video_guide is not None:
         if reference.video_guide.kind == H3VideoGuideKind.CAMERA_PREVIS:
             return (
-                f"{reference.label} transfers only the coarse camera path and pacing; its "
+                f"@{reference.alias} ({reference.provider_label}) transfers only the coarse "
+                "camera path and pacing; its "
                 "low-fidelity compression and interpolation artifacts are not retained. The "
                 "project's declared style and intended amount of motion remain authoritative."
             )
         return (
-            f"{reference.label} transfers only the terminal motion state, screen direction, "
+            f"@{reference.alias} ({reference.provider_label}) transfers only the terminal "
+            "motion state, screen direction, "
             "and compatible camera momentum; its dialogue, prior action, cuts, and accidental "
             "defects are not repeated."
         )
     if reference.media.kind == H3MediaKind.AUDIO:
         return (
-            f"{reference.label} preserves the referenced speaker's voice identity, pitch, "
+            f"@{reference.alias} ({reference.provider_label}) preserves the referenced speaker's "
+            "voice identity, pitch, "
             "timbre, and delivery character while all spoken words remain the locked dialogue."
         )
     if reference.media.kind == H3MediaKind.VIDEO:
         return (
-            f"{reference.label} transfers only the declared motion and camera relationship; "
+            f"@{reference.alias} ({reference.provider_label}) transfers only the declared motion "
+            "and camera relationship; "
             "unrequested subjects, dialogue, and edits are not copied."
         )
     return (
-        f"{reference.label} fully preserves the declared subject identity and stable visible "
+        f"@{reference.alias} ({reference.provider_label}) fully preserves the declared subject "
+        "identity and stable visible "
         "appearance while pose and framing change only as required by this shot."
     )
-
-
-def _reference_labels(media_inputs: list[H3MediaInput]) -> list[str]:
-    counters = {H3MediaKind.IMAGE: 0, H3MediaKind.VIDEO: 0, H3MediaKind.AUDIO: 0}
-    labels: list[str] = []
-    for media in media_inputs:
-        counters[media.kind] += 1
-        prefix = {
-            H3MediaKind.IMAGE: "Picture",
-            H3MediaKind.VIDEO: "Video",
-            H3MediaKind.AUDIO: "Audio",
-        }[media.kind]
-        labels.append(f"<{prefix} {counters[media.kind]}>")
-    return labels
 
 
 def _reference_plan_omits_visible_props(

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from short_drama.reference_aliases import normalize_reference_alias
 
 
 class DomainModel(BaseModel):
@@ -37,6 +40,11 @@ class ProductionExecutionTarget(StrEnum):
     REAL_H3 = "REAL_H3"
 
 
+class ContentPlanningOutput(StrEnum):
+    SCRIPT_ONLY = "SCRIPT_ONLY"
+    SCRIPT_AND_SHOTS = "SCRIPT_AND_SHOTS"
+
+
 class PlanningRunStatus(StrEnum):
     RUNNING = "RUNNING"
     COMPLETE = "COMPLETE"
@@ -45,11 +53,19 @@ class PlanningRunStatus(StrEnum):
 
 
 class PlanningRunStep(StrEnum):
+    STORY_ORIENTATION = "STORY_ORIENTATION"
     STORY_ARCHITECT = "STORY_ARCHITECT"
     SCENE_WRITER = "SCENE_WRITER"
     SCRIPT_CRITIC = "SCRIPT_CRITIC"
+    REVIEW_ROUTER = "REVIEW_ROUTER"
+    SOURCE_CONTRACT = "SOURCE_CONTRACT"
     STORY_REVISION = "STORY_REVISION"
+    STORY_METADATA_REVISION = "STORY_METADATA_REVISION"
+    REVISION_SCOPE = "REVISION_SCOPE"
+    SCENE_REVISION = "SCENE_REVISION"
+    REVISION_VERIFIER = "REVISION_VERIFIER"
     REVISION_JUDGE = "REVISION_JUDGE"
+    FINAL_COLD_READ = "FINAL_COLD_READ"
     SCENE_DIRECTOR = "SCENE_DIRECTOR"
     FINALIZE = "FINALIZE"
     COMPLETE = "COMPLETE"
@@ -92,6 +108,7 @@ class Freshness(StrEnum):
 
 class ProjectStage(StrEnum):
     INPUT = "INPUT"
+    SCRIPT_READY = "SCRIPT_READY"
     PLANNED = "PLANNED"
     GENERATING = "GENERATING"
     REVIEW = "REVIEW"
@@ -143,6 +160,13 @@ class ScriptReviewDispositionAction(StrEnum):
     CONTINUE = "CONTINUE"
 
 
+class StoryReviewFollowup(StrEnum):
+    """Agent-recommended continuation after a complete story read or repair check."""
+
+    FINALIZE = "FINALIZE"
+    FINAL_COLD_READ = "FINAL_COLD_READ"
+
+
 class ReviewRepairOwner(StrEnum):
     """Smallest production layer that can reasonably address a review issue."""
 
@@ -152,6 +176,21 @@ class ReviewRepairOwner(StrEnum):
     VIDEO_DIRECTOR = "VIDEO_DIRECTOR"
     TIMELINE_AGENT = "TIMELINE_AGENT"
     USER_OPTIONAL = "USER_OPTIONAL"
+
+
+class ContinuationPreference(StrEnum):
+    """What the user explicitly asked for before the story Agent decides."""
+
+    SERIES = "SERIES"
+    STANDALONE = "STANDALONE"
+    AGENT_DECIDES = "AGENT_DECIDES"
+
+
+class ResolvedEndingMode(StrEnum):
+    """The concrete episode shape selected by the Story Architect."""
+
+    SERIES = "SERIES"
+    STANDALONE = "STANDALONE"
 
 
 class StoryRepairDiagnosis(StrEnum):
@@ -213,6 +252,7 @@ class OriginType(StrEnum):
     MANUAL = "MANUAL"
     UPLOAD = "UPLOAD"
     LIBRARY_IMPORT = "LIBRARY_IMPORT"
+    LOCAL_DERIVED = "LOCAL_DERIVED"
     AI_GENERATED = "AI_GENERATED"
     AI_EDITED = "AI_EDITED"
     FIXTURE = "FIXTURE"
@@ -230,6 +270,46 @@ class AssetMediaType(StrEnum):
     IMAGE = "IMAGE"
     VIDEO = "VIDEO"
     AUDIO = "AUDIO"
+
+
+class AssetPresentationMode(StrEnum):
+    """Explicit rendering intent for an asset master; absence stays unknown."""
+
+    PHYSICAL_MASTER = "PHYSICAL_MASTER"
+    SCREEN_CONTENT_PLATE = "SCREEN_CONTENT_PLATE"
+
+
+class AssetReferenceStrategy(StrEnum):
+    """How much canonical visual coverage one asset needs for the current work."""
+
+    LIGHTWEIGHT = "LIGHTWEIGHT"
+    CHARACTER_STANDARD_VIEWS = "CHARACTER_STANDARD_VIEWS"
+    SCENE_COVERAGE = "SCENE_COVERAGE"
+
+
+class AssetStandardView(StrEnum):
+    """Reusable view labels for canonical character, location, and prop images."""
+
+    CANONICAL_MASTER = "CANONICAL_MASTER"
+    CHARACTER_FRONT = "CHARACTER_FRONT"
+    CHARACTER_LEFT_PROFILE = "CHARACTER_LEFT_PROFILE"
+    CHARACTER_RIGHT_PROFILE = "CHARACTER_RIGHT_PROFILE"
+    CHARACTER_BACK = "CHARACTER_BACK"
+    CHARACTER_WARDROBE_DETAIL = "CHARACTER_WARDROBE_DETAIL"
+    SCENE_MASTER = "SCENE_MASTER"
+    SCENE_OVERHEAD = "SCENE_OVERHEAD"
+    SCENE_REVERSE = "SCENE_REVERSE"
+    SCENE_INTERACTION_ZONE = "SCENE_INTERACTION_ZONE"
+    PROP_PRODUCT = "PROP_PRODUCT"
+    PROP_IN_HAND = "PROP_IN_HAND"
+    PROP_STATE = "PROP_STATE"
+
+
+class AssetSheetInputPolicy(StrEnum):
+    """Whether a local reference sheet may use explicitly selected draft versions."""
+
+    APPROVED_ONLY = "APPROVED_ONLY"
+    EXPLICIT_VERSIONS = "EXPLICIT_VERSIONS"
 
 
 class ReferenceRole(StrEnum):
@@ -345,6 +425,9 @@ class ProjectRecord(DomainModel):
     source_mode: SourceMode
     run_mode: RunMode
     production_profile: ProductionProfile = ProductionProfile.AI_SHORT_DRAMA
+    content_planning_output: ContentPlanningOutput = (
+        ContentPlanningOutput.SCRIPT_AND_SHOTS
+    )
     language: str = "zh-CN"
     aspect_ratio: str = "9:16"
     target_duration_seconds: float = 50.0
@@ -369,6 +452,7 @@ class ProjectRecord(DomainModel):
 class ScriptLine(DomainModel):
     id: str
     speaker: str
+    speaker_character_id: str | None = None
     original_text: str
     spoken_text: str
     subtitle_text: str
@@ -388,16 +472,19 @@ class StructuredScene(DomainModel):
     heading: str
     summary: str
     line_ids: list[str]
+    screenplay_text: str = ""
     narrative_purpose: str | None = None
-    target_duration_seconds: float | None = Field(default=None, ge=4.0)
+    target_duration_seconds: float | None = Field(default=None, gt=0.0)
     entry_state: SceneContinuitySummary | None = None
     exit_state: SceneContinuitySummary | None = None
 
 
 class ScriptReviewIssue(DomainModel):
+    issue_id: str | None = Field(default=None, min_length=1, max_length=120)
     category: str = Field(min_length=1, max_length=80)
     severity: ScriptReviewSeverity
-    scene_sequences: list[int] = Field(default_factory=list[int], max_length=12)
+    owner: ReviewRepairOwner
+    scene_sequences: list[int] = Field(default_factory=list[int])
     observation: str = Field(min_length=1, max_length=1200)
     recommendation: str = Field(min_length=1, max_length=1200)
 
@@ -406,7 +493,21 @@ class ScriptReviewReport(DomainModel):
     summary: str = Field(min_length=1, max_length=2000)
     strengths: list[str] = Field(default_factory=list[str], max_length=12)
     issues: list[ScriptReviewIssue] = Field(default_factory=list[ScriptReviewIssue], max_length=30)
-    requires_revision: bool = False
+    performance_timing_assessment: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=2000,
+    )
+    requires_revision: bool
+    recommended_followup: StoryReviewFollowup = StoryReviewFollowup.FINALIZE
+    followup_rationale: str | None = Field(default=None, max_length=1200)
+
+    @model_validator(mode="after")
+    def validate_issue_ids(self) -> ScriptReviewReport:
+        issue_ids = [issue.issue_id for issue in self.issues if issue.issue_id is not None]
+        if len(issue_ids) != len(set(issue_ids)):
+            raise ValueError("Script review issue IDs must be unique")
+        return self
 
 
 class ScriptReviewIssueRoute(DomainModel):
@@ -433,12 +534,28 @@ class ScriptReviewDisposition(DomainModel):
             raise ValueError("Each script-review issue may be routed only once")
         if not self.user_overridable:
             raise ValueError("Script-review routing must remain user-overridable")
-        if self.action == ScriptReviewDispositionAction.REVISE_STORY and not any(
-            route.owner == ReviewRepairOwner.STORY_ARCHITECT
-            for route in self.issue_routes
-        ):
-            raise ValueError("REVISE_STORY requires at least one Story Architect issue")
         return self
+
+
+class EndingContract(DomainModel):
+    """Episode payoff and continuation policy protected across later revisions."""
+
+    requested_preference: ContinuationPreference = ContinuationPreference.AGENT_DECIDES
+    resolved_mode: ResolvedEndingMode
+    episode_payoff: str = Field(min_length=1, max_length=1200)
+    required_closures: list[str] = Field(default_factory=list[str], max_length=16)
+    allowed_open_threads: list[str] = Field(default_factory=list[str], max_length=12)
+    continuation_hook: str | None = Field(default=None, max_length=1200)
+    final_button: str = Field(min_length=1, max_length=1200)
+    decision_basis: str = Field(min_length=1, max_length=1200)
+
+
+class StoryLockedDialogueLine(DomainModel):
+    """One user-locked spoken line structured by the intake Agent or API caller."""
+
+    speaker: str = Field(min_length=1, max_length=80)
+    text: str = Field(min_length=1, max_length=500)
+    audio_kind: AudioKind = AudioKind.DIALOGUE
 
 
 class StorySourceContract(DomainModel):
@@ -451,6 +568,13 @@ class StorySourceContract(DomainModel):
         default_factory=list[str],
         max_length=20,
     )
+    locked_dialogue: list[StoryLockedDialogueLine] = Field(
+        default_factory=list[StoryLockedDialogueLine],
+        max_length=5000,
+    )
+    continuation_preference: ContinuationPreference = (
+        ContinuationPreference.AGENT_DECIDES
+    )
     user_overridable: bool = True
 
     @model_validator(mode="after")
@@ -460,17 +584,47 @@ class StorySourceContract(DomainModel):
         return self
 
 
+class StoryIntent(DomainModel):
+    """Versioned creative direction for one story, not a quality gate."""
+
+    audience_experience: str = Field(min_length=1, max_length=2000)
+    dramatic_engine: str = Field(min_length=1, max_length=2000)
+    progression_strategy: str = Field(min_length=1, max_length=2000)
+    tone_and_plausibility: str = Field(min_length=1, max_length=2000)
+    protected_elements: list[str] = Field(default_factory=list[str], max_length=20)
+    drift_risks: list[str] = Field(default_factory=list[str], max_length=20)
+
+
+class StoryIssueLedgerEntry(DomainModel):
+    """Natural-language history for one semantic story concern, never a gate."""
+
+    issue_id: str = Field(min_length=1, max_length=120)
+    semantic_cluster: str = Field(min_length=1, max_length=240)
+    state: str = Field(min_length=1, max_length=240)
+    observation: str = Field(min_length=1, max_length=2000)
+    text_evidence: list[str] = Field(default_factory=list[str])
+    fix_evidence: list[str] = Field(default_factory=list[str])
+    evolution_notes: list[str] = Field(default_factory=list[str])
+    accepted_tradeoff: str | None = Field(default=None, max_length=2000)
+    handoff: str | None = Field(default=None, max_length=2000)
+
+
 class StoryRepairAction(DomainModel):
     """One evidence-backed recommendation; it is not an execution gate."""
 
+    # ``issue_index`` remains readable for planning records written before the
+    # Critic ledger gained stable IDs.  New repair work uses ``issue_id`` as the
+    # semantic identity so filtering or reordering review items cannot retarget
+    # an action.
     issue_index: int = Field(ge=1)
+    issue_id: str | None = Field(default=None, min_length=1, max_length=120)
     diagnosis: StoryRepairDiagnosis
     should_revise: bool
     rationale: str = Field(min_length=1, max_length=1200)
     affected_scene_sequences: list[int] = Field(
         default_factory=list[int],
-        max_length=12,
     )
+    target_duration_change_required: bool = False
     recommended_change: str = Field(min_length=1, max_length=1600)
     remove_or_simplify: list[str] = Field(default_factory=list[str], max_length=12)
     preserve: list[str] = Field(default_factory=list[str], max_length=12)
@@ -480,6 +634,14 @@ class StoryRepairAction(DomainModel):
     def validate_action(self) -> StoryRepairAction:
         if self.diagnosis == StoryRepairDiagnosis.CRITIC_OVERREACH and self.should_revise:
             raise ValueError("Critic overreach cannot require an automatic story rewrite")
+        if self.target_duration_change_required and not self.should_revise:
+            raise ValueError(
+                "Scene duration changes require an active story repair action"
+            )
+        if self.target_duration_change_required and not self.affected_scene_sequences:
+            raise ValueError(
+                "Scene duration changes must identify their affected scenes"
+            )
         return self
 
 
@@ -497,31 +659,241 @@ class StoryRepairPlan(DomainModel):
 
     @model_validator(mode="after")
     def validate_plan(self) -> StoryRepairPlan:
-        issue_indices = [action.issue_index for action in self.actions]
-        if len(issue_indices) != len(set(issue_indices)):
-            raise ValueError("Each routed story issue must be diagnosed exactly once")
+        legacy_issue_indices = [
+            action.issue_index
+            for action in self.actions
+            if action.issue_id is None
+        ]
+        if len(legacy_issue_indices) != len(set(legacy_issue_indices)):
+            raise ValueError(
+                "Legacy repair actions must use each routed issue index once"
+            )
+        issue_ids = [
+            action.issue_id
+            for action in self.actions
+            if action.issue_id is not None
+        ]
+        if len(issue_ids) != len(set(issue_ids)):
+            raise ValueError("Story repair action issue IDs must be unique")
         if not self.user_overridable:
             raise ValueError("Story repair recommendations must remain user-overridable")
         return self
 
 
+class StoryCharacterMetadataPatch(DomainModel):
+    """Sparse descriptive updates for one existing character selected by stable ID."""
+
+    character_id: str = Field(min_length=1, max_length=200)
+    appearance: str | None = Field(default=None, min_length=1, max_length=500)
+    wardrobe: str | None = Field(default=None, min_length=1, max_length=500)
+    performance: str | None = Field(default=None, min_length=1, max_length=500)
+    voice_identity: str | None = Field(default=None, min_length=1, max_length=80)
+
+    @field_validator(
+        "character_id",
+        "appearance",
+        "wardrobe",
+        "performance",
+        "voice_identity",
+        mode="before",
+    )
+    @classmethod
+    def trim_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_has_update(self) -> StoryCharacterMetadataPatch:
+        if all(
+            value is None
+            for value in (
+                self.appearance,
+                self.wardrobe,
+                self.performance,
+                self.voice_identity,
+            )
+        ):
+            raise ValueError("Character metadata patch must change a description")
+        return self
+
+
+class StoryLocationMetadataPatch(DomainModel):
+    """Sparse descriptive updates for one existing location selected by stable ID."""
+
+    location_id: str = Field(min_length=1, max_length=200)
+    layout: str | None = Field(default=None, min_length=1, max_length=800)
+    lighting: str | None = Field(default=None, min_length=1, max_length=500)
+    palette: str | None = Field(default=None, min_length=1, max_length=500)
+    key_views: list[str] | None = Field(default=None, min_length=1, max_length=8)
+
+    @field_validator("location_id", "layout", "lighting", "palette", mode="before")
+    @classmethod
+    def trim_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("key_views", mode="before")
+    @classmethod
+    def trim_key_views(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        return [
+            item.strip() if isinstance(item, str) else item
+            for item in cast(list[object], value)
+        ]
+
+    @model_validator(mode="after")
+    def validate_has_update(self) -> StoryLocationMetadataPatch:
+        if all(
+            value is None
+            for value in (self.layout, self.lighting, self.palette, self.key_views)
+        ):
+            raise ValueError("Location metadata patch must change a description")
+        if self.key_views is not None and (
+            any(not value for value in self.key_views)
+            or len(self.key_views) != len(set(self.key_views))
+        ):
+            raise ValueError("Location metadata key views must be non-empty and unique")
+        return self
+
+
+class StoryPropMetadataPatch(DomainModel):
+    """Sparse descriptive updates for one existing prop selected by stable ID."""
+
+    prop_id: str = Field(min_length=1, max_length=200)
+    appearance: str = Field(min_length=1, max_length=500)
+
+    @field_validator("prop_id", "appearance", mode="before")
+    @classmethod
+    def trim_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class StoryStyleMetadataPatch(DomainModel):
+    """Sparse updates to the existing global style record."""
+
+    medium: str | None = Field(default=None, min_length=1, max_length=300)
+    genre: str | None = Field(default=None, min_length=1, max_length=120)
+    cinematography: str | None = Field(default=None, min_length=1, max_length=800)
+    color: str | None = Field(default=None, min_length=1, max_length=500)
+    texture: str | None = Field(default=None, min_length=1, max_length=500)
+    forbidden: list[str] | None = Field(default=None, max_length=12)
+
+    @field_validator(
+        "medium",
+        "genre",
+        "cinematography",
+        "color",
+        "texture",
+        mode="before",
+    )
+    @classmethod
+    def trim_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("forbidden", mode="before")
+    @classmethod
+    def trim_forbidden(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        return [
+            item.strip() if isinstance(item, str) else item
+            for item in cast(list[object], value)
+        ]
+
+    @model_validator(mode="after")
+    def validate_has_update(self) -> StoryStyleMetadataPatch:
+        if all(
+            value is None
+            for value in (
+                self.medium,
+                self.genre,
+                self.cinematography,
+                self.color,
+                self.texture,
+                self.forbidden,
+            )
+        ):
+            raise ValueError("Style metadata patch must change at least one field")
+        if self.forbidden is not None and (
+            any(not value for value in self.forbidden)
+            or len(self.forbidden) != len(set(self.forbidden))
+        ):
+            raise ValueError("Style forbidden entries must be non-empty and unique")
+        return self
+
+
+class StoryMetadataRevisionPatch(DomainModel):
+    """Typed, sparse patch for global story metadata only.
+
+    Stable entity IDs are selectors, not editable values. Scene contracts, dialogue,
+    and target duration are intentionally absent from this schema.
+    """
+
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    story_summary: str | None = Field(default=None, min_length=1, max_length=2400)
+    character_patches: list[StoryCharacterMetadataPatch] = Field(
+        default_factory=list[StoryCharacterMetadataPatch],
+        max_length=12,
+    )
+    location_patches: list[StoryLocationMetadataPatch] = Field(
+        default_factory=list[StoryLocationMetadataPatch],
+        max_length=20,
+    )
+    prop_patches: list[StoryPropMetadataPatch] = Field(
+        default_factory=list[StoryPropMetadataPatch],
+        max_length=20,
+    )
+    style: StoryStyleMetadataPatch | None = None
+
+    @field_validator("title", "story_summary", mode="before")
+    @classmethod
+    def trim_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_unique_asset_selectors(self) -> StoryMetadataRevisionPatch:
+        for label, entity_ids in (
+            ("character", [item.character_id for item in self.character_patches]),
+            ("location", [item.location_id for item in self.location_patches]),
+            ("prop", [item.prop_id for item in self.prop_patches]),
+        ):
+            if len(entity_ids) != len(set(entity_ids)):
+                raise ValueError(f"Story metadata patch repeats a {label} selector")
+        return self
+
+
 class StoryRevisionViolation(DomainModel):
+    # Optional only so old persisted verifier results remain loadable.  Fresh
+    # verifier output is validated more strictly by the production planner.
+    issue_id: str | None = Field(default=None, min_length=1, max_length=120)
     category: str = Field(min_length=1, max_length=120)
-    scene_sequences: list[int] = Field(default_factory=list[int], max_length=12)
+    scene_sequences: list[int] = Field(default_factory=list[int])
+    target_duration_change_required: bool = False
     observation: str = Field(min_length=1, max_length=1200)
     repair_instruction: str = Field(min_length=1, max_length=1200)
 
+    @model_validator(mode="after")
+    def validate_duration_scope(self) -> StoryRevisionViolation:
+        if self.target_duration_change_required and not self.scene_sequences:
+            raise ValueError(
+                "Duration repair violations must identify at least one scene"
+            )
+        return self
+
 
 class StoryRevisionVerification(DomainModel):
-    """Narrow check that a Writer followed its repair brief without regressions."""
+    """Repair verification plus a natural cold read of the revised screenplay."""
 
     accepted: bool
     summary: str = Field(min_length=1, max_length=1600)
+    satisfied_issue_ids: list[str] = Field(default_factory=list[str])
+    # Compatibility projection for records produced before stable issue IDs.
     satisfied_issue_indices: list[int] = Field(default_factory=list[int], max_length=30)
     violations: list[StoryRevisionViolation] = Field(
         default_factory=list[StoryRevisionViolation],
         max_length=20,
     )
+    recommended_followup: StoryReviewFollowup = StoryReviewFollowup.FINALIZE
+    followup_rationale: str | None = Field(default=None, max_length=1200)
     user_overridable: bool = True
 
     @model_validator(mode="after")
@@ -532,32 +904,35 @@ class StoryRevisionVerification(DomainModel):
             raise ValueError("Rejected story revisions must name a concrete violation")
         if len(self.satisfied_issue_indices) != len(set(self.satisfied_issue_indices)):
             raise ValueError("Satisfied repair issue indices must be unique")
+        if len(self.satisfied_issue_ids) != len(set(self.satisfied_issue_ids)):
+            raise ValueError("Satisfied repair issue IDs must be unique")
         if not self.user_overridable:
             raise ValueError("Story revision verification must remain user-overridable")
         return self
 
 
 class PlanningOutlineSnapshot(DomainModel):
-    revision_round: int = Field(ge=0, le=20)
+    revision_round: int = Field(ge=0)
     outline_json: str
     source: str = Field(min_length=1, max_length=240)
     source_contract: StorySourceContract | None = None
+    story_intent: StoryIntent | None = None
     repair_plan: StoryRepairPlan | None = None
     revision_verification: StoryRevisionVerification | None = None
     created_at: str
 
 
 class PlanningReviewSnapshot(DomainModel):
-    review_round: int = Field(ge=1, le=21)
-    revision_round: int = Field(ge=0, le=20)
+    review_round: int = Field(ge=1)
+    revision_round: int = Field(ge=0)
     report: ScriptReviewReport
     disposition: ScriptReviewDisposition | None = None
     created_at: str
 
 
 class RevisionJudgeRecommendation(DomainModel):
-    recommended_revision_round: int = Field(ge=0, le=20)
-    alternative_revision_round: int = Field(ge=0, le=20)
+    recommended_revision_round: int = Field(ge=0)
+    alternative_revision_round: int = Field(ge=0)
     confidence: RevisionJudgeConfidence
     summary: str = Field(min_length=1, max_length=1200)
     evidence: list[str] = Field(default_factory=list[str], max_length=8)
@@ -579,12 +954,17 @@ class ScriptVersion(DomainModel):
     version: int
     source_mode: SourceMode
     original_text: str
+    screenplay_text: str = ""
     spoken_text: str
     subtitle_text: str
     lines: list[ScriptLine]
     structured_scenes: list[StructuredScene]
     review_report: ScriptReviewReport | None = None
     review_disposition: ScriptReviewDisposition | None = None
+    final_cold_read_report: ScriptReviewReport | None = None
+    ending_contract: EndingContract | None = None
+    story_intent: StoryIntent | None = None
+    source_contract: StorySourceContract | None = None
     planning_run_id: str | None = None
     approval_status: ApprovalStatus
     freshness: Freshness
@@ -648,6 +1028,91 @@ class ProjectBibleVersion(DomainModel):
     created_at: str
 
 
+class CoreAssetBrief(DomainModel):
+    """Structured identity and continuity anchors shared by all asset versions."""
+
+    identity_anchor: str = Field(min_length=1, max_length=1200)
+    tone_or_temperament: str | None = Field(default=None, max_length=1200)
+    visual_attributes: list[str] = Field(
+        min_length=1,
+        max_length=24,
+    )
+    wardrobe_or_materials: list[str] = Field(
+        default_factory=list[str],
+        max_length=16,
+    )
+    background_constraints: list[str] = Field(
+        default_factory=list[str],
+        max_length=16,
+    )
+    texture_constraints: list[str] = Field(
+        default_factory=list[str],
+        max_length=16,
+    )
+    continuity_anchors: list[str] = Field(
+        default_factory=list[str],
+        max_length=24,
+    )
+    named_views_or_zones: list[str] = Field(
+        default_factory=list[str],
+        max_length=16,
+    )
+    presentation_mode: AssetPresentationMode | None = None
+    required_visible_text: list[str] = Field(default_factory=list[str])
+    reference_strategy: AssetReferenceStrategy = AssetReferenceStrategy.LIGHTWEIGHT
+    requested_views: list[AssetStandardView] = Field(
+        default_factory=list[AssetStandardView],
+        max_length=12,
+    )
+    strategy_rationale: str | None = Field(default=None, max_length=1200)
+
+    @model_validator(mode="after")
+    def validate_requested_views(self) -> CoreAssetBrief:
+        if self.identity_anchor != self.identity_anchor.strip():
+            raise ValueError("Core asset identity_anchor must be trimmed")
+        for field_name in (
+            "visual_attributes",
+            "wardrobe_or_materials",
+            "background_constraints",
+            "texture_constraints",
+            "continuity_anchors",
+            "named_views_or_zones",
+            "required_visible_text",
+        ):
+            values = getattr(self, field_name)
+            normalized = [item.strip() for item in values if item.strip()]
+            if normalized != values or len(normalized) != len(set(normalized)):
+                raise ValueError(
+                    f"Core asset {field_name} entries must be trimmed, non-empty, and unique"
+                )
+        if len(self.requested_views) != len(set(self.requested_views)):
+            raise ValueError("Core asset requested views must be unique")
+        return self
+
+
+class AssetReferenceSheetCell(DomainModel):
+    view: AssetStandardView
+    label: str = Field(min_length=1, max_length=80)
+    source_asset_id: str = Field(min_length=1, max_length=200)
+    source_version_id: str = Field(min_length=1, max_length=200)
+
+
+class AssetReferenceSheet(DomainModel):
+    strategy: AssetReferenceStrategy
+    input_policy: AssetSheetInputPolicy
+    columns: int = Field(ge=1, le=3)
+    cells: list[AssetReferenceSheetCell] = Field(
+        min_length=2,
+        max_length=9,
+    )
+
+    @model_validator(mode="after")
+    def validate_layout(self) -> AssetReferenceSheet:
+        if self.columns > len(self.cells):
+            raise ValueError("Reference sheet columns cannot exceed its cell count")
+        return self
+
+
 class AssetSourceRecord(DomainModel):
     source_type: OriginType
     source_label: str
@@ -681,6 +1146,7 @@ class AssetVersion(DomainModel):
     file_size_bytes: int | None = None
     parent_version_id: str | None = None
     image_task_id: str | None = None
+    reference_sheet: AssetReferenceSheet | None = None
     source: AssetSourceRecord | None = None
     approval_status: ApprovalStatus
     review_notes: str | None = None
@@ -693,6 +1159,8 @@ class Asset(DomainModel):
     project_id: str
     kind: AssetKind
     name: str
+    bible_entity_id: str | None = Field(default=None, max_length=200)
+    brief: CoreAssetBrief | None = None
     current_version_id: str
     approved_version_id: str | None = None
     versions: list[AssetVersion]
@@ -736,6 +1204,65 @@ class ContinuityState(DomainModel):
     action_out: str
 
 
+class ShotReferenceCue(DomainModel):
+    """Semantic reference requested by one time-bounded part of a shot."""
+
+    subject_asset_id: str = Field(min_length=1, max_length=200)
+    alias: str = Field(min_length=1, max_length=80)
+    required_tags: list[str] = Field(default_factory=list[str], max_length=12)
+    purpose: str = Field(min_length=1, max_length=500)
+
+    @field_validator("alias", mode="before")
+    @classmethod
+    def normalize_alias(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        if value != value.strip() or value.startswith("@"):
+            raise ValueError(
+                "Shot reference aliases must be trimmed and must not include the @ prefix"
+            )
+        return normalize_reference_alias(value, max_length=80)
+
+    @model_validator(mode="after")
+    def validate_reference_cue(self) -> ShotReferenceCue:
+        normalized_tags = [item.strip() for item in self.required_tags if item.strip()]
+        if normalized_tags != self.required_tags or len(normalized_tags) != len(
+            set(normalized_tags)
+        ):
+            raise ValueError("Shot reference cue tags must be trimmed and unique")
+        return self
+
+
+class ShotTimelineBeat(DomainModel):
+    """One observable camera/action/performance phase inside an editorial shot."""
+
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(gt=0.0)
+    visual: str = Field(min_length=1, max_length=1200)
+    framing: str = Field(min_length=1, max_length=200)
+    camera: str = Field(min_length=1, max_length=500)
+    action: str = Field(min_length=1, max_length=800)
+    performance: str | None = Field(default=None, min_length=1, max_length=500)
+    emotion: str | None = Field(default=None, min_length=1, max_length=300)
+    dialogue_line_ids: list[str] = Field(default_factory=list[str], max_length=40)
+    sound: str | None = Field(default=None, min_length=1, max_length=500)
+    references: list[ShotReferenceCue] = Field(
+        default_factory=list[ShotReferenceCue],
+        max_length=12,
+    )
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> ShotTimelineBeat:
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("Shot timeline beat end_seconds must follow start_seconds")
+        if len(self.dialogue_line_ids) != len(set(self.dialogue_line_ids)):
+            raise ValueError("Shot timeline beat dialogue line IDs must be unique")
+        aliases = [item.alias for item in self.references]
+        if len(aliases) != len(set(aliases)):
+            raise ValueError("Shot timeline beat reference aliases must be unique")
+        return self
+
+
 class ShotPlan(DomainModel):
     id: str
     project_id: str
@@ -748,6 +1275,10 @@ class ShotPlan(DomainModel):
     camera: str
     audio_intent: str
     dialogue_line_ids: list[str]
+    timeline_beats: list[ShotTimelineBeat] = Field(
+        default_factory=list[ShotTimelineBeat],
+        max_length=24,
+    )
     continuity: ContinuityState
     transition_out: str
     merge_candidate: bool
@@ -755,6 +1286,42 @@ class ShotPlan(DomainModel):
     approval_status: ApprovalStatus
     freshness: Freshness
     revision: int = Field(default=1, ge=1)
+
+    @model_validator(mode="after")
+    def validate_timeline_beats(self) -> ShotPlan:
+        if not self.timeline_beats:
+            return self
+        tolerance = 0.05
+        if abs(self.timeline_beats[0].start_seconds) > tolerance:
+            raise ValueError("Shot timeline beats must start at 0 seconds")
+        for previous, current in zip(
+            self.timeline_beats,
+            self.timeline_beats[1:],
+            strict=False,
+        ):
+            if abs(previous.end_seconds - current.start_seconds) > tolerance:
+                raise ValueError("Shot timeline beats must be contiguous and ordered")
+        if abs(self.timeline_beats[-1].end_seconds - self.duration_seconds) > tolerance:
+            raise ValueError("Shot timeline beats must cover the editorial shot duration")
+        assigned_dialogue = [
+            line_id
+            for beat in self.timeline_beats
+            for line_id in beat.dialogue_line_ids
+        ]
+        if assigned_dialogue != self.dialogue_line_ids:
+            raise ValueError(
+                "Shot timeline beats must assign every shot dialogue line exactly once and in order"
+            )
+        alias_targets: dict[str, tuple[str, tuple[str, ...]]] = {}
+        for beat in self.timeline_beats:
+            for cue in beat.references:
+                target = (cue.subject_asset_id, tuple(cue.required_tags))
+                existing = alias_targets.setdefault(cue.alias, target)
+                if existing != target:
+                    raise ValueError(
+                        "A shot reference alias cannot identify different subjects or views"
+                    )
+        return self
 
 
 class CapabilitySnapshot(DomainModel):
@@ -778,10 +1345,10 @@ class ExecutionPlanEntry(DomainModel):
 
 
 class ReferenceBinding(DomainModel):
-    kind: str
+    kind: AssetKind
     target_id: str
     purpose: str
-    requirement: str
+    required: bool = True
 
 
 class ReferenceRequirement(DomainModel):
@@ -926,13 +1493,30 @@ class DirectorRepairRecord(DomainModel):
 
 
 class ProjectPlanningMetadata(DomainModel):
-    """Persisted planning provenance and resumable planning ownership."""
+    """Project-visible projection of planning provenance or an owned planning job."""
 
     run_id: str | None = None
     status: PlanningRunStatus
     planner: str | None = None
     warnings: list[str] = Field(default_factory=list[str])
     owner_agent_run_id: str | None = None
+    planning_job_kind: Literal["CONTENT_PLANNING"] | None = None
+
+    @model_validator(mode="after")
+    def validate_owned_job_projection(self) -> ProjectPlanningMetadata:
+        if self.run_id is None:
+            if self.owner_agent_run_id is not None or self.planning_job_kind is not None:
+                raise ValueError(
+                    "Planning job ownership and kind require a persisted planning run id"
+                )
+            return self
+        if self.owner_agent_run_id is not None and self.planning_job_kind is None:
+            self.planning_job_kind = "CONTENT_PLANNING"
+        if self.planning_job_kind is not None and self.owner_agent_run_id is None:
+            raise ValueError(
+                "A content planning job projection requires an owning AgentRun"
+            )
+        return self
 
 
 class ProjectDocument(DomainModel):
@@ -1114,15 +1698,14 @@ class TakeComparisonReport(DomainModel):
     id: str
     project_id: str
     shot_id: str
-    candidate_take_ids: list[str] = Field(min_length=2, max_length=5)
-    inspection_ids: list[str] = Field(min_length=2, max_length=10)
+    candidate_take_ids: list[str] = Field(min_length=2)
+    inspection_ids: list[str] = Field(min_length=2)
     decision: TakeComparisonDecision
     selected_take_id: str | None = None
     semantic_status: SemanticReviewStatus
     semantic_model: str | None = None
     candidate_reviews: list[TakeComparisonCandidateReview] = Field(
-        default_factory=list[TakeComparisonCandidateReview],
-        max_length=5,
+        default_factory=list[TakeComparisonCandidateReview]
     )
     summary: str = Field(min_length=1, max_length=3000)
     warnings: list[str] = Field(default_factory=list[str], max_length=16)
@@ -1306,9 +1889,9 @@ class EpisodeReviewReport(DomainModel):
         max_length=256,
     )
     summary: str = Field(default="整集审阅进行中。", min_length=1, max_length=5000)
-    warnings: list[str] = Field(default_factory=list[str], max_length=128)
+    warnings: list[str] = Field(default_factory=list[str])
     active_stage_key: str | None = Field(default=None, max_length=240)
-    active_stage_attempts: int = Field(default=0, ge=0, le=3)
+    active_stage_attempts: int = Field(default=0, ge=0)
     repair_applied_shot_ids: list[str] = Field(default_factory=list[str], max_length=128)
     repair_skipped_shot_ids: list[str] = Field(default_factory=list[str], max_length=128)
     repairs_complete: bool = False
@@ -1373,8 +1956,15 @@ class CreateProjectRequest(DomainModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     source_mode: SourceMode
     production_profile: ProductionProfile = ProductionProfile.AI_SHORT_DRAMA
+    content_planning_output: ContentPlanningOutput = (
+        ContentPlanningOutput.SCRIPT_AND_SHOTS
+    )
     target_duration_seconds: float | None = Field(default=None, ge=4.0)
     input_text: str = Field(default="", max_length=50000)
+    locked_dialogue: list[StoryLockedDialogueLine] = Field(
+        default_factory=list[StoryLockedDialogueLine],
+        max_length=5000,
+    )
     input_images: list[CreativeInputImage] = Field(
         default_factory=list[CreativeInputImage],
         max_length=8,
@@ -1390,6 +1980,17 @@ class CreateProjectRequest(DomainModel):
         text = self.input_text.strip()
         if self.source_mode in {SourceMode.IDEA_EXPANSION, SourceMode.SCRIPT_LOCKED} and not text:
             raise ValueError(f"{self.source_mode.value} requires input_text")
+        if self.locked_dialogue and self.source_mode != SourceMode.SCRIPT_LOCKED:
+            raise ValueError("locked_dialogue is only valid for SCRIPT_LOCKED input")
+        cursor = 0
+        for line in self.locked_dialogue:
+            position = text.find(line.text, cursor)
+            if position < 0:
+                raise ValueError(
+                    "Every structured locked-dialogue line must appear verbatim in "
+                    "input_text and preserve source order"
+                )
+            cursor = position + len(line.text)
         if self.source_mode == SourceMode.IMAGE_SEEDED and not self.input_images:
             raise ValueError("IMAGE_SEEDED requires at least one input image")
         return self
@@ -1412,7 +2013,7 @@ class VideoInspectionRequest(DomainModel):
 
 class TakeComparisonRequest(DomainModel):
     shot_id: str
-    take_ids: list[str] = Field(default_factory=list[str], max_length=5)
+    take_ids: list[str] = Field(default_factory=list[str])
     inspect_missing: bool = True
     include_previous_boundary: bool = True
     review_focus: str | None = Field(default=None, max_length=2000)
@@ -1435,8 +2036,30 @@ class EpisodeReviewRequest(DomainModel):
     force_new: bool = False
 
 
+class SceneTimingAssessmentRecord(DomainModel):
+    """One Writer timing self-assessment kept as inspectable evidence.
+
+    The record does not approve, reject, or route creative work.  Later Agents
+    remain responsible for their own semantic reading of the screenplay.
+    """
+
+    scene_sequence: int = Field(ge=1, le=500)
+    stage: Literal["INITIAL_WRITE", "REVISION"]
+    revision_round: int = Field(ge=0)
+    target_duration_seconds: float = Field(gt=0.0)
+    assessment: str = Field(min_length=1, max_length=1600)
+
+
 class PlanningRunRecord(DomainModel):
+    """Persisted Content Planning Job cursor owned by one AgentRun.
+
+    ``PlanningRunRecord`` remains the compatibility name used by persisted data.
+    It owns only staged content-planning progress; canonical project content lives
+    in :class:`ProjectDocument`, while the owning AgentRun remains the orchestrator.
+    """
+
     id: str
+    job_kind: Literal["CONTENT_PLANNING"] = "CONTENT_PLANNING"
     status: PlanningRunStatus
     current_step: PlanningRunStep
     completed_steps: list[PlanningRunStep] = Field(
@@ -1446,25 +2069,79 @@ class PlanningRunRecord(DomainModel):
     outline_json: str | None = None
     review_report: ScriptReviewReport | None = None
     review_disposition: ScriptReviewDisposition | None = None
+    final_cold_read_report: ScriptReviewReport | None = None
     source_contract: StorySourceContract | None = None
+    story_intent: StoryIntent | None = None
+    selected_narrative_skill_ids: list[str] = Field(
+        default_factory=list[str],
+        max_length=24,
+    )
+    skill_selection_reasons: list[str] = Field(
+        default_factory=list[str],
+        max_length=24,
+    )
+    narrative_skill_decision: str | None = Field(default=None, max_length=2400)
+    issue_ledger: list[StoryIssueLedgerEntry] = Field(
+        default_factory=list[StoryIssueLedgerEntry]
+    )
     latest_repair_plan: StoryRepairPlan | None = None
+    latest_story_metadata_patch: StoryMetadataRevisionPatch | None = None
     latest_revision_verification: StoryRevisionVerification | None = None
     revision_judge: RevisionJudgeRecommendation | None = None
+    revision_base_outline_json: str | None = None
+    revision_scene_sequences: list[int] = Field(
+        default_factory=list[int],
+        max_length=500,
+    )
+    next_revision_scene_index: int = Field(default=0, ge=0, le=500)
+    revision_scene_retry_feedback: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+    revision_scene_retry_count: int = Field(default=0, ge=0)
+    revision_changed_scene_sequences: list[int] = Field(
+        default_factory=list[int],
+        max_length=500,
+    )
+    latest_revision_target_scene_sequences: list[int] = Field(
+        default_factory=list[int],
+        max_length=500,
+    )
+    latest_revision_changed_scene_sequences: list[int] = Field(
+        default_factory=list[int],
+        max_length=500,
+    )
+    revision_repair_round: int = Field(default=0, ge=0)
     scene_script_json: list[str] = Field(default_factory=list[str], max_length=500)
+    scene_timing_assessments: list[SceneTimingAssessmentRecord] = Field(
+        default_factory=list[SceneTimingAssessmentRecord],
+        max_length=1000,
+    )
     next_script_scene_sequence: int = Field(default=1, ge=1, le=501)
+    scene_script_retry_feedback: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+    scene_script_retry_count: int = Field(default=0, ge=0)
+    step_retry_feedback: str | None = Field(default=None, max_length=2000)
+    step_retry_count: int = Field(default=0, ge=0)
+    step_retry_events: list[str] = Field(default_factory=list[str])
     directed_scene_json: list[str] = Field(default_factory=list[str], max_length=500)
     next_scene_sequence: int = Field(default=1, ge=1, le=501)
     total_scenes: int = Field(default=0, ge=0, le=500)
-    revision_round: int = Field(default=0, ge=0, le=20)
-    max_revision_rounds: int = Field(default=3, ge=0, le=3)
+    revision_round: int = Field(default=0, ge=0)
+    # Compatibility-only field for records written before revision rounds became
+    # open-ended. The planning state machine no longer consults this value.
+    max_revision_rounds: int | None = Field(default=None, ge=0)
     outline_source: str | None = Field(default=None, max_length=240)
     critic_used: bool = False
+    final_cold_read_used: bool = False
     used_scene_repair: bool = False
     used_scene_fallback: bool = False
     warnings: list[str] = Field(default_factory=list[str])
     error_message: str | None = None
-    project_id: str | None = None
-    owner_agent_run_id: str | None = None
+    project_id: str = Field(min_length=1, max_length=200)
+    owner_agent_run_id: str = Field(min_length=1, max_length=200)
     created_at: str
     updated_at: str
     completed_at: str | None = None
@@ -1477,7 +2154,7 @@ class PlanningRunResponse(DomainModel):
 
 class EnqueueRequest(DomainModel):
     shot_ids: list[str] | None = None
-    candidate_count: int = Field(default=2, ge=1, le=4)
+    candidate_count: int = Field(default=2, ge=1)
     operation: OperationKind = OperationKind.GENERATE
     behavior_by_candidate: dict[str, MockBehavior] = Field(default_factory=dict)
 

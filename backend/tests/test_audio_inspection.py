@@ -14,45 +14,32 @@ from short_drama.audio_inspection import (
     _normalize_dialogue,
     _signal_metrics,
 )
-from short_drama.agent_runtime import AgentRunStatus
-from short_drama.fixture import CANONICAL_LINES
+from short_drama.fixture import CANONICAL_LINES, CANONICAL_SPEAKER_CHARACTER_IDS
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     AudioContinuityAssessment,
     AudioInspectionRequest,
-    ProductionExecutionTarget,
-)
-from short_drama.production_manager import (
-    AgentRunAdvanceRequest,
-    AgentRunCreateRequest,
+    EnqueueRequest,
 )
 from short_drama.reference_planner import DirectorAdviceRequest
 from short_drama.service import ShortDramaService
 
 
 def _run_mock_agent_to_manifest(client, project_id: str) -> None:
-    created = client.post(
-        f"/api/short-drama/projects/{project_id}/agent-runs",
-        json={
-            "objective": "生成完整 Mock 制片结果",
-            "unattended": True,
-            "execution_target": "MOCK",
-            "render_export": False,
-        },
+    enqueued = client.post(
+        f"/api/short-drama/projects/{project_id}/enqueue",
+        json={},
     )
-    assert created.status_code == 200, created.text
-    current = created.json()
-    run_id = current["snapshot"]["run"]["id"]
-    for _ in range(16):
-        if current["snapshot"]["run"]["status"] == "COMPLETED":
-            return
-        advanced = client.post(
-            f"/api/short-drama/agent-runs/{run_id}/advance",
-            json={"max_actions": 8},
-        )
-        assert advanced.status_code == 200, advanced.text
-        current = advanced.json()["run"]
-    raise AssertionError("Agent Mock production did not complete")
+    assert enqueued.status_code == 200, enqueued.text
+    drained = client.post(
+        "/api/short-drama/worker/drain",
+        json={"project_id": project_id, "max_steps": 100},
+    )
+    assert drained.status_code == 200, drained.text
+    rebuilt = client.post(
+        f"/api/short-drama/projects/{project_id}/manifest/rebuild",
+    )
+    assert rebuilt.status_code == 200, rebuilt.text
 
 
 class FakeAudioSemanticService(AudioSemanticService):
@@ -78,15 +65,15 @@ class FakeAudioSemanticService(AudioSemanticService):
             for index in range(1, len(CANONICAL_LINES) + 1)
             if f"line-{index:02d}" in audio_path.name
         )
-        speaker, text, _kind = CANONICAL_LINES[line_number - 1]
-        canonical_speaker = "林夏" if "林夏" in speaker else speaker
+        _speaker, text, _kind = CANONICAL_LINES[line_number - 1]
+        speaker_character_id = CANONICAL_SPEAKER_CHARACTER_IDS[line_number - 1]
         embedding = None
         if include_speaker_embedding:
-            embedding = (
-                (1.0, 0.0)
-                if canonical_speaker == "林夏"
-                else (0.0, 1.0)
-            )
+            embedding = {
+                "character-linxia": (1.0, 0.0),
+                "character-zhouheng": (0.0, 1.0),
+                None: (0.707106, 0.707106),
+            }[speaker_character_id]
         return AudioSemanticResult(
             transcript_text=self.overrides.get(f"line-{line_number:02d}", text),
             voice_embedding=embedding,
@@ -111,7 +98,7 @@ class FakeDirectorLanguageProvider:
         max_output_tokens: int = 2200,
     ) -> str:
         del image_urls, max_output_tokens
-        assert "film director agent advising a user" in instructions
+        assert "视频制作流程中的导演 Agent" in instructions
         self.inputs.append(input_text)
         return json.dumps(
             {
@@ -152,23 +139,9 @@ def _produce_mock_manifest(
     service: ShortDramaService,
     project_id: str,
 ) -> None:
-    current = service.create_agent_run(
-        project_id,
-        AgentRunCreateRequest(
-            objective="生成完整 Mock 制片结果",
-            unattended=True,
-            execution_target=ProductionExecutionTarget.MOCK,
-            render_export=False,
-        ),
-    )
-    for _ in range(8):
-        if current.snapshot.run.status == AgentRunStatus.COMPLETED:
-            return
-        current = service.advance_agent_run(
-            current.snapshot.run.id,
-            AgentRunAdvanceRequest(max_actions=8),
-        ).run
-    raise AssertionError("Agent Mock production did not complete")
+    service.enqueue(project_id, EnqueueRequest())
+    service.drain(project_id, 100)
+    service.rebuild_manifest(project_id)
 
 
 def test_audio_inspection_closes_dialogue_and_voice_checks_with_fake_service(
@@ -196,6 +169,17 @@ def test_audio_inspection_closes_dialogue_and_voice_checks_with_fake_service(
         for item in report.speaker_checks
         if item.comparison_count > 0
     )
+    linxia = next(item for item in report.speaker_checks if item.speaker == "林夏")
+    recorded_linxia = next(
+        item for item in report.speaker_checks if item.speaker == "录音笔中的林夏"
+    )
+    assert linxia.script_line_ids == [
+        "project-dont-trust-me-line-01",
+        "project-dont-trust-me-line-03",
+    ]
+    assert linxia.comparison_count == 1
+    assert recorded_linxia.script_line_ids == ["project-dont-trust-me-line-04"]
+    assert recorded_linxia.comparison_count == 0
     assert len(audio.calls) == 5
     persisted = service.repository.get_audio_inspection(report.id)
     assert persisted is not None
@@ -229,9 +213,16 @@ def test_audio_issue_is_available_to_director_agent_without_forcing_repair(
     assert mismatch.exact_match is False
     assert any(
         item.code == "DIALOGUE_TRANSCRIPT_MISMATCH"
-        and item.severity == "HIGH"
+        and item.severity == "UNKNOWN"
         for item in mismatch.issues
     )
+    semantic_evidence = next(
+        item for item in mismatch.issues
+        if item.code == "DIALOGUE_TRANSCRIPT_MISMATCH"
+    )
+    assert "expected_text='你说他十点离开" in semantic_evidence.message
+    assert "transcript_text='你说他九点离开" in semantic_evidence.message
+    assert "speaker_character_id='character-linxia'" in semantic_evidence.message
     shot = result.project.document.shots[1]
     take = next(
         item
@@ -251,6 +242,8 @@ def test_audio_issue_is_available_to_director_agent_without_forcing_repair(
     assert advice.advisories[0].category.value == "AUDIO"
     assert advice.proposed_repair is None
     assert "DIALOGUE_TRANSCRIPT_MISMATCH" in director.inputs[0]
+    assert '"severity": "UNKNOWN"' in director.inputs[0]
+    assert "character-linxia" in director.inputs[0]
 
 
 def test_audio_inspection_endpoint_persists_non_semantic_report(client) -> None:

@@ -6,11 +6,12 @@ import json
 
 import pytest
 
+from short_drama.hierarchical_script import compose_scene_screenplay
 from short_drama.models import (
+    AudioKind,
     CreateProjectRequest,
     ProductionProfile,
     ProjectDocument,
-    ReferenceFraming,
     ReferenceRequirement,
     ReferenceRole,
     ReviewRepairOwner,
@@ -24,7 +25,9 @@ from short_drama.models import (
     StoryRepairAction,
     StoryRepairDiagnosis,
     StoryRepairPlan,
+    StoryLockedDialogueLine,
     StorySourceContract,
+    StoryRevisionViolation,
     StoryRevisionVerification,
 )
 from short_drama.production_planner import (
@@ -33,24 +36,29 @@ from short_drama.production_planner import (
     PlannedProp,
     PlannedReferenceNeed,
     ProductionPlan,
-    _default_reference_needs,
     _fallback_directed_scene_plan,
     _fallback_episode_outline,
     _fallback_plan,
+    _final_cold_read_prompt,
     _compact_error,
-    _character_name_covered,
-    _locked_dialogue,
+    _canonical_scene_screenplay,
     _outline_prompt,
-    _planner_prompt,
+    _normalize_review_report,
     _retime_shots,
     _scene_director_prompt,
     _story_critic_prompt,
-    _story_revision_prompt,
+    _story_repair_plan_prompt,
+    _story_revision_verifier_prompt,
     _validate_directed_scene_plan,
+    _validate_story_revision_verification,
     build_project_document_from_plan,
     create_production_plan,
     direct_story_scene,
+    normalize_story_repair_plan_issue_ids,
+    normalize_story_revision_verification_issue_ids,
+    orient_story,
     refresh_lightweight_reference_plans,
+    story_revision_review,
 )
 from short_drama.production_profiles import (
     ProductionSkillRole,
@@ -80,6 +88,21 @@ LOCKED_SCRIPT = """
 要求：保留以上五句台词原文和说话人；规划为 8–10 个最终剪辑镜头。
 """.strip()
 
+LOCKED_DIALOGUE = [
+    StoryLockedDialogueLine(
+        speaker="林夏",
+        text="你说他十点离开，可监控里，十点零三分他还在这里。",
+    ),
+    StoryLockedDialogueLine(speaker="周衡", text="监控会骗人。"),
+    StoryLockedDialogueLine(speaker="林夏", text="人也会。"),
+    StoryLockedDialogueLine(
+        speaker="录音笔中的林夏",
+        text="如果你听到这段话，别相信我。",
+        audio_kind=AudioKind.VOICEOVER,
+    ),
+    StoryLockedDialogueLine(speaker="周衡", text="现在，你还信自己吗？"),
+]
+
 
 def test_planned_characters_do_not_have_an_adult_only_content_gate() -> None:
     child = PlannedCharacter(
@@ -103,10 +126,129 @@ def test_planned_characters_do_not_have_an_adult_only_content_gate() -> None:
     assert elder.age == 103
 
 
-def test_group_character_covers_a_singular_dialogue_label() -> None:
-    assert _character_name_covered("受骗买家", {"受骗买家群"})
-    assert _character_name_covered("工人", {"工人们"})
-    assert not _character_name_covered("林夏", {"林夏朋友"})
+def test_planned_asset_text_normalizes_outer_whitespace() -> None:
+    character = PlannedCharacter(
+        name=" 林夏 ",
+        age=18,
+        appearance=" 黑色碎发 ",
+        wardrobe=" 白色校服 ",
+        performance=" 清爽专注 ",
+        voice_identity=" 青年男声 ",
+    )
+    location = PlannedLocation(
+        name=" 食堂 ",
+        layout=" 打饭窗口与就餐区 ",
+        lighting=" 暖黄顶灯 ",
+        palette=" 暖色 ",
+        key_views=[" 食堂全景 ", " 食堂窗口 "],
+    )
+
+    assert character.name == "林夏"
+    assert character.appearance == "黑色碎发"
+    assert location.name == "食堂"
+    assert location.key_views == ["食堂全景", "食堂窗口"]
+
+
+def test_canonical_screenplay_preserves_semantically_written_scene() -> None:
+    scene = _fallback_episode_outline(
+        CreateProjectRequest(
+            source_mode=SourceMode.IDEA_EXPANSION,
+            production_profile=ProductionProfile.AI_SHORT_DRAMA,
+            input_text="用可见行动表现一个人第一次公开赢得认可。",
+            target_duration_seconds=30,
+        )
+    ).scenes[0].model_copy(
+        update={
+            "playable_actions": ["主角完成挑战，旁观者公开改变判断"],
+            "screenplay_text": (
+                "【教室 日 内】\n"
+                "粉笔落下最后一笔。后排原本窃笑的人慢慢站直，"
+                "把最前排的位置让了出来。"
+            ),
+        }
+    )
+
+    screenplay = _canonical_scene_screenplay(scene, [])
+
+    assert screenplay == scene.screenplay_text
+    assert scene.playable_actions[0] not in screenplay
+
+
+def test_story_revision_review_follows_the_critics_semantic_revision_decision() -> None:
+    review = ScriptReviewReport(
+        summary="一项阻断问题和一项可选润色。",
+        issues=[
+            ScriptReviewIssue(
+                category="CAUSAL_LOGIC",
+                severity=ScriptReviewSeverity.HIGH,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                scene_sequences=[1],
+                observation="核心因果尚未闭合。",
+                recommendation="修复因果闭环。",
+            ),
+            ScriptReviewIssue(
+                category="DIALOGUE_POLISH",
+                severity=ScriptReviewSeverity.MEDIUM,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                scene_sequences=[2],
+                observation="一句台词可更精简。",
+                recommendation="可选润色。",
+            ),
+        ],
+        requires_revision=True,
+    )
+    disposition = ScriptReviewDisposition(
+        action=ScriptReviewDispositionAction.REVISE_STORY,
+        issue_routes=[
+            ScriptReviewIssueRoute(
+                issue_index=1,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                rationale="需要修改剧本因果。",
+            ),
+            ScriptReviewIssueRoute(
+                issue_index=2,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                rationale="若用户需要可由编剧润色。",
+            ),
+        ],
+        rationale="Critic 判断这一轮需要聚焦修订。",
+    )
+
+    blocking_review = story_revision_review(review, disposition)
+
+    assert [issue.category for issue in blocking_review.issues] == [
+        "CAUSAL_LOGIC",
+        "DIALOGUE_POLISH",
+    ]
+    assert blocking_review.requires_revision is True
+
+
+def test_review_report_retries_when_revision_decision_has_no_story_issue() -> None:
+    contradictory = ScriptReviewReport(
+        summary="剧本需要修改，但没有说明任何剧本文本问题。",
+        issues=[],
+        requires_revision=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="requires_revision=true without a STORY_ARCHITECT issue",
+    ):
+        _normalize_review_report(contradictory)
+
+
+def test_review_report_requires_a_natural_performance_timing_assessment() -> None:
+    missing_timing_evidence = ScriptReviewReport(
+        summary="剧本整体成立。",
+        issues=[],
+        requires_revision=False,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="natural-performance timing assessment",
+    ):
+        _normalize_review_report(missing_timing_evidence)
 
 
 class RepairingLanguageClient:
@@ -217,8 +359,10 @@ class MultiAgentLanguageClient:
                 issues=(
                     [
                         ScriptReviewIssue(
+                            issue_id=f"CAUSAL-LOGIC-{self.critic_calls}",
                             category="CAUSAL_LOGIC",
                             severity=ScriptReviewSeverity.HIGH,
+                            owner=ReviewRepairOwner.STORY_ARCHITECT,
                             scene_sequences=[1, len(self.outline.scenes)],
                             observation="结尾选择尚未完整解释开场事件如何成立。",
                             recommendation="明确世界规则或调整结尾选择，使因果闭合。",
@@ -226,6 +370,9 @@ class MultiAgentLanguageClient:
                     ]
                     if requires_revision
                     else []
+                ),
+                performance_timing_assessment=(
+                    "自然通读完整文本后，时长与本测试目标相称。"
                 ),
                 requires_revision=requires_revision,
             ).model_dump_json()
@@ -267,6 +414,7 @@ class MultiAgentLanguageClient:
                 actions=[
                     StoryRepairAction(
                         issue_index=index,
+                        issue_id=str(issue["issue_id"]),
                         diagnosis=StoryRepairDiagnosis.OUTLINE_DEFECT,
                         should_revise=True,
                         rationale="当前大纲未闭合该因果。",
@@ -283,15 +431,21 @@ class MultiAgentLanguageClient:
             self.revision_verifier_calls += 1
             payload = json.loads(input_text)
             self.revision_verifier_inputs.append(payload)
-            required = [
+            required_indices = [
                 action["issue_index"]
+                for action in payload["story_repair_plan"]["actions"]
+                if action["should_revise"]
+            ]
+            required_ids = [
+                action["issue_id"]
                 for action in payload["story_repair_plan"]["actions"]
                 if action["should_revise"]
             ]
             return StoryRevisionVerification(
                 accepted=True,
                 summary="Writer 已落实 Repair Plan 且没有引入新矛盾。",
-                satisfied_issue_indices=required,
+                satisfied_issue_ids=required_ids,
+                satisfied_issue_indices=required_indices,
                 violations=[],
             ).model_dump_json()
         if "revising an episode" in instructions:
@@ -308,17 +462,23 @@ class MultiAgentLanguageClient:
             sequence = int(payload["current_scene_node"]["sequence"])
             node = self.blueprint.scenes[sequence - 1]
             source_scene = self.outline.scenes[sequence - 1]
+            lines = scene_dialogue_lines(self.outline, source_scene)
             return EpisodeScenePatch(
                 scene_sequence=sequence,
                 heading=node.heading,
                 summary=node.summary,
                 narrative_purpose=node.narrative_purpose,
                 playable_actions=list(node.playable_actions),
+                screenplay_text=compose_scene_screenplay(
+                    heading=node.heading,
+                    playable_actions=list(node.playable_actions),
+                    lines=lines,
+                ),
                 target_duration_seconds=node.target_duration_seconds,
                 location_names=list(node.location_names),
                 continuity_in=node.continuity_in.model_copy(deep=True),
                 continuity_out=node.continuity_out.model_copy(deep=True),
-                lines=scene_dialogue_lines(self.outline, source_scene),
+                lines=lines,
             ).model_dump_json()
         if "story-architect Agent" in instructions:
             return self.blueprint.model_dump_json()
@@ -367,6 +527,7 @@ class SceneReferenceRepairClient:
         self.request = request
         self.outline = _fallback_episode_outline(request)
         self.calls = 0
+        self.inputs: list[dict[str, object]] = []
 
     def validate_credentials(self) -> None:
         pass
@@ -379,8 +540,9 @@ class SceneReferenceRepairClient:
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
-        del instructions, input_text, image_urls, max_output_tokens
+        del instructions, image_urls, max_output_tokens
         self.calls += 1
+        self.inputs.append(json.loads(input_text))
         scene = self.outline.scenes[0]
         plan = _fallback_directed_scene_plan(
             self.request,
@@ -399,13 +561,171 @@ class SceneReferenceRepairClient:
         return plan.model_dump_json()
 
 
+class StoryOrientationClient:
+    def __init__(self, *, skill_id: str = "narrative.payoff_escalation") -> None:
+        self.skill_id = skill_id
+        self.instructions = ""
+        self.input_text = ""
+
+    def validate_credentials(self) -> None:
+        pass
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        del image_urls, max_output_tokens
+        self.instructions = instructions
+        self.input_text = input_text
+        return json.dumps(
+            {
+                "source_contract": {
+                    "explicit_commitments": ["所有人的数学水平倒退100倍，只有主角不变"],
+                    "explicit_prohibitions": [],
+                    "open_creative_choices": ["人物、地点和具体升级方式"],
+                    "authoritative_user_overrides": [],
+                    "continuation_preference": "AGENT_DECIDES",
+                    "user_overridable": True,
+                },
+                "story_intent": {
+                    "audience_experience": "快速感受主角因简单心算不断获得夸张认可的爽感。",
+                    "dramatic_engine": "常识能力在新世界里变成稀缺天赋，并逐级放大公开反应。",
+                    "progression_strategy": "从日常小事推进到更高影响，但每段都先给可见兑现。",
+                    "tone_and_plausibility": "接受类型化夸张和无厘头反应，不要求现实制度解释。",
+                    "protected_elements": ["主角数学水平不变"],
+                    "drift_risks": ["不要写成严肃制度推演"],
+                },
+                "selected_narrative_skills": [
+                    {
+                        "skill_id": self.skill_id,
+                        "rationale": "需要让同一核心能力不断产生更大的公开兑现。",
+                    }
+                ],
+                "narrative_skill_decision": (
+                    "核心命题需要持续放大公开回报，因此选择升级技能；"
+                    "其他方法由具体蓝图再判断。"
+                ),
+            },
+            ensure_ascii=False,
+        )
+
+
+class LockedStoryOrientationClient:
+    def validate_credentials(self) -> None:
+        pass
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        del instructions, input_text, image_urls, max_output_tokens
+        return json.dumps(
+            {
+                "source_contract": {
+                    "explicit_commitments": ["五句台词及说话人保持不变"],
+                    "explicit_prohibitions": [],
+                    "open_creative_choices": ["场景调度与镜头设计"],
+                    "authoritative_user_overrides": [],
+                    "locked_dialogue": [
+                        line.model_dump(mode="json") for line in LOCKED_DIALOGUE
+                    ],
+                    "continuation_preference": "AGENT_DECIDES",
+                    "user_overridable": True,
+                },
+                "story_intent": {
+                    "audience_experience": "让观众感到克制的现实悬疑。",
+                    "dramatic_engine": "录音内容与人物当下选择形成信息差。",
+                    "progression_strategy": "线索和不信任逐步加深。",
+                    "tone_and_plausibility": "保持现实行为逻辑。",
+                    "protected_elements": ["五句原始台词"],
+                    "drift_risks": ["不要解释过度"],
+                },
+                "selected_narrative_skills": [],
+                "narrative_skill_decision": (
+                    "锁定悬疑文本已经给出明确发动机，当前不需要额外爽感或荒诞技能。"
+                ),
+            },
+            ensure_ascii=False,
+        )
+
+
 def _request() -> CreateProjectRequest:
     return CreateProjectRequest(
         name="别相信我",
         source_mode=SourceMode.SCRIPT_LOCKED,
         target_duration_seconds=50,
         input_text=LOCKED_SCRIPT,
+        locked_dialogue=LOCKED_DIALOGUE,
     )
+
+
+def test_story_orientation_selects_narrative_skills_semantically() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.IDEA_EXPANSION,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
+        input_text="所有人的数学水平倒退100倍，只有我不变的三分钟爽文短剧。",
+        target_duration_seconds=180,
+    )
+    client = StoryOrientationClient()
+
+    result = orient_story(request, client)
+
+    assert result.used
+    assert result.orientation is not None
+    assert [
+        item.skill_id for item in result.orientation.selected_narrative_skills
+    ] == ["narrative.payoff_escalation"]
+    assert "基于完整语义选择" in client.instructions
+    payload = json.loads(client.input_text)
+    assert {
+        item["id"] for item in payload["available_narrative_skills"]
+    } == {
+        "narrative.premise_amplification",
+        "narrative.payoff_escalation",
+        "narrative.absurd_comedy",
+    }
+
+
+def test_story_orientation_structures_plain_locked_dialogue_semantically() -> None:
+    request = CreateProjectRequest(
+        name="别相信我",
+        source_mode=SourceMode.SCRIPT_LOCKED,
+        target_duration_seconds=50,
+        input_text=LOCKED_SCRIPT,
+    )
+
+    result = orient_story(request, LockedStoryOrientationClient())
+
+    assert result.used
+    assert result.orientation is not None
+    assert result.orientation.source_contract.locked_dialogue == LOCKED_DIALOGUE
+
+
+def test_story_orientation_rejects_unknown_skill_without_keyword_fallback() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.IDEA_EXPANSION,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
+        input_text="写一个爽剧。",
+    )
+    invalid = orient_story(
+        request,
+        StoryOrientationClient(skill_id="narrative.keyword_selected"),
+    )
+    offline = orient_story(request, None)
+
+    assert not invalid.used
+    assert invalid.orientation is None
+    assert "unknown narrative Skills" in invalid.warnings[0]
+    assert offline.orientation is not None
+    assert offline.orientation.selected_narrative_skills == []
 
 
 def test_production_skills_are_advisory_and_share_independent_tools() -> None:
@@ -445,53 +765,50 @@ def test_production_skills_inject_distinct_policies_without_fixed_shot_count() -
         production_profile=ProductionProfile.AI_SHORT_DRAMA,
     )
 
-    general_instructions, general_input = _planner_prompt(general_request)
-    douyin_instructions, douyin_input = _planner_prompt(douyin_request)
+    general_instructions, general_input = _outline_prompt(general_request)
+    douyin_instructions, douyin_input = _outline_prompt(douyin_request)
     general_payload = json.loads(general_input)
     douyin_payload = json.loads(douyin_input)
 
     assert "留白、静默" in general_instructions
-    assert "不要仅为模仿短剧公式" in general_instructions
-    assert "好奇缺口" in douyin_instructions
     assert "比较若干个实质不同的构想" in douyin_instructions
     assert "办公室、文件、录音" not in douyin_instructions
     assert "借用签名" not in douyin_instructions
     assert "本故事独有的承诺" in douyin_instructions
-    assert "日常语序、代词、语气词" in douyin_instructions
+    assert "日常语序、代词、语气词" in production_skill(
+        ProductionProfile.AI_SHORT_DRAMA
+    ).writer
+    assert "日常语序、代词、语气词" not in douyin_instructions
     assert "日常语序、代词、语气词" not in general_instructions
-    assert "而不是把对白压缩得不自然" in douyin_instructions
-    assert "不要求每句台词都新增事实" in douyin_instructions
+    assert "而不是把对白压缩得不自然" in production_skill(
+        ProductionProfile.AI_SHORT_DRAMA
+    ).writer
+    assert "不要求每句台词都新增事实" in production_skill(
+        ProductionProfile.AI_SHORT_DRAMA
+    ).writer
     assert "朗读检查" in production_skill(
         ProductionProfile.AI_SHORT_DRAMA
     ).critic
     assert "电报式" in production_skill(
         ProductionProfile.AI_SHORT_DRAMA
     ).critic
-    assert "不得为提高密度而机械增加镜头" in douyin_instructions
-    assert "ProductionProfile supplies production guidance" in douyin_instructions
-    assert "do not require human anatomy" in douyin_instructions
+    assert "不得为提高密度而机械增加镜头" not in douyin_instructions
+    assert len(douyin_instructions) < 20_000
     assert "真实皮肤" not in douyin_instructions
     assert general_payload["production_profile"] == "GENERAL_VIDEO"
     assert douyin_payload["production_profile"] == "AI_SHORT_DRAMA"
     assert general_payload["target_duration_seconds"] == 60
     assert douyin_payload["target_duration_seconds"] == 300
-    assert general_payload["requirements"]["shots"] == (
-        "choose the smallest coherent executable set; no fixed count"
+    assert "而不是完整剧本" in general_instructions
+    assert "不要写镜头、机位、关键帧或 Provider 提示词" in general_instructions
+    assert general_payload["handoff_contract"]["scene_director_owns"] == (
+        "shot execution inside one scene"
     )
-    assert general_payload["requirements"]["medium"].startswith(
-        "derive the project's concrete visual medium"
-    )
-    assert "Editorial shots may be shorter than 4 seconds or longer than 15 seconds" in (
-        general_instructions
-    )
-    assert "integer 4-15 seconds" in general_payload["requirements"][
-        "shot_duration_seconds"
-    ]
     assert "6-10" not in general_instructions + general_input
     assert "6-10" not in douyin_instructions + douyin_input
 
 
-def test_douyin_long_form_prompts_audit_effective_story_duration_without_a_hard_gate() -> None:
+def test_douyin_long_form_prompts_leave_pacing_to_semantic_reading() -> None:
     request = CreateProjectRequest(
         source_mode=SourceMode.IDEA_EXPANSION,
         production_profile=ProductionProfile.AI_SHORT_DRAMA,
@@ -502,60 +819,36 @@ def test_douyin_long_form_prompts_audit_effective_story_duration_without_a_hard_
 
     architect_instructions, _ = _outline_prompt(request)
     critic_instructions, critic_input = _story_critic_prompt(request, outline)
+    final_read_instructions, _ = _final_cold_read_prompt(request, outline)
     scene_instructions, scene_input = _scene_director_prompt(
         request,
         outline,
         outline.scenes[0],
         outline.scenes[0].continuity_in,
     )
-    review = ScriptReviewReport(
-        summary="有效剧情时长不足。",
-        issues=[
-            ScriptReviewIssue(
-                category="EFFECTIVE_STORY_DURATION",
-                severity=ScriptReviewSeverity.HIGH,
-                scene_sequences=[1],
-                observation="场景时长主要依赖等待和重复证明。",
-                recommendation="用新的选择与后果替换空转时间。",
-            )
-        ],
-        requires_revision=True,
-    )
-    revision_instructions, revision_input = _story_revision_prompt(
-        request,
-        outline,
-        review,
-    )
     critic_payload = json.loads(critic_input)
     scene_payload = json.loads(scene_input)
-    revision_payload = json.loads(revision_input)
 
     assert "单独生成、检查、替换和重新剪辑" in architect_instructions
-    assert "而不是把对白压缩得不自然" in architect_instructions
-    assert "scene-duration arithmetic" in architect_instructions
+    assert "而不是把对白压缩得不自然" not in architect_instructions
+    assert "时长算术本身不代表内容成立" in architect_instructions
     assert "[grounded-institutional-causality]" not in architect_instructions
     assert "[separate-consequence-domains]" not in architect_instructions
-    assert "Do not approve an episode merely because" in critic_instructions
-    assert "对同一结论的重复证明" in critic_instructions
-    assert "当前行动、因果和人物后果是否可见可懂" in critic_instructions
-    assert "审核实际作品，不按预设答案找错" in critic_instructions
-    assert critic_payload["pacing_evidence"]["target_duration_seconds"] == 180
-    assert critic_payload["pacing_evidence"]["purpose"].startswith(
-        "Rough descriptive evidence"
-    )
-    assert len(critic_payload["pacing_evidence"]["scenes"]) == len(outline.scenes)
-    assert "generic looking, waiting, walking" in scene_instructions
-    assert "导演职责准则" in scene_instructions
+    assert "不要套固定语速、对白密度或数值门槛" in critic_instructions
+    assert "实际最后一场和最后一句" in critic_instructions
+    assert "冷启动观众能否辨认当前行动" in critic_instructions
+    assert "审看不是按预设答案找错" in critic_instructions
+    assert "给出各场可信范围与全剧范围" in critic_instructions
+    assert "不要假设尚未写出的快速剪辑" in critic_instructions
+    assert "换了场地、见证者或道具" in critic_instructions
+    assert "pacing_evidence" not in critic_payload
+    assert "分别给出各场可信范围、全剧范围" in final_read_instructions
+    assert "逐场问本场究竟改变了什么" in final_read_instructions
+    assert "不触发代码阈值" in final_read_instructions
+    assert "观望、等待、行走或重复证明" in scene_instructions
+    assert "导演的通用职责" in scene_instructions
     assert "重新生成、更换关键帧、拆分镜头" in scene_instructions
-    assert scene_payload["scene_pacing_evidence"]["scene_sequence"] == 1
-    assert "replacing empty atmosphere" in revision_instructions
-    assert "collapse it to the smallest plain-language mechanism" in revision_instructions
-    assert "[grounded-institutional-causality]" not in revision_instructions
-    assert "[separate-consequence-domains]" not in revision_instructions
-    assert revision_payload["current_pacing_evidence"][
-        "target_duration_seconds"
-    ] == 180
-    assert "fixed beat counts" in revision_instructions
+    assert "scene_pacing_evidence" not in scene_payload
 
 
 def test_general_video_critic_does_not_treat_quiet_time_as_a_density_failure() -> None:
@@ -570,7 +863,246 @@ def test_general_video_critic_does_not_treat_quiet_time_as_a_density_failure() -
     payload = json.loads(payload_json)
 
     assert "安静内容不会仅因为安静就构成缺陷" in instructions
-    assert payload["pacing_evidence"]["target_duration_seconds"] == 180
+    assert "pacing_evidence" not in payload
+
+
+def test_story_revision_prompts_treat_script_review_as_separate_delivery() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.IDEA_EXPANSION,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
+        input_text="请生成完整剧本及其内容审校。",
+        target_duration_seconds=180,
+    )
+    outline = _fallback_episode_outline(request)
+    review = ScriptReviewReport(
+        summary="内容审校已作为独立报告交付。",
+        strengths=["主线清晰"],
+        issues=[
+            ScriptReviewIssue(
+                issue_id="CAUSAL-LOGIC-1",
+                category="CAUSAL_LOGIC",
+                severity=ScriptReviewSeverity.HIGH,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                scene_sequences=[1],
+                observation="开场事件尚未在结尾回收。",
+                recommendation="在第 1 场补足因果回收。",
+            )
+        ],
+        requires_revision=True,
+    )
+    source_contract = StorySourceContract(
+        explicit_commitments=["完整剧本及其内容审校"],
+        explicit_prohibitions=[],
+        open_creative_choices=["未指定的剧情细节"],
+    )
+    repair_plan = StoryRepairPlan(
+        summary="只修复剧情因果。",
+        source_promise="保留完整剧本交付。",
+        invariants=["主线清晰"],
+        actions=[
+            StoryRepairAction(
+                issue_index=1,
+                issue_id="CAUSAL-LOGIC-1",
+                diagnosis=StoryRepairDiagnosis.OUTLINE_DEFECT,
+                should_revise=True,
+                rationale="剧情因果尚未闭环。",
+                affected_scene_sequences=[1],
+                recommended_change="回收开场事件。",
+            )
+        ],
+    )
+
+    repair_instructions, repair_input = _story_repair_plan_prompt(
+        request,
+        outline,
+        review,
+        source_contract,
+        None,
+    )
+    critic_instructions, critic_input = _story_critic_prompt(request, outline)
+    verifier_instructions, verifier_input = _story_revision_verifier_prompt(
+        request,
+        outline,
+        outline,
+        review,
+        repair_plan,
+        source_contract,
+    )
+
+    assert "ScriptReviewReport 本身就是独立交付" in critic_instructions
+    assert "不要求把审校附录写进场景" in critic_instructions
+    assert "语义判断" in critic_instructions
+    assert "不触发代码阈值" in critic_instructions
+    assert "你已经完成了整稿冷读" in critic_instructions
+    assert "FINAL_COLD_READ 枚举仅用于兼容旧运行记录" in critic_instructions
+    assert "审校报告是独立工件" in repair_instructions
+    assert "CRITIC_OVERREACH" in repair_instructions
+    assert "故事修复规划的通用职责" in repair_instructions
+    assert "编剧的通用职责" not in repair_instructions
+    assert "内容审校的通用职责" not in repair_instructions
+    assert "不得因审校附录没有写进场景" in verifier_instructions
+    assert "修复验收与终稿通读合并成一个完整责任" in verifier_instructions
+    assert "从第一场到最后一场自然冷读整份" in verifier_instructions
+    assert "只使用 audience_cold_read" in verifier_instructions
+    assert "不得用 outline summary" in verifier_instructions
+    assert "不能自动证明文本中缺失的原因或过程" in verifier_instructions
+    assert "不能压过 SourceContract" in verifier_instructions
+    assert "观众体验、剧情推进、人物主动性" in verifier_instructions
+    assert "recommended_followup=FINALIZE" in verifier_instructions
+    assert "不再把稿件转交给独立 Final Cold Read" in verifier_instructions
+    assert "不得因" in verifier_instructions
+    assert "修订验收的通用职责" in verifier_instructions
+    assert "内容审校的通用职责" not in verifier_instructions
+    assert json.loads(critic_input)["readable_screenplay"][0]["screenplay_text"] == (
+        outline.scenes[0].screenplay_text
+    )
+    assert json.loads(repair_input)["routed_story_review"] == review.model_dump(
+        mode="json"
+    )
+    verifier_payload = json.loads(verifier_input)
+    assert verifier_payload["routed_story_review"] == review.model_dump(mode="json")
+    assert "original_outline" not in verifier_payload
+    assert "revised_outline" not in verifier_payload
+    assert verifier_payload["audience_cold_read"] == {
+        "user_brief": request.input_text.strip(),
+        "source_contract": source_contract.model_dump(mode="json"),
+        "story_intent": (
+            outline.story_intent.model_dump(mode="json")
+            if outline.story_intent is not None
+            else None
+        ),
+        "ending_contract": (
+            outline.ending_contract.model_dump(mode="json")
+            if outline.ending_contract is not None
+            else None
+        ),
+        "readable_final_screenplay": [
+            {
+                "scene_sequence": outline.scenes[0].sequence,
+                "heading": outline.scenes[0].heading,
+                "target_duration_seconds": outline.scenes[0].target_duration_seconds,
+                "screenplay_text": outline.scenes[0].screenplay_text,
+            }
+        ],
+    }
+    assert verifier_payload["repair_verification_context"][
+        "revised_readable_screenplay"
+    ] == verifier_payload["audience_cold_read"]["readable_final_screenplay"]
+    repair_schema = json.loads(repair_input)["output_schema"]
+    assert "issue_id" in repair_schema["$defs"]["StoryRepairAction"]["required"]
+    verifier_schema = json.loads(verifier_input)["output_schema"]
+    assert "satisfied_issue_ids" in verifier_schema["required"]
+    assert (
+        "issue_id"
+        in verifier_schema["$defs"]["StoryRevisionViolation"]["required"]
+    )
+
+
+def test_legacy_revision_issue_indices_load_and_upgrade_to_stable_ids() -> None:
+    review = ScriptReviewReport(
+        summary="旧修订记录兼容测试。",
+        issues=[
+            ScriptReviewIssue(
+                issue_id="STABLE-ISSUE-1",
+                category="CAUSAL_LOGIC",
+                severity=ScriptReviewSeverity.HIGH,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                scene_sequences=[1],
+                observation="因果尚未闭合。",
+                recommendation="回收因果。",
+            )
+        ],
+        requires_revision=True,
+    )
+    legacy_plan = StoryRepairPlan.model_validate(
+        {
+            "summary": "旧计划。",
+            "source_promise": "保留主线。",
+            "actions": [
+                {
+                    "issue_index": 1,
+                    "diagnosis": "OUTLINE_DEFECT",
+                    "should_revise": True,
+                    "rationale": "旧数据只有索引。",
+                    "affected_scene_sequences": [1],
+                    "recommended_change": "聚焦修复。",
+                }
+            ],
+        }
+    )
+    upgraded_plan = normalize_story_repair_plan_issue_ids(review, legacy_plan)
+    assert upgraded_plan.actions[0].issue_id == "STABLE-ISSUE-1"
+
+    legacy_acceptance = StoryRevisionVerification.model_validate(
+        {
+            "accepted": True,
+            "summary": "旧 Verifier 使用索引记录通过项。",
+            "satisfied_issue_indices": [1],
+            "violations": [],
+        }
+    )
+    upgraded_acceptance = normalize_story_revision_verification_issue_ids(
+        upgraded_plan,
+        legacy_acceptance,
+    )
+    assert upgraded_acceptance.satisfied_issue_ids == ["STABLE-ISSUE-1"]
+
+    legacy_rejection = StoryRevisionVerification.model_validate(
+        {
+            "accepted": False,
+            "summary": "旧 Verifier 的 violation 没有 ID。",
+            "violations": [
+                {
+                    "category": "LEGACY_REGRESSION",
+                    "scene_sequences": [1],
+                    "observation": "旧回归。",
+                    "repair_instruction": "保留旧证据。",
+                }
+            ],
+        }
+    )
+    assert legacy_rejection.violations[0].issue_id is None
+
+
+def test_story_revision_verifier_rejects_an_unscoped_scene_violation() -> None:
+    request = _request()
+    outline = _fallback_episode_outline(request)
+    repair_plan = StoryRepairPlan(
+        summary="只修复剧情因果。",
+        source_promise="保留完整剧本交付。",
+        actions=[
+            StoryRepairAction(
+                issue_index=1,
+                issue_id="CAUSAL-LOGIC-1",
+                diagnosis=StoryRepairDiagnosis.OUTLINE_DEFECT,
+                should_revise=True,
+                rationale="剧情因果尚未闭环。",
+                affected_scene_sequences=[1],
+                recommended_change="回收开场事件。",
+            )
+        ],
+    )
+    verification = StoryRevisionVerification(
+        accepted=False,
+        summary="错把独立审校交付当成了场次内容。",
+        satisfied_issue_ids=["CAUSAL-LOGIC-1"],
+        violations=[
+            StoryRevisionViolation(
+                issue_id="DELIVERY-SCOPE-1",
+                category="明确交付承诺被删除",
+                scene_sequences=[],
+                observation="剧本场次中没有内容审校附录。",
+                repair_instruction="把内容审校加回剧本。",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="at least one repairable scene"):
+        _validate_story_revision_verification(
+            outline,
+            repair_plan,
+            verification,
+        )
 
 
 @pytest.mark.parametrize("target_seconds", [180, 300, 430, 600, 900])
@@ -598,50 +1130,15 @@ def test_ai_short_drama_scaffold_preserves_multi_minute_duration_contract(
     }
 
 
-def test_multi_agent_planner_passes_compact_actual_handoff_between_scene_agents() -> None:
+def test_language_backed_planning_requires_agent_owned_content_job() -> None:
     request = CreateProjectRequest(
         source_mode=SourceMode.AUTO_ORIGINAL,
         target_duration_seconds=300,
     )
     client = MultiAgentLanguageClient(request)
 
-    planning = create_production_plan(request, client)
-
-    assert planning.planner.startswith("multi-agent:gpt-5.6-sol story architect")
-    assert "+ script critic" in planning.planner
-    assert planning.review_report is not None
-    assert planning.review_report.requires_revision is False
-    assert len(client.scene_inputs) == len(planning.plan.scenes)
-    assert client.calls == len(planning.plan.scenes) * 2 + 2
-    second_input = client.scene_inputs[1]
-    assert second_input["previous_actual_handoff"]["known_facts"][-1] == (
-        "agent-scene-1-complete"
-    )
-    assert "invalid_scene_plan_json" not in second_input
-
-
-def test_multi_agent_planner_falls_back_only_the_failed_scene() -> None:
-    request = CreateProjectRequest(
-        source_mode=SourceMode.AUTO_ORIGINAL,
-        target_duration_seconds=300,
-    )
-    client = MultiAgentLanguageClient(request, fail_scene=2)
-
-    planning = create_production_plan(request, client)
-
-    shots_by_scene = {
-        sequence: [
-            shot
-            for shot in planning.plan.shots
-            if shot.scene_sequence == sequence
-        ]
-        for sequence in range(1, len(planning.plan.scenes) + 1)
-    }
-    assert "mixed-fallback" in planning.planner
-    assert shots_by_scene[1][0].narrative_purpose.startswith("Agent scene 1")
-    assert not shots_by_scene[2][0].narrative_purpose.startswith("Agent scene 2")
-    assert shots_by_scene[3][0].narrative_purpose.startswith("Agent scene 3")
-    assert any("场景 02" in warning and "仅该场" in warning for warning in planning.warnings)
+    with pytest.raises(ValueError, match="AgentRun-owned Content Planning Job"):
+        create_production_plan(request, client)
 
 
 def test_scene_director_rejects_reference_subjects_outside_episode_asset_contract() -> None:
@@ -669,7 +1166,7 @@ def test_scene_director_rejects_reference_subjects_outside_episode_asset_contrac
         _validate_directed_scene_plan(outline, scene, plan)
 
 
-def test_scene_director_locally_repairs_unknown_reference_subject_before_finalize() -> None:
+def test_scene_director_retries_unknown_reference_subject_on_next_explicit_call() -> None:
     request = CreateProjectRequest(
         source_mode=SourceMode.AUTO_ORIGINAL,
         target_duration_seconds=300,
@@ -677,7 +1174,7 @@ def test_scene_director_locally_repairs_unknown_reference_subject_before_finaliz
     client = SceneReferenceRepairClient(request)
     scene = client.outline.scenes[0]
 
-    result = direct_story_scene(
+    first = direct_story_scene(
         request,
         client.outline,
         scene,
@@ -685,12 +1182,32 @@ def test_scene_director_locally_repairs_unknown_reference_subject_before_finaliz
         client,
     )
 
-    assert result.repaired is True
-    assert result.used_fallback is False
+    assert first.retry_required is True
+    assert first.retry_feedback is not None
+    assert first.scene is None
+    assert first.repaired is False
+    assert first.used_fallback is False
+    assert client.calls == 1
+    assert client.inputs[0]["previous_retry_feedback"] is None
+
+    second = direct_story_scene(
+        request,
+        client.outline,
+        scene,
+        scene.continuity_in,
+        client,
+        retry_feedback=first.retry_feedback,
+    )
+
+    assert second.retry_required is False
+    assert second.retry_feedback is None
+    assert second.repaired is False
+    assert second.used_fallback is False
     assert client.calls == 2
+    assert client.inputs[1]["previous_retry_feedback"] == first.retry_feedback
     assert all(
         need.subject_name != "未声明的临时道具"
-        for shot in result.scene.shots
+        for shot in second.scene.shots
         for need in shot.reference_needs
     )
 
@@ -706,106 +1223,6 @@ def test_provider_html_error_is_compacted_before_persisting_warning() -> None:
 
     assert summary == "Provider returned an HTML error page: Unicorn! · Provider"
     assert "<!DOCTYPE" not in summary
-
-
-def test_script_critic_can_trigger_one_story_architect_revision_before_scene_planning() -> None:
-    request = CreateProjectRequest(
-        source_mode=SourceMode.IDEA_EXPANSION,
-        input_text="一个预告未来的录音迫使女主重新审视自己的选择。",
-        target_duration_seconds=300,
-    )
-    client = MultiAgentLanguageClient(request, critic_revision_rounds_required=1)
-
-    planning = create_production_plan(request, client)
-
-    assert client.critic_calls == 2
-    assert client.revision_calls == 1
-    assert "+ script critic revised" in planning.planner
-    assert "修订后明确了" in planning.plan.scene_summary
-    assert planning.review_report is not None
-    assert planning.review_report.requires_revision is False
-    assert any("已自动修订" in warning for warning in planning.warnings)
-    assert not any("仍保留" in warning for warning in planning.warnings)
-    document = build_project_document_from_plan(
-        project_id="project-script-reviewed",
-        request=request,
-        planning=planning,
-        created_at="2026-08-21T00:00:00Z",
-    )
-    assert document.script_versions[0].review_report == planning.review_report
-    assert document.bible_versions[0].style.medium == planning.plan.style.medium
-
-
-def test_story_revision_repairs_invalid_json_before_returning_to_critic() -> None:
-    request = CreateProjectRequest(
-        source_mode=SourceMode.IDEA_EXPANSION,
-        input_text="一个视觉线索迫使女主做出有代价的选择。",
-        target_duration_seconds=180,
-    )
-    client = MultiAgentLanguageClient(
-        request,
-        critic_revision_rounds_required=1,
-        invalid_first_revision=True,
-    )
-
-    planning = create_production_plan(request, client)
-
-    assert client.revision_calls == 2
-    assert client.critic_calls == 2
-    assert planning.review_report is not None
-    assert planning.review_report.requires_revision is False
-    assert any(
-        "首次输出未通过结构校验" in warning and "已自动修复" in warning
-        for warning in planning.warnings
-    )
-
-
-def test_script_critic_revision_loop_is_bounded_and_remaining_advice_is_non_blocking() -> None:
-    request = CreateProjectRequest(
-        source_mode=SourceMode.IDEA_EXPANSION,
-        input_text="一个选择会改变未来的都市悬疑故事。",
-        target_duration_seconds=300,
-    )
-    client = MultiAgentLanguageClient(request, critic_revision_rounds_required=99)
-
-    planning = create_production_plan(request, client)
-
-    assert client.revision_calls == 3
-    assert client.critic_calls == 4
-    assert "revised-3x" in planning.planner
-    assert planning.review_report is not None
-    assert planning.review_report.requires_revision is True
-    assert any("仍保留" in warning and "不会阻断" in warning for warning in planning.warnings)
-    assert planning.plan.shots
-
-
-def test_review_router_can_handoff_critic_issue_without_rewriting_story() -> None:
-    request = CreateProjectRequest(
-        source_mode=SourceMode.IDEA_EXPANSION,
-        input_text="人物在复杂空间里完成一次需要清楚调度的行动。",
-        target_duration_seconds=180,
-    )
-    client = DownstreamRoutingClient(
-        request,
-        critic_revision_rounds_required=1,
-    )
-
-    planning = create_production_plan(request, client)
-
-    assert client.critic_calls == 1
-    assert client.revision_calls == 0
-    assert planning.review_report is not None
-    assert planning.review_report.requires_revision is True
-    assert planning.review_disposition is not None
-    assert (
-        planning.review_disposition.action
-        == ScriptReviewDispositionAction.CONTINUE_WITH_HANDOFF
-    )
-    assert planning.review_disposition.issue_routes[0].owner == ReviewRepairOwner.SCENE_DIRECTOR
-    assert any(
-        payload["routed_review_handoff"]
-        for payload in client.scene_inputs
-    )
 
 
 def test_multi_scene_plan_maps_scene_contracts_and_shots_into_project_document() -> None:
@@ -855,6 +1272,14 @@ def test_general_profile_accepts_silent_long_take_plan_without_density_gate() ->
     assert plan.lines == []
 
 
+def test_production_subject_names_are_unique_across_asset_kinds() -> None:
+    payload = _fallback_plan(_request()).model_dump(mode="json")
+    payload["locations"][0]["name"] = payload["characters"][0]["name"]
+
+    with pytest.raises(ValueError, match="must be globally unique"):
+        ProductionPlan.model_validate(payload)
+
+
 def test_local_scaffold_does_not_choose_style_or_profile_specific_rhythm() -> None:
     common = {
         "source_mode": SourceMode.AUTO_ORIGINAL,
@@ -901,31 +1326,25 @@ def test_editorial_retiming_does_not_split_at_h3_request_boundary() -> None:
     assert [shot.duration_seconds for shot in shots] == [25.0, 25.0, 25.0]
 
 
-def test_stationary_long_shot_does_not_force_full_body_reference() -> None:
-    request = CreateProjectRequest(
-        source_mode=SourceMode.AUTO_ORIGINAL,
-        production_profile=ProductionProfile.AI_SHORT_DRAMA,
-    )
-    plan = _fallback_plan(request)
-    shot = plan.shots[0].model_copy(
-        deep=True,
-        update={
-            "duration_seconds": 20.0,
-            "visual": "一个稳定画面承载信息变化",
-            "framing": "由当前 Style 决定",
-            "camera": "保持稳定",
-            "character_positions": plan.characters[0].name,
-        },
+def test_empty_reference_needs_remain_explicitly_empty() -> None:
+    request = _request()
+    planning = create_production_plan(request, None)
+    for shot in planning.plan.shots:
+        shot.reference_needs = []
+
+    document = build_project_document_from_plan(
+        project_id="project-explicit-empty-references",
+        request=request,
+        planning=planning,
+        created_at="2026-09-03T00:00:00Z",
     )
 
-    needs = _default_reference_needs(
-        plan=plan,
-        shot=shot,
-        line_speakers={plan.characters[0].name},
+    assert all(plan.requirements == [] for plan in document.reference_plan)
+    assert all(plan.bindings == [] for plan in document.reference_plan)
+    assert all(
+        plan.planning_notes == "asset-manager:agent-explicit"
+        for plan in document.reference_plan
     )
-
-    character_need = next(item for item in needs if item.subject_name == plan.characters[0].name)
-    assert ReferenceFraming.FULL_BODY not in character_need.preferred_framings
 
 
 def test_legacy_project_document_defaults_to_douyin_profile() -> None:
@@ -945,93 +1364,35 @@ def test_legacy_project_document_defaults_to_douyin_profile() -> None:
     assert restored.project.production_profile == ProductionProfile.AI_SHORT_DRAMA
 
 
-def test_locked_dialogue_ignores_metadata_and_classifies_recorded_voice() -> None:
-    lines = _locked_dialogue(LOCKED_SCRIPT)
-
-    assert [(line.speaker, line.audio_kind.value) for line in lines] == [
-        ("林夏", "DIALOGUE"),
-        ("周衡", "DIALOGUE"),
-        ("林夏", "DIALOGUE"),
-        ("录音笔中的林夏", "VOICEOVER"),
-        ("周衡", "DIALOGUE"),
-    ]
-    assert [line.text for line in lines] == [
-        "你说他十点离开，可监控里，十点零三分他还在这里。",
-        "监控会骗人。",
-        "人也会。",
-        "如果你听到这段话，别相信我。",
-        "现在，你还信自己吗？",
-    ]
-
-
-def test_locked_dialogue_ignores_common_story_contract_headings() -> None:
-    lines = _locked_dialogue(
-        "\n".join(
-            [
-                "核心场景：仓库、酒店、停车场。",
-                "关键规则：未来可以被改变。",
-                "结尾明确：录音只代表可能结果。",
-                "许宁：“下次先相信我。”",
-            ]
-        )
+def test_plain_locked_script_waits_for_agent_semantic_intake() -> None:
+    request = CreateProjectRequest(
+        name="别相信我",
+        source_mode=SourceMode.SCRIPT_LOCKED,
+        target_duration_seconds=50,
+        input_text=LOCKED_SCRIPT,
     )
 
-    assert [(line.speaker, line.text) for line in lines] == [
-        ("许宁", "下次先相信我。")
-    ]
-
-
-def test_locked_dialogue_uses_actor_at_action_start_and_voice_owner_at_source() -> None:
-    lines = _locked_dialogue(
-        "\n".join(
-            [
-                "角色：周衡，32 岁。林夏，28 岁。",
-                "周衡看向林夏：“监控会骗人。”",
-                "周衡按下录音笔，录音中传出林夏的声音：“别相信我。”",
-            ]
-        )
+    planning = create_production_plan(request, None)
+    document = build_project_document_from_plan(
+        project_id="project-locked-awaiting-intake",
+        request=request,
+        planning=planning,
+        created_at="2026-08-17T00:00:00Z",
     )
 
-    assert [(line.speaker, line.audio_kind.value) for line in lines] == [
-        ("周衡", "DIALOGUE"),
-        ("录音笔中的林夏", "VOICEOVER"),
-    ]
+    assert planning.plan.lines == []
+    assert document.script_versions[0].original_text == LOCKED_SCRIPT
 
 
-def test_locked_dialogue_uses_latest_action_clause_and_nearest_voice_owner() -> None:
-    lines = _locked_dialogue(
-        "\n".join(
-            [
-                "角色：许宁，29岁。程野，31岁。顾岚，35岁。",
-                "程野推门进来。许宁藏起录音笔，问：“你明晚九点在哪？”",
-                "许宁把顾岚叫来。程野出现，看见录音笔，说：“你还是听了那段录音。”",
-                "许宁、顾岚和程野当面对质。录音笔再次播放许宁的声音：“如果我没来这里，死的人才会是顾岚。”",
-                "许宁关掉录音笔，对程野说：“下次先相信我。”",
-            ]
+def test_structured_locked_dialogue_must_be_verbatim_and_in_source_order() -> None:
+    with pytest.raises(ValueError, match="appear verbatim"):
+        CreateProjectRequest(
+            name="坏顺序",
+            source_mode=SourceMode.SCRIPT_LOCKED,
+            target_duration_seconds=50,
+            input_text=LOCKED_SCRIPT,
+            locked_dialogue=list(reversed(LOCKED_DIALOGUE)),
         )
-    )
-
-    assert [(line.speaker, line.audio_kind.value) for line in lines] == [
-        ("许宁", "DIALOGUE"),
-        ("程野", "DIALOGUE"),
-        ("录音笔中的许宁", "VOICEOVER"),
-        ("许宁", "DIALOGUE"),
-    ]
-
-
-def test_locked_dialogue_strips_speech_actions_from_character_labels() -> None:
-    lines = _locked_dialogue(
-        "\n".join(
-            [
-                "角色：许宁，29岁。程野，31岁。",
-                "许宁问：“你明晚九点在哪？”",
-                "程野回答：“停车场。”",
-                "许宁低声说：“别让他看见请柬。”",
-            ]
-        )
-    )
-
-    assert [line.speaker for line in lines] == ["许宁", "程野", "许宁"]
 
 
 def test_locked_fallback_does_not_turn_metadata_or_voiceover_into_characters() -> None:
@@ -1059,24 +1420,7 @@ def test_locked_fallback_does_not_turn_metadata_or_voiceover_into_characters() -
     ] == ["林夏定妆", "周衡定妆"]
 
 
-def test_invalid_language_plan_gets_one_structured_repair() -> None:
-    request = _request()
-    client = RepairingLanguageClient(request)
-
-    planning = create_production_plan(request, client)
-
-    assert client.calls == 2
-    assert planning.planner == "gpt-5.6-sol-repaired"
-    assert any("自动修复后采用" in warning for warning in planning.warnings)
-    assert [character.name for character in planning.plan.characters] == ["林夏", "周衡"]
-    assert all(
-        index >= 1
-        for shot in planning.plan.shots
-        for index in shot.dialogue_line_indices
-    )
-
-
-def test_lightweight_reference_enrichment_uses_declared_shot_intent() -> None:
+def test_reference_refresh_does_not_infer_assets_from_shot_text() -> None:
     request = _request()
     planning = create_production_plan(request, None)
     planning.plan.props.append(
@@ -1098,22 +1442,18 @@ def test_lightweight_reference_enrichment_uses_declared_shot_intent() -> None:
     shot = document.shots[0]
     plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
     prop = next(item for item in document.assets if item.kind.value == "PROP")
-    prop_version_ids = {item.id for item in prop.versions}
-    plan.bindings = [
-        item for item in plan.bindings if item.target_id not in prop_version_ids
-    ]
-    plan.max_reference_images = 3
 
     changed = refresh_lightweight_reference_plans(document)
 
-    assert changed is True
-    assert any(item.target_id == prop.current_version_id for item in plan.bindings)
-    assert plan.max_reference_images >= len(plan.bindings)
+    assert changed is False
+    assert plan.requirements == []
+    assert all(item.target_id != prop.current_version_id for item in plan.bindings)
 
 
 def test_lightweight_reference_plans_exclude_unrelated_project_locations() -> None:
     request = _request()
     planning = create_production_plan(request, None)
+    planning.plan.style.texture = "干净低噪点的电影质感"
     planning.plan.locations.append(
         PlannedLocation(
             name="地下车库",
@@ -1134,6 +1474,9 @@ def test_lightweight_reference_plans_exclude_unrelated_project_locations() -> No
     unrelated = next(
         item for item in document.assets if item.name == "地下车库"
     )
+    assert unrelated.brief is not None
+    assert unrelated.brief.named_views_or_zones == ["步行入口", "停车区全景"]
+    assert unrelated.brief.texture_constraints == ["干净低噪点的电影质感"]
     assert all(
         unrelated.current_version_id
         not in {binding.target_id for binding in plan.bindings}
@@ -1141,7 +1484,40 @@ def test_lightweight_reference_plans_exclude_unrelated_project_locations() -> No
     )
 
 
-def test_deterministic_reference_refresh_rebuilds_visible_subject_scope() -> None:
+def test_location_name_ending_in_character_suffix_maps_to_its_asset() -> None:
+    request = _request()
+    planning = create_production_plan(request, None)
+    location_name = "摄影棚定妆"
+    planning.plan.locations.append(
+        PlannedLocation(
+            name=location_name,
+            layout="单层摄影棚与中央表演区",
+            lighting="均匀顶光",
+            palette="中性灰",
+            key_views=["摄影棚全景", "中央表演区"],
+        )
+    )
+    planning.plan.shots[0].reference_needs = [
+        PlannedReferenceNeed(
+            subject_name=location_name,
+            acceptable_roles=[ReferenceRole.LOCATION_MASTER],
+            purpose="锁定该摄影棚的空间关系",
+        )
+    ]
+
+    document = build_project_document_from_plan(
+        project_id="project-location-suffix",
+        request=request,
+        planning=planning,
+        created_at="2026-09-02T00:00:00Z",
+    )
+    location = next(item for item in document.assets if item.name == location_name)
+    reference_plan = document.reference_plan[0]
+
+    assert reference_plan.requirements[0].subject_asset_id == location.id
+
+
+def test_reference_refresh_uses_only_explicit_subject_asset_ids() -> None:
     request = _request()
     planning = create_production_plan(request, None)
     planning.plan.locations.append(
@@ -1162,23 +1538,25 @@ def test_deterministic_reference_refresh_rebuilds_visible_subject_scope() -> Non
     locations = [
         item for item in document.assets if item.kind.value == "LOCATION"
     ]
-    visible = next(item for item in locations if item.name != "地下车库")
-    offscreen = next(item for item in locations if item.name == "地下车库")
+    unrequested = next(item for item in locations if item.name != "地下车库")
+    requested = next(item for item in locations if item.name == "地下车库")
     shot = document.shots[0]
     plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
-    plan.planning_notes = "asset-manager:deterministic-fallback"
+    plan.planning_notes = "legacy-note-must-not-route"
     plan.requirements = [
         ReferenceRequirement(
             id=f"{shot.id}-reference-01",
-            subject_asset_id=offscreen.id,
+            subject_asset_id=requested.id,
             acceptable_roles=[ReferenceRole.LOCATION_MASTER],
-            purpose="下一场地点只存在于连续性说明中",
+            purpose="Agent 明确选择该地点作为本镜空间锚点",
         )
     ]
 
     changed = refresh_lightweight_reference_plans(document)
 
     subject_ids = {item.subject_asset_id for item in plan.requirements}
+    bound_version_ids = {item.target_id for item in plan.bindings}
     assert changed is True
-    assert visible.id in subject_ids
-    assert offscreen.id not in subject_ids
+    assert subject_ids == {requested.id}
+    assert bound_version_ids == {requested.current_version_id}
+    assert unrequested.current_version_id not in bound_version_ids

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from short_drama.models import (
     DomainModel,
@@ -23,6 +23,17 @@ from short_drama.models import (
     VideoInspectionScope,
     VideoGenerationRoute,
 )
+from short_drama.reference_aliases import normalize_reference_alias
+
+
+def normalize_h3_reference_alias(value: str) -> str:
+    return normalize_reference_alias(value, max_length=80)
+
+
+def derive_h3_reference_alias(value: str) -> str:
+    """Normalize a system-generated alias, then truncate its normalized form safely."""
+
+    return normalize_reference_alias(value, max_length=80, truncate=True)
 
 
 class H3MediaKind(StrEnum):
@@ -88,6 +99,28 @@ class H3MediaInput(DomainModel):
     source: H3MediaSource
     asset_version_id: str | None = None
     video_guide_id: str | None = None
+    subject_asset_id: str | None = Field(default=None, max_length=200)
+    reference_alias: str | None = Field(default=None, min_length=1, max_length=80)
+    binding_purpose: str | None = Field(default=None, min_length=1, max_length=500)
+    reference_tags: list[str] = Field(default_factory=list[str], max_length=12)
+
+    @field_validator("reference_alias", mode="before")
+    @classmethod
+    def normalize_reference_alias(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        return normalize_h3_reference_alias(value)
+
+    @model_validator(mode="after")
+    def validate_reference_metadata(self) -> H3MediaInput:
+        normalized_tags = [item.strip() for item in self.reference_tags if item.strip()]
+        if normalized_tags != self.reference_tags or len(normalized_tags) != len(
+            set(normalized_tags)
+        ):
+            raise ValueError("H3 reference tags must be trimmed and unique")
+        return self
 
 
 class H3ProbeRequest(DomainModel):
@@ -127,6 +160,7 @@ class H3ShotRouteAction(StrEnum):
 class H3ShotRouteReadiness(StrEnum):
     READY = "READY"
     READY_WITH_WARNINGS = "READY_WITH_WARNINGS"
+    NEEDS_AGENT_DECISION = "NEEDS_AGENT_DECISION"
     NEEDS_ASSET = "NEEDS_ASSET"
     UNSUPPORTED = "UNSUPPORTED"
 
@@ -191,6 +225,19 @@ class H3VideoGuide(DomainModel):
     advisory_only: Literal[True] = True
     created_at: str
 
+    @model_validator(mode="after")
+    def validate_camera_previs_intent(self) -> H3VideoGuide:
+        if self.kind == H3VideoGuideKind.CAMERA_PREVIS:
+            if self.camera_motion is None or self.previs_base_source is None:
+                raise ValueError(
+                    "CAMERA_PREVIS requires explicit camera_motion and previs_base_source"
+                )
+        elif self.camera_motion is not None or self.previs_base_source is not None:
+            raise ValueError(
+                "Only CAMERA_PREVIS may declare camera motion or a previs base source"
+            )
+        return self
+
 
 class H3ShotRoutePlan(DomainModel):
     shot_id: str
@@ -225,11 +272,16 @@ class H3ShotRoutePlan(DomainModel):
         max_length=3,
     )
     selected_video_guide_id: str | None = None
-    candidate_count: int = Field(default=1, ge=1, le=5)
+    reference_selection_candidate_ids: list[str] = Field(default_factory=list[str])
+    candidate_count: int = Field(
+        default=1,
+        ge=1,
+        description="Number of candidates requested by this explicit route-plan action.",
+    )
     inspection: H3InspectionPolicy
     readiness: H3ShotRouteReadiness
     execution_status: H3ShotRouteExecutionStatus = H3ShotRouteExecutionStatus.PLANNED
-    task_ids: list[str] = Field(default_factory=list[str], max_length=10)
+    task_ids: list[str] = Field(default_factory=list[str])
     inspection_ids: list[str] = Field(default_factory=list[str], max_length=10)
     inspection_issue_codes: list[str] = Field(default_factory=list[str], max_length=50)
     override_allowed: Literal[True] = True
@@ -249,6 +301,17 @@ class H3ShotRoutePlan(DomainModel):
                 for item in self.media_inputs
             ):
                 raise ValueError("Selected video guide must be present in media_inputs")
+        if (
+            self.reference_selection_candidate_ids
+            and self.route != VideoGenerationRoute.REFERENCE
+        ):
+            raise ValueError(
+                "Reference selection candidate IDs are only valid for the REFERENCE route"
+            )
+        if len(self.reference_selection_candidate_ids) != len(
+            set(self.reference_selection_candidate_ids)
+        ):
+            raise ValueError("Reference selection candidate IDs must be unique")
         return self
 
 
@@ -274,11 +337,50 @@ class H3ProductionRoutePlan(DomainModel):
     executed_at: str | None = None
 
 
+class H3ShotRouteDirective(DomainModel):
+    """Explicit per-shot production intent supplied by the calling Agent or user."""
+
+    shot_id: str = Field(min_length=1, max_length=200)
+    candidate_id: str | None = Field(default=None, min_length=1, max_length=300)
+    reuse_take_id: str | None = Field(default=None, min_length=1, max_length=200)
+    reference_selection_candidate_ids: list[str] | None = None
+    camera_previs_motion: H3CameraMotionPreset | None = None
+
+    @model_validator(mode="after")
+    def validate_route_choice(self) -> H3ShotRouteDirective:
+        if self.candidate_id is not None and self.reuse_take_id is not None:
+            raise ValueError(
+                "An H3 shot route directive may choose candidate_id or reuse_take_id, not both"
+            )
+        if (
+            self.reference_selection_candidate_ids is not None
+            and len(self.reference_selection_candidate_ids)
+            != len(set(self.reference_selection_candidate_ids))
+        ):
+            raise ValueError("Reference selection candidate IDs must be unique")
+        return self
+
+
 class H3ProductionRoutePlanRequest(DomainModel):
     shot_ids: list[str] = Field(default_factory=list[str], max_length=500)
     use_language_agent: bool = True
-    candidate_count: int = Field(default=1, ge=1, le=5)
+    candidate_count: int = Field(
+        default=1,
+        ge=1,
+        description="Number of candidates the calling Agent requests in this action.",
+    )
     consider_video_guides: bool = True
+    shot_directives: list[H3ShotRouteDirective] = Field(
+        default_factory=list[H3ShotRouteDirective],
+        max_length=500,
+    )
+
+    @model_validator(mode="after")
+    def validate_shot_directives(self) -> H3ProductionRoutePlanRequest:
+        directive_ids = [item.shot_id for item in self.shot_directives]
+        if len(directive_ids) != len(set(directive_ids)):
+            raise ValueError("H3 shot route directives must use unique shot IDs")
+        return self
 
 
 class H3ProductionRoutePlanResponse(DomainModel):
@@ -292,7 +394,6 @@ class H3ProductionRoutePlanListResponse(DomainModel):
 class H3ProductionRouteExecuteRequest(DomainModel):
     reuse_passed_takes: bool = True
     enqueue_new_generations: bool = False
-    adaptive_sequential: bool = False
     inspect_reused_takes: bool = True
     semantic_review: bool = True
     rebuild_manifest: bool = True

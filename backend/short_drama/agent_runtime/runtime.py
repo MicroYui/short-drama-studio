@@ -33,9 +33,11 @@ from short_drama.agent_runtime.models import (
     WorkOrder,
     utc_now,
 )
+from short_drama.skills.models import ProductionSkillRole
 from short_drama.agent_runtime.plan_graph import PlanGraph
 from short_drama.agent_runtime.store import AgentRuntimeStore
 from short_drama.models import ProductionExecutionTarget
+from short_drama.observability import log_event
 
 
 def _new_id(prefix: str) -> str:
@@ -95,6 +97,7 @@ class AgentRuntime:
         parent_run_id: str | None = None,
         unattended: bool = False,
         execution_target: ProductionExecutionTarget | None = None,
+        render_export: bool | None = None,
     ) -> AgentRun:
         run = AgentRun(
             id=_new_id("agent-run"),
@@ -105,11 +108,13 @@ class AgentRuntime:
             parent_run_id=parent_run_id,
             unattended=unattended,
             execution_target=execution_target,
+            render_export=render_export,
         )
         self.store.create_run(
             run,
             RunMemory(run_id=run.id, current_focus=objective, next_actions=["Create a plan"]),
         )
+        self._log_run_status(run, previous_status=None)
         return run
 
     def start_run(
@@ -122,6 +127,7 @@ class AgentRuntime:
         parent_run_id: str | None = None,
         unattended: bool = False,
         execution_target: ProductionExecutionTarget | None = None,
+        render_export: bool | None = None,
     ) -> AgentRun:
         """Compatibility alias for callers that describe creation as start."""
 
@@ -133,6 +139,7 @@ class AgentRuntime:
             parent_run_id=parent_run_id,
             unattended=unattended,
             execution_target=execution_target,
+            render_export=render_export,
         )
 
     def revise_plan(
@@ -263,6 +270,7 @@ class AgentRuntime:
         status: ActionStatus,
         output_summary: str | None = None,
         error_message: str | None = None,
+        error_kind: str | None = None,
         artifact_refs: Sequence[ArtifactRef] | None = None,
     ) -> ActionRecord:
         if status not in (
@@ -277,11 +285,34 @@ class AgentRuntime:
         action.status = status
         action.output_summary = output_summary
         action.error_message = error_message
+        action.error_kind = error_kind
         if artifact_refs is not None:
             action.artifact_refs = list(artifact_refs)
         action.completed_at = utc_now()
         action.updated_at = action.completed_at
+        if action.started_at is not None:
+            action.duration_ms = max(
+                0,
+                int((action.completed_at - action.started_at).total_seconds() * 1000),
+            )
         self.store.save_action(action)
+        run = self._require_run(action.run_id)
+        log_event(
+            "agent.tool_finished" if action.tool_name is not None else "agent.action_finished",
+            run_id=action.run_id,
+            project_id=run.project_id,
+            action_id=action.id,
+            action_kind=action.kind.value,
+            status=action.status.value,
+            agent_id=action.agent_id,
+            plan_revision_id=action.plan_revision_id,
+            plan_step_id=action.plan_step_id,
+            tool_name=action.tool_name,
+            work_order_id=action.work_order_id,
+            duration_ms=action.duration_ms,
+            error_kind=action.error_kind,
+            artifact_count=len(action.artifact_refs),
+        )
         return action
 
     def complete_action(
@@ -304,12 +335,14 @@ class AgentRuntime:
         *,
         error_message: str,
         output_summary: str | None = None,
+        error_kind: str | None = None,
     ) -> ActionRecord:
         return self.finish_action(
             action_id,
             status=ActionStatus.FAILED,
             output_summary=output_summary,
             error_message=error_message,
+            error_kind=error_kind,
         )
 
     def checkpoint(
@@ -340,6 +373,7 @@ class AgentRuntime:
 
     def set_run_status(self, run_id: str, status: AgentRunStatus) -> AgentRun:
         run = self._require_run(run_id)
+        previous_status = run.status
         run.status = status
         run.updated_at = utc_now()
         run.completed_at = (
@@ -352,6 +386,7 @@ class AgentRuntime:
             else None
         )
         self.store.save_run(run)
+        self._log_run_status(run, previous_status=previous_status)
         return run
 
     def set_run_execution_target(
@@ -361,6 +396,36 @@ class AgentRuntime:
     ) -> AgentRun:
         run = self._require_run(run_id)
         run.execution_target = execution_target
+        run.updated_at = utc_now()
+        self.store.save_run(run)
+        return run
+
+    def set_run_render_export(
+        self,
+        run_id: str,
+        render_export: bool,
+    ) -> AgentRun:
+        run = self._require_run(run_id)
+        run.render_export = render_export
+        run.updated_at = utc_now()
+        self.store.save_run(run)
+        return run
+
+    def set_run_active_skills(
+        self,
+        run_id: str,
+        skill_ids: Sequence[str],
+    ) -> AgentRun:
+        """Persist an Agent-selected Skill composition for later context assembly.
+
+        The runtime deliberately does not decide which Skills apply. It only
+        normalizes identifiers already selected and validated by the owning Agent.
+        """
+
+        run = self._require_run(run_id)
+        run.active_skill_ids = list(
+            dict.fromkeys(value.strip() for value in skill_ids if value.strip())
+        )
         run.updated_at = utc_now()
         self.store.save_run(run)
         return run
@@ -502,6 +567,7 @@ class AgentRuntime:
         *,
         sender: str,
         recipient_role: str,
+        production_skill_role: ProductionSkillRole | None = None,
         objective: str,
         why_now: str,
         scope: Sequence[ArtifactRef] = (),
@@ -517,6 +583,7 @@ class AgentRuntime:
             parent_run_id=run_id,
             sender=sender,
             recipient_role=recipient_role,
+            production_skill_role=production_skill_role,
             objective=objective,
             why_now=why_now,
             scope=list(scope),
@@ -535,6 +602,7 @@ class AgentRuntime:
         *,
         sender: str,
         recipient_role: str,
+        production_skill_role: ProductionSkillRole | None = None,
         objective: str,
         why_now: str,
         scope: Sequence[ArtifactRef] = (),
@@ -548,6 +616,7 @@ class AgentRuntime:
             run_id,
             sender=sender,
             recipient_role=recipient_role,
+            production_skill_role=production_skill_role,
             objective=objective,
             why_now=why_now,
             scope=scope,
@@ -702,3 +771,24 @@ class AgentRuntime:
         if work_order is None:
             raise KeyError(f"Unknown work order: {work_order_id}")
         return work_order
+
+    @staticmethod
+    def _log_run_status(
+        run: AgentRun,
+        *,
+        previous_status: AgentRunStatus | None,
+    ) -> None:
+        log_event(
+            "agent.run_status",
+            run_id=run.id,
+            project_id=run.project_id,
+            status=run.status.value,
+            previous_status=(
+                previous_status.value if previous_status is not None else None
+            ),
+            root_agent=run.root_agent,
+            unattended=run.unattended,
+            execution_target=(
+                run.execution_target.value if run.execution_target is not None else None
+            ),
+        )

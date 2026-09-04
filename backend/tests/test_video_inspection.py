@@ -12,6 +12,7 @@ from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.models import (
     ApprovalStatus,
+    AssetKind,
     AssetMediaType,
     EnqueueRequest,
     ReferenceBinding,
@@ -122,10 +123,10 @@ def test_semantic_review_includes_approved_bound_asset_references(tmp_path: Path
     asset.approved_version_id = approved.id
     plan.bindings.append(
         ReferenceBinding(
-            kind="character",
+            kind=AssetKind.CHARACTER,
             target_id=approved.id,
             purpose="canonical identity comparison",
-            requirement="preserve the approved character identity",
+            required=True,
         )
     )
 
@@ -270,9 +271,9 @@ def test_semantic_observation_flows_into_optional_director_advice(
     assert advice.recommended_strategy == "CHANGE_KEYFRAME"
     assert fake.generations[0][2] is not None
     assert len(fake.generations[0][2] or []) == 1
-    assert "Sparse frames cannot prove" in fake.generations[0][0]
-    assert "Use only LOW, MEDIUM, HIGH, or CRITICAL" in fake.generations[0][0]
-    assert "Calibrate severity by the consequence for the finished story" in fake.generations[0][0]
-    assert "Do not promote a secondary deviation to HIGH" in fake.generations[0][0]
-    assert "canonical asset references" in fake.generations[0][0]
+    assert "稀疏抽帧无法证明某个动作从未发生" in fake.generations[0][0]
+    assert "严重度只使用 LOW、MEDIUM、HIGH 或 CRITICAL" in fake.generations[0][0]
+    assert "根据它对成片故事的影响校准" in fake.generations[0][0]
+    assert "不要仅因为某项次要偏差写在 ShotPlan 中" in fake.generations[0][0]
+    assert "提供标准资产参考图时" in fake.generations[0][0]
     assert "AUTO_IDENTITY_DRIFT" in fake.generations[1][1]

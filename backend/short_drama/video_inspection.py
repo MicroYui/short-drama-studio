@@ -636,34 +636,27 @@ class VideoInspector:
             None,
         )
         instructions = (
-            "You are a video observation tool for a film-director agent. Return JSON only and "
-            "match the supplied schema. Inspect the chronological contact sheets for visible "
-            "intra-shot drift and, when provided, the previous-to-current shot boundary. Separate "
-            "observation from inference. Do not invent a required action, release, prop state, "
-            "screen direction, or camera intention that is absent from the supplied ShotPlan, "
-            "continuity state, Bible, or user focus. Sparse frames cannot prove that an action never "
-            "happened; lower confidence or omit the issue. Report an issue only when visible evidence "
-            "conflicts with declared intent or with chronological state. The report is advisory input "
-            "to another Agent, never a hard gate and never a repair decision. Use only LOW, MEDIUM, "
-            "HIGH, or CRITICAL for issue severity. Calibrate severity by the consequence for the "
-            "finished story, not by whether every requested directing detail was reproduced: HIGH "
-            "means a central story action or chronological state is missing or contradicted, or a "
-            "clear identity, contact, orientation, or spatial-continuity break makes the take unsafe "
-            "to cut into the episode. MEDIUM means the main story beat and continuity remain readable "
-            "but a secondary action, environmental motion, coverage preference, framing target, or "
-            "polish detail was not achieved. Do not promote a secondary deviation to HIGH merely "
-            "because it appears in the ShotPlan. Use stable generic QA categories rather than "
-            "scene-specific fields. When canonical asset references are supplied, compare the visible "
-            "character anchors declared by the project, required location relationships, and prop appearance against "
-            "the relevant reference; report clear drift, but do not require details that are hidden "
-            "or too small to judge."
+            "你是供电影导演 Agent 调用的视频观察 Tool。只返回 JSON，并严格匹配所给 schema。"
+            "检查按时间顺序排列的接触表，识别镜头内部可见的漂移；如果提供了前后镜头边界，也一并"
+            "检查。把观察与推断分开。不要虚构 ShotPlan、连续性状态、Bible 或用户关注点中未声明的"
+            "必要动作、释放动作、道具状态、画面方向或机位意图。稀疏抽帧无法证明某个动作从未发生；"
+            "此时应降低置信度或不报告该问题。只有可见证据与已声明意图或时间顺序状态冲突时，才报告"
+            "问题。报告只是提供给另一个 Agent 的建议性输入，不是硬门禁，也不替代修复决策。问题"
+            "严重度只使用 LOW、MEDIUM、HIGH 或 CRITICAL，并根据它对成片故事的影响校准，而不是"
+            "根据每个导演细节是否都被复现来判断：HIGH 表示核心叙事动作或时间顺序状态缺失、被"
+            "否定，或者清晰的人物身份、接触关系、朝向或空间连续性断裂，使该 Take 不适合直接剪入"
+            "本集；MEDIUM 表示主要叙事节拍和连续性仍然可读，但次要动作、环境运动、覆盖偏好、构图"
+            "目标或润色细节没有实现。不要仅因为某项次要偏差写在 ShotPlan 中，就把它提升为 HIGH。"
+            "使用稳定、通用的 QA 分类，不要创建场景专属字段。提供标准资产参考图时，将项目声明且"
+            "在画面中可见的人物锚点、必要场景关系和道具外观与对应参考图比较；报告清晰漂移，但不要"
+            "要求判断被遮挡或小到无法辨认的细节。"
         )
         reference_images = _semantic_reference_images(document, reference_plan)
         image_map: list[dict[str, object]] = [
             {
                 "index": 1,
                 "role": "CURRENT_TAKE_TIMELINE",
-                "description": "chronological adaptive samples from the current take",
+                "description": "当前 Take 的按时间顺序自适应抽帧",
             }
         ]
         next_image_index = 2
@@ -672,7 +665,7 @@ class VideoInspector:
                 {
                     "index": next_image_index,
                     "role": "SHOT_BOUNDARY",
-                    "description": "previous-shot end followed by current-shot start",
+                    "description": "前一镜头结束帧，随后是当前镜头起始帧",
                 }
             )
             next_image_index += 1
@@ -710,8 +703,8 @@ class VideoInspector:
             "review_focus": request.review_focus,
             "image_map": image_map,
             "notes": (
-                "Frame labels are chronological within each sheet. VISUAL_CHANGE marks locally "
-                "large image change, not an error by itself."
+                "每张接触表中的帧标签按时间顺序排列。VISUAL_CHANGE 只标记局部画面"
+                "变化较大，本身不代表错误。"
             ),
         }
         image_urls = [_image_data_url(contact_sheet)]

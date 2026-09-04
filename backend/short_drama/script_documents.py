@@ -31,7 +31,7 @@ class PlanningScriptDocument(DomainModel):
     """One versioned, retrieval-ready unit from a planning outline."""
 
     run_id: str = Field(min_length=1, max_length=160)
-    revision_round: int = Field(ge=0, le=20)
+    revision_round: int = Field(ge=0)
     document_id: str = Field(min_length=1, max_length=240)
     kind: PlanningScriptDocumentKind
     scene_sequence: int | None = Field(default=None, ge=1, le=500)
@@ -75,7 +75,7 @@ class PlanningScriptSearchHit(DomainModel):
 
 class PlanningScriptSearchResponse(DomainModel):
     run_id: str
-    revision_round: int = Field(ge=0, le=20)
+    revision_round: int = Field(ge=0)
     query: str
     hits: list[PlanningScriptSearchHit] = Field(
         default_factory=list[PlanningScriptSearchHit],
@@ -87,7 +87,7 @@ class PlanningSceneRevisionRequest(DomainModel):
     """Natural-language local edit; explicit scenes override Agent scope selection."""
 
     instruction: str = Field(min_length=1, max_length=8000)
-    scene_sequences: list[int] = Field(default_factory=list[int], max_length=40)
+    scene_sequences: list[int] = Field(default_factory=list[int])
 
     @model_validator(mode="after")
     def validate_sequences(self) -> PlanningSceneRevisionRequest:
@@ -107,7 +107,7 @@ class ScriptRevisionContextPlan(DomainModel):
     """Agent recommendation for the smallest coherent script-edit scope."""
 
     scope: ScriptRevisionScope
-    affected_scene_sequences: list[int] = Field(default_factory=list[int], max_length=40)
+    affected_scene_sequences: list[int] = Field(default_factory=list[int])
     retrieval_query: str = Field(default="", max_length=4000)
     rationale: str = Field(min_length=1, max_length=1600)
     preserve: list[str] = Field(default_factory=list[str], max_length=24)
@@ -124,30 +124,63 @@ class ScriptRevisionContextPlan(DomainModel):
         return self
 
 
+class SceneDurationRevisionConstraint(DomainModel):
+    """Typed permission and deterministic balance target for one scene patch."""
+
+    allow_change: bool = False
+    balance_episode_on_this_scene: bool = False
+    episode_target_seconds: float = Field(ge=4.0)
+    current_episode_scene_total_seconds: float = Field(ge=4.0)
+    required_scene_target_seconds: float | None = Field(default=None, gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_balance_contract(self) -> SceneDurationRevisionConstraint:
+        if self.balance_episode_on_this_scene and not self.allow_change:
+            raise ValueError("Episode duration balancing requires scene duration permission")
+        if self.balance_episode_on_this_scene != (
+            self.required_scene_target_seconds is not None
+        ):
+            raise ValueError(
+                "Balanced scene duration constraints require one exact scene target"
+            )
+        return self
+
+
 class EpisodeScenePatch(DomainModel):
-    """Replacement content for one scene; global dialogue indices are rebuilt."""
+    """Replacement content for one scene; global dialogue indices are rebuilt.
+
+    ``performance_timing_assessment`` is Agent-authored evidence for trace and
+    later review.  It never decides whether the patch is accepted.
+    """
 
     scene_sequence: int = Field(ge=1, le=500)
     heading: str = Field(min_length=1, max_length=200)
     summary: str = Field(min_length=1, max_length=1600)
     narrative_purpose: str = Field(min_length=1, max_length=800)
     playable_actions: list[str] = Field(default_factory=list[str], max_length=24)
-    target_duration_seconds: float = Field(ge=4.0)
+    screenplay_text: str = Field(default="", max_length=60000)
+    target_duration_seconds: float = Field(gt=0.0)
     location_names: list[str] = Field(min_length=1, max_length=6)
+    prop_ids: list[str] = Field(default_factory=list[str])
     continuity_in: SceneContinuitySummary
     continuity_out: SceneContinuitySummary
     lines: list[PlannedDialogueLine] = Field(
         default_factory=list[PlannedDialogueLine],
         max_length=500,
     )
+    performance_timing_assessment: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=1600,
+    )
 
 
 class EpisodeOutlinePatch(DomainModel):
     """A model-produced edit proposal that cannot mutate unrelated scenes."""
 
-    base_revision_round: int = Field(ge=0, le=20)
+    base_revision_round: int = Field(ge=0)
     rationale: str = Field(min_length=1, max_length=1600)
-    scene_patches: list[EpisodeScenePatch] = Field(min_length=1, max_length=40)
+    scene_patches: list[EpisodeScenePatch] = Field(min_length=1)
     preserve: list[str] = Field(default_factory=list[str], max_length=24)
     user_overridable: bool = True
 
@@ -185,6 +218,16 @@ def build_episode_manifest(outline: EpisodeOutline) -> dict[str, Any]:
         "locations": [location.model_dump(mode="json") for location in outline.locations],
         "props": [prop.model_dump(mode="json") for prop in outline.props],
         "style": outline.style.model_dump(mode="json"),
+        "ending_contract": (
+            outline.ending_contract.model_dump(mode="json")
+            if outline.ending_contract is not None
+            else None
+        ),
+        "story_intent": (
+            outline.story_intent.model_dump(mode="json")
+            if outline.story_intent is not None
+            else None
+        ),
         "scenes": [
             {
                 "sequence": scene.sequence,
@@ -194,6 +237,7 @@ def build_episode_manifest(outline: EpisodeOutline) -> dict[str, Any]:
                 "playable_actions": list(scene.playable_actions),
                 "target_duration_seconds": scene.target_duration_seconds,
                 "location_names": list(scene.location_names),
+                "prop_ids": list(scene.prop_ids),
                 "dialogue_line_count": len(scene.dialogue_line_indices),
                 "continuity_in": scene.continuity_in.model_dump(mode="json"),
                 "continuity_out": scene.continuity_out.model_dump(mode="json"),
@@ -201,10 +245,6 @@ def build_episode_manifest(outline: EpisodeOutline) -> dict[str, Any]:
             for scene in outline.scenes
         ],
     }
-
-
-def _names_mentioned(text: str, names: list[str]) -> list[str]:
-    return [name for name in names if name and name in text]
 
 
 def build_planning_script_documents(
@@ -219,10 +259,29 @@ def build_planning_script_documents(
     all_character_names = [character.name for character in outline.characters]
     all_location_names = [location.name for location in outline.locations]
     all_prop_names = [prop.name for prop in outline.props]
+    character_name_by_id = {
+        character.character_id: character.name
+        for character in outline.characters
+        if character.character_id is not None
+    }
+    intent = outline.story_intent
+    intent_lines = (
+        []
+        if intent is None
+        else [
+            f"观众体验：{intent.audience_experience}",
+            f"戏剧引擎：{intent.dramatic_engine}",
+            f"推进策略：{intent.progression_strategy}",
+            f"调性与可信度：{intent.tone_and_plausibility}",
+            "需保护的元素：" + "；".join(intent.protected_elements),
+            "需避免的偏移：" + "；".join(intent.drift_risks),
+        ]
+    )
     bible_body = "\n".join(
         [
             f"标题：{outline.title}",
             f"故事摘要：{outline.story_summary}",
+            *intent_lines,
             "角色："
             + "；".join(
                 f"{character.name}，{character.appearance}，{character.wardrobe}，"
@@ -238,6 +297,14 @@ def build_planning_script_documents(
             + "；".join(f"{prop.name}，{prop.appearance}" for prop in outline.props),
             f"风格：{outline.style.genre}；{outline.style.cinematography}；"
             f"{outline.style.color}；{outline.style.texture}",
+            (
+                "结尾合同："
+                f"{outline.ending_contract.resolved_mode.value}；"
+                f"本集回报={outline.ending_contract.episode_payoff}；"
+                f"最后落点={outline.ending_contract.final_button}"
+                if outline.ending_contract is not None
+                else "结尾合同：旧版本未记录"
+            ),
         ]
     )
     documents = [
@@ -252,8 +319,23 @@ def build_planning_script_documents(
             location_names=all_location_names,
             prop_names=all_prop_names,
             search_metadata=(
-                "全剧 设定 故事 人物 地点 道具 风格 "
+                "全剧 设定 故事 人物 地点 道具 风格 创作意图 观众体验 戏剧引擎 "
                 + " ".join(all_character_names + all_location_names + all_prop_names)
+                + (
+                    ""
+                    if intent is None
+                    else " "
+                    + " ".join(
+                        [
+                            intent.audience_experience,
+                            intent.dramatic_engine,
+                            intent.progression_strategy,
+                            intent.tone_and_plausibility,
+                            *intent.protected_elements,
+                            *intent.drift_risks,
+                        ]
+                    )
+                )
             ),
             body=bible_body,
             created_at=created_at,
@@ -283,18 +365,17 @@ def build_planning_script_documents(
                 scene.narrative_purpose,
                 "可执行动作：" + "；".join(scene.playable_actions),
                 continuity_text,
-                dialogue_text,
+                scene.screenplay_text or dialogue_text,
             ]
         )
         character_names = list(
             dict.fromkeys(
-                [
-                    *[line.speaker for line in lines],
-                    *_names_mentioned(scene_text, all_character_names),
-                ]
+                character_name_by_id[line.speaker_character_id]
+                for line in lines
+                if line.speaker_character_id in character_name_by_id
             )
         )
-        prop_names = _names_mentioned(scene_text, all_prop_names)
+        prop_names: list[str] = []
         documents.append(
             PlanningScriptDocument(
                 run_id=run_id,
@@ -359,9 +440,11 @@ def apply_episode_outline_patch(
                 summary=scene_patch.summary,
                 narrative_purpose=scene_patch.narrative_purpose,
                 playable_actions=list(scene_patch.playable_actions),
+                screenplay_text=scene_patch.screenplay_text,
                 target_duration_seconds=scene_patch.target_duration_seconds,
                 dialogue_line_indices=[],
                 location_names=list(scene_patch.location_names),
+                prop_ids=list(scene_patch.prop_ids),
                 continuity_in=scene_patch.continuity_in.model_copy(deep=True),
                 continuity_out=scene_patch.continuity_out.model_copy(deep=True),
             )

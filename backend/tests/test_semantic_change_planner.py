@@ -34,7 +34,7 @@ class SemanticChangeLanguageClient:
         max_output_tokens: int = 2200,
     ) -> str:
         del image_urls, max_output_tokens
-        assert "Semantic Change Planner Agent" in instructions
+        assert "语义变更规划 Agent" in instructions
         payload = json.loads(input_text)
         character = next(
             item

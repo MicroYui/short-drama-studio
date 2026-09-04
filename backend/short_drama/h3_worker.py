@@ -141,14 +141,12 @@ class PersistentH3Worker:
         task = self._require_h3_task(task_id)
         if task.status != TaskStatus.SUBMIT_UNKNOWN:
             raise InvalidTaskTransition(f"Task {task.id} is not waiting for reconciliation")
+        run = self._require_run(task.id)
         client = self._client()
         remote = client.query(provider_task_id)
-        if remote.model != task.model:
-            raise InvalidTaskTransition("The selected MiniMax task uses a different model")
-        if remote.resolution not in {None, task.resolution}:
-            raise InvalidTaskTransition("The selected MiniMax task uses a different resolution")
-        if remote.duration not in {None, int(task.requested_duration_seconds)}:
-            raise InvalidTaskTransition("The selected MiniMax task uses a different duration")
+        mismatch = self._reconciliation_mismatch_reason(task, run, remote)
+        if mismatch is not None:
+            raise InvalidTaskTransition(mismatch)
         now = utc_now()
         self.repository.record_provider_submission(
             request_fingerprint=task.request_fingerprint,
@@ -160,7 +158,6 @@ class PersistentH3Worker:
         task.error_code = None
         task.error_message = None
         task.updated_at = now
-        run = self._require_run(task.id)
         run.latest_remote_task = remote
         run.last_error_code = None
         run.last_error_message = None
@@ -205,6 +202,41 @@ class PersistentH3Worker:
 
     def list_reconciliation_candidates(self) -> list[H3RemoteTask]:
         return self._client().list_tasks(page_size=50)
+
+    def list_reconciliation_candidates_for_task(
+        self,
+        task_id: str,
+    ) -> list[H3RemoteTask]:
+        task = self._require_h3_task(task_id)
+        if task.status != TaskStatus.SUBMIT_UNKNOWN:
+            raise InvalidTaskTransition(f"Task {task.id} is not waiting for reconciliation")
+        run = self._require_run(task.id)
+        return [
+            remote
+            for remote in self.list_reconciliation_candidates()
+            if self._reconciliation_mismatch_reason(task, run, remote) is None
+        ]
+
+    @staticmethod
+    def _reconciliation_mismatch_reason(
+        task: GenerationTask,
+        run: H3ProviderRun,
+        remote: H3RemoteTask,
+    ) -> str | None:
+        if remote.model != task.model:
+            return "The selected MiniMax task uses a different model"
+        if remote.resolution not in {None, task.resolution}:
+            return "The selected MiniMax task uses a different resolution"
+        if remote.duration not in {None, int(task.requested_duration_seconds)}:
+            return "The selected MiniMax task uses a different duration"
+        expected_ratio = None if run.request is None else run.request.ratio
+        if remote.ratio is not None and remote.ratio != expected_ratio:
+            return "The selected MiniMax task uses a different aspect ratio"
+        if remote.task_type not in {None, "generation"}:
+            return "The selected MiniMax task is not a generation task"
+        if remote.modality not in {None, "video"}:
+            return "The selected MiniMax task is not a video task"
+        return None
 
     def validate_credentials(self) -> None:
         self._client().list_tasks(page_size=1)

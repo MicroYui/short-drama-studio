@@ -28,6 +28,7 @@ from short_drama.models import (
     Freshness,
     ReferenceAngle,
     ReferenceFraming,
+    ReferenceRequirement,
     ReferenceRole,
     SourceMode,
 )
@@ -106,15 +107,39 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
         input_text="深夜办公室，两人在走廊边走边说，会议室揭晓误会。",
     )
     planning = create_production_plan(request, None)
-    planning.plan.shots[0].character_positions = "项目主体位于走廊场景中"
-    planning.plan.shots[0].framing = "近景"
-    planning.plan.shots[0].camera = "沿走廊跟随主体"
     document = build_project_document_from_plan(
         project_id="project-asset-coverage",
         request=request,
         planning=planning,
         created_at="2026-08-20T00:00:00Z",
     )
+    character_asset = next(
+        asset for asset in document.assets if asset.kind == AssetKind.CHARACTER
+    )
+    location_asset = next(
+        asset for asset in document.assets if asset.kind == AssetKind.LOCATION
+    )
+    reference_plan = document.reference_plan[0]
+    reference_plan.requirements = [
+        ReferenceRequirement(
+            id="explicit-character-profile",
+            subject_asset_id=character_asset.id,
+            acceptable_roles=[ReferenceRole.CHARACTER_PROFILE],
+            preferred_angles=[ReferenceAngle.LEFT_PROFILE],
+            preferred_framings=[ReferenceFraming.MEDIUM],
+            required_tags=["identity", "profile"],
+            purpose="Agent 显式要求可跨镜复用的角色侧面身份视图。",
+        ),
+        ReferenceRequirement(
+            id="explicit-location-interaction",
+            subject_asset_id=location_asset.id,
+            acceptable_roles=[ReferenceRole.LOCATION_INTERACTION],
+            preferred_angles=[ReferenceAngle.NOT_APPLICABLE],
+            preferred_framings=[ReferenceFraming.WIDE],
+            required_tags=["topology", "interaction"],
+            purpose="Agent 显式要求可跨镜复用的场景交互区拓扑视图。",
+        ),
+    ]
     bible = next(
         item
         for item in document.bible_versions
@@ -188,7 +213,8 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
         "当前制片技能：AI 原生短剧。"
         in character_prompt
     )
-    assert "资产审核职责准则：" in character_prompt
+    assert "资产审核的通用职责：" in character_prompt
+    assert "资产审核的当前格式补充：" in character_prompt
     assert "类型创作原则：" not in character_prompt
     location_need = next(
         item
@@ -202,7 +228,7 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
     )
     assert "项目 Style：" in location_prompt
     assert "禁止：" not in location_prompt
-    assert "资产审核职责准则：" in location_prompt
+    assert "资产审核的通用职责：" in location_prompt
     assert all(
         need.lineage_root_version_id
         == next(

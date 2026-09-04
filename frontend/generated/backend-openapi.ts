@@ -911,6 +911,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/image-tasks/{task_id}/resolve-not-submitted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Image Not Submitted */
+        post: operations["resolve_image_not_submitted_api_short_drama_image_tasks__task_id__resolve_not_submitted_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/image-tasks/{task_id}/retry": {
         parameters: {
             query?: never;
@@ -2139,6 +2156,10 @@ export interface components {
              * Format: date-time
              */
             created_at?: string;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Error Kind */
+            error_kind?: string | null;
             /** Error Message */
             error_message?: string | null;
             /** Id */
@@ -2216,15 +2237,11 @@ export interface components {
          * @description Bootstrap a production run before its canonical project exists.
          */
         AgentProjectCreateRequest: {
-            /** @default MOCK */
             execution_target: components["schemas"]["ProductionExecutionTarget"];
             /** Objective */
             objective?: string | null;
             project: components["schemas"]["CreateProjectRequest"];
-            /**
-             * Render Export
-             * @default true
-             */
+            /** Render Export */
             render_export: boolean;
             /**
              * Root Agent
@@ -2299,6 +2316,8 @@ export interface components {
             parent_run_id?: string | null;
             /** Project Id */
             project_id: string;
+            /** Render Export */
+            render_export?: boolean | null;
             /** Root Agent */
             root_agent: string;
             /** @default RUNNING */
@@ -2377,6 +2396,7 @@ export interface components {
         AgentRunStatus: "RUNNING" | "WAITING" | "COMPLETED" | "FAILED" | "CANCELLED";
         /** AgentRunView */
         AgentRunView: {
+            content_planning_trace?: components["schemas"]["ContentPlanningTraceView"] | null;
             context: components["schemas"]["ContextPack"];
             /** Ready Steps */
             ready_steps: components["schemas"]["PlanStep"][];
@@ -2497,6 +2517,9 @@ export interface components {
         Asset: {
             /** Approved Version Id */
             approved_version_id?: string | null;
+            /** Bible Entity Id */
+            bible_entity_id?: string | null;
+            brief?: components["schemas"]["CoreAssetBrief"] | null;
             /** Current Version Id */
             current_version_id: string;
             /** Id */
@@ -2606,6 +2629,7 @@ export interface components {
         };
         /** AssetCreateRequest */
         AssetCreateRequest: {
+            brief?: components["schemas"]["CoreAssetBrief"] | null;
             /** Descriptor */
             descriptor: string;
             kind: components["schemas"]["AssetKind"];
@@ -2649,6 +2673,37 @@ export interface components {
             version: components["schemas"]["AssetVersion"];
         };
         /**
+         * AssetPresentationMode
+         * @description Explicit rendering intent for an asset master; absence stays unknown.
+         * @enum {string}
+         */
+        AssetPresentationMode: "PHYSICAL_MASTER" | "SCREEN_CONTENT_PLATE";
+        /** AssetReferenceSheet */
+        AssetReferenceSheet: {
+            /** Cells */
+            cells: components["schemas"]["AssetReferenceSheetCell"][];
+            /** Columns */
+            columns: number;
+            input_policy: components["schemas"]["AssetSheetInputPolicy"];
+            strategy: components["schemas"]["AssetReferenceStrategy"];
+        };
+        /** AssetReferenceSheetCell */
+        AssetReferenceSheetCell: {
+            /** Label */
+            label: string;
+            /** Source Asset Id */
+            source_asset_id: string;
+            /** Source Version Id */
+            source_version_id: string;
+            view: components["schemas"]["AssetStandardView"];
+        };
+        /**
+         * AssetReferenceStrategy
+         * @description How much canonical visual coverage one asset needs for the current work.
+         * @enum {string}
+         */
+        AssetReferenceStrategy: "LIGHTWEIGHT" | "CHARACTER_STANDARD_VIEWS" | "SCENE_COVERAGE";
+        /**
          * AssetReviewDecision
          * @enum {string}
          */
@@ -2659,6 +2714,12 @@ export interface components {
             /** Notes */
             notes: string;
         };
+        /**
+         * AssetSheetInputPolicy
+         * @description Whether a local reference sheet may use explicitly selected draft versions.
+         * @enum {string}
+         */
+        AssetSheetInputPolicy: "APPROVED_ONLY" | "EXPLICIT_VERSIONS";
         /** AssetSourceRecord */
         AssetSourceRecord: {
             /** Attribution */
@@ -2691,6 +2752,12 @@ export interface components {
             /** Stock Import Mode */
             stock_import_mode?: string | null;
         };
+        /**
+         * AssetStandardView
+         * @description Reusable view labels for canonical character, location, and prop images.
+         * @enum {string}
+         */
+        AssetStandardView: "CANONICAL_MASTER" | "CHARACTER_FRONT" | "CHARACTER_LEFT_PROFILE" | "CHARACTER_RIGHT_PROFILE" | "CHARACTER_BACK" | "CHARACTER_WARDROBE_DETAIL" | "SCENE_MASTER" | "SCENE_OVERHEAD" | "SCENE_REVERSE" | "SCENE_INTERACTION_ZONE" | "PROP_PRODUCT" | "PROP_IN_HAND" | "PROP_STATE";
         /** AssetVersion */
         AssetVersion: {
             approval_status: components["schemas"]["ApprovalStatus"];
@@ -2720,6 +2787,7 @@ export interface components {
             origin_type: components["schemas"]["OriginType"];
             /** Parent Version Id */
             parent_version_id?: string | null;
+            reference_sheet?: components["schemas"]["AssetReferenceSheet"] | null;
             /** Review Notes */
             review_notes?: string | null;
             source?: components["schemas"]["AssetSourceRecord"] | null;
@@ -3002,6 +3070,76 @@ export interface components {
             size_bytes: number;
         };
         /**
+         * ContentPlanningOutput
+         * @enum {string}
+         */
+        ContentPlanningOutput: "SCRIPT_ONLY" | "SCRIPT_AND_SHOTS";
+        /**
+         * ContentPlanningTraceView
+         * @description Structured creative evidence exposed for human-readable Agent traces.
+         *
+         *     This projection deliberately excludes retry counters and orchestration plan
+         *     revisions.  It reports the semantic work produced by the creative Agents;
+         *     callers must not treat it as a second source of canonical story content.
+         */
+        ContentPlanningTraceView: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Completed Steps */
+            completed_steps: components["schemas"]["PlanningRunStep"][];
+            /**
+             * Critic Used
+             * @default false
+             */
+            critic_used: boolean;
+            current_step: components["schemas"]["PlanningRunStep"];
+            final_cold_read_report?: components["schemas"]["ScriptReviewReport"] | null;
+            /**
+             * Final Cold Read Used
+             * @default false
+             */
+            final_cold_read_used: boolean;
+            /** Issue Ledger */
+            issue_ledger?: components["schemas"]["StoryIssueLedgerEntry"][];
+            latest_repair_plan?: components["schemas"]["StoryRepairPlan"] | null;
+            /** Latest Revision Changed Scene Sequences */
+            latest_revision_changed_scene_sequences?: number[];
+            /** Latest Revision Target Scene Sequences */
+            latest_revision_target_scene_sequences?: number[];
+            latest_revision_verification?: components["schemas"]["StoryRevisionVerification"] | null;
+            latest_story_metadata_patch?: components["schemas"]["StoryMetadataRevisionPatch"] | null;
+            /** Narrative Skill Decision */
+            narrative_skill_decision?: string | null;
+            /** Outline Json */
+            outline_json?: string | null;
+            /** Outline Source */
+            outline_source?: string | null;
+            /** Planning Run Id */
+            planning_run_id: string;
+            review_disposition?: components["schemas"]["ScriptReviewDisposition"] | null;
+            review_report?: components["schemas"]["ScriptReviewReport"] | null;
+            /** Revision Changed Scene Sequences */
+            revision_changed_scene_sequences?: number[];
+            revision_judge?: components["schemas"]["RevisionJudgeRecommendation"] | null;
+            /** Revision Round */
+            revision_round: number;
+            /** Revision Scene Sequences */
+            revision_scene_sequences?: number[];
+            /** Scene Draft Json */
+            scene_draft_json?: string[];
+            /** Scene Timing Assessments */
+            scene_timing_assessments?: components["schemas"]["SceneTimingAssessmentRecord"][];
+            /** Selected Narrative Skill Ids */
+            selected_narrative_skill_ids?: string[];
+            /** Skill Selection Reasons */
+            skill_selection_reasons?: string[];
+            source_contract?: components["schemas"]["StorySourceContract"] | null;
+            status: components["schemas"]["PlanningRunStatus"];
+            story_intent?: components["schemas"]["StoryIntent"] | null;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
          * ContextPack
          * @description Bounded context assembled for one agent call.
          */
@@ -3021,6 +3159,7 @@ export interface components {
             constraints?: string[];
             /** Decisions */
             decisions?: components["schemas"]["DecisionMemory"][];
+            execution_target?: components["schemas"]["ProductionExecutionTarget"] | null;
             /** Experiences */
             experiences?: components["schemas"]["ExperienceMemory"][];
             /** Next Actions */
@@ -3035,6 +3174,8 @@ export interface components {
             project_summary?: string | null;
             /** Recent Actions */
             recent_actions?: components["schemas"]["ActionDigest"][];
+            /** Render Export */
+            render_export?: boolean | null;
             /** Run Focus */
             run_focus?: string | null;
             /** Run Id */
@@ -3042,6 +3183,12 @@ export interface components {
             /** Unresolved Artifact Refs */
             unresolved_artifact_refs?: components["schemas"]["ArtifactRef"][];
         };
+        /**
+         * ContinuationPreference
+         * @description What the user explicitly asked for before the story Agent decides.
+         * @enum {string}
+         */
+        ContinuationPreference: "SERIES" | "STANDALONE" | "AGENT_DECIDES";
         /** ContinuityState */
         ContinuityState: {
             /** Action In */
@@ -3057,8 +3204,41 @@ export interface components {
             /** Prop State Out */
             prop_state_out: string;
         };
+        /**
+         * CoreAssetBrief
+         * @description Structured identity and continuity anchors shared by all asset versions.
+         */
+        CoreAssetBrief: {
+            /** Background Constraints */
+            background_constraints?: string[];
+            /** Continuity Anchors */
+            continuity_anchors?: string[];
+            /** Identity Anchor */
+            identity_anchor: string;
+            /** Named Views Or Zones */
+            named_views_or_zones?: string[];
+            presentation_mode?: components["schemas"]["AssetPresentationMode"] | null;
+            /** @default LIGHTWEIGHT */
+            reference_strategy: components["schemas"]["AssetReferenceStrategy"];
+            /** Requested Views */
+            requested_views?: components["schemas"]["AssetStandardView"][];
+            /** Required Visible Text */
+            required_visible_text?: string[];
+            /** Strategy Rationale */
+            strategy_rationale?: string | null;
+            /** Texture Constraints */
+            texture_constraints?: string[];
+            /** Tone Or Temperament */
+            tone_or_temperament?: string | null;
+            /** Visual Attributes */
+            visual_attributes: string[];
+            /** Wardrobe Or Materials */
+            wardrobe_or_materials?: string[];
+        };
         /** CreateProjectRequest */
         CreateProjectRequest: {
+            /** @default SCRIPT_AND_SHOTS */
+            content_planning_output: components["schemas"]["ContentPlanningOutput"];
             /** Input Images */
             input_images?: components["schemas"]["CreativeInputImage"][];
             /**
@@ -3068,6 +3248,8 @@ export interface components {
             input_text: string;
             /** Linked Asset Project Ids */
             linked_asset_project_ids?: string[];
+            /** Locked Dialogue */
+            locked_dialogue?: components["schemas"]["StoryLockedDialogueLine"][];
             /** Name */
             name?: string | null;
             /** @default AI_SHORT_DRAMA */
@@ -3261,7 +3443,7 @@ export interface components {
             /** Reason */
             reason: string;
             reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Input"] | null;
-            shot_patch?: components["schemas"]["ShotPlanPatch"] | null;
+            shot_patch?: components["schemas"]["ShotPlanPatch-Input"] | null;
             /** Source Take Id */
             source_take_id?: string | null;
             /** Split Shots */
@@ -3276,7 +3458,7 @@ export interface components {
             /** Reason */
             reason: string;
             reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Output"] | null;
-            shot_patch?: components["schemas"]["ShotPlanPatch"] | null;
+            shot_patch?: components["schemas"]["ShotPlanPatch-Output"] | null;
             /** Source Take Id */
             source_take_id?: string | null;
             /** Split Shots */
@@ -3399,6 +3581,27 @@ export interface components {
             label: string;
             /** Size Bytes */
             size_bytes: number;
+        };
+        /**
+         * EndingContract
+         * @description Episode payoff and continuation policy protected across later revisions.
+         */
+        EndingContract: {
+            /** Allowed Open Threads */
+            allowed_open_threads?: string[];
+            /** Continuation Hook */
+            continuation_hook?: string | null;
+            /** Decision Basis */
+            decision_basis: string;
+            /** Episode Payoff */
+            episode_payoff: string;
+            /** Final Button */
+            final_button: string;
+            /** @default AGENT_DECIDES */
+            requested_preference: components["schemas"]["ContinuationPreference"];
+            /** Required Closures */
+            required_closures?: string[];
+            resolved_mode: components["schemas"]["ResolvedEndingMode"];
         };
         /**
          * EnhancePromptRequest
@@ -3993,9 +4196,17 @@ export interface components {
         H3MediaInput: {
             /** Asset Version Id */
             asset_version_id?: string | null;
+            /** Binding Purpose */
+            binding_purpose?: string | null;
             kind: components["schemas"]["H3MediaKind"];
+            /** Reference Alias */
+            reference_alias?: string | null;
+            /** Reference Tags */
+            reference_tags?: string[];
             role: components["schemas"]["H3MediaRole"];
             source: components["schemas"]["H3MediaSource"];
+            /** Subject Asset Id */
+            subject_asset_id?: string | null;
             /** Video Guide Id */
             video_guide_id?: string | null;
         };
@@ -4111,11 +4322,6 @@ export interface components {
         /** H3ProductionRouteExecuteRequest */
         H3ProductionRouteExecuteRequest: {
             /**
-             * Adaptive Sequential
-             * @default false
-             */
-            adaptive_sequential: boolean;
-            /**
              * Enqueue New Generations
              * @default false
              */
@@ -4221,6 +4427,7 @@ export interface components {
         H3ProductionRoutePlanRequest: {
             /**
              * Candidate Count
+             * @description Number of candidates the calling Agent requests in this action.
              * @default 1
              */
             candidate_count: number;
@@ -4229,6 +4436,8 @@ export interface components {
              * @default true
              */
             consider_video_guides: boolean;
+            /** Shot Directives */
+            shot_directives?: components["schemas"]["H3ShotRouteDirective"][];
             /** Shot Ids */
             shot_ids?: string[];
             /**
@@ -4421,6 +4630,21 @@ export interface components {
          */
         H3ShotRouteAction: "REUSE_TAKE" | "GENERATE";
         /**
+         * H3ShotRouteDirective
+         * @description Explicit per-shot production intent supplied by the calling Agent or user.
+         */
+        H3ShotRouteDirective: {
+            camera_previs_motion?: components["schemas"]["H3CameraMotionPreset"] | null;
+            /** Candidate Id */
+            candidate_id?: string | null;
+            /** Reference Selection Candidate Ids */
+            reference_selection_candidate_ids?: string[] | null;
+            /** Reuse Take Id */
+            reuse_take_id?: string | null;
+            /** Shot Id */
+            shot_id: string;
+        };
+        /**
          * H3ShotRouteExecutionStatus
          * @enum {string}
          */
@@ -4432,6 +4656,7 @@ export interface components {
             asset_preparations?: components["schemas"]["H3RouteAssetPreparation"][];
             /**
              * Candidate Count
+             * @description Number of candidates requested by this explicit route-plan action.
              * @default 1
              */
             candidate_count: number;
@@ -4467,6 +4692,8 @@ export interface components {
             /** Rationale */
             rationale: string;
             readiness: components["schemas"]["H3ShotRouteReadiness"];
+            /** Reference Selection Candidate Ids */
+            reference_selection_candidate_ids?: string[];
             /** Reuse Take Id */
             reuse_take_id?: string | null;
             /** Risk Ids */
@@ -4491,7 +4718,7 @@ export interface components {
          * H3ShotRouteReadiness
          * @enum {string}
          */
-        H3ShotRouteReadiness: "READY" | "READY_WITH_WARNINGS" | "NEEDS_ASSET" | "UNSUPPORTED";
+        H3ShotRouteReadiness: "READY" | "READY_WITH_WARNINGS" | "NEEDS_AGENT_DECISION" | "NEEDS_ASSET" | "UNSUPPORTED";
         /** H3TakeReviewRequest */
         H3TakeReviewRequest: {
             /** Hard Gate Passed */
@@ -5073,6 +5300,11 @@ export interface components {
             /** Updated At */
             updated_at: string;
             usage?: components["schemas"]["ImageUsage"] | null;
+        };
+        /** ImageNotSubmittedResolutionRequest */
+        ImageNotSubmittedResolutionRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * ImageOperation
@@ -5932,7 +6164,7 @@ export interface components {
          * OriginType
          * @enum {string}
          */
-        OriginType: "MANUAL" | "UPLOAD" | "LIBRARY_IMPORT" | "AI_GENERATED" | "AI_EDITED" | "FIXTURE";
+        OriginType: "MANUAL" | "UPLOAD" | "LIBRARY_IMPORT" | "LOCAL_DERIVED" | "AI_GENERATED" | "AI_EDITED" | "FIXTURE";
         /**
          * OutpaintPads
          * @description Per-edge pixels to add around the source video (extend-only, so all ≥ 0).
@@ -6054,6 +6286,7 @@ export interface components {
             /** Instructions */
             instructions: string;
             kind: components["schemas"]["ActionKind"];
+            production_skill_role?: components["schemas"]["ProductionSkillRole"] | null;
             /** Title */
             title: string;
             /** Tool Name */
@@ -6064,6 +6297,11 @@ export interface components {
          * @enum {string}
          */
         PlanningRunStatus: "RUNNING" | "COMPLETE" | "NEEDS_ATTENTION" | "FAILED";
+        /**
+         * PlanningRunStep
+         * @enum {string}
+         */
+        PlanningRunStep: "STORY_ORIENTATION" | "STORY_ARCHITECT" | "SCENE_WRITER" | "SCRIPT_CRITIC" | "REVIEW_ROUTER" | "SOURCE_CONTRACT" | "STORY_REVISION" | "STORY_METADATA_REVISION" | "REVISION_SCOPE" | "SCENE_REVISION" | "REVISION_VERIFIER" | "REVISION_JUDGE" | "FINAL_COLD_READ" | "SCENE_DIRECTOR" | "FINALIZE" | "COMPLETE";
         /** PreprocessingStep */
         PreprocessingStep: {
             /** Params */
@@ -6097,6 +6335,11 @@ export interface components {
             /** Role Names */
             role_names: string[];
         };
+        /**
+         * ProductionSkillRole
+         * @enum {string}
+         */
+        ProductionSkillRole: "CONCEPT" | "WRITER" | "PLANNER" | "CRITIC" | "STORY_REPAIR" | "REVISION_VERIFIER" | "FINAL_COLD_READ" | "REVIEW_ROUTER" | "DIRECTOR" | "ASSET_REVIEWER" | "ROUTE_PLANNER" | "VIDEO_PROMPT_COMPILER" | "EPISODE_REVIEWER";
         /** ProgressSummary */
         ProgressSummary: {
             /** Export Ready */
@@ -6195,13 +6438,15 @@ export interface components {
         };
         /**
          * ProjectPlanningMetadata
-         * @description Persisted planning provenance and resumable planning ownership.
+         * @description Project-visible projection of planning provenance or an owned planning job.
          */
         ProjectPlanningMetadata: {
             /** Owner Agent Run Id */
             owner_agent_run_id?: string | null;
             /** Planner */
             planner?: string | null;
+            /** Planning Job Kind */
+            planning_job_kind?: "CONTENT_PLANNING" | null;
             /** Run Id */
             run_id?: string | null;
             status: components["schemas"]["PlanningRunStatus"];
@@ -6215,6 +6460,8 @@ export interface components {
              * @default 9:16
              */
             aspect_ratio: string;
+            /** @default SCRIPT_AND_SHOTS */
+            content_planning_output: components["schemas"]["ContentPlanningOutput"];
             /** Created At */
             created_at: string;
             /** Current Bible Version Id */
@@ -6260,7 +6507,7 @@ export interface components {
          * ProjectStage
          * @enum {string}
          */
-        ProjectStage: "INPUT" | "PLANNED" | "GENERATING" | "REVIEW" | "TIMELINE_READY" | "EXPORTED";
+        ProjectStage: "INPUT" | "SCRIPT_READY" | "PLANNED" | "GENERATING" | "REVIEW" | "TIMELINE_READY" | "EXPORTED";
         /** PromptTemplatePlaceholder */
         PromptTemplatePlaceholder: {
             /** Choices */
@@ -6354,12 +6601,14 @@ export interface components {
         ReferenceAngle: "FRONT" | "THREE_QUARTER_LEFT" | "THREE_QUARTER_RIGHT" | "LEFT_PROFILE" | "RIGHT_PROFILE" | "BACK" | "NOT_APPLICABLE";
         /** ReferenceBinding */
         ReferenceBinding: {
-            /** Kind */
-            kind: string;
+            kind: components["schemas"]["AssetKind"];
             /** Purpose */
             purpose: string;
-            /** Requirement */
-            requirement: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
             /** Target Id */
             target_id: string;
         };
@@ -6745,6 +6994,8 @@ export interface components {
             /** Narrative Purpose */
             narrative_purpose: string;
             reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Input"] | null;
+            /** Timeline Beats */
+            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
             /** Transition Out */
             transition_out: string;
             /** Visual */
@@ -6780,11 +7031,19 @@ export interface components {
             /** Narrative Purpose */
             narrative_purpose: string;
             reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Output"] | null;
+            /** Timeline Beats */
+            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
             /** Transition Out */
             transition_out: string;
             /** Visual */
             visual: string;
         };
+        /**
+         * ResolvedEndingMode
+         * @description The concrete episode shape selected by the Story Architect.
+         * @enum {string}
+         */
+        ResolvedEndingMode: "SERIES" | "STANDALONE";
         /** RetakeCancelledResponse */
         RetakeCancelledResponse: {
             /**
@@ -6859,6 +7118,30 @@ export interface components {
             change_reason: string;
             /** Revisions */
             revisions: components["schemas"]["ScriptLineRevision"][];
+        };
+        /**
+         * RevisionJudgeConfidence
+         * @enum {string}
+         */
+        RevisionJudgeConfidence: "LOW" | "MEDIUM" | "HIGH";
+        /** RevisionJudgeRecommendation */
+        RevisionJudgeRecommendation: {
+            /**
+             * Advisory Only
+             * @default true
+             */
+            advisory_only: boolean;
+            /** Alternative Revision Round */
+            alternative_revision_round: number;
+            confidence: components["schemas"]["RevisionJudgeConfidence"];
+            /** Evidence */
+            evidence?: string[];
+            /** Recommended Revision Round */
+            recommended_revision_round: number;
+            /** Summary */
+            summary: string;
+            /** Tradeoffs */
+            tradeoffs?: string[];
         };
         /** RouteEvidence */
         RouteEvidence: {
@@ -6962,6 +7245,28 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /**
+         * SceneTimingAssessmentRecord
+         * @description One Writer timing self-assessment kept as inspectable evidence.
+         *
+         *     The record does not approve, reject, or route creative work.  Later Agents
+         *     remain responsible for their own semantic reading of the screenplay.
+         */
+        SceneTimingAssessmentRecord: {
+            /** Assessment */
+            assessment: string;
+            /** Revision Round */
+            revision_round: number;
+            /** Scene Sequence */
+            scene_sequence: number;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "INITIAL_WRITE" | "REVISION";
+            /** Target Duration Seconds */
+            target_duration_seconds: number;
+        };
         /** ScriptLine */
         ScriptLine: {
             audio_kind: components["schemas"]["AudioKind"];
@@ -6971,6 +7276,8 @@ export interface components {
             original_text: string;
             /** Speaker */
             speaker: string;
+            /** Speaker Character Id */
+            speaker_character_id?: string | null;
             /** Spoken Text */
             spoken_text: string;
             /** Subtitle Text */
@@ -7011,8 +7318,11 @@ export interface components {
         ScriptReviewIssue: {
             /** Category */
             category: string;
+            /** Issue Id */
+            issue_id?: string | null;
             /** Observation */
             observation: string;
+            owner: components["schemas"]["ReviewRepairOwner"];
             /** Recommendation */
             recommendation: string;
             /** Scene Sequences */
@@ -7029,12 +7339,15 @@ export interface components {
         };
         /** ScriptReviewReport */
         ScriptReviewReport: {
+            /** Followup Rationale */
+            followup_rationale?: string | null;
             /** Issues */
             issues?: components["schemas"]["ScriptReviewIssue"][];
-            /**
-             * Requires Revision
-             * @default false
-             */
+            /** Performance Timing Assessment */
+            performance_timing_assessment?: string | null;
+            /** @default FINALIZE */
+            recommended_followup: components["schemas"]["StoryReviewFollowup"];
+            /** Requires Revision */
             requires_revision: boolean;
             /** Strengths */
             strengths?: string[];
@@ -7053,6 +7366,8 @@ export interface components {
             change_reason?: string | null;
             /** Created At */
             created_at: string;
+            ending_contract?: components["schemas"]["EndingContract"] | null;
+            final_cold_read_report?: components["schemas"]["ScriptReviewReport"] | null;
             freshness: components["schemas"]["Freshness"];
             /** Id */
             id: string;
@@ -7068,9 +7383,16 @@ export interface components {
             project_id: string;
             review_disposition?: components["schemas"]["ScriptReviewDisposition"] | null;
             review_report?: components["schemas"]["ScriptReviewReport"] | null;
+            /**
+             * Screenplay Text
+             * @default
+             */
+            screenplay_text: string;
+            source_contract?: components["schemas"]["StorySourceContract"] | null;
             source_mode: components["schemas"]["SourceMode"];
             /** Spoken Text */
             spoken_text: string;
+            story_intent?: components["schemas"]["StoryIntent"] | null;
             /** Structured Scenes */
             structured_scenes: components["schemas"]["StructuredScene"][];
             /** Subtitle Text */
@@ -7377,13 +7699,15 @@ export interface components {
             scene_id?: string | null;
             /** Sequence */
             sequence: number;
+            /** Timeline Beats */
+            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
             /** Transition Out */
             transition_out: string;
             /** Visual */
             visual: string;
         };
         /** ShotPlanPatch */
-        ShotPlanPatch: {
+        "ShotPlanPatch-Input": {
             /** Audio Intent */
             audio_intent?: string | null;
             /** Camera */
@@ -7401,10 +7725,52 @@ export interface components {
             merge_candidate?: boolean | null;
             /** Narrative Purpose */
             narrative_purpose?: string | null;
+            /** Timeline Beats */
+            timeline_beats?: components["schemas"]["ShotTimelineBeat"][] | null;
             /** Transition Out */
             transition_out?: string | null;
             /** Visual */
             visual?: string | null;
+        };
+        /** ShotPlanPatch */
+        "ShotPlanPatch-Output": {
+            /** Audio Intent */
+            audio_intent?: string | null;
+            /** Camera */
+            camera?: string | null;
+            continuity?: components["schemas"]["ContinuityState"] | null;
+            /** Dialogue Line Ids */
+            dialogue_line_ids?: string[] | null;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Framing */
+            framing?: string | null;
+            /** Local Rework Risk */
+            local_rework_risk?: string | null;
+            /** Merge Candidate */
+            merge_candidate?: boolean | null;
+            /** Narrative Purpose */
+            narrative_purpose?: string | null;
+            /** Timeline Beats */
+            timeline_beats?: components["schemas"]["ShotTimelineBeat"][] | null;
+            /** Transition Out */
+            transition_out?: string | null;
+            /** Visual */
+            visual?: string | null;
+        };
+        /**
+         * ShotReferenceCue
+         * @description Semantic reference requested by one time-bounded part of a shot.
+         */
+        ShotReferenceCue: {
+            /** Alias */
+            alias: string;
+            /** Purpose */
+            purpose: string;
+            /** Required Tags */
+            required_tags?: string[];
+            /** Subject Asset Id */
+            subject_asset_id: string;
         };
         /** ShotReferencePlanUpdateRequest */
         "ShotReferencePlanUpdateRequest-Input": {
@@ -7437,6 +7803,34 @@ export interface components {
             planning_notes?: string | null;
             /** Requirements */
             requirements?: components["schemas"]["ReferenceRequirement"][];
+        };
+        /**
+         * ShotTimelineBeat
+         * @description One observable camera/action/performance phase inside an editorial shot.
+         */
+        ShotTimelineBeat: {
+            /** Action */
+            action: string;
+            /** Camera */
+            camera: string;
+            /** Dialogue Line Ids */
+            dialogue_line_ids?: string[];
+            /** Emotion */
+            emotion?: string | null;
+            /** End Seconds */
+            end_seconds: number;
+            /** Framing */
+            framing: string;
+            /** Performance */
+            performance?: string | null;
+            /** References */
+            references?: components["schemas"]["ShotReferenceCue"][];
+            /** Sound */
+            sound?: string | null;
+            /** Start Seconds */
+            start_seconds: number;
+            /** Visual */
+            visual: string;
         };
         /**
          * SourceMode
@@ -7494,6 +7888,46 @@ export interface components {
             /** Voice Identity */
             voice_identity?: string | null;
         };
+        /**
+         * SpecialistTurnRecord
+         * @description Recoverable trace for one specialist decision followed by one Tool action.
+         */
+        SpecialistTurnRecord: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at?: string;
+            /** Result */
+            result?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Sequence */
+            sequence: number;
+            /** @default REQUESTED */
+            status: components["schemas"]["SpecialistTurnStatus"];
+            /** Tool Name */
+            tool_name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+        };
+        /**
+         * SpecialistTurnStatus
+         * @description Persisted lifecycle of one Tool request made by a specialist Agent.
+         * @enum {string}
+         */
+        SpecialistTurnStatus: "REQUESTED" | "IN_PROGRESS" | "COMPLETED" | "INTERRUPTED";
         /** StatusMessage */
         StatusMessage: {
             /** Message */
@@ -7638,6 +8072,267 @@ export interface components {
              */
             clear_api_key: boolean;
         };
+        /**
+         * StoryCharacterMetadataPatch
+         * @description Sparse descriptive updates for one existing character selected by stable ID.
+         */
+        StoryCharacterMetadataPatch: {
+            /** Appearance */
+            appearance?: string | null;
+            /** Character Id */
+            character_id: string;
+            /** Performance */
+            performance?: string | null;
+            /** Voice Identity */
+            voice_identity?: string | null;
+            /** Wardrobe */
+            wardrobe?: string | null;
+        };
+        /**
+         * StoryIntent
+         * @description Versioned creative direction for one story, not a quality gate.
+         */
+        StoryIntent: {
+            /** Audience Experience */
+            audience_experience: string;
+            /** Dramatic Engine */
+            dramatic_engine: string;
+            /** Drift Risks */
+            drift_risks?: string[];
+            /** Progression Strategy */
+            progression_strategy: string;
+            /** Protected Elements */
+            protected_elements?: string[];
+            /** Tone And Plausibility */
+            tone_and_plausibility: string;
+        };
+        /**
+         * StoryIssueLedgerEntry
+         * @description Natural-language history for one semantic story concern, never a gate.
+         */
+        StoryIssueLedgerEntry: {
+            /** Accepted Tradeoff */
+            accepted_tradeoff?: string | null;
+            /** Evolution Notes */
+            evolution_notes?: string[];
+            /** Fix Evidence */
+            fix_evidence?: string[];
+            /** Handoff */
+            handoff?: string | null;
+            /** Issue Id */
+            issue_id: string;
+            /** Observation */
+            observation: string;
+            /** Semantic Cluster */
+            semantic_cluster: string;
+            /** State */
+            state: string;
+            /** Text Evidence */
+            text_evidence?: string[];
+        };
+        /**
+         * StoryLocationMetadataPatch
+         * @description Sparse descriptive updates for one existing location selected by stable ID.
+         */
+        StoryLocationMetadataPatch: {
+            /** Key Views */
+            key_views?: string[] | null;
+            /** Layout */
+            layout?: string | null;
+            /** Lighting */
+            lighting?: string | null;
+            /** Location Id */
+            location_id: string;
+            /** Palette */
+            palette?: string | null;
+        };
+        /**
+         * StoryLockedDialogueLine
+         * @description One user-locked spoken line structured by the intake Agent or API caller.
+         */
+        StoryLockedDialogueLine: {
+            /** @default DIALOGUE */
+            audio_kind: components["schemas"]["AudioKind"];
+            /** Speaker */
+            speaker: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * StoryMetadataRevisionPatch
+         * @description Typed, sparse patch for global story metadata only.
+         *
+         *     Stable entity IDs are selectors, not editable values. Scene contracts, dialogue,
+         *     and target duration are intentionally absent from this schema.
+         */
+        StoryMetadataRevisionPatch: {
+            /** Character Patches */
+            character_patches?: components["schemas"]["StoryCharacterMetadataPatch"][];
+            /** Location Patches */
+            location_patches?: components["schemas"]["StoryLocationMetadataPatch"][];
+            /** Prop Patches */
+            prop_patches?: components["schemas"]["StoryPropMetadataPatch"][];
+            /** Story Summary */
+            story_summary?: string | null;
+            style?: components["schemas"]["StoryStyleMetadataPatch"] | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * StoryPropMetadataPatch
+         * @description Sparse descriptive updates for one existing prop selected by stable ID.
+         */
+        StoryPropMetadataPatch: {
+            /** Appearance */
+            appearance: string;
+            /** Prop Id */
+            prop_id: string;
+        };
+        /**
+         * StoryRepairAction
+         * @description One evidence-backed recommendation; it is not an execution gate.
+         */
+        StoryRepairAction: {
+            /** Affected Scene Sequences */
+            affected_scene_sequences?: number[];
+            diagnosis: components["schemas"]["StoryRepairDiagnosis"];
+            /** Issue Id */
+            issue_id?: string | null;
+            /** Issue Index */
+            issue_index: number;
+            /** Preserve */
+            preserve?: string[];
+            /** Rationale */
+            rationale: string;
+            /** Recommended Change */
+            recommended_change: string;
+            /** Remove Or Simplify */
+            remove_or_simplify?: string[];
+            /** Should Revise */
+            should_revise: boolean;
+            /**
+             * Target Duration Change Required
+             * @default false
+             */
+            target_duration_change_required: boolean;
+            /** Validation Questions */
+            validation_questions?: string[];
+        };
+        /**
+         * StoryRepairDiagnosis
+         * @description Where a routed story issue actually originates after a second look.
+         * @enum {string}
+         */
+        StoryRepairDiagnosis: "SOURCE_CONCEPT_GAP" | "OUTLINE_DEFECT" | "CRITIC_OVERREACH";
+        /**
+         * StoryRepairPlan
+         * @description Cross-round diagnosis and minimal repair plan prepared before rewriting.
+         */
+        StoryRepairPlan: {
+            /** Actions */
+            actions?: components["schemas"]["StoryRepairAction"][];
+            /** Invariants */
+            invariants?: string[];
+            /** Source Promise */
+            source_promise: string;
+            /** Summary */
+            summary: string;
+            /**
+             * User Overridable
+             * @default true
+             */
+            user_overridable: boolean;
+        };
+        /**
+         * StoryReviewFollowup
+         * @description Agent-recommended continuation after a complete story read or repair check.
+         * @enum {string}
+         */
+        StoryReviewFollowup: "FINALIZE" | "FINAL_COLD_READ";
+        /**
+         * StoryRevisionVerification
+         * @description Repair verification plus a natural cold read of the revised screenplay.
+         */
+        StoryRevisionVerification: {
+            /** Accepted */
+            accepted: boolean;
+            /** Followup Rationale */
+            followup_rationale?: string | null;
+            /** @default FINALIZE */
+            recommended_followup: components["schemas"]["StoryReviewFollowup"];
+            /** Satisfied Issue Ids */
+            satisfied_issue_ids?: string[];
+            /** Satisfied Issue Indices */
+            satisfied_issue_indices?: number[];
+            /** Summary */
+            summary: string;
+            /**
+             * User Overridable
+             * @default true
+             */
+            user_overridable: boolean;
+            /** Violations */
+            violations?: components["schemas"]["StoryRevisionViolation"][];
+        };
+        /** StoryRevisionViolation */
+        StoryRevisionViolation: {
+            /** Category */
+            category: string;
+            /** Issue Id */
+            issue_id?: string | null;
+            /** Observation */
+            observation: string;
+            /** Repair Instruction */
+            repair_instruction: string;
+            /** Scene Sequences */
+            scene_sequences?: number[];
+            /**
+             * Target Duration Change Required
+             * @default false
+             */
+            target_duration_change_required: boolean;
+        };
+        /**
+         * StorySourceContract
+         * @description Explicit user promises separated from creative choices left to the Agents.
+         */
+        StorySourceContract: {
+            /** Authoritative User Overrides */
+            authoritative_user_overrides?: string[];
+            /** @default AGENT_DECIDES */
+            continuation_preference: components["schemas"]["ContinuationPreference"];
+            /** Explicit Commitments */
+            explicit_commitments: string[];
+            /** Explicit Prohibitions */
+            explicit_prohibitions?: string[];
+            /** Locked Dialogue */
+            locked_dialogue?: components["schemas"]["StoryLockedDialogueLine"][];
+            /** Open Creative Choices */
+            open_creative_choices?: string[];
+            /**
+             * User Overridable
+             * @default true
+             */
+            user_overridable: boolean;
+        };
+        /**
+         * StoryStyleMetadataPatch
+         * @description Sparse updates to the existing global style record.
+         */
+        StoryStyleMetadataPatch: {
+            /** Cinematography */
+            cinematography?: string | null;
+            /** Color */
+            color?: string | null;
+            /** Forbidden */
+            forbidden?: string[] | null;
+            /** Genre */
+            genre?: string | null;
+            /** Medium */
+            medium?: string | null;
+            /** Texture */
+            texture?: string | null;
+        };
         /** StructuredScene */
         StructuredScene: {
             entry_state?: components["schemas"]["SceneContinuitySummary"] | null;
@@ -7650,6 +8345,11 @@ export interface components {
             line_ids: string[];
             /** Narrative Purpose */
             narrative_purpose?: string | null;
+            /**
+             * Screenplay Text
+             * @default
+             */
+            screenplay_text: string;
             /** Summary */
             summary: string;
             /** Target Duration Seconds */
@@ -8193,12 +8893,15 @@ export interface components {
             open_questions?: string[];
             /** Parent Run Id */
             parent_run_id: string;
+            production_skill_role?: components["schemas"]["ProductionSkillRole"] | null;
             /** Recipient Role */
             recipient_role: string;
             /** Scope */
             scope?: components["schemas"]["ArtifactRef"][];
             /** Sender */
             sender: string;
+            /** Specialist Turns */
+            specialist_turns?: components["schemas"]["SpecialistTurnRecord"][];
             /** @default PENDING */
             status: components["schemas"]["DelegationStatus"];
             /**
@@ -10351,6 +11054,50 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageTaskResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_image_not_submitted_api_short_drama_image_tasks__task_id__resolve_not_submitted_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageNotSubmittedResolutionRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

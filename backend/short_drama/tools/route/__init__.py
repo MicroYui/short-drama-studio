@@ -26,7 +26,6 @@ from short_drama.language_models import (
     LanguagePromptCompileResponse,
 )
 from short_drama.quality_learning import H3CapabilityProfileResponse
-from short_drama.tools.common import EmptyToolInput
 from short_drama.tools.contracts import (
     ArtifactRef,
     ToolCategory,
@@ -64,8 +63,10 @@ class RouteToolService(Protocol):
 
     def list_h3_provider_runs(self, project_id: str) -> H3ProviderRunsResponse: ...
 
-    def list_h3_reconciliation_candidates(
+    def list_h3_reconciliation_candidates_for_task(
         self,
+        project_id: str,
+        task_id: str,
     ) -> H3ReconciliationCandidatesResponse: ...
 
     def resolve_h3_submission(
@@ -107,6 +108,11 @@ class RouteToolService(Protocol):
 
 class RouteProjectInput(ToolModel):
     project_id: str
+
+
+class RouteReconciliationInput(ToolModel):
+    project_id: str
+    task_id: str
 
 
 class RoutePromptCompileInput(ToolModel):
@@ -252,19 +258,38 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
         )
     )
 
+    def list_reconciliation_candidates(
+        request: RouteReconciliationInput,
+    ) -> ToolExecution[H3ReconciliationCandidatesResponse]:
+        result = service.list_h3_reconciliation_candidates_for_task(
+            request.project_id,
+            request.task_id,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="generation_task",
+                    artifact_id=request.task_id,
+                ),
+            ),
+        )
+
     registry.register(
         ToolSpec(
             id="route.list_h3_reconciliation",
-            version=1,
+            version=2,
             category=ToolCategory.ROUTE,
-            description="List H3 tasks whose remote submission state needs reconciliation.",
-            effect=ToolEffect.READ,
-            idempotent=True,
-            input_model=EmptyToolInput,
-            output_model=H3ReconciliationCandidatesResponse,
-            handler=lambda _request: ToolExecution(
-                output=service.list_h3_reconciliation_candidates()
+            description=(
+                "List remote H3 candidates compatible with one local SUBMIT_UNKNOWN "
+                "task; do not bind automatically when multiple candidates remain."
             ),
+            effect=ToolEffect.EXTERNAL,
+            idempotent=True,
+            input_model=RouteReconciliationInput,
+            output_model=H3ReconciliationCandidatesResponse,
+            handler=list_reconciliation_candidates,
             tags=frozenset({"h3", "reconciliation", "route"}),
         )
     )
@@ -490,6 +515,7 @@ __all__ = [
     "RouteProbeInput",
     "RouteProjectInput",
     "RoutePromptCompileInput",
+    "RouteReconciliationInput",
     "RouteResolveNotSubmittedInput",
     "RouteResolveSubmissionInput",
     "RouteReviewTakeInput",

@@ -39,10 +39,10 @@ from short_drama.production_manager import (
     AgentRunAdvanceRequest,
     AgentRunCreateRequest,
     AgentRunReplanRequest,
-    AgentUserInputRequest,
     AgentWorkOrderResultRequest,
     ProductionManagerError,
 )
+from short_drama.production_profiles import ProductionSkillRole
 from short_drama.service import ShortDramaService
 
 
@@ -162,6 +162,14 @@ def _single_tool_plan(
     )
 
 
+def test_incomplete_agent_plan_requires_a_next_step() -> None:
+    with pytest.raises(
+        ValueError,
+        match="incomplete Agent plan must contain at least one next step",
+    ):
+        AgentPlanProposal(summary="No next step", goal_complete=False)
+
+
 def test_capability_catalog_shares_tools_across_file_backed_skills(
     tmp_path: Path,
 ) -> None:
@@ -190,14 +198,25 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
 
     run = service.create_agent_run(
         project.id,
-        AgentRunCreateRequest(objective="Inspect only what this objective needs."),
+        AgentRunCreateRequest(
+            objective="Inspect only what this objective needs.",
+            execution_target=ProductionExecutionTarget.REAL_H3,
+            render_export=False,
+        ),
     )
 
     assert run.snapshot.current_plan is not None
     assert run.snapshot.current_plan.steps[0].tool_name == "project.get"
     assert run.snapshot.run.unattended is False
-    assert run.snapshot.run.execution_target is None
+    assert run.snapshot.run.execution_target == ProductionExecutionTarget.REAL_H3
+    assert run.snapshot.run.render_export is False
+    planner_context = json.loads(client.inputs[0])["context"]
+    assert planner_context["execution_target"] == "REAL_H3"
+    assert planner_context["render_export"] is False
     assert "你可以选择、跳过、重排、并行或替换步骤" in client.instructions[0]
+    assert "STORY_REPAIR" in client.instructions[0]
+    assert "REVISION_VERIFIER" in client.instructions[0]
+    assert "FINAL_COLD_READ" in client.instructions[0]
     assert "当前制片技能：AI 原生短剧" in client.instructions[0]
     assert "共享端到端制片流程" in client.instructions[0]
     assert project.id in client.inputs[0]
@@ -212,13 +231,18 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
             {
                 "route.enqueue_h3_probe",
                 "route.execute_h3_plan",
+                "route.list_h3_reconciliation",
                 "route.resolve_h3_submission",
                 "route.resolve_h3_not_submitted",
             },
         ),
         (
             ProductionExecutionTarget.REAL_H3,
-            {"route.enqueue_h3_probe", "route.execute_h3_plan"},
+            {
+                "route.enqueue_h3_probe",
+                "route.execute_h3_plan",
+                "route.list_h3_reconciliation",
+            },
             {
                 "video.enqueue",
                 "video.retake",
@@ -240,6 +264,7 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
                 "task.reconcile",
                 "route.enqueue_h3_probe",
                 "route.execute_h3_plan",
+                "route.list_h3_reconciliation",
                 "route.resolve_h3_submission",
                 "route.resolve_h3_not_submitted",
             },
@@ -377,6 +402,7 @@ def test_configured_specialist_agent_completes_work_order_round_trip(
                         id="delegate-director",
                         title="Ask scene director",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Review the first shot's staging.",
                     )
@@ -504,7 +530,8 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
                         id="director-review",
                         title="Director review",
                         kind=ActionKind.DELEGATION,
-                        assigned_agent="scene-director",
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
+                        assigned_agent="specialist-alpha",
                         instructions="Review this shot's staging without changing other shots.",
                         arguments={
                             "why_now": "The shot is the only affected branch.",
@@ -532,9 +559,17 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
     work_order = service.get_agent_work_order(work_order_id)
 
     assert work_order.work_order.scope[0].artifact_id == shot.id
+    assert work_order.work_order.recipient_role == "specialist-alpha"
+    assert (
+        work_order.work_order.production_skill_role
+        == ProductionSkillRole.DIRECTOR
+    )
     assert work_order.work_order.constraints == ["Preserve the accepted ending."]
     assert "当前制片技能：AI 原生短剧" in work_order.system_prompt
-    assert "导演职责准则" in work_order.system_prompt
+    assert "导演的通用职责" in work_order.system_prompt
+    assert "把已批准的文本意图转成可见的表演、调度、构图、动作、声音与时间设计" in (
+        work_order.system_prompt
+    )
     assert work_order.context.artifacts[0].ref.artifact_id == shot.id
 
     returned = service.submit_agent_work_order_result(
@@ -578,6 +613,7 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
                         id="presenter-direction",
                         title="Presenter direction",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Review eyeline and gesture range.",
                     )
@@ -615,6 +651,7 @@ def test_partial_work_order_result_can_be_completed_without_orphaning_the_plan(
                         id="delegate",
                         title="Delegate",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Review the scene.",
                     )
@@ -746,6 +783,7 @@ def test_advance_executes_the_current_ready_batch_before_waiting(
                         id="delegate",
                         title="Delegate a bounded review",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Review the current staging.",
                     ),
@@ -782,6 +820,10 @@ def test_advance_executes_the_current_ready_batch_before_waiting(
         "SUCCEEDED",
         "SUCCEEDED",
     ]
+    assert all(
+        action.tool_name != "planning.advance"
+        for action in advanced.run.snapshot.actions
+    )
     assert advanced.run.snapshot.run.status == AgentRunStatus.WAITING
 
     completed = service.submit_agent_work_order_result(
@@ -858,27 +900,43 @@ def test_completed_bounded_plan_replans_from_the_latest_context(
     assert any("latest ContextPack" in note for note in advanced.notes)
 
 
-def test_successful_actions_reset_the_no_progress_replan_bound(
+def test_failed_actions_can_replan_beyond_the_legacy_fixed_count(
     tmp_path: Path,
 ) -> None:
     client = SequencedLanguageClient(
         [
             json.dumps(
                 {
-                    "summary": f"Continue bounded step {index}.",
-                    "goal_complete": index == 6,
+                    "summary": (
+                        "Record recovery after repeated failed plans."
+                        if index == 5
+                        else f"Retry invalid inspection plan {index}."
+                    ),
+                    "goal_complete": index == 5,
                     "steps": [
-                        {
-                            "id": f"checkpoint-{index}",
-                            "title": f"Checkpoint {index}",
-                            "kind": "CHECKPOINT",
-                            "assigned_agent": "production-manager",
-                            "instructions": f"Record successful step {index}.",
-                        }
+                        (
+                            {
+                                "id": "recovered",
+                                "title": "Record recovery",
+                                "kind": "CHECKPOINT",
+                                "assigned_agent": "production-manager",
+                                "instructions": "Record the recovered plan.",
+                            }
+                            if index == 5
+                            else {
+                                "id": f"invalid-inspection-{index}",
+                                "title": f"Invalid inspection {index}",
+                                "kind": "TOOL_CALL",
+                                "assigned_agent": "production-manager",
+                                "tool_name": "project.get",
+                                "instructions": "Attempt an inspection without its required input.",
+                                "arguments": {},
+                            }
+                        )
                     ],
                 }
             )
-            for index in range(1, 7)
+            for index in range(1, 6)
         ]
     )
     service = ShortDramaService(
@@ -893,16 +951,17 @@ def test_successful_actions_reset_the_no_progress_replan_bound(
     run = service.create_agent_run(
         project.id,
         AgentRunCreateRequest(
-            objective="Complete seven successful bounded checkpoints.",
+            objective="Recover after more than four consecutive failed plans.",
             initial_plan=AgentPlanProposal(
-                summary="Start the bounded sequence.",
+                summary="Start with an invalid inspection.",
                 steps=[
                     PlanStep(
-                        id="checkpoint-0",
-                        title="Checkpoint 0",
-                        kind=ActionKind.CHECKPOINT,
+                        id="invalid-inspection-0",
+                        title="Invalid inspection 0",
+                        kind=ActionKind.TOOL_CALL,
                         assigned_agent="production-manager",
-                        instructions="Record successful step 0.",
+                        tool_name="project.get",
+                        instructions="Attempt an inspection without its required input.",
                     )
                 ],
             ),
@@ -911,13 +970,139 @@ def test_successful_actions_reset_the_no_progress_replan_bound(
 
     advanced = service.advance_agent_run(
         run.snapshot.run.id,
-        AgentRunAdvanceRequest(max_actions=7),
+        AgentRunAdvanceRequest(max_actions=6),
     )
 
     assert advanced.run.snapshot.run.status == AgentRunStatus.COMPLETED
-    assert len(advanced.executed_action_ids) == 7
-    assert len(client.inputs) == 6
+    assert [action.status for action in advanced.run.snapshot.actions] == [
+        ActionStatus.FAILED,
+        ActionStatus.FAILED,
+        ActionStatus.FAILED,
+        ActionStatus.FAILED,
+        ActionStatus.FAILED,
+        ActionStatus.SUCCEEDED,
+    ]
+    assert len(advanced.executed_action_ids) == 6
+    assert len(client.inputs) == 5
     assert not any("bounded retry limit" in note for note in advanced.notes)
+
+
+def test_completed_plan_waits_when_replan_has_no_actionable_or_terminal_path(
+    tmp_path: Path,
+) -> None:
+    client = SequencedLanguageClient(
+        [
+            json.dumps(
+                {
+                    "summary": "No justified next action is available yet.",
+                    "goal_complete": False,
+                    "steps": [],
+                }
+            )
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project = service.initialize_fixture().document.project
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Stop naturally when replanning has no supported next action.",
+            initial_plan=AgentPlanProposal(
+                summary="Record the current state before reconsidering the plan.",
+                steps=[
+                    PlanStep(
+                        id="checkpoint",
+                        title="Record current state",
+                        kind=ActionKind.CHECKPOINT,
+                        assigned_agent="production-manager",
+                        instructions="Persist the current state.",
+                    )
+                ],
+            ),
+        ),
+    )
+
+    advanced = service.advance_agent_run(
+        run.snapshot.run.id,
+        AgentRunAdvanceRequest(max_actions=2),
+    )
+
+    assert advanced.run.snapshot.run.status == AgentRunStatus.WAITING
+    assert len(advanced.executed_action_ids) == 1
+    assert len(client.inputs) == 1
+    assert advanced.run.snapshot.current_plan is not None
+    assert advanced.run.snapshot.current_plan.revision == 1
+    assert advanced.run.ready_steps == []
+    assert any("invalid plan payload" in note for note in advanced.notes)
+
+
+def test_external_action_settlement_waits_after_one_invalid_replan(
+    tmp_path: Path,
+) -> None:
+    client = SequencedLanguageClient(
+        [
+            json.dumps(
+                {
+                    "summary": "No justified next action is available yet.",
+                    "goal_complete": False,
+                    "steps": [],
+                }
+            )
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project = service.initialize_fixture().document.project
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Complete a delegated review and reconsider the next plan.",
+            initial_plan=AgentPlanProposal(
+                summary="Delegate one review before replanning.",
+                steps=[
+                    PlanStep(
+                        id="delegate",
+                        title="Delegate review",
+                        kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
+                        assigned_agent="scene-director",
+                        instructions="Return one concise staging review.",
+                    )
+                ],
+            ),
+        ),
+    )
+    waiting = service.advance_agent_run(
+        run.snapshot.run.id,
+        AgentRunAdvanceRequest(),
+    )
+
+    completed = service.submit_agent_work_order_result(
+        waiting.created_work_order_ids[0],
+        AgentWorkOrderResultRequest(
+            status=AgentResultStatus.COMPLETED,
+            concise_summary="The staging review is complete.",
+        ),
+    )
+
+    assert completed.run.snapshot.run.status == AgentRunStatus.WAITING
+    assert len(client.inputs) == 1
+    assert completed.run.snapshot.current_plan is not None
+    assert completed.run.snapshot.current_plan.revision == 1
+    assert completed.run.ready_steps == []
 
 
 def test_tool_failure_can_replan_and_continue_within_the_same_advance(
@@ -993,14 +1178,17 @@ def test_builtin_specialist_can_call_shared_tools_before_returning_result(
     )
     project = service.initialize_fixture().document.project
     client.responses = [
+        *[
             json.dumps(
                 {
                     "tool_name": "project.get",
                     "arguments": {"project_id": project.id},
-                    "reason": "Inspect the canonical project before directing the scene.",
+                    "reason": f"Inspect canonical evidence item {index} before deciding.",
                 }
-            ),
-            """{
+            )
+            for index in range(1, 7)
+        ],
+        """{
               "status": "COMPLETED",
               "concise_summary": "The scene direction is grounded in the canonical project.",
               "created_artifacts": [],
@@ -1028,6 +1216,7 @@ def test_builtin_specialist_can_call_shared_tools_before_returning_result(
                         id="delegate",
                         title="Delegate scene direction",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Inspect the project and return one staging decision.",
                     )
@@ -1040,16 +1229,36 @@ def test_builtin_specialist_can_call_shared_tools_before_returning_result(
         AgentRunAdvanceRequest(),
     )
 
-    response = service.execute_agent_work_order(waiting.created_work_order_ids[0])
+    work_order_id = waiting.created_work_order_ids[0]
+    partial_results = []
+    while True:
+        response = service.execute_agent_work_order(work_order_id)
+        if response.result.status == AgentResultStatus.COMPLETED:
+            break
+        partial_results.append(response.result)
 
     assert response.run.snapshot.run.status == AgentRunStatus.COMPLETED
-    assert len(client.inputs) == 2
+    assert len(partial_results) == 12
+    assert all(item.status == AgentResultStatus.PARTIAL for item in partial_results)
+    assert len(client.inputs) == 7
     first_payload = json.loads(client.inputs[0])
     assert "project.get" in {
         tool["id"] for tool in first_payload["available_tools"]
     }
-    second_payload = json.loads(client.inputs[1])
-    assert second_payload["tool_history"][0]["result"]["status"] == "SUCCEEDED"
+    final_payload = json.loads(client.inputs[-1])
+    assert len(final_payload["tool_history"]) == 6
+    assert [
+        len(json.loads(value)["tool_history"]) for value in client.inputs
+    ] == list(range(7))
+    assert all(
+        item["result"]["status"] == "SUCCEEDED"
+        for item in final_payload["tool_history"]
+    )
+    assert all(
+        "tool_calls_remaining" not in json.loads(value) for value in client.inputs
+    )
+    assert all("轮次已用完" not in value for value in client.instructions)
+    assert len(response.result.evidence_refs) == 1
     assert response.result.evidence_refs[0].artifact_id == project.id
     experiences = service.agent_runtime_store.list_experiences(project.id)
     assert experiences[0].summary == response.result.concise_summary
@@ -1089,6 +1298,7 @@ def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> Non
                         id="delegate",
                         title="Delegate review",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Inspect the project and act only if compatible.",
                     )
@@ -1101,6 +1311,11 @@ def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> Non
         AgentRunAdvanceRequest(),
     )
     work_order_id = waiting.created_work_order_ids[0]
+
+    requested = service.execute_agent_work_order(work_order_id)
+
+    assert requested.result.status == AgentResultStatus.PARTIAL
+    assert service.repository.list_tasks(project.id) == []
 
     with pytest.raises(
         ProductionManagerError,
@@ -1119,6 +1334,9 @@ def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> Non
     work_order = service.agent_runtime_store.get_work_order(work_order_id)
     assert work_order is not None
     assert work_order.status == DelegationStatus.NEEDS_ATTENTION
+    assert len(work_order.specialist_turns) == 1
+    assert work_order.specialist_turns[0].result is not None
+    assert work_order.specialist_turns[0].result["status"] == "FAILED"
 
 
 def test_completed_work_order_contract_errors_are_wrapped(
@@ -1138,6 +1356,7 @@ def test_completed_work_order_contract_errors_are_wrapped(
                         id="delegate",
                         title="Delegate evidenced review",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Return one evidenced finding.",
                         arguments={
@@ -1193,6 +1412,9 @@ def test_agent_project_bootstrap_creates_the_project_before_returning(
         guided.run.snapshot.run.execution_target
         == ProductionExecutionTarget.MOCK
     )
+    assert guided.run.snapshot.run.render_export is False
+    assert guided.run.context.execution_target == ProductionExecutionTarget.MOCK
+    assert guided.run.context.render_export is False
     assert guided.run.snapshot.current_plan is not None
     assert guided.run.snapshot.current_plan.goal_complete is True
 
@@ -1212,17 +1434,24 @@ def test_agent_project_bootstrap_creates_the_project_before_returning(
     automatic_project = service.get_project(automatic.project_id)
     assert automatic_project.document.project.id == automatic.project_id
     assert automatic.run.snapshot.current_plan is not None
-    assert automatic.run.snapshot.current_plan.revision == 2
-    assert automatic.run.snapshot.run.status == AgentRunStatus.RUNNING
+    assert automatic.run.snapshot.current_plan.revision == 1
+    assert automatic.run.snapshot.run.status == AgentRunStatus.WAITING
     assert automatic.run.snapshot.run.unattended is True
     assert (
         automatic.run.snapshot.run.execution_target
         == ProductionExecutionTarget.MOCK
     )
-    assert automatic.run.ready_steps[0].tool_name == "video.enqueue"
+    assert automatic.run.snapshot.run.render_export is False
+    assert automatic.run.context.execution_target == ProductionExecutionTarget.MOCK
+    assert automatic.run.context.render_export is False
+    assert automatic.run.ready_steps == []
+    assert any(
+        "semantic Production Manager" in blocker
+        for blocker in automatic.run.snapshot.memory.blockers
+    )
 
 
-def test_default_mock_agent_project_reaches_export_without_legacy_run(
+def test_local_fallback_does_not_author_a_mock_production_route(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -1239,23 +1468,21 @@ def test_default_mock_agent_project_reaches_export_without_legacy_run(
         )
     )
 
-    current = created.run
-    for _ in range(8):
-        if current.snapshot.run.status == AgentRunStatus.COMPLETED:
-            break
-        current = service.advance_agent_run(
-            current.snapshot.run.id,
-            AgentRunAdvanceRequest(max_actions=8),
-        ).run
-
     aggregate = service.get_project(created.project_id)
-    assert current.snapshot.run.status == AgentRunStatus.COMPLETED
-    assert aggregate.document.project.stage.value == "EXPORTED"
-    assert len(aggregate.exports) == 1
+    assert created.run.snapshot.run.status == AgentRunStatus.WAITING
+    assert aggregate.document.project.stage.value != "EXPORTED"
+    assert aggregate.exports == []
+    assert created.run.ready_steps == []
+    assert all(
+        action.tool_name not in {"video.enqueue", "task.drain", "timeline.export"}
+        for action in created.run.snapshot.actions
+    )
+    assert created.run.context.execution_target == ProductionExecutionTarget.MOCK
+    assert created.run.context.render_export is True
     assert "autonomous_runs" not in aggregate.document.model_dump()
 
 
-def test_existing_guided_project_can_start_an_explicit_mock_agent_run(
+def test_existing_project_without_semantic_planner_waits_for_an_explicit_plan(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -1278,12 +1505,17 @@ def test_existing_guided_project_can_start_an_explicit_mock_agent_run(
         ),
     )
 
-    assert run.snapshot.run.status == AgentRunStatus.RUNNING
+    assert run.snapshot.run.status == AgentRunStatus.WAITING
     assert run.snapshot.run.unattended is True
     assert run.snapshot.run.execution_target == ProductionExecutionTarget.MOCK
-    assert run.snapshot.current_plan is not None
-    assert run.snapshot.current_plan.goal_complete is False
-    assert run.ready_steps[0].tool_name == "video.enqueue"
+    assert run.snapshot.run.render_export is True
+    assert run.context.execution_target == ProductionExecutionTarget.MOCK
+    assert run.context.render_export is True
+    assert run.snapshot.current_plan is None
+    assert run.ready_steps == []
+    assert any(
+        "supply initial_plan" in blocker for blocker in run.snapshot.memory.blockers
+    )
 
 
 def test_current_run_target_does_not_inherit_an_older_run_target(
@@ -1306,7 +1538,8 @@ def test_current_run_target_does_not_inherit_an_older_run_target(
             render_export=False,
         ),
     )
-    assert older.ready_steps[0].tool_name == "route.plan_h3"
+    assert older.snapshot.run.status == AgentRunStatus.WAITING
+    assert older.ready_steps == []
 
     current = service.create_agent_run(
         project.id,
@@ -1317,7 +1550,12 @@ def test_current_run_target_does_not_inherit_an_older_run_target(
         ),
     )
 
-    assert current.ready_steps[0].tool_name == "video.enqueue"
+    assert current.snapshot.run.status == AgentRunStatus.WAITING
+    assert current.ready_steps == []
+    assert older.context.execution_target == ProductionExecutionTarget.REAL_H3
+    assert older.context.render_export is False
+    assert current.context.execution_target == ProductionExecutionTarget.MOCK
+    assert current.context.render_export is True
     assert current.context.decisions[0].run_id == current.snapshot.run.id
     assert current.context.decisions[0].statement == "Render export: yes"
     assert any(
@@ -1325,6 +1563,45 @@ def test_current_run_target_does_not_inherit_an_older_run_target(
         and decision.run_id == current.snapshot.run.id
         for decision in current.context.decisions
     )
+
+
+def test_context_options_are_not_reconstructed_from_decision_text(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document.project
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Keep explicit runtime options typed.",
+            auto_plan=False,
+            execution_target=ProductionExecutionTarget.MOCK,
+            render_export=False,
+        ),
+    )
+    service.agent_runtime.remember_decision(
+        project_id=project.id,
+        run_id=run.snapshot.run.id,
+        statement="Execution target: REAL_H3",
+        rationale="A deliberately contradictory readable trace entry.",
+    )
+    service.agent_runtime.remember_decision(
+        project_id=project.id,
+        run_id=run.snapshot.run.id,
+        statement="Render export: yes",
+        rationale="A deliberately contradictory readable trace entry.",
+    )
+
+    current = service.get_agent_run(run.snapshot.run.id)
+
+    assert current.snapshot.run.execution_target == ProductionExecutionTarget.MOCK
+    assert current.snapshot.run.render_export is False
+    assert current.context.execution_target == ProductionExecutionTarget.MOCK
+    assert current.context.render_export is False
+    assert {decision.statement for decision in current.context.decisions} >= {
+        "Execution target: REAL_H3",
+        "Render export: yes",
+    }
 
 
 @pytest.mark.parametrize(
@@ -1338,6 +1615,7 @@ def test_current_run_target_does_not_inherit_an_older_run_target(
         (ProductionExecutionTarget.REAL_H3, "task.reconcile", "MOCK"),
         (ProductionExecutionTarget.MOCK, "route.enqueue_h3_probe", "REAL_H3"),
         (ProductionExecutionTarget.MOCK, "route.execute_h3_plan", "REAL_H3"),
+        (ProductionExecutionTarget.MOCK, "route.list_h3_reconciliation", "REAL_H3"),
         (ProductionExecutionTarget.MOCK, "route.resolve_h3_submission", "REAL_H3"),
         (ProductionExecutionTarget.MOCK, "route.resolve_h3_not_submitted", "REAL_H3"),
     ],
@@ -1418,7 +1696,7 @@ def test_real_h3_run_cannot_advance_a_mock_task(tmp_path: Path) -> None:
     assert persisted.status == TaskStatus.QUEUED
 
 
-def test_local_planner_requests_and_remembers_a_missing_production_target(
+def test_local_planner_requires_a_semantic_planner_or_caller_plan(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -1434,41 +1712,26 @@ def test_local_planner_requests_and_remembers_a_missing_production_target(
         project.id,
         AgentRunCreateRequest(objective="Continue production."),
     )
-    waiting = service.advance_agent_run(
-        run.snapshot.run.id,
-        AgentRunAdvanceRequest(),
-    ).run
-    action = waiting.snapshot.actions[-1]
-    assert action.kind == ActionKind.USER_INPUT
-    assert action.status == ActionStatus.RUNNING
+    assert run.snapshot.run.status == AgentRunStatus.WAITING
+    assert run.snapshot.current_plan is None
+    assert run.ready_steps == []
+    assert any(
+        "configure the language planner or supply initial_plan" in blocker
+        for blocker in run.snapshot.memory.blockers
+    )
 
-    with pytest.raises(ProductionManagerError, match="must be MOCK or REAL_H3"):
-        service.submit_agent_user_input(
-            run.snapshot.run.id,
-            AgentUserInputRequest(
-                action_id=action.id,
-                answer="something else",
-                remember_as_decision=True,
+    caller_planned = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Inspect the canonical project.",
+            initial_plan=_single_tool_plan(
+                "project.get",
+                {"project_id": project.id},
             ),
-        )
-    pending_action = service.agent_runtime_store.get_action(action.id)
-    assert pending_action is not None
-    assert pending_action.status == ActionStatus.RUNNING
-
-    continued = service.submit_agent_user_input(
-        run.snapshot.run.id,
-        AgentUserInputRequest(
-            action_id=action.id,
-            answer="mock",
-            remember_as_decision=True,
         ),
     )
-    assert continued.ready_steps[0].tool_name == "video.enqueue"
-    assert continued.snapshot.run.execution_target == ProductionExecutionTarget.MOCK
-    assert any(
-        decision.statement == "Execution target: MOCK"
-        for decision in continued.context.decisions
-    )
+    assert caller_planned.snapshot.run.status == AgentRunStatus.RUNNING
+    assert caller_planned.ready_steps[0].tool_name == "project.get"
 
 
 def test_id_only_tool_arguments_cannot_mutate_another_project(
@@ -1594,6 +1857,7 @@ def test_agent_result_artifacts_must_match_the_parent_run_project(
                         id="delegate-review",
                         title="Delegate review",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Review the current project.",
                     )
@@ -1673,6 +1937,7 @@ def test_restart_normalizes_interrupted_tool_and_specialist_work(
                         id="delegate",
                         title="Delegate",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Review one scene.",
                     )
@@ -1749,6 +2014,7 @@ def test_work_order_context_resolves_a_persisted_take_reference(
                         id="review-take",
                         title="Review take",
                         kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.DIRECTOR,
                         assigned_agent="scene-director",
                         instructions="Review only this generated take.",
                         artifact_refs=[
@@ -1774,7 +2040,7 @@ def test_work_order_context_resolves_a_persisted_take_reference(
     }
 
 
-def test_local_h3_planner_never_advances_mock_tasks(
+def test_local_fallback_never_authors_a_provider_task_route(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -1793,8 +2059,7 @@ def test_local_h3_planner_never_advances_mock_tasks(
         ),
     )
 
-    assert not any(
-        step.tool_name == "task.advance"
-        and step.arguments.get("task_id") in mock_task_ids
-        for step in run.ready_steps
-    )
+    assert run.snapshot.run.status == AgentRunStatus.WAITING
+    assert run.ready_steps == []
+    assert service.repository.list_tasks(project.id) == queued.tasks
+    assert mock_task_ids == {task.id for task in queued.tasks}

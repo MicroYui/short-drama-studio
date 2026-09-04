@@ -154,19 +154,16 @@ def review_scene(
         roles=(ProductionSkillRole.EPISODE_REVIEWER,),
     )
     instructions = (
-        "You are a scene-level episode-review Agent for the active video-production medium. "
-        f"{skill_prompt.text} Return JSON only and match SceneReviewAgentOutput. Review the supplied "
-        "scene as edited, using "
-        "the locked scene purpose, chronological ShotPlans, selected Takes, timeline clips, and "
-        "persisted video observations. Report evidence before inference. Do not grade the scene, "
-        "require a fixed beat count, require new information every N seconds, or turn polish "
-        "preferences into failures. A finding needs a concrete contradiction, missing causal beat, "
-        "unreadable story action, state discontinuity, or visibly unsupported duration. Keep LOW "
-        "and MEDIUM findings advisory. Set repair_recommended only when a linked shot can plausibly "
-        "be locally regenerated without rewriting the surrounding story. Do not perform STT, voice "
-        "identity, or audio-quality QA. SOUND_SOURCE_SEMANTICS is allowed only when existing visual "
-        "evidence or locked audio intent shows that the wrong on-screen source is speaking. Every "
-        "finding is dismissible and never blocks export."
+        "你是当前视频制作媒介中的场景级成片审校 Agent。"
+        f"{skill_prompt.text} 只返回 JSON，并严格匹配 SceneReviewAgentOutput。请基于已经剪成的"
+        "场景进行审校，使用已锁定的场景意图、按时间顺序排列的 ShotPlan、已选 Take、时间线片段"
+        "以及已持久化的视频观察。先陈述证据，再作推断。不要给场景打分，不要要求固定的节拍"
+        "数量，不要要求每隔固定时间出现新信息，也不要把润色偏好当作问题。只有出现具体矛盾、"
+        "缺失的因果环节、无法读懂的叙事动作、状态不连续，或画面证据明显无法支撑当前时长时，"
+        "才形成 finding。LOW 和 MEDIUM 级 finding 只作为建议。只有当关联镜头能够在不改写周边"
+        "剧情的前提下合理地局部重生成时，才设置 repair_recommended。不要执行语音转写、音色身份"
+        "或音频质量 QA。只有现有画面证据或已锁定的声音意图表明发声主体错误时，才可使用 "
+        "SOUND_SOURCE_SEMANTICS。所有 finding 都可以被忽略，且绝不阻塞导出。"
     )
     payload = {
         "output_schema": SceneReviewAgentOutput.model_json_schema(),
@@ -182,8 +179,8 @@ def review_scene(
         "allowed_dimensions": [item.value for item in EpisodeReviewDimension],
         "allowed_issue_categories": [item.value for item in QaFailureCategory],
         "product_rule": (
-            "Open-ended advisory review only. No numeric score, approval gate, fixed pacing rule, "
-            "or scene-specific schema. Use only supplied scene and production evidence."
+            "只做开放式建议审校；不使用数字评分、审批门、固定节奏规则或场景专属 schema。"
+            "只依据提供的场景与制作证据。"
         ),
     }
     output = client.generate_text(
@@ -236,16 +233,14 @@ def review_episode(
         roles=(ProductionSkillRole.EPISODE_REVIEWER,),
     )
     instructions = (
-        "You are an episode-level reviewer Agent for the active video-production medium. "
-        f"{skill_prompt.text} Return JSON only and match EpisodeReviewAgentOutput. Compare the locked "
-        "script, scene entry/exit states, "
-        "timeline order, and the independent scene reviews. Find only cross-scene or episode-level "
-        "problems that are supported by those artifacts: story clarity, causal handoff, character "
-        "or prop state, sound-source semantics already observed visually, and pacing caused by "
-        "specific edited material. Do not rescore or repeat scene findings unless combining them "
-        "changes the diagnosis. Do not enforce a fixed beat count, fixed shot count, or information "
-        "interval. Set repair_recommended only when concrete linked shots can be locally regenerated; "
-        "otherwise give a dismissible advisory. Never block export or require approval."
+        "你是当前视频制作媒介中的整集审校 Agent。"
+        f"{skill_prompt.text} 只返回 JSON，并严格匹配 EpisodeReviewAgentOutput。请对照已锁定剧本、"
+        "各场景的进入与退出状态、时间线顺序以及相互独立的场景审校结果。只识别这些产物能够支持的"
+        "跨场景或整集问题，包括故事是否清楚、因果是否顺利交接、人物或道具状态是否连续、已有画面"
+        "观察支持的声音来源语义，以及具体剪辑内容造成的节奏问题。除非合并多个场景 finding 会改变"
+        "诊断，否则不要重新评分或重复它们。不要强制固定的节拍数、镜头数或信息出现间隔。只有具体"
+        "关联镜头可以局部重生成时，才设置 repair_recommended；其他情况给出可忽略的建议。绝不阻塞"
+        "导出，也不要求审批。"
     )
     payload = {
         "output_schema": EpisodeReviewAgentOutput.model_json_schema(),
@@ -264,8 +259,8 @@ def review_episode(
         "allowed_dimensions": [item.value for item in EpisodeReviewDimension],
         "allowed_issue_categories": [item.value for item in QaFailureCategory],
         "product_rule": (
-            "Advisory-only evidence synthesis. No numeric score, approval gate, answer key, fixed "
-            "pacing threshold, voice QA, or scene-specific field."
+            "只做建议性的证据综合；不使用数字评分、审批门、标准答案、固定节奏阈值、声音 QA "
+            "或场景专属字段。"
         ),
     }
     output = client.generate_text(

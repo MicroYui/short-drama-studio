@@ -27,6 +27,7 @@ from short_drama.models import (
     ProjectBibleVersion,
     ProjectDocument,
     ScriptVersion,
+    ShotPlan,
 )
 from short_drama.worker import utc_now
 
@@ -326,11 +327,27 @@ def prepare_semantic_change(
         shot = shot_by_id.get(patch.target_id)
         if shot is None:
             raise ChangeExecutionError(f"Unknown shot target: {patch.target_id}")
+        payload = shot.model_dump(mode="python")
         for field, value in patch.updates.items():
-            setattr(shot, field, value.strip())
-        shot.revision += 1
-        shot.approval_status = ApprovalStatus.APPROVED
-        shot.freshness = Freshness.CURRENT
+            payload[field] = value.strip()
+        if {
+            "visual",
+            "framing",
+            "camera",
+            "audio_intent",
+            "transition_out",
+        }.intersection(patch.updates):
+            payload["timeline_beats"] = []
+        payload["revision"] = shot.revision + 1
+        payload["approval_status"] = ApprovalStatus.APPROVED
+        payload["freshness"] = Freshness.CURRENT
+        try:
+            validated_shot = ShotPlan.model_validate(payload)
+        except ValueError as exc:
+            raise ChangeExecutionError(f"Invalid shot patch: {exc}") from exc
+        shot_index = updated.shots.index(shot)
+        updated.shots[shot_index] = validated_shot
+        shot_by_id[patch.target_id] = validated_shot
         applied_target_ids.append(patch.target_id)
 
     invalidated_shot_ids = list(dict.fromkeys(request.plan.affected_shot_ids))

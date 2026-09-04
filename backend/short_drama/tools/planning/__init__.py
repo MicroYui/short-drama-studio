@@ -19,12 +19,18 @@ from short_drama.tools.registry import ToolRegistry
 class PlanningToolService(Protocol):
     def get_planning_run(self, run_id: str) -> PlanningRunResponse: ...
 
-    def advance_planning_run(self, run_id: str) -> PlanningRunResponse: ...
+    def advance_content_planning_job(
+        self,
+        job_id: str,
+        *,
+        owner_agent_run_id: str,
+    ) -> PlanningRunResponse: ...
 
 
 class PlanningAdvanceInput(ToolModel):
     project_id: str
     run_id: str
+    owner_agent_run_id: str
 
 
 def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None:
@@ -34,19 +40,26 @@ def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None
         current = service.get_planning_run(request.run_id)
         if current.run.project_id != request.project_id:
             raise ValueError(
-                "Planning run does not belong to the requested project"
+                "Content planning job does not belong to the requested project"
+            )
+        if current.run.owner_agent_run_id != request.owner_agent_run_id:
+            raise ValueError(
+                "Content planning job does not belong to the requesting AgentRun"
             )
 
-        response = service.advance_planning_run(request.run_id)
+        response = service.advance_content_planning_job(
+            request.run_id,
+            owner_agent_run_id=request.owner_agent_run_id,
+        )
         if response.run.project_id != request.project_id:
             raise ValueError(
-                "Advanced planning run no longer belongs to the requested project"
+                "Advanced content planning job no longer belongs to the requested project"
             )
 
         refs = [
             ArtifactRef(
                 project_id=request.project_id,
-                artifact_type="planning_run",
+                artifact_type="content_planning_job",
                 artifact_id=request.run_id,
             )
         ]
@@ -70,14 +83,17 @@ def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None
             version=1,
             category=ToolCategory.PLANNING,
             description=(
-                "Advance one persisted content-planning unit and return its new cursor."
+                "Advance one bounded unit of an AgentRun-owned Content Planning Job "
+                "and return its persisted cursor."
             ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=PlanningAdvanceInput,
             output_model=PlanningRunResponse,
             handler=advance_planning,
-            tags=frozenset({"planning", "agent-runtime", "resumable"}),
+            tags=frozenset(
+                {"planning", "content-planning-job", "agent-runtime", "resumable"}
+            ),
         )
     )
 

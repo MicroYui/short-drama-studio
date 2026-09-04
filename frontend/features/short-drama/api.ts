@@ -171,6 +171,7 @@ const listImageTasks = makeEndpointClient('/api/short-drama/projects/{project_id
 const advanceImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/advance', 'post')
 const cancelImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/cancel', 'post')
 const retryImageTask = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/retry', 'post')
+const resolveImageNotSubmitted = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/resolve-not-submitted', 'post')
 const recoverImageTaskOutput = makeEndpointClient('/api/short-drama/image-tasks/{task_id}/recover-output', 'post')
 const searchAssets = makeEndpointClient('/api/short-drama/asset-agent/tools/search-assets', 'post')
 const inspectAssetCoverage = makeEndpointClient('/api/short-drama/projects/{project_id}/asset-agent/tools/inspect-coverage', 'get')
@@ -551,6 +552,13 @@ export const ShortDramaApi = {
   ),
   retryImageTask: (taskId: string) => (
     retryImageTask(undefined, undefined, imageTaskPath(taskId, 'retry'))
+  ),
+  resolveImageNotSubmitted: (taskId: string, reason: string) => (
+    resolveImageNotSubmitted(
+      { reason },
+      undefined,
+      imageTaskPath(taskId, 'resolve-not-submitted'),
+    )
   ),
   recoverImageTaskOutput: (taskId: string) => (
     recoverImageTaskOutput(undefined, undefined, imageTaskPath(taskId, 'recover-output'))

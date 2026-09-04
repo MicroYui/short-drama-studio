@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-import re
 from pathlib import Path
 
 from pydantic import Field
@@ -14,6 +13,7 @@ from short_drama.h3_models import H3RouteAssetPreparation
 from short_drama.models import (
     Asset,
     AssetKind,
+    AssetPresentationMode,
     AssetVersion,
     DomainModel,
     ProjectDocument,
@@ -50,32 +50,30 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
         include_constitution=False,
     )
-    label_source = descriptor
-    if asset.kind == AssetKind.LOCATION:
-        profile = next(
-            (
-                item
-                for item in bible.locations
-                if item.name == asset.name or item.name in asset.name
-            ),
-            None,
-        )
-        if profile is not None:
-            label_source = profile.layout
-    required_labels = _required_diegetic_labels(label_source)
-    is_screen_content = (
-        asset.kind == AssetKind.PROP and _is_screen_content_asset(asset.name)
+    required_labels = (
+        list(asset.brief.required_visible_text) if asset.brief is not None else []
     )
-    if is_screen_content:
+    presentation_mode = (
+        asset.brief.presentation_mode if asset.brief is not None else None
+    )
+    is_screen_content = presentation_mode == AssetPresentationMode.SCREEN_CONTENT_PLATE
+    if is_screen_content and required_labels:
+        label_list = "、".join(f"“{item}”" for item in required_labels)
         text_policy = (
-            "允许且只允许资产描述所需的虚构界面文字；关键人名、"
-            "金额关系、账号状态、标题和引号内文案必须准确可读。"
+            f"只允许上游结构化简报明确列出的虚构界面文字：{label_list}；"
+            "人名、金额、关系、状态和标题必须按该清单准确可读。"
             "不要乱码、无关文字、真实平台品牌、水印或广告。"
+        )
+    elif is_screen_content:
+        text_policy = (
+            "上游未提供结构化的必需可见文字清单；不得从资产名称、"
+            "描述、引号或界面语义中自行猜测文案。只用不可读的中性信息块，"
+            "待 Asset Agent 补充显式文字清单后再生成可读内容。"
         )
     elif required_labels:
         label_list = "、".join(f"“{item}”" for item in required_labels)
         text_policy = (
-            f"只允许资产描述明确要求的场内实物文字：{label_list}；"
+            f"只允许结构化资产简报明确列出的场内实物文字：{label_list}；"
             "这些文字必须准确、可读、安装在对应实物上。"
             "除此之外不要任何文字、标签、水印、品牌名或界面元素。"
         )
@@ -102,7 +100,14 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         f"不要擅自追加当前 Style 未声明的视觉媒介、审美、材质或表现规则。输出适合竖屏制作的"
         f"单幅纯视觉内容，{text_policy}"
     )
-    if asset.kind == AssetKind.CHARACTER:
+    if is_screen_content:
+        layout = (
+            "生成一张单幅、正视、可供后期贴入屏幕的虚构界面内容母版。"
+            "信息层级与区域只服从结构化资产简报，不复制任何真实平台的 logo "
+            "或完整视觉识别。不要手、手机外壳、透视变形、反光、多个页面、"
+            "宫格或拼贴。"
+        )
+    elif asset.kind == AssetKind.CHARACTER:
         layout = (
             "生成一张能够稳定表达该角色身份与造型的单幅角色母版。取景、角度、比例、"
             "细节和背景服从当前 Style 与资产描述，并为后续实际镜头提供清楚锚点。"
@@ -114,14 +119,10 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
             "空间、层次、透视、构图或图形组织方式服从当前 Style 与资产描述。"
             "不要无关人物、分镜宫格、拼贴、互相冲突的视角或说明标签。"
         )
-    elif is_screen_content:
-        layout = (
-            "生成一张单幅、正视、可供后期贴入手机屏幕的虚构移动界面母版。"
-            "信息层级、列表、时间、金额或账号区域必须像真实产品，但不复制任何"
-            "真实平台的 logo 或完整视觉识别。不要手、手机外壳、透视变形、反光、"
-            "多个页面、宫格或拼贴。"
-        )
-    elif asset.kind == AssetKind.PROP:
+    elif (
+        asset.kind == AssetKind.PROP
+        and presentation_mode == AssetPresentationMode.PHYSICAL_MASTER
+    ):
         layout = (
             "生成一张能够稳定表达该道具身份和剧情所需结构的单幅母版，清楚展示资产描述"
             "中确实存在的形状、颜色、材质和标志性特征。按钮、接口、指示灯、把手、附件等"
@@ -129,6 +130,12 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
             "不要出现完整人物、交接动作、房间、柜台、商品背景或剧情场景。纸张、合同和"
             "文件只保留不可辨认的中性版式块，不生成乱码或可读正文。不要宫格、拼贴、"
             "商标或额外部件；若上方文字策略列出必需场内文字，仅例外保留该文字。"
+        )
+    elif asset.kind == AssetKind.PROP:
+        layout = (
+            "上游尚未用结构化字段声明该资产是实体道具母版还是屏幕内容母版。"
+            "不得根据资产名称、描述中的词语或引号猜测呈现形态；由 Asset Agent "
+            "先补充 presentation_mode，再选择对应母版生成方式。"
         )
     else:
         layout = "生成一张符合当前 Style、可供后续镜头构图使用的清晰视觉参考图。"
@@ -139,14 +146,15 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
             "全片风格可能包含后段状态，不得把后续烟雾、火灾、灰烬、"
             "损坏或灯光变化提前画进本图。"
         )
-    asset_identity = (
-        f"资产名称：{asset.name}"
-        if asset.kind != AssetKind.PROP
-        else f"资产类型：{'手机屏幕内容母版' if is_screen_content else '实体道具母版'}"
+    asset_identity = f"资产名称：{asset.name}"
+    presentation_context = (
+        f"\n结构化呈现类型：{presentation_mode.value}"
+        if presentation_mode is not None
+        else "\n结构化呈现类型：未声明"
     )
     return (
         f"{shared}\n{layout}\n{asset_identity}\n资产描述：{descriptor}。"
-        f"{style_context}\n制作类型策略：{skill_prompt.text}"
+        f"{presentation_context}{style_context}\n制作类型策略：{skill_prompt.text}"
     )
 
 
@@ -178,54 +186,43 @@ def build_stock_grounded_asset_prompt(
 ) -> str:
     if asset.kind == AssetKind.CHARACTER:
         return build_stock_grounded_character_prompt(document, asset)
-    descriptor = canonical_base_asset_descriptor(document, asset)
-    required_labels = _required_diegetic_labels(descriptor)
+    required_labels = (
+        list(asset.brief.required_visible_text) if asset.brief is not None else []
+    )
     required_label_scope = (
-        "并按资产描述准确重建必需的场内实物文字"
+        "并按结构化资产简报准确重建必需的场内实物文字"
         if required_labels
         else ""
     )
-    grounding_scope = {
-        AssetKind.LOCATION: (
-            "输入图像是场景布局、尺度或材质的参考。创建本项目中的虚构地点，"
-            "只保留对当前 Style 和镜头有用的关系，并服从资产描述重构入口、通道、"
-            f"设备区与光线；删除原图中的无关文字、品牌和不属于剧情的物体{required_label_scope}。"
-        ),
-        AssetKind.PROP: (
-            "输入图像是现实物体的尺度、结构和材质参考。创建本项目中的虚构道具，"
-            f"保留合理工业构造，但必须服从资产描述；删除品牌、无关可读文字和无关附件{required_label_scope}。"
-        ),
-    }.get(
-        asset.kind,
-        "输入图像仅作声明范围内的视觉参考，输出必须服从本项目资产描述与 Style。",
+    presentation_mode = (
+        asset.brief.presentation_mode if asset.brief is not None else None
     )
-    return f"{build_base_asset_prompt(document, asset)}\n\n{grounding_scope}"
-
-
-def _required_diegetic_labels(descriptor: str) -> list[str]:
-    """Return only text that the Bible explicitly quotes as a visible set element."""
-
-    labels: list[str] = []
-    for match in re.finditer(r"[“\"]([^”\"\n]{1,80})[”\"]", descriptor):
-        label = match.group(1).strip()
-        if label and label not in labels:
-            labels.append(label)
-    return labels
-
-
-def _is_screen_content_asset(name: str) -> bool:
-    return any(
-        token in name
-        for token in (
-            "页面",
-            "界面",
-            "截图",
-            "付款记录",
-            "转账记录",
-            "聊天记录",
-            "短信记录",
+    if presentation_mode == AssetPresentationMode.SCREEN_CONTENT_PLATE:
+        grounding_scope = (
+            "输入图像只是布局、层级或信息密度参考。按结构化资产简报重建"
+            f"虚构屏幕内容，删除真实平台识别、品牌和无关文字{required_label_scope}。"
         )
-    )
+    elif asset.kind == AssetKind.PROP and presentation_mode is None:
+        grounding_scope = (
+            "上游尚未显式声明实体道具或屏幕内容呈现类型；不从名称、描述或图像"
+            "内容猜测，待 Asset Agent 补充 presentation_mode 后再选择对应重建方式。"
+        )
+    else:
+        grounding_scope = {
+            AssetKind.LOCATION: (
+                "输入图像是场景布局、尺度或材质的参考。创建本项目中的虚构地点，"
+                "只保留对当前 Style 和镜头有用的关系，并服从资产描述重构入口、通道、"
+                f"设备区与光线；删除原图中的无关文字、品牌和不属于剧情的物体{required_label_scope}。"
+            ),
+            AssetKind.PROP: (
+                "输入图像是现实物体的尺度、结构和材质参考。创建本项目中的虚构道具，"
+                f"保留合理工业构造，但必须服从资产描述；删除品牌、无关可读文字和无关附件{required_label_scope}。"
+            ),
+        }.get(
+            asset.kind,
+            "输入图像仅作声明范围内的视觉参考，输出必须服从本项目资产描述与 Style。",
+        )
+    return f"{build_base_asset_prompt(document, asset)}\n\n{grounding_scope}"
 
 
 def canonical_base_asset_descriptor(
@@ -234,58 +231,42 @@ def canonical_base_asset_descriptor(
 ) -> str:
     """Remove shot-state prose from the canonical image-master request."""
 
-    bible = next(
-        item
-        for item in document.bible_versions
-        if item.id == document.project.current_bible_version_id
-    )
-    if asset.kind == AssetKind.CHARACTER:
-        profile = next(
-            (
-                item
-                for item in bible.characters
-                if item.name == asset.name or item.name in asset.name
-            ),
-            None,
-        )
-        if profile is not None:
-            age_descriptor = f"{profile.age}岁；" if profile.age > 0 else ""
-            return f"{age_descriptor}{profile.appearance}；{profile.wardrobe}"
+    descriptor = _structured_asset_descriptor(asset)
     if asset.kind == AssetKind.LOCATION:
-        profile = next(
-            (
-                item
-                for item in bible.locations
-                if item.name == asset.name or item.name in asset.name
-            ),
-            None,
-        )
-        if profile is not None:
-            first_shot = _first_location_appearance_shot(document, asset)
-            if first_shot is not None:
-                return (
-                    f"稳定空间拓扑：{profile.layout}；"
-                    "基础母版时点：只呈现该地点首次出场时的环境和静态状态；"
-                    f"首次出场镜头：{first_shot.visual}；"
-                    f"首次出场物件状态：{first_shot.continuity.prop_state_in}；"
-                    "只从镜头描述中提取场景、天气、光线、门窗、固定设备和静态道具，"
-                    "不要画人物或正在发生的动作。不得提前出现后续镜头才发生的烟雾、"
-                    "火灾、损坏、开关变化、门锁变化、物件位移或其他剧情状态；"
-                    "后续状态应由派生资产或镜头关键帧表达"
-                )
-            return f"{profile.layout}；{profile.lighting}；{profile.palette}"
-    if asset.kind == AssetKind.PROP:
-        profile = next(
-            (
-                item
-                for item in bible.props
-                if item.name == asset.name or item.name in asset.name
-            ),
-            None,
-        )
-        if profile is not None:
-            return profile.appearance
-    return asset.versions[-1].descriptor
+        first_shot = _first_location_appearance_shot(document, asset)
+        if first_shot is not None:
+            return (
+                f"结构化基础描述：{descriptor}；"
+                "基础母版时点：以显式绑定该资产的最早镜头为准；"
+                f"首次显式引用镜头：{first_shot.visual}；"
+                f"该镜头入点物件状态：{first_shot.continuity.prop_state_in}；"
+                "由视觉 Agent 语义区分定场资产与人物动作；该时点只来自显式的"
+                "资产引用，后续状态由派生资产或镜头关键帧表达"
+            )
+    return descriptor
+
+
+def _structured_asset_descriptor(asset: Asset) -> str:
+    brief = asset.brief
+    if brief is None:
+        return asset.versions[-1].descriptor
+    parts = [f"身份锚点：{brief.identity_anchor}"]
+    if brief.tone_or_temperament is not None:
+        parts.append(f"气质或氛围：{brief.tone_or_temperament}")
+    structured_lists = (
+        ("可见属性", brief.visual_attributes),
+        ("服饰或材质", brief.wardrobe_or_materials),
+        ("背景约束", brief.background_constraints),
+        ("质感约束", brief.texture_constraints),
+        ("连续性锚点", brief.continuity_anchors),
+        ("命名视图或区域", brief.named_views_or_zones),
+    )
+    parts.extend(
+        f"{label}：{'、'.join(values)}"
+        for label, values in structured_lists
+        if values
+    )
+    return "；".join(parts)
 
 
 def _first_location_appearance_shot(
@@ -294,42 +275,30 @@ def _first_location_appearance_shot(
 ) -> ShotPlan | None:
     """Find the first shot that actually uses a location as its current setting."""
 
-    planned_shot_ids = {
-        plan.shot_id
-        for plan in document.reference_plan
-        if any(
+    asset_version_ids = {version.id for version in asset.versions}
+    planned_shot_ids = set[str]()
+    for plan in document.reference_plan:
+        explicitly_required = any(
             requirement.subject_asset_id == asset.id
             for requirement in plan.requirements
         )
-    }
+        explicitly_bound = any(
+            binding.target_id in asset_version_ids for binding in plan.bindings
+        )
+        if explicitly_required or explicitly_bound:
+            planned_shot_ids.add(plan.shot_id)
+    for shot in document.shots:
+        if any(
+            cue.subject_asset_id == asset.id
+            for beat in shot.timeline_beats
+            for cue in beat.references
+        ):
+            planned_shot_ids.add(shot.id)
     ordered = sorted(document.shots, key=lambda item: item.sequence)
-    planned = next(
+    return next(
         (shot for shot in ordered if shot.id in planned_shot_ids),
         None,
     )
-    if planned is not None:
-        return planned
-
-    normalized_name = "".join(
-        character.lower() for character in asset.name if character.isalnum()
-    )
-    if not normalized_name:
-        return None
-    for shot in ordered:
-        context = "\n".join(
-            (
-                shot.visual,
-                shot.camera,
-                shot.continuity.character_positions,
-                shot.continuity.prop_state_in,
-            )
-        )
-        normalized_context = "".join(
-            character.lower() for character in context if character.isalnum()
-        )
-        if normalized_name in normalized_context:
-            return shot
-    return None
 
 
 def build_keyframe_correction_prompt(
@@ -359,72 +328,59 @@ def inspect_asset_image(
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
         include_constitution=False,
     )
-    if asset.kind == AssetKind.PROP and _is_screen_content_asset(asset.name):
+    if (
+        asset.brief is not None
+        and asset.brief.presentation_mode == AssetPresentationMode.SCREEN_CONTENT_PLATE
+    ):
         review_scope = (
-            "Judge this fictional screen-content asset for readable hierarchy, compositing "
-            "usefulness, and the exact names, relationships, statuses, amounts, or quoted copy "
-            "explicitly required by the descriptor. Reject gibberish, semantic substitutions, "
-            "unrelated UI text, and recognizable real-platform branding. Do not require a phone "
-            "body or actor hand because this is a clean screen plate."
+            "审核这个已显式声明为屏幕内容母版的虚构资产：判断信息层级、后期贴合用途，"
+            "以及结构化资产简报 required_visible_text 中每一项可见文字是否准确。"
+            "乱码、语义替换、无关界面文字或可识别的真实平台品牌都应记为问题。"
+            "这是干净的屏幕内容板，不要求出现手机外壳或演员的手。"
         )
     else:
         review_scope = {
             AssetKind.CHARACTER: (
-                "Judge the named character's identity, anatomy, wardrobe, and coherence across views."
+                "审核已声明角色的身份、人体结构、服装，以及不同参考视图之间的一致性。"
             ),
             AssetKind.LOCATION: (
-                "Judge spatial topology, lighting, materials, and production usefulness. Incidental "
-                "anonymous scale figures are not story-character references and must not be rejected "
-                "for identity or wardrobe unless the request explicitly names a character. For a "
-                "project-level location master, the descriptor's earliest-appearance state is "
-                "authoritative: report future-state leakage when weather, smoke, fire, damage, "
-                "opened locks, moved props, switched equipment, or other later story changes appear "
-                "too early. Stable spatial topology and temporal state variants must remain separate; "
-                "a clearly visible later-only state makes the candidate not recommended."
+                "审核空间拓扑、灯光、材质和实际制作可用性。偶然出现的匿名尺度参照人物"
+                "不是剧情角色引用；除非输入显式绑定了角色，不要因其身份或服装拒绝资产。"
+                "项目级场景母版以结构化描述中的最早显式引用状态为准；若画面提前出现后续"
+                "才有的天气、烟雾、火焰、损坏、门锁开启、道具位移、设备切换或其他剧情"
+                "状态，应报告未来状态泄漏。稳定空间拓扑与时间状态变体必须分开；明确出现"
+                "仅属于后续的状态时，不建议采用该候选。"
             ),
             AssetKind.PROP: (
-                "Judge only the prop's shape, scale, materials, component placement, and consistency "
-                "across views. An anonymous cropped hand is only a scale cue. Do not require story "
-                "character identity, wardrobe, handoff order, laterality, or scene continuity unless "
-                "the supplied keyframe preparation explicitly requests them."
+                "只审核道具的形状、尺度、材质、部件位置和跨视图一致性。匿名且被裁切的手"
+                "只作为尺度参照。除非关键帧准备数据显式要求，不要追加剧情角色身份、服装、"
+                "交接顺序、左右手或场景连续性要求。"
             ),
             AssetKind.REFERENCE: (
-                "Judge the supplied shot or reference purpose and every visible subject it explicitly requests."
+                "按输入显式声明的镜头或参考用途，审核其中明确要求可见的每个主体。"
             ),
-        }.get(asset.kind, "Judge visible production usefulness against the supplied descriptor.")
+        }.get(asset.kind, "依据输入的结构化描述审核画面的制作可用性。")
     instructions = (
-        "You are a visual asset inspection tool for an AI-native vertical video production pipeline. "
+        "你是 AI 原生竖屏视频生产管线中的视觉资产检查 Agent。"
         f"{skill_prompt.text} "
-        "Return JSON only and match the supplied schema. Compare only visible image evidence with "
-        "the supplied asset description, project Bible, and optional ShotPlan/keyframe brief. "
-        "The project Bible's declared medium and style are authoritative. Do not add visual-medium, "
-        "surface, camera, or motion requirements that the project did not request. For a shot keyframe, "
-        "inspect in two passes: first identify the visible subjects, "
-        "limbs when relevant, "
-        "contacts, prop state, gaze, and action phase without assuming the requested answer; then "
-        "compare those observations with the declared start/end state. If an explicitly declared "
-        "left/right hand, contact side, or action phase is visibly contradicted, report a generic "
-        "continuity issue. If laterality or phase is visually ambiguous, do not guess that it is "
-        "correct: lower the score and recommend a clearer keyframe only when that element is "
-        "required to be visible in the frame. If the ShotPlan explicitly places an actor, hand, "
-        "prop, or state offscreen or out of frame, its absence is compliant evidence: do not "
-        "require its contact, laterality, light state, or action phase to be visually readable, "
-        "and do not reject the image merely because an offscreen state cannot be verified. You "
-        "may mention that limitation as a non-blocking observation. For a keyframe, set "
-        "recommended=false when a visible explicit start/end state is contradicted, or when a "
-        "contact or laterality that the frame is required to show remains ambiguous; an otherwise "
-        "attractive image does not cancel those production-control failures. "
-        "Check conformance to the declared style, visible corruption, identity coherence within a "
-        "reference sheet, required location relationships, prop shape, framing usefulness, and "
-        "unwanted text or watermarks. "
-        "Do not invent requirements. A recommendation is an overridable production suggestion, "
-        "not a user-facing approval gate. Use generic QA categories and stable issue codes. "
-        "When canonical reference images are supplied, Image 1 is always the candidate under "
-        "review and later images are approved references. Compare only the identity and appearance "
-        "anchors declared for this character, together with required location relationships and prop "
-        "construction, against the matching approved "
-        "reference instead of judging the candidate in isolation. Do not average or merge "
-        "different character identities. "
+        "只返回符合给定 schema 的 JSON。只比较图像中的可见证据与输入的资产简报、项目 "
+        "Bible，以及可选的 ShotPlan 或关键帧简报。项目 Bible 已声明的媒介和 Style 是依据，"
+        "不要追加项目未要求的视觉媒介、表面质感、机位或运动规则。"
+        "审核镜头关键帧时分两步：先独立识别画面中的主体、必要时的肢体、接触关系、道具"
+        "状态、视线和动作阶段，不预设期望答案；再与显式声明的开始/结束状态比较。"
+        "如果画面明确违背了已声明的左右手、接触侧或动作阶段，报告通用连续性问题。"
+        "如果左右侧或阶段在视觉上含混，不要猜测其正确；只有当该元素被显式要求在画面中"
+        "可见时，才降低评分并建议更清楚的关键帧。若 ShotPlan 显式把演员、手、道具或状态"
+        "放在画外，其缺席就是符合要求的证据；不要强求画面展示它的接触、左右侧、亮灭状态"
+        "或动作阶段，也不要仅因画外状态无法验证就拒绝图像。可以把这个限制写成不影响采用"
+        "的观察项。若关键帧中的可见开始/结束状态与声明相反，或被要求清楚展示的接触或"
+        "左右侧仍含混，应设置 recommended=false；画面美观不能抵消这些制作控制问题。"
+        "检查已声明 Style、可见破损、参考表内身份一致性、必需的场景关系、道具形状、构图"
+        "可用性，以及多余文字或水印。不要发明要求。recommendation 是可被 Agent 或用户"
+        "覆盖的制作建议，不是用户审批条件；使用通用 QA 分类和稳定 issue code。"
+        "提供标准参考图时，Image 1 始终是待审核候选，后续图片是已批准参考。只比较与当前"
+        "资产 ID 对应的身份和外观锚点、必需场景关系及道具结构，不要孤立评价候选，也不要"
+        "平均或混合不同角色身份。"
         + review_scope
     )
     reference_images = _canonical_reference_images(canonical_references or [])
@@ -435,6 +391,11 @@ def inspect_asset_image(
             "kind": asset.kind.value,
             "name": asset.name,
             "descriptor": version.descriptor,
+            "brief": (
+                asset.brief.model_dump(mode="json")
+                if asset.brief is not None
+                else None
+            ),
         },
         "bible": next(
             item.model_dump(mode="json")
@@ -448,10 +409,9 @@ def inspect_asset_image(
         "allowed_issue_categories": [item.value for item in QaFailureCategory],
         "decision_guidance": {
             "recommended": (
-                "true only when the image is usable as a production reference without a severe "
-                "visible contradiction or corruption"
+                "仅当图像可直接承担声明的制作参考职责，且没有严重可见矛盾或破损时为 true"
             ),
-            "score": "0-5 production usefulness, not aesthetic novelty",
+            "score": "0-5 分，衡量制作可用性而非审美新奇程度",
             "asset_kind_scope": review_scope,
         },
         "image_map": [

@@ -31,6 +31,7 @@ from short_drama.models import (
     ReferenceRequirement,
     ReferenceRole,
     ShotPlan,
+    ShotTimelineBeat,
     SpatialInteractionConstraint,
 )
 from short_drama.production_profiles import (
@@ -165,6 +166,7 @@ class ShotPlanPatch(DomainModel):
     camera: str | None = Field(default=None, min_length=1)
     audio_intent: str | None = Field(default=None, min_length=1)
     dialogue_line_ids: list[str] | None = None
+    timeline_beats: list[ShotTimelineBeat] | None = None
     continuity: ContinuityState | None = None
     transition_out: str | None = Field(default=None, min_length=1)
     merge_candidate: bool | None = None
@@ -180,6 +182,10 @@ class ReplacementShotDraft(DomainModel):
     camera: str = Field(min_length=1)
     audio_intent: str = Field(min_length=1)
     dialogue_line_ids: list[str] = Field(default_factory=list[str])
+    timeline_beats: list[ShotTimelineBeat] = Field(
+        default_factory=list[ShotTimelineBeat],
+        max_length=24,
+    )
     continuity: ContinuityState
     transition_out: str = Field(min_length=1)
     merge_candidate: bool = False
@@ -518,14 +524,13 @@ def preview_reference_plan(
     complexity = _assess_complexity(shot, plan, selected)
     if complexity.missing_topology_anchors:
         warnings.append(
-            "Create or approve LOCATION_INTERACTION views for: "
+            "需为以下锚点生成或审批 LOCATION_INTERACTION 视图："
             + ", ".join(complexity.missing_topology_anchors)
         )
     if _has_competing_scene_geometry(selected):
         warnings.append(
-            "A selected character reference contains embedded scene geometry while a separate "
-            "location reference is also selected. Prefer a background-neutral character view "
-            "or bake both into one shot-specific keyframe before video generation."
+            "已选人物参考图内嵌了场景几何，同时又选择了独立场景参考图。"
+            "优先使用背景中性的人物视图，或在视频生成前把两者整合到一张镜头专用关键帧中。"
         )
     return ReferencePlanPreviewResponse(
         shot_id=shot.id,
@@ -641,7 +646,7 @@ def _binding_selections(
     for index, binding in enumerate(plan.bindings, start=1):
         binding_id = f"binding-{index}"
         resolved = version_index.get(binding.target_id)
-        required = binding.requirement.strip().upper() == "REQUIRED"
+        required = binding.required
         if resolved is None:
             if required:
                 missing.append(binding_id)
@@ -724,15 +729,15 @@ def compile_keyframe_brief(
     if primary_canvas is not None:
         source_asset, source_version = primary_canvas
         reference_lines.append(
-            "Image 1: PRIMARY EDIT CANVAS; "
-            f"source={source_asset.name} v{source_version.version}; preserve its exact camera, "
-            "crop, object instances, topology, handedness, and contact side."
+            "图片 1：主编辑画布；"
+            f"来源={source_asset.name} v{source_version.version}；严格保留其机位、裁切、"
+            "物体实例、拓扑、左右手与接触侧。"
         )
     reference_lines.extend(
         (
-            f"Image {index}: {asset_index[item.subject_asset_id].name}; "
-            f"role={item.role.value}; angle={item.angle.value}; "
-            f"framing={item.framing.value}; use only for {item.description}."
+            f"图片 {index}：{asset_index[item.subject_asset_id].name}；"
+            f"角色={item.role.value}；角度={item.angle.value}；"
+            f"景别={item.framing.value}；仅用于 {item.description}。"
         )
         for index, item in enumerate(
             selected_inputs,
@@ -761,49 +766,47 @@ def compile_keyframe_brief(
     extra = [item.strip() for item in request.extra_constraints if item.strip()]
     is_topology_reference = request.position == KeyframePosition.TOPOLOGY_REFERENCE
     production_medium = declared_style_value(style.medium) if style is not None else None
-    medium_suffix = f" in {production_medium}" if production_medium is not None else ""
+    medium_suffix = f"，制作媒介为 {production_medium}" if production_medium is not None else ""
 
     sections = [
         (
-            f"Generate ONE single environment topology plate{medium_suffix}. "
-            "Show no people, body parts, carried props, character silhouettes, or reflections "
-            "of people. Do not create a collage, grid, split panel, turnaround sheet, caption, "
-            "logo, watermark, arrows, labels, or readable signage."
+            f"生成一张独立的环境拓扑参考图{medium_suffix}。"
+            "画面不得出现人物、身体部位、被携带的道具、人物剪影或人物倒影。"
+            "不要生成拼贴图、网格图、分屏、转面图、字幕、标志、水印、箭头、标签"
+            "或可读的标牌文字。"
             if is_topology_reference
-            else f"Generate ONE single shot keyframe{medium_suffix}. "
-            "Do not create a collage, grid, split panel, turnaround sheet, caption, logo, "
-            "watermark, or readable signage."
+            else f"生成一张独立的镜头关键帧{medium_suffix}。"
+            "不要生成拼贴图、网格图、分屏、转面图、字幕、标志、水印"
+            "或可读的标牌文字。"
         ),
         (
-            "LOCATION AND CAMERA CONTEXT:\n"
-            f"Framing: {shot.framing}\n"
-            f"Camera side: {shot.camera}\n"
-            "Use the shot only to identify which part of the location needs an unambiguous "
-            "interaction layout; do not render its characters or action."
+            "场景与机位上下文：\n"
+            f"景别：{shot.framing}\n"
+            f"机位方向：{shot.camera}\n"
+            "镜头信息仅用于确定场景中哪一部分需要清晰无歧义的交互布局；"
+            "不要呈现镜头中的人物或动作。"
             if is_topology_reference
-            else "LOCKED SHOT:\n"
-            f"Purpose: {shot.narrative_purpose}\n"
-            f"Visual: {shot.visual}\n"
-            f"Framing: {shot.framing}\n"
-            f"Camera: {shot.camera}"
+            else "已锁定镜头：\n"
+            f"叙事目的：{shot.narrative_purpose}\n"
+            f"画面：{shot.visual}\n"
+            f"景别：{shot.framing}\n"
+            f"机位：{shot.camera}"
         ),
-        "REFERENCE IMAGE MAP:\n"
-        + ("\n".join(reference_lines) if reference_lines else "No visual references supplied."),
-        "FRAME INTENT:\n" + position_guidance,
+        "参考图对照表：\n"
+        + ("\n".join(reference_lines) if reference_lines else "未提供视觉参考图。"),
+        "画面意图：\n" + position_guidance,
     ]
     if primary_canvas is not None:
         sections.append(
-            "PRIMARY CANVAS LOCKS:\n"
-            "Image 1 is the authoritative physical frame, not an alternative visual reference. "
-            "Keep its camera position, lens, crop, background layout, number of object instances, "
-            "mechanical attachments, left/right orientation, actor handedness, and hand-to-object "
-            "contact side, including which physical surface owns each subpart. Apply only the "
-            "state changes required by FRAME INTENT and the declared action beats. Later reference "
-            "images may refine identity or appearance but must not replace Image 1 geometry."
+            "主画布锁定项：\n"
+            "图片 1 是权威的物理画面，不是可互换的参考图。保留其机位、镜头、裁切、"
+            "背景布局、物体实例数量、机械连接、左右方向、演员用手习惯以及手与物体的"
+            "接触侧，包括每个子部件归属的物理表面。只应用「画面意图」和已声明动作节拍"
+            "所要求的状态变化。后续参考图可以完善身份或外观，但不得取代图片 1 的几何结构。"
         )
     if beat_lines and not is_topology_reference:
         if start_boundary is None:
-            sections.append("ORDERED ACTION BEATS:\n" + "\n".join(beat_lines))
+            sections.append("有序动作节拍：\n" + "\n".join(beat_lines))
         else:
             completed_lines = [
                 line
@@ -817,33 +820,32 @@ def compile_keyframe_brief(
             ]
             if completed_lines:
                 sections.append(
-                    "ACTION BEATS COMPLETED BEFORE THIS FRAME:\n"
+                    "此帧之前已完成的动作节拍：\n"
                     + "\n".join(completed_lines)
                 )
             sections.append(
-                "ACTION BEATS REMAINING AFTER THIS FRAME:\n"
+                "此帧之后待完成的动作节拍：\n"
                 + "\n".join(remaining_lines)
             )
     if interaction_lines:
         sections.append(
             (
-                "INTERACTION TOPOLOGY TO MAKE VISUALLY UNAMBIGUOUS:\n"
+                "需要在画面中清晰表达的交互拓扑：\n"
                 + "\n".join(
                     _format_topology_interaction(item, asset_index)
                     for item in plan.interactions
                 )
                 if is_topology_reference
-                else "SPATIAL INTERACTIONS AND INVARIANTS:\n"
+                else "空间交互与不变项：\n"
                 + "\n".join(interaction_lines)
             )
         )
     if physical_topology_lines and not is_topology_reference:
         sections.append(
-            "RIGID ASSEMBLY AND CONTACT RULES:\n"
+            "刚性组装与接触规则：\n"
             + "\n".join(physical_topology_lines)
-            + "\nVisibility may change only through normal perspective or occlusion. A declared "
-            "part must not disappear physically, migrate to another surface, swap with a "
-            "paired part, or detach from the moving target."
+            + "\n可见性只能因正常的透视或遮挡发生变化。已声明部件不得物理消失、"
+            "转移到其他表面、与成对部件互换，或从移动目标上脱离。"
         )
     if not is_topology_reference:
         character_continuity = _character_continuity_lines(
@@ -853,7 +855,7 @@ def compile_keyframe_brief(
             asset_index,
         )
         sections.append(
-            "CONTINUITY:\n"
+            "连续性：\n"
             + character_continuity
             + _prop_continuity_lines(
                 shot,
@@ -866,10 +868,10 @@ def compile_keyframe_brief(
         style_fields = [
             f"{label}: {value}"
             for label, raw_value in (
-                ("Medium", style.medium),
-                ("cinematography", style.cinematography),
-                ("color", style.color),
-                ("texture", style.texture),
+                ("媒介", style.medium),
+                ("摄影", style.cinematography),
+                ("色彩", style.color),
+                ("质感", style.texture),
             )
             if (value := declared_style_value(raw_value)) is not None
         ]
@@ -877,24 +879,22 @@ def compile_keyframe_brief(
         if style_fields:
             look_lines.append("; ".join(style_fields) + ".")
         if style.forbidden:
-            look_lines.append("Forbidden: " + "; ".join(style.forbidden))
+            look_lines.append("禁止项：" + "；".join(style.forbidden))
     else:
         look_lines = []
     if look_lines:
         sections.append(
-            "PROJECT LOOK:\n" + "\n".join(look_lines)
+            "项目视觉风格：\n" + "\n".join(look_lines)
         )
     if extra:
-        sections.append("EXTRA LOCKS:\n" + "\n".join(f"- {item}" for item in extra))
+        sections.append("额外锁定项：\n" + "\n".join(f"- {item}" for item in extra))
     sections.append(
         (
-            "The result must remain one physically coherent environment. Make the movable "
-            "target, its mechanical boundary, and every fixed neighboring anchor visually "
-            "distinct without depicting a person performing the action."
+            "结果必须保持为一个物理连贯的环境。在不描绘人物执行动作的前提下，"
+            "让可移动目标、它的机械边界与周边每个固定锚点在视觉上清晰可区分。"
             if is_topology_reference
-            else "The result must remain one physically coherent space. Any hand, tool, door, "
-            "button, drawer, vehicle part, or other interacted object must visibly obey the "
-            "specified target and state transition; unrelated anchors must not move."
+            else "结果必须保持为一个物理连贯的空间。手、工具、门、按钮、抽屉、车辆部件"
+            "或其他交互物体，都必须在画面中遵循指定的目标与状态转变；无关锚点不得移动。"
         )
     )
     input_version_ids: list[str] = []
@@ -1011,8 +1011,8 @@ def _assess_complexity(
     selected: list[ReferenceSelection],
 ) -> ReferenceComplexityAssessment:
     observations = [
-        f"Shot duration is {shot.duration_seconds:g}s with "
-        f"{len(plan.action_beats)} declared action beat(s)."
+        f"镜头时长为 {shot.duration_seconds:g} 秒，"
+        f"共声明 {len(plan.action_beats)} 个动作节拍。"
     ]
 
     selected_by_subject = {
@@ -1038,20 +1038,19 @@ def _assess_complexity(
                 missing_topology.append(token)
     if missing_topology:
         observations.append(
-            "Declared interaction anchors without a matching approved "
-            "LOCATION_INTERACTION view: " + ", ".join(sorted(set(missing_topology)))
+            "以下已声明交互锚点没有匹配的已审批 LOCATION_INTERACTION 视图："
+            + ", ".join(sorted(set(missing_topology)))
         )
     if len({item.target_anchor for item in plan.interactions}) > 1:
         observations.append(
-            "More than one declared interaction target appears in this shot."
+            "当前镜头中声明了不止一个交互目标。"
         )
     if not plan.interactions:
-        observations.append("No explicit spatial interaction was declared for this shot.")
+        observations.append("当前镜头未显式声明空间交互。")
     if _has_competing_scene_geometry(selected):
         observations.append(
-            "A character reference embeds its own scene geometry while a separate location "
-            "reference is selected; independent video references may create duplicate or "
-            "drifting entrances, windows, counters, or other location structures."
+            "人物参考图内嵌了自身场景几何，同时又选择了独立场景参考图；"
+            "独立的视频参考可能造成入口、窗户、柜台或其他场景结构重复或漂移。"
         )
     return ReferenceComplexityAssessment(
         duration_seconds=shot.duration_seconds,
@@ -1099,62 +1098,57 @@ def build_director_advice_input(
         roles=(ProductionSkillRole.DIRECTOR,),
     )
     instructions = (
-        "You are a film director agent advising a user in the active video-production medium. "
-        f"{skill_prompt.text} Return JSON only, matching the supplied schema. Evaluate "
-        "the actual shot context; do not apply a fixed action-count or duration threshold. "
-        "Compare prompt retry, keyframe replacement, shot split, and coverage-camera change "
-        "against the actual QA failure and provider capability profile. A prompt retry should "
-        "not be the default when prior evidence indicates a route or keyframe mismatch. Treat "
-        "prior applied repairs followed by another failed QA result as causal evidence. Do not "
-        "repeat an ineffective strategy for the same failure family unless the new proposal "
-        "materially changes its actual inputs and explains why that change should work; prefer "
-        "another strategy from the repair library when appropriate. Every item is optional and "
-        "dismissible. Never claim that generation is blocked or that the user must follow your "
-        "advice. Use an empty advisories array and repair_options array when no suggestion would "
-        "materially improve quality."
+        "你是当前视频制作流程中的导演 Agent，负责基于真实制作上下文向用户提出建议。"
+        f"{skill_prompt.text} 只返回符合所给 schema 的 JSON。请结合当前镜头的具体情况判断，"
+        "不要用固定的动作数量或时长阈值代替导演判断。针对实际 QA 失败和 Provider 能力画像，"
+        "比较修改提示词、替换关键帧、拆分镜头和更换覆盖机位等修复路径。若已有证据指向路线选择"
+        "或关键帧不匹配，不要默认再次修改提示词。某项修复已经执行、随后同类 QA 仍然失败时，"
+        "应把这段历史视为因果证据；除非新方案实质改变输入并解释为何这次会奏效，否则不要重复"
+        "同一套无效策略，必要时从修复策略库中选择更合适的方案。所有建议均可选、可忽略，"
+        "不得声称生成被阻塞，也不得要求用户必须采纳。若没有能实质提升质量的建议，请返回空的 "
+        "advisories 和 repair_options。"
     )
     payload = {
         "output_schema": {
             "advisories": [
                 {
-                    "category": "one of: "
+                    "category": "以下枚举值之一："
                     + " | ".join(item.value for item in DirectorAdvisoryCategory),
-                    "message": "concise recommendation",
-                    "rationale": "shot-specific reason",
-                    "suggested_action": "optional concrete next action",
+                    "message": "简洁的建议",
+                    "rationale": "针对当前镜头的具体理由",
+                    "suggested_action": "可选的下一步具体行动",
                     "dismissible": True,
                 }
             ],
             "repair_options": [
                 {
-                    "strategy": "one of: "
+                    "strategy": "以下枚举值之一："
                     + " | ".join(item.value for item in DirectorRepairStrategy),
-                    "summary": "what would change",
-                    "rationale": "why it addresses the observed QA failure",
-                    "tradeoff": "quality, continuity, time, or cost tradeoff",
-                    "recommended": "boolean; at most one true",
+                    "summary": "将要改变什么",
+                    "rationale": "为何能处理已观察到的 QA 失败",
+                    "tradeoff": "在质量、连续性、时间或成本上的取舍",
+                    "recommended": "布尔值；最多一个选项为 true",
                     "dismissible": True,
                 }
             ],
-            "recommended_strategy": "one strategy value or null",
+            "recommended_strategy": "一个策略枚举值或 null",
             "proposed_repair": {
                 "decision": "APPLIED",
-                "strategy": "same value as recommended_strategy",
-                "reason": "concise executable rationale",
+                "strategy": "与 recommended_strategy 相同的枚举值",
+                "reason": "简洁且可执行的理由",
                 "source_take_id": request.take_id,
-                "issue_codes": ["codes from qa_failures"],
+                "issue_codes": ["来自 qa_failures 的问题代码"],
                 "shot_patch": (
-                    "optional provider-neutral ShotPlan field patch; use null when unchanged"
+                    "可选、与 Provider 无关的 ShotPlan 字段补丁；不变时使用 null"
                 ),
                 "reference_plan": (
-                    "optional update object containing only requirements, action_beats, "
-                    "interactions, max_reference_images, and planning_notes; never return "
-                    "shot_id, bindings, capability_valid, or validation_notes; use null when "
-                    "unchanged"
+                    "可选更新对象，只能包含 requirements、action_beats、interactions、"
+                    "max_reference_images 和 planning_notes；不得返回 shot_id、bindings、"
+                    "capability_valid 或 validation_notes；不变时使用 null"
                 ),
                 "split_shots": (
-                    "for SPLIT_SHOT only, at least two complete replacement shot drafts; "
-                    "otherwise an empty array"
+                    "仅供 SPLIT_SHOT 使用，至少包含两个完整的替代镜头草案；"
+                    "其他策略返回空数组"
                 ),
             },
         },
@@ -1177,31 +1171,27 @@ def build_director_advice_input(
         "provider_capability_profile": capability_profile.model_dump(mode="json"),
         "repair_strategy_library": {
             DirectorRepairStrategy.PROMPT_RETRY.value: (
-                "Regenerate with a materially revised prompt while keeping the current shot, "
-                "camera, and keyframe inputs."
+                "保留当前镜头、机位和关键帧输入，在实质修改提示词后重新生成。"
             ),
             DirectorRepairStrategy.CHANGE_KEYFRAME.value: (
-                "Replace or repair one or more keyframes, then regenerate the same shot intent."
+                "替换或修复一个或多个关键帧，再按同一镜头意图重新生成。"
             ),
             DirectorRepairStrategy.SPLIT_SHOT.value: (
-                "Distribute competing action beats across multiple shots and update dependencies."
+                "把相互争夺表达空间的动作节拍分配到多个镜头，并同步更新依赖关系。"
             ),
             DirectorRepairStrategy.CHANGE_CAMERA.value: (
-                "Keep the narrative beat but use a coverage angle that reduces hidden topology, "
-                "contact, or orientation requirements."
+                "保留叙事节拍，改用能减少隐藏拓扑、接触关系或朝向要求的覆盖机位。"
             ),
         },
         "user_direction": request.user_direction,
         "run_mode": document.project.run_mode.value,
         "production_profile": document.project.production_profile.value,
         "product_rule": (
-            "Advice never blocks generation. In AUTO_DRAFT, return an executable proposed_repair "
-            "for the recommended strategy so the workflow can continue without a user pause. In "
-            "GUIDED, the user may apply or ignore it. Never invent scene-specific schema fields. "
-            "Do not require a minimum beat count, a fixed shot count, or new information at a "
-            "fixed time interval. "
-            "Keep the JSON concise: at most three advisories, at most four repair options, omit "
-            "unchanged optional fields, and keep each prose field under 300 characters."
+            "建议不得阻塞生成。在 AUTO_DRAFT 模式下，如推荐某个策略，应同时返回可执行的 "
+            "proposed_repair，使流程无需等待用户即可继续；在 GUIDED 模式下，用户可以采纳或忽略。"
+            "不得虚构场景专属的 schema 字段，不得要求最低节拍数量、固定镜头数量，也不得要求按固定"
+            "时间间隔加入新信息。JSON 应保持精炼：advisories 最多三个，repair_options 最多四个，"
+            "省略未变化的可选字段，每个叙述性字段不超过 300 个字符。"
         ),
     }
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
@@ -1280,14 +1270,12 @@ def build_director_advice_repair_input(
     validation_error: ValueError,
 ) -> tuple[str, str]:
     instructions = (
-        "You are repairing a previously invalid JSON response from a film director agent. "
-        "Return one complete corrected JSON object only and match the supplied schema exactly. "
-        "Preserve valid recommendations and the original narrative intent. Do not introduce a "
-        "new scene-specific field, mandatory gate, or non-dismissible instruction. When a "
-        "recommended strategy is present, its proposed_repair must be executable, use the same "
-        "strategy, and keep decision=APPLIED. Keep the corrected JSON concise: omit unchanged "
-        "optional fields and keep every prose field under 300 characters. For SPLIT_SHOT, emit "
-        "authoring fields only and let only the final replacement inherit source dependencies."
+        "你正在修复导演 Agent 先前返回的一份无效 JSON。只返回一个完整、修正后的 JSON 对象，"
+        "并严格匹配所给 schema。保留原响应中有效的建议和原始叙事意图，不得新增场景专属字段、"
+        "强制门禁或不可忽略的指令。若存在推荐策略，proposed_repair 必须可执行、使用同一策略，"
+        "并保持 decision=APPLIED。修正后的 JSON 应简洁，省略未变化的可选字段，每个叙述性字段"
+        "不超过 300 个字符。对于 SPLIT_SHOT，只输出创作态字段，并且只允许最后一个替代镜头继承"
+        "源镜头依赖。"
     )
     payload = {
         "validation_error": str(validation_error),
@@ -1301,9 +1289,9 @@ def build_director_advice_repair_input(
 def _format_action_beat(beat: ActionBeat, assets: dict[str, Asset]) -> str:
     actor = assets.get(beat.actor_asset_id)
     actor_name = actor.name if actor is not None else beat.actor_asset_id
-    target = f"; target={beat.target_anchor}" if beat.target_anchor else ""
+    target = f"；目标={beat.target_anchor}" if beat.target_anchor else ""
     end_state = (
-        f"; required end state={beat.required_end_state}"
+        f"；要求的结束状态={beat.required_end_state}"
         if beat.required_end_state
         else ""
     )
@@ -1319,29 +1307,29 @@ def _format_interaction(
     actor_name = actor.name if actor is not None else interaction.actor_asset_id
     target_name = target.name if target is not None else interaction.target_asset_id
     invariants = (
-        "; unchanged anchors=" + ", ".join(interaction.unchanged_anchors)
+        "；不变锚点=" + "、".join(interaction.unchanged_anchors)
         if interaction.unchanged_anchors
         else ""
     )
     contact = ""
     if interaction.contact_anchor is not None:
-        contact = f"; exact contact anchor={interaction.contact_anchor}"
+        contact = f"；精确接触锚点={interaction.contact_anchor}"
         if interaction.contact_surface is not None:
-            contact += f" on surface={interaction.contact_surface}"
+            contact += f"，所在表面={interaction.contact_surface}"
         if interaction.contact_persists:
-            contact += "; keep the same effector on that exact anchor and surface until release"
+            contact += "；在释放前，保持同一执行部位与该精确锚点和表面接触"
     attachments = (
-        "; rigid attachments="
+        "；刚性连接="
         + ", ".join(
-            f"{item.anchor} stays on {item.surface}"
+            f"{item.anchor} 保持位于 {item.surface}"
             for item in interaction.rigid_attachments
         )
         if interaction.rigid_attachments
         else ""
     )
     return (
-        f"- {actor_name} uses {interaction.effector.value} to {interaction.action} "
-        f"{target_name}:{interaction.target_anchor}; state "
+        f"- {actor_name} 使用 {interaction.effector.value} 对 "
+        f"{target_name}:{interaction.target_anchor} 执行「{interaction.action}」；状态 "
         f"{interaction.start_state} -> {interaction.end_state}{contact}{attachments}{invariants}."
     )
 
@@ -1353,29 +1341,29 @@ def _format_topology_interaction(
     target = assets.get(interaction.target_asset_id)
     target_name = target.name if target is not None else interaction.target_asset_id
     invariants = (
-        "; visually separate fixed/invariant anchors="
-        + ", ".join(interaction.unchanged_anchors)
+        "；在视觉上分离固定/不变锚点="
+        + "、".join(interaction.unchanged_anchors)
         if interaction.unchanged_anchors
         else ""
     )
     contact = ""
     if interaction.contact_anchor is not None:
-        contact = f"; actionable contact={interaction.contact_anchor}"
+        contact = f"；可交互接触点={interaction.contact_anchor}"
         if interaction.contact_surface is not None:
-            contact += f" on {interaction.contact_surface}"
+            contact += f"，位于 {interaction.contact_surface}"
     attachments = (
-        "; show attached subparts on their owning surfaces="
+        "；在归属表面上显示附属子部件="
         + ", ".join(
-            f"{item.anchor} on {item.surface}"
+            f"{item.anchor} 位于 {item.surface}"
             for item in interaction.rigid_attachments
         )
         if interaction.rigid_attachments
         else ""
     )
     return (
-        f"- Actionable target={target_name}:{interaction.target_anchor}; intended state "
-        f"transition={interaction.start_state} -> {interaction.end_state}; make its handle, "
-        f"hinge/pivot/track, boundary, and opening path physically readable{contact}"
+        f"- 可交互目标={target_name}:{interaction.target_anchor}；预期状态"
+        f"转变={interaction.start_state} -> {interaction.end_state}；让其把手、铰链/旋转轴/"
+        f"轨道、边界与开启路径在物理上清晰可读{contact}"
         f"{attachments}{invariants}."
     )
 
@@ -1388,25 +1376,25 @@ def _format_physical_topology_rule(
     parts: list[str] = []
     if interaction.rigid_attachments:
         parts.append(
-            "move "
+            "让 "
             + ", ".join(
-                f"{item.anchor} on {item.surface}"
+                f"位于 {item.surface} 的 {item.anchor}"
                 for item in interaction.rigid_attachments
             )
-            + f" as one rigid assembly with {interaction.target_anchor}"
+            + f" 与 {interaction.target_anchor} 作为同一刚性组件运动"
         )
     if interaction.contact_persists:
         anchor = interaction.contact_anchor or interaction.target_anchor
         surface = (
-            f" on {interaction.contact_surface}"
+            f"，位于 {interaction.contact_surface}"
             if interaction.contact_surface is not None
             else ""
         )
         parts.append(
-            f"keep {interaction.effector.value} continuously attached to {anchor}{surface} "
-            "without crossing through the object or transferring to another side"
+            f"保持 {interaction.effector.value} 持续连接于 {anchor}{surface}，"
+            "不得穿过物体或转移到另一侧"
         )
-    return "- " + "; ".join(parts) + "."
+    return "- " + "；".join(parts) + "。"
 
 
 def _position_guidance(
@@ -1417,10 +1405,9 @@ def _position_guidance(
 ) -> str:
     if position == KeyframePosition.TOPOLOGY_REFERENCE:
         return (
-            "Create a clean interaction-topology reference view before the action. "
-            "The actionable target, its control/handle/hinge/track, and every invariant "
-            "anchor must be visually distinct. Do not depict an ambiguous duplicate control. "
-            "Do not perform the action yet."
+            "生成一张动作发生前的干净交互拓扑参考图。可交互目标、它的控件/"
+            "把手/铰链/轨道，以及每个不变锚点，都必须在视觉上清晰可区分。"
+            "不要画出存在歧义的重复控件，此时也不要执行动作。"
         )
     if position == KeyframePosition.START:
         states = "; ".join(
@@ -1430,23 +1417,22 @@ def _position_guidance(
         )
         if start_after_action_beat_order is not None:
             return (
-                "Show the exact video opening state after all action beats through order "
-                f"{start_after_action_beat_order} have completed and immediately before the "
-                "next declared beat. Do not replay completed beats. "
-                + (f"Locked boundary states: {states}." if states else "")
+                f"呈现截至顺序 {start_after_action_beat_order} 的所有动作节拍都已完成后、"
+                "下一个已声明节拍即将开始前的精确视频开场状态。不要重演已完成的节拍。"
+                + (f"已锁定边界状态：{states}。" if states else "")
             )
         return (
-            "Show the exact opening state immediately before the first required action beat. "
-            "The actor may be poised to act but has not completed the first state transition. "
-            + (f"Locked starting states: {states}." if states else "")
+            "呈现第一个必要动作节拍发生前一刻的精确开场状态。演员可以摆好"
+            "准备动作的姿势，但尚未完成第一次状态转变。"
+            + (f"已锁定起始状态：{states}。" if states else "")
         )
     ends = "; ".join(
         f"{item.target_anchor}={item.end_state}" for item in plan.interactions
     )
     return (
-        "Show the exact final state after every required action beat has completed. "
-        "Keep the same identities, wardrobe, location geometry, camera side, and object design. "
-        + (f"Locked ending states: {ends}." if ends else "")
+        "呈现所有必要动作节拍完成后的精确最终状态。保持人物身份、服装、"
+        "场景几何、机位方向与物体设计一致。"
+        + (f"已锁定结束状态：{ends}。" if ends else "")
     )
 
 
@@ -1491,12 +1477,12 @@ def _character_continuity_lines(
     visible_names = list(dict.fromkeys(visible_names))
     if len(visible_names) == 1:
         return (
-            f"Visible characters: {visible_names[0]} only. Other characters mentioned by "
-            "broader continuity must remain off-screen.\n"
+            f"可见人物：仅有 {visible_names[0]}。更大范围连续性中提到的其他人物"
+            "必须保持在画外。\n"
         )
     if len(visible_names) > 1:
         return (
-            "Characters and eyeline: "
+            "人物与视线："
             f"{shot.continuity.character_positions}; {shot.continuity.eyeline}\n"
         )
     return ""
@@ -1509,11 +1495,11 @@ def _prop_continuity_lines(
     start_boundary: int | None,
 ) -> str:
     if position == KeyframePosition.END:
-        return f"Prop/object state at this frame: {shot.continuity.prop_state_out}"
+        return f"此帧的道具/物体状态：{shot.continuity.prop_state_out}"
     if start_boundary is None:
         return (
-            f"Prop/object state at this frame: {shot.continuity.prop_state_in}\n"
-            f"Final state required after the video: {shot.continuity.prop_state_out}"
+            f"此帧的道具/物体状态：{shot.continuity.prop_state_in}\n"
+            f"视频结束后要求的最终状态：{shot.continuity.prop_state_out}"
         )
     completed_states = [
         beat.required_end_state
@@ -1522,8 +1508,8 @@ def _prop_continuity_lines(
     ]
     boundary_state = "; ".join(completed_states) or shot.continuity.prop_state_in
     return (
-        f"State at this frame from completed beats: {boundary_state}\n"
-        f"Final state required after the video: {shot.continuity.prop_state_out}"
+        f"由已完成节拍确定的此帧状态：{boundary_state}\n"
+        f"视频结束后要求的最终状态：{shot.continuity.prop_state_out}"
     )
 
 

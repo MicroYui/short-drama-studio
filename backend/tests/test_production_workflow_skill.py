@@ -48,3 +48,18 @@ def test_shared_workflow_keeps_all_ten_reviewable_stages() -> None:
     )
 
     assert stages == ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+
+
+def test_shared_workflow_extracts_general_patterns_without_freezing_one_example() -> None:
+    workflow = production_workflow()
+
+    assert "可复用的视频生成范式" in workflow
+    assert "默认先形成一份可完整阅读和批准的 ScriptVersion" in workflow
+    assert "剧情重要度、预计复用范围、跨镜连续性风险" in workflow
+    assert "artifact.update_brief" in workflow
+    assert "image.compose_reference_sheet" in workflow
+    assert "默认在完整 ScriptVersion 可审阅后" in workflow
+    assert "镜头、动作、台词/声音、情绪或表演变化" in workflow
+    assert "<Picture N>" in workflow
+    assert "固定 15 秒、固定 13 切" in workflow
+    assert "不是 H3 或 AI 视频的必要合同" in workflow

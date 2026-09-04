@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from short_drama.models import (
     SpatialInteractionConstraint,
     SurfaceAttachmentConstraint,
 )
+from short_drama.observability import LOGGER_NAME
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderError,
     OpenAICompatibleLanguageClient,
@@ -38,13 +40,30 @@ from short_drama.service import (
 
 
 class FakeResponse:
-    def __init__(self, status_code: int, payload: object) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        payload: object,
+        *,
+        headers: dict[str, str] | None = None,
+        stream_lines: list[str | bytes] | None = None,
+    ) -> None:
         self.status_code = status_code
         self.payload = payload
         self.text = json.dumps(payload)
+        self.headers = headers or {}
+        self.stream_lines = stream_lines or []
+        self.closed = False
 
     def json(self) -> object:
         return self.payload
+
+    def iter_lines(self, *, decode_unicode: bool = False) -> list[str | bytes]:
+        del decode_unicode
+        return self.stream_lines
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class FakeSession:
@@ -193,11 +212,192 @@ def test_language_client_generates_with_responses_api_and_reads_nested_text() ->
                     "input": "锁定事实",
                     "reasoning": {"effort": "low"},
                     "max_output_tokens": 2200,
+                    "stream": True,
                 },
-                "timeout": 180.0,
+                "timeout": None,
+                "stream": True,
             },
         )
     ]
+
+
+def test_language_client_reads_streaming_responses_events() -> None:
+    response = FakeResponse(
+        200,
+        {},
+        headers={"Content-Type": "text/event-stream; charset=utf-8"},
+        stream_lines=[
+            'event: response.created',
+            'data: {"response":{"instructions":"unterminated',
+            "",
+            'event: response.output_text.delta',
+            b'data: {"type":"response.output_text.delta",',
+            'data: "delta":"最终"}'.encode(),
+            "",
+            'data: {"type":"response.output_text.delta","delta":"剧本"}',
+            "",
+            'data: {"type":"response.output_text.done","text":"最终剧本"}',
+            "",
+            'data: {"type":"response.completed","response":{"output_text":"最终剧本"}}',
+            "",
+            "data: [DONE]",
+        ],
+    )
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        session=FakeSession(response),  # type: ignore[arg-type]
+    )
+
+    result = client.generate_text(instructions="只输出剧本", input_text="锁定事实")
+
+    assert result == "最终剧本"
+    assert response.closed is True
+
+
+def test_language_client_logs_content_free_stream_metrics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    response = FakeResponse(
+        200,
+        {},
+        headers={"Content-Type": "text/event-stream"},
+        stream_lines=[
+            'data: {"type":"response.output_text.delta","delta":"最终"}',
+            "",
+            'data: {"type":"response.completed","response":{"output_text":"最终"}}',
+            "",
+        ],
+    )
+    clock_values = iter([10.0, 11.25, 14.0])
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        model="test-sol",
+        session=FakeSession(response),  # type: ignore[arg-type]
+        monotonic_clock=lambda: next(clock_values),
+    )
+
+    result = client.generate_text(instructions="只输出剧本", input_text="锁定事实")
+
+    assert result == "最终"
+    events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == LOGGER_NAME
+        and json.loads(record.getMessage()).get("event")
+        == "provider.language_generation"
+    ]
+    assert events == [
+        {
+            "completion_type": "sse_response_completed",
+            "elapsed_seconds": 4.0,
+            "error_kind": None,
+            "event": "provider.language_generation",
+            "input_characters": 4,
+            "instruction_characters": 5,
+            "model": "test-sol",
+            "output_characters": 2,
+            "provider": "openai_compatible",
+            "success": True,
+            "time_to_first_text_delta_seconds": 1.25,
+            "timestamp": events[0]["timestamp"],
+        }
+    ]
+    serialized = json.dumps(events, ensure_ascii=False)
+    assert "只输出剧本" not in serialized
+    assert "锁定事实" not in serialized
+    assert "最终" not in serialized
+
+
+def test_language_client_logs_transport_failure_metrics(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    clock_values = iter([20.0, 23.5])
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        session=FakeSession(requests.ConnectionError("offline")),  # type: ignore[arg-type]
+        monotonic_clock=lambda: next(clock_values),
+    )
+
+    with pytest.raises(LanguageProviderError, match="could not reach"):
+        client.generate_text(instructions="instructions", input_text="input")
+
+    event = next(
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == LOGGER_NAME
+        and json.loads(record.getMessage()).get("event")
+        == "provider.language_generation"
+    )
+    assert event["success"] is False
+    assert event["completion_type"] == "transport_error"
+    assert event["elapsed_seconds"] == 3.5
+    assert event["time_to_first_text_delta_seconds"] is None
+    assert event["instruction_characters"] == 12
+    assert event["input_characters"] == 5
+    assert event["output_characters"] == 0
+    assert event["error_kind"] == "LanguageProviderError"
+
+
+def test_language_client_rejects_partial_stream_without_terminal_event() -> None:
+    response = FakeResponse(
+        200,
+        {},
+        headers={"Content-Type": "text/event-stream"},
+        stream_lines=[
+            'data: {"type":"response.output_text.delta","delta":"未完"}',
+        ],
+    )
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        session=FakeSession(response),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(LanguageProviderError, match="ended before completion"):
+        client.generate_text(instructions="只输出剧本", input_text="锁定事实")
+
+    assert response.closed is True
+
+
+def test_language_client_keeps_first_delta_metric_when_stream_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    response = FakeResponse(
+        200,
+        {},
+        headers={"Content-Type": "text/event-stream"},
+        stream_lines=[
+            'data: {"type":"response.output_text.delta","delta":"未完"}',
+        ],
+    )
+    clock_values = iter([30.0, 30.75, 32.0])
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        session=FakeSession(response),  # type: ignore[arg-type]
+        monotonic_clock=lambda: next(clock_values),
+    )
+
+    with pytest.raises(LanguageProviderError, match="ended before completion"):
+        client.generate_text(instructions="instructions", input_text="input")
+
+    event = next(
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == LOGGER_NAME
+        and json.loads(record.getMessage()).get("event")
+        == "provider.language_generation"
+    )
+    assert event["success"] is False
+    assert event["completion_type"] == "sse_error"
+    assert event["elapsed_seconds"] == 2.0
+    assert event["time_to_first_text_delta_seconds"] == 0.75
 
 
 def test_language_client_sends_multimodal_responses_input() -> None:
@@ -437,14 +637,15 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
     payload = json.loads(input_text)
 
     assert "当前制作类型为AI 原生短剧" in instructions
-    assert "视频提示词编译职责准则：" in instructions
+    assert "视频提示词编译的通用职责" in instructions
     assert "类型创作原则：" not in instructions
     assert payload["production_profile"] == "AI_SHORT_DRAMA"
-    assert payload["visible_assets"] == ["林夏", "雨夜便利店"]
+    assert payload["visible_assets"] == ["林夏"]
     assert [
         character["name"]
         for character in payload["visible_asset_bible_for_disambiguation_only"]["characters"]
     ] == ["林夏"]
+    assert payload["visible_asset_bible_for_disambiguation_only"]["locations"] == []
     assert payload["visible_asset_bible_for_disambiguation_only"]["props"] == []
     assert payload["previous_shot_terminal_state"] == {
         "sequence": 1,
@@ -473,7 +674,7 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
     )
     assert "当前制作类型为按项目声明的视觉媒介" in general_instructions
     assert "当前制片技能：通用视频。" in general_instructions
-    assert "视频提示词编译职责准则：" in general_instructions
+    assert "视频提示词编译的通用职责" in general_instructions
     assert "AI 原生短剧" not in general_instructions
     assert json.loads(general_input)["production_profile"] == "GENERAL_VIDEO"
 
@@ -537,7 +738,7 @@ def test_language_prompt_includes_structured_physical_interactions() -> None:
     ]
 
 
-def test_language_prompt_filters_voiceover_character_but_keeps_current_prop_state() -> None:
+def test_language_prompt_uses_explicit_prop_binding_without_inferring_voiceover_character() -> None:
     from short_drama.fixture import build_dont_trust_me_fixture
 
     document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
@@ -552,12 +753,95 @@ def test_language_prompt_filters_voiceover_character_but_keeps_current_prop_stat
     payload = json.loads(input_text)
     bible = payload["visible_asset_bible_for_disambiguation_only"]
 
-    assert payload["visible_assets"] == ["周衡", "雨夜便利店", "红色旧录音笔"]
-    assert [character["name"] for character in bible["characters"]] == ["周衡"]
+    assert payload["visible_assets"] == ["红色旧录音笔"]
+    assert bible["characters"] == []
+    assert bible["locations"] == []
     assert len(bible["props"]) == 1
     assert bible["props"][0]["name"] == "红色旧录音笔"
     assert all(state["shot_id"] == shot_5.id for state in bible["props"][0]["states"])
     assert payload["locked_dialogue"][0]["speaker"] == "录音笔中的林夏"
+
+
+def test_language_prompt_does_not_infer_visible_assets_from_narrative_text() -> None:
+    from short_drama.fixture import build_dont_trust_me_fixture
+
+    document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    shot_1 = next(shot for shot in document.shots if shot.sequence == 1)
+    _, input_text = build_language_prompt_input(
+        document,
+        shot_1,
+        route=VideoGenerationRoute.DIRECT,
+        duration_seconds=5,
+        source_prompt="baseline",
+    )
+    payload = json.loads(input_text)
+
+    assert "雨夜便利店" in shot_1.visual
+    assert "两人" in shot_1.continuity.action_out
+    assert payload["visible_assets"] == []
+    assert payload["visible_asset_bible_for_disambiguation_only"] == {
+        "characters": [],
+        "locations": [],
+        "props": [],
+        "style": document.bible_versions[0].style.model_dump(mode="json"),
+    }
+
+
+def test_language_prompt_resolves_bible_entities_only_from_typed_asset_links() -> None:
+    from short_drama.fixture import build_dont_trust_me_fixture
+
+    document = build_dont_trust_me_fixture("2026-08-15T00:00:00+00:00")
+    shot = next(item for item in document.shots if item.sequence == 2)
+    character_asset = next(
+        item for item in document.assets if item.name == "林夏定妆"
+    )
+    character_asset.name = "周衡定妆"
+    character_asset.bible_entity_id = "character-linxia"
+
+    _, input_text = build_language_prompt_input(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=8,
+        source_prompt="baseline",
+        media_inputs=[
+            H3MediaInput(
+                kind=H3MediaKind.IMAGE,
+                role=H3MediaRole.REFERENCE_IMAGE,
+                source=H3MediaSource(external_url="https://preview.invalid/character.png"),
+                asset_version_id=character_asset.current_version_id,
+            )
+        ],
+    )
+    payload = json.loads(input_text)
+
+    assert payload["visible_assets"] == ["林夏"]
+    assert [
+        item["name"]
+        for item in payload["visible_asset_bible_for_disambiguation_only"]["characters"]
+    ] == ["林夏"]
+
+    character_asset.bible_entity_id = None
+    _, unlinked_input = build_language_prompt_input(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=8,
+        source_prompt="baseline",
+        media_inputs=[
+            H3MediaInput(
+                kind=H3MediaKind.IMAGE,
+                role=H3MediaRole.REFERENCE_IMAGE,
+                source=H3MediaSource(external_url="https://preview.invalid/character.png"),
+                asset_version_id=character_asset.current_version_id,
+            )
+        ],
+    )
+    unlinked_payload = json.loads(unlinked_input)
+    assert unlinked_payload["visible_assets"] == ["周衡定妆"]
+    assert unlinked_payload["visible_asset_bible_for_disambiguation_only"][
+        "characters"
+    ] == []
 
 
 def test_language_prompt_binds_route_media_descriptors() -> None:
@@ -588,7 +872,12 @@ def test_language_prompt_binds_route_media_descriptors() -> None:
         {
             "role": "reference_image",
             "kind": "IMAGE",
-            "purpose": "只锚定描述中明确对应的视觉元素",
+            "provider_label": "<Picture 1>",
+            "reference_alias": "@林夏定妆",
+            "subject": "林夏定妆",
+            "subject_asset_id": linxia.id,
+            "reference_tags": [],
+            "purpose": "identity, wardrobe, object appearance, or location geometry",
             "asset_version_id": version.id,
             "asset_name": "林夏定妆",
             "asset_kind": "CHARACTER",

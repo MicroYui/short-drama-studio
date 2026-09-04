@@ -6,7 +6,6 @@ shot can proceed and do not alter the provider-neutral ShotPlan.
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 
@@ -39,56 +38,6 @@ _TAIL_SECONDS = 4.0
 _PREVIS_SECONDS = 4.0
 
 
-def camera_motion_preset(camera: str) -> H3CameraMotionPreset:
-    """Map free-form Director language to a small generic camera-previs vocabulary."""
-
-    value = camera.casefold()
-    mappings: tuple[tuple[H3CameraMotionPreset, tuple[str, ...]], ...] = (
-        (
-            H3CameraMotionPreset.DOLLY_IN,
-            (
-                "推近",
-                "推进",
-                "轻推",
-                "推镜",
-                "靠近",
-                "前移",
-                "dolly in",
-                "push in",
-                "zoom in",
-            ),
-        ),
-        (
-            H3CameraMotionPreset.DOLLY_OUT,
-            ("拉远", "后退", "后移", "dolly out", "pull out", "zoom out"),
-        ),
-        (
-            H3CameraMotionPreset.JIB_UP,
-            ("升起", "上升", "摇上", "抬升", "jib up", "crane up", "tilt up"),
-        ),
-        (
-            H3CameraMotionPreset.JIB_DOWN,
-            ("下降", "下沉", "摇下", "降低", "jib down", "crane down", "tilt down"),
-        ),
-        (
-            H3CameraMotionPreset.TRACK_LEFT,
-            ("左移", "向左", "左摇", "track left", "pan left", "dolly left"),
-        ),
-        (
-            H3CameraMotionPreset.TRACK_RIGHT,
-            ("右移", "向右", "右摇", "track right", "pan right", "dolly right"),
-        ),
-        (
-            H3CameraMotionPreset.FOLLOW,
-            ("跟随", "跟拍", "追随", "tracking", "follow"),
-        ),
-    )
-    for preset, tokens in mappings:
-        if any(token in value for token in tokens):
-            return preset
-    return H3CameraMotionPreset.STATIC
-
-
 def append_h3_video_guide_guidance(prompt: str, guide: H3VideoGuide) -> str:
     """Tell H3 which part of an optional guide is authoritative."""
 
@@ -105,7 +54,9 @@ def append_h3_video_guide_guidance(prompt: str, guide: H3VideoGuide) -> str:
             "前镜末段原样重复。"
         )
     else:
-        motion = guide.camera_motion.value if guide.camera_motion is not None else "STATIC"
+        if guide.camera_motion is None:
+            raise ValueError("CAMERA_PREVIS guide requires an explicit camera motion")
+        motion = guide.camera_motion.value
         if guide.previs_base_source == H3VideoGuideBaseSource.TARGET_START_FRAME:
             guidance = (
                 f"<Video 1>是从本镜头已批准起始构图生成的低保真二维机位预演（{motion}）。"
@@ -137,6 +88,7 @@ class H3VideoGuideBuilder:
         shot_ids: list[str],
         created_at: str,
         prepared_media_inputs: dict[str, list[H3MediaInput]] | None = None,
+        camera_motion_by_shot: dict[str, H3CameraMotionPreset] | None = None,
     ) -> tuple[dict[str, list[H3VideoGuide]], list[str]]:
         selected_ids = set(shot_ids)
         ordered = sorted(document.shots, key=lambda item: item.sequence)
@@ -146,9 +98,6 @@ class H3VideoGuideBuilder:
 
         for index, shot in enumerate(ordered):
             if index == 0 or (selected_ids and shot.id not in selected_ids):
-                continue
-            target_take = source_take_by_shot.get(shot.id)
-            if target_take is not None and target_take.qa_status == QaStatus.PASSED:
                 continue
             previous = ordered[index - 1]
             if previous.scene_id != shot.scene_id:
@@ -167,6 +116,7 @@ class H3VideoGuideBuilder:
                     source_take=source_take,
                     created_at=created_at,
                     target_start_frame=target_start_frame,
+                    camera_motion=(camera_motion_by_shot or {}).get(shot.id),
                 )
             except MediaGenerationError as exc:
                 warnings.append(
@@ -186,7 +136,6 @@ class H3VideoGuideBuilder:
                 not take.is_selected
                 or take.freshness != Freshness.CURRENT
                 or take.availability != TakeAvailability.AVAILABLE
-                or take.qa_status == QaStatus.PENDING
                 or not path.is_file()
                 or path.stat().st_size == 0
             ):
@@ -221,6 +170,7 @@ class H3VideoGuideBuilder:
         source_take: Take,
         created_at: str,
         target_start_frame: H3MediaInput | None,
+        camera_motion: H3CameraMotionPreset | None,
     ) -> list[H3VideoGuide]:
         source_path = Path(source_take.media_path).expanduser().resolve()
         metadata = probe_media_with_ffmpeg(source_path)
@@ -265,60 +215,10 @@ class H3VideoGuideBuilder:
             duration=tail_duration,
         )
 
-        motion = camera_motion_preset(shot.camera)
-        if target_start_frame is not None:
-            assert target_start_frame.source.local_path is not None
-            raw_frame_path = Path(target_start_frame.source.local_path).expanduser().resolve()
-            base_token = self._safe_component(
-                target_start_frame.asset_version_id or raw_frame_path.stem
-            )
-            previs_base_source = H3VideoGuideBaseSource.TARGET_START_FRAME
-            base_asset_version_id = target_start_frame.asset_version_id
-            frame_path = guide_dir / f"previs-base-target-{base_token}-{revision_token}.jpg"
-            previs_path = guide_dir / f"previs-target-{base_token}-{revision_token}.mp4"
-            self._ensure_image_frame(
-                source_path=raw_frame_path,
-                destination=frame_path,
-            )
-            previs_rationale = (
-                "Preview the Director's coarse camera path from the current shot's approved "
-                "start composition; H3 should retain that composition while synthesizing natural motion."
-            )
-            previs_warnings = [
-                "A 2D camera previs does not prove feasible body blocking or three-dimensional occlusion.",
-                "The approved start frame controls composition but does not guarantee action continuity.",
-            ]
-        else:
-            base_token = source_token
-            previs_base_source = H3VideoGuideBaseSource.PREVIOUS_BOUNDARY_FRAME
-            base_asset_version_id = None
-            frame_path = guide_dir / f"previs-base-previous-{base_token}-{revision_token}.jpg"
-            previs_path = guide_dir / f"previs-previous-{base_token}-{revision_token}.mp4"
-            self._ensure_last_frame(
-                source_path=source_path,
-                destination=frame_path,
-                timestamp=max(0.0, actual_duration - 0.30),
-            )
-            previs_rationale = (
-                "Preview the Director's coarse camera path from the preceding boundary frame; "
-                "H3 should use only the requested motion and retain the project's declared style."
-            )
-            previs_warnings = [
-                *common_warnings,
-                "A 2D camera previs does not prove feasible body blocking or three-dimensional occlusion.",
-                "A preceding boundary frame may preserve the wrong coverage for a new camera angle.",
-            ]
-        self._ensure_previs(
-            image_path=frame_path,
-            destination=previs_path,
-            duration=_PREVIS_SECONDS,
-            motion=motion,
-        )
         full_output_duration = self._media_duration(full_path)
         tail_output_duration = self._media_duration(tail_path)
-        previs_output_duration = self._media_duration(previs_path)
 
-        return [
+        guides = [
             H3VideoGuide(
                 id=self._guide_id(H3VideoGuideKind.PREVIOUS_TAKE, shot, source_take),
                 shot_id=shot.id,
@@ -365,31 +265,113 @@ class H3VideoGuideBuilder:
                 ],
                 created_at=created_at,
             ),
-            H3VideoGuide(
-                id=self._guide_id(
-                    H3VideoGuideKind.CAMERA_PREVIS,
-                    shot,
-                    source_take,
-                    base_token=base_token,
-                ),
-                shot_id=shot.id,
-                source_shot_id=previous.id,
-                source_shot_revision=previous.revision,
-                source_take_id=source_take.id,
-                kind=H3VideoGuideKind.CAMERA_PREVIS,
-                media_path=str(previs_path.resolve()),
-                duration_seconds=previs_output_duration,
-                camera_motion=motion,
-                previs_base_source=previs_base_source,
-                base_asset_version_id=base_asset_version_id,
-                source_qa_status=source_take.qa_status,
-                source_quality_score=source_take.qa_report.score,
-                source_issue_codes=issue_codes,
-                rationale=previs_rationale,
-                warnings=previs_warnings,
-                created_at=created_at,
-            ),
         ]
+        if camera_motion is not None:
+            guides.append(
+                self._prepare_camera_previs(
+                    shot=shot,
+                    previous=previous,
+                    source_take=source_take,
+                    source_path=source_path,
+                    source_token=source_token,
+                    actual_duration=actual_duration,
+                    guide_dir=guide_dir,
+                    revision_token=revision_token,
+                    common_warnings=common_warnings,
+                    issue_codes=issue_codes,
+                    created_at=created_at,
+                    target_start_frame=target_start_frame,
+                    camera_motion=camera_motion,
+                )
+            )
+        return guides
+
+    def _prepare_camera_previs(
+        self,
+        *,
+        shot: ShotPlan,
+        previous: ShotPlan,
+        source_take: Take,
+        source_path: Path,
+        source_token: str,
+        actual_duration: float,
+        guide_dir: Path,
+        revision_token: str,
+        common_warnings: list[str],
+        issue_codes: list[str],
+        created_at: str,
+        target_start_frame: H3MediaInput | None,
+        camera_motion: H3CameraMotionPreset,
+    ) -> H3VideoGuide:
+        if target_start_frame is not None:
+            assert target_start_frame.source.local_path is not None
+            raw_frame_path = Path(target_start_frame.source.local_path).expanduser().resolve()
+            base_token = self._safe_component(
+                target_start_frame.asset_version_id or raw_frame_path.stem
+            )
+            previs_base_source = H3VideoGuideBaseSource.TARGET_START_FRAME
+            base_asset_version_id = target_start_frame.asset_version_id
+            frame_path = guide_dir / f"previs-base-target-{base_token}-{revision_token}.jpg"
+            previs_path = guide_dir / f"previs-target-{base_token}-{revision_token}.mp4"
+            self._ensure_image_frame(source_path=raw_frame_path, destination=frame_path)
+            rationale = (
+                "Preview the calling Agent's explicit coarse camera path from the current "
+                "shot's approved start composition."
+            )
+            warnings = [
+                "A 2D camera previs does not prove feasible body blocking or three-dimensional occlusion.",
+                "The approved start frame controls composition but does not guarantee action continuity.",
+            ]
+        else:
+            base_token = source_token
+            previs_base_source = H3VideoGuideBaseSource.PREVIOUS_BOUNDARY_FRAME
+            base_asset_version_id = None
+            frame_path = guide_dir / f"previs-base-previous-{base_token}-{revision_token}.jpg"
+            previs_path = guide_dir / f"previs-previous-{base_token}-{revision_token}.mp4"
+            self._ensure_last_frame(
+                source_path=source_path,
+                destination=frame_path,
+                timestamp=max(0.0, actual_duration - 0.30),
+            )
+            rationale = (
+                "Preview the calling Agent's explicit coarse camera path from the preceding "
+                "boundary frame."
+            )
+            warnings = [
+                *common_warnings,
+                "A 2D camera previs does not prove feasible body blocking or three-dimensional occlusion.",
+                "A preceding boundary frame may preserve the wrong coverage for a new camera angle.",
+            ]
+        self._ensure_previs(
+            image_path=frame_path,
+            destination=previs_path,
+            duration=_PREVIS_SECONDS,
+            motion=camera_motion,
+        )
+        return H3VideoGuide(
+            id=self._guide_id(
+                H3VideoGuideKind.CAMERA_PREVIS,
+                shot,
+                source_take,
+                base_token=base_token,
+            ),
+            shot_id=shot.id,
+            source_shot_id=previous.id,
+            source_shot_revision=previous.revision,
+            source_take_id=source_take.id,
+            kind=H3VideoGuideKind.CAMERA_PREVIS,
+            media_path=str(previs_path.resolve()),
+            duration_seconds=self._media_duration(previs_path),
+            camera_motion=camera_motion,
+            previs_base_source=previs_base_source,
+            base_asset_version_id=base_asset_version_id,
+            source_qa_status=source_take.qa_status,
+            source_quality_score=source_take.qa_report.score,
+            source_issue_codes=issue_codes,
+            rationale=rationale,
+            warnings=warnings,
+            created_at=created_at,
+        )
 
     @staticmethod
     def _source_warnings(source_take: Take) -> list[str]:
@@ -401,7 +383,17 @@ class H3VideoGuideBuilder:
 
     @staticmethod
     def _safe_component(value: str) -> str:
-        result = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-.")
+        allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"
+        parts: list[str] = []
+        previous_was_separator = False
+        for character in value:
+            if character in allowed:
+                parts.append(character)
+                previous_was_separator = False
+            elif not previous_was_separator:
+                parts.append("-")
+                previous_was_separator = True
+        result = "".join(parts).strip("-.")
         return result or "artifact"
 
     @staticmethod

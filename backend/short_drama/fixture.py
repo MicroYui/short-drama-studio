@@ -46,6 +46,14 @@ CANONICAL_LINES: tuple[tuple[str, str, AudioKind], ...] = (
     ("周衡", "现在，你还信自己吗？", AudioKind.DIALOGUE),
 )
 
+CANONICAL_SPEAKER_CHARACTER_IDS: tuple[str | None, ...] = (
+    "character-linxia",
+    "character-zhouheng",
+    "character-linxia",
+    None,
+    "character-zhouheng",
+)
+
 CANONICAL_SCRIPT = "\n".join(
     f"{speaker}：{text}" for speaker, text, _audio_kind in CANONICAL_LINES
 )
@@ -60,12 +68,16 @@ def _canonical_script_lines(project_id: str) -> list[ScriptLine]:
         ScriptLine(
             id=_artifact_id(project_id, f"line-{index:02d}"),
             speaker=speaker,
+            speaker_character_id=speaker_character_id,
             original_text=text,
             spoken_text=text,
             subtitle_text=text,
             audio_kind=audio_kind,
         )
-        for index, (speaker, text, audio_kind) in enumerate(CANONICAL_LINES, start=1)
+        for index, ((speaker, text, audio_kind), speaker_character_id) in enumerate(
+            zip(CANONICAL_LINES, CANONICAL_SPEAKER_CHARACTER_IDS, strict=True),
+            start=1,
+        )
     ]
 
 
@@ -82,6 +94,7 @@ def _locked_script_lines(project_id: str, input_text: str) -> list[ScriptLine]:
             ScriptLine(
                 id=_artifact_id(project_id, f"line-{index:02d}"),
                 speaker=speaker.strip() or "旁白",
+                speaker_character_id=None,
                 original_text=text.strip(),
                 spoken_text=text.strip(),
                 subtitle_text=text.strip(),
@@ -198,6 +211,7 @@ def _asset(
     suffix: str,
     kind: AssetKind,
     name: str,
+    bible_entity_id: str,
     descriptor: str,
     created_at: str,
 ) -> Asset:
@@ -207,6 +221,7 @@ def _asset(
         project_id=project_id,
         kind=kind,
         name=name,
+        bible_entity_id=bible_entity_id,
         current_version_id=version_id,
         versions=[
             AssetVersion(
@@ -229,6 +244,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
             suffix="linxia",
             kind=AssetKind.CHARACTER,
             name="林夏定妆",
+            bible_entity_id="character-linxia",
             descriptor="28 岁，短黑发，米白风衣，克制警觉，声线标识 S1",
             created_at=created_at,
         ),
@@ -237,6 +253,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
             suffix="zhouheng",
             kind=AssetKind.CHARACTER,
             name="周衡定妆",
+            bible_entity_id="character-zhouheng",
             descriptor="32 岁，深灰西装，左眉浅疤，平静，声线标识 S2",
             created_at=created_at,
         ),
@@ -245,6 +262,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
             suffix="store",
             kind=AssetKind.LOCATION,
             name="雨夜便利店",
+            bible_entity_id="location-convenience-store",
             descriptor="冷白顶灯，右侧玻璃门，左后收银台，蓝色霓虹雨夜反光",
             created_at=created_at,
         ),
@@ -253,6 +271,7 @@ def _build_assets(project_id: str, created_at: str) -> list[Asset]:
             suffix="recorder",
             kind=AssetKind.PROP,
             name="红色旧录音笔",
+            bible_entity_id="prop-red-recorder",
             descriptor="磨损红壳，指示灯；周衡右手 → 柜台 → 林夏左手",
             created_at=created_at,
         ),
@@ -359,13 +378,13 @@ def _build_execution_plan(project_id: str, shots: list[ShotPlan]) -> list[Execut
 
 def _build_reference_plan(project_id: str, shots: list[ShotPlan]) -> list[ReferencePlanEntry]:
     bindings_by_sequence: dict[int, list[ReferenceBinding]] = {
-        2: [ReferenceBinding(kind="CHARACTER", target_id=_artifact_id(project_id, "asset-linxia-v1"), purpose="身份与服装", requirement="REQUIRED")],
+        2: [ReferenceBinding(kind=AssetKind.CHARACTER, target_id=_artifact_id(project_id, "asset-linxia-v1"), purpose="身份与服装", required=True)],
         3: [
-            ReferenceBinding(kind="CHARACTER", target_id=_artifact_id(project_id, "asset-zhouheng-v1"), purpose="身份与眉间浅疤", requirement="REQUIRED"),
-            ReferenceBinding(kind="PROP", target_id=_artifact_id(project_id, "asset-recorder-v1"), purpose="右手持有状态", requirement="REQUIRED"),
+            ReferenceBinding(kind=AssetKind.CHARACTER, target_id=_artifact_id(project_id, "asset-zhouheng-v1"), purpose="身份与眉间浅疤", required=True),
+            ReferenceBinding(kind=AssetKind.PROP, target_id=_artifact_id(project_id, "asset-recorder-v1"), purpose="右手持有状态", required=True),
         ],
-        5: [ReferenceBinding(kind="PROP", target_id=_artifact_id(project_id, "asset-recorder-v1"), purpose="柜台位置与指示灯", requirement="REQUIRED")],
-        8: [ReferenceBinding(kind="PROP", target_id=_artifact_id(project_id, "asset-recorder-v1"), purpose="道具转移到林夏左手", requirement="REQUIRED")],
+        5: [ReferenceBinding(kind=AssetKind.PROP, target_id=_artifact_id(project_id, "asset-recorder-v1"), purpose="柜台位置与指示灯", required=True)],
+        8: [ReferenceBinding(kind=AssetKind.PROP, target_id=_artifact_id(project_id, "asset-recorder-v1"), purpose="道具转移到林夏左手", required=True)],
     }
     return [
         ReferencePlanEntry(

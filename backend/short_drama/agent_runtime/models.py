@@ -14,6 +14,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from short_drama.models import ProductionExecutionTarget
+from short_drama.skills.models import ProductionSkillRole
 
 
 def utc_now() -> datetime:
@@ -67,6 +68,15 @@ class AgentResultStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class SpecialistTurnStatus(StrEnum):
+    """Persisted lifecycle of one Tool request made by a specialist Agent."""
+
+    REQUESTED = "REQUESTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    INTERRUPTED = "INTERRUPTED"
+
+
 class ExperienceConfidence(StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
@@ -101,6 +111,7 @@ class AgentRun(RuntimeModel):
     active_skill_ids: list[str] = Field(default_factory=list[str])
     unattended: bool = False
     execution_target: ProductionExecutionTarget | None = None
+    render_export: bool | None = None
     status: AgentRunStatus = AgentRunStatus.RUNNING
     parent_run_id: str | None = None
     current_plan_revision_id: str | None = None
@@ -116,6 +127,7 @@ class PlanStep(RuntimeModel):
     title: str = Field(min_length=1)
     kind: ActionKind
     assigned_agent: str = Field(min_length=1)
+    production_skill_role: ProductionSkillRole | None = None
     tool_name: str | None = None
     instructions: str = Field(min_length=1)
     arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
@@ -191,6 +203,8 @@ class ActionRecord(RuntimeModel):
     input_summary: str = Field(min_length=1)
     output_summary: str | None = None
     error_message: str | None = None
+    duration_ms: int | None = Field(default=None, ge=0)
+    error_kind: str | None = Field(default=None, min_length=1, max_length=200)
     artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -246,6 +260,20 @@ class ExperienceMemory(RuntimeModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class SpecialistTurnRecord(RuntimeModel):
+    """Recoverable trace for one specialist decision followed by one Tool action."""
+
+    id: str = Field(min_length=1)
+    sequence: int = Field(ge=1)
+    tool_name: str = Field(min_length=1, max_length=200)
+    arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    reason: str = Field(min_length=1, max_length=1000)
+    status: SpecialistTurnStatus = SpecialistTurnStatus.REQUESTED
+    result: dict[str, JsonValue] | None = None
+    requested_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class WorkOrder(RuntimeModel):
     """Concise, self-contained contract for delegating work to another agent."""
 
@@ -253,6 +281,7 @@ class WorkOrder(RuntimeModel):
     parent_run_id: str = Field(min_length=1)
     sender: str = Field(min_length=1)
     recipient_role: str = Field(min_length=1)
+    production_skill_role: ProductionSkillRole | None = None
     objective: str = Field(min_length=1)
     why_now: str = Field(min_length=1)
     scope: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
@@ -263,6 +292,9 @@ class WorkOrder(RuntimeModel):
         default_factory=dict[str, JsonValue]
     )
     acceptance_criteria: list[str] = Field(default_factory=list[str])
+    specialist_turns: list[SpecialistTurnRecord] = Field(
+        default_factory=list[SpecialistTurnRecord]
+    )
     status: DelegationStatus = DelegationStatus.PENDING
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -301,6 +333,8 @@ class ContextPack(RuntimeModel):
     project_id: str
     objective: str
     active_skill_ids: list[str] = Field(default_factory=list[str])
+    execution_target: ProductionExecutionTarget | None = None
+    render_export: bool | None = None
     project_summary: str | None = None
     run_focus: str | None = None
     constraints: list[str] = Field(default_factory=list[str])

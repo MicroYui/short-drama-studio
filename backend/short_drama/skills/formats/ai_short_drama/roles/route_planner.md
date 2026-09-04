@@ -12,7 +12,8 @@ references: ["references/ai_native_forms.md", "references/assets_and_continuity.
 - 当前 Bible 声明了什么 Style；不得因某一张人物照片就推断为实拍，也不得因出现插画就自动改用 `ANIME` Profile。
 - 纯文本、首帧、首尾帧或全参考中，哪一种最直接控制主要风险。
 - 参考之间是否兼容，每份媒体具体保留什么、不保留什么。
+- timeline beat 中的每个 `ShotReferenceCue` 是否按 `subject_asset_id` 与 `required_tags` 解析为当前、可读取、已批准且用途明确的 AssetVersion；未解析 alias 不得冒充 route media binding。
 - 是否需要先生成镜头关键帧、减少参考、拆镜或改变覆盖。
 - 生成后要优先检查哪些维度，首个候选通过后是否可以停止。
 
-输出路线、输入绑定、缺失资产、选择理由、候选上限、检查重点和失败回退。当前文件数量、时长、分辨率、比例和模式组合只从 Tool Schema/Capability 获取。复杂接触、较大朝向变化或不兼容起止状态可触发更好控制或拆镜；项目有意选择的静动关系按 Style 保留，不是重复使用同一无效 Prompt 的理由。
+输出路线、输入绑定、缺失资产、选择理由、候选探索方式、检查重点和失败回退。解析 cue 时可把语义 alias 与 purpose 写入 `H3MediaInput.reference_alias` / `binding_purpose`，但每份输入仍必须保留实际 `source`、AssetVersion/guide 身份和确定的媒体顺序；Provider label 由该顺序生成，不由 alias 替代。当前文件数量、时长、分辨率、比例和模式组合只从 Tool Schema/Capability 获取。复杂接触、较大朝向变化或不兼容起止状态可触发更好控制或拆镜；项目有意选择的静动关系按 Style 保留，不是重复使用同一无效 Prompt 的理由。

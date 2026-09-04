@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import re
 import subprocess
 import unicodedata
 import wave
@@ -50,6 +49,15 @@ class AudioSemanticResult:
     voice_embedding: tuple[float, ...] | None = None
     detected_language: str | None = None
     confidence: float | None = None
+
+
+@dataclass(frozen=True)
+class _SpeakerBinding:
+    """Explicit script-to-Bible identity used only for acoustic aggregation."""
+
+    key: str
+    display_name: str
+    voice_identity: str | None
 
 
 class AudioSemanticService(Protocol):
@@ -292,7 +300,7 @@ class AudioInspector:
 
         dialogue_checks: list[DialogueAudioCheck] = []
         embeddings: dict[str, list[tuple[str, tuple[float, ...]]]] = {}
-        voice_identities: dict[str, str | None] = {}
+        speaker_bindings: dict[str, _SpeakerBinding] = {}
         semantic_failures = 0
         semantic_attempts = 0
         unmapped_cues = 0
@@ -315,6 +323,8 @@ class AudioInspector:
                 )
                 issues.append(issue)
                 continue
+            speaker_binding = _speaker_binding(document, line)
+            speaker_bindings[line.id] = speaker_binding
             clip = _clip_for_cue(manifest.audio_clips, cue.start_seconds, cue.end_seconds)
             if clip is None:
                 unmapped_cues += 1
@@ -352,16 +362,13 @@ class AudioInspector:
             if request.semantic_review:
                 semantic_attempts += 1
                 semantic_failures += int(failure)
-            speaker, voice_identity = _canonical_speaker(document, line.speaker)
-            voice_identities[speaker] = voice_identity
             if embedding is not None:
-                embeddings.setdefault(speaker, []).append((line.id, embedding))
+                embeddings.setdefault(speaker_binding.key, []).append((line.id, embedding))
 
         speaker_checks, speaker_issues = _speaker_continuity_checks(
-            document=document,
             dialogue_checks=dialogue_checks,
             embeddings=embeddings,
-            voice_identities=voice_identities,
+            speaker_bindings=speaker_bindings,
             enabled=request.speaker_continuity,
         )
         issues.extend(speaker_issues)
@@ -692,27 +699,22 @@ class AudioInspector:
                 normalized_transcript,
             )
             if not exact_match:
-                severity = (
-                    "HIGH"
-                    if _critical_dialogue_tokens_changed(
-                        normalized_expected,
-                        normalized_transcript,
-                    )
-                    or character_error_rate > 0.2
-                    else "MEDIUM"
-                    if character_error_rate > 0.08
-                    else "LOW"
-                )
                 issues.append(
                     QaIssue(
                         code="DIALOGUE_TRANSCRIPT_MISMATCH",
-                        severity=severity,
+                        severity="UNKNOWN",
                         message=(
-                            f"{line.id} differs from locked dialogue; CER="
-                            f"{character_error_rate:.3f}, expected='{line.spoken_text}', "
-                            f"transcript='{transcript}'."
+                            f"{line.id} 的转写与锁定台词不同；语义影响尚未判断。"
+                            "请导演 Agent 结合以下原始证据判断含义和成片后果："
+                            f"script_line_id={line.id!r}, cue_id={cue.id!r}, "
+                            f"shot_id={clip.shot_id!r}, take_id={clip.take_id!r}, "
+                            f"speaker_character_id={line.speaker_character_id!r}, "
+                            f"speaker_display={line.speaker!r}, "
+                            f"expected_text={line.spoken_text!r}, "
+                            f"transcript_text={transcript!r}, "
+                            f"character_error_rate={character_error_rate:.3f}."
                         ),
-                        repair_layer="DIRECTOR_PROMPT_OR_AUDIO_REPLACEMENT",
+                        repair_layer="DIRECTOR_SEMANTIC_REVIEW",
                         category=QaFailureCategory.DIALOGUE_AUDIO,
                     )
                 )
@@ -964,17 +966,6 @@ def _character_error_rate(expected: str, actual: str) -> float:
     return previous[-1] / len(expected)
 
 
-_CRITICAL_DIALOGUE_PATTERN = re.compile(
-    r"[0-9零一二三四五六七八九十百千万点分秒]|不|没|无|别|未|莫|勿"
-)
-
-
-def _critical_dialogue_tokens_changed(expected: str, actual: str) -> bool:
-    expected_tokens = _CRITICAL_DIALOGUE_PATTERN.findall(expected)
-    actual_tokens = _CRITICAL_DIALOGUE_PATTERN.findall(actual)
-    return expected_tokens != actual_tokens
-
-
 def _clip_for_cue(
     clips: list[TimelineAudioClip],
     cue_start: float,
@@ -992,10 +983,16 @@ def _clip_for_cue(
     return min(matches, key=lambda item: item.duration_seconds)
 
 
-def _canonical_speaker(
+def _speaker_binding(
     document: ProjectDocument,
-    speaker: str,
-) -> tuple[str, str | None]:
+    line: ScriptLine,
+) -> _SpeakerBinding:
+    if line.speaker_character_id is None:
+        return _SpeakerBinding(
+            key=f"script-line:{line.id}",
+            display_name=line.speaker,
+            voice_identity=None,
+        )
     bible = next(
         (
             item
@@ -1004,14 +1001,21 @@ def _canonical_speaker(
         ),
         document.bible_versions[-1],
     )
-    exact = next((item for item in bible.characters if item.name == speaker), None)
-    if exact is not None:
-        return exact.name, exact.voice_identity
-    contained = [item for item in bible.characters if item.name in speaker]
-    if contained:
-        selected = max(contained, key=lambda item: len(item.name))
-        return selected.name, selected.voice_identity
-    return speaker, None
+    character = next(
+        (
+            item
+            for item in bible.characters
+            if item.id == line.speaker_character_id
+        ),
+        None,
+    )
+    return _SpeakerBinding(
+        key=line.speaker_character_id,
+        display_name=(character.name if character is not None else line.speaker),
+        voice_identity=(
+            character.voice_identity if character is not None else None
+        ),
+    )
 
 
 def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
@@ -1022,16 +1026,24 @@ def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
 
 def _speaker_continuity_checks(
     *,
-    document: ProjectDocument,
     dialogue_checks: list[DialogueAudioCheck],
     embeddings: dict[str, list[tuple[str, tuple[float, ...]]]],
-    voice_identities: dict[str, str | None],
+    speaker_bindings: dict[str, _SpeakerBinding],
     enabled: bool,
 ) -> tuple[list[SpeakerVoiceContinuityCheck], list[QaIssue]]:
     lines_by_speaker: dict[str, list[str]] = {}
+    binding_by_key: dict[str, _SpeakerBinding] = {}
     for check in dialogue_checks:
-        speaker, _voice_identity = _canonical_speaker(document, check.expected_speaker)
-        lines_by_speaker.setdefault(speaker, []).append(check.script_line_id)
+        binding = speaker_bindings.get(
+            check.script_line_id,
+            _SpeakerBinding(
+                key=f"script-line:{check.script_line_id}",
+                display_name=check.expected_speaker,
+                voice_identity=None,
+            ),
+        )
+        binding_by_key[binding.key] = binding
+        lines_by_speaker.setdefault(binding.key, []).append(check.script_line_id)
     all_embeddings = [
         (speaker, line_id, embedding)
         for speaker, items in embeddings.items()
@@ -1039,8 +1051,9 @@ def _speaker_continuity_checks(
     ]
     results: list[SpeakerVoiceContinuityCheck] = []
     issues: list[QaIssue] = []
-    for speaker, line_ids in lines_by_speaker.items():
-        samples = embeddings.get(speaker, [])
+    for speaker_key, line_ids in lines_by_speaker.items():
+        binding = binding_by_key[speaker_key]
+        samples = embeddings.get(speaker_key, [])
         same = [
             _cosine(left[1], right[1])
             for left, right in combinations(samples, 2)
@@ -1049,7 +1062,7 @@ def _speaker_continuity_checks(
             _cosine(embedding, other_embedding)
             for _line_id, embedding in samples
             for other_speaker, _other_line_id, other_embedding in all_embeddings
-            if other_speaker != speaker
+            if other_speaker != speaker_key
         ]
         minimum = min(same) if same else None
         middle = median(same) if same else None
@@ -1076,7 +1089,10 @@ def _speaker_continuity_checks(
                 QaIssue(
                     code="VOICE_CONTINUITY_REVIEW",
                     severity="MEDIUM",
-                    message=f"Expected speaker '{speaker}' has inconsistent cross-shot voice evidence.",
+                    message=(
+                        f"Expected speaker '{binding.display_name}' has inconsistent "
+                        "cross-shot voice evidence."
+                    ),
                     repair_layer="DIRECTOR_ROUTE_OR_REFERENCE_AUDIO",
                     category=QaFailureCategory.DIALOGUE_AUDIO,
                 )
@@ -1089,8 +1105,8 @@ def _speaker_continuity_checks(
             )
         results.append(
             SpeakerVoiceContinuityCheck(
-                speaker=speaker,
-                voice_identity=voice_identities.get(speaker),
+                speaker=binding.display_name,
+                voice_identity=binding.voice_identity,
                 script_line_ids=list(dict.fromkeys(line_ids)),
                 comparison_count=len(same),
                 minimum_same_speaker_similarity=(

@@ -26,6 +26,8 @@ from short_drama.agent_runtime.models import (
     PlanStep,
     ProjectMemory,
     RunMemory,
+    SpecialistTurnRecord,
+    SpecialistTurnStatus,
     WorkOrder,
 )
 from short_drama.agent_runtime.plan_graph import PlanGraph
@@ -59,5 +61,7 @@ __all__ = [
     "PlanStep",
     "ProjectMemory",
     "RunMemory",
+    "SpecialistTurnRecord",
+    "SpecialistTurnStatus",
     "WorkOrder",
 ]

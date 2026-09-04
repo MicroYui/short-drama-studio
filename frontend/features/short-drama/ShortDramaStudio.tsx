@@ -1366,6 +1366,7 @@ export function ShortDramaStudio() {
       input_text: inputText,
       input_images: images,
       run_mode: runMode,
+      content_planning_output: 'SCRIPT_AND_SHOTS' as const,
     }
     setBusyLabel(runMode === 'AUTO_DRAFT' ? '启动 Agent 自动制作' : '建立 Agent 制片项目')
     setError(null)

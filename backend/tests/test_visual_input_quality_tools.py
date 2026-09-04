@@ -62,7 +62,7 @@ class FakeVisualInputLanguageProvider:
         payload = json.loads(input_text)
         images = list(image_urls or [])
         self.calls.append((instructions, payload, images))
-        if "visual reference reranking Tool" in instructions:
+        if "视觉参考图重排 Tool" in instructions:
             candidates = payload["candidates"]
             selected = next(
                 item
@@ -103,7 +103,7 @@ class FakeVisualInputLanguageProvider:
                     "summary": "Use the camera-matched portrait as the smallest sufficient set.",
                 }
             )
-        if "relative keyframe comparison Tool" in instructions:
+        if "关键帧相对比较 Tool" in instructions:
             candidates = payload["candidates"]
             return json.dumps(
                 {
@@ -135,7 +135,7 @@ class FakeVisualInputLanguageProvider:
                     "summary": "Generate or upload a clearer start keyframe instead of choosing the least bad image.",
                 }
             )
-        if "input compatibility checking Tool" in instructions:
+        if "输入兼容性检查 Tool" in instructions:
             return json.dumps(
                 {
                     "decision": InputCompatibilityDecision.CHANGE_KEYFRAME.value,
@@ -324,7 +324,7 @@ def test_reference_visual_reranker_selects_smallest_set_and_persists(
     assert response.report.proceed_allowed is True
     assert len(language.calls) == 1
     assert len(language.calls[0][2]) == 2
-    assert "First describe what each image visibly contains" in language.calls[0][0]
+    assert "先分别描述每张图片中实际可见的内容" in language.calls[0][0]
 
     restarted = _service(tmp_path, language)
     reports = restarted.list_visual_input_reports(project_id)
@@ -462,5 +462,5 @@ def test_input_compatibility_reports_provider_contract_as_warning_not_creative_g
     assert response.report.proceed_allowed is True
     assert response.report.advisory_only is True
     assert response.report.technical_warnings == [
-        "H3 frame and reference-image modes cannot be mixed in one request."
+        "同一次 H3 请求中不能混用帧模式和参考图模式。"
     ]

@@ -44,7 +44,7 @@
 - `CONTINUE_WITH_HANDOFF`：剧本可继续，问题交给后续制作层；
 - `CONTINUE`：没有可执行问题。
 
-严重度描述 Critic 的判断，不是执行门槛。HIGH 机位问题也不能靠 Writer 加对白解决；MEDIUM 因果缺口仍可能需要 Story Architect。Router 不可用时，Harness 把观察降级为 `USER_OPTIONAL`，不会沿用 Critic 的旧布尔值擅自重写。
+严重度不决定修复归属。HIGH 机位问题也不能靠 Writer 加对白解决；Router 可以认为 MEDIUM 问题的自然 owner 是 Story Architect，但它仍只作为独立审校建议。只有 Router 已将 HIGH 问题归属给 Story Architect 时才触发自动改稿。Router 不可用时，Harness 把观察降级为 `USER_OPTIONAL`，不会沿用 Critic 的旧布尔值擅自重写。
 
 Critic 输出若只是 JSON 尾逗号或 schema 结构错误，Harness 会进行一次只修结构的重试，保留原审阅语义；不会因为序列化错误丢掉整份审阅。
 
@@ -101,12 +101,11 @@ Writer 只接收 Repair Plan 中 `should_revise=true` 的动作。Revision Verif
 
 ## 停止策略
 
-不再以“Critic 零问题”作为自动停止条件。当前采用普通产品工程的有界策略：
+不再以“Critic 零问题”或固定轮数作为自动停止条件。当前采用内容状态驱动的策略：
 
-- 自动修订最多 3 轮；用户或 supervising Agent 可显式再发起一轮；
 - Source Contract 必须保留，Revision Verifier 必须接受；
-- 存在 HIGH 或核心来源承诺缺失时优先继续修复；
-- 无 HIGH、问题没有回升且剩余问题可下放或属于中低级优化时，可以定稿；
+- 存在 `HIGH + STORY_ARCHITECT` 或核心来源承诺缺失时继续逐场修复；
+- 不再存在该阻断项时可以定稿，MEDIUM/LOW 保留在独立审校报告中；
 - Revision Judge 只在最近一版出现问题数或 HIGH 数回升时比较版本，不为追求形式完整每轮都调用；
 - 所有建议均可由用户忽略、直接编辑或要求 Agent 定向修改。
 
@@ -145,7 +144,7 @@ Writer 只接收 Repair Plan 中 `should_revise=true` 的动作。Revision Verif
 - Source Contract 能从真实三分钟输入中抽取并持久化 16 项显式承诺、5 项禁区和开放选择；
 - Contract 进入 Repair Planner、Writer 与 Revision Verifier 的输入；
 - Critic overreach 可以被诊断为不改稿；
-- Writer 回退会触发最多两次有界定向修复；
+- Writer 回退会保留当前游标并触发可恢复的逐场定向修复，不设任意次数上限；
 - Critic JSON 尾逗号可在不丢语义的情况下修复；
 - Review Router 可把问题路由给 Scene Director 而不调用 Writer；
 - 规划大纲支持直接编辑、Agent 定向编辑和基于最新审阅再修订；

@@ -67,6 +67,7 @@ from short_drama.h3_models import (
     H3RouteAssetPreparationStatus,
     H3ShotRouteAction,
     H3ShotRouteExecutionStatus,
+    H3ShotRoutePlan,
     H3ShotRouteReadiness,
     H3TakeReviewRequest,
     H3TakeReviewResponse,
@@ -86,14 +87,18 @@ from short_drama.h3_worker import (
 from short_drama.h3_video_guides import H3VideoGuideBuilder
 from short_drama.episode_review import review_episode, review_scene
 from short_drama.image_models import (
+    AssetBriefUpdateRequest,
     AssetCreateRequest,
     AssetImportLocalRequest,
     AssetImportUrlRequest,
     AssetMutationResponse,
+    AssetReferenceSheetComposeRequest,
     AssetReviewDecision,
     AssetReviewRequest,
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
+    ImageGenerationTask,
+    ImageNotSubmittedResolutionRequest,
     ImageTaskCreateRequest,
     ImageTaskListResponse,
     ImageTaskResponse,
@@ -105,6 +110,7 @@ from short_drama.language_models import (
     LanguageProviderConfigUpdate,
 )
 from short_drama.hierarchical_script import (
+    SceneUpstreamReplanTarget,
     assemble_written_scenes,
     compact_script_retrieval_query,
     recommend_script_revision_context,
@@ -114,6 +120,7 @@ from short_drama.hierarchical_script import (
 from short_drama.media import MockMediaRenderer, TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
+    AudioContinuityAssessment,
     AudioInspectionRequest,
     AudioInspectionResponse,
     Asset,
@@ -121,6 +128,7 @@ from short_drama.models import (
     AssetVersion,
     AssetMediaType,
     CharacterProfile,
+    ContentPlanningOutput,
     CreateProjectRequest,
     CreativeInputImage,
     DirectorRepairDecision,
@@ -157,21 +165,25 @@ from short_drama.models import (
     ReferencePackEntry,
     ReferenceBinding,
     ReferencePlanEntry,
+    ReviewRepairOwner,
     RouteEvidence,
     RunMode,
     QaFailureCategory,
+    QaIssue,
     QaStatus,
     ReviseScriptLineRequest,
     ReviseScriptLinesRequest,
     ScriptLineRevision,
-    ScriptReviewReport,
+    ScriptReviewDisposition,
     ScriptReviewDispositionAction,
-    ScriptReviewSeverity,
+    ScriptReviewReport,
+    SceneTimingAssessmentRecord,
     StructuredScene,
     ScriptVersion,
     SemanticReviewStatus,
     ShotPlan,
     SourceMode,
+    StoryIssueLedgerEntry,
     SubtitleCue,
     Take,
     TakeAvailability,
@@ -189,26 +201,37 @@ from short_drama.models import (
     VoiceReferenceBinding,
     WorkerDrainResponse,
 )
+from short_drama.observability import log_provider_task_transition
 from short_drama.production_planner import (
     EpisodeOutline,
+    PlannedSceneContract,
     ProductionPlanningResult,
     SceneShotPlan,
-    StoryRevisionResult,
     assemble_multi_agent_planning_result,
+    assemble_script_only_planning_result,
+    story_revision_issue_indices,
     build_project_document_from_plan,
+    compile_story_source_contract,
     create_production_plan,
     create_story_architecture,
     direct_story_scene,
+    final_cold_read_story,
     judge_story_revisions,
+    normalize_story_repair_plan_issue_ids,
+    orient_story,
     plan_story_repair,
     refresh_lightweight_reference_plans,
     review_story_outline,
+    revise_story_metadata,
     route_story_review,
     scene_review_handoff,
     story_revision_history_entry,
     story_revision_review,
-    revise_story_outline,
     verify_story_revision,
+)
+from short_drama.production_profiles import (
+    ProductionSkillRole,
+    compile_narrative_skill_prompt,
 )
 from short_drama.take_comparison import compare_take_candidates
 from short_drama.visual_input_quality import (
@@ -295,6 +318,8 @@ from short_drama.repository import ShortDramaRepository
 from short_drama.script_documents import (
     EpisodeOutlinePatch,
     EpisodeScenePatch,
+    PlanningScriptSearchHit,
+    SceneDurationRevisionConstraint,
     ScriptRevisionScope,
     apply_episode_outline_patch,
     build_planning_script_documents,
@@ -342,14 +367,19 @@ _TERMINAL_TASK_STATUSES = {
     TaskStatus.FAILED,
     TaskStatus.CANCELLED,
 }
-_MAX_EPISODE_REVIEW_ATTEMPTS = 3
 _DIRECTOR_ADVICE_MAX_OUTPUT_TOKENS = 7200
 _CREATIVE_INPUT_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 _MAX_CREATIVE_INPUT_IMAGE_BYTES = 256 * 1024 * 1024
 
 
+def _duration_milliseconds(value: float) -> int:
+    return int(round(value * 1000))
+
+
 def _take_is_timeline_eligible(take: Take) -> bool:
-    return take.qa_status == QaStatus.PASSED
+    """Keep technical availability separate from overridable creative QA."""
+
+    return take.availability == TakeAvailability.AVAILABLE
 
 
 def _timeline_clip_window(shot: ShotPlan, take: Take) -> tuple[float, float]:
@@ -373,6 +403,48 @@ def _timeline_clip_window(shot: ShotPlan, take: Take) -> tuple[float, float]:
     preserve_tail = not shot.dialogue_line_ids and has_resolved_action
     source_in_seconds = overrun if preserve_tail else 0.0
     return source_in_seconds, clip_duration
+
+
+def _log_video_task_transition(
+    previous: GenerationTask | None,
+    task: GenerationTask,
+    *,
+    action: str,
+    parent_task_id: str | None = None,
+) -> None:
+    log_provider_task_transition(
+        task_kind="video",
+        action=action,
+        task_id=task.id,
+        parent_task_id=parent_task_id,
+        project_id=task.project_id,
+        provider=task.provider,
+        provider_task_id=task.provider_task_id,
+        previous_status=(previous.status.value if previous is not None else None),
+        status=task.status.value,
+        error_kind=task.error_code,
+    )
+
+
+def _log_image_task_transition(
+    previous: ImageGenerationTask | None,
+    task: ImageGenerationTask,
+    *,
+    action: str,
+    parent_task_id: str | None = None,
+) -> None:
+    log_provider_task_transition(
+        task_kind="image",
+        action=action,
+        task_id=task.id,
+        parent_task_id=parent_task_id,
+        project_id=task.project_id,
+        provider=task.provider,
+        provider_task_id=task.provider_request_id,
+        previous_status=(previous.status.value if previous is not None else None),
+        status=task.status.value,
+        error_kind=task.error_code,
+    )
 
 
 class ShortDramaService:
@@ -540,7 +612,7 @@ class ShortDramaService:
         """Apply an edited impact plan and invalidate its downstream dependency branch."""
 
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             try:
                 prepared = prepare_semantic_change(document, request)
             except ChangeExecutionError as exc:
@@ -562,55 +634,155 @@ class ShortDramaService:
     def get_planning_run(self, run_id: str) -> PlanningRunResponse:
         return self._planning_run_response(self._require_planning_run(run_id))
 
-    def advance_planning_run(self, run_id: str) -> PlanningRunResponse:
+    def get_content_planning_job(self, job_id: str) -> PlanningRunResponse:
+        """Return the persisted Content Planning Job behind the compatibility name."""
+
+        return self.get_planning_run(job_id)
+
+    def advance_content_planning_job(
+        self,
+        job_id: str,
+        *,
+        owner_agent_run_id: str,
+    ) -> PlanningRunResponse:
+        """Advance one bounded planning unit on behalf of the owning AgentRun."""
+
+        run_id = job_id
         lock = self._planning_run_lock(run_id)
         if not lock.acquire(blocking=False):
-            raise WorkflowConflictError(f"Planning run {run_id} is already advancing")
+            raise WorkflowConflictError(
+                f"Content planning job {run_id} is already advancing"
+            )
         try:
             run = self._require_planning_run(run_id)
-            if run.owner_agent_run_id is None or run.project_id is None:
+            if run.owner_agent_run_id != owner_agent_run_id:
                 raise WorkflowConflictError(
-                    "Planning runs must belong to a Production Manager Agent run"
+                    "Content planning job does not belong to the requesting AgentRun"
                 )
             if run.status == PlanningRunStatus.COMPLETE:
                 return self._planning_run_response(run)
-            run.status = PlanningRunStatus.RUNNING
-            run.error_message = None
-            self._advance_planning_run_once(run)
-            run.updated_at = utc_now()
-            self._save_planning_run_state(run)
-            return self._planning_run_response(run)
-        except WorkflowConflictError as exc:
-            run = self.repository.get_planning_run(run_id)
-            if run is None:
-                raise
-            run.status = PlanningRunStatus.NEEDS_ATTENTION
-            run.error_message = str(exc)
-            run.updated_at = utc_now()
-            self._save_planning_run_state(run)
-            return self._planning_run_response(run)
-        except Exception as exc:
-            run = self.repository.get_planning_run(run_id)
-            if run is None:
-                raise
-            run.status = PlanningRunStatus.NEEDS_ATTENTION
-            run.error_message = str(exc)
-            run.updated_at = utc_now()
-            self._save_planning_run_state(run)
-            return self._planning_run_response(run)
+            try:
+                run.status = PlanningRunStatus.RUNNING
+                run.error_message = None
+                self._advance_planning_run_once(run)
+                run.updated_at = utc_now()
+                self._save_planning_run_state(run)
+                return self._planning_run_response(run)
+            except WorkflowConflictError as exc:
+                persisted = self.repository.get_planning_run(run_id)
+                if persisted is None:
+                    raise
+                persisted.status = PlanningRunStatus.NEEDS_ATTENTION
+                persisted.error_message = str(exc)
+                persisted.updated_at = utc_now()
+                self._save_planning_run_state(persisted)
+                return self._planning_run_response(persisted)
+            except Exception as exc:
+                persisted = self.repository.get_planning_run(run_id)
+                if persisted is None:
+                    raise
+                persisted.status = PlanningRunStatus.NEEDS_ATTENTION
+                persisted.error_message = str(exc)
+                persisted.updated_at = utc_now()
+                self._save_planning_run_state(persisted)
+                return self._planning_run_response(persisted)
         finally:
             lock.release()
+
+    def advance_planning_run(self, run_id: str) -> PlanningRunResponse:
+        """Compatibility helper for internal callers; product orchestration uses AgentRun."""
+
+        run = self._require_planning_run(run_id)
+        return self.advance_content_planning_job(
+            run_id,
+            owner_agent_run_id=run.owner_agent_run_id,
+        )
 
     def _advance_planning_run_once(self, run: PlanningRunRecord) -> None:
         request = run.request
         client = self._configured_language_client()
+        if run.current_step == PlanningRunStep.STORY_ORIENTATION:
+            result = orient_story(
+                request,
+                client,
+                retry_feedback=run.step_retry_feedback,
+            )
+            if client is not None and (not result.used or result.orientation is None):
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.STORY_ORIENTATION,
+                    result.warnings,
+                )
+                return
+            if result.orientation is None:
+                raise WorkflowConflictError(
+                    "Story Orientation did not return an orientation"
+                )
+            self._clear_planning_step_retry(run)
+            orientation = result.orientation
+            run.source_contract = orientation.source_contract.model_copy(deep=True)
+            run.story_intent = orientation.story_intent.model_copy(deep=True)
+            run.selected_narrative_skill_ids = [
+                selection.skill_id
+                for selection in orientation.selected_narrative_skills
+            ]
+            run.skill_selection_reasons = [
+                selection.rationale
+                for selection in orientation.selected_narrative_skills
+            ]
+            run.narrative_skill_decision = orientation.narrative_skill_decision
+            run.warnings.extend(result.warnings)
+            if orientation.selected_narrative_skills:
+                run.warnings.append(
+                    "Story Orientation Agent 已基于整段创作语义选择组合叙事技能："
+                    + "；".join(
+                        f"{selection.skill_id}（{selection.rationale}）"
+                        for selection in orientation.selected_narrative_skills
+                    )
+                )
+            else:
+                run.warnings.append(
+                    "Story Orientation Agent 的叙事技能判断："
+                    + orientation.narrative_skill_decision
+                )
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.STORY_ORIENTATION,
+                PlanningRunStep.STORY_ARCHITECT,
+            )
+            return
+
         if run.current_step == PlanningRunStep.STORY_ARCHITECT:
-            architecture = create_story_architecture(request, client)
+            architecture = create_story_architecture(
+                request,
+                client,
+                source_contract=run.source_contract,
+                story_intent=run.story_intent,
+                selected_narrative_skill_ids=tuple(
+                    run.selected_narrative_skill_ids
+                ),
+                retry_feedback=run.step_retry_feedback,
+            )
+            if (
+                client is not None
+                and architecture.source == "deterministic structure scaffold"
+            ):
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.STORY_ARCHITECT,
+                    architecture.warnings,
+                )
+                return
+            self._clear_planning_step_retry(run)
             run.outline_json = architecture.outline.model_dump_json()
             run.outline_source = architecture.source
+            run.source_contract = architecture.source_contract
+            run.story_intent = architecture.outline.story_intent
             run.total_scenes = len(architecture.outline.scenes)
             run.scene_script_json = []
+            run.scene_timing_assessments = []
             run.next_script_scene_sequence = 1
+            self._clear_scene_script_retry(run)
             run.warnings.extend(architecture.warnings)
             self._complete_planning_step(
                 run,
@@ -636,8 +808,68 @@ class ShortDramaService:
                 scene,
                 written_scenes,
                 client,
+                retry_feedback=run.scene_script_retry_feedback,
+                story_intent=run.story_intent or outline.story_intent,
+                source_contract=run.source_contract,
+                selected_skill_prompt=compile_narrative_skill_prompt(
+                    run.selected_narrative_skill_ids,
+                    roles=(ProductionSkillRole.WRITER,),
+                ),
             )
+            if writing.retry_required:
+                feedback = writing.retry_feedback or "Unknown Scene Writer failure"
+                self._record_scene_script_retry(run, scene.sequence, feedback)
+                return
+            if writing.upstream_replan_request is not None:
+                replan = writing.upstream_replan_request
+                run.scene_script_json = []
+                run.scene_timing_assessments = []
+                run.next_script_scene_sequence = 1
+                self._clear_scene_script_retry(run)
+                run.step_retry_feedback = json.dumps(
+                    {
+                        "requested_by": "SCENE_WRITER",
+                        "scene_sequence": scene.sequence,
+                        "reason": replan.reason,
+                        "evidence": replan.evidence,
+                        "requested_change": replan.requested_change,
+                        "preserve": replan.preserve,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                run.current_step = (
+                    PlanningRunStep.STORY_ORIENTATION
+                    if replan.target == SceneUpstreamReplanTarget.STORY_ORIENTATION
+                    else PlanningRunStep.STORY_ARCHITECT
+                )
+                run.warnings.append(
+                    f"第 {scene.sequence} 场 Scene Writer 请求重新进入 "
+                    f"{replan.target.value}：{replan.reason}"
+                )
+                return
+            self._clear_scene_script_retry(run)
+            if writing.patch is None:
+                raise WorkflowConflictError(
+                    "Scene Writer returned neither a scene patch nor an upstream replan request"
+                )
             run.scene_script_json.append(writing.patch.model_dump_json())
+            timing_assessment = writing.patch.performance_timing_assessment
+            if timing_assessment is not None:
+                run.scene_timing_assessments.append(
+                    SceneTimingAssessmentRecord(
+                        scene_sequence=scene.sequence,
+                        stage="INITIAL_WRITE",
+                        revision_round=run.revision_round,
+                        target_duration_seconds=scene.target_duration_seconds,
+                        assessment=timing_assessment,
+                    )
+                )
+            elif client is not None:
+                run.warnings.append(
+                    f"第 {scene.sequence} 场 Scene Writer 未留下表演时长自评；"
+                    "该证据缺失已记录，但不会由代码决定创作结果。"
+                )
             run.warnings.extend(writing.warnings)
             run.next_script_scene_sequence += 1
             if run.next_script_scene_sequence > len(outline.scenes):
@@ -658,6 +890,7 @@ class ShortDramaService:
                         outline_json=run.outline_json,
                         source=run.outline_source or "Scene Writer assembly",
                         source_contract=run.source_contract,
+                        story_intent=completed_outline.story_intent,
                         repair_plan=run.latest_repair_plan,
                         revision_verification=run.latest_revision_verification,
                         created_at=created_at,
@@ -672,52 +905,88 @@ class ShortDramaService:
             return
 
         if run.current_step == PlanningRunStep.SCRIPT_CRITIC:
-            critique = review_story_outline(request, outline, client)
-            if critique.report is not None:
-                run.review_report = critique.report
-                routing = route_story_review(
-                    request,
-                    outline,
-                    critique.report,
-                    client,
+            critique = review_story_outline(
+                request,
+                outline,
+                client,
+                source_contract=run.source_contract,
+                issue_ledger=run.issue_ledger,
+                selected_narrative_skill_ids=tuple(
+                    run.selected_narrative_skill_ids
+                ),
+                retry_feedback=run.step_retry_feedback,
+            )
+            if client is not None and (not critique.used or critique.report is None):
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.SCRIPT_CRITIC,
+                    critique.warnings,
                 )
-                run.review_disposition = routing.disposition
-                run.warnings.extend(routing.warnings)
-                self.repository.save_planning_review_snapshot(
-                    run.id,
-                    PlanningReviewSnapshot(
-                        review_round=run.revision_round + 1,
-                        revision_round=run.revision_round,
-                        report=critique.report,
-                        disposition=routing.disposition,
-                        created_at=utc_now(),
-                    ),
-                )
-            else:
-                run.review_disposition = None
+                return
+            self._clear_planning_step_retry(run)
+            run.review_report = critique.report
+            run.review_disposition = None
+            run.final_cold_read_report = None
             run.critic_used = run.critic_used or critique.used
             run.warnings.extend(critique.warnings)
-            if (
-                run.review_disposition is not None
-                and run.review_disposition.action
-                == ScriptReviewDispositionAction.REVISE_STORY
-                and run.revision_round < run.max_revision_rounds
-            ):
-                next_step = PlanningRunStep.STORY_REVISION
+            if critique.report is not None:
+                run.issue_ledger = self._merge_story_issue_ledger(
+                    run.issue_ledger,
+                    critique.report,
+                    phase="首次完整剧本冷读",
+                )
+                next_step = self._route_current_story_review(
+                    run,
+                    request,
+                    outline,
+                    client,
+                )
             else:
-                self._append_remaining_review_warning(run)
-                if (
-                    critique.report is not None
-                    and self._latest_review_has_regression(run)
-                ):
-                    self._append_latest_review_regression_warning(run)
-                    next_step = PlanningRunStep.REVISION_JUDGE
-                else:
-                    next_step = PlanningRunStep.SCENE_DIRECTOR
+                next_step = self._post_script_planning_step(run)
             self._complete_planning_step(
                 run,
                 PlanningRunStep.SCRIPT_CRITIC,
                 next_step,
+            )
+            return
+
+        if run.current_step == PlanningRunStep.REVIEW_ROUTER:
+            # Compatibility for jobs persisted before routing was folded into
+            # the Critic unit. New jobs never stop on this step.
+            if run.review_report is None:
+                raise WorkflowConflictError(
+                    "Planning run has no script review to route"
+                )
+            next_step = self._route_current_story_review(
+                run,
+                request,
+                outline,
+                client,
+            )
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.REVIEW_ROUTER,
+                next_step,
+            )
+            return
+
+        if run.current_step == PlanningRunStep.SOURCE_CONTRACT:
+            if run.source_contract is None:
+                contract = compile_story_source_contract(request, client)
+                if client is not None and not contract.used:
+                    self._defer_planning_step_retry(
+                        run,
+                        PlanningRunStep.SOURCE_CONTRACT,
+                        contract.warnings,
+                    )
+                    return
+                self._clear_planning_step_retry(run)
+                run.source_contract = contract.contract
+                run.warnings.extend(contract.warnings)
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.SOURCE_CONTRACT,
+                PlanningRunStep.STORY_REVISION,
             )
             return
 
@@ -726,45 +995,88 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "Planning run has no routed script review to revise"
                 )
+            if run.source_contract is None:
+                # Compatibility for jobs persisted before SOURCE_CONTRACT became
+                # an explicit, independently observable planning step.
+                run.current_step = PlanningRunStep.SOURCE_CONTRACT
+                return
             revision_review = story_revision_review(
                 run.review_report,
                 run.review_disposition,
             )
-            revision = self._revise_story_outline_with_scene_tools(
-                run,
+            planning = plan_story_repair(
                 request,
                 outline,
                 revision_review,
                 client,
-                revision_round=run.revision_round + 1,
+                source_contract=run.source_contract,
+                revision_history=self._planning_revision_history(run),
+                selected_narrative_skill_ids=tuple(
+                    run.selected_narrative_skill_ids
+                ),
+                retry_feedback=run.step_retry_feedback,
             )
-            run.warnings.extend(revision.warnings)
-            run.source_contract = revision.source_contract or run.source_contract
-            run.latest_repair_plan = revision.repair_plan
-            run.latest_revision_verification = revision.verification
-            if revision.revised:
-                run.outline_json = revision.outline.model_dump_json()
-                run.total_scenes = len(revision.outline.scenes)
-                run.revision_round += 1
-                self.repository.save_planning_outline_snapshot(
-                    run.id,
-                    PlanningOutlineSnapshot(
-                        revision_round=run.revision_round,
-                        outline_json=run.outline_json,
-                        source=(
-                            f"Story Architect revision {run.revision_round}"
-                        ),
-                        source_contract=run.source_contract,
-                        repair_plan=revision.repair_plan,
-                        revision_verification=revision.verification,
-                        created_at=utc_now(),
+            if client is not None and not planning.used:
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.STORY_REVISION,
+                    planning.warnings,
+                )
+                return
+            self._clear_planning_step_retry(run)
+            run.warnings.extend(planning.warnings)
+            run.source_contract = planning.source_contract
+            run.latest_repair_plan = planning.plan
+            run.latest_story_metadata_patch = None
+            run.latest_revision_verification = None
+            run.revision_base_outline_json = outline.model_dump_json()
+            run.revision_scene_sequences = []
+            run.next_revision_scene_index = 0
+            self._clear_scene_revision_retry(run)
+            run.revision_changed_scene_sequences = []
+            run.latest_revision_target_scene_sequences = []
+            run.latest_revision_changed_scene_sequences = []
+            run.revision_repair_round = 0
+            if not any(action.should_revise for action in planning.plan.actions):
+                disposition = run.review_disposition
+                run.review_disposition = ScriptReviewDisposition(
+                    action=ScriptReviewDispositionAction.CONTINUE_WITH_HANDOFF,
+                    issue_routes=[
+                        (
+                            route.model_copy(
+                                update={
+                                    "owner": ReviewRepairOwner.USER_OPTIONAL,
+                                    "rationale": (
+                                        "Source-contract-aware Repair Planner "
+                                        "classified this routed story finding as "
+                                        "non-actionable; no automatic story edit is required."
+                                    ),
+                                }
+                            )
+                            if route.owner == ReviewRepairOwner.STORY_ARCHITECT
+                            else route.model_copy(deep=True)
+                        )
+                        for route in disposition.issue_routes
+                    ],
+                    rationale=(
+                        "Source-contract-aware Repair Planner found no supported "
+                        "story change; retain the findings as optional or downstream "
+                        "handoff instead of forcing a rewrite."
                     ),
                 )
-                self._index_planning_outline(run, revision.outline)
-                next_step = PlanningRunStep.SCRIPT_CRITIC
-            else:
+                run.warnings.append(
+                    "Story Repair Planner 判定当前 routed findings 均不应修订，"
+                    "已降级为可选或下游交接，不强制改写剧本。"
+                )
                 self._append_remaining_review_warning(run)
-                next_step = PlanningRunStep.SCENE_DIRECTOR
+                self._clear_revision_execution_state(run)
+                self._complete_planning_step(
+                    run,
+                    PlanningRunStep.STORY_REVISION,
+                    self._post_script_planning_step(run),
+                )
+                return
+            next_step = PlanningRunStep.STORY_METADATA_REVISION
             self._complete_planning_step(
                 run,
                 PlanningRunStep.STORY_REVISION,
@@ -772,12 +1084,84 @@ class ShortDramaService:
             )
             return
 
+        if run.current_step == PlanningRunStep.STORY_METADATA_REVISION:
+            self._advance_story_metadata_revision(run, request, outline, client)
+            return
+
+        if run.current_step == PlanningRunStep.REVISION_SCOPE:
+            if not self._prepare_revision_scene_queue(run, outline, client):
+                return
+            self._clear_planning_step_retry(run)
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.REVISION_SCOPE,
+                PlanningRunStep.SCENE_REVISION,
+            )
+            return
+
+        if run.current_step == PlanningRunStep.SCENE_REVISION:
+            self._advance_scene_revision(run, request, outline, client)
+            return
+
+        if run.current_step == PlanningRunStep.REVISION_VERIFIER:
+            self._advance_revision_verifier(run, request, outline, client)
+            return
+
         if run.current_step == PlanningRunStep.REVISION_JUDGE:
             self._run_revision_judge(run, request, client)
             self._complete_planning_step(
                 run,
                 PlanningRunStep.REVISION_JUDGE,
-                PlanningRunStep.SCENE_DIRECTOR,
+                self._post_script_planning_step(run),
+            )
+            return
+
+        if run.current_step == PlanningRunStep.FINAL_COLD_READ:
+            cold_read = final_cold_read_story(
+                request,
+                outline,
+                client,
+                source_contract=run.source_contract,
+            )
+            if client is not None and (not cold_read.used or cold_read.report is None):
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.FINAL_COLD_READ,
+                    cold_read.warnings,
+                )
+                return
+            self._clear_planning_step_retry(run)
+            run.final_cold_read_used = run.final_cold_read_used or cold_read.used
+            run.final_cold_read_report = cold_read.report
+            run.warnings.extend(cold_read.warnings)
+            if cold_read.report is not None:
+                run.issue_ledger = self._merge_story_issue_ledger(
+                    run.issue_ledger,
+                    cold_read.report,
+                    phase="最终冷读",
+                )
+                routing = route_story_review(
+                    request,
+                    outline,
+                    cold_read.report,
+                    None,
+                )
+                if (
+                    routing.disposition.action
+                    == ScriptReviewDispositionAction.REVISE_STORY
+                ):
+                    run.review_report = cold_read.report
+                    run.review_disposition = routing.disposition
+                    run.warnings.append(
+                        "Final Cold Read 判断当前剧本仍需修订，"
+                        "已按问题场次返回增量故事修订。"
+                    )
+                    run.current_step = PlanningRunStep.STORY_REVISION
+                    return
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.FINAL_COLD_READ,
+                self._post_cold_read_step(run),
             )
             return
 
@@ -806,7 +1190,24 @@ class ShortDramaService:
                     run.review_disposition,
                     scene.sequence,
                 ),
+                retry_feedback=run.step_retry_feedback,
             )
+            if direction.retry_required:
+                feedback = (
+                    direction.retry_feedback
+                    or "Unknown Scene Director structural failure"
+                )
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.SCENE_DIRECTOR,
+                    [feedback],
+                )
+                return
+            self._clear_planning_step_retry(run)
+            if direction.scene is None:
+                raise WorkflowConflictError(
+                    "Scene Director completed without a directed scene"
+                )
             run.directed_scene_json.append(direction.scene.model_dump_json())
             run.used_scene_repair = run.used_scene_repair or direction.repaired
             run.used_scene_fallback = (
@@ -823,26 +1224,76 @@ class ShortDramaService:
             return
 
         if run.current_step == PlanningRunStep.FINALIZE:
-            if run.project_id is None or run.owner_agent_run_id is None:
-                raise WorkflowConflictError(
-                    "Planning runs must belong to a Production Manager Agent run"
+            if (
+                run.review_report is not None
+                and run.review_report.issues
+                and run.review_disposition is None
+            ):
+                warning = (
+                    "FINALIZE 检测到尚未经 Review Router 归属的审校问题；"
+                    "已返回路由步骤，未丢失剧本或审校报告。"
                 )
+                if warning not in run.warnings:
+                    run.warnings.append(warning)
+                self._complete_planning_step(
+                    run,
+                    PlanningRunStep.FINALIZE,
+                    PlanningRunStep.REVIEW_ROUTER,
+                )
+                return
+            if self._planning_run_has_unresolved_story_review(run):
+                if run.review_disposition is None:
+                    next_step = PlanningRunStep.REVIEW_ROUTER
+                else:
+                    next_step = (
+                        PlanningRunStep.STORY_REVISION
+                        if run.source_contract is not None
+                        else PlanningRunStep.SOURCE_CONTRACT
+                    )
+                warning = (
+                    "FINALIZE 检测到未完成的 REVISE_STORY 审校；"
+                    "已恢复到增量故事修订，未写入已批准剧本。"
+                )
+                if warning not in run.warnings:
+                    run.warnings.append(warning)
+                self._complete_planning_step(
+                    run,
+                    PlanningRunStep.FINALIZE,
+                    next_step,
+                )
+                return
             directed_scenes = [
                 SceneShotPlan.model_validate_json(value)
                 for value in run.directed_scene_json
             ]
-            planning = assemble_multi_agent_planning_result(
-                request,
-                outline,
-                directed_scenes,
-                outline_source=run.outline_source or "unknown story architect",
-                critic_used=run.critic_used,
-                revision_rounds=run.revision_round,
-                used_scene_repair=run.used_scene_repair,
-                used_scene_fallback=run.used_scene_fallback,
-                warnings=run.warnings,
-                review_report=run.review_report,
-                review_disposition=run.review_disposition,
+            planning = (
+                assemble_script_only_planning_result(
+                    outline,
+                    outline_source=run.outline_source or "unknown story architect",
+                    critic_used=run.critic_used,
+                    revision_rounds=run.revision_round,
+                    warnings=run.warnings,
+                    review_report=run.review_report,
+                    review_disposition=run.review_disposition,
+                    final_cold_read_report=run.final_cold_read_report,
+                )
+                if request.content_planning_output
+                == ContentPlanningOutput.SCRIPT_ONLY
+                else assemble_multi_agent_planning_result(
+                    request,
+                    outline,
+                    directed_scenes,
+                    source_contract=run.source_contract,
+                    outline_source=run.outline_source or "unknown story architect",
+                    critic_used=run.critic_used,
+                    revision_rounds=run.revision_round,
+                    used_scene_repair=run.used_scene_repair,
+                    used_scene_fallback=run.used_scene_fallback,
+                    warnings=run.warnings,
+                    review_report=run.review_report,
+                    review_disposition=run.review_disposition,
+                    final_cold_read_report=run.final_cold_read_report,
+                )
             )
             document = build_project_document_from_plan(
                 project_id=run.project_id,
@@ -850,6 +1301,7 @@ class ShortDramaService:
                 planning=planning,
                 created_at=utc_now(),
                 planning_run_id=run.id,
+                source_contract=run.source_contract,
                 planning_status=PlanningRunStatus.RUNNING,
                 owner_agent_run_id=run.owner_agent_run_id,
             )
@@ -861,7 +1313,8 @@ class ShortDramaService:
                     )
                 if not self._owner_planning_project_is_prepared(current, run):
                     self.repository.save_project(document)
-            self._ensure_creative_input_images_imported(run.project_id, request)
+            if request.content_planning_output != ContentPlanningOutput.SCRIPT_ONLY:
+                self._ensure_creative_input_images_imported(run.project_id, request)
             self._complete_planning_step(
                 run,
                 PlanningRunStep.FINALIZE,
@@ -891,6 +1344,267 @@ class ShortDramaService:
         run.current_step = next_step
 
     @staticmethod
+    def _post_script_planning_step(run: PlanningRunRecord) -> PlanningRunStep:
+        report = run.review_report
+        if report is not None and not report.requires_revision:
+            rationale = (
+                report.followup_rationale
+                or "当前完整 Critic 冷读已足以判断剧本可交付。"
+            )
+            warning = (
+                "Script Critic 已完成整稿冷读，直接继续交付，"
+                "不再自动转交独立 Final Cold Read："
+                + rationale
+            )
+            if warning not in run.warnings:
+                run.warnings.append(warning)
+        return ShortDramaService._post_cold_read_step(run)
+
+    def _route_current_story_review(
+        self,
+        run: PlanningRunRecord,
+        request: CreateProjectRequest,
+        outline: EpisodeOutline,
+        client: LanguageProviderClient | None,
+    ) -> PlanningRunStep:
+        """Apply the Critic's semantic decision without a second serial Agent step."""
+
+        if run.review_report is None:
+            raise WorkflowConflictError("Planning run has no script review to route")
+        routing = route_story_review(
+            request,
+            outline,
+            run.review_report,
+            client,
+        )
+        run.review_disposition = routing.disposition
+        run.warnings.extend(routing.warnings)
+        self.repository.save_planning_review_snapshot(
+            run.id,
+            PlanningReviewSnapshot(
+                review_round=run.revision_round + 1,
+                revision_round=run.revision_round,
+                report=run.review_report,
+                disposition=routing.disposition,
+                created_at=utc_now(),
+            ),
+        )
+        if routing.disposition.action == ScriptReviewDispositionAction.REVISE_STORY:
+            return (
+                PlanningRunStep.STORY_REVISION
+                if run.source_contract is not None
+                else PlanningRunStep.SOURCE_CONTRACT
+            )
+        self._append_remaining_review_warning(run)
+        return self._post_script_planning_step(run)
+
+    @staticmethod
+    def _merge_story_issue_ledger(
+        current: list[StoryIssueLedgerEntry],
+        report: ScriptReviewReport,
+        *,
+        phase: str,
+    ) -> list[StoryIssueLedgerEntry]:
+        existing_by_id = {entry.issue_id: entry for entry in current}
+        observed_ids: set[str] = set()
+        merged: list[StoryIssueLedgerEntry] = []
+        for issue in report.issues:
+            issue_id = issue.issue_id
+            if issue_id is None:
+                raise WorkflowConflictError(
+                    "Fresh story review issue is missing its Agent-authored semantic issue_id"
+                )
+            observed_ids.add(issue_id)
+            previous = existing_by_id.get(issue_id)
+            evidence = (
+                f"{phase}；场次 {issue.scene_sequences or ['全局']}："
+                f"{issue.observation}"
+            )
+            text_evidence = list(previous.text_evidence) if previous else []
+            if evidence not in text_evidence:
+                text_evidence.append(evidence)
+            evolution_notes = list(previous.evolution_notes) if previous else []
+            evolution = (
+                f"{phase}沿用该语义问题并更新观察。"
+                if previous is not None
+                else f"{phase}首次记录该语义问题。"
+            )
+            if evolution not in evolution_notes:
+                evolution_notes.append(evolution)
+            merged.append(
+                StoryIssueLedgerEntry(
+                    issue_id=issue_id,
+                    semantic_cluster=issue.category,
+                    state=(
+                        "当前剧本文本需要聚焦修订"
+                        if issue.owner == ReviewRepairOwner.STORY_ARCHITECT
+                        and report.requires_revision
+                        else "作为创作取舍或下游制作建议保留"
+                    ),
+                    observation=issue.observation,
+                    text_evidence=text_evidence,
+                    fix_evidence=(
+                        list(previous.fix_evidence) if previous else []
+                    ),
+                    evolution_notes=evolution_notes,
+                    accepted_tradeoff=(
+                        previous.accepted_tradeoff if previous else None
+                    ),
+                    handoff=(
+                        previous.handoff
+                        if previous is not None and previous.handoff is not None
+                        else (
+                            None
+                            if issue.owner == ReviewRepairOwner.STORY_ARCHITECT
+                            else f"交由 {issue.owner.value}：{issue.recommendation}"
+                        )
+                    ),
+                )
+            )
+        for entry in current:
+            if entry.issue_id in observed_ids:
+                continue
+            notes = list(entry.evolution_notes)
+            note = f"{phase}未再次报告该问题；保留历史，不据此自动判定关闭。"
+            if note not in notes:
+                notes.append(note)
+            merged.append(
+                entry.model_copy(
+                    deep=True,
+                    update={
+                        "state": "本轮未再次出现，等待后续证据或保留为已接受取舍",
+                        "evolution_notes": notes,
+                    },
+                )
+            )
+        return merged
+
+    @staticmethod
+    def _record_revision_verification_in_issue_ledger(
+        run: PlanningRunRecord,
+    ) -> None:
+        verification = run.latest_revision_verification
+        if verification is None:
+            return
+        satisfied_ids = set(verification.satisfied_issue_ids)
+        updated = [entry.model_copy(deep=True) for entry in run.issue_ledger]
+        entry_index = {
+            entry.issue_id: index for index, entry in enumerate(updated)
+        }
+        for issue_id in satisfied_ids:
+            index = entry_index.get(issue_id)
+            if index is None:
+                continue
+            entry = updated[index]
+            fix_evidence = list(entry.fix_evidence)
+            evidence = "Revision Verifier：" + verification.summary
+            if evidence not in fix_evidence:
+                fix_evidence.append(evidence)
+            notes = list(entry.evolution_notes)
+            note = (
+                "Revision Verifier 已确认本轮修订满足对应修复范围，"
+                "并完成终稿整体冷读。"
+                if verification.accepted
+                else (
+                    "Revision Verifier 已确认该原问题的定向修复，"
+                    "但整稿冷读又定位了需要聚焦返修的具体交付问题。"
+                )
+            )
+            if note not in notes:
+                notes.append(note)
+            updated[index] = entry.model_copy(
+                deep=True,
+                update={
+                    "state": (
+                        "定向修复与终稿通读已获 Verifier 确认，"
+                        "不再重复开启独立冷读"
+                    )
+                    if verification.accepted
+                    else (
+                        "原问题的定向修复已获确认，"
+                        "终稿通读发现具体交付问题，继续聚焦返修"
+                    ),
+                    "fix_evidence": fix_evidence,
+                    "evolution_notes": notes,
+                },
+            )
+
+        for violation in verification.violations:
+            issue_id = violation.issue_id
+            if issue_id is None:
+                continue
+            scene_scope = violation.scene_sequences or ["全局"]
+            evidence = (
+                f"Revision Verifier；场次 {scene_scope}："
+                f"{violation.observation}"
+            )
+            index = entry_index.get(issue_id)
+            if index is None:
+                updated.append(
+                    StoryIssueLedgerEntry(
+                        issue_id=issue_id,
+                        semantic_cluster=violation.category,
+                        state="Verifier 已定位，等待聚焦修订",
+                        observation=violation.observation,
+                        text_evidence=[evidence],
+                        evolution_notes=[
+                            "Revision Verifier 终稿通读首次记录该交付问题。"
+                        ],
+                        handoff=violation.repair_instruction,
+                    )
+                )
+                entry_index[issue_id] = len(updated) - 1
+                continue
+            entry = updated[index]
+            text_evidence = list(entry.text_evidence)
+            if evidence not in text_evidence:
+                text_evidence.append(evidence)
+            notes = list(entry.evolution_notes)
+            note = "Revision Verifier 沿用该 issue_id 确认问题仍需聚焦修订。"
+            if note not in notes:
+                notes.append(note)
+            updated[index] = entry.model_copy(
+                deep=True,
+                update={
+                    "semantic_cluster": violation.category,
+                    "state": "Verifier 已定位，等待聚焦修订",
+                    "observation": violation.observation,
+                    "text_evidence": text_evidence,
+                    "evolution_notes": notes,
+                    "handoff": violation.repair_instruction,
+                },
+            )
+        run.issue_ledger = updated
+
+    @staticmethod
+    def _post_cold_read_step(run: PlanningRunRecord) -> PlanningRunStep:
+        if run.request.content_planning_output == ContentPlanningOutput.SCRIPT_ONLY:
+            return PlanningRunStep.FINALIZE
+        return PlanningRunStep.SCENE_DIRECTOR
+
+    @staticmethod
+    def _planning_run_has_unresolved_story_review(
+        run: PlanningRunRecord,
+    ) -> bool:
+        if (
+            run.latest_revision_verification is not None
+            and not run.latest_revision_verification.accepted
+        ):
+            return True
+        report = run.review_report
+        disposition = run.review_disposition
+        if (
+            disposition is not None
+            and disposition.action == ScriptReviewDispositionAction.REVISE_STORY
+        ):
+            return True
+        if report is None:
+            return False
+        if disposition is None:
+            return report.requires_revision
+        return bool(story_revision_issue_indices(report, disposition))
+
+    @staticmethod
     def _append_remaining_review_warning(run: PlanningRunRecord) -> None:
         report = run.review_report
         if report is None or not report.issues:
@@ -898,29 +1612,10 @@ class ShortDramaService:
         warning = (
             f"当前剧本审阅仍保留 {len(report.issues)} 项可选修改建议；"
             "已由当前 Production Skill 路由到对应制作层，"
-            "不会成为强制门禁，用户可继续、编辑或忽略。"
+            "用户可继续、编辑或忽略。"
         )
         if warning not in run.warnings:
             run.warnings.append(warning)
-
-    def _latest_review_has_regression(self, run: PlanningRunRecord) -> bool:
-        reviews = self.repository.list_planning_review_snapshots(run.id)
-        if len(reviews) < 2:
-            return False
-        previous = reviews[-2].report
-        latest = reviews[-1].report
-        previous_high = sum(
-            issue.severity == ScriptReviewSeverity.HIGH
-            for issue in previous.issues
-        )
-        latest_high = sum(
-            issue.severity == ScriptReviewSeverity.HIGH
-            for issue in latest.issues
-        )
-        return (
-            len(latest.issues) > len(previous.issues)
-            or latest_high > previous_high
-        )
 
     def _run_revision_judge(
         self,
@@ -984,35 +1679,6 @@ class ShortDramaService:
             "当前流程未自动替换大纲，仍使用最新版继续；用户可忽略该建议。"
         )
 
-    def _append_latest_review_regression_warning(
-        self,
-        run: PlanningRunRecord,
-    ) -> None:
-        reviews = self.repository.list_planning_review_snapshots(run.id)
-        if len(reviews) < 2:
-            return
-        previous = reviews[-2].report
-        latest = reviews[-1].report
-        previous_high = sum(
-            issue.severity == ScriptReviewSeverity.HIGH
-            for issue in previous.issues
-        )
-        latest_high = sum(
-            issue.severity == ScriptReviewSeverity.HIGH
-            for issue in latest.issues
-        )
-        if not self._latest_review_has_regression(run):
-            return
-        warning = (
-            "最近一轮复审较上一轮报告了更多问题"
-            f"（总数 {len(previous.issues)}→{len(latest.issues)}，"
-            f"HIGH {previous_high}→{latest_high}）。"
-            "Director Agent 建议比较最近两版大纲后再决定；"
-            "这不会阻断后续规划，用户也可忽略。"
-        )
-        if warning not in run.warnings:
-            run.warnings.append(warning)
-
     @staticmethod
     def _planning_outline(run: PlanningRunRecord) -> EpisodeOutline:
         if run.outline_json is None:
@@ -1040,7 +1706,7 @@ class ShortDramaService:
         self,
         run: PlanningRunRecord,
     ) -> list[dict[str, object]]:
-        """Return up to three completed pre-current review rounds for repair planning."""
+        """Return all completed pre-current review rounds for repair planning."""
 
         outlines = {
             snapshot.revision_round: snapshot
@@ -1066,78 +1732,286 @@ class ShortDramaService:
                     review=snapshot.report,
                 )
             )
-        return history[-3:]
+        return history
 
-    def _revise_story_outline_with_scene_tools(
-        self,
+    @staticmethod
+    def _clear_revision_execution_state(run: PlanningRunRecord) -> None:
+        run.revision_base_outline_json = None
+        run.revision_scene_sequences = []
+        run.next_revision_scene_index = 0
+        ShortDramaService._clear_scene_revision_retry(run)
+        run.revision_changed_scene_sequences = []
+        run.revision_repair_round = 0
+
+    @staticmethod
+    def _clear_scene_revision_retry(run: PlanningRunRecord) -> None:
+        run.revision_scene_retry_feedback = None
+        run.revision_scene_retry_count = 0
+
+    @staticmethod
+    def _record_scene_revision_retry(
         run: PlanningRunRecord,
-        request: CreateProjectRequest,
-        outline: EpisodeOutline,
-        review_report: ScriptReviewReport,
-        client: LanguageProviderClient | None,
-        *,
-        revision_round: int,
-    ) -> StoryRevisionResult:
-        """Execute a routed repair as scene patches, with bounded local verification."""
+        sequence: int,
+        feedback: str,
+    ) -> None:
+        feedback = feedback[-2000:]
+        run.revision_scene_retry_count += 1
+        run.revision_scene_retry_feedback = feedback
+        run.warnings.append(
+            f"第 {run.revision_round + 1} 轮第 {sequence} 场局部修改第 "
+            f"{run.revision_scene_retry_count} 次尝试失败；"
+            "下次 planning.advance 将重试同一场："
+            + feedback
+        )
 
-        planning = plan_story_repair(
-            request,
-            outline,
-            review_report,
-            client,
-            source_contract=run.source_contract,
-            revision_history=self._planning_revision_history(run),
-        )
-        repair_plan = planning.plan
-        source_contract = planning.source_contract
-        actions = [action for action in repair_plan.actions if action.should_revise]
-        if not actions:
-            return StoryRevisionResult(
-                outline=outline,
-                revised=False,
-                warnings=[
-                    *planning.warnings,
-                    "Story Repair Planner 判定当前 routed findings 均不应触发剧本重写；"
-                    "已保留为可覆盖建议并继续下游规划。",
-                ],
-                repair_plan=repair_plan,
-                source_contract=source_contract,
-            )
-        selected = sorted(
-            {
-                sequence
-                for action in actions
-                for sequence in action.affected_scene_sequences
-            }
-        )
-        if not selected:
-            return revise_story_outline(
-                request,
-                outline,
-                review_report,
-                client,
-                revision_round=revision_round,
-                source_contract=source_contract,
-                revision_history=self._planning_revision_history(run),
-            )
-        if not self.repository.list_planning_script_documents(
-            run.id,
-            run.revision_round,
+    @staticmethod
+    def _duration_revision_scene_sequences(run: PlanningRunRecord) -> set[int]:
+        verification = run.latest_revision_verification
+        if (
+            run.revision_repair_round > 0
+            and verification is not None
+            and not verification.accepted
         ):
-            self._index_planning_outline(run, outline)
-        repair_instruction = json.dumps(
+            return {
+                sequence
+                for violation in verification.violations
+                if violation.target_duration_change_required
+                for sequence in violation.scene_sequences
+            }
+        repair_plan = run.latest_repair_plan
+        if repair_plan is None:
+            return set()
+        return {
+            sequence
+            for action in repair_plan.actions
+            if action.should_revise and action.target_duration_change_required
+            for sequence in action.affected_scene_sequences
+        }
+
+    @classmethod
+    def _scene_duration_revision_constraint(
+        cls,
+        run: PlanningRunRecord,
+        outline: EpisodeOutline,
+        scene: PlannedSceneContract,
+    ) -> SceneDurationRevisionConstraint:
+        allowed_sequences = cls._duration_revision_scene_sequences(run)
+        allow_change = scene.sequence in allowed_sequences
+        remaining_adjustable = [
+            sequence
+            for sequence in run.revision_scene_sequences[
+                run.next_revision_scene_index + 1 :
+            ]
+            if sequence in allowed_sequences
+        ]
+        balance_here = allow_change and not remaining_adjustable
+        scene_total_milliseconds = sum(
+            _duration_milliseconds(item.target_duration_seconds)
+            for item in outline.scenes
+        )
+        target_milliseconds = _duration_milliseconds(
+            outline.target_duration_seconds
+        )
+        required_duration = (
+            (
+                _duration_milliseconds(scene.target_duration_seconds)
+                + target_milliseconds
+                - scene_total_milliseconds
+            )
+            / 1000
+            if balance_here
+            else None
+        )
+        return SceneDurationRevisionConstraint(
+            allow_change=allow_change,
+            balance_episode_on_this_scene=balance_here,
+            episode_target_seconds=outline.target_duration_seconds,
+            current_episode_scene_total_seconds=scene_total_milliseconds / 1000,
+            required_scene_target_seconds=required_duration,
+        )
+
+    @classmethod
+    def _scene_duration_candidate_error(
+        cls,
+        run: PlanningRunRecord,
+        outline: EpisodeOutline,
+        scene: PlannedSceneContract,
+        patch: EpisodeScenePatch,
+        constraint: SceneDurationRevisionConstraint,
+    ) -> str | None:
+        if not constraint.allow_change:
+            return None
+        target_milliseconds = _duration_milliseconds(
+            constraint.episode_target_seconds
+        )
+        current_total_milliseconds = _duration_milliseconds(
+            constraint.current_episode_scene_total_seconds
+        )
+        prospective_total_milliseconds = (
+            current_total_milliseconds
+            - _duration_milliseconds(scene.target_duration_seconds)
+            + _duration_milliseconds(patch.target_duration_seconds)
+        )
+        remaining_adjustable = set(
+            run.revision_scene_sequences[run.next_revision_scene_index + 1 :]
+        ) & cls._duration_revision_scene_sequences(run)
+        if not remaining_adjustable:
+            if prospective_total_milliseconds == target_milliseconds:
+                return None
+            required_milliseconds = (
+                _duration_milliseconds(scene.target_duration_seconds)
+                + target_milliseconds
+                - current_total_milliseconds
+            )
+            return (
+                "Final scene-duration compensation is unbalanced: "
+                f"episode_target={target_milliseconds / 1000:g}, "
+                "prospective_scene_total="
+                f"{prospective_total_milliseconds / 1000:g}, "
+                f"scene_{scene.sequence}_target_duration_seconds must be "
+                f"{required_milliseconds / 1000:g}"
+            )
+        remaining_current_milliseconds = sum(
+            _duration_milliseconds(item.target_duration_seconds)
+            for item in outline.scenes
+            if item.sequence in remaining_adjustable
+        )
+        fixed_after_candidate_milliseconds = (
+            prospective_total_milliseconds - remaining_current_milliseconds
+        )
+        remaining_budget_milliseconds = (
+            target_milliseconds - fixed_after_candidate_milliseconds
+        )
+        if remaining_budget_milliseconds > 0:
+            return None
+        return (
+            "Scene-duration reallocation leaves no positive total duration for remaining "
+            f"adjustable scenes {sorted(remaining_adjustable)}: "
+            f"remaining_total={remaining_budget_milliseconds / 1000:g}"
+        )
+
+    @staticmethod
+    def _clear_scene_script_retry(run: PlanningRunRecord) -> None:
+        run.scene_script_retry_feedback = None
+        run.scene_script_retry_count = 0
+
+    @staticmethod
+    def _record_scene_script_retry(
+        run: PlanningRunRecord,
+        sequence: int,
+        feedback: str,
+    ) -> None:
+        feedback = feedback[-2000:]
+        run.scene_script_retry_count += 1
+        run.scene_script_retry_feedback = feedback
+        run.warnings.append(
+            f"第 {sequence} 场 Scene Writer 第 {run.scene_script_retry_count} 次尝试失败；"
+            "保留当前场次游标，下次 planning.advance 将重试同一场："
+            + feedback
+        )
+
+    @staticmethod
+    def _clear_planning_step_retry(run: PlanningRunRecord) -> None:
+        run.step_retry_feedback = None
+        run.step_retry_count = 0
+
+    @staticmethod
+    def _defer_planning_step_retry(
+        run: PlanningRunRecord,
+        step: PlanningRunStep,
+        details: list[str],
+    ) -> None:
+        feedback = " ".join(item.strip() for item in details if item.strip())
+        if not feedback:
+            feedback = "Provider output was unavailable or failed validation."
+        feedback = feedback[-2000:]
+        run.step_retry_count += 1
+        run.step_retry_feedback = feedback
+        run.step_retry_events.append(
+            f"{step.value} 第 {run.step_retry_count} 次尝试未完成；"
+            f"保留当前游标，下次 planning.advance 重试同一步骤：{feedback}"
+        )
+
+    @staticmethod
+    def _revision_instruction(run: PlanningRunRecord) -> str:
+        repair_plan = run.latest_repair_plan
+        source_contract = run.source_contract
+        if repair_plan is None or source_contract is None:
+            raise WorkflowConflictError(
+                "Planning run has no persisted repair plan or source contract"
+            )
+        actions = [
+            action for action in repair_plan.actions if action.should_revise
+        ]
+        original_instruction = {
+            "repair_summary": repair_plan.summary,
+            "source_promise": repair_plan.source_promise,
+            "invariants": repair_plan.invariants,
+            "authority_order": (
+                "explicit_story_source_contract、StoryIntent、EndingContract "
+                "与实际可读剧本优先；invariants 只保留不冲突的"
+                "已成立内容，不得替剧本辩护观众看不到的因果。"
+            ),
+            "actions": [action.model_dump(mode="json") for action in actions],
+            "explicit_story_source_contract": source_contract.model_dump(
+                mode="json"
+            ),
+        }
+        if (
+            run.revision_repair_round == 0
+            or run.latest_revision_verification is None
+        ):
+            return json.dumps(original_instruction, ensure_ascii=False)
+        return json.dumps(
             {
-                "repair_summary": repair_plan.summary,
-                "source_promise": repair_plan.source_promise,
-                "invariants": repair_plan.invariants,
-                "actions": [action.model_dump(mode="json") for action in actions],
-                "explicit_story_source_contract": source_contract.model_dump(
-                    mode="json"
+                "original_repair_instruction": original_instruction,
+                "revision_verification": (
+                    run.latest_revision_verification.model_dump(mode="json")
+                ),
+                "instruction": (
+                    "仅修复 Verifier 已定位的终稿问题，保留与该问题不冲突的"
+                    "已成立局部修改；SourceContract、StoryIntent、EndingContract "
+                    "与实际可读终稿优先于旧 repair invariant。"
                 ),
             },
             ensure_ascii=False,
         )
-        repair_search_query = compact_script_retrieval_query(
+
+    @staticmethod
+    def _normalize_active_repair_issue_ids(run: PlanningRunRecord) -> None:
+        """Upgrade an old in-flight repair plan using its routed Critic review."""
+
+        if (
+            run.latest_repair_plan is None
+            or run.review_report is None
+            or run.review_disposition is None
+        ):
+            return
+        revision_review = story_revision_review(
+            run.review_report,
+            run.review_disposition,
+        )
+        if not revision_review.issues:
+            return
+        run.latest_repair_plan = normalize_story_repair_plan_issue_ids(
+            revision_review,
+            run.latest_repair_plan,
+        )
+
+    def _revision_search_context(
+        self,
+        run: PlanningRunRecord,
+        outline: EpisodeOutline,
+    ) -> tuple[str, list[PlanningScriptSearchHit]]:
+        repair_plan = run.latest_repair_plan
+        if repair_plan is None:
+            raise WorkflowConflictError(
+                "Planning run has no persisted story repair plan"
+            )
+        actions = [
+            action for action in repair_plan.actions if action.should_revise
+        ]
+        query = compact_script_retrieval_query(
             "\n".join(
                 [
                     repair_plan.summary,
@@ -1153,165 +2027,515 @@ class ShortDramaService:
                 ]
             )
         )
+        # Rebuild retrieval documents from the persisted run cursor before the
+        # model call. If an earlier process stopped after a provider response but
+        # before the run was committed, this removes any ahead-of-cursor index.
+        self._index_planning_outline(run, outline)
         hits = self.repository.search_planning_script_documents(
             run.id,
             run.revision_round,
-            repair_search_query,
+            query,
             limit=12,
             include_story_bible=True,
         )
-        scope_plan = recommend_script_revision_context(
-            repair_instruction,
-            outline,
-            hits,
-            client,
-            retrieval_query=repair_search_query,
-        )
-        if scope_plan.scope == ScriptRevisionScope.FULL_OUTLINE:
-            return revise_story_outline(
-                request,
-                outline,
-                review_report,
-                client,
-                revision_round=revision_round,
-                source_contract=source_contract,
-                revision_history=self._planning_revision_history(run),
-            )
-        warnings = list(planning.warnings)
+        return query, hits
 
-        def apply_local_revision(
-            base: EpisodeOutline,
-            sequences: list[int],
-            instruction: str,
-        ) -> tuple[EpisodeOutline, bool]:
-            patches: list[EpisodeScenePatch] = []
-            for sequence in sequences:
-                result = revise_story_scene(
-                    request,
-                    base,
-                    base.scenes[sequence - 1],
-                    instruction,
-                    sequences,
-                    hits,
-                    client,
+    def _prepare_revision_scene_queue(
+        self,
+        run: PlanningRunRecord,
+        outline: EpisodeOutline,
+        client: LanguageProviderClient | None,
+    ) -> bool:
+        if (
+            run.latest_repair_plan is None
+            or run.revision_base_outline_json is None
+        ):
+            raise WorkflowConflictError(
+                "Planning run has no repair plan ready for scope selection"
+            )
+        all_sequences = [scene.sequence for scene in outline.scenes]
+        candidate_sequences = sorted(
+            {
+                sequence
+                for action in run.latest_repair_plan.actions
+                if action.should_revise
+                for sequence in action.affected_scene_sequences
+            }
+        )
+        if not candidate_sequences:
+            query, hits = self._revision_search_context(run, outline)
+            scope_result = recommend_script_revision_context(
+                self._revision_instruction(run),
+                outline,
+                hits,
+                client,
+                retrieval_query=query,
+                candidate_scene_sequences=[],
+            )
+            if scope_result.plan is None:
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.REVISION_SCOPE,
+                    [
+                        scope_result.retry_feedback
+                        or "Revision Scope Agent did not produce a semantic scene scope."
+                    ],
                 )
-                warnings.extend(result.warnings)
-                if result.revised:
-                    patches.append(result.patch)
-            if not patches:
-                return base, False
-            return (
-                apply_episode_outline_patch(
-                    base,
+                return False
+            run.warnings.extend(scope_result.warnings)
+            scope_plan = scope_result.plan
+            if scope_plan.scope == ScriptRevisionScope.FULL_OUTLINE:
+                selected = all_sequences
+                run.warnings.append(
+                    "Scope Agent 建议 FULL_OUTLINE；"
+                    "已转换为全场逐场修订队列，不会整集重写。"
+                )
+            else:
+                selected = sorted(scope_plan.affected_scene_sequences)
+        elif set(candidate_sequences) == set(all_sequences):
+            selected = all_sequences
+            run.warnings.append(
+                "Story Repair Planner 已定位全部场次；"
+                "已将它们按顺序排入逐场修订队列。"
+            )
+        else:
+            query, hits = self._revision_search_context(run, outline)
+            scope_plan = recommend_script_revision_context(
+                self._revision_instruction(run),
+                outline,
+                hits,
+                client,
+                retrieval_query=query,
+                candidate_scene_sequences=candidate_sequences,
+            )
+            if scope_plan.plan is None:
+                self._defer_planning_step_retry(
+                    run,
+                    PlanningRunStep.REVISION_SCOPE,
+                    [
+                        scope_plan.retry_feedback
+                        or "Revision Scope Agent did not produce a semantic scene scope."
+                    ],
+                )
+                return False
+            run.warnings.extend(scope_plan.warnings)
+            resolved_scope_plan = scope_plan.plan
+            if resolved_scope_plan.scope == ScriptRevisionScope.FULL_OUTLINE:
+                selected = all_sequences
+                run.warnings.append(
+                    "Scope Agent 建议 FULL_OUTLINE；"
+                    "已转换为全场逐场修订队列，不会整集重写。"
+                )
+            else:
+                selected = sorted(resolved_scope_plan.affected_scene_sequences)
+        duration_sequences = self._duration_revision_scene_sequences(run)
+        if duration_sequences:
+            # A scope recommendation may narrow ordinary content edits, but it
+            # cannot omit a typed duration donor/recipient required to balance
+            # the episode after sequential scene patches.
+            selected = sorted(set(selected) | duration_sequences)
+        known_sequences = set(all_sequences)
+        unknown = sorted(set(selected) - known_sequences)
+        if unknown:
+            raise WorkflowConflictError(
+                "Revision scope references unknown scenes: "
+                + ", ".join(str(sequence) for sequence in unknown)
+            )
+        if not selected:
+            raise WorkflowConflictError("Revision scope produced an empty scene queue")
+        run.revision_scene_sequences = list(dict.fromkeys(selected))
+        run.latest_revision_target_scene_sequences = list(
+            dict.fromkeys(
+                [
+                    *run.latest_revision_target_scene_sequences,
+                    *run.revision_scene_sequences,
+                ]
+            )
+        )
+        run.next_revision_scene_index = 0
+        self._clear_scene_revision_retry(run)
+        return True
+
+    def _advance_story_metadata_revision(
+        self,
+        run: PlanningRunRecord,
+        request: CreateProjectRequest,
+        outline: EpisodeOutline,
+        client: LanguageProviderClient | None,
+    ) -> None:
+        if (
+            run.latest_repair_plan is None
+            or run.source_contract is None
+            or run.revision_base_outline_json is None
+        ):
+            raise WorkflowConflictError(
+                "Planning run has no active repair plan for metadata revision"
+            )
+        self._normalize_active_repair_issue_ids(run)
+        is_verifier_repair = run.revision_repair_round > 0
+        if is_verifier_repair and not run.revision_scene_sequences:
+            raise WorkflowConflictError(
+                "Planning run has no persisted scene queue after verifier rejection"
+            )
+        result = revise_story_metadata(
+            request,
+            outline,
+            run.latest_repair_plan,
+            run.source_contract,
+            client,
+            verification=(
+                run.latest_revision_verification
+                if is_verifier_repair
+                else None
+            ),
+            selected_narrative_skill_ids=tuple(
+                run.selected_narrative_skill_ids
+            ),
+            retry_feedback=run.step_retry_feedback,
+        )
+        if client is not None and not result.used:
+            self._defer_planning_step_retry(
+                run,
+                PlanningRunStep.STORY_METADATA_REVISION,
+                result.warnings,
+            )
+            return
+        self._clear_planning_step_retry(run)
+        run.warnings.extend(result.warnings)
+        run.latest_story_metadata_patch = result.patch
+        if result.revised:
+            run.outline_json = result.outline.model_dump_json()
+            run.total_scenes = len(result.outline.scenes)
+        self._complete_planning_step(
+            run,
+            PlanningRunStep.STORY_METADATA_REVISION,
+            (
+                PlanningRunStep.SCENE_REVISION
+                if is_verifier_repair
+                else PlanningRunStep.REVISION_SCOPE
+            ),
+        )
+
+    def _advance_scene_revision(
+        self,
+        run: PlanningRunRecord,
+        request: CreateProjectRequest,
+        outline: EpisodeOutline,
+        client: LanguageProviderClient | None,
+    ) -> None:
+        self._normalize_active_repair_issue_ids(run)
+        repair_plan = run.latest_repair_plan
+        if repair_plan is None or run.revision_base_outline_json is None:
+            raise WorkflowConflictError(
+                "Planning run has no active incremental story revision"
+            )
+        queue = run.revision_scene_sequences
+        cursor = run.next_revision_scene_index
+        if not queue or cursor >= len(queue):
+            raise WorkflowConflictError(
+                "Scene revision cursor is beyond an incomplete revision queue"
+            )
+        sequence = queue[cursor]
+        scene = next(
+            (item for item in outline.scenes if item.sequence == sequence),
+            None,
+        )
+        if scene is None:
+            raise WorkflowConflictError(
+                f"Scene revision target no longer exists: {sequence}"
+            )
+        duration_constraint = self._scene_duration_revision_constraint(
+            run,
+            outline,
+            scene,
+        )
+        _query, hits = self._revision_search_context(run, outline)
+        result = revise_story_scene(
+            request,
+            outline,
+            scene,
+            self._revision_instruction(run),
+            queue,
+            hits,
+            duration_constraint,
+            client,
+            retry_feedback=run.revision_scene_retry_feedback,
+            story_intent=run.story_intent or outline.story_intent,
+            selected_skill_prompt=compile_narrative_skill_prompt(
+                run.selected_narrative_skill_ids,
+                roles=(ProductionSkillRole.WRITER,),
+            ),
+            previous_verification=(
+                run.latest_revision_verification
+                if run.revision_repair_round > 0
+                and run.latest_revision_verification is not None
+                and not run.latest_revision_verification.accepted
+                else None
+            ),
+        )
+        if result.retry_required:
+            feedback = result.retry_feedback or "Unknown scene revision failure"
+            self._record_scene_revision_retry(run, sequence, feedback)
+            return
+        run.warnings.extend(result.warnings)
+        timing_assessment = result.patch.performance_timing_assessment
+        if timing_assessment is not None:
+            run.scene_timing_assessments.append(
+                SceneTimingAssessmentRecord(
+                    scene_sequence=sequence,
+                    stage="REVISION",
+                    revision_round=run.revision_round + 1,
+                    target_duration_seconds=result.patch.target_duration_seconds,
+                    assessment=timing_assessment,
+                )
+            )
+        elif client is not None:
+            run.warnings.append(
+                f"第 {sequence} 场局部 Writer 未留下修订后表演时长自评；"
+                "该证据缺失已记录，但不会由代码决定创作结果。"
+            )
+        if result.revised:
+            duration_error = self._scene_duration_candidate_error(
+                run,
+                outline,
+                scene,
+                result.patch,
+                duration_constraint,
+            )
+            if duration_error is not None:
+                self._record_scene_revision_retry(
+                    run,
+                    sequence,
+                    duration_error,
+                )
+                return
+            try:
+                revised = apply_episode_outline_patch(
+                    outline,
                     EpisodeOutlinePatch(
                         base_revision_round=run.revision_round,
                         rationale=repair_plan.summary,
-                        scene_patches=patches,
+                        scene_patches=[result.patch],
                         preserve=repair_plan.invariants,
                     ),
-                ),
-                True,
+                )
+            except ValueError as error:
+                self._record_scene_revision_retry(run, sequence, str(error))
+                return
+            run.outline_json = revised.model_dump_json()
+            run.total_scenes = len(revised.scenes)
+            if sequence not in run.revision_changed_scene_sequences:
+                run.revision_changed_scene_sequences.append(sequence)
+            if sequence not in run.latest_revision_changed_scene_sequences:
+                run.latest_revision_changed_scene_sequences.append(sequence)
+        self._clear_scene_revision_retry(run)
+        run.next_revision_scene_index += 1
+        if run.next_revision_scene_index >= len(queue):
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.SCENE_REVISION,
+                PlanningRunStep.REVISION_VERIFIER,
             )
 
-        revised, changed = apply_local_revision(
-            outline,
-            selected,
-            repair_instruction,
-        )
-        if not changed:
-            return StoryRevisionResult(
-                outline=outline,
-                revised=False,
-                warnings=[
-                    *warnings,
-                    f"第 {revision_round} 轮局部 Writer 未产生可采用 Patch，保留当前剧本。",
-                ],
-                repair_plan=repair_plan,
-                source_contract=source_contract,
+    def _advance_revision_verifier(
+        self,
+        run: PlanningRunRecord,
+        request: CreateProjectRequest,
+        outline: EpisodeOutline,
+        client: LanguageProviderClient | None,
+    ) -> None:
+        if (
+            run.revision_base_outline_json is None
+            or run.review_report is None
+            or run.latest_repair_plan is None
+            or run.source_contract is None
+        ):
+            raise WorkflowConflictError(
+                "Planning run has incomplete state for revision verification"
             )
+        self._normalize_active_repair_issue_ids(run)
+        assert run.latest_repair_plan is not None
+        original = EpisodeOutline.model_validate_json(
+            run.revision_base_outline_json
+        )
+        previous_verification = (
+            run.latest_revision_verification
+            if run.latest_revision_verification is not None
+            and not run.latest_revision_verification.accepted
+            else None
+        )
+        revision_review = story_revision_review(
+            run.review_report,
+            run.review_disposition,
+        ) if run.review_disposition is not None else run.review_report
         verification_result = verify_story_revision(
             request,
+            original,
             outline,
-            revised,
-            review_report,
-            repair_plan,
-            source_contract,
+            revision_review,
+            run.latest_repair_plan,
+            run.source_contract,
             client,
+            selected_narrative_skill_ids=tuple(
+                run.selected_narrative_skill_ids
+            ),
+            retry_feedback=run.step_retry_feedback,
+            previous_verification=previous_verification,
+            issue_ledger=run.issue_ledger,
         )
-        warnings.extend(verification_result.warnings)
+        if client is not None and not verification_result.used:
+            self._defer_planning_step_retry(
+                run,
+                PlanningRunStep.REVISION_VERIFIER,
+                verification_result.warnings,
+            )
+            return
+        self._clear_planning_step_retry(run)
+        run.warnings.extend(verification_result.warnings)
+        run.latest_revision_verification = verification_result.verification
+        self._record_revision_verification_in_issue_ledger(run)
         verification = verification_result.verification
-        local_repair_count = 0
-        while verification is not None and not verification.accepted and local_repair_count < 2:
+        if verification is None:
+            raise WorkflowConflictError(
+                "Story Revision Verifier did not return an accepted result"
+            )
+        if not verification.accepted:
             violation_sequences = sorted(
                 {
                     sequence
                     for violation in verification.violations
                     for sequence in violation.scene_sequences
                 }
-            ) or selected
-            correction = json.dumps(
-                {
-                    "original_repair_instruction": json.loads(repair_instruction),
-                    "revision_verification": verification.model_dump(mode="json"),
-                    "instruction": "仅修复 Verifier 已定位的回退，保留已成立的局部修改。",
+            )
+            if not violation_sequences:
+                violation_sequences = list(run.revision_scene_sequences)
+            if not violation_sequences:
+                violation_sequences = [scene.sequence for scene in outline.scenes]
+            run.revision_scene_sequences = violation_sequences
+            run.latest_revision_target_scene_sequences = list(
+                dict.fromkeys(
+                    [
+                        *run.latest_revision_target_scene_sequences,
+                        *violation_sequences,
+                    ]
+                )
+            )
+            run.next_revision_scene_index = 0
+            self._clear_scene_revision_retry(run)
+            run.revision_repair_round += 1
+            run.warnings.append(
+                f"Revision Verifier 已定位回归问题；第 "
+                f"{run.revision_repair_round} 次定向修复将按场次 "
+                f"{violation_sequences} 逐场执行。"
+            )
+            self._complete_planning_step(
+                run,
+                PlanningRunStep.REVISION_VERIFIER,
+                PlanningRunStep.STORY_METADATA_REVISION,
+            )
+            return
+
+        if run.review_disposition is not None:
+            run.review_disposition = run.review_disposition.model_copy(
+                deep=True,
+                update={
+                    "action": (
+                        ScriptReviewDispositionAction.CONTINUE_WITH_HANDOFF
+                        if run.review_report.issues
+                        else ScriptReviewDispositionAction.CONTINUE
+                    ),
+                    "issue_routes": [
+                        (
+                            route.model_copy(
+                                deep=True,
+                                update={
+                                    "owner": ReviewRepairOwner.USER_OPTIONAL,
+                                    "rationale": (
+                                        "Revision Verifier 已确认对应剧本修复；"
+                                        "保留为历史记录，不再自动重开同一问题。"
+                                    ),
+                                },
+                            )
+                            if route.owner == ReviewRepairOwner.STORY_ARCHITECT
+                            else route.model_copy(deep=True)
+                        )
+                        for route in run.review_disposition.issue_routes
+                    ],
+                    "rationale": (
+                        "Revision Verifier 已语义确认本轮剧本修复；"
+                        "已解决的故事问题不再触发重复 Critic 或循环修订，"
+                        "其余下游建议继续保留。"
+                    ),
                 },
-                ensure_ascii=False,
             )
-            revised, changed = apply_local_revision(
-                revised,
-                violation_sequences,
-                correction,
+
+        run.latest_revision_target_scene_sequences = list(
+            dict.fromkeys(
+                [
+                    *run.latest_revision_target_scene_sequences,
+                    *run.revision_scene_sequences,
+                ]
             )
-            if not changed:
-                break
-            local_repair_count += 1
-            verification_result = verify_story_revision(
-                request,
-                outline,
-                revised,
-                review_report,
-                repair_plan,
-                source_contract,
-                client,
-            )
-            warnings.extend(verification_result.warnings)
-            verification = verification_result.verification
-        if verification is not None and not verification.accepted:
-            return StoryRevisionResult(
-                outline=outline,
-                revised=False,
-                warnings=[
-                    *warnings,
-                    f"第 {revision_round} 轮局部修订在 {local_repair_count} 次定向修复后"
-                    "仍未通过 Repair Plan 执行校验，已保留修订前剧本。",
-                ],
-                repair_plan=repair_plan,
-                verification=verification,
-                source_contract=source_contract,
-            )
-        if local_repair_count:
-            warnings.append(
-                f"第 {revision_round} 轮局部 Writer 已根据 Revision Verifier 定向修复 "
-                f"{local_repair_count} 次。"
-            )
-        warnings.append(
-            f"第 {revision_round} 轮已仅对场次 {selected} 应用剧本 Patch，"
-            "未重新生成其他场次。"
         )
-        return StoryRevisionResult(
-            outline=revised,
-            revised=True,
-            warnings=warnings,
-            repair_plan=repair_plan,
-            verification=verification,
-            source_contract=source_contract,
+        run.latest_revision_changed_scene_sequences = list(
+            dict.fromkeys(
+                [
+                    *run.latest_revision_changed_scene_sequences,
+                    *run.revision_changed_scene_sequences,
+                ]
+            )
+        )
+        selected = list(run.revision_changed_scene_sequences)
+        revised = outline != original
+        repair_round = run.revision_repair_round
+        if revised:
+            run.revision_round += 1
+            self.repository.save_planning_outline_snapshot(
+                run.id,
+                PlanningOutlineSnapshot(
+                    revision_round=run.revision_round,
+                    outline_json=outline.model_dump_json(),
+                    source=f"Incremental scene revision {run.revision_round}",
+                    source_contract=run.source_contract,
+                    story_intent=outline.story_intent,
+                    repair_plan=run.latest_repair_plan,
+                    revision_verification=verification,
+                    created_at=utc_now(),
+                ),
+            )
+            self._index_planning_outline(run, outline)
+            if repair_round:
+                run.warnings.append(
+                    f"第 {run.revision_round} 轮局部 Writer 已根据 "
+                    f"Revision Verifier 定向修复 {repair_round} 次。"
+                )
+            run.warnings.append(
+                f"第 {run.revision_round} 轮已逐场应用剧本 Patch；"
+                f"产生修改的场次为 {selected}，未调用整集重写。"
+            )
+        else:
+            run.warnings.append(
+                f"第 {run.revision_round + 1} 轮逐场 Writer 未产生可采用 "
+                "Patch；Revision Verifier 已接受当前修复范围。"
+            )
+        rationale = (
+            verification.followup_rationale
+            or "修复事项和从头到尾的自然冷读均已通过。"
+        )
+        run.warnings.append(
+            "Revision Verifier 已同时完成定向修复验收与终稿整体冷读，"
+            "直接继续交付，不再自动转交独立 Final Cold Read："
+            + rationale
+        )
+        next_step = self._post_cold_read_step(run)
+        self._clear_revision_execution_state(run)
+        self._complete_planning_step(
+            run,
+            PlanningRunStep.REVISION_VERIFIER,
+            next_step,
         )
 
     def _planning_run_response(self, run: PlanningRunRecord) -> PlanningRunResponse:
-        if run.project_id is None or run.owner_agent_run_id is None:
-            raise WorkflowConflictError(
-                "Planning runs must belong to a Production Manager Agent run"
-            )
         document = self.repository.get_project(run.project_id)
         if document is None:
             raise WorkflowConflictError(f"Owner project is missing: {run.project_id}")
@@ -1320,10 +2544,6 @@ class ShortDramaService:
     def _save_planning_run_state(self, run: PlanningRunRecord) -> None:
         """Persist an owned run and its project-visible status as one DB commit."""
 
-        if run.owner_agent_run_id is None or run.project_id is None:
-            raise WorkflowConflictError(
-                "Planning runs must belong to a Production Manager Agent run"
-            )
         with self._lock:
             document = self.repository.get_project(run.project_id)
             if document is None:
@@ -1340,6 +2560,7 @@ class ShortDramaService:
                 planner=planner,
                 warnings=list(dict.fromkeys(run.warnings)),
                 owner_agent_run_id=run.owner_agent_run_id,
+                planning_job_kind="CONTENT_PLANNING",
             )
             document.project.updated_at = run.updated_at
             self.repository.save_planning_run_with_project(run, document)
@@ -1351,7 +2572,13 @@ class ShortDramaService:
     ) -> bool:
         """Recognize a FINALIZE payload left ready by an interrupted attempt."""
 
-        if document.project.stage != ProjectStage.PLANNED:
+        expected_stage = (
+            ProjectStage.SCRIPT_READY
+            if run.request.content_planning_output
+            == ContentPlanningOutput.SCRIPT_ONLY
+            else ProjectStage.PLANNED
+        )
+        if document.project.stage != expected_stage:
             return False
         if document.planning is None or document.planning.run_id != run.id:
             return False
@@ -1421,7 +2648,7 @@ class ShortDramaService:
         project_id: str,
         request: AssetCatalogImportRequest,
     ) -> AssetMutationResponse:
-        target_document = self._require_project_document(project_id)
+        target_document = self._require_project_mutation_allowed(project_id)
         source_document = self._require_project_document(request.source_project_id)
         source_asset = self._require_asset_in_document(
             source_document,
@@ -1503,8 +2730,6 @@ class ShortDramaService:
         self._preflight_creative_input_images(request)
         if (
             owner_agent_run_id is not None
-            and request.run_mode == RunMode.AUTO_DRAFT
-            and request.resolved_target_duration_seconds() > 90.0
             and self._configured_language_client() is not None
         ):
             return self._create_agent_owned_planning_project(
@@ -1539,8 +2764,11 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 f"Project already exists: {resolved_project_id}"
             )
-        client = self._configured_language_client()
-        planning = create_production_plan(request, client)
+        # Language-authored project content is always owned by an AgentRun and
+        # advanced through its persisted Content Planning Job.  The direct
+        # compatibility path only creates a local scaffold; it must never hide
+        # a multi-step generation or whole-script rewrite inside one call.
+        planning = create_production_plan(request, None)
         created_at = utc_now()
         document = build_project_document_from_plan(
             project_id=resolved_project_id,
@@ -1577,7 +2805,7 @@ class ShortDramaService:
         run = PlanningRunRecord(
             id=run_id,
             status=PlanningRunStatus.RUNNING,
-            current_step=PlanningRunStep.STORY_ARCHITECT,
+            current_step=PlanningRunStep.STORY_ORIENTATION,
             request=request,
             project_id=resolved_project_id,
             owner_agent_run_id=owner_agent_run_id,
@@ -1595,10 +2823,15 @@ class ShortDramaService:
             owner_agent_run_id=owner_agent_run_id,
         )
         document.project.stage = ProjectStage.INPUT
+        for version in document.script_versions:
+            version.approval_status = ApprovalStatus.DRAFT
+        for version in document.bible_versions:
+            version.approval_status = ApprovalStatus.DRAFT
         document.planning = ProjectPlanningMetadata(
             run_id=run.id,
             status=PlanningRunStatus.RUNNING,
             owner_agent_run_id=owner_agent_run_id,
+            planning_job_kind="CONTENT_PLANNING",
         )
         with self._lock:
             inserted = self.repository.insert_project_with_planning_run(document, run)
@@ -1820,7 +3053,7 @@ class ShortDramaService:
     ) -> None:
         imported_versions: list[tuple[str, str]] = []
         for index, image in enumerate(request.input_images, start=1):
-            created = self.create_asset(
+            created = self._create_asset_unchecked(
                 project_id,
                 AssetCreateRequest(
                     kind=AssetKind.REFERENCE,
@@ -1829,7 +3062,7 @@ class ShortDramaService:
                 ),
             )
             if image.local_path is not None:
-                imported = self.import_local_asset_version(
+                imported = self._import_local_asset_version_unchecked(
                     project_id,
                     created.asset.id,
                     AssetImportLocalRequest(
@@ -1839,7 +3072,7 @@ class ShortDramaService:
                 )
             else:
                 assert image.external_url is not None
-                imported = self.import_url_asset_version(
+                imported = self._import_url_asset_version_unchecked(
                     project_id,
                     created.asset.id,
                     AssetImportUrlRequest(
@@ -1848,7 +3081,7 @@ class ShortDramaService:
                         media_type=AssetMediaType.IMAGE,
                     ),
                 )
-            self.review_asset_version(
+            self._review_asset_version_unchecked(
                 project_id,
                 created.asset.id,
                 imported.version.id,
@@ -1873,11 +3106,7 @@ class ShortDramaService:
     ) -> None:
         with self._lock:
             document = self._require_project_document(project_id)
-            requirement = (
-                "REQUIRED"
-                if request.source_mode == SourceMode.IMAGE_SEEDED
-                else "OPTIONAL"
-            )
+            required = request.source_mode == SourceMode.IMAGE_SEEDED
             changed = False
             for plan in document.reference_plan:
                 known_targets = {binding.target_id for binding in plan.bindings}
@@ -1886,10 +3115,10 @@ class ShortDramaService:
                         continue
                     plan.bindings.append(
                         ReferenceBinding(
-                            kind=AssetKind.REFERENCE.value,
+                            kind=AssetKind.REFERENCE,
                             target_id=version_id,
                             purpose=f"用户提供的跨镜视觉种子：{descriptor}",
-                            requirement=requirement,
+                            required=required,
                         )
                     )
                     known_targets.add(version_id)
@@ -2121,7 +3350,7 @@ class ShortDramaService:
         request: ReferencePackEntryCreateRequest,
     ) -> ReferencePackEntryMutationResponse:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             subject = self._require_asset_in_document(document, request.subject_asset_id)
             if subject.kind not in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}:
                 raise WorkflowConflictError(
@@ -2226,7 +3455,7 @@ class ShortDramaService:
         request: ShotReferencePlanUpdateRequest,
     ) -> ProjectAggregate:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             shot = self._require_shot_in_document(document, shot_id)
             plan = self._require_reference_plan(document, shot_id)
             before = plan.model_dump(mode="json")
@@ -2482,14 +3711,24 @@ class ShortDramaService:
                 for item in shot_dialogue_checks
                 for issue in item.issues
             )
-            relevant_speakers = {
-                item.expected_speaker for item in shot_dialogue_checks
+            relevant_line_ids = {
+                item.script_line_id for item in shot_dialogue_checks
             }
             qa_issues.extend(
-                issue.model_copy(deep=True)
-                for issue in audio_inspection.issues
-                if issue.code == "VOICE_CONTINUITY_REVIEW"
-                and any(speaker in issue.message for speaker in relevant_speakers)
+                QaIssue(
+                    code="VOICE_CONTINUITY_REVIEW",
+                    severity="UNKNOWN",
+                    message=(
+                        f"声线连续性证据涉及当前镜头；speaker={check.speaker!r}, "
+                        f"script_line_ids={check.script_line_ids!r}, detail={check.detail!r}。"
+                        "请导演 Agent 结合实际表演与可接受变化判断是否需要处理。"
+                    ),
+                    repair_layer="DIRECTOR_ROUTE_OR_REFERENCE_AUDIO",
+                    category=QaFailureCategory.DIALOGUE_AUDIO,
+                )
+                for check in audio_inspection.speaker_checks
+                if check.assessment == AudioContinuityAssessment.REVIEW
+                and bool(set(check.script_line_ids) & relevant_line_ids)
             )
             reviewer_notes.append(
                 f"{audio_inspection.id}: {audio_inspection.summary}"
@@ -2604,7 +3843,7 @@ class ShortDramaService:
         request: H3ProductionRoutePlanRequest,
     ) -> H3ProductionRoutePlanResponse:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             if refresh_lightweight_reference_plans(document):
                 document.project.updated_at = utc_now()
                 self.repository.save_project(document)
@@ -2623,6 +3862,9 @@ class ShortDramaService:
         )
         video_guides = {}
         video_guide_warnings: list[str] = []
+        directive_by_shot = {
+            item.shot_id: item for item in request.shot_directives
+        }
         if request.consider_video_guides:
             video_guides, video_guide_warnings = self.h3_video_guide_builder.prepare(
                 document=document,
@@ -2630,6 +3872,11 @@ class ShortDramaService:
                 shot_ids=request.shot_ids,
                 created_at=created_at,
                 prepared_media_inputs=prepared_media_inputs,
+                camera_motion_by_shot={
+                    shot_id: directive.camera_previs_motion
+                    for shot_id, directive in directive_by_shot.items()
+                    if directive.camera_previs_motion is not None
+                },
             )
         try:
             plan = build_h3_production_route_plan(
@@ -2648,6 +3895,7 @@ class ShortDramaService:
                 prepared_media_inputs=prepared_media_inputs,
                 video_guides=video_guides,
                 video_guide_warnings=video_guide_warnings,
+                shot_directives=request.shot_directives,
             )
         except RoutePlanningError as exc:
             raise WorkflowConflictError(str(exc)) from exc
@@ -2663,6 +3911,52 @@ class ShortDramaService:
             plans=self.repository.list_h3_route_plans(project_id)
         )
 
+    def _h3_route_plan_tasks(
+        self,
+        project_id: str,
+        decision: H3ShotRoutePlan,
+    ) -> list[GenerationTask]:
+        if len(set(decision.task_ids)) != len(decision.task_ids):
+            raise WorkflowConflictError(
+                f"H3 route decision for shot {decision.shot_id} contains duplicate task IDs"
+            )
+        shot_tasks = self.repository.list_tasks_for_shot(project_id, decision.shot_id)
+        by_id = {task.id: task for task in shot_tasks}
+        planned_tasks: list[GenerationTask] = []
+        for task_id in decision.task_ids:
+            task = by_id.get(task_id)
+            if task is None:
+                raise WorkflowConflictError(
+                    f"H3 route decision for shot {decision.shot_id} references missing "
+                    f"task {task_id}"
+                )
+            evidence = self.repository.get_route_evidence_for_task(task.id)
+            if (
+                task.project_id != project_id
+                or task.shot_id != decision.shot_id
+                or task.provider != "minimax"
+                or task.model != "MiniMax-H3"
+                or task.operation != OperationKind.GENERATE
+                or task.route != decision.route
+                or evidence is None
+                or evidence.purpose != EvidencePurpose.PRODUCTION
+            ):
+                raise WorkflowConflictError(
+                    f"Task {task.id} does not belong to the production route decision "
+                    f"for shot {decision.shot_id}"
+                )
+            planned_tasks.append(task)
+        return planned_tasks
+
+    def _h3_route_enqueue_count(
+        self,
+        decision: H3ShotRoutePlan,
+        planned_tasks: list[GenerationTask],
+    ) -> int:
+        """Execute one persisted route decision as one explicit candidate batch."""
+
+        return 0 if planned_tasks else decision.candidate_count
+
     def execute_h3_production_route_plan(
         self,
         project_id: str,
@@ -2672,7 +3966,7 @@ class ShortDramaService:
         inspection_take_ids: list[str] = []
         queued_tasks: list[GenerationTask] = []
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             plan = self.repository.get_h3_route_plan(plan_id)
             if plan is None or plan.project_id != project_id:
                 raise ArtifactNotFoundError(plan_id)
@@ -2684,24 +3978,69 @@ class ShortDramaService:
                 self.repository.save_h3_route_plan(plan)
                 raise WorkflowConflictError(str(exc)) from exc
 
-            needs_provider_submission = any(
-                item.action == H3ShotRouteAction.GENERATE
-                and item.readiness
-                not in {
-                    H3ShotRouteReadiness.NEEDS_ASSET,
-                    H3ShotRouteReadiness.UNSUPPORTED,
-                }
-                for item in plan.decisions
-            )
+            execution_inputs: dict[
+                int,
+                tuple[
+                    int,
+                    ShotPlan | None,
+                    list[H3MediaInput],
+                ],
+            ] = {}
+            for decision in plan.decisions:
+                planned_tasks: list[GenerationTask] = []
+                enqueue_count = 0
+                shot: ShotPlan | None = None
+                media_inputs: list[H3MediaInput] = []
+                if (
+                    request.enqueue_new_generations
+                    and decision.action == H3ShotRouteAction.GENERATE
+                    and decision.readiness
+                    not in {
+                        H3ShotRouteReadiness.NEEDS_AGENT_DECISION,
+                        H3ShotRouteReadiness.NEEDS_ASSET,
+                        H3ShotRouteReadiness.UNSUPPORTED,
+                    }
+                ):
+                    planned_tasks = self._h3_route_plan_tasks(
+                        project_id,
+                        decision,
+                    )
+                    enqueue_count = self._h3_route_enqueue_count(
+                        decision,
+                        planned_tasks,
+                    )
+                    if enqueue_count:
+                        shot = self._require_shot_in_document(document, decision.shot_id)
+                        media_inputs = self._resolve_approved_asset_inputs(
+                            document,
+                            decision.media_inputs,
+                        )
+                        try:
+                            validate_h3_probe(
+                                route=decision.route,
+                                prompt=decision.prompt,
+                                duration_seconds=decision.duration_seconds,
+                                media_inputs=media_inputs,
+                            )
+                        except H3CapabilityError as exc:
+                            raise WorkflowConflictError(str(exc)) from exc
+                execution_inputs[id(decision)] = (
+                    enqueue_count,
+                    shot,
+                    media_inputs,
+                )
+
             if (
-                request.enqueue_new_generations
-                and needs_provider_submission
+                any(item[0] > 0 for item in execution_inputs.values())
                 and not self.h3_config.api_key()
             ):
                 raise WorkflowConflictError(
                     "AceData API token is required before enqueueing production H3 tasks"
                 )
             for decision in sorted(plan.decisions, key=lambda item: item.shot_sequence):
+                if decision.readiness == H3ShotRouteReadiness.NEEDS_AGENT_DECISION:
+                    decision.execution_status = H3ShotRouteExecutionStatus.SKIPPED
+                    continue
                 if decision.action == H3ShotRouteAction.REUSE_TAKE:
                     if not request.reuse_passed_takes or decision.reuse_take_id is None:
                         decision.execution_status = H3ShotRouteExecutionStatus.SKIPPED
@@ -2714,32 +4053,31 @@ class ShortDramaService:
 
                 if (
                     decision.readiness
-                    in {H3ShotRouteReadiness.NEEDS_ASSET, H3ShotRouteReadiness.UNSUPPORTED}
+                    in {
+                        H3ShotRouteReadiness.NEEDS_AGENT_DECISION,
+                        H3ShotRouteReadiness.NEEDS_ASSET,
+                        H3ShotRouteReadiness.UNSUPPORTED,
+                    }
                     or not request.enqueue_new_generations
                 ):
                     decision.execution_status = H3ShotRouteExecutionStatus.SKIPPED
                     continue
-                shot = self._require_shot_in_document(document, decision.shot_id)
-                media_inputs = self._resolve_approved_asset_inputs(
-                    document,
-                    decision.media_inputs,
-                )
-                try:
-                    validate_h3_probe(
-                        route=decision.route,
-                        prompt=decision.prompt,
-                        duration_seconds=decision.duration_seconds,
-                        media_inputs=media_inputs,
-                    )
-                except H3CapabilityError as exc:
-                    raise WorkflowConflictError(str(exc)) from exc
+                (
+                    enqueue_count,
+                    shot,
+                    media_inputs,
+                ) = execution_inputs[id(decision)]
+                if decision.task_ids:
+                    decision.execution_status = H3ShotRouteExecutionStatus.QUEUED
+                if enqueue_count == 0:
+                    continue
+                assert shot is not None
                 existing_tasks = self.repository.list_tasks_for_shot(project_id, shot.id)
                 next_candidate = max(
                     (item.candidate_index for item in existing_tasks),
                     default=0,
                 ) + 1
-                task_ids: list[str] = []
-                enqueue_count = 1 if request.adaptive_sequential else decision.candidate_count
+                decision.execution_status = H3ShotRouteExecutionStatus.QUEUED
                 for offset in range(enqueue_count):
                     task, run, route_evidence = self._new_h3_task_and_run(
                         document=document,
@@ -2755,15 +4093,22 @@ class ShortDramaService:
                         attempt=1,
                         retry_of_task_id=None,
                     )
-                    self.repository.save_task(task)
-                    self.repository.save_provider_run(run)
-                    self.repository.save_route_evidence(route_evidence)
+                    decision.task_ids.append(task.id)
+                    plan.status = H3RoutePlanStatus.EXECUTING
+                    plan.updated_at = utc_now()
+                    self.repository.save_h3_route_task_bundle(
+                        task=task,
+                        run=run,
+                        evidence=route_evidence,
+                        plan=plan,
+                    )
+                    _log_video_task_transition(None, task, action="enqueue")
                     queued_tasks.append(task)
-                    task_ids.append(task.id)
-                decision.task_ids = task_ids
-                decision.execution_status = H3ShotRouteExecutionStatus.QUEUED
 
-            if queued_tasks:
+            if queued_tasks or any(
+                item.action == H3ShotRouteAction.GENERATE and item.task_ids
+                for item in plan.decisions
+            ):
                 document = self._require_project_document(project_id)
                 document.project.stage = ProjectStage.GENERATING
                 document.project.updated_at = utc_now()
@@ -2857,7 +4202,7 @@ class ShortDramaService:
         request: DirectorRepairDecisionRequest,
     ) -> ProjectAggregate:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             shot = self._require_shot_in_document(document, shot_id)
             if request.source_take_id is not None:
                 source_take = self.repository.get_take(request.source_take_id)
@@ -2885,17 +4230,45 @@ class ShortDramaService:
                                 document,
                                 patch.dialogue_line_ids,
                             )
+                        shot_payload = shot.model_dump(mode="python")
+                        beat_invalidating_fields = {
+                            "duration_seconds",
+                            "visual",
+                            "framing",
+                            "camera",
+                            "audio_intent",
+                            "dialogue_line_ids",
+                            "continuity",
+                            "transition_out",
+                        }
+                        if (
+                            "timeline_beats" not in patch.model_fields_set
+                            and beat_invalidating_fields.intersection(
+                                patch.model_fields_set
+                            )
+                        ):
+                            shot_payload["timeline_beats"] = []
                         for field_name in patch.model_fields_set:
                             value = getattr(patch, field_name)
                             if value is not None:
-                                setattr(shot, field_name, deepcopy(value))
+                                shot_payload[field_name] = deepcopy(value)
+                        shot_payload["revision"] = shot.revision + 1
+                        try:
+                            updated_shot = ShotPlan.model_validate(shot_payload)
+                        except ValueError as exc:
+                            raise WorkflowConflictError(
+                                f"Invalid ShotPlan repair: {exc}"
+                            ) from exc
+                        document.shots[document.shots.index(shot)] = updated_shot
+                        shot = updated_shot
                     if request.reference_plan is not None:
                         self._apply_reference_plan_update(
                             document,
                             shot_id,
                             request.reference_plan,
                         )
-                    shot.revision += 1
+                    if patch is None:
+                        shot.revision += 1
                     self.repository.mark_takes_stale(project_id, [shot_id])
                 self._invalidate_current_manifests(document)
                 document.project.stage = ProjectStage.PLANNED
@@ -2923,6 +4296,8 @@ class ShortDramaService:
         shot_id: str,
         request: DirectorAdviceRequest,
     ) -> DirectorLoopResponse:
+        # Reject before get_director_advice can invoke the language provider.
+        self._require_project_mutation_allowed(project_id)
         advice = self.get_director_advice(project_id, shot_id, request)
         project = self.get_project(project_id)
         if project.document.project.run_mode != RunMode.AUTO_DRAFT:
@@ -2960,6 +4335,14 @@ class ShortDramaService:
         project_id: str,
         request: AssetCreateRequest,
     ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        return self._create_asset_unchecked(project_id, request)
+
+    def _create_asset_unchecked(
+        self,
+        project_id: str,
+        request: AssetCreateRequest,
+    ) -> AssetMutationResponse:
         try:
             version = self.asset_workbench.create_asset(project_id, request)
             return self._asset_mutation_response(project_id, version.id)
@@ -2968,7 +4351,39 @@ class ShortDramaService:
         except AssetWorkbenchConflict as exc:
             raise WorkflowConflictError(str(exc)) from exc
 
+    def update_asset_brief(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetBriefUpdateRequest,
+    ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        try:
+            version = self.asset_workbench.update_asset_brief(
+                project_id,
+                asset_id,
+                request,
+            )
+            return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
     def import_local_asset_version(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetImportLocalRequest,
+    ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        return self._import_local_asset_version_unchecked(
+            project_id,
+            asset_id,
+            request,
+        )
+
+    def _import_local_asset_version_unchecked(
         self,
         project_id: str,
         asset_id: str,
@@ -2988,8 +4403,40 @@ class ShortDramaService:
         asset_id: str,
         request: AssetImportUrlRequest,
     ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        return self._import_url_asset_version_unchecked(
+            project_id,
+            asset_id,
+            request,
+        )
+
+    def _import_url_asset_version_unchecked(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetImportUrlRequest,
+    ) -> AssetMutationResponse:
         try:
             version = self.asset_workbench.import_url(project_id, asset_id, request)
+            return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def compose_asset_reference_sheet(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetReferenceSheetComposeRequest,
+    ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        try:
+            version = self.asset_workbench.compose_reference_sheet(
+                project_id,
+                asset_id,
+                request,
+            )
             return self._asset_mutation_response(project_id, version.id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
@@ -3001,6 +4448,7 @@ class ShortDramaService:
         project_id: str,
         request: StockAssetImportRequest,
     ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
         try:
             version = self.asset_workbench.import_stock_candidate(project_id, request)
             return self._asset_mutation_response(project_id, version.id)
@@ -3010,6 +4458,21 @@ class ShortDramaService:
             raise WorkflowConflictError(str(exc)) from exc
 
     def review_asset_version(
+        self,
+        project_id: str,
+        asset_id: str,
+        version_id: str,
+        request: AssetReviewRequest,
+    ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        return self._review_asset_version_unchecked(
+            project_id,
+            asset_id,
+            version_id,
+            request,
+        )
+
+    def _review_asset_version_unchecked(
         self,
         project_id: str,
         asset_id: str,
@@ -3036,7 +4499,7 @@ class ShortDramaService:
         request: VoiceReferenceUpdateRequest,
     ) -> VoiceReferenceMutationResponse:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             character = self._require_current_character(document, character_id)
             existing = next(
                 (
@@ -3089,7 +4552,7 @@ class ShortDramaService:
         data: bytes,
     ) -> VoiceReferenceMutationResponse:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             character = self._require_current_character(document, character_id)
             existing = next(
                 (
@@ -3164,12 +4627,14 @@ class ShortDramaService:
         asset_id: str,
         request: ImageTaskCreateRequest,
     ) -> ImageTaskResponse:
+        self._require_project_mutation_allowed(project_id)
         try:
             task = self.asset_workbench.enqueue_image_task(project_id, asset_id, request)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
         except (AssetWorkbenchConflict, AssetProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        _log_image_task_transition(None, task, action="enqueue")
         return ImageTaskResponse(task=task, project=self.get_project(project_id))
 
     def list_image_tasks(
@@ -3184,6 +4649,7 @@ class ShortDramaService:
         return ImageTaskListResponse(tasks=tasks)
 
     def advance_image_task(self, task_id: str) -> ImageTaskResponse:
+        previous = self.repository.get_image_task(task_id)
         try:
             task = self.asset_workbench.advance_image_task(task_id)
         except AssetWorkbenchNotFound as exc:
@@ -3192,33 +4658,64 @@ class ShortDramaService:
             raise WorkflowConflictError(str(exc)) from exc
         except ImageProviderError as exc:
             raise ProviderOperationError(str(exc)) from exc
+        _log_image_task_transition(previous, task, action="advance")
         return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
 
     def cancel_image_task(self, task_id: str) -> ImageTaskResponse:
+        previous = self.repository.get_image_task(task_id)
         try:
             task = self.asset_workbench.cancel_image_task(task_id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
         except AssetWorkbenchConflict as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        _log_image_task_transition(previous, task, action="cancel")
         return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
 
     def retry_image_task(self, task_id: str) -> ImageTaskResponse:
+        previous = self.repository.get_image_task(task_id)
         try:
             task = self.asset_workbench.retry_image_task(task_id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
         except (AssetWorkbenchConflict, AssetProviderConfigurationError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        _log_image_task_transition(
+            None,
+            task,
+            action="retry",
+            parent_task_id=(previous.id if previous is not None else task_id),
+        )
+        return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
+
+    def resolve_image_not_submitted(
+        self,
+        task_id: str,
+        request: ImageNotSubmittedResolutionRequest,
+    ) -> ImageTaskResponse:
+        previous = self.repository.get_image_task(task_id)
+        try:
+            task = self.asset_workbench.resolve_image_not_submitted(task_id, request)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        _log_image_task_transition(
+            previous,
+            task,
+            action="resolve_not_submitted",
+        )
         return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
 
     def recover_image_task_output(self, task_id: str) -> ImageTaskResponse:
+        previous = self.repository.get_image_task(task_id)
         try:
             task = self.asset_workbench.recover_image_output(task_id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
         except AssetWorkbenchConflict as exc:
             raise WorkflowConflictError(str(exc)) from exc
+        _log_image_task_transition(previous, task, action="recover_output")
         return ImageTaskResponse(task=task, project=self.get_project(task.project_id))
 
     def update_h3_config(
@@ -3272,6 +4769,7 @@ class ShortDramaService:
         request: H3ProbeRequest,
     ) -> H3ProbeResponse:
         with self._lock:
+            self._require_project_mutation_allowed(project_id)
             if not self.h3_config.api_key():
                 raise WorkflowConflictError(
                     "AceData API token is required before enqueueing a paid H3 probe"
@@ -3299,6 +4797,7 @@ class ShortDramaService:
             self.repository.save_task(task)
             self.repository.save_provider_run(run)
             self.repository.save_route_evidence(evidence)
+            _log_video_task_transition(None, task, action="enqueue")
             document.project.stage = ProjectStage.GENERATING
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
@@ -3321,9 +4820,28 @@ class ShortDramaService:
             raise ProviderOperationError(str(exc)) from exc
         return H3ReconciliationCandidatesResponse(tasks=tasks)
 
+    def list_h3_reconciliation_candidates_for_task(
+        self,
+        project_id: str,
+        task_id: str,
+    ) -> H3ReconciliationCandidatesResponse:
+        self._require_project_document(project_id)
+        task = self._require_task(task_id)
+        if task.project_id != project_id:
+            raise ArtifactNotFoundError(task_id)
+        try:
+            tasks = self.h3_worker.list_reconciliation_candidates_for_task(task_id)
+        except KeyError as exc:
+            raise ArtifactNotFoundError(task_id) from exc
+        except (InvalidTaskTransition, H3ProviderConfigurationError) as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        except H3ClientError as exc:
+            raise ProviderOperationError(str(exc)) from exc
+        return H3ReconciliationCandidatesResponse(tasks=tasks)
+
     def enqueue(self, project_id: str, request: EnqueueRequest) -> ProjectAggregate:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             available_shot_ids = {shot.id for shot in document.shots}
             requested_shot_ids = request.shot_ids or [shot.id for shot in document.shots]
             unknown = set(requested_shot_ids) - available_shot_ids
@@ -3351,6 +4869,7 @@ class ShortDramaService:
                         retry_of_task_id=None,
                     )
                     self.repository.save_task(task)
+                    _log_video_task_transition(None, task, action="enqueue")
             document.project.stage = ProjectStage.GENERATING
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
@@ -3371,11 +4890,27 @@ class ShortDramaService:
         except H3ClientError as exc:
             raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
+        _log_video_task_transition(persisted, task, action="advance")
         return task
 
     def drain(self, project_id: str, max_steps: int) -> WorkerDrainResponse:
         self._require_project_document(project_id)
+        before = {
+            task.id: task
+            for task in self.repository.list_tasks(project_id)
+            if task.provider == "mock"
+        }
         processed_steps = self.worker.drain(project_id, max_steps)
+        for task in self.repository.list_tasks(project_id):
+            if task.provider != "mock":
+                continue
+            previous = before.get(task.id)
+            if previous is None or (
+                previous.status != task.status
+                or previous.error_code != task.error_code
+                or previous.provider_task_id != task.provider_task_id
+            ):
+                _log_video_task_transition(previous, task, action="drain")
         self._refresh_project_stage(project_id)
         return WorkerDrainResponse(
             processed_steps=processed_steps,
@@ -3401,6 +4936,7 @@ class ShortDramaService:
         except H3ClientError as exc:
             raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
+        _log_video_task_transition(persisted, task, action="cancel")
         return task
 
     def retry_task(self, task_id: str) -> GenerationTask:
@@ -3455,6 +4991,12 @@ class ShortDramaService:
             document.project.stage = ProjectStage.GENERATING
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
+            _log_video_task_transition(
+                None,
+                retry,
+                action="retry",
+                parent_task_id=task.id,
+            )
             return retry
 
     def reconcile_task(self, task_id: str) -> GenerationTask:
@@ -3470,6 +5012,7 @@ class ShortDramaService:
         except InvalidTaskTransition as exc:
             raise WorkflowConflictError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
+        _log_video_task_transition(persisted, task, action="reconcile")
         return task
 
     def resolve_h3_submission(
@@ -3477,6 +5020,7 @@ class ShortDramaService:
         task_id: str,
         provider_task_id: str,
     ) -> H3TaskActionResponse:
+        previous = self._require_task(task_id)
         try:
             task = self.h3_worker.reconcile(task_id, provider_task_id.strip())
         except KeyError as exc:
@@ -3489,6 +5033,7 @@ class ShortDramaService:
         run = self.repository.get_provider_run(task.id)
         if run is None:
             raise WorkflowConflictError(f"H3 provider run for task {task.id} is missing")
+        _log_video_task_transition(previous, task, action="resolve_submission")
         return H3TaskActionResponse(
             task=task,
             project=self.get_project(task.project_id),
@@ -3500,6 +5045,7 @@ class ShortDramaService:
         task_id: str,
         request: H3NotSubmittedResolutionRequest,
     ) -> H3TaskActionResponse:
+        previous = self._require_task(task_id)
         try:
             task = self.h3_worker.resolve_not_submitted(task_id, request.reason)
         except KeyError as exc:
@@ -3510,6 +5056,7 @@ class ShortDramaService:
         run = self.repository.get_provider_run(task.id)
         if run is None:
             raise WorkflowConflictError(f"H3 provider run for task {task.id} is missing")
+        _log_video_task_transition(previous, task, action="resolve_not_submitted")
         return H3TaskActionResponse(
             task=task,
             project=self.get_project(task.project_id),
@@ -3531,6 +5078,7 @@ class ShortDramaService:
         except H3ClientError as exc:
             raise ProviderOperationError(str(exc)) from exc
         self._refresh_project_stage(task.project_id)
+        _log_video_task_transition(persisted, task, action="recover_output")
         return task
 
     def select_take(self, take_id: str) -> ProjectAggregate:
@@ -3538,10 +5086,11 @@ class ShortDramaService:
             take = self.repository.get_take(take_id)
             if take is None:
                 raise ArtifactNotFoundError(take_id)
+            document = self._require_project_mutation_allowed(take.project_id)
             if take.freshness != Freshness.CURRENT:
                 raise WorkflowConflictError("A stale Take cannot be selected for the current timeline")
-            if take.qa_status != QaStatus.PASSED:
-                raise WorkflowConflictError("Only a QA-passed Take can be selected")
+            if take.availability != TakeAvailability.AVAILABLE:
+                raise WorkflowConflictError("A missing Take cannot be selected")
             evidence = self.repository.get_route_evidence_for_take(take_id)
             if evidence is not None and evidence.purpose == EvidencePurpose.CONTRACT_SMOKE:
                 raise WorkflowConflictError(
@@ -3550,7 +5099,6 @@ class ShortDramaService:
             selected = self.repository.select_take(take_id)
             if selected is None:
                 raise ArtifactNotFoundError(take_id)
-            document = self._require_project_document(take.project_id)
             self._invalidate_current_manifests(document)
             document.project.stage = self._task_derived_project_stage(take.project_id)
             document.project.updated_at = utc_now()
@@ -3653,10 +5201,6 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "Take comparison requires at least two current candidates"
             )
-        if len(takes) > 5:
-            raise WorkflowConflictError(
-                "Take comparison accepts at most five candidates; provide take_ids explicitly"
-            )
         for take in takes:
             if take.project_id != project_id or take.shot_id != shot.id:
                 raise WorkflowConflictError(
@@ -3666,10 +5210,6 @@ class ShortDramaService:
                 raise WorkflowConflictError("A stale Take cannot enter current comparison")
             if take.availability != TakeAvailability.AVAILABLE:
                 raise WorkflowConflictError("A missing Take cannot enter comparison")
-            if take.qa_status == QaStatus.PENDING:
-                raise WorkflowConflictError(
-                    "Run candidate QA before relative Take comparison"
-                )
 
         client = self._require_language_client()
         project_inspections = self.repository.list_video_inspections(project_id)
@@ -3915,16 +5455,14 @@ class ShortDramaService:
         report.active_stage_key = stage_key
         report.active_stage_attempts = attempts
         report.warnings.append(
-            f"{stage_key} review attempt {attempts}/{_MAX_EPISODE_REVIEW_ATTEMPTS} "
-            f"failed: {error}"
+            f"{stage_key} review attempt {attempts} failed: {error}. "
+            "The current cursor and collected evidence were retained so the Agent can "
+            "retry, change route, or request input on a later advance."
         )
-        if attempts >= _MAX_EPISODE_REVIEW_ATTEMPTS:
-            report.status = EpisodeReviewStatus.FAILED
-            report.summary = (
-                f"整集 Reviewer 在 {stage_key} 连续失败 "
-                f"{_MAX_EPISODE_REVIEW_ATTEMPTS} 次；现有逐镜证据仍保留，导出不受阻。"
-            )
-            report.repairs_complete = True
+        report.summary = (
+            f"整集 Reviewer 在 {stage_key} 本次未完成；"
+            "已保留现有逐镜证据与当前游标。"
+        )
         report.updated_at = utc_now()
         self.repository.save_episode_review(report)
         return report
@@ -3983,6 +5521,7 @@ class ShortDramaService:
             take = self.repository.get_take(take_id)
             if take is None:
                 raise ArtifactNotFoundError(take_id)
+            document = self._require_project_mutation_allowed(take.project_id)
             if take.provider != "minimax" or take.model != "MiniMax-H3":
                 raise WorkflowConflictError("Only a MiniMax-H3 Take uses H3 route review")
             evidence = self.repository.get_route_evidence_for_take(take_id)
@@ -4022,7 +5561,6 @@ class ShortDramaService:
             evidence.reviewed_at = now
             self.repository.save_route_evidence(evidence)
 
-            document = self._require_project_document(take.project_id)
             document.project.stage = self._task_derived_project_stage(take.project_id)
             document.project.updated_at = now
             self.repository.save_project(document)
@@ -4057,7 +5595,7 @@ class ShortDramaService:
         request: ReviseScriptLinesRequest,
     ) -> ProjectAggregate:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             current = self._current_script(document)
             revision_ids = [item.line_id for item in request.revisions]
             duplicate_ids = sorted(
@@ -4090,6 +5628,7 @@ class ShortDramaService:
                 version=next_version_number,
                 source_mode=current.source_mode,
                 original_text=current.original_text,
+                screenplay_text=current.screenplay_text,
                 spoken_text="\n".join(line.spoken_text for line in next_lines),
                 subtitle_text="\n".join(line.subtitle_text for line in next_lines),
                 lines=next_lines,
@@ -4102,6 +5641,26 @@ class ShortDramaService:
                 review_disposition=(
                     current.review_disposition.model_copy(deep=True)
                     if current.review_disposition is not None
+                    else None
+                ),
+                final_cold_read_report=(
+                    current.final_cold_read_report.model_copy(deep=True)
+                    if current.final_cold_read_report is not None
+                    else None
+                ),
+                ending_contract=(
+                    current.ending_contract.model_copy(deep=True)
+                    if current.ending_contract is not None
+                    else None
+                ),
+                story_intent=(
+                    current.story_intent.model_copy(deep=True)
+                    if current.story_intent is not None
+                    else None
+                ),
+                source_contract=(
+                    current.source_contract.model_copy(deep=True)
+                    if current.source_contract is not None
                     else None
                 ),
                 planning_run_id=current.planning_run_id,
@@ -4135,7 +5694,7 @@ class ShortDramaService:
         if operation == OperationKind.GENERATE:
             raise WorkflowConflictError("Use the regular enqueue operation for initial generation")
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             shot = next((item for item in document.shots if item.id == shot_id), None)
             if shot is None:
                 raise ArtifactNotFoundError(shot_id)
@@ -4158,6 +5717,7 @@ class ShortDramaService:
                 retry_of_task_id=None,
             )
             self.repository.save_task(task)
+            _log_video_task_transition(None, task, action="enqueue")
             document.project.stage = ProjectStage.GENERATING
             document.project.updated_at = utc_now()
             self.repository.save_project(document)
@@ -4165,7 +5725,7 @@ class ShortDramaService:
 
     def rebuild_manifest(self, project_id: str) -> TimelineManifest:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             current_script = self._current_script(document)
             selected_by_shot: dict[str, Take] = {}
             for take in self.repository.list_takes(project_id):
@@ -4178,7 +5738,7 @@ class ShortDramaService:
             missing = [shot.id for shot in document.shots if shot.id not in selected_by_shot]
             if missing:
                 raise WorkflowConflictError(
-                    "Every shot needs a current QA-passed selected Take before building the timeline: "
+                    "Every shot needs a current technically available selected Take before building the timeline: "
                     + ", ".join(missing)
                 )
             self._invalidate_current_manifests(document)
@@ -4263,7 +5823,7 @@ class ShortDramaService:
 
     def export_project(self, project_id: str, rebuild_manifest: bool = True) -> ExportRecord:
         with self._lock:
-            document = self._require_project_document(project_id)
+            document = self._require_project_mutation_allowed(project_id)
             if rebuild_manifest or document.project.current_manifest_id is None:
                 manifest = self.rebuild_manifest(project_id)
             else:
@@ -4422,7 +5982,12 @@ class ShortDramaService:
             "duration": duration_seconds,
             "prompt": prompt,
             "media_inputs": [
-                item.model_dump(mode="json", exclude_none=True) for item in media_inputs
+                item.model_dump(
+                    mode="json",
+                    exclude_none=True,
+                    exclude_defaults=True,
+                )
+                for item in media_inputs
             ],
             "candidate_index": candidate_index,
             "script_version_id": document.project.current_script_version_id,
@@ -4724,6 +6289,9 @@ class ShortDramaService:
                     camera=draft.camera,
                     audio_intent=draft.audio_intent,
                     dialogue_line_ids=list(draft.dialogue_line_ids),
+                    timeline_beats=[
+                        beat.model_copy(deep=True) for beat in draft.timeline_beats
+                    ],
                     continuity=draft.continuity.model_copy(deep=True),
                     transition_out=draft.transition_out,
                     merge_candidate=draft.merge_candidate,
@@ -4949,6 +6517,24 @@ class ShortDramaService:
         document = self.repository.get_project(project_id)
         if document is None:
             raise ProjectNotFoundError(project_id)
+        return document
+
+    def _require_project_mutation_allowed(self, project_id: str) -> ProjectDocument:
+        """Return the document unless its Agent-owned planning cursor is unfinished."""
+
+        document = self._require_project_document(project_id)
+        planning = document.planning
+        if (
+            planning is not None
+            and planning.run_id is not None
+            and planning.owner_agent_run_id is not None
+            and planning.status != PlanningRunStatus.COMPLETE
+        ):
+            raise WorkflowConflictError(
+                f"Project {project_id} has unfinished Content Planning Job "
+                f"{planning.run_id} ({planning.status.value}); direct mutation is "
+                "blocked until its AgentRun completes content planning"
+            )
         return document
 
     @staticmethod

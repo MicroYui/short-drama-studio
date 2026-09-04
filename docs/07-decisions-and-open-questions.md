@@ -134,13 +134,13 @@ H3 视觉实验只提交合法输入组合：Direct、首帧、首尾帧和 Refe
 
 固定八镜比较四组：全部独立；相邻两镜 `1+2 / 3+4 / 5+6 / 7+8`；表演段落 `1 / 2+3 / 4+5 / 6+7 / 8`；全部独立但用上一镜尾帧或连续性关键帧约束下一镜。所有 H3 模型内多镜任务不超过 15 秒，并显式给出切镜时间。比较身份、服装、空间、道具、动作、声线、切镜准确度、单镜质量、后期自由度和单点失败的返工范围；只有连续性或表演明显改善且严重错误与返工范围没有显著扩大时，才把分组规则写入对应镜头类型。
 
-### D34. 用分阶段样本和硬门槛控制稳定性，不无限抽卡
+### D34. 以证据充分性决定样本与候选，不把计数变成运行门禁
 
-每个实验条件先做 5 个独立样本，可能入选者至少扩展到 10；结果接近或波动时每次增加 5 个，最多 20，仍无法稳定判断则保留 `UNKNOWN`。普通镜头首轮生成 3 个 Take，高风险镜头 5 个，自动补充到至少 2 个硬通过候选；同一请求方案累计 10 次仍不稳定时必须改提示、参考、分组或音频路线。默认路线至少需 10 个有效样本、严重失败率不高于 20%、综合硬通过率不低于 70%、严格对白逐字正确率不低于 80%；最终进入成片的每个 Take 必须 100% 通过全部硬门槛。
+早期固定“5/10/20 个样本、3/5 个 Take、至少 2 个硬通过候选”的方案已经废止。实验时先声明要比较的真实问题和可观察证据，再根据结果分歧、波动与决策风险决定是否继续取样；无法形成稳定结论时保留 `UNKNOWN`。生产运行中，Route Agent 根据当前镜头、已有候选和失败证据决定继续生成、改变输入、调整镜头或接受当前结果，不由候选数、失败次数、分数阈值或 QA 布尔值自动停止或放行。Provider 请求格式、媒体可读性和时长范围等技术合同仍在提交边界校验，但不承担审美判断。
 
-### D35. 三次自动闭环与盲评共同验收首版
+### D35. 独立运行与盲评是实验方法，不是产品完成条件
 
-由 1 人检查硬门槛，至少 3 人在隐藏路线并随机顺序后盲评；先按正常速度完整观看，再复看或做技术逐帧检查。同一锁定输入独立运行 3 次 `AUTO_DRAFT`，三次都必须自动到达可播放时间线并完成导出，不能靠人工修复项目或任务结构；自动 QA 和定向重试后至少 2/3 完整草稿无严重失败。最终批准片须为 45–60 秒、五句台词逐字正确、角色/服装/场景/道具/说话人连续且无明显坏帧或口型错误；核心质量项盲评中位数不低于 4/5，至少 2/3 评审愿意继续看。允许换 Take、局部 Retake 和时间线微调，但不能靠人工重建大部分影片来替代自动闭环。
+需要比较路线或版本时，可在同模型、同输入和相同可控条件下做独立运行、隐藏条件的成对/盲评及具体失败分析；样本量由当前不确定性和实际决策决定，不预设为产品运行次数。自动闭环验收关注规范项目状态能否独立到达目标工件，质量验收关注真实可播放内容及目标观众体验；两者均保存 trace 和证据，但不以固定运行次数、评分中位数、通过比例或“问题清零”构成运行时门禁。人工仍可换 Take、局部返工或调整时间线，并应区分这是正常创作选择还是为掩盖结构性故障而重建大部分作品。
 
 ### D36. H3 PoC 固定 768P，交付规格与生成规格分离
 
@@ -180,7 +180,7 @@ Mock 阶段直接实现当前完整闭环所需的 schema、模块边界、API �
 
 ### D45. 真人 AUTO_DRAFT 采用同一核心上的可恢复有限推进
 
-真实自动草稿不建立第二运行时，也不以一个长 HTTP 请求等待整集完成。它复用现有资产任务、H3 任务、Take、RouteEvidence、视频观察和 TimelineManifest，每次推进有限动作并持久化；桌面在 Provider 等待时自动轮询，进程重启后继续。只有配置缺失、`SUBMIT_UNKNOWN` 或有限重试耗尽才进入 `NEEDS_ATTENTION`，普通导演建议不暂停自动流程。
+真实自动草稿不建立第二运行时，也不以一个长 HTTP 请求等待整集完成。它复用现有资产任务、H3 任务、Take、RouteEvidence、视频观察和 TimelineManifest，每次推进一个可观察动作并持久化；桌面在 Provider 等待时自动轮询，进程重启后继续。配置缺失、`SUBMIT_UNKNOWN` 或确有无法自主解决的外部状态可进入 `NEEDS_ATTENTION`；失败次数本身不触发停止，普通导演建议也不自动暂停流程。
 
 ### D46. 照片生成和参考包是 Asset Agent Tools
 
@@ -188,25 +188,27 @@ Planner 先声明镜头实际需要的主体、角色、角度、景别和状态
 
 ### D47. 通用视频与 AI 原生短剧使用同一运行时的不同 Production Skill
 
-项目创建时可以选择通用视频或 AI 原生短剧。两者共享项目、资产、H3、QA 和时间线实现；当前 Profile 为 Concept、Writer、Planner、Critic、Review Router、Director、Asset Reviewer、H3 Route/Prompt Compiler 和 Episode Reviewer 编译各自 role rubric。AI 短剧 Skill 描述连续叙事、生成式工件和局部返修等稳定目标，具体视觉、运动与声音风格由 Agent 写入 ProjectBible Style，不预设写实真人或动画。合同、签名、融资、付款流程等旧样片经验不进入格式 Skill；只有当前项目真实执行产生、带结果依据的经验才由 AgentRuntime `ExperienceMemory` 按项目和 Skill 召回。分镜不设置固定镜头数、动作数或“每 N 秒新信息”门控，Agent 不为提高密度机械增加内容。
+项目创建时可选择通用视频、AI 原生短剧、数字人或动漫这类宽粒度 `ProductionProfile`。它们共享项目、剧本、资产、H3、QA 和时间线实现；通用的 Story Architect、Writer、Critic、Director 与 Asset Reviewer 职责使用中文共享角色，格式 Skill 只补充该媒介长期稳定的可读性和制作重点。爽剧、喜剧、悬疑等叙事方法不写入 Profile 枚举，而由 Story Orientation Agent 查看文件化 Narrative Skill Catalog 后按项目语义选择零个或多个 Skill。Loader 只校验 ID 和角色支持，不做关键词映射、题材枚举或必选数量。具体视觉、运动与声音风格由 Agent 写入 `ProjectBible.style`，不代替叙事意图，也不预设写实真人或动画。项目样片经验不进入格式 Skill；只有真实执行产生、带结果依据的经验才由 AgentRuntime `ExperienceMemory` 召回。分镜不设置固定镜头数、动作数或“每 N 秒新信息”门控。
+
+四视图/轻量群像选择、场景俯视/全景/功能区 coverage、时间线分镜中的镜头/动作/台词/情绪拆分，以及 H3 的真实 `@` 媒体绑定，分别属于资产 Agent、导演/分镜 Agent 和 Provider Prompt Compiler。共享 Story Architect 只负责故事承诺、人物选择、因果推进和结尾意图，不读取这些下游 Provider/资产规则。
 
 ### D48. H3 视频参考是 Route Agent 工具，不是连续性门控
 
 前镜完整 Take、前镜尾部运动窗口和低保真机位预演均作为可选 `H3VideoGuide` 工件进入 Route Agent。真实样本表明，H3 可能把原始前镜视频中的动作当作待继续内容，即使 Prompt 要求不要重复；因此完整 Take/尾窗主要用于确实延续同一动作与相近覆盖的镜头。反打或换机位时优先比较 Frame 路线，若使用机位预演则优先从当前镜头已批准起始关键帧生成。预演可帮助保持构图和粗运镜，但不能证明人体走位或终态动作必然完成。所有路线建议都可忽略；缺少 guide、Agent 不可用或用户坚持原路线都不阻断生成，也不为该能力增加场景专用字段、hash 冻结或额外审批门。
 
-### D49. 多分钟 AUTO_DRAFT 复用同一 Orchestrator，返工额度按镜头计算
+### D49. 多分钟 AUTO_DRAFT 已迁移到 AgentRun，不保留固定返工额度
 
-这条决定记录 Phase 19 当时的实现：超过 90 秒的 `PlanningRun` 在 FINALIZE 后建立 Project 与 `AutonomousRun`。Phase 29 已将默认新建和新自动制作迁移到 AgentRun，由 Production Manager 复用同一 Asset、H3、QA、Director、Take、TimelineManifest 与导出 Tools；旧 AutonomousRun 控制面已经删除，独立 PlanningRun 也不再对外开放。长内容只保留 Agent-owned PlanningRun 作为 `planning.advance` 背后的可恢复内容规划子流程，Provider 对账由 GenerationTask/H3 任务状态机负责。Scene Director 的整集资产契约、当前场、当前对白、compact handoff，以及每镜独立返工额度等领域语义保持不变。
+这条决定记录 Phase 19 当时的实现：超过 90 秒的 `PlanningRun` 在 FINALIZE 后建立 Project 与 `AutonomousRun`，并曾以每镜计数限制返工。Phase 29 已将默认新建和新自动制作迁移到 AgentRun，由 Production Manager 复用同一 Asset、H3、QA、Director、Take、TimelineManifest 与导出 Tools；旧 AutonomousRun 控制面已经删除，独立 PlanningRun 也不再对外开放。当系统负责原创或扩写且配置了语言 Provider 时，无论时长都由 AgentRun 拥有 Content Planning Job，作为 `planning.advance` 背后的可恢复内容规划子流程；当前代码和持久化兼容名仍为 `PlanningRun`。ProjectDocument 是唯一项目内容真相，Provider 对账由 GenerationTask/H3 任务状态机负责。Scene Director 仍读取整集资产契约、当前场、当前对白与 compact handoff，但是否返工、返工哪一镜、继续同一路线或改变输入，都由 Agent 根据当前证据决定，不保留每镜额度、失败次数或其他计数式停止规则。
 
 ### D50. 整集 QA 使用分层 Reviewer，报告不成为门控
 
-时间线建立后，由 Scene Reviewer 按场读取入选 Take、锁定剧本和现有 VideoInspection，再由 Episode Reviewer 汇总跨场与整集问题。报告必须关联证据、场次和镜头；只有明确关联镜头的局部修复建议才交给现有 Director Agent，用户可忽略。Provider 不可用、三次阶段失败或没有可执行修复都继续导出。该阶段不自动运行 STT、声纹或音频质量 QA，不新增整集评分阈值、固定节拍规则、答案键、场景专用字段、hash 冻结或第二运行时。
+时间线建立后，由 Scene Reviewer 按场读取入选 Take、锁定剧本和现有 VideoInspection，再由 Episode Reviewer 汇总跨场与整集问题。报告必须关联证据、场次和镜头；只有明确关联镜头的局部修复建议才交给现有 Director Agent，用户可忽略。Reviewer/Provider 不可用或暂时失败时保留当前报告与错误证据，由 Agent 决定稍后重试、换路线或带明确未完成项继续，不用固定失败次数代替判断。该阶段不自动运行 STT、声纹或音频质量 QA，不新增整集评分阈值、固定节拍规则、答案键、场景专用字段、hash 冻结或第二运行时。
 
 ### D51. 产品采用 Agent + Skills + Tools，workflow 只作执行底座
 
-用户面对的是能理解自然语言目标并自主完成制片的 Agent，不是节点编排器。AI 短剧和后续内容形态作为 Production Skills，封装领域目标、角色分工、共享流程上的类型重点与评审原则；具体 Style 属于项目工件而不是新 workflow。Multi-Agent 委派、单场/单镜规划、资产检索/生成/编辑、H3、视频观察、连续性检查和时间线局部更新均作为可独立组合的 Tools 或 Harness 能力。持久化 AgentRun、PlanRevision、Action、WorkOrder 和 Provider 任务状态机负责推进、重规划、恢复与对账；Agent-owned PlanningRun 只负责长文本规划的可恢复游标，不规定不同内容形态的完整创作流程。
+用户面对的是能理解自然语言目标并自主完成制片的 Agent，不是节点编排器。AI 短剧和后续内容形态作为 Production Skills，封装领域目标、角色分工、共享流程上的类型重点与评审原则；具体 Style 属于项目工件而不是新 workflow。Multi-Agent 委派、单场/单镜规划、资产检索/生成/编辑、H3、视频观察、连续性检查和时间线局部更新均作为可独立组合的 Tools 或 Harness 能力。持久化 AgentRun、PlanRevision、Action、WorkOrder 和 Provider 任务状态机负责推进、重规划、恢复与对账；Content Planning Job（当前兼容实现名 `PlanningRun`）只负责内容规划的可恢复游标，不规定不同内容形态的完整创作流程。只要系统负责原创或扩写且配置了语言 Provider，就由所属 AgentRun 持有该作业，不按时长分流。`assigned_agent` 仅标识委派给谁，Production Manager 必须基于完整目标显式填写 `production_skill_role`，运行时只按该字段装载专业职责，禁止按 Agent 名称或用户文本关键词路由。当前不抽象通用 `ChildJob`；只有多个同级领域作业出现相同生命周期后才提取公共合同。
 
-PoC 不建设动态 Skill Registry；当前文件化 `Profile → ProductionSkill` Catalog 就是最小 Skill 目录。Skill 保存稳定类型原则、按职责选择的角色 Prompt 和共享流程上的可覆盖制作重点，但不保存项目案例经验、不限制 Tool Catalog，也不负责重试、恢复或 Provider 副作用。数字人口播和动漫 Skill 已按同一合同加入，不改变核心架构。自然语言局部修改由 Agent 解析实体、属性和适用范围，再利用按需编译的 `ProjectIndex` 与版本依赖生成 `ImpactPlan`，只重算实际受影响的资产、关键帧、镜头、Take 和时间线分支。例如换一个角色在特定场景中的衣服颜色，不应重做未出现该服装的镜头，也不应无故重做台词、声音或字幕。用户可调整范围、指定镜头或忽略建议。当前已实现 `change.preview` 与 `change.apply` Agent Tools：LLM 只选语义根对象，Harness 校验真实 ID 并计算资产、台词、场次、镜头与 Take 依赖，Change Executor 再复用现有版本、图像、ReferencePlan、H3 与 Timeline Tools，不为单例修改增加专用 workflow 或领域字段。
+PoC 不建设远程市场式的动态 Skill Registry；当前文件化 `Profile → ProductionSkill` Catalog、共享中文角色和开放目录的 Narrative Skills 就是最小 Skill 基础。Skill 保存稳定格式原则、按职责组合的角色 Prompt 和共享流程上的可覆盖制作重点，但不保存项目案例经验、不限制 Tool Catalog，也不负责重试、恢复或 Provider 副作用。Narrative Skill 可声明自己支持的角色，Agent 显式选择后编译器才装载；目录不增加题材枚举、自动触发字段或必选数量。数字人口播和动漫 Skill 按同一合同加入，不改变核心架构。自然语言局部修改由 Agent 解析实体、属性和适用范围，再利用按需编译的 `ProjectIndex` 与版本依赖生成 `ImpactPlan`，只重算实际受影响的资产、关键帧、镜头、Take 和时间线分支。例如换一个角色在特定场景中的衣服颜色，不应重做未出现该服装的镜头，也不应无故重做台词、声音或字幕。用户可调整范围、指定镜头或忽略建议。当前已实现 `change.preview` 与 `change.apply` Agent Tools：LLM 只选语义根对象，Harness 校验真实 ID 并计算资产、台词、场次、镜头与 Take 依赖，Change Executor 再复用现有版本、图像、ReferencePlan、H3 与 Timeline Tools，不为单例修改增加专用 workflow 或领域字段。
 
 ### D52. 语义修改优先设计为按需索引和影响计划
 
@@ -218,9 +220,9 @@ PoC 不建设动态 Skill Registry；当前文件化 `Profile → ProductionSkil
 
 制片过程中若发现 Prompt、资产选择、镜头拆法、检查顺序或重试方式明显提高质量、减少生成次数且没有观察到对应退化，可以直接更新默认实现、记录简短依据并继续。只有路线优劣不明、要形成跨项目默认、会显著改变成本或架构/Provider 边界时，才做同输入受控比较。当前合格 Take 可以使用；稳定率和跨题材结论仍不能由一次最好结果推出。
 
-### D54. 抖音短剧自动选题优先具体高概念与可见爽点
+### D54. Story Orientation 先定义本项目体验，再语义选择叙事方法
 
-当系统负责选题时，Story Architect 先在内部比较多个实质不同的一句话概念，只输出最强方案。优先选择能一句话讲清的异常设定、具体欲望或威胁、可见反差、情绪回报和后续剧集引擎；不再默认落入办公室、秘密录音/文件、记忆悖论、关系猜疑或“某物没有说谎”式模糊悬疑。极端环境、重生、社会身份翻转、家庭权力冲突和规则幻想只是候选方向，不成为题材配额。用户给出创意时保留其标志性反差并放大，而不是替换为更安全的通用悬疑；Critic 可以指出概念泛化，但建议仍可忽略。
+当系统负责原创或扩写时，Story Orientation Agent 先从用户整段输入中分离 `StorySourceContract` 与 `StoryIntent`，再按语义选择概念放大、递进兑现、荒诞喜剧或其他可组合 Narrative Skills。一句话高概念、可见爽点、现实主义或严谨因果都可能是某个项目的正确选择，但不成为 AI 短剧 Profile 对所有题材的默认答案。用户给出创意时先保护其标志性反差和想要的观众体验，不替换为 Agent 偏好的安全题材。选择过程不使用关键词、正则、题材配额或类型门禁。
 
 ### D55. 确定性校验不限制正常创作内容
 
@@ -232,25 +234,45 @@ Schema 和校验器只维护引用完整性、时间范围、Provider 合约、�
 
 长镜头生成段之间需要继承前段终态、可选尾窗或关键帧，并由镜内/边界观察检查人物、空间、动作、声音和运镜连续性。Director Agent 仍可根据质量风险建议把它改成多个剪辑镜头、换覆盖机位或保留长镜头并技术分段，用户可以忽略。当前 Planner 已移除 4–15 秒分镜门限；在重新进入真实视频生成前，还需把“一镜多生成段、逐段 Take、段间 QA 和 Timeline 拼接”接入 H3 Route Plan，现阶段不会用不完整实现触发付费生成。
 
-### D57. Critic 只报告观察，Production Skill 的 Review Router 决定修订归属
+### D57. Critic 以目标观众冷读并维护 Issue Ledger
 
-`ScriptReviewReport.requires_revision` 只保留为旧数据和审稿意见兼容字段，不再控制 `PlanningRun` 或同步规划循环。每次 Critic 后由当前 Production Skill 注入策略的 Review Router Agent 读取实际大纲与全部问题，把每项问题路由给 `STORY_ARCHITECT / SCENE_DIRECTOR / ASSET_AGENT / VIDEO_DIRECTOR / TIMELINE_AGENT / USER_OPTIONAL`，并给出默认的 `REVISE_STORY / CONTINUE_WITH_HANDOFF / CONTINUE`。严重度不是门控：中低问题也可能需要核心剧本修复，高问题也可能只是镜头或资产执行问题。
+Script Critic 的第一判断依据是 `StoryIntent`、`StorySourceContract` 和人真正能读到的完整剧本，不是通用编剧教科书、审计式现实主义或隐藏答案。它为语义上相同的问题保留稳定 `issue_id`，在 Critic Issue Ledger 中累积语义分类、当前状态、文本/修复证据、演变说明、已接受取舍和下游 handoff。这样后续增强 Verifier 的自然冷读能区分持续、变形、回归或已被接受的取舍，而不是每轮换个说法重新挑错。
 
-只有明确属于 Story Architect 的问题会进入下一轮剧本修订；场面调度、构图、道具呈现、生成缺陷和剪辑问题作为结构化 handoff 交给后续制作层，不能靠继续增加对白或解释修复。Router 不可用时系统不会擅自扩大重写范围，而是把观察保留为用户可编辑的可选建议并继续。路由结果会随 PlanningRun 审稿快照和最终 ScriptVersion 持久化；用户始终可以直接改稿、让 Agent 改、继续或忽略，Review Router 是默认自动动作而不是审批门。
+Critic 对当前完整稿只做一次全稿诊断，`requires_revision` 保存它对文本问题的语义判断；问题 `owner` 只用于将资产、表演、生成或剪辑问题交给正确下游层，不再串行调用空 Review Router Agent。严重度和问题数只是解释证据，不触发 `HIGH + STORY_ARCHITECT` 之类的代码门槛。夸张、荒诞、无厘头或有意的逻辑跳跃不是默认缺陷；只有它们破坏本剧承诺或自己建立的规则时才需报告。Critic 后进入 Repair/逐场修订和增强 Revision Verifier；Verifier 一次同时完成 Issue 修复验收与脱离修复说明的全稿自然冷读，直接接受当前稿或带具体证据继续聚焦修订。聚焦修订后回到 Verifier，不重跑完整 Critic。独立 `FINAL_COLD_READ` 只作旧运行和持久化兼容，不再作为现行角色阶段。
 
-### D58. 修订前独立区分来源承诺、剧本缺陷与 Critic 越界
+### D58. 修订先对照来源承诺与创作意图，再做局部改稿
 
-Router 把问题交给 Story Architect 后，不直接把 Critic 当答案。Source Contract Agent 从用户输入中提取显式承诺、明确禁区和开放选择；Story Repair Planner 再把每项 routed finding 诊断为 `SOURCE_CONCEPT_GAP / OUTLINE_DEFECT / CRITIC_OVERREACH`。Critic 越界不得触发自动改稿；显式来源承诺不能为了减少制作规模而静默删除，只能简化其实现方式。Repair Plan、最近三轮历史和 Source Contract 一同进入 Writer。
+`StorySourceContract` 保存用户显式承诺、明确禁区、开放选择和后续权威覆盖；`StoryIntent` 保存目标观众体验、戏剧引擎、推进策略、调性/可信度、受保护元素与偏移风险。它们随大纲、剧本版本和 PlanningRun 恢复，不只存在一次 Prompt 中。`SCRIPT_LOCKED` 普通文本由 Story Orientation Agent 依据完整语义结构化为 `StorySourceContract.locked_dialogue`；API 调用方也可以直接提交结构化锁定台词。确定性代码只保护逐字文本、来源顺序与调用方给定结构，不用正则、冒号模板或关键词猜测 speaker、旁白和内心音。Story Repair Planner 不直接把 Critic 当答案，而是重新诊断来源概念缺口、当前剧本缺陷或 Critic 越界；用户承诺不能为降低制作复杂度而静默删除。
 
-Writer 输出由窄范围 Revision Verifier 检查是否落实 Repair Plan、保留来源承诺与 invariants，并避免新增因果、资源状态、时序、动机和信息密度回退。最多执行两次针对具体 violation 的修复，仍失败则保留原稿并交由用户决定。用户直接改稿或明确要求 Agent 改稿时，本次指令与已认可大纲作为 authoritative override 优先于冲突的旧承诺，后续自动修订不能擅自改回。停止条件不要求 Critic 零问题：自动修订最多三轮；无 HIGH、来源承诺完整、Verifier 接受且问题未回升时，可以把中低建议下放或保留为可忽略意见。所有计划与验证结果都可由用户覆盖。
+Writer 只处理 Repair Plan 指向的场次和全局元数据，每完成一场就保存进展；即使需要全剧调整，也通过逐场 Patch 而不是一次性覆盖整稿。增强 Revision Verifier 先对照 Repair Plan、Issue Ledger、受保护承诺和修复证据验收原问题与新回归，再脱离修复说明，对用户简报、`StoryIntent`、`EndingContract` 和当前可读全稿做自然冷读，并将结论写回 Issue Ledger。它直接接受当前稿，或带 issue ID、场次范围和理由继续聚焦修订。停止不要求 Critic 零问题，也不设固定审校/修订轮数或时间阈值；聚焦修订完成后重新交给 Verifier，而不是重跑完整 Critic 或进入独立 Final Cold Read。用户直接改稿或明确要求 Agent 改稿时，本次指令作为 authoritative override，后续不能擅自改回。
 
 ### D59. 约 4 秒到数十分钟共用分层剧本 Tools
 
-不按短片、3 分钟或 30 分钟切换 workflow。约 4 秒的单节点内容到数十分钟剧本都使用 `Global Blueprint → Scene Writer → Critic/Repair → Scene Director`，时长只影响场次节点数、单场时长和需要取回的文档上下文。场次数由 Story Architect 根据内容判断，不建立固定时长档或节点配额。
+不按短片、3 分钟或 30 分钟切换 workflow。约 4 秒的单节点内容到数十分钟剧本都共用 `Story Orientation → Global Blueprint → Scene Writer → 一次完整 Critic → Repair/逐场修订 → 增强 Verifier → 按需 Scene Director`，时长只影响场次节点数、单场时长和需要取回的文档上下文。场次数与跨场修订范围由 Agent 根据内容和问题判断；原先 40 场、跨场 12 场这类低常数创作上限已移除，不建立固定时长档、节点配额、总超时或审校轮次上限。长任务以蓝图、逐场写作和逐场修订单元持久化推进。
 
-Blueprint、单场写作、版本化剧本检索、修改范围建议、Scene Patch、Patch 合并和局部复审都必须是可独立调用的 Agent Tools。PlanningRun 只提供默认自主编排、持久化和恢复，不规定用户必须从头跑到尾。用户指定某场、某角色或某段台词时，Agent 先检索当前 run/revision 的 Story Bible 和 Scene 文档，建议最小影响范围；用户明确给出场次时直接覆盖该建议。未选中场次不重新生成，台词索引由确定性代码重建。
+Blueprint、单场写作、版本化剧本检索、修改范围建议、Scene Patch、Patch 合并和局部复审都必须是可独立调用的 Agent Tools。只要系统负责原创或扩写且配置了语言 Provider，所属 AgentRun 就使用 Content Planning Job；该作业当前以 `PlanningRun` 实现，只提供顺序内容规划游标、持久化和恢复。AgentRun 决定何时推进、哪些工件需要局部修改以及何时完成，而不是按时长选择是否使用该作业。用户指定某场、某角色或某段台词时，Agent 先检索当前 run/revision 的 Story Bible 和 Scene 文档，建议最小影响范围；用户明确给出场次时直接覆盖该建议。未选中场次不重新生成，台词索引由确定性代码重建。
 
-Critic 自动修订优先按 Repair Plan 的 `affected_scene_sequences` 执行局部 Patch；只有 Scope Agent 判断标题、中心设定、全局角色/地点契约、总时长或大部分因果主干必须改变时，才走完整 Blueprint 修订兼容路径。这是 Agent 建议而非门禁，用户始终可覆盖。详见 [Phase 22](33-phase22-hierarchical-script-tools.md)。
+Critic 语义判断需要修订时，Repair Planner 优先按 `affected_scene_sequences` 执行局部 Patch；只有标题、中心设定、全局角色/地点契约、总时长或大部分因果主干真正需要改变时，才更新 Blueprint 元数据，随后仍逐场持久化修订。这是 Agent 建议而非门禁，用户始终可覆盖。详见 [Phase 22](33-phase22-hierarchical-script-tools.md)。
+
+当前工程已实现 Story Orientation、合同/意图持久化、Narrative Skill 语义选择、Issue Ledger 和局部修订游标。它们的真实剧本质量、Skill 选择准确度、Critic 是否过度挑错与修订是否保护优点，仍需不同题材的真实语言模型样本验证，不因 Prompt 与测试通过就预告成片质量。
+
+### D60. 专业 WorkOrder 以单步 turn 持久化，不在一次请求内隐藏循环
+
+专业 Agent 请求 Tool 时，第一次外部 `execute` 只让模型决定下一步，并把 Tool、参数和理由写入 `WorkOrder.specialist_turns`；下一次只执行该已持久化 Tool 并写回结果；再下一次才让 Agent 阅读历史、继续请求其他 Tool 或返回 AgentResult。这里没有固定 Tool 次数上限，终止由专业 Agent 和 Production Manager 根据目标与证据判断。
+
+若进程在 Tool 执行中重启，恢复逻辑将对应 `IN_PROGRESS` turn 标为 `INTERRUPTED`、写入结果未知的中断证据，并把 WorkOrder 置为 `NEEDS_ATTENTION`。Agent 应先检查规范项目状态，再决定对账、重试或换路线；Harness 不自动重放可能已有外部副作用的调用。该合同服务于进度可见、恢复和正确性，不是新的审批门。
+
+### D61. 剧本时长以 Agent 的自然表演证据判断
+
+蓝图中的场次秒数和总和只是规划分配，不证明实际成稿能在目标时长内自然表演。Writer 和修订 Writer 对当前输出的对白、动作、停顿、反应与观众读清信息所需时间给出 `performance_timing_assessment`；Critic 和增强 Verifier 再对完整文本做同样的语义复核。只有成稿明确写成同时发生、蒙太奇或可连续掠过时才按并行处理，不替剧本假设尚未写出的快切。该证据帮助 Agent 取舍、合并、修订或请求上游重规划，不转化为字数、语速、场次数或时长偏差的代码阈值。
+
+### D62. 剧本逐场继承状态，EndingContract 保护最终状态而非仪式清单
+
+Writer、Critic、Repair 和增强 Verifier 都把前文已建立的人物关系、群体态度、资源与权限当作后续场的入场事实。换地点、换见证者、换道具，或把口头认可改成文件、挂牌，不会自动把同一次震惊、让位、授予或交接变成新升级；后续场需要产生新的选择、代价或后果。`EndingContract` 描述本篇必须到达的最终状态、最后画面/台词意图和续集策略，不要求 Writer 把每个 closure 分别演成认可、授予、核验或交接仪式。多个 closure 若只证明同一次状态变化，应由最有力的决定性动作统一兑现。这是通用角色的叙事判断，不是固定节拍或题材模板。
+
+### D63. H3 全部合法候选由 Route Agent 显式选择
+
+Route Tool 把当前镜头技术上合法的全部 Direct、Frame、Reference、Video Guide 和可复用 Take 候选，连同类型化 QA、观察与缺失输入证据暴露给 Route Agent；代码不用 top-k、候选序号、分数、QA 状态或失败类别预先截断创作选择。Route Agent 显式返回候选 ID、需要的参考媒体 ID 和本批生成意图，可以选择一个或多个候选，不设固定数量。同一 Route Plan 重复执行只对账且保持幂等；Agent 根据新证据决定继续探索时，建立新 Route Plan 与显式候选批次。没有语言 Route Agent，且调用方也没有显式决定时，计划保持 `NEEDS_AGENT_DECISION/PARTIAL`，技术基线不自动提交或计费。
 
 ## 2. 已完成确认的五项基础
 
@@ -291,7 +313,7 @@ Critic 自动修订优先按 Repair Plan 的 `affected_scene_sequences` 执行�
 
 不成为强制项。用户可上传、录制或绑定已有音频，Route Planner 在有该角色台词的镜头中把它作为 `reference_audio` 候选；未提供时继续使用 H3 原生声音，不阻断无人值守流程。当前只支持该输入，不为它新增声音 QA。
 
-### Q9. 是否需要外部口型模型（启用门槛已确认）
+### Q9. 是否需要外部口型模型（由实际问题证据决定）
 
 只有所选原生/参考音频路线无法通过正脸、侧脸和多人对白探针时再选。不要提前集成 MuseTalk、LatentSync、Wav2Lip 等后处理。
 
@@ -299,7 +321,7 @@ Critic 自动修订优先按 Repair Plan 的 `affected_scene_sequences` 执行�
 
 由连续性与局部返工实验决定；不因“理论上更连贯”就把模型最大窗口塞满。
 
-## 4. 进入真实质量实验前的工程验收门
+## 4. 真实质量实验前的工程验收状态
 
 当前架构与实验协议已经确认。Phase 0–11 已完成从工程基线到无人值守 Mock、真实 H3 从零单集、音视频 QA、独立重复、三版匿名材料和可选角色声线输入。当前工程门状态为：
 
@@ -309,9 +331,9 @@ Critic 自动修订优先按 Repair Plan 的 `affected_scene_sequences` 执行�
 - 预览、TimelineManifest 与最终导出的音画结果一致；
 - LTX Desktop 应用代码与未采用的 LTX 模型权重保持清晰分离；
 - H3 Adapter 已完成 capability 校验、任务恢复、用量记录和真实冒烟；
-- 四种输入归一化、`AutonomousRun`、适应性抽帧、镜内/镜间观察和观察报告到 Director Agent 已完成；
-- Route Planner 已能自动复用当前版本中通过的人审 H3 Take，或为缺口镜头编译 Direct、Frame、Reference 生产请求；《别相信我》已完成 9 镜、57.13 秒全 H3 时间线和技术导出；
-- 没有可复用 Take 的项目已能自动完成图像资产准备、H3 异步候选收敛、原生声音 QA、Director 有界重试和成片导出；E007 三次独立 `AUTO_DRAFT` 与用户汇总定性验收已完成，C 版成为当前最终版。原三人数字评分数据未收集，因此只关闭本轮产品验收，不将其表述为三人评分 benchmark。
+- 四种输入归一化、AgentRun 总调度、适应性抽帧、镜内/镜间观察和观察报告到 Director Agent 已完成；旧 `AutonomousRun` 只作为历史阶段记录；
+- Route Planner 已能向 Agent 暴露当前版本中技术可用的 H3 Take 与 Direct、Frame、Reference 候选；只有 Agent 或调用方显式选择后才复用或提交。《别相信我》已完成 9 镜、57.13 秒全 H3 时间线和技术导出；
+- 没有可复用 Take 的项目已验证图像资产准备、H3 异步任务、原生声音 QA、Director 语义修复、时间线与成片导出的历史闭环；当前运行由 Route/Director Agent 根据证据决定候选、返工与停止，不再使用 Director 有界重试或每镜返工额度。E007 三次独立 `AUTO_DRAFT` 与用户汇总定性验收已完成，C 版成为当前最终版。原三人数字评分数据未收集，因此只关闭本轮产品验收，不将其表述为三人评分 benchmark。
 
 Mock 工程门的实现和验证证据见 [Phase 1：供应商中立 Mock 垂直切片](10-phase1-mock-vertical-slice.md)。
 

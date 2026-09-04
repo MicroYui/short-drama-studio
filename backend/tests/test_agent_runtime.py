@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import logging
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -9,9 +12,12 @@ from pydantic import ValidationError
 
 from short_drama.agent_runtime import (
     ActionKind,
+    ActionRecord,
+    ActionStatus,
     AgentResultContractError,
     AgentResultStatus,
     AgentRun,
+    AgentRunStatus,
     AgentRuntime,
     AgentRuntimeStore,
     ArtifactRef,
@@ -25,6 +31,7 @@ from short_drama.agent_runtime import (
     ProjectMemory,
 )
 from short_drama.models import ProductionExecutionTarget
+from short_drama.observability import LOGGER_NAME
 
 
 class FakeArtifactResolver:
@@ -167,6 +174,86 @@ def test_failed_step_waits_for_replan_instead_of_implicit_retry(tmp_path: Path) 
     assert runtime.ready_steps(run.id) == []
 
 
+def test_agent_runtime_logs_structured_status_and_finished_action_events(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    store, runtime, _compiler = _runtime(tmp_path / "runtime.sqlite3")
+    run = runtime.create_run(
+        project_id="project-observability",
+        objective="secret objective text must not enter logs",
+        root_agent="production-manager",
+        unattended=True,
+        execution_target=ProductionExecutionTarget.MOCK,
+    )
+    action = runtime.start_action(
+        run.id,
+        kind=ActionKind.TOOL_CALL,
+        agent_id="video-producer",
+        input_summary="secret input and provider credential must not enter logs",
+        tool_name="video.generate",
+    )
+    assert action.started_at is not None
+    action.started_at -= timedelta(seconds=1)
+    store.save_action(action)
+
+    finished = runtime.finish_action(
+        action.id,
+        status=ActionStatus.FAILED,
+        output_summary="secret provider output must not enter logs",
+        error_message="secret provider failure body must not enter logs",
+        error_kind="ProviderOperationError",
+    )
+    runtime.set_run_status(run.id, AgentRunStatus.WAITING)
+
+    messages = [
+        record.getMessage() for record in caplog.records if record.name == LOGGER_NAME
+    ]
+    events = [json.loads(message) for message in messages]
+    assert [event["event"] for event in events] == [
+        "agent.run_status",
+        "agent.tool_finished",
+        "agent.run_status",
+    ]
+    assert {
+        key: events[0][key]
+        for key in (
+            "project_id",
+            "run_id",
+            "status",
+            "previous_status",
+            "root_agent",
+            "unattended",
+            "execution_target",
+        )
+    } == {
+        "project_id": "project-observability",
+        "run_id": run.id,
+        "status": "RUNNING",
+        "previous_status": None,
+        "root_agent": "production-manager",
+        "unattended": True,
+        "execution_target": "MOCK",
+    }
+    assert events[1]["action_id"] == action.id
+    assert events[1]["action_kind"] == "TOOL_CALL"
+    assert events[1]["status"] == "FAILED"
+    assert events[1]["tool_name"] == "video.generate"
+    assert events[1]["error_kind"] == "ProviderOperationError"
+    assert events[1]["duration_ms"] >= 1000
+    assert events[2]["previous_status"] == "RUNNING"
+    assert events[2]["status"] == "WAITING"
+    assert finished.duration_ms is not None and finished.duration_ms >= 1000
+    assert finished.error_kind == "ProviderOperationError"
+    assert all("\n" not in message for message in messages)
+    serialized_events = "\n".join(messages)
+    assert "secret objective" not in serialized_events
+    assert "secret input" not in serialized_events
+    assert "secret provider output" not in serialized_events
+    assert "secret provider failure" not in serialized_events
+
+
 def test_plan_revisions_and_run_checkpoint_survive_reopen(tmp_path: Path) -> None:
     database_path = tmp_path / "runtime.sqlite3"
     _store, runtime, _compiler = _runtime(database_path)
@@ -176,6 +263,7 @@ def test_plan_revisions_and_run_checkpoint_survive_reopen(tmp_path: Path) -> Non
         root_agent="production-manager",
         unattended=True,
         execution_target=ProductionExecutionTarget.MOCK,
+        render_export=False,
     )
     initial = runtime.add_plan(
         run.id,
@@ -236,18 +324,28 @@ def test_plan_revisions_and_run_checkpoint_survive_reopen(tmp_path: Path) -> Non
     assert snapshot.memory.completed_action_ids == [action.id]
     assert snapshot.run.unattended is True
     assert snapshot.run.execution_target == ProductionExecutionTarget.MOCK
+    assert snapshot.run.render_export is False
     assert reopened_store.list_resumable_runs("project-2") == [snapshot.run]
 
     legacy_run_payload = snapshot.run.model_dump()
     legacy_run_payload.pop("unattended")
     legacy_run_payload.pop("execution_target")
+    legacy_run_payload.pop("render_export")
     legacy_run = AgentRun.model_validate(legacy_run_payload)
     assert legacy_run.unattended is False
     assert legacy_run.execution_target is None
+    assert legacy_run.render_export is None
 
     legacy_payload = initial.model_dump()
     legacy_payload.pop("goal_complete")
     assert PlanRevision.model_validate(legacy_payload).goal_complete is False
+
+    legacy_action_payload = action.model_dump()
+    legacy_action_payload.pop("duration_ms")
+    legacy_action_payload.pop("error_kind")
+    legacy_action = ActionRecord.model_validate(legacy_action_payload)
+    assert legacy_action.duration_ms is None
+    assert legacy_action.error_kind is None
 
 
 def test_context_compiler_uses_artifact_refs_and_bounded_summaries(tmp_path: Path) -> None:
@@ -277,6 +375,8 @@ def test_context_compiler_uses_artifact_refs_and_bounded_summaries(tmp_path: Pat
         objective="修改第三场",
         root_agent="production-manager",
         active_skill_ids=["format.douyin-short-drama"],
+        execution_target=ProductionExecutionTarget.REAL_H3,
+        render_export=False,
     )
     store.save_project_memory(
         ProjectMemory(
@@ -319,6 +419,8 @@ def test_context_compiler_uses_artifact_refs_and_bounded_summaries(tmp_path: Pat
     )
 
     assert context.project_summary == "一部竖屏情感短剧，主线是林夏保护家人。"
+    assert context.execution_target == ProductionExecutionTarget.REAL_H3
+    assert context.render_export is False
     assert context.run_focus == "仅修改第三场"
     assert [item.ref for item in context.artifacts] == [scene_ref]
     assert context.unresolved_artifact_refs == [missing_ref]
@@ -614,6 +716,33 @@ def test_completed_result_can_be_distilled_and_deduplicated_as_experience(
         project_id=run.project_id,
         skill_id="format.douyin-short-drama",
     ) == [merged]
+
+
+def test_runtime_updates_agent_selected_skill_composition(tmp_path: Path) -> None:
+    _store, runtime, _compiler = _runtime(tmp_path / "runtime.sqlite3")
+    run = runtime.create_run(
+        project_id="project-skills",
+        objective="Write the requested story.",
+        root_agent="production-manager",
+        active_skill_ids=["format.ai-short-drama"],
+    )
+
+    updated = runtime.set_run_active_skills(
+        run.id,
+        [
+            "format.ai-short-drama",
+            "narrative.payoff-escalation",
+            "narrative.payoff-escalation",
+            " narrative.absurd-comedy ",
+        ],
+    )
+
+    assert updated.active_skill_ids == [
+        "format.ai-short-drama",
+        "narrative.payoff-escalation",
+        "narrative.absurd-comedy",
+    ]
+    assert runtime.snapshot(run.id).run.active_skill_ids == updated.active_skill_ids
 
 
 def test_pending_work_order_survives_runtime_restart(tmp_path: Path) -> None:

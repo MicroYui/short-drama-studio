@@ -12,11 +12,13 @@ from pathlib import Path
 from uuid import uuid4
 
 import imageio_ffmpeg
-from PIL import Image, ImageChops, ImageFilter, UnidentifiedImageError
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps, UnidentifiedImageError
 
 from short_drama.image_models import (
+    AssetBriefUpdateRequest,
     AssetCreateRequest,
     AssetImportLocalRequest,
+    AssetReferenceSheetComposeRequest,
     AssetImportUrlRequest,
     AssetReviewDecision,
     AssetReviewRequest,
@@ -24,6 +26,7 @@ from short_drama.image_models import (
     ImageCostRecord,
     ImageGenerationTask,
     ImageOperation,
+    ImageNotSubmittedResolutionRequest,
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
     ImageProviderRequest,
@@ -36,7 +39,12 @@ from short_drama.models import (
     Asset,
     AssetKind,
     AssetMediaType,
+    AssetReferenceSheet,
+    AssetReferenceSheetCell,
+    AssetReferenceStrategy,
+    AssetSheetInputPolicy,
     AssetSourceRecord,
+    AssetStandardView,
     AssetVersion,
     Freshness,
     OriginType,
@@ -90,6 +98,29 @@ _MAX_VOICE_UPLOAD_BYTES = 32 * 1024 * 1024
 _MAX_H3_AUDIO_BYTES = 15 * 1024 * 1024
 _MAX_EDIT_IMAGE_BYTES = 20 * 1024 * 1024
 _MAX_EDIT_MASK_BYTES = 4 * 1024 * 1024
+_REFERENCE_SHEET_CELL_WIDTH = 512
+_REFERENCE_SHEET_IMAGE_HEIGHT = 512
+_REFERENCE_SHEET_LABEL_HEIGHT = 40
+_REFERENCE_SHEET_PADDING = 16
+_CHARACTER_STANDARD_VIEWS = frozenset(
+    {
+        AssetStandardView.CANONICAL_MASTER,
+        AssetStandardView.CHARACTER_FRONT,
+        AssetStandardView.CHARACTER_LEFT_PROFILE,
+        AssetStandardView.CHARACTER_RIGHT_PROFILE,
+        AssetStandardView.CHARACTER_BACK,
+        AssetStandardView.CHARACTER_WARDROBE_DETAIL,
+    }
+)
+_SCENE_COVERAGE_VIEWS = frozenset(
+    {
+        AssetStandardView.CANONICAL_MASTER,
+        AssetStandardView.SCENE_MASTER,
+        AssetStandardView.SCENE_OVERHEAD,
+        AssetStandardView.SCENE_REVERSE,
+        AssetStandardView.SCENE_INTERACTION_ZONE,
+    }
+)
 
 
 class AssetWorkbench:
@@ -124,6 +155,15 @@ class AssetWorkbench:
         return self.config_store.response()
 
     def create_asset(self, project_id: str, request: AssetCreateRequest) -> AssetVersion:
+        self._validate_asset_strategy(
+            request.kind,
+            request.brief.reference_strategy if request.brief is not None else None,
+        )
+        if request.brief is not None:
+            self._validate_standard_views(
+                request.brief.reference_strategy,
+                request.brief.requested_views,
+            )
         with self._lock:
             document = self._require_project(project_id)
             now = utc_now()
@@ -148,6 +188,11 @@ class AssetWorkbench:
                 project_id=project_id,
                 kind=request.kind,
                 name=request.name.strip(),
+                brief=(
+                    request.brief.model_copy(deep=True)
+                    if request.brief is not None
+                    else None
+                ),
                 current_version_id=version.id,
                 versions=[version],
             )
@@ -155,6 +200,26 @@ class AssetWorkbench:
             document.project.updated_at = now
             self.repository.save_project(document)
             return version
+
+    def update_asset_brief(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetBriefUpdateRequest,
+    ) -> AssetVersion:
+        with self._lock:
+            document = self._require_project(project_id)
+            asset = self._require_asset(document, asset_id)
+            self._validate_asset_strategy(asset.kind, request.brief.reference_strategy)
+            self._validate_standard_views(
+                request.brief.reference_strategy,
+                request.brief.requested_views,
+            )
+            asset.brief = request.brief.model_copy(deep=True)
+            current = self._require_asset_version(asset, asset.current_version_id)
+            document.project.updated_at = utc_now()
+            self.repository.save_project(document)
+            return current
 
     def import_local(
         self,
@@ -245,6 +310,167 @@ class AssetWorkbench:
             )
             self._append_version(document, asset, version)
             return version
+
+    def compose_reference_sheet(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetReferenceSheetComposeRequest,
+    ) -> AssetVersion:
+        """Compose explicitly selected local images into one deterministic draft version."""
+
+        with self._lock:
+            document = self._require_project(project_id)
+            target = self._require_asset(document, asset_id)
+            self._validate_asset_strategy(target.kind, request.strategy)
+            self._validate_sheet_views(request)
+            parent_id = self._resolve_parent(target, request.parent_version_id)
+            expected_current_version_id = target.current_version_id
+            output_number = self._next_version_number(target)
+            output_version_id = f"asset-version-{uuid4().hex[:12]}"
+            source_rows: list[tuple[Path, AssetReferenceSheetCell]] = []
+            for requested_cell in request.cells:
+                source_asset, source_version = self._find_version(
+                    document,
+                    requested_cell.asset_version_id,
+                )
+                if source_version.media_type != AssetMediaType.IMAGE:
+                    raise AssetWorkbenchConflict(
+                        "Reference sheet inputs must be image AssetVersions"
+                    )
+                if source_version.local_path is None:
+                    raise AssetWorkbenchConflict(
+                        "Reference sheet inputs must be locally cached images"
+                    )
+                source_path = Path(source_version.local_path).expanduser().resolve()
+                if not source_path.is_file():
+                    raise AssetWorkbenchConflict(
+                        f"Reference sheet input file is missing: {source_version.id}"
+                    )
+                if (
+                    request.input_policy == AssetSheetInputPolicy.APPROVED_ONLY
+                    and (
+                        source_asset.approved_version_id != source_version.id
+                        or source_version.approval_status != ApprovalStatus.APPROVED
+                    )
+                ):
+                    raise AssetWorkbenchConflict(
+                        "APPROVED_ONLY reference sheets require each source AssetVersion "
+                        "to be its asset's current approved version"
+                    )
+                if (
+                    request.input_policy == AssetSheetInputPolicy.EXPLICIT_VERSIONS
+                    and source_version.approval_status == ApprovalStatus.REJECTED
+                ):
+                    raise AssetWorkbenchConflict(
+                        "Rejected AssetVersions cannot be explicitly composed into a "
+                        "reference sheet"
+                    )
+                source_rows.append(
+                    (
+                        source_path,
+                        AssetReferenceSheetCell(
+                            view=requested_cell.view,
+                            label=(requested_cell.label or requested_cell.view.value).strip(),
+                            source_asset_id=source_asset.id,
+                            source_version_id=source_version.id,
+                        ),
+                    )
+                )
+
+        output_directory = self._asset_directory(project_id, asset_id)
+        output_directory.mkdir(parents=True, exist_ok=True)
+        temporary_path = output_directory / f".{output_version_id}-reference-sheet.png"
+        output_path = output_directory / (
+            f"v{output_number}-{output_version_id}-reference-sheet.png"
+        )
+        try:
+            width, height = self._render_reference_sheet(
+                source_rows,
+                columns=request.columns,
+                destination=temporary_path,
+            )
+            with self._lock:
+                document = self._require_project(project_id)
+                target = self._require_asset(document, asset_id)
+                if (
+                    target.current_version_id != expected_current_version_id
+                    or self._next_version_number(target) != output_number
+                ):
+                    raise AssetWorkbenchConflict(
+                        "Target asset changed while the reference sheet was being composed; retry"
+                    )
+                for source_path, cell in source_rows:
+                    source_asset, source_version = self._find_version(
+                        document,
+                        cell.source_version_id,
+                    )
+                    if (
+                        source_version.local_path is None
+                        or Path(source_version.local_path).expanduser().resolve()
+                        != source_path
+                        or not source_path.is_file()
+                    ):
+                        raise AssetWorkbenchConflict(
+                            "A reference sheet source changed while it was being composed; retry"
+                        )
+                    if (
+                        request.input_policy == AssetSheetInputPolicy.APPROVED_ONLY
+                        and (
+                            source_asset.approved_version_id != source_version.id
+                            or source_version.approval_status
+                            != ApprovalStatus.APPROVED
+                        )
+                    ):
+                        raise AssetWorkbenchConflict(
+                            "A reference sheet source is no longer its asset's current "
+                            "approved version; retry"
+                        )
+                    if (
+                        request.input_policy == AssetSheetInputPolicy.EXPLICIT_VERSIONS
+                        and source_version.approval_status == ApprovalStatus.REJECTED
+                    ):
+                        raise AssetWorkbenchConflict(
+                            "A reference sheet source was rejected while it was being "
+                            "composed; retry"
+                        )
+                temporary_path.replace(output_path)
+                now = utc_now()
+                version = AssetVersion(
+                    id=output_version_id,
+                    version=output_number,
+                    origin_type=OriginType.LOCAL_DERIVED,
+                    descriptor=request.descriptor.strip(),
+                    media_type=AssetMediaType.IMAGE,
+                    local_path=str(output_path),
+                    mime_type="image/png",
+                    width=width,
+                    height=height,
+                    file_size_bytes=output_path.stat().st_size,
+                    parent_version_id=parent_id,
+                    reference_sheet=AssetReferenceSheet(
+                        strategy=request.strategy,
+                        input_policy=request.input_policy,
+                        columns=request.columns,
+                        cells=[cell for _source_path, cell in source_rows],
+                    ),
+                    source=AssetSourceRecord(
+                        source_type=OriginType.LOCAL_DERIVED,
+                        source_label="本地确定性标准视图拼图",
+                        provider="local",
+                        model="pillow-reference-sheet-v1",
+                        created_at=now,
+                    ),
+                    approval_status=ApprovalStatus.DRAFT,
+                    freshness=Freshness.CURRENT,
+                    created_at=now,
+                )
+                self._append_version(document, target, version)
+                return version
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)
+            raise
 
     def import_stock_candidate(
         self,
@@ -675,10 +901,15 @@ class AssetWorkbench:
 
     def retry_image_task(self, task_id: str) -> ImageGenerationTask:
         task = self._require_image_task(task_id)
+        if task.status == ImageTaskStatus.SUBMIT_UNKNOWN:
+            raise AssetWorkbenchConflict(
+                f"Image task {task.id} may already have been accepted by the provider; "
+                "direct retry is disabled. Verify the provider outcome, then create a "
+                "new image task explicitly if another submission is required"
+            )
         if task.status not in {
             ImageTaskStatus.FAILED,
             ImageTaskStatus.CANCELLED,
-            ImageTaskStatus.SUBMIT_UNKNOWN,
             ImageTaskStatus.OUTPUT_MISSING,
         }:
             raise AssetWorkbenchConflict(
@@ -705,6 +936,28 @@ class AssetWorkbench:
             attempt=task.attempt + 1,
             retry_of_task_id=task.id,
         )
+
+    def resolve_image_not_submitted(
+        self,
+        task_id: str,
+        request: ImageNotSubmittedResolutionRequest,
+    ) -> ImageGenerationTask:
+        task = self._require_image_task(task_id)
+        if task.status != ImageTaskStatus.SUBMIT_UNKNOWN:
+            raise AssetWorkbenchConflict(
+                f"Image task {task.id} is not waiting for submission reconciliation"
+            )
+        reason = request.reason.strip()
+        if not reason:
+            raise AssetWorkbenchConflict("A reconciliation reason is required")
+        now = utc_now()
+        task.status = ImageTaskStatus.FAILED
+        task.error_code = "IMAGE_SUBMISSION_NOT_CREATED"
+        task.error_message = reason
+        task.finished_at = now
+        task.updated_at = now
+        self.repository.save_image_task(task)
+        return task
 
     def recover_image_output(self, task_id: str) -> ImageGenerationTask:
         task = self._require_image_task(task_id)
@@ -1006,6 +1259,113 @@ class AssetWorkbench:
         asset.current_version_id = version.id
         document.project.updated_at = utc_now()
         self.repository.save_project(document)
+
+    @staticmethod
+    def _validate_asset_strategy(
+        kind: AssetKind,
+        strategy: AssetReferenceStrategy | None,
+    ) -> None:
+        if strategy in {None, AssetReferenceStrategy.LIGHTWEIGHT}:
+            return
+        if (
+            strategy == AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS
+            and kind != AssetKind.CHARACTER
+        ):
+            raise AssetWorkbenchConflict(
+                "CHARACTER_STANDARD_VIEWS can only be used for a character asset"
+            )
+        if (
+            strategy == AssetReferenceStrategy.SCENE_COVERAGE
+            and kind != AssetKind.LOCATION
+        ):
+            raise AssetWorkbenchConflict(
+                "SCENE_COVERAGE can only be used for a location asset"
+            )
+
+    @staticmethod
+    def _validate_standard_views(
+        strategy: AssetReferenceStrategy,
+        views: list[AssetStandardView],
+    ) -> None:
+        allowed: frozenset[AssetStandardView] | None = None
+        if strategy == AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS:
+            allowed = _CHARACTER_STANDARD_VIEWS
+        elif strategy == AssetReferenceStrategy.SCENE_COVERAGE:
+            allowed = _SCENE_COVERAGE_VIEWS
+        if allowed is None:
+            return
+        incompatible = [view.value for view in views if view not in allowed]
+        if incompatible:
+            raise AssetWorkbenchConflict(
+                f"{strategy.value} contains incompatible views: "
+                + ", ".join(incompatible)
+            )
+
+    def _validate_sheet_views(self, request: AssetReferenceSheetComposeRequest) -> None:
+        self._validate_standard_views(
+            request.strategy,
+            [cell.view for cell in request.cells],
+        )
+
+    @staticmethod
+    def _render_reference_sheet(
+        source_rows: list[tuple[Path, AssetReferenceSheetCell]],
+        *,
+        columns: int,
+        destination: Path,
+    ) -> tuple[int, int]:
+        rows = (len(source_rows) + columns - 1) // columns
+        cell_height = _REFERENCE_SHEET_IMAGE_HEIGHT + _REFERENCE_SHEET_LABEL_HEIGHT
+        width = (
+            columns * _REFERENCE_SHEET_CELL_WIDTH
+            + (columns + 1) * _REFERENCE_SHEET_PADDING
+        )
+        height = rows * cell_height + (rows + 1) * _REFERENCE_SHEET_PADDING
+        sheet = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(sheet)
+        try:
+            for index, (source_path, cell) in enumerate(source_rows):
+                row, column = divmod(index, columns)
+                left = _REFERENCE_SHEET_PADDING + column * (
+                    _REFERENCE_SHEET_CELL_WIDTH + _REFERENCE_SHEET_PADDING
+                )
+                top = _REFERENCE_SHEET_PADDING + row * (
+                    cell_height + _REFERENCE_SHEET_PADDING
+                )
+                with Image.open(source_path) as source_image:
+                    normalized = ImageOps.exif_transpose(source_image).convert("RGB")
+                    fitted = ImageOps.contain(
+                        normalized,
+                        (_REFERENCE_SHEET_CELL_WIDTH, _REFERENCE_SHEET_IMAGE_HEIGHT),
+                        Image.Resampling.LANCZOS,
+                    )
+                image_left = left + (_REFERENCE_SHEET_CELL_WIDTH - fitted.width) // 2
+                image_top = top + (_REFERENCE_SHEET_IMAGE_HEIGHT - fitted.height) // 2
+                sheet.paste(fitted, (image_left, image_top))
+                draw.rectangle(
+                    (
+                        left,
+                        top,
+                        left + _REFERENCE_SHEET_CELL_WIDTH - 1,
+                        top + _REFERENCE_SHEET_IMAGE_HEIGHT - 1,
+                    ),
+                    outline="#C7CBD1",
+                    width=2,
+                )
+                draw.text(
+                    (left + 8, top + _REFERENCE_SHEET_IMAGE_HEIGHT + 12),
+                    cell.label,
+                    fill="#20242A",
+                )
+            sheet.save(destination, format="PNG", optimize=False, compress_level=9)
+        except (OSError, UnidentifiedImageError) as exc:
+            destination.unlink(missing_ok=True)
+            raise AssetWorkbenchConflict(
+                "Reference sheet input is not a readable local image"
+            ) from exc
+        finally:
+            sheet.close()
+        return width, height
 
     def _resolve_parent(self, asset: Asset, requested: str | None) -> str | None:
         if requested is not None:

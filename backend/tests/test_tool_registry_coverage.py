@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from short_drama.service import ShortDramaService
-from short_drama.tools import ToolCallStatus, ToolCategory
+from short_drama.tools import ToolCallStatus, ToolCategory, ToolEffect
 
 
 REQUIRED_PRODUCTION_TOOLS = {
@@ -21,13 +21,16 @@ REQUIRED_PRODUCTION_TOOLS = {
         "artifact.review_version",
         "artifact.search_catalog",
         "artifact.search_stock",
+        "artifact.update_brief",
     },
     "image": {
         "image.advance",
         "image.cancel",
+        "image.compose_reference_sheet",
         "image.enqueue",
         "image.list",
         "image.recover_output",
+        "image.resolve_not_submitted",
         "image.retry",
     },
     "planning": {"planning.advance"},
@@ -108,6 +111,12 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     for descriptor in descriptors.values():
         assert descriptor.input_schema["type"] == "object"
         assert descriptor.output_schema["type"] == "object"
+
+    reconciliation = descriptors["route.list_h3_reconciliation"]
+    assert reconciliation.version == 2
+    assert reconciliation.effect == ToolEffect.EXTERNAL
+    assert reconciliation.idempotent is True
+    assert reconciliation.input_schema["required"] == ["project_id", "task_id"]
 
 
 def test_read_adapters_use_the_real_service_without_bypassing_it(tmp_path: Path) -> None:

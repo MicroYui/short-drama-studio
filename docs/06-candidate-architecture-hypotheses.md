@@ -211,7 +211,7 @@ PoC 的 H3 `GenerationTask` 固定请求 768P；原始 Take 不被交付缩放�
 
 ### `QAReport`
 
-严重失败与排序分开：角色身份、动作、道具、台词、说话人、口型和坏帧是硬门槛；美感、节奏和表演用于候选排序。报告同时记录问题应在“重生成、换路线、局部修复或后期合成”哪一层解决。
+身份、动作、道具、台词、说话人、口型、坏帧、美感、节奏和表演都作为类型化观察证据保存，不压成一个总分或硬通过状态。Agent 根据镜头职责、项目意图和实际取舍选择候选，并记录问题应在“重生成、换路线、局部修复或后期合成”哪一层解决；媒体不可读或 Provider 合同不合法仍属于技术执行错误。
 
 真人和漫剧使用同一份报告结构，但检查器与阈值按 Style Profile 选择：真人重点检查身份漂移、皮肤/肢体真实性、微表情、物理运动和自然口型；漫剧重点检查线条/材质风格、角色比例、颜色、层次、有限动画与风格化口型。共享 schema 不等于强迫两种形态使用同一套视觉评分器。
 
@@ -385,13 +385,13 @@ Planner 不再硬限定 6–10 镜，Director 也不使用固定动作数、固�
 
 45–60 秒只保留为首个验收样片的历史范围，不再是新项目限制。桌面端允许用户填写不少于 4 秒的任意目标时长；3/5/10/15 分钟只是抖音短剧快捷值，默认 5 分钟，通用视频默认 60 秒。快捷值不改变底层 Tools 或 AgentRun 的动态编排语义。
 
-超过 90 秒时，Planner 分为 Story Architect、Script Critic、Review Router 与逐场 Scene Director。Story Architect 维护整集因果、全局资产、对白和场次契约；Script Critic 只报告有证据的因果、动机、伏笔回收和节奏观察；当前 Production Skill 的 Review Router 决定哪些问题确实需要整集修订，哪些下放导演、资产、视频、时间线或保留为可选建议。只有 Story Architect 归属的问题进入最多三轮整集修订与逐轮复审，其他问题随相关场次 handoff，不用增加解释来修复执行层问题。Scene Director 只展开当前场，并通过人物、道具、事实和待回应问题组成的 compact handoff 顺序传递连续性。所有路由可由用户覆盖，场次失败只局部修复或回退，不把整集重新丢给一个超长 Prompt。本阶段主要检查剧本和结构，不调用 GPT Image 或 H3。
+配置语言 Provider 时，无论时长都由 AgentRun 持有的 Content Planning Job 增量推进 Story Architect、逐场 Scene Writer、Script Critic、Review Router，以及目标需要时的 Scene Director。Story Architect 维护整集因果、全局资产、对白和场次契约；Script Critic 只报告有证据的因果、动机、伏笔回收和节奏观察；Review Router 决定每项问题的最小修复层。只有 `HIGH + STORY_ARCHITECT` 进入下一轮逐场修订，不设固定轮数；MEDIUM/LOW 保留为独立审校建议，其他问题随相关场次 handoff，不用增加解释来修复执行层问题。Scene Director 只展开当前场，并通过人物、道具、事实和待回应问题组成的 compact handoff 顺序传递连续性。所有路由可由用户覆盖，场次失败只局部修复并保留游标，不把整集重新丢给一个超长 Prompt。本阶段主要检查剧本和结构，不调用 GPT Image 或 H3。
 
-进入故事修订前，Source Contract Agent 独立提取用户显式承诺、禁区和开放选择；Story Repair Planner 再把 routed finding 诊断为来源概念缺口、当前大纲缺陷或 Critic 越界。Repair Plan、Source Contract 和最近三轮历史共同约束 Writer，Revision Verifier 只检查计划执行、来源承诺与新引入的状态回退，最多允许两次针对具体 violation 的定向修复。该层不使用固定剧情规则或答案键，全部建议可由用户覆盖；正常改善不要求 Critic 零问题。
+进入故事修订前，Source Contract Agent 独立提取用户显式承诺、禁区和开放选择；Story Repair Planner 再把 routed finding 诊断为来源概念缺口、当前大纲缺陷或 Critic 越界。Repair Plan、Source Contract 和结构化修订历史共同约束 Writer，Revision Verifier 只检查计划执行、来源承诺与新引入的状态回退；具体 violation 按已保存的场次游标定向修复至验收通过，不以任意次数截断。该层不使用固定剧情规则或答案键，全部建议可由用户覆盖；正常改善不要求 Critic 零问题。
 
 ### Phase 15：持久化 PlanningRun
 
-超过 90 秒的创建不再同步执行全部长篇 Agent。项目正式建立前先把原始请求、当前阶段、整集大纲、审稿报告、修订轮次和已经完成的逐场计划保存为独立 `PlanningRun`；一次推进只运行一个 Agent 阶段或一场 Scene Director。应用重启后从当前节点继续，单场失败只重试当前场。完成 `FINALIZE` 后才建立正式 ProjectDocument，并在 AUTO_DRAFT 模式下衔接原有 AutonomousRun。
+本阶段当时先将超过 90 秒的创建改为可恢复 `PlanningRun`。当前实现已取消时长分流：所有已配置语言 Provider 的 Agent-owned 创作都使用 AgentRun 持有的 Content Planning Job（兼容实现名仍为 `PlanningRun`）。原始请求、当前阶段、整集大纲、审稿报告、修订轮次和已完成的逐场工件均持久化；一次推进只运行一个 Agent 阶段或一场 Writer/Director。应用重启后从当前节点继续，单场失败只重试当前场。ProjectDocument 从创建开始即是唯一内容真相，`FINALIZE` 原位更新；旧 AutonomousRun 控制面已删除。
 
 PlanningRun 不是新的工作流画布或微服务。它只是 SQLite/API 核心中的一个前置长任务状态机；语言模型调用期间不持有全局锁，前端通过阶段和场次进度自动轮询。规划阶段不调用 GPT Image 或 H3。
 

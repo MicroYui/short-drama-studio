@@ -15,6 +15,7 @@ from short_drama.deps import get_short_drama_service
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     EnqueueRequest,
+    QaStatus,
     SemanticReviewStatus,
     TakeComparisonDecision,
     TakeComparisonRequest,
@@ -52,7 +53,7 @@ class FakeTakeComparisonLanguageProvider:
         max_output_tokens: int = 2200,
     ) -> str:
         del max_output_tokens
-        assert "pairwise Take comparison tool" in instructions
+        assert "同镜头 Take 对比工具" in instructions
         payload = json.loads(input_text)
         candidates = payload["candidates"]
         candidate_ids = [item["take"]["id"] for item in candidates]
@@ -104,23 +105,25 @@ def _service(
     return service
 
 
-def _prepare_two_candidates(
+def _prepare_candidates(
     service: ShortDramaService,
     tmp_path: Path,
+    *,
+    candidate_count: int = 2,
 ) -> tuple[str, str, list[str]]:
     project = service.initialize_fixture()
     project_id = project.document.project.id
     shot = project.document.shots[0]
     service.enqueue(
         project_id,
-        EnqueueRequest(shot_ids=[shot.id], candidate_count=2),
+        EnqueueRequest(shot_ids=[shot.id], candidate_count=candidate_count),
     )
     generated = service.drain(project_id, 100).project
     takes = sorted(
         (take for take in generated.takes if take.shot_id == shot.id),
         key=lambda item: item.candidate_index,
     )
-    assert len(takes) == 2
+    assert len(takes) == candidate_count
     assert all(take.qa_status.value == "PASSED" for take in takes)
 
     for index, take in enumerate(takes, start=1):
@@ -179,7 +182,13 @@ def test_compare_takes_selects_relative_winner_and_persists_report(
         winner_index=1,
     )
     service = _service(tmp_path, language)
-    project_id, shot_id, take_ids = _prepare_two_candidates(service, tmp_path)
+    project_id, shot_id, take_ids = _prepare_candidates(service, tmp_path)
+    warned_winner = service.repository.get_take(take_ids[1])
+    assert warned_winner is not None
+    warned_winner.qa_status = QaStatus.REJECTED
+    warned_winner.qa_report.status = QaStatus.REJECTED
+    warned_winner.qa_report.hard_gate_passed = False
+    service.repository.save_take(warned_winner)
     response = service.compare_takes(
         project_id,
         TakeComparisonRequest(
@@ -196,7 +205,8 @@ def test_compare_takes_selects_relative_winner_and_persists_report(
     assert not next(take for take in response.project.takes if take.id == take_ids[0]).is_selected
     assert len(language.calls) == 1
     assert len(language.calls[0][2]) == 2
-    assert language.calls[0][1]["eligible_take_ids"] == take_ids
+    assert language.calls[0][1]["technically_available_take_ids"] == take_ids
+    assert language.calls[0][1]["candidates"][1]["take"]["qa_status"] == "REJECTED"
 
     restarted = _service(tmp_path, language)
     persisted = restarted.repository.list_take_comparisons(project_id)
@@ -211,7 +221,7 @@ def test_compare_takes_none_acceptable_clears_automatic_selection(
         decision=TakeComparisonDecision.NONE_ACCEPTABLE,
     )
     service = _service(tmp_path, language)
-    project_id, shot_id, take_ids = _prepare_two_candidates(service, tmp_path)
+    project_id, shot_id, take_ids = _prepare_candidates(service, tmp_path)
     service.select_take(take_ids[0])
 
     response = service.compare_takes(
@@ -239,7 +249,7 @@ def test_compare_takes_agent_tool_endpoint_is_thin_and_user_controllable(
         winner_index=0,
     )
     service = _service(tmp_path, language)
-    project_id, shot_id, take_ids = _prepare_two_candidates(service, tmp_path)
+    project_id, shot_id, take_ids = _prepare_candidates(service, tmp_path)
     selected_before = {
         take.id
         for take in service.get_project(project_id).takes
@@ -267,3 +277,52 @@ def test_compare_takes_agent_tool_endpoint_is_thin_and_user_controllable(
         for take in result.json()["project"]["takes"]
         if take["shot_id"] == shot_id and take["is_selected"]
     } == selected_before
+
+
+def test_mock_enqueue_accepts_agent_requested_candidate_batch_without_local_cap(
+    tmp_path: Path,
+) -> None:
+    language = FakeTakeComparisonLanguageProvider(
+        decision=TakeComparisonDecision.NONE_ACCEPTABLE,
+    )
+    service = _service(tmp_path, language)
+    project = service.initialize_fixture()
+    shot = project.document.shots[0]
+
+    queued = service.enqueue(
+        project.document.project.id,
+        EnqueueRequest(shot_ids=[shot.id], candidate_count=6),
+    )
+
+    assert len([task for task in queued.tasks if task.shot_id == shot.id]) == 6
+
+
+def test_compare_takes_accepts_agent_explicit_candidate_set_larger_than_five(
+    tmp_path: Path,
+) -> None:
+    language = FakeTakeComparisonLanguageProvider(
+        decision=TakeComparisonDecision.SELECT_TAKE,
+        winner_index=5,
+    )
+    service = _service(tmp_path, language)
+    project_id, shot_id, take_ids = _prepare_candidates(
+        service,
+        tmp_path,
+        candidate_count=6,
+    )
+
+    response = service.compare_takes(
+        project_id,
+        TakeComparisonRequest(
+            shot_id=shot_id,
+            take_ids=take_ids,
+            inspect_missing=False,
+            apply_selection=False,
+        ),
+    )
+
+    assert response.report.candidate_take_ids == take_ids
+    assert response.report.selected_take_id == take_ids[5]
+    assert [item.take_id for item in response.report.candidate_reviews] == take_ids
+    assert len(language.calls) == 1
+    assert len(language.calls[0][2]) == 6

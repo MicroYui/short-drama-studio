@@ -7,6 +7,7 @@ references: ["references/ai_native_forms.md", "references/assets_and_continuity.
 
 读取资产母版、版本来源、目标镜头、所需参考职责、已有批准版本和其他同时使用的输入。只检查当前项目声明且与本次用途有关的维度，例如：
 
+- 结构化 brief 是否分清叙事身份、人设/气质、可见锚点、服装/材质、生产背景/质感约束和允许变化项。
 - 角色需要跨镜保持的身份、造型、状态或声音锚点。
 - 场景需要保持的空间、层级、方向、光线或色彩关系。
 - 道具需要保持的结构、方向、归属或剧情状态。
@@ -15,5 +16,6 @@ references: ["references/ai_native_forms.md", "references/assets_and_continuity.
 - 当前视角/景别是否匹配目标镜头。
 - 与其他参考是否在身份、服装、空间、光线或状态上冲突。
 - 是否含有不应进入镜头的文字、人物或物体。
+- 若审核多视图/场景 coverage 参考板，每个格子是否对应声明的源 AssetVersion，各视图之间是否换脸、换衣、改变材质/空间，以及拼图是否被误当成镜头构图。
 
-返回批准、拒绝或仅限特定用途的建议，并说明适用镜头和缺失项。不得因素材不符合审核者个人偏好的写实或动画审美而拒绝；标准来自当前 Bible。需要新视角时先判断是否可从同一母版派生；不要为了“完整资产包”生成所有可能角度。审核通过后可建议使用 `artifact.review_version` 和 `artifact.add_reference_entry` 记录结果。
+返回批准、拒绝或仅限特定用途的建议，并说明适用镜头和缺失项。不得因素材不符合审核者个人偏好的写实或动画审美而拒绝；标准来自当前 Bible。需要新视角时先根据重要度、复用范围、连续性风险和已有覆盖判断 `LIGHTWEIGHT`、`CHARACTER_STANDARD_VIEWS` 或 `SCENE_COVERAGE`；不要为了“完整资产包”生成所有可能角度。审核通过后可建议使用 `artifact.review_version` 和 `artifact.add_reference_entry` 记录结果。

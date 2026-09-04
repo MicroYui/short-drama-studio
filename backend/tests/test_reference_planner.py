@@ -271,9 +271,9 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
         "entrance.door_face.interior",
         "entrance.door_face.exterior",
     }
-    assert any("background-neutral" in item for item in body["warnings"])
+    assert any("背景中性" in item for item in body["warnings"])
     assert any(
-        "duplicate or drifting entrances" in item
+        "入口、窗户、柜台或其他场景结构重复或漂移" in item
         for item in body["complexity"]["observations"]
     )
 
@@ -289,13 +289,13 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert brief_body["input_version_ids"] == [store_version]
     assert "entrance.primary_door" in brief_body["prompt"]
     assert "entrance.fixed_panel" in brief_body["prompt"]
-    assert "entrance.handle.interior on entrance.door_face.interior" in brief_body["prompt"]
-    assert "entrance.handle.exterior on entrance.door_face.exterior" in brief_body["prompt"]
-    assert "Do not create a collage" in brief_body["prompt"]
-    assert "environment topology plate" in brief_body["prompt"]
-    assert "Show no people" in brief_body["prompt"]
-    assert "ORDERED ACTION BEATS" not in brief_body["prompt"]
-    assert "Characters and eyeline" not in brief_body["prompt"]
+    assert "entrance.handle.interior 位于 entrance.door_face.interior" in brief_body["prompt"]
+    assert "entrance.handle.exterior 位于 entrance.door_face.exterior" in brief_body["prompt"]
+    assert "不要生成拼贴图" in brief_body["prompt"]
+    assert "环境拓扑参考图" in brief_body["prompt"]
+    assert "画面不得出现人物" in brief_body["prompt"]
+    assert "有序动作节拍" not in brief_body["prompt"]
+    assert "人物与视线" not in brief_body["prompt"]
 
     start_brief = client.post(
         f"/api/short-drama/projects/{project_id}/shots/{shot.id}/keyframe-brief/compile",
@@ -306,13 +306,13 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     )
     assert start_brief.status_code == 200, start_brief.text
     start_prompt = start_brief.json()["prompt"]
-    assert "through order 2 have completed" in start_prompt
-    assert "Do not replay completed beats" in start_prompt
-    assert "ACTION BEATS COMPLETED BEFORE THIS FRAME" in start_prompt
-    assert "ACTION BEATS REMAINING AFTER THIS FRAME" in start_prompt
+    assert "截至顺序 2 的所有动作节拍都已完成" in start_prompt
+    assert "不要重演已完成的节拍" in start_prompt
+    assert "此帧之前已完成的动作节拍" in start_prompt
+    assert "此帧之后待完成的动作节拍" in start_prompt
     assert "entrance.primary_door=closed" in start_prompt
-    assert "Other characters mentioned by broader continuity must remain off-screen" in start_prompt
-    assert "State at this frame from completed beats" in start_prompt
+    assert "更大范围连续性中提到的其他人物必须保持在画外" in start_prompt
+    assert "由已完成节拍确定的此帧状态" in start_prompt
     assert "Prop state in:" not in start_prompt
 
     canvas_asset = service.create_asset(
@@ -336,12 +336,12 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert end_body["primary_input_version_id"] == canvas_version
     assert end_body["input_version_ids"][0] == canvas_version
     assert len(end_body["input_version_ids"]) == len(set(end_body["input_version_ids"]))
-    assert "Image 1 is the authoritative physical frame" in end_body["prompt"]
-    assert "hand-to-object contact side" in end_body["prompt"]
-    assert "RIGID ASSEMBLY AND CONTACT RULES" in end_body["prompt"]
-    assert "move entrance.handle.interior on entrance.door_face.interior" in end_body["prompt"]
-    assert "keep RIGHT_HAND continuously attached" in end_body["prompt"]
-    assert "must not disappear physically" in end_body["prompt"]
+    assert "图片 1 是权威的物理画面" in end_body["prompt"]
+    assert "手与物体的接触侧" in end_body["prompt"]
+    assert "刚性组装与接触规则" in end_body["prompt"]
+    assert "位于 entrance.door_face.interior 的 entrance.handle.interior" in end_body["prompt"]
+    assert "保持 RIGHT_HAND 持续连接于" in end_body["prompt"]
+    assert "不得物理消失" in end_body["prompt"]
 
     selected_canvas = body["selected"][0]
     duplicate_brief = client.post(
@@ -355,7 +355,7 @@ def test_reference_pack_selector_and_generic_interaction_risk(tmp_path: Path) ->
     assert duplicate_brief.status_code == 200, duplicate_brief.text
     duplicate_body = duplicate_brief.json()
     assert duplicate_body["input_version_ids"] == [selected_canvas["asset_version_id"]]
-    assert "Image 2:" not in duplicate_body["prompt"]
+    assert "图片 2：" not in duplicate_body["prompt"]
 
     topology_asset = service.create_asset(
         project_id,
@@ -438,13 +438,13 @@ def test_semantic_requirement_uses_approved_core_binding_as_coarse_fallback(
             kind=AssetKind.CHARACTER.value,
             target_id=lin_version_id,
             purpose="Approved Lin Xia identity anchor.",
-            requirement="REQUIRED",
+            required=True,
         ),
         ReferenceBinding(
             kind=AssetKind.LOCATION.value,
             target_id=location_version_id,
             purpose="Approved store look anchor.",
-            requirement="REQUIRED",
+            required=True,
         ),
     ]
     plan.requirements = [
@@ -574,13 +574,13 @@ def test_keyframe_scope_preserves_one_reference_per_required_subject(
             kind=AssetKind.LOCATION.value,
             target_id=location_version_id,
             purpose="Approved location identity anchor.",
-            requirement="REQUIRED",
+            required=True,
         ),
         ReferenceBinding(
             kind=AssetKind.CHARACTER.value,
             target_id=character_version_id,
             purpose="Approved character identity anchor.",
-            requirement="REQUIRED",
+            required=True,
         ),
     ]
     plan.requirements = [
@@ -702,9 +702,9 @@ def test_director_agent_recommends_without_creating_a_generation_gate(
     assert body["advisories"][0]["dismissible"] is True
     assert len(fake.generations) == 1
     instructions, input_text = fake.generations[0]
-    assert "do not apply a fixed action-count or duration threshold" in instructions
-    assert "Compare prompt retry, keyframe replacement, shot split" in instructions
-    assert "Advice never blocks generation" in input_text
+    assert "不要用固定的动作数量或时长阈值代替导演判断" in instructions
+    assert "比较修改提示词、替换关键帧、拆分镜头和更换覆盖机位" in instructions
+    assert "建议不得阻塞生成" in input_text
     assert '"provider_capability_profile"' in input_text
     assert '"repair_strategy_library"' in input_text
 
@@ -743,7 +743,7 @@ def test_director_agent_repairs_invalid_json_once(tmp_path: Path) -> None:
     assert len(fake.generations) == 2
     assert fake.max_output_token_requests == [7200, 7200]
     repair_instructions, repair_input = fake.generations[1]
-    assert "repairing a previously invalid JSON response" in repair_instructions
+    assert "修复导演 Agent 先前返回的一份无效 JSON" in repair_instructions
     assert '"invalid_director_json": "not-json"' in repair_input
     assert '"original_director_context"' in repair_input
 
@@ -917,7 +917,7 @@ def test_director_agent_receives_prior_applied_repairs_as_strategy_evidence(
 
     assert len(fake.generations) == 2
     instructions, input_text = fake.generations[1]
-    assert "Do not repeat an ineffective strategy" in instructions
+    assert "不要重复同一套无效策略" in instructions
     payload = json.loads(input_text)
     prior_repairs = payload["prior_repairs"]
     assert len(prior_repairs) == 1
@@ -1113,7 +1113,7 @@ def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
     body = result.json()
     director_instructions, director_input = fake.generations[0]
     assert "当前制片技能：通用视频。" in director_instructions
-    assert "导演职责准则：" in director_instructions
+    assert "导演的通用职责：" in director_instructions
     assert "根据预期体验判断调度与节奏" in director_instructions
     assert "AI 原生短剧" not in director_instructions
     assert json.loads(director_input)["production_profile"] == "GENERAL_VIDEO"
@@ -1263,7 +1263,7 @@ def test_missing_recommended_reference_is_advisory_and_does_not_block_compile(
     assert brief_body["missing_requirement_ids"] == ["preferred-left-profile"]
     assert brief_body["proceed_allowed"] is True
     assert brief_body["input_version_ids"] == []
-    assert "No visual references supplied" in brief_body["prompt"]
+    assert "未提供视觉参考图" in brief_body["prompt"]
 
 
 def test_reference_pack_rejects_wrong_subject_role_and_unapproved_version(

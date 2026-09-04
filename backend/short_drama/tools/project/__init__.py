@@ -106,7 +106,7 @@ def register_tools(registry: ToolRegistry, service: ProjectToolService) -> None:
             artifact_refs.append(
                 ArtifactRef(
                     project_id=project_id,
-                    artifact_type="planning_run",
+                    artifact_type="content_planning_job",
                     artifact_id=planning.run_id,
                 )
             )

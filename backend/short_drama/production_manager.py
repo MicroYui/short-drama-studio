@@ -14,7 +14,7 @@ import threading
 from typing import Protocol, cast
 from uuid import uuid4
 
-from pydantic import Field, JsonValue
+from pydantic import Field, JsonValue, model_validator
 
 from short_drama.agent_runtime import (
     ActionKind,
@@ -27,28 +27,45 @@ from short_drama.agent_runtime import (
     AgentRunStatus,
     AgentRuntime,
     ArtifactRef,
-    ArtifactSummary,
     ContextPack,
     DelegationStatus,
     PlanGraph,
     PlanStep,
     ProjectMemory,
+    SpecialistTurnRecord,
+    SpecialistTurnStatus,
     WorkOrder,
+)
+from short_drama.agent_runtime.artifact_resolver import (
+    ProjectArtifactResolver,
+    project_artifact_refs as _project_refs,
+    project_summary as _project_summary,
 )
 from short_drama.agent_runtime.models import utc_now
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
+    ContentPlanningOutput,
     ProductionExecutionTarget,
     CreateProjectRequest,
     DomainModel,
     GenerationTask,
     PlanningRunRecord,
+    PlanningRunStep,
     PlanningRunStatus,
     ProductionProfile,
     ProjectDocument,
     ProjectStage,
+    RevisionJudgeRecommendation,
     RunMode,
-    TaskStatus,
+    SceneTimingAssessmentRecord,
+    ScriptReviewDisposition,
+    ScriptReviewReport,
+    StoryIntent,
+    StoryIssueLedgerEntry,
+    StoryMetadataRevisionPatch,
+    StoryRepairPlan,
+    StoryRevisionVerification,
+    StorySourceContract,
     Take,
 )
 from short_drama.production_profiles import (
@@ -78,6 +95,7 @@ _REAL_H3_ONLY_TOOL_IDS = frozenset(
     {
         "route.enqueue_h3_probe",
         "route.execute_h3_plan",
+        "route.list_h3_reconciliation",
         "route.resolve_h3_submission",
         "route.resolve_h3_not_submitted",
     }
@@ -123,49 +141,20 @@ class ProjectDocumentStore(Protocol):
     def get_take(self, take_id: str) -> Take | None: ...
 
 
-class ArtifactRecordLike(Protocol):
-    id: str
-    project_id: str
-
-    def model_dump_json(self) -> str: ...
-
-
-class ProjectArtifactRecordStore(Protocol):
-    def list_exports(self, project_id: str) -> Sequence[ArtifactRecordLike]: ...
-
-    def list_provider_runs(self, project_id: str) -> Sequence[ArtifactRecordLike]: ...
-
-    def list_route_evidence(self, project_id: str) -> Sequence[ArtifactRecordLike]: ...
-
-    def get_video_inspection(self, report_id: str) -> ArtifactRecordLike | None: ...
-
-    def get_take_comparison(self, report_id: str) -> ArtifactRecordLike | None: ...
-
-    def list_reference_visual_reranks(
-        self, project_id: str
-    ) -> Sequence[ArtifactRecordLike]: ...
-
-    def list_keyframe_comparisons(
-        self, project_id: str
-    ) -> Sequence[ArtifactRecordLike]: ...
-
-    def list_input_compatibility_reports(
-        self, project_id: str
-    ) -> Sequence[ArtifactRecordLike]: ...
-
-    def get_audio_inspection(self, report_id: str) -> ArtifactRecordLike | None: ...
-
-    def get_episode_review(self, report_id: str) -> ArtifactRecordLike | None: ...
-
-    def get_h3_route_plan(self, plan_id: str) -> ArtifactRecordLike | None: ...
-
-
 class AgentPlanProposal(DomainModel):
     """A complete, replaceable plan authored by an Agent or supplied by a caller."""
 
     summary: str = Field(min_length=1, max_length=4000)
     steps: list[PlanStep] = Field(default_factory=list[PlanStep], max_length=48)
     goal_complete: bool = False
+
+    @model_validator(mode="after")
+    def validate_progress_path(self) -> AgentPlanProposal:
+        if not self.goal_complete and not self.steps:
+            raise ValueError(
+                "An incomplete Agent plan must contain at least one next step"
+            )
+        return self
 
 
 class AgentRunCreateRequest(DomainModel):
@@ -182,8 +171,8 @@ class AgentProjectCreateRequest(DomainModel):
     """Bootstrap a production run before its canonical project exists."""
 
     project: CreateProjectRequest
-    execution_target: ProductionExecutionTarget = ProductionExecutionTarget.MOCK
-    render_export: bool = True
+    execution_target: ProductionExecutionTarget
+    render_export: bool
     objective: str | None = Field(default=None, min_length=1, max_length=12000)
     root_agent: str = Field(default="production-manager", min_length=1, max_length=120)
 
@@ -230,10 +219,59 @@ class AgentCapabilityCatalog(DomainModel):
     skills: list[ProductionSkillDescriptor]
 
 
+class ContentPlanningTraceView(DomainModel):
+    """Structured creative evidence exposed for human-readable Agent traces.
+
+    This projection deliberately excludes retry counters and orchestration plan
+    revisions.  It reports the semantic work produced by the creative Agents;
+    callers must not treat it as a second source of canonical story content.
+    """
+
+    planning_run_id: str
+    status: PlanningRunStatus
+    current_step: PlanningRunStep
+    completed_steps: list[PlanningRunStep]
+    source_contract: StorySourceContract | None = None
+    story_intent: StoryIntent | None = None
+    selected_narrative_skill_ids: list[str] = Field(default_factory=list[str])
+    skill_selection_reasons: list[str] = Field(default_factory=list[str])
+    narrative_skill_decision: str | None = None
+    outline_source: str | None = None
+    outline_json: str | None = None
+    scene_draft_json: list[str] = Field(default_factory=list[str])
+    scene_timing_assessments: list[SceneTimingAssessmentRecord] = Field(
+        default_factory=list[SceneTimingAssessmentRecord]
+    )
+    review_report: ScriptReviewReport | None = None
+    review_disposition: ScriptReviewDisposition | None = None
+    issue_ledger: list[StoryIssueLedgerEntry] = Field(
+        default_factory=list[StoryIssueLedgerEntry]
+    )
+    latest_repair_plan: StoryRepairPlan | None = None
+    latest_story_metadata_patch: StoryMetadataRevisionPatch | None = None
+    latest_revision_verification: StoryRevisionVerification | None = None
+    revision_judge: RevisionJudgeRecommendation | None = None
+    revision_round: int = Field(ge=0)
+    revision_scene_sequences: list[int] = Field(default_factory=list[int])
+    revision_changed_scene_sequences: list[int] = Field(default_factory=list[int])
+    latest_revision_target_scene_sequences: list[int] = Field(
+        default_factory=list[int]
+    )
+    latest_revision_changed_scene_sequences: list[int] = Field(
+        default_factory=list[int]
+    )
+    critic_used: bool = False
+    final_cold_read_used: bool = False
+    final_cold_read_report: ScriptReviewReport | None = None
+    warnings: list[str] = Field(default_factory=list[str])
+    completed_at: str | None = None
+
+
 class AgentRunView(DomainModel):
     snapshot: AgentRunSnapshot
     ready_steps: list[PlanStep]
     context: ContextPack
+    content_planning_trace: ContentPlanningTraceView | None = None
 
 
 class AgentProjectCreateResponse(DomainModel):
@@ -263,6 +301,88 @@ class AgentWorkOrderResultResponse(DomainModel):
     run: AgentRunView
 
 
+def _content_planning_trace_view(
+    run: PlanningRunRecord,
+) -> ContentPlanningTraceView:
+    return ContentPlanningTraceView(
+        planning_run_id=run.id,
+        status=run.status,
+        current_step=run.current_step,
+        completed_steps=list(run.completed_steps),
+        source_contract=(
+            run.source_contract.model_copy(deep=True)
+            if run.source_contract is not None
+            else None
+        ),
+        story_intent=(
+            run.story_intent.model_copy(deep=True)
+            if run.story_intent is not None
+            else None
+        ),
+        selected_narrative_skill_ids=list(run.selected_narrative_skill_ids),
+        skill_selection_reasons=list(run.skill_selection_reasons),
+        narrative_skill_decision=run.narrative_skill_decision,
+        outline_source=run.outline_source,
+        outline_json=run.outline_json,
+        scene_draft_json=list(run.scene_script_json),
+        scene_timing_assessments=[
+            assessment.model_copy(deep=True)
+            for assessment in run.scene_timing_assessments
+        ],
+        review_report=(
+            run.review_report.model_copy(deep=True)
+            if run.review_report is not None
+            else None
+        ),
+        review_disposition=(
+            run.review_disposition.model_copy(deep=True)
+            if run.review_disposition is not None
+            else None
+        ),
+        issue_ledger=[entry.model_copy(deep=True) for entry in run.issue_ledger],
+        latest_repair_plan=(
+            run.latest_repair_plan.model_copy(deep=True)
+            if run.latest_repair_plan is not None
+            else None
+        ),
+        latest_story_metadata_patch=(
+            run.latest_story_metadata_patch.model_copy(deep=True)
+            if run.latest_story_metadata_patch is not None
+            else None
+        ),
+        latest_revision_verification=(
+            run.latest_revision_verification.model_copy(deep=True)
+            if run.latest_revision_verification is not None
+            else None
+        ),
+        revision_judge=(
+            run.revision_judge.model_copy(deep=True)
+            if run.revision_judge is not None
+            else None
+        ),
+        revision_round=run.revision_round,
+        revision_scene_sequences=list(run.revision_scene_sequences),
+        revision_changed_scene_sequences=list(
+            run.revision_changed_scene_sequences
+        ),
+        latest_revision_target_scene_sequences=list(
+            run.latest_revision_target_scene_sequences
+        ),
+        latest_revision_changed_scene_sequences=list(
+            run.latest_revision_changed_scene_sequences
+        ),
+        critic_used=run.critic_used,
+        final_cold_read_used=run.final_cold_read_used,
+        final_cold_read_report=(
+            run.final_cold_read_report.model_copy(deep=True)
+            if run.final_cold_read_report is not None
+            else None
+        ),
+        warnings=list(run.warnings),
+        completed_at=run.completed_at,
+    )
+
+
 class ProductionPlanner(Protocol):
     """Agent planning boundary; implementations may use any language model."""
 
@@ -284,7 +404,10 @@ LanguageClientResolver = Callable[[], LanguageProviderClient | None]
 class SpecialistAgent(Protocol):
     """Execute one bounded WorkOrder using its role-specific Skill context."""
 
-    def execute(self, work_order: AgentWorkOrderView) -> AgentWorkOrderResultRequest: ...
+    def execute(
+        self,
+        work_order: AgentWorkOrderView,
+    ) -> AgentWorkOrderResultRequest | SpecialistToolRequest: ...
 
 
 SpecialistAgentFactory = Callable[[LanguageProviderClient], SpecialistAgent]
@@ -316,26 +439,6 @@ def _unique_artifact_refs(refs: Sequence[ArtifactRef]) -> list[ArtifactRef]:
         seen.add(identity)
         result.append(ref)
     return result
-
-
-def _run_decision_suffix(context: ContextPack, prefix: str, default: str) -> str:
-    for decision in context.decisions:
-        if decision.run_id == context.run_id and decision.statement.startswith(prefix):
-            value = decision.statement.removeprefix(prefix).strip()
-            if value:
-                return value
-    return default
-
-
-def _latest_artifact_ref(
-    context: ContextPack,
-    artifact_type: str,
-) -> ArtifactRef | None:
-    for action in reversed(context.recent_actions):
-        for ref in reversed(action.artifact_refs):
-            if ref.artifact_type == artifact_type:
-                return ref
-    return None
 
 
 class LanguageProductionPlanner:
@@ -370,6 +473,7 @@ class LanguageProductionPlanner:
             if current_plan is None
             else current_plan.model_dump(mode="json"),
         }
+        role_values = "、".join(role.value for role in ProductionSkillRole)
         instructions = (
             "你是以 Agent 为核心的视频创作系统中的 Production Manager。请依据给定上下文，"
             "为当前目标提出最小且有用的下一版计划。你可以选择、跳过、重排、并行或替换步骤，"
@@ -379,7 +483,10 @@ class LanguageProductionPlanner:
             "只返回 JSON，顶层键为 summary、steps、goal_complete。仅当最新上下文已经证明"
             "本次运行目标达成时设置 goal_complete=true；否则返回下一组有边界的有效步骤，"
             "并设置 goal_complete=false。每个步骤包含 id、title、kind、assigned_agent、"
-            "可选的 tool_name，以及 instructions、arguments、depends_on、artifact_refs。"
+            "可选的 tool_name 与 production_skill_role，以及 instructions、arguments、"
+            "depends_on、artifact_refs。assigned_agent 只是执行者身份，不得从它的名称或"
+            "用户文本猜测专业职责。每个 DELEGATION 都必须由你根据完整目标语义，显式选择"
+            f"一个 production_skill_role：{role_values}。"
             "DELEGATION 的 arguments 可以包含 why_now、constraints、confirmed_decisions、"
             "open_questions、acceptance_criteria、expected_output_schema。\n\n"
             + skill_prompt
@@ -409,7 +516,12 @@ def default_production_planner_factory(
 
 
 class LocalProductionPlanner:
-    """Small deterministic fallback used only when no language planner is configured."""
+    """Recognize terminal lifecycle facts when no semantic planner is configured.
+
+    This fallback deliberately does not author creative or provider routes. A caller
+    must supply an explicit plan, or configure a language planner, for non-terminal
+    production work.
+    """
 
     def __init__(self, projects: ProjectDocumentStore) -> None:
         self._projects = projects
@@ -423,14 +535,12 @@ class LocalProductionPlanner:
         current_plan: AgentPlanProposal | None,
         reason: str,
     ) -> AgentPlanProposal:
-        del skill_prompt, reason
+        del skill_prompt, tools, reason
         document = self._projects.get_project(context.project_id)
         if document is None:
             raise ProductionManagerError(
                 "The local planner cannot continue before project.create succeeds"
             )
-        available = {item.id for item in tools}
-        project_id = document.project.id
         if (
             document.project.run_mode == RunMode.GUIDED
             and current_plan is not None
@@ -441,208 +551,21 @@ class LocalProductionPlanner:
                 goal_complete=True,
             )
 
-        execution_target = _run_decision_suffix(
-            context,
-            "Execution target:",
-            "",
-        )
-        if not execution_target:
-            return AgentPlanProposal(
-                summary=(
-                    "The local fallback needs an explicit production target before it can "
-                    "perform media-generation work for this Agent run."
-                ),
-                steps=[
-                    PlanStep(
-                        id="request-production-target",
-                        title="Choose a production target",
-                        kind=ActionKind.USER_INPUT,
-                        assigned_agent="production-manager",
-                        instructions=(
-                            "Choose MOCK or REAL_H3 for this production continuation, or "
-                            "configure the language provider for a different dynamic plan."
-                        ),
-                    )
-                ],
-            )
-        render_export = (
-            _run_decision_suffix(context, "Render export:", "yes").casefold() != "no"
-        )
         stage = document.project.stage
-        terminal_statuses = {
-            TaskStatus.SUCCEEDED,
-            TaskStatus.FAILED,
-            TaskStatus.CANCELLED,
-            TaskStatus.SUBMIT_UNKNOWN,
-            TaskStatus.OUTPUT_MISSING,
-        }
         if stage == ProjectStage.EXPORTED:
             return AgentPlanProposal(
                 summary="The local fallback confirms that the requested export exists.",
                 goal_complete=True,
             )
-        if stage == ProjectStage.TIMELINE_READY and not render_export:
+        if stage == ProjectStage.TIMELINE_READY and context.render_export is False:
             return AgentPlanProposal(
                 summary="The requested timeline is ready and export was not requested.",
                 goal_complete=True,
             )
 
-        if execution_target == ProductionExecutionTarget.MOCK.value:
-            if stage in {ProjectStage.INPUT, ProjectStage.PLANNED}:
-                return self._one_tool_plan(
-                    available,
-                    summary="Queue deterministic candidate generation for the planned shots.",
-                    step_id="enqueue-mock-video",
-                    title="Queue candidate videos",
-                    tool_name="video.enqueue",
-                    arguments={"project_id": project_id, "request": {}},
-                )
-            if stage == ProjectStage.GENERATING and any(
-                task.provider == "mock" and task.status not in terminal_statuses
-                for task in self._projects.list_tasks(project_id)
-            ):
-                return self._one_tool_plan(
-                    available,
-                    summary="Advance the persisted deterministic generation tasks to idle.",
-                    step_id="drain-mock-tasks",
-                    title="Drain generation tasks",
-                    tool_name="task.drain",
-                    arguments={"project_id": project_id, "max_steps": 5000},
-                )
-            if stage == ProjectStage.REVIEW:
-                return self._one_tool_plan(
-                    available,
-                    summary="Assemble the current selected Takes into a timeline.",
-                    step_id="rebuild-timeline",
-                    title="Build the timeline",
-                    tool_name="timeline.rebuild",
-                    arguments={"project_id": project_id},
-                )
-            if stage == ProjectStage.TIMELINE_READY:
-                return self._one_tool_plan(
-                    available,
-                    summary="Render the requested delivery artifacts.",
-                    step_id="export-timeline",
-                    title="Export the finished timeline",
-                    tool_name="timeline.export",
-                    arguments={
-                        "project_id": project_id,
-                        "request": {"rebuild_manifest": False},
-                    },
-                )
-
-        route_plan_ref = _latest_artifact_ref(context, "h3_route_plan")
-        if stage in {ProjectStage.INPUT, ProjectStage.PLANNED} and route_plan_ref is None:
-            return self._one_tool_plan(
-                available,
-                summary="Compile a provider route plan without a language-model planner.",
-                step_id="plan-h3-route",
-                title="Plan the H3 route",
-                tool_name="route.plan_h3",
-                arguments={
-                    "project_id": project_id,
-                    "request": {
-                        "use_language_agent": False,
-                        "candidate_count": 1,
-                        "consider_video_guides": True,
-                    },
-                },
-            )
-        if stage in {ProjectStage.INPUT, ProjectStage.PLANNED} and route_plan_ref is not None:
-            return self._one_tool_plan(
-                available,
-                summary="Start the prepared H3 route with explicit provider settings.",
-                step_id="execute-h3-route",
-                title="Execute the H3 route",
-                tool_name="route.execute_h3_plan",
-                arguments={
-                    "project_id": project_id,
-                    "plan_id": route_plan_ref.artifact_id,
-                    "request": {
-                        "reuse_passed_takes": True,
-                        "enqueue_new_generations": True,
-                        "adaptive_sequential": True,
-                        "inspect_reused_takes": False,
-                        "semantic_review": False,
-                        "rebuild_manifest": False,
-                        "render_export": False,
-                    },
-                },
-            )
-        if stage == ProjectStage.GENERATING:
-            task_refs = [
-                ArtifactRef(
-                    project_id=project_id,
-                    artifact_type="generation_task",
-                    artifact_id=task.id,
-                )
-                for task in self._projects.list_tasks(project_id)
-                if task.provider == "minimax" and task.status not in terminal_statuses
-            ][:48]
-            if task_refs:
-                return AgentPlanProposal(
-                    summary="Advance the current H3 provider tasks by one bounded transition.",
-                    steps=[
-                        PlanStep(
-                            id=f"advance-{index}",
-                            title=f"Advance provider task {ref.artifact_id}",
-                            kind=ActionKind.TOOL_CALL,
-                            assigned_agent="production-manager",
-                            tool_name="task.advance",
-                            instructions="Advance this persisted provider task once.",
-                            arguments={"task_id": ref.artifact_id},
-                            artifact_refs=[ref],
-                        )
-                        for index, ref in enumerate(task_refs, start=1)
-                    ],
-                )
-
-        return AgentPlanProposal(
-            summary=(
-                "The local fallback reached work that needs a user or configured specialist "
-                "Agent to choose the next repair or review action."
-            ),
-            steps=[
-                PlanStep(
-                    id="request-next-production-decision",
-                    title="Request the next production decision",
-                    kind=ActionKind.USER_INPUT,
-                    assigned_agent="production-manager",
-                    instructions=(
-                        "Choose the next review or repair action, or configure the language "
-                        "provider so the Production Manager can continue autonomously."
-                    ),
-                )
-            ],
-        )
-
-    @staticmethod
-    def _one_tool_plan(
-        available: set[str],
-        *,
-        summary: str,
-        step_id: str,
-        title: str,
-        tool_name: str,
-        arguments: dict[str, JsonValue],
-    ) -> AgentPlanProposal:
-        if tool_name not in available:
-            raise ProductionManagerError(
-                f"The local fallback requires unavailable Tool {tool_name!r}"
-            )
-        return AgentPlanProposal(
-            summary=summary,
-            steps=[
-                PlanStep(
-                    id=step_id,
-                    title=title,
-                    kind=ActionKind.TOOL_CALL,
-                    assigned_agent="production-manager",
-                    tool_name=tool_name,
-                    instructions=summary,
-                    arguments=arguments,
-                )
-            ],
+        raise ProductionManagerError(
+            "No semantic Production Manager is configured for this non-terminal "
+            "objective; configure the language planner or supply initial_plan."
         )
 
 
@@ -654,42 +577,86 @@ class SpecialistToolRequest(DomainModel):
     reason: str = Field(default="Gather the evidence needed for the WorkOrder", max_length=1000)
 
 
+def _specialist_tool_history(work_order: WorkOrder) -> list[dict[str, object]]:
+    """Project persisted specialist turns back into the model's compact history."""
+
+    history: list[dict[str, object]] = []
+    for turn in work_order.specialist_turns:
+        item: dict[str, object] = {
+            "request": {
+                "tool_name": turn.tool_name,
+                "arguments": turn.arguments,
+                "reason": turn.reason,
+            }
+        }
+        if turn.result is not None:
+            item["result"] = turn.result
+        history.append(item)
+    return history
+
+
+def _specialist_evidence_refs(work_order: WorkOrder) -> list[ArtifactRef]:
+    refs: list[ArtifactRef] = []
+    for turn in work_order.specialist_turns:
+        if turn.result is None:
+            continue
+        raw_refs = turn.result.get("artifact_refs")
+        if not isinstance(raw_refs, list):
+            continue
+        for raw_ref in raw_refs:
+            if not isinstance(raw_ref, dict):
+                continue
+            try:
+                refs.append(ArtifactRef.model_validate(raw_ref))
+            except ValueError:
+                continue
+    return _unique_artifact_refs(refs)
+
+
+def _interrupted_tool_result(turn: SpecialistTurnRecord) -> dict[str, JsonValue]:
+    return {
+        "tool_id": turn.tool_name,
+        "status": ToolCallStatus.FAILED.value,
+        "output": None,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {
+            "kind": "ToolExecutionInterrupted",
+            "message": (
+                "Tool execution was interrupted before its result was persisted. "
+                "Inspect canonical state and decide semantically whether to reconcile or retry."
+            ),
+        },
+    }
+
+
 class LanguageSpecialistAgent:
-    """Bounded specialist loop that may inspect or mutate through the shared Tool Registry."""
+    """Make one specialist decision from a persisted WorkOrder checkpoint."""
 
     def __init__(
         self,
         client: LanguageProviderClient,
         tools: ToolRegistry | None = None,
-        *,
-        max_tool_rounds: int = 4,
     ) -> None:
-        if max_tool_rounds < 0:
-            raise ValueError("max_tool_rounds must be non-negative")
         self._client = client
         self._tools = tools
         self._tool_descriptors: list[ToolDescriptor] | None = None
-        self._scoped_tool_invoker: (
-            Callable[[str, str, Mapping[str, object]], ToolResult] | None
-        ) = None
-        self._max_tool_rounds = max_tool_rounds
 
     def bind_tools(
         self,
         tools: ToolRegistry,
         *,
-        scoped_invoker: Callable[
-            [str, str, Mapping[str, object]], ToolResult
-        ] | None = None,
         descriptors: Sequence[ToolDescriptor] | None = None,
     ) -> None:
-        """Attach the manager's shared registry without changing custom Agent factories."""
+        """Attach the shared Tool catalog without executing a Tool in this model turn."""
 
         self._tools = tools
         self._tool_descriptors = None if descriptors is None else list(descriptors)
-        self._scoped_tool_invoker = scoped_invoker
 
-    def execute(self, work_order: AgentWorkOrderView) -> AgentWorkOrderResultRequest:
+    def execute(
+        self,
+        work_order: AgentWorkOrderView,
+    ) -> AgentWorkOrderResultRequest | SpecialistToolRequest:
         descriptors = (
             []
             if self._tools is None
@@ -708,484 +675,72 @@ class LanguageSpecialistAgent:
             }
             for item in descriptors
         ]
-        tool_history: list[dict[str, object]] = []
-        evidence_refs: list[ArtifactRef] = []
-
-        for round_index in range(self._max_tool_rounds + 1):
-            may_call_tool = bool(descriptors) and round_index < self._max_tool_rounds
-            instructions = (
-                "你是当前 WorkOrder 指定的专业 Agent。请依据下方对应角色的 Production Skill，"
-                "处理已经限定范围的目标和所提供的工件摘要，不要扩大任务范围。"
-                "你与 Production Manager 共用同一套 Tool Catalog。"
-                + (
-                    "如果还需要补充证据或执行范围内的修改，只返回包含 tool_name、arguments、"
-                    "reason 的 JSON，并且每轮只请求一次 Tool 调用；否则直接返回最终结果。"
-                    if may_call_tool
-                    else "Tool 调用轮次已用完，请立即返回当前能够给出的最佳最终结果。"
-                )
-                + "最终结果必须是符合 AgentWorkOrderResultRequest 的 JSON，字段包括 status、"
-                "concise_summary、created_artifacts、updated_artifacts、findings、decisions、"
-                "assumptions、unresolved_questions、evidence_refs、recommended_next_actions。"
-                "请求的分析或决定已经完成时使用 COMPLETED；缺少实质输入时使用 PARTIAL；"
-                "只有目标确实无法处理时才使用 FAILED。\n\n"
-                + work_order.system_prompt
+        may_call_tool = bool(descriptors) and self._tools is not None
+        instructions = (
+            "你是当前 WorkOrder 指定的专业 Agent。请依据下方对应角色的 Production Skill，"
+            "处理已经限定范围的目标和所提供的工件摘要，不要扩大任务范围。"
+            "你与 Production Manager 共用同一套 Tool Catalog。"
+            + (
+                "如果还需要补充证据或执行范围内的修改，只返回包含 tool_name、arguments、"
+                "reason 的 JSON，本轮只提出一次 Tool 请求。请求会先持久化，由后续独立"
+                "推进执行；否则直接返回最终结果。"
+                if may_call_tool
+                else "当前没有可用 Tool，请直接返回最终结果。"
             )
-            raw = self._client.generate_text(
-                instructions=instructions,
-                input_text=json.dumps(
-                    {
-                        "work_order": work_order.work_order.model_dump(mode="json"),
-                        "context": work_order.context.model_dump(mode="json"),
-                        "available_tools": tool_catalog,
-                        "tool_history": tool_history,
-                        "tool_calls_remaining": max(
-                            0,
-                            self._max_tool_rounds - round_index,
-                        ),
-                    },
-                    ensure_ascii=False,
-                ),
-                max_output_tokens=5000,
-            )
-            payload = _json_block(raw)
+            + "最终结果必须是符合 AgentWorkOrderResultRequest 的 JSON，字段包括 status、"
+            "concise_summary、created_artifacts、updated_artifacts、findings、decisions、"
+            "assumptions、unresolved_questions、evidence_refs、recommended_next_actions。"
+            "请求的分析或决定已经完成时使用 COMPLETED；缺少实质输入时使用 PARTIAL；"
+            "只有目标确实无法处理时才使用 FAILED。\n\n"
+            + work_order.system_prompt
+        )
+        raw = self._client.generate_text(
+            instructions=instructions,
+            input_text=json.dumps(
+                {
+                    "work_order": work_order.work_order.model_dump(
+                        mode="json",
+                        exclude={"specialist_turns"},
+                    ),
+                    "context": work_order.context.model_dump(mode="json"),
+                    "available_tools": tool_catalog,
+                    "tool_history": _specialist_tool_history(work_order.work_order),
+                },
+                ensure_ascii=False,
+            ),
+            max_output_tokens=5000,
+        )
+        payload = _json_block(raw)
+        try:
+            result = AgentWorkOrderResultRequest.model_validate_json(payload)
+        except ValueError as result_error:
+            if not may_call_tool:
+                raise ProductionManagerError(
+                    "Specialist Agent returned an invalid AgentResult payload"
+                ) from result_error
             try:
-                result = AgentWorkOrderResultRequest.model_validate_json(payload)
-            except ValueError as result_error:
-                if not may_call_tool or self._tools is None:
-                    raise ProductionManagerError(
-                        "Specialist Agent returned an invalid AgentResult payload"
-                    ) from result_error
-                try:
-                    tool_request = SpecialistToolRequest.model_validate_json(payload)
-                except ValueError as tool_error:
-                    raise ProductionManagerError(
-                        "Specialist Agent returned neither a Tool call nor an AgentResult"
-                    ) from tool_error
-                arguments = cast(Mapping[str, object], tool_request.arguments)
-                scoped_invoker = self._scoped_tool_invoker
-                tool_result = (
-                    scoped_invoker(
-                        work_order.context.project_id,
-                        tool_request.tool_name,
-                        arguments,
+                return SpecialistToolRequest.model_validate_json(payload)
+            except ValueError as tool_error:
+                raise ProductionManagerError(
+                    "Specialist Agent returned neither a Tool call nor an AgentResult"
+                ) from tool_error
+
+        evidence_refs = _specialist_evidence_refs(work_order.work_order)
+        if evidence_refs:
+            result = result.model_copy(
+                update={
+                    "evidence_refs": _unique_artifact_refs(
+                        [*result.evidence_refs, *evidence_refs]
                     )
-                    if scoped_invoker is not None
-                    else self._tools.invoke(tool_request.tool_name, arguments)
-                )
-                evidence_refs.extend(tool_result.artifact_refs)
-                tool_history.append(
-                    {
-                        "request": tool_request.model_dump(mode="json"),
-                        "result": tool_result.model_dump(mode="json"),
-                    }
-                )
-                continue
-
-            if evidence_refs:
-                merged_refs = _unique_artifact_refs(
-                    [*result.evidence_refs, *evidence_refs]
-                )
-                result = result.model_copy(update={"evidence_refs": merged_refs})
-            return result
-
-        raise ProductionManagerError("Specialist Agent exhausted its bounded Tool loop")
+                }
+            )
+        return result
 
 
 def default_specialist_agent_factory(
     client: LanguageProviderClient,
 ) -> SpecialistAgent:
     return LanguageSpecialistAgent(client)
-
-
-def _current_script(document: ProjectDocument):
-    return next(
-        (
-            item
-            for item in document.script_versions
-            if item.id == document.project.current_script_version_id
-        ),
-        None,
-    )
-
-
-def _current_bible(document: ProjectDocument):
-    return next(
-        (
-            item
-            for item in document.bible_versions
-            if item.id == document.project.current_bible_version_id
-        ),
-        None,
-    )
-
-
-class ProjectArtifactResolver:
-    """Resolve focused summaries from the canonical ProjectDocument."""
-
-    def __init__(self, projects: ProjectDocumentStore) -> None:
-        self._projects = projects
-
-    def summarize_artifact(self, ref: ArtifactRef) -> ArtifactSummary | None:
-        document = self._projects.get_project(ref.project_id)
-        if document is None:
-            return None
-        if ref.artifact_type == "project":
-            return ArtifactSummary(
-                ref=ref,
-                title=document.project.name,
-                summary=_project_summary(document),
-            )
-        if ref.artifact_type == "planning_run":
-            planning_run = self._projects.get_planning_run(ref.artifact_id)
-            if (
-                planning_run is None
-                or planning_run.id != ref.artifact_id
-                or planning_run.project_id != ref.project_id
-            ):
-                return None
-            return ArtifactSummary(
-                ref=ref,
-                title=f"Planning run {planning_run.current_step.value}",
-                summary=planning_run.model_dump_json(),
-            )
-        if ref.artifact_type in {"script", "script_version"}:
-            script = next(
-                (
-                    item
-                    for item in document.script_versions
-                    if item.id == ref.artifact_id
-                    or (ref.version is not None and item.version == ref.version)
-                ),
-                None,
-            )
-            if script is None:
-                return None
-            scenes: list[str] = []
-            line_by_id = {line.id: line for line in script.lines}
-            for scene in script.structured_scenes:
-                lines = [
-                    f"{line_by_id[line_id].speaker}: {line_by_id[line_id].spoken_text}"
-                    for line_id in scene.line_ids
-                    if line_id in line_by_id
-                ]
-                scenes.append(
-                    f"{scene.id} {scene.heading} | {scene.summary} | " + " / ".join(lines)
-                )
-            return ArtifactSummary(
-                ref=ref,
-                title=f"Script v{script.version}",
-                summary="\n".join(scenes) or script.spoken_text,
-            )
-        if ref.artifact_type in {"bible", "bible_version"}:
-            bible = next(
-                (
-                    item
-                    for item in document.bible_versions
-                    if item.id == ref.artifact_id
-                    or (ref.version is not None and item.version == ref.version)
-                ),
-                None,
-            )
-            if bible is None:
-                return None
-            summary = {
-                "characters": [item.model_dump(mode="json") for item in bible.characters],
-                "locations": [item.model_dump(mode="json") for item in bible.locations],
-                "props": [item.model_dump(mode="json") for item in bible.props],
-                "style": bible.style.model_dump(mode="json"),
-            }
-            return ArtifactSummary(
-                ref=ref,
-                title=f"Project Bible v{bible.version}",
-                summary=json.dumps(summary, ensure_ascii=False),
-            )
-        if ref.artifact_type == "scene":
-            script = _current_script(document)
-            if script is None:
-                return None
-            scene = next(
-                (item for item in script.structured_scenes if item.id == ref.artifact_id),
-                None,
-            )
-            if scene is None:
-                return None
-            line_by_id = {line.id: line for line in script.lines}
-            lines = [
-                line_by_id[line_id].model_dump(mode="json")
-                for line_id in scene.line_ids
-                if line_id in line_by_id
-            ]
-            return ArtifactSummary(
-                ref=ref,
-                title=scene.heading,
-                summary=json.dumps(
-                    {**scene.model_dump(mode="json"), "lines": lines},
-                    ensure_ascii=False,
-                ),
-            )
-        if ref.artifact_type == "shot":
-            shot = next((item for item in document.shots if item.id == ref.artifact_id), None)
-            if shot is None:
-                return None
-            return ArtifactSummary(
-                ref=ref,
-                title=f"Shot {shot.sequence}",
-                summary=shot.model_dump_json(),
-            )
-        if ref.artifact_type == "character":
-            bible = _current_bible(document)
-            character = None if bible is None else next(
-                (item for item in bible.characters if item.id == ref.artifact_id),
-                None,
-            )
-            if character is None:
-                return None
-            return ArtifactSummary(
-                ref=ref,
-                title=character.name,
-                summary=character.model_dump_json(),
-            )
-        if ref.artifact_type in {"asset", "asset_version"}:
-            asset = next(
-                (
-                    item
-                    for item in document.assets
-                    if item.id == ref.artifact_id
-                    or any(version.id == ref.artifact_id for version in item.versions)
-                ),
-                None,
-            )
-            if asset is None:
-                return None
-            return ArtifactSummary(
-                ref=ref,
-                title=asset.name,
-                summary=asset.model_dump_json(),
-            )
-        if ref.artifact_type in {"reference_pack", "reference_pack_entry"}:
-            pack = next(
-                (
-                    item
-                    for item in document.reference_packs
-                    if item.id == ref.artifact_id
-                    or any(entry.id == ref.artifact_id for entry in item.entries)
-                ),
-                None,
-            )
-            if pack is None:
-                return None
-            if ref.artifact_type == "reference_pack_entry":
-                entry = next(
-                    (item for item in pack.entries if item.id == ref.artifact_id),
-                    None,
-                )
-                if entry is None:
-                    return None
-                return ArtifactSummary(
-                    ref=ref,
-                    title=f"Reference pack entry {entry.id}",
-                    summary=entry.model_dump_json(),
-                )
-            return ArtifactSummary(
-                ref=ref,
-                title=pack.name,
-                summary=pack.model_dump_json(),
-            )
-        if ref.artifact_type in {"timeline", "timeline_manifest"}:
-            manifest = next(
-                (item for item in document.manifests if item.id == ref.artifact_id),
-                None,
-            )
-            if manifest is None:
-                return None
-            return ArtifactSummary(
-                ref=ref,
-                title=f"Timeline v{manifest.version}",
-                summary=manifest.model_dump_json(),
-            )
-        if ref.artifact_type == "generation_task":
-            return _artifact_record_summary(ref, self._projects.get_task(ref.artifact_id))
-        if ref.artifact_type == "image_task":
-            return _artifact_record_summary(
-                ref,
-                self._projects.get_image_task(ref.artifact_id),
-            )
-        if ref.artifact_type == "take":
-            return _artifact_record_summary(ref, self._projects.get_take(ref.artifact_id))
-
-        records = cast(ProjectArtifactRecordStore, self._projects)
-        if ref.artifact_type == "h3_route_plan":
-            return _artifact_record_summary(
-                ref,
-                records.get_h3_route_plan(ref.artifact_id),
-            )
-        if ref.artifact_type == "video_inspection":
-            return _artifact_record_summary(
-                ref,
-                records.get_video_inspection(ref.artifact_id),
-            )
-        if ref.artifact_type == "take_comparison":
-            return _artifact_record_summary(
-                ref,
-                records.get_take_comparison(ref.artifact_id),
-            )
-        if ref.artifact_type == "audio_inspection":
-            return _artifact_record_summary(
-                ref,
-                records.get_audio_inspection(ref.artifact_id),
-            )
-        if ref.artifact_type == "episode_review":
-            return _artifact_record_summary(
-                ref,
-                records.get_episode_review(ref.artifact_id),
-            )
-
-        collection_loaders: dict[
-            str,
-            Callable[[str], Sequence[ArtifactRecordLike]],
-        ] = {
-            "export": records.list_exports,
-            "h3_provider_run": records.list_provider_runs,
-            "route_evidence": records.list_route_evidence,
-            "reference_visual_rerank": records.list_reference_visual_reranks,
-            "keyframe_comparison": records.list_keyframe_comparisons,
-            "input_compatibility": records.list_input_compatibility_reports,
-        }
-        loader = collection_loaders.get(ref.artifact_type)
-        if loader is not None:
-            record = next(
-                (item for item in loader(ref.project_id) if item.id == ref.artifact_id),
-                None,
-            )
-            return _artifact_record_summary(ref, record)
-        return None
-
-
-def _artifact_record_summary(
-    ref: ArtifactRef,
-    record: ArtifactRecordLike | None,
-) -> ArtifactSummary | None:
-    if (
-        record is None
-        or record.id != ref.artifact_id
-        or record.project_id != ref.project_id
-    ):
-        return None
-    return ArtifactSummary(
-        ref=ref,
-        title=ref.artifact_type.replace("_", " ").title(),
-        summary=record.model_dump_json(),
-    )
-
-
-def _project_refs(document: ProjectDocument) -> list[ArtifactRef]:
-    refs = [
-        ArtifactRef(
-            project_id=document.project.id,
-            artifact_type="project",
-            artifact_id=document.project.id,
-        )
-    ]
-    script = _current_script(document)
-    if script is not None:
-        refs.append(
-            ArtifactRef(
-                project_id=document.project.id,
-                artifact_type="script_version",
-                artifact_id=script.id,
-                version=script.version,
-            )
-        )
-    bible = _current_bible(document)
-    if bible is not None:
-        refs.append(
-            ArtifactRef(
-                project_id=document.project.id,
-                artifact_type="bible_version",
-                artifact_id=bible.id,
-                version=bible.version,
-            )
-        )
-    refs.extend(
-        ArtifactRef(
-            project_id=document.project.id,
-            artifact_type="scene",
-            artifact_id=scene.id,
-            version=None if script is None else script.version,
-        )
-        for scene in ([] if script is None else script.structured_scenes)
-    )
-    refs.extend(
-        ArtifactRef(
-            project_id=document.project.id,
-            artifact_type="shot",
-            artifact_id=shot.id,
-            version=shot.revision,
-        )
-        for shot in document.shots
-    )
-    return refs
-
-
-def _project_summary(document: ProjectDocument) -> str:
-    script = _current_script(document)
-    bible = _current_bible(document)
-    scene_summaries = [] if script is None else [
-        f"{scene.id}:{scene.heading}:{scene.summary}" for scene in script.structured_scenes
-    ]
-    characters = [] if bible is None else [
-        f"{item.id}:{item.name}:{item.performance}" for item in bible.characters
-    ]
-    shot_summaries = [
-        f"{shot.id}#{shot.sequence}:{shot.narrative_purpose}:{shot.visual}"
-        for shot in document.shots
-    ]
-    planning_summary = "Planning metadata unavailable"
-    if document.planning is not None:
-        planning = document.planning
-        warning_summary = " | ".join(planning.warnings) or "none"
-        planning_summary = (
-            f"Planning {planning.status.value}; planner {planning.planner or 'pending'}; "
-            f"run {planning.run_id or 'none'}; warnings {warning_summary}"
-        )
-    return "\n".join(
-        [
-            f"Project {document.project.name} ({document.project.id})",
-            f"Profile {document.project.production_profile.value}; stage {document.project.stage.value}; "
-            f"language {document.project.language}; aspect {document.project.aspect_ratio}; "
-            f"target {document.project.target_duration_seconds}s",
-            "Characters: " + " | ".join(characters),
-            "Scenes: " + " | ".join(scene_summaries),
-            "Shots: " + " | ".join(shot_summaries),
-            f"Assets {len(document.assets)}; manifests {len(document.manifests)}; "
-            f"current script {document.project.current_script_version_id}; "
-            f"current bible {document.project.current_bible_version_id}",
-            planning_summary,
-        ]
-    )
-
-
-def _role_for_recipient(recipient: str) -> ProductionSkillRole:
-    normalized = recipient.casefold().replace("_", "-")
-    if "review-router" in normalized:
-        return ProductionSkillRole.REVIEW_ROUTER
-    if "director" in normalized:
-        return ProductionSkillRole.DIRECTOR
-    if "asset" in normalized or "design" in normalized:
-        return ProductionSkillRole.ASSET_REVIEWER
-    if "route" in normalized:
-        return ProductionSkillRole.ROUTE_PLANNER
-    if "video" in normalized or "prompt" in normalized:
-        return ProductionSkillRole.VIDEO_PROMPT_COMPILER
-    if "episode" in normalized or "final" in normalized:
-        return ProductionSkillRole.EPISODE_REVIEWER
-    if "critic" in normalized or "review" in normalized:
-        return ProductionSkillRole.CRITIC
-    if "concept" in normalized:
-        return ProductionSkillRole.CONCEPT
-    if "writer" in normalized or "story" in normalized or "script" in normalized:
-        return ProductionSkillRole.WRITER
-    return ProductionSkillRole.PLANNER
 
 
 class ProductionManager:
@@ -1252,6 +807,7 @@ class ProductionManager:
             active_skill_ids=[production_skill_id(request.project.production_profile)],
             unattended=request.project.run_mode == RunMode.AUTO_DRAFT,
             execution_target=request.execution_target,
+            render_export=request.render_export,
         )
         self.runtime.remember_decision(
             project_id=project_id,
@@ -1352,6 +908,7 @@ class ProductionManager:
             active_skill_ids=[production_skill_id(document.project.production_profile)],
             unattended=request.unattended,
             execution_target=request.execution_target,
+            render_export=request.render_export,
         )
         if request.execution_target is not None:
             self.runtime.remember_decision(
@@ -1412,13 +969,37 @@ class ProductionManager:
         if snapshot.current_plan is not None:
             for step in snapshot.current_plan.steps:
                 requested_refs.extend(step.artifact_refs)
+        context = self.runtime.context(
+            run_id,
+            requested_artifact_refs=requested_refs,
+        )
+        planning_trace: ContentPlanningTraceView | None = None
+        planning_refs = [
+            *requested_refs,
+            *[
+                artifact.ref
+                for artifact in context.artifacts
+                if artifact.ref.artifact_type == "content_planning_job"
+            ],
+        ]
+        seen_planning_ids: set[str] = set()
+        for ref in planning_refs:
+            if (
+                ref.artifact_type != "content_planning_job"
+                or ref.artifact_id in seen_planning_ids
+            ):
+                continue
+            seen_planning_ids.add(ref.artifact_id)
+            planning = self.projects.get_planning_run(ref.artifact_id)
+            if planning is None or planning.owner_agent_run_id != run_id:
+                continue
+            planning_trace = _content_planning_trace_view(planning)
+            break
         return AgentRunView(
             snapshot=snapshot,
             ready_steps=self.runtime.ready_steps(run_id),
-            context=self.runtime.context(
-                run_id,
-                requested_artifact_refs=requested_refs,
-            ),
+            context=context,
+            content_planning_trace=planning_trace,
         )
 
     def replan(
@@ -1493,11 +1074,24 @@ class ProductionManager:
         *,
         agent_run_id: str,
         document: ProjectDocument,
-        retry_after_user_confirmation: bool = False,
     ) -> AgentPlanProposal | None:
         """Keep persisted long-form planning ahead of downstream production work."""
 
         planning = document.planning
+        if (
+            document.project.content_planning_output
+            == ContentPlanningOutput.SCRIPT_ONLY
+            and document.project.stage == ProjectStage.SCRIPT_READY
+            and (planning is None or planning.status == PlanningRunStatus.COMPLETE)
+        ):
+            return AgentPlanProposal(
+                summary=(
+                    "The requested screenplay is complete; stop before shot, asset, image, "
+                    "video, or timeline production."
+                ),
+                steps=[],
+                goal_complete=True,
+            )
         if planning is None or planning.status == PlanningRunStatus.COMPLETE:
             return None
 
@@ -1529,7 +1123,7 @@ class ProductionManager:
 
         planning_ref = ArtifactRef(
             project_id=document.project.id,
-            artifact_type="planning_run",
+            artifact_type="content_planning_job",
             artifact_id=planning.run_id,
         )
         if planning.owner_agent_run_id != agent_run_id:
@@ -1556,64 +1150,23 @@ class ProductionManager:
         if planning.status in {
             PlanningRunStatus.FAILED,
             PlanningRunStatus.NEEDS_ATTENTION,
-        } and not retry_after_user_confirmation:
-            failed = planning.status == PlanningRunStatus.FAILED
-            return AgentPlanProposal(
-                summary=(
-                    "The persisted content-planning run failed and needs a user decision "
-                    "before production can continue."
-                    if failed
-                    else "The current content-planning unit needs attention before it is "
-                    "retried."
-                ),
-                steps=[
-                    PlanStep(
-                        id=(
-                            "resolve-failed-planning-run"
-                            if failed
-                            else "repair-planning-run"
-                        ),
-                        title=(
-                            "Resolve the failed planning run"
-                            if failed
-                            else "Repair the current planning unit"
-                        ),
-                        kind=ActionKind.USER_INPUT,
-                        assigned_agent="production-manager",
-                        instructions=(
-                            "Review the planning failure, correct the input or provider, then "
-                            "resume from the persisted project context."
-                            if failed
-                            else "Correct the provider or project input, then explicitly "
-                            "continue from the persisted planning cursor."
-                        ),
-                        artifact_refs=[planning_ref],
-                    )
-                ],
-            )
+        }:
+            # A failed content unit is context for the Production Manager Agent, not
+            # an automatic user-approval gate.  Returning no fixed precondition lets
+            # the planner choose whether to retry, change route, or request genuinely
+            # missing user input from the persisted ContextPack.
+            return None
 
         if not self.tools.contains("planning.advance"):
             raise ProductionManagerError(
                 "The shared Tool Registry has no planning.advance Tool"
             )
-        retrying = planning.status in {
-            PlanningRunStatus.FAILED,
-            PlanningRunStatus.NEEDS_ATTENTION,
-        }
         return AgentPlanProposal(
-            summary=(
-                "Retry the current persisted content-planning unit."
-                if retrying
-                else "Advance the persisted content plan by one bounded unit."
-            ),
+            summary="Advance the persisted content plan by one bounded unit.",
             steps=[
                 PlanStep(
                     id="advance-content-planning",
-                    title=(
-                        "Retry the current planning unit"
-                        if retrying
-                        else "Advance content planning"
-                    ),
+                    title="Advance content planning",
                     kind=ActionKind.TOOL_CALL,
                     assigned_agent="production-manager",
                     tool_name="planning.advance",
@@ -1624,6 +1177,7 @@ class ProductionManager:
                     arguments={
                         "project_id": document.project.id,
                         "run_id": planning.run_id,
+                        "owner_agent_run_id": agent_run_id,
                     },
                     artifact_refs=[planning_ref],
                 )
@@ -1660,8 +1214,7 @@ class ProductionManager:
         work_orders: list[str] = []
         notes: list[str] = []
         remaining_actions = request.max_actions
-        automatic_replans = 0
-        max_automatic_replans = 4
+        planning_progress_boundary_reached = False
 
         while True:
             current = self.runtime.snapshot(run_id)
@@ -1672,25 +1225,23 @@ class ProductionManager:
 
             failed_actions = self._failed_actions_for_plan(current, plan.id)
             if failed_actions:
-                if automatic_replans >= max_automatic_replans:
-                    self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
-                    notes.append("Automatic replanning stopped at the bounded retry limit")
-                    break
                 reason = "Revise the plan after failed actions: " + "; ".join(
                     action.error_message or action.input_summary
                     for action in failed_actions[-4:]
                 )
                 if not self._automatic_replan_unlocked(run_id, reason, notes):
                     break
-                automatic_replans += 1
                 continue
 
             ready = self.runtime.ready_steps(run_id)
+            if ready and planning_progress_boundary_reached:
+                self.runtime.set_run_status(run_id, AgentRunStatus.RUNNING)
+                break
             if ready and remaining_actions > 0:
                 batch = ready[:remaining_actions]
-                made_progress = False
                 self.runtime.set_run_status(run_id, AgentRunStatus.RUNNING)
                 for step in batch:
+                    completed_planning_action = False
                     action, work_order, note = self._execute_step(
                         run_id,
                         plan.id,
@@ -1699,15 +1250,15 @@ class ProductionManager:
                     executed.append(action.id)
                     remaining_actions -= 1
                     if action.status == ActionStatus.SUCCEEDED:
-                        made_progress = True
+                        if step.tool_name == "planning.advance":
+                            planning_progress_boundary_reached = True
+                            completed_planning_action = True
                     if work_order is not None:
                         work_orders.append(work_order.id)
                     if note:
                         notes.append(note)
-                # This limit protects against replanning without progress. A successful
-                # action starts a fresh bounded segment; max_actions still caps the call.
-                if made_progress:
-                    automatic_replans = 0
+                    if completed_planning_action:
+                        break
                 continue
 
             if ready:
@@ -1719,10 +1270,6 @@ class ProductionManager:
                     self.runtime.set_run_status(run_id, AgentRunStatus.COMPLETED)
                     notes.append("The Agent confirmed that the run objective is complete")
                     break
-                if automatic_replans >= max_automatic_replans:
-                    self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
-                    notes.append("Automatic replanning stopped at the bounded retry limit")
-                    break
                 if not self._automatic_replan_unlocked(
                     run_id,
                     "The bounded plan completed; inspect the latest ContextPack and continue "
@@ -1730,7 +1277,6 @@ class ProductionManager:
                     notes,
                 ):
                     break
-                automatic_replans += 1
                 continue
 
             self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
@@ -1750,6 +1296,18 @@ class ProductionManager:
             if view.snapshot.current_plan is None
             else view.snapshot.current_plan.id
         )
+        active_blockers = [
+            action.error_message
+            for action in view.snapshot.actions
+            if action.status == ActionStatus.FAILED
+            and action.plan_revision_id == active_plan_id
+            and action.error_message
+        ][-4:]
+        if not active_blockers and view.snapshot.run.status == AgentRunStatus.WAITING:
+            active_blockers = view.snapshot.memory.blockers
+        next_actions = [step.title for step in view.ready_steps]
+        if not next_actions and view.snapshot.run.status == AgentRunStatus.WAITING:
+            next_actions = view.snapshot.memory.next_actions
         self.runtime.checkpoint(
             run_id,
             current_focus=(
@@ -1757,20 +1315,14 @@ class ProductionManager:
                 if view.snapshot.current_plan is not None
                 else view.snapshot.run.objective
             ),
-            blockers=[
-                action.error_message
-                for action in view.snapshot.actions
-                if action.status == ActionStatus.FAILED
-                and action.plan_revision_id == active_plan_id
-                and action.error_message
-            ][-4:],
+            blockers=active_blockers,
             open_questions=[
                 action.input_summary
                 for action in view.snapshot.actions
                 if action.kind == ActionKind.USER_INPUT
                 and action.status == ActionStatus.RUNNING
             ],
-            next_actions=[step.title for step in view.ready_steps],
+            next_actions=next_actions,
             artifact_refs=[
                 ref for action in view.snapshot.actions[-8:] for ref in action.artifact_refs
             ],
@@ -1834,6 +1386,27 @@ class ProductionManager:
             )
             notes.append(f"Automatic replanning failed: {exc}")
             return False
+        replanned = self.runtime.snapshot(run_id)
+        replanned_plan = replanned.current_plan
+        if (
+            replanned_plan is None
+            or (
+                not replanned_plan.goal_complete
+                and not self.runtime.ready_steps(run_id)
+            )
+        ):
+            self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
+            self.runtime.checkpoint(
+                run_id,
+                current_focus=reason,
+                blockers=[
+                    *blockers,
+                    "Automatic replanning produced no actionable plan",
+                ][-4:],
+                next_actions=["Revise the plan from the latest ContextPack"],
+            )
+            notes.append("Automatic replanning produced no actionable or terminal plan")
+            return False
         notes.append("The Production Manager revised the plan from the latest ContextPack")
         return True
 
@@ -1845,7 +1418,12 @@ class ProductionManager:
         if run is None:
             raise ProductionManagerError(f"Unknown agent run: {work_order.parent_run_id}")
         document = self._require_project(run.project_id)
-        role = _role_for_recipient(work_order.recipient_role)
+        role = work_order.production_skill_role
+        if role is None:
+            raise ProductionManagerError(
+                "WorkOrder 缺少 Agent 显式选择的 production_skill_role；"
+                "不能从 recipient_role 名称推断专业职责"
+            )
         prompt = compile_production_prompt(
             document.project.production_profile,
             roles=(role,),
@@ -2002,11 +1580,6 @@ class ProductionManager:
         work_order = self.runtime.store.get_work_order(work_order_id)
         if work_order is None:
             raise ProductionManagerError(f"Unknown work order: {work_order_id}")
-        client = self._language_client_resolver()
-        if client is None:
-            raise ProductionManagerError(
-                "No language provider is configured for the specialist Agent"
-            )
         with self._run_lock(work_order.parent_run_id):
             current = self.runtime.store.get_work_order(work_order_id)
             if current is None:
@@ -2018,33 +1591,40 @@ class ProductionManager:
                 raise ProductionManagerError(
                     f"Work order cannot be executed from {current.status.value}"
                 )
+            pending_turn = next(
+                (
+                    turn
+                    for turn in reversed(current.specialist_turns)
+                    if turn.status == SpecialistTurnStatus.REQUESTED
+                ),
+                None,
+            )
+        if pending_turn is not None:
+            return self._execute_pending_specialist_tool(
+                work_order_id,
+                pending_turn.id,
+            )
+
+        client = self._language_client_resolver()
+        if client is None:
+            raise ProductionManagerError(
+                "No language provider is configured for the specialist Agent"
+            )
+        with self._run_lock(work_order.parent_run_id):
             self.runtime.begin_work_order(work_order_id)
             view = self.get_work_order(work_order_id)
             parent_run = self.runtime.snapshot(work_order.parent_run_id).run
         try:
             agent = self._specialist_agent_factory(client)
             if isinstance(agent, LanguageSpecialistAgent):
-                def invoke_for_parent_run(
-                    project_id: str,
-                    tool_name: str,
-                    arguments: Mapping[str, object],
-                ) -> ToolResult:
-                    return self._invoke_scoped_tool(
-                        project_id,
-                        tool_name,
-                        arguments,
-                        agent_run_id=parent_run.id,
-                    )
-
                 agent.bind_tools(
                     self.tools,
-                    scoped_invoker=invoke_for_parent_run,
                     descriptors=_tools_for_execution_target(
                         self.tools.list(),
                         parent_run.execution_target,
                     ),
                 )
-            result = agent.execute(view)
+            decision = agent.execute(view)
         except Exception as exc:
             with self._run_lock(work_order.parent_run_id):
                 failed = self.runtime.store.get_work_order(work_order_id)
@@ -2056,7 +1636,156 @@ class ProductionManager:
             raise ProductionManagerError(
                 f"Specialist Agent execution failed: {exc}"
             ) from exc
-        return self.submit_work_order_result(work_order_id, result)
+        if isinstance(decision, SpecialistToolRequest):
+            with self._run_lock(work_order.parent_run_id):
+                current = self.runtime.store.get_work_order(work_order_id)
+                if current is None:
+                    raise ProductionManagerError(
+                        f"Unknown work order: {work_order_id}"
+                    )
+                next_sequence = max(
+                    (turn.sequence for turn in current.specialist_turns),
+                    default=0,
+                ) + 1
+                current.specialist_turns.append(
+                    SpecialistTurnRecord(
+                        id=f"specialist-turn-{uuid4().hex}",
+                        sequence=next_sequence,
+                        tool_name=decision.tool_name,
+                        arguments=decision.arguments,
+                        reason=decision.reason,
+                    )
+                )
+                current.status = DelegationStatus.NEEDS_ATTENTION
+                current.updated_at = utc_now()
+                self.runtime.store.save_work_order(current)
+            return self.submit_work_order_result(
+                work_order_id,
+                AgentWorkOrderResultRequest(
+                    status=AgentResultStatus.PARTIAL,
+                    concise_summary=(
+                        f"专业 Agent 已请求 Tool {decision.tool_name}，"
+                        "请求已持久化，尚未执行。"
+                    ),
+                    recommended_next_actions=[
+                        "执行已持久化的 Tool 请求，然后让专业 Agent 继续判断。"
+                    ],
+                ),
+            )
+        return self.submit_work_order_result(work_order_id, decision)
+
+    def _execute_pending_specialist_tool(
+        self,
+        work_order_id: str,
+        turn_id: str,
+    ) -> AgentWorkOrderResultResponse:
+        work_order = self.runtime.store.get_work_order(work_order_id)
+        if work_order is None:
+            raise ProductionManagerError(f"Unknown work order: {work_order_id}")
+        with self._run_lock(work_order.parent_run_id):
+            current = self.runtime.store.get_work_order(work_order_id)
+            if current is None:
+                raise ProductionManagerError(f"Unknown work order: {work_order_id}")
+            turn = next(
+                (item for item in current.specialist_turns if item.id == turn_id),
+                None,
+            )
+            if turn is None or turn.status != SpecialistTurnStatus.REQUESTED:
+                raise ProductionManagerError(
+                    "The persisted specialist Tool request is no longer pending"
+                )
+            turn.status = SpecialistTurnStatus.IN_PROGRESS
+            turn.updated_at = utc_now()
+            current.status = DelegationStatus.IN_PROGRESS
+            current.updated_at = turn.updated_at
+            self.runtime.store.save_work_order(current)
+            project_id = self.runtime.snapshot(current.parent_run_id).run.project_id
+            parent_run_id = current.parent_run_id
+            tool_name = turn.tool_name
+            arguments = cast(Mapping[str, object], turn.arguments)
+
+        try:
+            tool_result = self._invoke_scoped_tool(
+                project_id,
+                tool_name,
+                arguments,
+                agent_run_id=parent_run_id,
+            )
+        except Exception as exc:
+            with self._run_lock(parent_run_id):
+                current = self.runtime.store.get_work_order(work_order_id)
+                if current is not None:
+                    turn = next(
+                        (item for item in current.specialist_turns if item.id == turn_id),
+                        None,
+                    )
+                    if turn is not None:
+                        turn.status = SpecialistTurnStatus.COMPLETED
+                        turn.result = {
+                            "tool_id": turn.tool_name,
+                            "status": ToolCallStatus.FAILED.value,
+                            "output": None,
+                            "artifact_refs": [],
+                            "warnings": [],
+                            "error": {
+                                "kind": type(exc).__name__,
+                                "message": str(exc),
+                            },
+                        }
+                        turn.updated_at = utc_now()
+                    current.status = DelegationStatus.NEEDS_ATTENTION
+                    current.updated_at = utc_now()
+                    self.runtime.store.save_work_order(current)
+            if isinstance(exc, ProductionManagerError):
+                raise
+            raise ProductionManagerError(
+                f"Specialist Tool execution failed: {exc}"
+            ) from exc
+
+        serialized_result = cast(
+            dict[str, JsonValue],
+            tool_result.model_dump(mode="json"),
+        )
+        with self._run_lock(parent_run_id):
+            current = self.runtime.store.get_work_order(work_order_id)
+            if current is None:
+                raise ProductionManagerError(f"Unknown work order: {work_order_id}")
+            turn = next(
+                (item for item in current.specialist_turns if item.id == turn_id),
+                None,
+            )
+            if turn is None:
+                raise ProductionManagerError(
+                    "The persisted specialist Tool turn disappeared during execution"
+                )
+            turn.status = SpecialistTurnStatus.COMPLETED
+            turn.result = serialized_result
+            turn.updated_at = utc_now()
+            current.status = DelegationStatus.NEEDS_ATTENTION
+            current.updated_at = turn.updated_at
+            self.runtime.store.save_work_order(current)
+
+        findings: list[str] = []
+        if tool_result.error is not None:
+            findings.append(
+                f"Tool {tool_name} returned {tool_result.status.value}: "
+                f"{tool_result.error.message}"
+            )
+        return self.submit_work_order_result(
+            work_order_id,
+            AgentWorkOrderResultRequest(
+                status=AgentResultStatus.PARTIAL,
+                concise_summary=(
+                    f"Tool {tool_name} 已执行并持久化结果："
+                    f"{tool_result.status.value}。"
+                ),
+                findings=findings,
+                evidence_refs=tool_result.artifact_refs,
+                recommended_next_actions=[
+                    "让专业 Agent 读取已持久化的 Tool 结果并继续判断。"
+                ],
+            ),
+        )
 
     def submit_user_input(
         self,
@@ -2082,55 +1811,15 @@ class ProductionManager:
         run = self.runtime.store.get_run(run_id)
         if run is None:
             raise ProductionManagerError(f"Unknown agent run: {run_id}")
-        decision_statement = request.answer
-        if request.remember_as_decision and action.plan_step_id == "request-production-target":
-            target = request.answer.strip().upper()
-            if target not in {
-                ProductionExecutionTarget.MOCK.value,
-                ProductionExecutionTarget.REAL_H3.value,
-            }:
-                raise ProductionManagerError(
-                    "Production target must be MOCK or REAL_H3"
-                )
-            self.runtime.set_run_execution_target(
-                run.id,
-                ProductionExecutionTarget(target),
-            )
-            decision_statement = f"Execution target: {target}"
         self.runtime.complete_action(action.id, output_summary=request.answer)
         if request.remember_as_decision:
             self.runtime.remember_decision(
                 project_id=run.project_id,
                 run_id=run.id,
-                statement=decision_statement,
+                statement=request.answer,
                 rationale=f"User response to: {action.input_summary}",
                 artifact_refs=action.artifact_refs,
             )
-        if action.plan_step_id in {
-            "repair-planning-run",
-            "resolve-failed-planning-run",
-        }:
-            document = self._require_project(run.project_id)
-            proposal = self._planning_precondition_plan(
-                agent_run_id=run_id,
-                document=document,
-                retry_after_user_confirmation=True,
-            )
-            if proposal is None:
-                raise ProductionManagerError(
-                    "The planning run no longer needs an explicit retry"
-                )
-            self._replace_plan(run_id, proposal)
-            self.runtime.set_run_status(run_id, AgentRunStatus.RUNNING)
-            self.runtime.checkpoint(
-                run_id,
-                current_focus=proposal.summary,
-                next_actions=[step.title for step in self.runtime.ready_steps(run_id)],
-                artifact_refs=[
-                    ref for step in proposal.steps for ref in step.artifact_refs
-                ],
-            )
-            return self.get_run(run_id)
         self._settle_run_after_external_action(
             run_id,
             reason=(
@@ -2154,7 +1843,7 @@ class ProductionManager:
         reason: str,
     ) -> AgentRunStatus:
         notes: list[str] = []
-        for _index in range(4):
+        while True:
             snapshot = self.runtime.snapshot(run_id)
             plan = snapshot.current_plan
             if plan is None:
@@ -2192,9 +1881,6 @@ class ProductionManager:
             )
             self.runtime.set_run_status(run_id, status)
             return status
-
-        self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
-        return AgentRunStatus.WAITING
 
     def refresh_project_memory(self, document: ProjectDocument) -> ProjectMemory:
         memory = ProjectMemory(
@@ -2264,6 +1950,7 @@ class ProductionManager:
                     self.runtime.fail_action(
                         action.id,
                         error_message=f"{step.kind.value} step is missing tool_name",
+                        error_kind="MissingToolName",
                     ),
                     None,
                     "The Agent plan must be revised",
@@ -2274,6 +1961,7 @@ class ProductionManager:
                     self.runtime.fail_action(
                         action.id,
                         error_message=f"Unknown agent run: {run_id}",
+                        error_kind="UnknownAgentRun",
                     ),
                     None,
                     "The Agent plan must be revised",
@@ -2291,6 +1979,7 @@ class ProductionManager:
                         action.id,
                         error_message=str(exc),
                         output_summary=str(exc),
+                        error_kind=type(exc).__name__,
                     ),
                     None,
                     "Tool scope error recorded; the Agent can revise the plan",
@@ -2306,6 +1995,11 @@ class ProductionManager:
                         action.id,
                         error_message=message,
                         output_summary=message,
+                        error_kind=(
+                            result.error.kind
+                            if result.error is not None
+                            else result.status.value
+                        ),
                     ),
                     None,
                     "Tool failure recorded; the Agent can revise the plan",
@@ -2320,14 +2014,36 @@ class ProductionManager:
             )
             document = self.projects.get_project(run.project_id)
             if document is not None:
+                if step.tool_name == "planning.advance":
+                    planning_run_id = step.arguments.get("run_id")
+                    if isinstance(planning_run_id, str):
+                        self._synchronize_planning_narrative_context(
+                            agent_run_id=run.id,
+                            document=document,
+                            planning_run_id=planning_run_id,
+                        )
                 self.refresh_project_memory(document)
             return completed, None, None
         if step.kind == ActionKind.DELEGATION:
+            if step.production_skill_role is None:
+                return (
+                    self.runtime.fail_action(
+                        action.id,
+                        error_message=(
+                            "DELEGATION step is missing the Agent-selected "
+                            "production_skill_role"
+                        ),
+                        error_kind="MissingProductionSkillRole",
+                    ),
+                    None,
+                    "The Agent plan must explicitly select the delegation's production role",
+                )
             arguments = step.arguments
             work_order = self.runtime.create_work_order(
                 run_id,
                 sender="production-manager",
                 recipient_role=step.assigned_agent,
+                production_skill_role=step.production_skill_role,
                 objective=step.instructions,
                 why_now=_string_argument(arguments, "why_now", step.title),
                 scope=step.artifact_refs,
@@ -2363,6 +2079,106 @@ class ProductionManager:
             raise ProductionManagerError(f"Unknown project: {project_id}")
         return document
 
+    def _synchronize_planning_narrative_context(
+        self,
+        *,
+        agent_run_id: str,
+        document: ProjectDocument,
+        planning_run_id: str,
+    ) -> None:
+        """Expose Agent-selected story direction to the owning AgentRun."""
+
+        planning = self.projects.get_planning_run(planning_run_id)
+        intent = None if planning is None else planning.story_intent
+        if planning is None or intent is None:
+            return
+
+        self.runtime.set_run_active_skills(
+            agent_run_id,
+            [
+                production_skill_id(document.project.production_profile),
+                *planning.selected_narrative_skill_ids,
+            ],
+        )
+
+        existing_statements = {
+            decision.statement
+            for decision in self.runtime.store.list_decisions(
+                document.project.id,
+                run_id=agent_run_id,
+            )
+            if decision.run_id == agent_run_id
+        }
+        planning_ref = ArtifactRef(
+            project_id=document.project.id,
+            artifact_type="content_planning_job",
+            artifact_id=planning.id,
+        )
+        intent_parts = [
+            f"观众体验：{intent.audience_experience}",
+            f"戏剧引擎：{intent.dramatic_engine}",
+            f"推进策略：{intent.progression_strategy}",
+            f"调性与可信度：{intent.tone_and_plausibility}",
+        ]
+        if intent.protected_elements:
+            intent_parts.append("需保护的元素：" + "；".join(intent.protected_elements))
+        if intent.drift_risks:
+            intent_parts.append("需避免的偏移：" + "；".join(intent.drift_risks))
+        decisions = [
+            (
+                "当前故事创作意图：" + "；".join(intent_parts),
+                (
+                    f"内容规划任务 {planning.id} 形成的可覆盖创作方向，"
+                    "供后续 Agent 理解观众体验与故事取舍，不作为质量门禁。"
+                ),
+            )
+        ]
+        if planning.narrative_skill_decision:
+            decisions.append(
+                (
+                    "本轮叙事技能选择判断：" + planning.narrative_skill_decision,
+                    (
+                        f"内容规划任务 {planning.id} 基于完整用户语义形成；"
+                        "包括不装载额外技能时的理由，不作为关键词路由或质量门禁。"
+                    ),
+                )
+            )
+        for index, skill_id in enumerate(planning.selected_narrative_skill_ids):
+            normalized_skill_id = skill_id.strip()
+            if not normalized_skill_id:
+                continue
+            reason = (
+                planning.skill_selection_reasons[index].strip()
+                if index < len(planning.skill_selection_reasons)
+                else ""
+            )
+            selection_statement = f"当前故事选用叙事技能 {normalized_skill_id}"
+            if reason:
+                selection_statement += f"；选择理由：{reason}"
+            else:
+                selection_statement += "；内容规划记录未附单独理由"
+            decisions.append(
+                (
+                    selection_statement,
+                    (
+                        f"内容规划任务 {planning.id} 根据当前故事创作意图"
+                        "自主选择，后续 Agent 或用户可以调整。"
+                    ),
+                )
+            )
+
+        for statement, rationale in decisions:
+            if statement in existing_statements:
+                continue
+            self.runtime.remember_decision(
+                project_id=document.project.id,
+                run_id=agent_run_id,
+                statement=statement,
+                rationale=rationale,
+                artifact_refs=[planning_ref],
+            )
+            existing_statements.add(statement)
+
     def _validate_tool_scope(
         self,
         project_id: str,
@@ -2392,6 +2208,7 @@ class ProductionManager:
 
         if tool_name == "planning.advance":
             run_id = arguments.get("run_id")
+            requested_owner_agent_run_id = arguments.get("owner_agent_run_id")
             document = self.projects.get_project(project_id)
             planning = None if document is None else document.planning
             if not isinstance(run_id, str) or planning is None:
@@ -2401,6 +2218,10 @@ class ProductionManager:
             if planning.run_id != run_id:
                 raise ProductionManagerError(
                     "planning.advance must target the current project's planning run"
+                )
+            if requested_owner_agent_run_id != agent_run_id:
+                raise ProductionManagerError(
+                    "planning.advance owner_agent_run_id must match the current Agent run"
                 )
             if planning.owner_agent_run_id is not None:
                 if agent_run_id is None:
@@ -2500,6 +2321,12 @@ class ProductionManager:
                 run.id,
                 statuses=(DelegationStatus.IN_PROGRESS,),
             ):
+                for turn in work_order.specialist_turns:
+                    if turn.status != SpecialistTurnStatus.IN_PROGRESS:
+                        continue
+                    turn.status = SpecialistTurnStatus.INTERRUPTED
+                    turn.result = _interrupted_tool_result(turn)
+                    turn.updated_at = utc_now()
                 work_order.status = DelegationStatus.NEEDS_ATTENTION
                 work_order.updated_at = utc_now()
                 self.runtime.store.save_work_order(work_order)
@@ -2525,7 +2352,7 @@ class ProductionManager:
                             refs.append(
                                 ArtifactRef(
                                     project_id=run.project_id,
-                                    artifact_type="planning_run",
+                                    artifact_type="content_planning_job",
                                     artifact_id=document.planning.run_id,
                                 )
                             )
@@ -2563,10 +2390,15 @@ class ProductionManager:
                                 artifact_refs=[
                                     ArtifactRef(
                                         project_id=run.project_id,
-                                        artifact_type="planning_run",
+                                        artifact_type="content_planning_job",
                                         artifact_id=planning_run.id,
                                     )
                                 ],
+                            )
+                            self._synchronize_planning_narrative_context(
+                                agent_run_id=run.id,
+                                document=document,
+                                planning_run_id=planning_run.id,
                             )
                             self.refresh_project_memory(document)
                             recovered = True

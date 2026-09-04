@@ -14,6 +14,8 @@ from short_drama.media import TimelineExporter
 from short_drama.models import (
     ApprovalStatus,
     EnqueueRequest,
+    EpisodeReviewReport,
+    EpisodeReviewStatus,
     Freshness,
     OutputSpec,
     TaskStatus,
@@ -57,6 +59,53 @@ def _run_mock_agent_to_completion(
     *,
     render_export: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    steps: list[dict[str, Any]] = [
+        {
+            "id": "enqueue-mock-candidates",
+            "title": "Queue Mock video candidates",
+            "kind": "TOOL_CALL",
+            "assigned_agent": "production-manager",
+            "tool_name": "video.enqueue",
+            "instructions": "Queue deterministic Mock candidates for all current shots.",
+            "arguments": {"project_id": project_id, "request": {}},
+        },
+        {
+            "id": "drain-mock-tasks",
+            "title": "Complete Mock generation tasks",
+            "kind": "TOOL_CALL",
+            "assigned_agent": "production-manager",
+            "tool_name": "task.drain",
+            "instructions": "Advance the queued Mock tasks to terminal results.",
+            "arguments": {"project_id": project_id, "max_steps": 5000},
+            "depends_on": ["enqueue-mock-candidates"],
+        },
+        {
+            "id": "rebuild-timeline",
+            "title": "Build the selected-take timeline",
+            "kind": "TOOL_CALL",
+            "assigned_agent": "production-manager",
+            "tool_name": "timeline.rebuild",
+            "instructions": "Build a timeline from the selected Mock takes.",
+            "arguments": {"project_id": project_id},
+            "depends_on": ["drain-mock-tasks"],
+        },
+    ]
+    if render_export:
+        steps.append(
+            {
+                "id": "export-timeline",
+                "title": "Render the current timeline",
+                "kind": "TOOL_CALL",
+                "assigned_agent": "production-manager",
+                "tool_name": "timeline.export",
+                "instructions": "Render the current manifest without rebuilding it again.",
+                "arguments": {
+                    "project_id": project_id,
+                    "request": {"rebuild_manifest": False},
+                },
+                "depends_on": ["rebuild-timeline"],
+            }
+        )
     created = client.post(
         f"/api/short-drama/projects/{project_id}/agent-runs",
         json={
@@ -64,6 +113,11 @@ def _run_mock_agent_to_completion(
             "unattended": True,
             "execution_target": "MOCK",
             "render_export": render_export,
+            "initial_plan": {
+                "summary": "Execute the caller-authored Mock production plan.",
+                "steps": steps,
+                "goal_complete": True,
+            },
         },
     )
     assert created.status_code == 200, created.text
@@ -76,17 +130,36 @@ def _advance_agent_run_to_completion(
     current: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     run_id = current["snapshot"]["run"]["id"]
-    for _ in range(16):
-        if current["snapshot"]["run"]["status"] == "COMPLETED":
-            break
+    while current["snapshot"]["run"]["status"] == "RUNNING":
+        previous_progress = (
+            current["snapshot"]["current_plan"]["id"],
+            tuple(
+                (action["id"], action["status"])
+                for action in current["snapshot"]["actions"]
+            ),
+        )
         advanced = client.post(
             f"/api/short-drama/agent-runs/{run_id}/advance",
             json={"max_actions": 8},
         )
         assert advanced.status_code == 200, advanced.text
-        current = advanced.json()["run"]
-    else:
-        raise AssertionError("Agent Mock production did not complete")
+        response = advanced.json()
+        current = response["run"]
+        current_plan = current["snapshot"]["current_plan"]
+        current_progress = (
+            None if current_plan is None else current_plan["id"],
+            tuple(
+                (action["id"], action["status"])
+                for action in current["snapshot"]["actions"]
+            ),
+        )
+        if (
+            current["snapshot"]["run"]["status"] == "RUNNING"
+            and not response["executed_action_ids"]
+            and current_progress == previous_progress
+        ):
+            raise AssertionError("Agent Mock production made no progress")
+    assert current["snapshot"]["run"]["status"] == "COMPLETED", current
     fetched = client.get(f"/api/short-drama/projects/{project_id}")
     assert fetched.status_code == 200, fetched.text
     return fetched.json(), current
@@ -368,6 +441,13 @@ def test_both_input_contracts_share_typed_planning_and_sqlite(client, test_state
             "name": "已有剧本输入",
             "source_mode": "SCRIPT_LOCKED",
             "input_text": locked_text,
+            "locked_dialogue": [
+                {
+                    "speaker": "林夏",
+                    "text": "不要动那支录音笔。",
+                    "audio_kind": "DIALOGUE",
+                }
+            ],
             "run_mode": "AUTO_DRAFT",
         },
     )
@@ -459,14 +539,14 @@ def test_empty_and_image_inputs_share_the_same_planning_contract(
     assert all(
         any(
             binding["target_id"] == version["id"]
-            and binding["requirement"] == "REQUIRED"
+            and binding["required"] is True
             for binding in plan["bindings"]
         )
         for plan in body["document"]["reference_plan"]
     )
 
 
-def test_five_minute_agent_project_runs_to_manifest_without_user_stops(client) -> None:
+def test_five_minute_agent_project_waits_for_a_semantic_plan(client) -> None:
     created, run = _create_agent_project(
         client,
         {
@@ -475,23 +555,22 @@ def test_five_minute_agent_project_runs_to_manifest_without_user_stops(client) -
             "run_mode": "AUTO_DRAFT",
         },
     )
-    body, completed = _advance_agent_run_to_completion(
-        client,
-        created["document"]["project"]["id"],
-        run,
+
+    assert run["snapshot"]["run"]["status"] == "WAITING"
+    assert created["document"]["project"]["target_duration_seconds"] == 300
+    assert created["progress"]["shots_with_selected_take"] == 0
+    assert created["progress"]["manifest_ready"] is False
+    assert created["exports"] == []
+    assert run["ready_steps"] == []
+    assert all(
+        action["tool_name"]
+        not in {"video.enqueue", "task.drain", "timeline.rebuild", "timeline.export"}
+        for action in run["snapshot"]["actions"]
     )
-
-    assert completed["snapshot"]["run"]["status"] == "COMPLETED"
-    assert body["document"]["project"]["target_duration_seconds"] == 300
-    assert body["progress"]["shots_with_selected_take"] == len(
-        body["document"]["shots"]
-    )
-    assert body["progress"]["manifest_ready"] is True
-    assert "autonomous_runs" not in body["document"]
-    assert body["exports"] == []
+    assert "autonomous_runs" not in created["document"]
 
 
-def test_general_profile_silent_fallback_runs_to_manifest(client) -> None:
+def test_general_profile_without_semantic_planner_does_not_guess_a_route(client) -> None:
     created, run = _create_agent_project(
         client,
         {
@@ -501,22 +580,21 @@ def test_general_profile_silent_fallback_runs_to_manifest(client) -> None:
             "run_mode": "AUTO_DRAFT",
         },
     )
-    body, completed = _advance_agent_run_to_completion(
-        client,
-        created["document"]["project"]["id"],
-        run,
-    )
 
-    assert completed["snapshot"]["run"]["status"] == "COMPLETED"
-    assert body["document"]["project"]["production_profile"] == (
+    assert run["snapshot"]["run"]["status"] == "WAITING"
+    assert created["document"]["project"]["production_profile"] == (
         "GENERAL_VIDEO"
     )
-    assert len(body["document"]["shots"]) == len(
-        body["document"]["script_versions"][0]["structured_scenes"]
+    assert created["tasks"] == []
+    assert created["takes"] == []
+    assert created["progress"]["manifest_ready"] is False
+    assert run["ready_steps"] == []
+    assert all(
+        action["tool_name"]
+        not in {"video.enqueue", "task.drain", "timeline.rebuild", "timeline.export"}
+        for action in run["snapshot"]["actions"]
     )
-    assert body["document"]["script_versions"][0]["lines"] == []
-    assert body["progress"]["manifest_ready"] is True
-    assert "autonomous_runs" not in body["document"]
+    assert "autonomous_runs" not in created["document"]
 
 
 def test_locked_script_preserves_more_than_ten_dialogue_lines(client) -> None:
@@ -527,6 +605,14 @@ def test_locked_script_preserves_more_than_ten_dialogue_lines(client) -> None:
             "name": "长对白锁定剧本",
             "source_mode": "SCRIPT_LOCKED",
             "input_text": "\n".join(lines),
+            "locked_dialogue": [
+                {
+                    "speaker": f"角色{i % 2 + 1}",
+                    "text": f"第{i}句锁定对白。",
+                    "audio_kind": "DIALOGUE",
+                }
+                for i in range(1, 13)
+            ],
             "run_mode": "GUIDED",
         },
     )
@@ -676,6 +762,41 @@ def test_episode_review_endpoint_persists_non_blocking_unavailable_report(client
     assert "UNKNOWN" in body["report"]["summary"]
     assert body["project"]["episode_reviews"][-1]["id"] == body["report"]["id"]
     assert body["project"]["progress"]["manifest_ready"] is True
+
+
+def test_episode_review_failures_remain_retryable_without_an_attempt_gate(
+    tmp_path: Path,
+) -> None:
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+    )
+    aggregate = service.initialize_fixture()
+    script_version_id = aggregate.document.project.current_script_version_id
+    assert script_version_id is not None
+    report = EpisodeReviewReport(
+        id="episode-review-agent-native-retry",
+        project_id=aggregate.document.project.id,
+        manifest_id="manifest-not-yet-required-for-trace",
+        source_script_version_id=script_version_id,
+        status=EpisodeReviewStatus.RUNNING,
+        created_at="2026-09-03T00:00:00+00:00",
+        updated_at="2026-09-03T00:00:00+00:00",
+    )
+    service.repository.save_episode_review(report)
+
+    for index in range(140):
+        report = service._record_episode_review_failure(
+            report,
+            stage_key="SCENE:1",
+            error=RuntimeError(f"temporary reviewer failure {index + 1}"),
+        )
+
+    assert report.status == EpisodeReviewStatus.RUNNING
+    assert report.active_stage_attempts == 140
+    assert report.repairs_complete is False
+    assert len(report.warnings) == 140
+    assert service.repository.get_episode_review(report.id) == report
 
 
 def test_complete_eight_shot_mock_timeline_export_and_local_invalidation(client) -> None:

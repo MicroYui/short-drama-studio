@@ -447,11 +447,16 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     })
   }
 
-  const taskAction = async (task: ImageGenerationTask, action: 'continue' | 'retry' | 'recover' | 'cancel') => {
+  const taskAction = async (task: ImageGenerationTask, action: 'continue' | 'retry' | 'recover' | 'cancel' | 'resolve-not-submitted') => {
     setBusy('更新图像任务')
     onError(null)
     const result = action === 'retry'
       ? await ShortDramaApi.retryImageTask(task.id)
+      : action === 'resolve-not-submitted'
+        ? await ShortDramaApi.resolveImageNotSubmitted(
+          task.id,
+          '用户核对供应商后台后确认未创建图像任务。',
+        )
       : action === 'recover'
         ? await ShortDramaApi.recoverImageTaskOutput(task.id)
         : action === 'cancel'
@@ -616,7 +621,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
         <div className="flex items-center justify-between"><div><h3 className="text-sm font-medium text-white">图像任务</h3><p className="mt-1 text-xs text-zinc-600">同步 API 也先持久化任务；提交未知时不会自动重复付费。</p></div><button className={subtleButton} onClick={() => void loadTasks()}><RefreshCw className="h-3.5 w-3.5" />刷新</button></div>
         <div className="mt-3 space-y-2">
           {tasks.length === 0 && <p className="rounded-lg border border-dashed border-zinc-800 py-6 text-center text-xs text-zinc-600">当前资产还没有图像任务</p>}
-          {tasks.map((task) => <div key={task.id} className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 lg:flex-row lg:items-center lg:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge tone={statusTone(task.status)}>{task.status}</Badge><span className="text-xs text-zinc-300">{task.operation} · v{task.output_version_number} · attempt {task.attempt}</span><span className="text-xs text-zinc-600">{money(task.cost?.estimated_amount)}</span></div><p className="mt-1 truncate text-xs text-zinc-600">{task.error_message ?? task.request.prompt}</p></div><div className="flex shrink-0 gap-1">{task.status === 'QUEUED' && <><button className={subtleButton} onClick={() => void taskAction(task, 'continue')}><Sparkles className="h-3.5 w-3.5" />运行</button><button className={subtleButton} onClick={() => void taskAction(task, 'cancel')}>取消</button></>}{task.status === 'SUBMITTING' && <button className={subtleButton} onClick={() => void taskAction(task, 'continue')}><Sparkles className="h-3.5 w-3.5" />继续提交</button>}{task.status === 'OUTPUT_MISSING' && <button className={subtleButton} onClick={() => void taskAction(task, 'recover')}><RefreshCw className="h-3.5 w-3.5" />恢复产物</button>}{['FAILED', 'CANCELLED', 'SUBMIT_UNKNOWN', 'OUTPUT_MISSING'].includes(task.status) && <button className={subtleButton} onClick={() => void taskAction(task, 'retry')}><RotateCcw className="h-3.5 w-3.5" />建立重试</button>}</div></div>)}
+          {tasks.map((task) => <div key={task.id} className="flex flex-col gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3 lg:flex-row lg:items-center lg:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge tone={statusTone(task.status)}>{task.status}</Badge><span className="text-xs text-zinc-300">{task.operation} · v{task.output_version_number} · attempt {task.attempt}</span><span className="text-xs text-zinc-600">{money(task.cost?.estimated_amount)}</span></div><p className="mt-1 truncate text-xs text-zinc-600">{task.error_message ?? task.request.prompt}</p></div><div className="flex shrink-0 items-center gap-1">{task.status === 'QUEUED' && <><button className={subtleButton} onClick={() => void taskAction(task, 'continue')}><Sparkles className="h-3.5 w-3.5" />运行</button><button className={subtleButton} onClick={() => void taskAction(task, 'cancel')}>取消</button></>}{task.status === 'SUBMITTING' && <button className={subtleButton} onClick={() => void taskAction(task, 'continue')}><Sparkles className="h-3.5 w-3.5" />继续提交</button>}{task.status === 'SUBMIT_UNKNOWN' && <><span className="max-w-48 text-right text-[10px] leading-4 text-amber-300/80">核对供应商后台后再处理。</span><button className={subtleButton} onClick={() => void taskAction(task, 'resolve-not-submitted')}>确认未创建</button></>}{task.status === 'OUTPUT_MISSING' && <button className={subtleButton} onClick={() => void taskAction(task, 'recover')}><RefreshCw className="h-3.5 w-3.5" />恢复产物</button>}{['FAILED', 'CANCELLED', 'OUTPUT_MISSING'].includes(task.status) && <button className={subtleButton} onClick={() => void taskAction(task, 'retry')}><RotateCcw className="h-3.5 w-3.5" />建立重试</button>}</div></div>)}
         </div>
       </section>
 
