@@ -125,7 +125,7 @@ field.
 
 ### Regenerate OpenAPI types
 
-`pnpm openapi:generate` after the `api_types.py` change, to pick up `provider` in
+`./scripts/pnpm-project.sh openapi:generate` after the `api_types.py` change, to pick up `provider` in
 `EnhancePromptRequest` for the generated TS client.
 
 ## Out of scope

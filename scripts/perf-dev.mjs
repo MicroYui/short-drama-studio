@@ -14,7 +14,7 @@
  * already downloaded + activated (via LTX_APP_DATA_DIR). If no model is loaded,
  * open the app once to fetch one, then re-run this.
  *
- *   pnpm perf:dev
+ *   ./scripts/pnpm-project.sh perf:dev
  */
 import { spawn, spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -126,7 +126,7 @@ async function startDashboard() {
       if (process.platform === 'darwin') {
         console.log('[perf:dev] On Apple Silicon this is gated on FREE RAM at the moment the server starts')
         console.log('[perf:dev] (roughly 15 GB+ needed). Close memory-heavy apps — browsers are usually the')
-        console.log('[perf:dev] biggest offender — then re-run `pnpm perf:dev` to re-check.')
+        console.log('[perf:dev] biggest offender — then re-run `./scripts/pnpm-project.sh perf:dev` to re-check.')
       } else {
         console.log('[perf:dev] This machine has no supported local-generation GPU (needs a CUDA GPU with')
         console.log('[perf:dev] >=16 GB VRAM, or Apple Silicon with enough free RAM).')
@@ -142,7 +142,7 @@ async function startDashboard() {
     const h = await r.json()
     if (h && h.models_loaded === false) {
       console.log('\n[perf:dev] NOTE: no model loaded. Open the app once to download/activate a')
-      console.log('           model, then re-run `pnpm perf:dev`.\n')
+      console.log('           model, then re-run `./scripts/pnpm-project.sh perf:dev`.\n')
     }
   } catch { /* health check is best-effort */ }
 

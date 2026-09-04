@@ -15,6 +15,7 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $ReleaseDir = Join-Path $ProjectDir "release"
+$ElectronBuilder = Join-Path $ProjectDir "node_modules\.bin\electron-builder.cmd"
 
 Set-Location $ProjectDir
 
@@ -29,17 +30,22 @@ if (-not (Test-Path "python-embed")) {
     exit 1
 }
 
+if (-not (Test-Path $ElectronBuilder)) {
+    Write-Host "ERROR: electron-builder is not installed in node_modules. Run .\scripts\pnpm-project.ps1 install first." -ForegroundColor Red
+    exit 1
+}
+
 # Build with electron-builder
 if ($Unpack) {
     Write-Host "Packaging unpacked app (fast mode)..." -ForegroundColor Yellow
-    pnpm exec electron-builder --win --dir
+    & $ElectronBuilder --win --dir
 } else {
     Write-Host "Packaging installer..." -ForegroundColor Yellow
     $PublishArgs = @()
     if ($Publish -ne "") {
         $PublishArgs = @("--publish", $Publish)
     }
-    pnpm exec electron-builder --win @PublishArgs
+    & $ElectronBuilder --win @PublishArgs
 }
 
 if ($LASTEXITCODE -ne 0) {

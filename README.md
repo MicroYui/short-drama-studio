@@ -197,27 +197,30 @@ Prereqs:
 - Python 3.12+
 - Git
 
-On Microsoft-managed development machines, use `./scripts/pnpm-project.sh` in
-place of `pnpm` in the commands below. The wrapper installs the pinned pnpm
-version through the Microsoft package feed configured in `.npmrc`, so Corepack
-does not attempt a direct public-registry download.
+Project commands use `./scripts/pnpm-project.sh`. The wrapper reuses the pinned
+pnpm version from the local npm cache in strict offline mode. On a cache miss it
+allows only the Microsoft package feed configured in `.npmrc`; Corepack and the
+public npm registry are not used. `.corepack.env` is an extra guard for Corepack
+versions that support project environment files, but older installations may
+ignore it, so always use the project wrapper. On Windows, use
+`scripts\pnpm-project.ps1`.
 
 Setup:
 
 ```bash
-pnpm setup:dev
+./scripts/pnpm-project.sh setup:dev
 ```
 
 Run:
 
 ```bash
-pnpm dev
+./scripts/pnpm-project.sh dev
 ```
 
 Debug:
 
 ```bash
-pnpm dev:debug
+./scripts/pnpm-project.sh dev:debug
 ```
 
 `dev:debug` starts Electron with inspector enabled and starts the Python backend with `debugpy`.
@@ -225,19 +228,19 @@ pnpm dev:debug
 Typecheck:
 
 ```bash
-pnpm typecheck
+./scripts/pnpm-project.sh typecheck
 ```
 
 Backend tests:
 
 ```bash
-pnpm backend:test
+./scripts/pnpm-project.sh backend:test
 ```
 
 Performance & validation:
 
 ```bash
-pnpm perf:dev
+./scripts/pnpm-project.sh perf:dev
 ```
 
 Starts the backend headless and opens the performance runner dashboard — soak/leak

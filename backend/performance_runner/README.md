@@ -47,7 +47,7 @@ Every gate tool exits non-zero on FAIL, so the same scripts can gate CI.
 ### Headless (recommended for perf) — one command
 
 ```bash
-pnpm perf:dev
+./scripts/pnpm-project.sh perf:dev
 ```
 
 Starts the backend **headless** (no Electron/frontend, so nothing else touches the
@@ -63,7 +63,8 @@ dashboard in a browser. Ctrl+C stops both.
 > API-only mode, `perf:dev` stops and asks you to free RAM (close memory-heavy apps)
 > and re-run, rather than opening a dashboard with no local work to measure.
 
-> **`perf:dev` measures the dev backend** — the same interpreter `pnpm dev` uses, with
+> **`perf:dev` measures the dev backend** — the same interpreter
+> `./scripts/pnpm-project.sh dev` uses, with
 > the app's generation env mirrored (auth, app-data dir, MPS CPU-fallback). On CUDA that's
 > representative of what ships. On Apple Silicon the packaged app loads a prebuilt zero-copy
 > mps-sdpa extension that a dev run JIT-builds instead, so the attention path — and its

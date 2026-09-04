@@ -21,29 +21,29 @@ LTX Desktop is an Electron app for AI video generation using LTX models. Three-l
 
 | Command | Purpose |
 |---|---|
-| `pnpm dev` | Start dev server (Vite + Electron + Python backend) |
-| `pnpm dev:debug` | Dev with Electron inspector + Python debugpy |
-| `pnpm typecheck` | Run TypeScript (`tsc --noEmit`) and Python (`pyright`) type checks |
-| `pnpm typecheck:ts` | TypeScript only |
-| `pnpm typecheck:py` | Python pyright only |
-| `pnpm backend:test` | Run Python pytest tests |
-| `pnpm build:frontend` | Vite frontend build only |
-| `pnpm build` | Full platform build (auto-detects platform) |
-| `pnpm setup:dev` | One-time dev environment setup (auto-detects platform) |
+| `./scripts/pnpm-project.sh dev` | Start dev server (Vite + Electron + Python backend) |
+| `./scripts/pnpm-project.sh dev:debug` | Dev with Electron inspector + Python debugpy |
+| `./scripts/pnpm-project.sh typecheck` | Run TypeScript (`tsc --noEmit`) and Python (`pyright`) type checks |
+| `./scripts/pnpm-project.sh typecheck:ts` | TypeScript only |
+| `./scripts/pnpm-project.sh typecheck:py` | Python pyright only |
+| `./scripts/pnpm-project.sh backend:test` | Run Python pytest tests |
+| `./scripts/pnpm-project.sh build:frontend` | Vite frontend build only |
+| `./scripts/pnpm-project.sh build` | Full platform build (auto-detects platform) |
+| `./scripts/pnpm-project.sh setup:dev` | One-time dev environment setup (auto-detects platform) |
 
-Run a single backend test file via pnpm: `pnpm backend:test -- tests/test_ic_lora.py`
+Run a single backend test file via pnpm: `./scripts/pnpm-project.sh backend:test -- tests/test_ic_lora.py`
 
 ### Restricted Network and JavaScript Dependencies
 
 - The corporate environment only permits its managed Microsoft sources. External npm registries used by npm, pnpm, Corepack, or `npx` are blocked by IT; treat JavaScript dependency execution as offline by default.
-- Do not run `corepack enable`, `corepack prepare`, `npm install`, `pnpm install`, `yarn install`, `npx`, or any command that may bootstrap a package manager or download packages unless the user explicitly authorizes it and provides a reachable managed source.
+- Do not run bare `pnpm`, `corepack`, `npx`, `npm install`, `yarn install`, or any command that may bootstrap a package manager or download packages unless the user explicitly authorizes it. Use `./scripts/pnpm-project.sh` for project commands; it uses the cached pinned pnpm offline when available and permits a cache miss to reach only the managed Microsoft feed.
 - Prefer the dependencies already present in the repository and invoke local binaries directly, for example `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/vite build`.
 - If a required package or binary is not available locally, report the missing dependency and stop that check. Do not retry against public or alternative registries.
 - The command table above documents upstream workflows. In this environment, use equivalent local-binary checks where necessary and report the exact commands that were run.
 
 ## CI Checks
 
-PRs must pass: `pnpm typecheck` + `pnpm backend:test` + frontend Vite build.
+PRs must pass: `./scripts/pnpm-project.sh typecheck` + `./scripts/pnpm-project.sh backend:test` + `./scripts/pnpm-project.sh build:frontend`.
 
 ## Frontend Architecture
 

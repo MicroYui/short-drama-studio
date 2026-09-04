@@ -17,13 +17,14 @@ Ok "uv   $(uv --version)"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
+$PnpmProject = Join-Path $ScriptDir "pnpm-project.ps1"
 
-# ── npm install ─────────────────────────────────────────────────────
+# ── pnpm install through the managed project wrapper ───────────────
 Write-Host "`nInstalling Node dependencies..."
 Set-Location $ProjectDir
-npm install
-if ($LASTEXITCODE -ne 0) { Fail "npm install failed" }
-Ok "npm install complete"
+& $PnpmProject install
+if ($LASTEXITCODE -ne 0) { Fail "pnpm install failed" }
+Ok "pnpm install complete"
 
 # ── uv sync ─────────────────────────────────────────────────────────
 Write-Host "`nSetting up Python backend venv..."
@@ -52,6 +53,6 @@ if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
 
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-Write-Host "  Setup complete! Run the app with:  npm run dev" -ForegroundColor Cyan
-Write-Host "  Debug mode (with debugpy):         npm run dev:debug" -ForegroundColor Cyan
+Write-Host "  Setup complete! Run the app with:  .\scripts\pnpm-project.ps1 dev" -ForegroundColor Cyan
+Write-Host "  Debug mode (with debugpy):         .\scripts\pnpm-project.ps1 dev:debug" -ForegroundColor Cyan
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan

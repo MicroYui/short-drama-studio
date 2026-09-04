@@ -39,8 +39,9 @@ HTTP_TIMEOUT_S = 1800                                 # a 1080p/20s gen can take
 # Auth: the backend requires a Bearer token on every request when it's launched
 # with an auth token set. The desktop app generates a random token per launch;
 # copy it from the app's Logs footer (the "•••••" control) into the dashboard's
-# token field, or export PERF_AUTH_TOKEN for the CLI. `pnpm perf:dev` injects a
-# token automatically. A backend started without a token leaves this empty.
+# token field, or export PERF_AUTH_TOKEN for the CLI.
+# `./scripts/pnpm-project.sh perf:dev` injects a token automatically. A backend
+# started without a token leaves this empty.
 AUTH_TOKEN = os.environ.get("PERF_AUTH_TOKEN") or os.environ.get("LTX_AUTH_TOKEN") or ""
 
 # Windows: usually on PATH (C:\Windows\System32\nvidia-smi.exe). If not, set the

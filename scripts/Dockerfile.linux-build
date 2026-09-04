@@ -10,17 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # uv (Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 WORKDIR /app
 
 # Layer 1: Node dependencies (cached unless package.json/lockfile change)
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY scripts/pnpm-project.sh scripts/pnpm-project.sh
+RUN ./scripts/pnpm-project.sh install --frozen-lockfile
 
 # Layer 2: Everything else
 COPY . .
 
 # Build frontend + prepare Python env + package installer
-CMD ["bash", "-c", "bash scripts/prepare-python.sh && pnpm build:frontend && bash scripts/create-installer.sh --platform linux"]
+CMD ["bash", "-c", "bash scripts/prepare-python.sh && npm run build:frontend && bash scripts/create-installer.sh --platform linux"]

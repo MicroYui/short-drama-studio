@@ -14,25 +14,25 @@ Prereqs:
 Setup:
 
 ```bash
-pnpm setup:dev
+./scripts/pnpm-project.sh setup:dev
 ```
 
 Run:
 
 ```bash
-pnpm dev
+./scripts/pnpm-project.sh dev
 ```
 
 Debug:
 
 ```bash
-pnpm dev:debug
+./scripts/pnpm-project.sh dev:debug
 ```
 
 Typecheck:
 
 ```bash
-pnpm typecheck
+./scripts/pnpm-project.sh typecheck
 ```
 
 ## What we accept right now
@@ -61,11 +61,13 @@ At minimum, run:
 - Type checking:
 
 ```bash
-pnpm typecheck
+./scripts/pnpm-project.sh typecheck
 ```
 
 - Backend tests:
 
 ```bash
-pnpm backend:test
+./scripts/pnpm-project.sh backend:test
 ```
+
+On Windows, use `scripts\pnpm-project.ps1` with the same arguments.

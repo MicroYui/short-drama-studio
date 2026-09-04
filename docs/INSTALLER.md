@@ -41,7 +41,7 @@ Before building, ensure you have:
 ## Quick Build
 
 ```bash
-pnpm build
+./scripts/pnpm-project.sh build
 ```
 
 This auto-detects your platform and will:
@@ -55,17 +55,19 @@ This auto-detects your platform and will:
 
 ```bash
 # Full build
-pnpm build
+./scripts/pnpm-project.sh build
 
 # Skip Python setup (if already prepared)
-pnpm build:skip-python
+./scripts/pnpm-project.sh build:skip-python
 
 # Fast rebuild (unpacked, skip Python + pnpm install)
-pnpm build:fast
+./scripts/pnpm-project.sh build:fast
 
 # Just prepare Python environment
-pnpm prepare:python
+./scripts/pnpm-project.sh prepare:python
 ```
+
+On Windows, use `scripts\pnpm-project.ps1` with the same arguments.
 
 All commands auto-detect the current platform (macOS, Linux, or Windows).
 
@@ -137,16 +139,16 @@ End-user topics like system requirements, first-run setup, and model download be
 bash scripts/prepare-python.sh
 
 # 2. Install dependencies
-pnpm install
+./scripts/pnpm-project.sh install
 
 # 3. Build frontend
-pnpm build:frontend
+npm run build:frontend
 
 # 4. Build DMG
-pnpm exec electron-builder --mac
+./node_modules/.bin/electron-builder --mac
 
 # Or build unpacked app (faster, for testing)
-pnpm exec electron-builder --mac --dir
+./node_modules/.bin/electron-builder --mac --dir
 ```
 
 ### Linux
@@ -155,16 +157,16 @@ pnpm exec electron-builder --mac --dir
 bash scripts/prepare-python.sh
 
 # 2. Install dependencies
-pnpm install
+./scripts/pnpm-project.sh install
 
 # 3. Build frontend
-pnpm build:frontend
+npm run build:frontend
 
 # 4. Build AppImage + deb
-pnpm exec electron-builder --linux
+./node_modules/.bin/electron-builder --linux
 
 # Or build unpacked app (faster, for testing)
-pnpm exec electron-builder --linux --dir
+./node_modules/.bin/electron-builder --linux --dir
 ```
 
 ### Windows
@@ -173,11 +175,11 @@ pnpm exec electron-builder --linux --dir
 ./scripts/prepare-python.ps1
 
 # 2. Install dependencies
-pnpm install
+.\scripts\pnpm-project.ps1 install
 
 # 3. Build frontend
-pnpm build:frontend
+npm run build:frontend
 
 # 4. Build installer
-pnpm exec electron-builder --win
+.\node_modules\.bin\electron-builder.cmd --win
 ```

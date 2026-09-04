@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reset the dev env to a clean state (deps removed + reinstalled). Run `pnpm dev` after.
+# Reset the dev env to a clean state (deps removed + reinstalled).
 set -euo pipefail
 
 GREEN='\033[0;32m'
@@ -18,7 +18,7 @@ ok "workspace cleaned"
 
 echo ""
 echo "Reinstalling Node dependencies..."
-pnpm install
+"$SCRIPT_DIR/pnpm-project.sh" install
 ok "pnpm install complete"
 
 echo ""
@@ -29,5 +29,5 @@ ok "uv sync complete"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  Clean complete! Run the app with:  pnpm dev"
+echo "  Clean complete! Run the app with:  ./scripts/pnpm-project.sh dev"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

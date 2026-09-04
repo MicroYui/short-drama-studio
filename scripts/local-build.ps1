@@ -1,6 +1,7 @@
 # local-build.ps1
 # All-in-one local build script for creating the LTX Desktop installer.
-# Prepares the Python environment, installs pnpm deps, builds the frontend,
+# Prepares the Python environment, installs pnpm deps through the managed
+# project wrapper, builds the frontend,
 # then packages with electron-builder via create-installer.ps1.
 
 param(
@@ -16,6 +17,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $PythonEmbedDir = Join-Path $ProjectDir "python-embed"
 $ReleaseDir = Join-Path $ProjectDir "release"
+$PnpmProject = Join-Path $ScriptDir "pnpm-project.ps1"
 
 Write-Host @"
 
@@ -82,7 +84,7 @@ if (-not (Test-Path $PythonEmbedDir)) {
 # Step 2: Install pnpm dependencies
 # ============================================================
 Write-Host "`n[2/3] Installing pnpm dependencies..." -ForegroundColor Yellow
-pnpm install
+& $PnpmProject install
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to install pnpm dependencies!" -ForegroundColor Red
     exit 1
@@ -93,7 +95,7 @@ if ($LASTEXITCODE -ne 0) {
 # ============================================================
 Write-Host "`n[3/3] Building frontend and Electron app..." -ForegroundColor Yellow
 
-pnpm run build:frontend
+npm run build:frontend
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to build frontend!" -ForegroundColor Red
     exit 1

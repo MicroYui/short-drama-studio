@@ -56,6 +56,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RELEASE_DIR="$PROJECT_DIR/release"
+ELECTRON_BUILDER="$PROJECT_DIR/node_modules/.bin/electron-builder"
 
 cd "$PROJECT_DIR"
 
@@ -69,6 +70,11 @@ fi
 
 if [ "$PLATFORM" != "linux" ] && [ ! -d "python-embed" ]; then
   echo "ERROR: Python environment not found. Run local-build.sh or prepare-python.sh first."
+  exit 1
+fi
+
+if [ ! -x "$ELECTRON_BUILDER" ]; then
+  echo "ERROR: electron-builder is not installed in node_modules. Run ./scripts/pnpm-project.sh install first."
   exit 1
 fi
 
@@ -90,11 +96,11 @@ if [ "$UNPACK" = true ]; then
     # signing discovery is disabled, which macOS rejects at launch. Keep the
     # release configuration hardened, but make the explicitly unsigned local
     # smoke-test build runnable.
-    pnpm exec electron-builder $BUILDER_ARGS --dir \
+    "$ELECTRON_BUILDER" $BUILDER_ARGS --dir \
       --config.mac.hardenedRuntime=false \
       --config.mac.notarize=false
   else
-    pnpm exec electron-builder $BUILDER_ARGS --dir
+    "$ELECTRON_BUILDER" $BUILDER_ARGS --dir
   fi
 else
   PUBLISH_ARGS=""
@@ -102,7 +108,7 @@ else
     PUBLISH_ARGS="--publish $PUBLISH"
   fi
   echo "Packaging installer..."
-  pnpm exec electron-builder $BUILDER_ARGS $PUBLISH_ARGS
+  "$ELECTRON_BUILDER" $BUILDER_ARGS $PUBLISH_ARGS
 fi
 echo ""
 

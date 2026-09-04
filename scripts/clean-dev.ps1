@@ -1,4 +1,4 @@
-﻿# Reset the dev env to a clean state (deps removed + reinstalled). Run `pnpm dev` after.
+﻿# Reset the dev env to a clean state (deps removed + reinstalled).
 
 $ErrorActionPreference = "Stop"
 
@@ -6,6 +6,7 @@ function Ok($msg) { Write-Host "✓ $msg" -ForegroundColor Green }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
+$PnpmProject = Join-Path $ScriptDir "pnpm-project.ps1"
 Set-Location $ProjectDir
 
 Write-Host "Removing build artifacts and dependencies..."
@@ -20,7 +21,7 @@ Get-ChildItem -Path backend -Filter __pycache__ -Recurse -Directory |
 Ok "workspace cleaned"
 
 Write-Host "`nReinstalling Node dependencies..."
-pnpm install
+& $PnpmProject install
 if ($LASTEXITCODE -ne 0) { Write-Host "✗ pnpm install failed" -ForegroundColor Red; exit 1 }
 Ok "pnpm install complete"
 
@@ -32,5 +33,5 @@ Ok "uv sync complete"
 
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-Write-Host "  Clean complete! Run the app with:  pnpm dev" -ForegroundColor Cyan
+Write-Host "  Clean complete! Run the app with:  .\scripts\pnpm-project.ps1 dev" -ForegroundColor Cyan
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
