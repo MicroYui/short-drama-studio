@@ -1,9 +1,13 @@
 ---
 provider: minimax_h3
 label: MiniMax H3 提示词编译技能
-prompt_references: ["references/common_compilation.md", "references/base_and_keyframe_modes.md", "references/reference_mode.md"]
+provenance: OFFICIAL_TRANSLATION_WITH_ADAPTER
+upstream_sources: ["https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/SKILL.md", "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/base-en.txt", "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/references/ref-en.txt"]
+prompt_references: ["references/official_h3_prompt_writing_zh_cn.md", "references/common_compilation.md", "references/base_and_keyframe_modes.md", "references/reference_mode.md"]
 ---
-# MiniMax H3 提示词编译技能
+# MiniMax H3 提示词编译适配层
+
+> 官方 `h3-prompt-writing` 的忠实中文直译单独保存在 `references/official_h3_prompt_writing_zh_cn.md`。本文仅负责把官方规则接到当前项目的 ShotPlan、Route、Tool 和状态合同，不得冒充上游原文。
 
 ## 这项技能解决什么问题
 
@@ -28,10 +32,11 @@ prompt_references: ["references/common_compilation.md", "references/base_and_key
 
 - `DIRECT`：编译为 T2VA，从文字完整建立起始画面、动作、摄影机和声音。
 - `FRAME_FIRST`：编译为 I2VA，严格从批准首帧开始发展。
+- `FRAME_LAST`：编译为 L2VA，根据已批准尾帧推导相容的前置状态，并让动作与构图在结尾精确收敛。
 - `FRAME_FIRST_LAST`：编译为 FL2VA，在批准首尾帧之间形成连续、可观察的变化路径。
 - `REFERENCE`：编译为 Ref2VA，用图片、视频或音频锚定明确的身份、外观、运动、空间或声音。
 
-MiniMax 官方还描述了尾帧引导等模式，但当前项目没有对应的 `VideoGenerationRoute`。编译器不得凭文档自行制造未注册路线；需要新增路线时，应先扩展类型模型、路线 Tool、请求适配和测试。
+五种模式均必须来自上游已选定的 `VideoGenerationRoute`；编译器不得为了追求画面而自行换路线。
 
 ## 输出合同
 
@@ -39,6 +44,9 @@ MiniMax 官方还描述了尾帧引导等模式，但当前项目没有对应的
 - 严格使用 `required_prompt_schema` 指定的字段名和顺序。
 - 描述字段使用自然、具体的英文；锁定对白、歌词和画面内文字保留原语言。
 - 包含精确时长、目标画幅和实际绑定的参考标签。
+- `REFERENCE_IMAGE` 的实际上传标签仍保留为 `<Picture N>` 以便 Provider 追踪，但 Prompt 要用 `<Subject N>` 表示从该图提取的可复用角色、场景或物件内容。
+- 同一语义主体的多张参考图共享一个 `<Subject N>`，在 `subject_definitions` 中合并说明每个源 `<Picture N>` 分别提供的视图或特征；不得把同一角色的正、侧、背面写成三个人。
+- `FIRST_FRAME`、`LAST_FRAME` 及其他具体关键帧/构图锚点继续直接使用 `<Picture N>`，不转换为 `<Subject N>`。
 - 不添加未声明人物、道具、动作、对白、切镜、场景转换或画面文字。
 - 最终文本不得超过当前适配器规定的字符上限；无法忠实容纳时应返回上游重新设计镜头，而不是暗中删减锁定事实。
 

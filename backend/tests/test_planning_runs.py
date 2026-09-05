@@ -59,11 +59,13 @@ from short_drama.production_planner import (
     PlannedStyle,
     SceneShotPlan,
     StoryOrientation,
+    ProductionMethodSelection,
 )
 from short_drama.providers.language_config import LanguageProviderConfigUpdate
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderError,
 )
+from short_drama.production_profiles import production_method_skill_catalog
 from short_drama.service import ShortDramaService
 from short_drama.script_documents import (
     EpisodeScenePatch,
@@ -235,6 +237,10 @@ class StagedLanguageClient:
         self.fail_judge = fail_judge
         self.story_orientation_calls = 0
         self.story_orientation_inputs: list[dict[str, object]] = []
+        self.selected_method_skills: list[ProductionMethodSelection] = []
+        self.method_selection_rationale: str | None = None
+        self.story_architect_instructions: list[str] = []
+        self.scene_writer_instructions: list[str] = []
         self.critic_calls = 0
         self.final_cold_read_calls = 0
         self.review_router_calls = 0
@@ -297,6 +303,8 @@ class StagedLanguageClient:
                 narrative_skill_decision=(
                     "当前测试故事依靠通用悬疑职责即可，不额外装载爽感或荒诞升级技能。"
                 ),
+                selected_method_skills=self.selected_method_skills,
+                method_selection_rationale=self.method_selection_rationale,
             ).model_dump_json()
         if "revision-judge Agent" in instructions:
             self.judge_calls += 1
@@ -325,7 +333,7 @@ class StagedLanguageClient:
                 ),
                 requires_revision=False,
             ).model_dump_json()
-        if "script-critic Agent" in instructions:
+        if "Script Verifier Agent" in instructions:
             self.critic_calls += 1
             issue_count = (
                 self.review_issue_counts[
@@ -395,7 +403,7 @@ class StagedLanguageClient:
                 explicit_prohibitions=[],
                 open_creative_choices=["未由用户明确规定的剧情细节可调整"],
             ).model_dump_json()
-        if "story-repair planner Agent" in instructions:
+        if "Leader 的返修分派步骤" in instructions:
             self.repair_plan_calls += 1
             payload = json.loads(input_text)
             self.repair_plan_inputs.append(payload)
@@ -472,6 +480,7 @@ class StagedLanguageClient:
             )
             return json.dumps(payload, ensure_ascii=False)
         if "Scene Writer Agent" in instructions:
+            self.scene_writer_instructions.append(instructions)
             payload = json.loads(input_text)
             self.script_scene_inputs.append(payload)
             sequence = int(payload["current_scene_node"]["sequence"])
@@ -520,6 +529,7 @@ class StagedLanguageClient:
             )
             return patch.model_dump_json()
         if "story-architect Agent" in instructions:
+            self.story_architect_instructions.append(instructions)
             return self.blueprint.model_dump_json()
         payload = json.loads(input_text)
         self.scene_inputs.append(payload)
@@ -551,7 +561,7 @@ class CriticRecommendedFinalColdReadClient(StagedLanguageClient):
             image_urls=image_urls,
             max_output_tokens=max_output_tokens,
         )
-        if "script-critic Agent" not in instructions:
+        if "Script Verifier Agent" not in instructions:
             return output
         report = ScriptReviewReport.model_validate_json(output)
         if report.requires_revision:
@@ -696,7 +706,7 @@ class EmptyAffectedRevisionClient(StagedLanguageClient):
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
-        if "story-repair planner Agent" in instructions:
+        if "Leader 的返修分派步骤" in instructions:
             self.repair_plan_calls += 1
             payload = json.loads(input_text)
             self.repair_plan_inputs.append(payload)
@@ -778,7 +788,7 @@ class CriticOverreachRepairClient(StagedLanguageClient):
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
-        if "story-repair planner Agent" in instructions:
+        if "Leader 的返修分派步骤" in instructions:
             self.repair_plan_calls += 1
             payload = json.loads(input_text)
             self.repair_plan_inputs.append(payload)
@@ -828,7 +838,7 @@ class HandoffRegressionClient(StagedLanguageClient):
             max_output_tokens=max_output_tokens,
         )
         if (
-            "script-critic Agent" in instructions
+            "Script Verifier Agent" in instructions
             and "final cold-read Agent" not in instructions
             and self.critic_calls >= 4
         ):
@@ -859,7 +869,7 @@ class AdvisoryStoryReviewClient(StagedLanguageClient):
         max_output_tokens: int = 2200,
     ) -> str:
         if (
-            "script-critic Agent" in instructions
+            "Script Verifier Agent" in instructions
             and "final cold-read Agent" not in instructions
         ):
             self.critic_calls += 1
@@ -928,7 +938,7 @@ class MalformedCriticJsonClient(StagedLanguageClient):
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
-        if "script-critic Agent" in instructions and not self.invalid_critic_sent:
+        if "Script Verifier Agent" in instructions and not self.invalid_critic_sent:
             self.invalid_critic_sent = True
             valid = ScriptReviewReport(
                 summary="原审阅内容正确，但 JSON 有尾逗号。",
@@ -1088,9 +1098,11 @@ class DurationReallocationClient(StagedLanguageClient):
         request: CreateProjectRequest,
         *,
         fail_final_balance_once: bool = False,
+        first_scene_shift_seconds: float = 6.0,
     ) -> None:
         super().__init__(request, revision_rounds_required=1)
         self.fail_final_balance_once = fail_final_balance_once
+        self.first_scene_shift_seconds = first_scene_shift_seconds
         self.failed_final_balance = False
         self.duration_constraints: list[dict[str, object]] = []
 
@@ -1102,7 +1114,7 @@ class DurationReallocationClient(StagedLanguageClient):
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
-        if "story-repair planner Agent" in instructions:
+        if "Leader 的返修分派步骤" in instructions:
             output = super().generate_text(
                 instructions=instructions,
                 input_text=input_text,
@@ -1133,15 +1145,10 @@ class DurationReallocationClient(StagedLanguageClient):
             )
             patch = EpisodeScenePatch.model_validate_json(output)
             if patch.scene_sequence == 1:
-                patch.target_duration_seconds -= 6.0
-            else:
-                required = constraint["required_scene_target_seconds"]
-                assert isinstance(required, int | float)
-                if self.fail_final_balance_once and not self.failed_final_balance:
-                    self.failed_final_balance = True
-                    patch.target_duration_seconds = float(required) - 2.0
-                else:
-                    patch.target_duration_seconds = float(required)
+                patch.target_duration_seconds -= self.first_scene_shift_seconds
+            elif self.fail_final_balance_once and not self.failed_final_balance:
+                self.failed_final_balance = True
+                patch.target_duration_seconds -= 2.0
             return patch.model_dump_json()
         return super().generate_text(
             instructions=instructions,
@@ -1218,10 +1225,6 @@ class VerifierDurationReallocationClient(StagedLanguageClient):
                 patch = EpisodeScenePatch.model_validate_json(output)
                 if patch.scene_sequence == 1:
                     patch.target_duration_seconds -= 6.0
-                else:
-                    required = constraint["required_scene_target_seconds"]
-                    assert isinstance(required, int | float)
-                    patch.target_duration_seconds = float(required)
                 return patch.model_dump_json()
         return super().generate_text(
             instructions=instructions,
@@ -1397,7 +1400,7 @@ class LegacyCriticFollowupClient(RetryOncePlanningStageClient):
             image_urls=image_urls,
             max_output_tokens=max_output_tokens,
         )
-        if "script-critic Agent" not in instructions:
+        if "Script Verifier Agent" not in instructions:
             return output
         report = ScriptReviewReport.model_validate_json(output)
         if report.requires_revision:
@@ -1483,7 +1486,7 @@ def test_legacy_critic_final_cold_read_followup_is_not_dispatched(
     language = LegacyCriticFollowupClient(request, marker="unused-marker")
     service = _service(tmp_path, language)
     run = _start_owned_planning(service, request).run
-    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_CRITIC)
+    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_VERIFIER)
 
     reviewed = service.advance_planning_run(run.id)
 
@@ -1556,7 +1559,7 @@ def test_long_form_planning_advances_one_agent_stage_or_scene_at_a_time(
     after_writer = _advance_to_step(
         service,
         started.run.id,
-        PlanningRunStep.SCRIPT_CRITIC,
+        PlanningRunStep.SCRIPT_VERIFIER,
     )
     assert after_writer.run.next_script_scene_sequence == len(language.outline.scenes) + 1
     assert language.script_scene_calls == list(
@@ -1583,6 +1586,7 @@ def test_long_form_planning_advances_one_agent_stage_or_scene_at_a_time(
     assert len(first_scene.run.directed_scene_json) == 1
     assert first_scene.run.next_scene_sequence == 2
     assert language.scene_calls == [1]
+
 
     completed = _finish(service, started.run.id)
     assert completed.project is not None
@@ -1658,6 +1662,67 @@ def test_long_form_planning_advances_one_agent_stage_or_scene_at_a_time(
     assert latest_script.parent_version_id == revised_script.id
     assert latest_script.lines[1].spoken_text.endswith("你先听我说。")
     assert latest_script.lines[2].spoken_text.endswith("别急。")
+
+
+def test_story_orientation_method_selection_survives_restart_and_reaches_agents(
+    tmp_path: Path,
+) -> None:
+    request = _request(180).model_copy(
+        update={
+            "name": "新品牌商业短片",
+            "input_text": (
+                "为已提供的新产品做一支品牌商业片，只使用简报中的事实，"
+                "用真实使用动作证明核心价值。"
+            ),
+        }
+    )
+    language = StagedLanguageClient(request)
+    language.selected_method_skills = [
+        ProductionMethodSelection(
+            skill_id="method.minimax_h3.brand_promo_video",
+            rationale="需要把品牌事实、核心主张与可见产品证据对齐。",
+        )
+    ]
+    language.method_selection_rationale = (
+        "这个项目需要商业片方法；具体 Style 仍由项目资产决定。"
+    )
+    service = _service(tmp_path, language)
+    started = _start_owned_planning(service, request)
+
+    oriented = service.advance_planning_run(started.run.id)
+
+    assert oriented.run.selected_method_skill_ids == [
+        "method.minimax_h3.brand_promo_video"
+    ]
+    assert oriented.run.method_selection_reasons == [
+        "需要把品牌事实、核心主张与可见产品证据对齐。"
+    ]
+    assert oriented.run.method_selection_rationale == (
+        "这个项目需要商业片方法；具体 Style 仍由项目资产决定。"
+    )
+    assert {
+        item["id"]
+        for item in language.story_orientation_inputs[0][
+            "available_production_methods"
+        ]
+    } == {descriptor.id for descriptor in production_method_skill_catalog()}
+
+    restarted = _service(tmp_path, language)
+    restored = restarted.get_planning_run(started.run.id).run
+    assert restored.selected_method_skill_ids == [
+        "method.minimax_h3.brand_promo_video"
+    ]
+
+    after_architect = restarted.advance_planning_run(started.run.id)
+    assert after_architect.run.current_step == PlanningRunStep.SCENE_WRITER
+    assert "MiniMax-H3：品牌宣传短片" in (
+        language.story_architect_instructions[-1]
+    )
+    assert "步骤 2：建立品牌事实表" in language.story_architect_instructions[-1]
+
+    restarted.advance_planning_run(started.run.id)
+    assert "MiniMax-H3：品牌宣传短片" in language.scene_writer_instructions[-1]
+    assert "选择故事脊柱" in language.scene_writer_instructions[-1]
 
 
 def test_agent_owned_long_project_starts_as_scaffold_and_finalizes_without_legacy_run(
@@ -1762,7 +1827,7 @@ def test_deleting_project_removes_its_active_content_planning_job(
     advanced = _advance_to_step(
         service,
         run_id,
-        PlanningRunStep.SCRIPT_CRITIC,
+        PlanningRunStep.SCRIPT_VERIFIER,
     ).run
     assert advanced.status == PlanningRunStatus.RUNNING
     assert service.repository.list_planning_outline_snapshots(run_id)
@@ -2112,7 +2177,7 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     restarted_writer = _service(tmp_path, language)
     restored_writer = restarted_writer.get_planning_run(run.id)
     assert len(restored_writer.run.scene_script_json) == 1
-    _advance_to_step(restarted_writer, run.id, PlanningRunStep.SCRIPT_CRITIC)
+    _advance_to_step(restarted_writer, run.id, PlanningRunStep.SCRIPT_VERIFIER)
     after_critic = restarted_writer.advance_planning_run(run.id)
     assert after_critic.run.current_step == PlanningRunStep.STORY_REVISION
     assert after_critic.run.review_report is not None
@@ -2134,62 +2199,39 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     assert language.review_router_calls == 0
 
     after_repair_plan = restarted_after_critic.advance_planning_run(run.id)
-    assert after_repair_plan.run.current_step == (
-        PlanningRunStep.STORY_METADATA_REVISION
-    )
+    expected_revision_scenes = [1, len(language.outline.scenes)]
+    assert after_repair_plan.run.current_step == PlanningRunStep.SCENE_REVISION
     assert after_repair_plan.run.latest_repair_plan is not None
     assert after_repair_plan.run.revision_base_outline_json is not None
-    assert after_repair_plan.run.revision_scene_sequences == []
+    assert (
+        after_repair_plan.run.revision_scene_sequences
+        == expected_revision_scenes
+    )
+    assert after_repair_plan.run.next_revision_scene_index == 0
     assert language.repair_plan_calls == 1
     assert language.metadata_revision_calls == 0
     assert language.revision_scope_calls == 0
     assert language.local_revision_calls == []
 
-    restarted_before_metadata = _service(tmp_path, language)
-    restored_repair_plan = restarted_before_metadata.get_planning_run(run.id).run
-    assert restored_repair_plan.current_step == (
-        PlanningRunStep.STORY_METADATA_REVISION
-    )
+    restarted_before_revision = _service(tmp_path, language)
+    restored_repair_plan = restarted_before_revision.get_planning_run(run.id).run
+    assert restored_repair_plan.current_step == PlanningRunStep.SCENE_REVISION
     assert restored_repair_plan.latest_repair_plan == after_repair_plan.run.latest_repair_plan
     assert restored_repair_plan.revision_base_outline_json == (
         after_repair_plan.run.revision_base_outline_json
     )
-
-    metadata_aligned = restarted_before_metadata.advance_planning_run(run.id)
-    assert metadata_aligned.run.current_step == PlanningRunStep.REVISION_SCOPE
-    assert language.metadata_revision_calls == 1
-    metadata_input = language.metadata_revision_inputs[0]
-    metadata_context = metadata_input["current_global_metadata"]
-    scene_context = metadata_input["scene_contract_context"]
-    assert isinstance(metadata_context, dict)
-    assert isinstance(scene_context, list)
-    assert "lines" not in metadata_context
-    assert all(
-        isinstance(scene, dict) and "screenplay_text" not in scene
-        for scene in scene_context
-    )
-
-    restarted_before_scope = _service(tmp_path, language)
-    restored_metadata = restarted_before_scope.get_planning_run(run.id).run
-    assert restored_metadata.current_step == PlanningRunStep.REVISION_SCOPE
-    assert restored_metadata.latest_story_metadata_patch is not None
-
-    queued = restarted_before_scope.advance_planning_run(run.id)
-    expected_revision_scenes = [1, len(language.outline.scenes)]
-    assert queued.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert queued.run.revision_scene_sequences == expected_revision_scenes
-    assert queued.run.next_revision_scene_index == 0
-    assert queued.run.revision_changed_scene_sequences == []
+    assert restored_repair_plan.revision_changed_scene_sequences == []
     assert (
-        queued.run.latest_revision_target_scene_sequences
+        restored_repair_plan.latest_revision_target_scene_sequences
         == expected_revision_scenes
     )
-    assert queued.run.latest_revision_changed_scene_sequences == []
-    assert language.revision_scope_calls == 1
+    assert restored_repair_plan.latest_revision_changed_scene_sequences == []
+    assert language.metadata_revision_calls == 0
+    assert language.revision_scope_calls == 0
     assert language.local_revision_calls == []
     assert language.revision_verifier_calls == 0
 
-    first_patch = restarted_before_scope.advance_planning_run(run.id)
+    first_patch = restarted_before_revision.advance_planning_run(run.id)
     assert first_patch.run.current_step == PlanningRunStep.SCENE_REVISION
     assert first_patch.run.next_revision_scene_index == 1
     assert first_patch.run.revision_changed_scene_sequences == [1]
@@ -2287,8 +2329,8 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     assert language.review_router_calls == 0
     assert language.source_contract_calls == 0
     assert language.repair_plan_calls == 1
-    assert language.metadata_revision_calls == 1
-    assert language.revision_scope_calls == 1
+    assert language.metadata_revision_calls == 0
+    assert language.revision_scope_calls == 0
     assert language.revision_verifier_calls == 1
     assert language.scene_inputs[1]["previous_actual_handoff"]["known_facts"][-1] == (
         "staged-scene-1-complete"
@@ -2412,8 +2454,9 @@ def test_scene_writer_failure_retries_the_same_scene_before_advancing(
     [
         (PlanningRunStep.STORY_ORIENTATION, "Story Orientation Agent"),
         (PlanningRunStep.STORY_ARCHITECT, "story-architect Agent"),
-        (PlanningRunStep.SCRIPT_CRITIC, "script-critic Agent"),
-        (PlanningRunStep.STORY_REVISION, "story-repair planner Agent"),
+        (PlanningRunStep.SCRIPT_VERIFIER, "Script Verifier Agent"),
+        (PlanningRunStep.SCRIPT_CRITIC, "Script Verifier Agent"),
+        (PlanningRunStep.STORY_REVISION, "Leader 的返修分派步骤"),
         (PlanningRunStep.STORY_METADATA_REVISION, "story-metadata revision Agent"),
         (PlanningRunStep.REVISION_VERIFIER, "story-revision verifier Agent"),
         (PlanningRunStep.FINAL_COLD_READ, "final cold-read Agent"),
@@ -2433,19 +2476,28 @@ def test_provider_backed_planning_stage_failure_retries_the_same_cursor(
     )
     service = _service(tmp_path, language)
     run = _start_owned_planning(service, request).run
-    if step == PlanningRunStep.FINAL_COLD_READ:
-        # FINAL_COLD_READ 不再由新流程自动进入，但已持久化的旧游标
+    if step in {
+        PlanningRunStep.SCRIPT_CRITIC,
+        PlanningRunStep.STORY_METADATA_REVISION,
+        PlanningRunStep.FINAL_COLD_READ,
+    }:
+        # 这些步骤不再由新流程自动进入，但已持久化的旧游标
         # 仍可恢复和重试。
+        preparation_step = {
+            PlanningRunStep.SCRIPT_CRITIC: PlanningRunStep.SCRIPT_VERIFIER,
+            PlanningRunStep.STORY_METADATA_REVISION: PlanningRunStep.SCENE_REVISION,
+            PlanningRunStep.FINAL_COLD_READ: PlanningRunStep.SCRIPT_VERIFIER,
+        }[step]
         before_legacy_step = _advance_to_step(
             service,
             run.id,
-            PlanningRunStep.SCRIPT_CRITIC,
+            preparation_step,
             max_steps=80,
         )
         assert before_legacy_step.project is not None
         legacy_run = before_legacy_step.run.model_copy(
             deep=True,
-            update={"current_step": PlanningRunStep.FINAL_COLD_READ},
+            update={"current_step": step},
         )
         service.repository.save_planning_run_with_project(
             legacy_run,
@@ -2479,6 +2531,9 @@ def test_provider_backed_planning_stage_failure_retries_the_same_cursor(
     assert succeeded.run.step_retry_count == 0
     assert succeeded.run.step_retry_feedback is None
     assert succeeded.run.step_retry_events == failed.run.step_retry_events
+    if step == PlanningRunStep.SCRIPT_CRITIC:
+        assert PlanningRunStep.SCRIPT_CRITIC in succeeded.run.completed_steps
+        assert PlanningRunStep.SCRIPT_VERIFIER not in succeeded.run.completed_steps
 
 
 @pytest.mark.parametrize("failure_mode", ["timeout", "structure"])
@@ -2529,7 +2584,7 @@ def test_scene_revision_failure_retries_the_same_scene_before_advancing(
     assert language.local_revision_inputs[-1]["previous_retry_feedback"] == feedback
 
 
-def test_scene_duration_reallocation_applies_decrease_then_exact_compensation(
+def test_scene_duration_reallocation_keeps_agent_selected_approximate_targets(
     tmp_path: Path,
 ) -> None:
     request = _request(180)
@@ -2559,29 +2614,71 @@ def test_scene_duration_reallocation_applies_decrease_then_exact_compensation(
     assert first_constraint["balance_episode_on_this_scene"] is False
     assert first_constraint["required_scene_target_seconds"] is None
 
-    balanced = service.advance_planning_run(run.id)
+    revised_second_scene = service.advance_planning_run(run.id)
 
-    assert balanced.run.current_step == PlanningRunStep.REVISION_VERIFIER
-    assert balanced.run.next_revision_scene_index == 2
+    assert revised_second_scene.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert revised_second_scene.run.next_revision_scene_index == 2
     final_outline = EpisodeOutline.model_validate_json(
-        balanced.run.outline_json or ""
+        revised_second_scene.run.outline_json or ""
     )
     assert final_outline.scenes[-1].target_duration_seconds == (
-        original.scenes[-1].target_duration_seconds + 6.0
+        original.scenes[-1].target_duration_seconds
     )
     assert sum(
         round(scene.target_duration_seconds * 1000)
         for scene in final_outline.scenes
-    ) == round(final_outline.target_duration_seconds * 1000)
+    ) == round(final_outline.target_duration_seconds * 1000) - 6000
     final_constraint = language.duration_constraints[-1]
     assert final_constraint["allow_change"] is True
-    assert final_constraint["balance_episode_on_this_scene"] is True
-    assert final_constraint["required_scene_target_seconds"] == (
-        original.scenes[-1].target_duration_seconds + 6.0
+    assert final_constraint["balance_episode_on_this_scene"] is False
+    assert final_constraint["required_scene_target_seconds"] is None
+    assert any(
+        "供 Verifier 判断" in warning
+        for warning in revised_second_scene.run.warnings
     )
 
 
-def test_unbalanced_final_scene_duration_retries_without_committing_patch(
+def test_large_intermediate_duration_drift_persists_and_revision_continues(
+    tmp_path: Path,
+) -> None:
+    request = _request(180)
+    language = DurationReallocationClient(
+        request,
+        # 40 seconds exceeds the removed 20% outline tolerance while keeping
+        # the first scene's target positive (45 -> 5 seconds).
+        first_scene_shift_seconds=40.0,
+    )
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    queued = _advance_to_step(service, run.id, PlanningRunStep.SCENE_REVISION)
+    original = EpisodeOutline.model_validate_json(queued.run.outline_json or "")
+
+    partially_revised = service.advance_planning_run(run.id)
+
+    assert partially_revised.run.current_step == PlanningRunStep.SCENE_REVISION
+    assert partially_revised.run.next_revision_scene_index == 1
+    assert partially_revised.run.revision_scene_retry_count == 0
+    intermediate = EpisodeOutline.model_validate_json(
+        partially_revised.run.outline_json or ""
+    )
+    assert intermediate.scenes[0].target_duration_seconds == 5.0
+    assert sum(scene.target_duration_seconds for scene in intermediate.scenes) == 140.0
+    assert any("供 Verifier 判断" in warning for warning in partially_revised.run.warnings)
+
+    restarted = _service(tmp_path, language)
+    persisted = restarted.get_planning_run(run.id).run
+    assert persisted.outline_json == partially_revised.run.outline_json
+    assert persisted.next_revision_scene_index == 1
+
+    continued = restarted.advance_planning_run(run.id)
+
+    assert continued.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert continued.run.next_revision_scene_index == 2
+    assert continued.run.revision_scene_retry_count == 0
+    assert language.local_revision_calls == [1, len(original.scenes)]
+
+
+def test_duration_drift_is_recorded_for_verifier_without_retrying_scene(
     tmp_path: Path,
 ) -> None:
     request = _request(180)
@@ -2593,42 +2690,32 @@ def test_unbalanced_final_scene_duration_retries_without_committing_patch(
     run = _start_owned_planning(service, request).run
     _advance_to_step(service, run.id, PlanningRunStep.SCENE_REVISION)
     decreased = service.advance_planning_run(run.id)
-    outline_before_final = decreased.run.outline_json
+    accepted = service.advance_planning_run(run.id)
 
-    failed = service.advance_planning_run(run.id)
-
-    assert failed.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert failed.run.next_revision_scene_index == 1
-    assert failed.run.outline_json == outline_before_final
-    assert failed.run.revision_changed_scene_sequences == [1]
-    assert failed.run.revision_scene_retry_count == 1
-    assert failed.run.revision_scene_retry_feedback is not None
-    feedback = failed.run.revision_scene_retry_feedback
-    assert "target_duration_seconds=51" in feedback
-    assert "received=49" in feedback
+    assert accepted.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert accepted.run.next_revision_scene_index == 2
+    assert accepted.run.revision_changed_scene_sequences == [
+        1,
+        len(language.outline.scenes),
+    ]
+    assert accepted.run.revision_scene_retry_count == 0
+    assert accepted.run.revision_scene_retry_feedback is None
+    assert any("供 Verifier 判断" in warning for warning in accepted.run.warnings)
 
     restarted = _service(tmp_path, language)
     persisted = restarted.get_planning_run(run.id).run
-    assert persisted.current_step == PlanningRunStep.SCENE_REVISION
-    assert persisted.next_revision_scene_index == 1
-    assert persisted.outline_json == outline_before_final
-    assert persisted.revision_scene_retry_feedback == feedback
-
-    balanced = restarted.advance_planning_run(run.id)
-
-    assert balanced.run.current_step == PlanningRunStep.REVISION_VERIFIER
-    assert balanced.run.next_revision_scene_index == 2
-    assert balanced.run.revision_scene_retry_count == 0
-    assert balanced.run.revision_scene_retry_feedback is None
-    assert language.local_revision_calls == [1, len(language.outline.scenes), len(language.outline.scenes)]
-    assert language.local_revision_inputs[-1]["previous_retry_feedback"] == feedback
+    assert persisted.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert persisted.next_revision_scene_index == 2
+    assert persisted.revision_scene_retry_count == 0
+    assert persisted.revision_scene_retry_feedback is None
+    assert language.local_revision_calls == [1, len(language.outline.scenes)]
     final_outline = EpisodeOutline.model_validate_json(
-        balanced.run.outline_json or ""
+        persisted.outline_json or ""
     )
     assert sum(
         round(scene.target_duration_seconds * 1000)
         for scene in final_outline.scenes
-    ) == round(final_outline.target_duration_seconds * 1000)
+    ) == round(final_outline.target_duration_seconds * 1000) - 8000
 
 
 def test_verifier_duration_reallocation_permission_survives_restart(
@@ -2645,7 +2732,7 @@ def test_verifier_duration_reallocation_permission_survives_restart(
 
     rejected = service.advance_planning_run(run.id)
 
-    assert rejected.run.current_step == PlanningRunStep.STORY_METADATA_REVISION
+    assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
     assert rejected.run.latest_revision_verification is not None
     assert rejected.run.latest_revision_verification.accepted is False
     assert rejected.run.latest_revision_verification.violations[
@@ -2654,13 +2741,11 @@ def test_verifier_duration_reallocation_permission_survives_restart(
     assert rejected.run.revision_scene_sequences == [1, len(language.outline.scenes)]
 
     restarted = _service(tmp_path, language)
-    metadata_repaired = restarted.advance_planning_run(run.id)
-    assert metadata_repaired.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert metadata_repaired.run.next_revision_scene_index == 0
+    first_repair = restarted.advance_planning_run(run.id)
+    assert first_repair.run.current_step == PlanningRunStep.SCENE_REVISION
+    assert first_repair.run.next_revision_scene_index == 1
 
-    decreased = restarted.advance_planning_run(run.id)
-    assert decreased.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert decreased.run.next_revision_scene_index == 1
+    decreased = first_repair
     decreased_outline = EpisodeOutline.model_validate_json(
         decreased.run.outline_json or ""
     )
@@ -2669,22 +2754,23 @@ def test_verifier_duration_reallocation_permission_survives_restart(
     )
 
     restarted = _service(tmp_path, language)
-    balanced = restarted.advance_planning_run(run.id)
+    revised_second_scene = restarted.advance_planning_run(run.id)
 
-    assert balanced.run.current_step == PlanningRunStep.REVISION_VERIFIER
-    assert balanced.run.next_revision_scene_index == 2
+    assert revised_second_scene.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert revised_second_scene.run.next_revision_scene_index == 2
     assert len(language.duration_constraints) == 2
-    assert language.duration_constraints[-1]["balance_episode_on_this_scene"] is True
+    assert language.duration_constraints[-1]["balance_episode_on_this_scene"] is False
+    assert language.duration_constraints[-1]["required_scene_target_seconds"] is None
     final_outline = EpisodeOutline.model_validate_json(
-        balanced.run.outline_json or ""
+        revised_second_scene.run.outline_json or ""
     )
     assert sum(
         round(scene.target_duration_seconds * 1000)
         for scene in final_outline.scenes
-    ) == round(final_outline.target_duration_seconds * 1000)
+    ) == round(final_outline.target_duration_seconds * 1000) - 6000
 
 
-def test_full_outline_revision_is_still_applied_one_scene_per_advance(
+def test_leader_selected_revision_scenes_are_applied_one_per_advance(
     tmp_path: Path,
 ) -> None:
     request = _request()
@@ -2697,22 +2783,18 @@ def test_full_outline_revision_is_still_applied_one_scene_per_advance(
     _advance_to_step(service, run.id, PlanningRunStep.STORY_REVISION)
 
     repair_planned = service.advance_planning_run(run.id)
-    assert repair_planned.run.current_step == (
-        PlanningRunStep.STORY_METADATA_REVISION
-    )
+    assert repair_planned.run.current_step == PlanningRunStep.SCENE_REVISION
     assert language.revision_calls == 0
     assert language.local_revision_calls == []
+    assert language.metadata_revision_calls == 0
+    assert language.revision_scope_calls == 0
 
-    metadata_aligned = service.advance_planning_run(run.id)
-    assert metadata_aligned.run.current_step == PlanningRunStep.REVISION_SCOPE
-    assert language.metadata_revision_calls == 1
-
-    queued = service.advance_planning_run(run.id)
-    expected_sequences = list(range(1, original_count + 1))
+    queued = repair_planned
+    expected_sequences = [1, original_count]
     assert queued.run.current_step == PlanningRunStep.SCENE_REVISION
     assert queued.run.revision_scene_sequences == expected_sequences
     assert queued.run.next_revision_scene_index == 0
-    assert language.revision_scope_calls == 1
+    assert language.revision_scope_calls == 0
     assert language.revision_calls == 0
 
     current = queued
@@ -2741,7 +2823,7 @@ def test_full_outline_revision_is_still_applied_one_scene_per_advance(
         assert patched_sequences == expected_sequences[:completed_count]
         expected_step = (
             PlanningRunStep.REVISION_VERIFIER
-            if completed_count == original_count
+            if completed_count == len(expected_sequences)
             else PlanningRunStep.SCENE_REVISION
         )
         assert current.run.current_step == expected_step
@@ -2757,18 +2839,28 @@ def test_full_outline_revision_is_still_applied_one_scene_per_advance(
     assert language.final_cold_read_calls == 0
 
 
-def test_story_metadata_revision_persists_without_rewriting_any_scene(
+def test_legacy_story_metadata_revision_persists_without_rewriting_any_scene(
     tmp_path: Path,
 ) -> None:
     request = _request(180)
     language = MetadataReconciliationClient(request)
     service = _service(tmp_path, language)
     run = _start_owned_planning(service, request).run
-    ready = _advance_to_step(
+    active_revision = _advance_to_step(
         service,
         run.id,
-        PlanningRunStep.STORY_METADATA_REVISION,
+        PlanningRunStep.SCENE_REVISION,
     )
+    assert active_revision.project is not None
+    legacy_run = active_revision.run.model_copy(
+        deep=True,
+        update={"current_step": PlanningRunStep.STORY_METADATA_REVISION},
+    )
+    service.repository.save_planning_run_with_project(
+        legacy_run,
+        active_revision.project.document,
+    )
+    ready = service.get_planning_run(run.id)
     before = EpisodeOutline.model_validate_json(ready.run.outline_json or "")
 
     aligned = service.advance_planning_run(run.id)
@@ -2793,7 +2885,7 @@ def test_story_metadata_revision_persists_without_rewriting_any_scene(
     )
 
 
-def test_empty_repair_scope_waits_for_recoverable_semantic_scope(
+def test_empty_repair_scope_returns_to_story_architect_without_scope_agent(
     tmp_path: Path,
 ) -> None:
     request = _request()
@@ -2803,47 +2895,65 @@ def test_empty_repair_scope_waits_for_recoverable_semantic_scope(
     _advance_to_step(service, run.id, PlanningRunStep.STORY_REVISION)
 
     repair_planned = service.advance_planning_run(run.id)
-    assert repair_planned.run.current_step == (
-        PlanningRunStep.STORY_METADATA_REVISION
-    )
+    assert repair_planned.run.current_step == PlanningRunStep.STORY_ARCHITECT
     assert repair_planned.run.revision_scene_sequences == []
+    assert repair_planned.run.step_retry_feedback is not None
+    feedback = json.loads(repair_planned.run.step_retry_feedback)
+    assert feedback["requested_by"] == "STORY_REPAIR_LEADER"
+    assert feedback["structural_actions"][0]["affected_scene_sequences"] == []
+    assert language.metadata_revision_calls == 0
     assert language.revision_scope_calls == 0
-
-    metadata_aligned = service.advance_planning_run(run.id)
-    assert metadata_aligned.run.current_step == PlanningRunStep.REVISION_SCOPE
-    assert language.metadata_revision_calls == 1
-
-    waiting = service.advance_planning_run(run.id)
-    assert waiting.run.current_step == PlanningRunStep.REVISION_SCOPE
-    assert waiting.run.revision_scene_sequences == []
-    assert waiting.run.next_revision_scene_index == 0
-    assert waiting.run.step_retry_count == 1
-    assert waiting.run.step_retry_feedback is not None
-    assert "transient revision scope failure" in waiting.run.step_retry_feedback
-    assert language.revision_scope_calls == 1
     assert language.revision_calls == 0
     assert language.local_revision_calls == []
 
     restarted = _service(tmp_path, language)
     persisted = restarted.get_planning_run(run.id).run
-    assert persisted.current_step == PlanningRunStep.REVISION_SCOPE
+    assert persisted.current_step == PlanningRunStep.STORY_ARCHITECT
     assert persisted.revision_scene_sequences == []
-    assert persisted.step_retry_count == 1
+    assert persisted.step_retry_feedback == repair_planned.run.step_retry_feedback
 
-    queued = restarted.advance_planning_run(run.id)
-    expected_sequences = [len(language.outline.scenes)]
-    assert queued.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert queued.run.revision_scene_sequences == expected_sequences
-    assert queued.run.next_revision_scene_index == 0
-    assert queued.run.step_retry_count == 0
-    assert queued.run.step_retry_feedback is None
-    assert language.revision_scope_calls == 2
+    rearchitected = restarted.advance_planning_run(run.id)
+    assert rearchitected.run.current_step == PlanningRunStep.SCENE_WRITER
+    assert rearchitected.run.step_retry_feedback is None
+    assert rearchitected.run.scene_script_json == []
+    assert rearchitected.run.next_script_scene_sequence == 1
+    assert language.metadata_revision_calls == 0
+    assert language.revision_scope_calls == 0
 
-    first_patch = restarted.advance_planning_run(run.id)
-    assert first_patch.run.current_step == PlanningRunStep.REVISION_VERIFIER
-    assert first_patch.run.next_revision_scene_index == 1
-    assert language.local_revision_calls == expected_sequences
-    assert language.revision_calls == 0
+
+def test_structural_story_handoff_larger_than_retry_text_survives_restart(
+    tmp_path: Path,
+) -> None:
+    request = _request()
+    language = EmptyAffectedRevisionClient(request, revision_rounds_required=1)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    _advance_to_step(service, run.id, PlanningRunStep.STORY_REVISION)
+
+    repair_planned = service.advance_planning_run(run.id)
+    assert repair_planned.project is not None
+    assert repair_planned.run.step_retry_feedback is not None
+    feedback = json.loads(repair_planned.run.step_retry_feedback)
+    feedback["architect_context"] = "需要保留的结构语义。" * 220
+    expanded_feedback = json.dumps(
+        feedback,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    assert len(expanded_feedback) > 2000
+    repair_planned.run.step_retry_feedback = expanded_feedback
+    service.repository.save_planning_run_with_project(
+        repair_planned.run,
+        repair_planned.project.document,
+    )
+
+    restarted = _service(tmp_path, language)
+    persisted = restarted.get_planning_run(run.id).run
+    assert persisted.step_retry_feedback == expanded_feedback
+
+    rearchitected = restarted.advance_planning_run(run.id)
+    assert rearchitected.run.current_step == PlanningRunStep.SCENE_WRITER
+    assert rearchitected.run.step_retry_feedback is None
 
 
 def test_repair_planner_can_downgrade_unsupported_router_story_findings(
@@ -2992,7 +3102,7 @@ def test_agent_revision_decision_is_not_overridden_by_severity_after_restart(
     ready = _advance_to_step(
         service,
         _start_owned_planning(service, request).run.id,
-        PlanningRunStep.SCRIPT_CRITIC,
+        PlanningRunStep.SCRIPT_VERIFIER,
     )
     assert ready.project is not None
     report = ScriptReviewReport(
@@ -3037,7 +3147,7 @@ def test_agent_revision_decision_is_not_overridden_by_severity_after_restart(
     restarted = _service(tmp_path, language)
     repair_planned = restarted.advance_planning_run(legacy.id)
 
-    assert repair_planned.run.current_step == PlanningRunStep.STORY_METADATA_REVISION
+    assert repair_planned.run.current_step == PlanningRunStep.SCENE_REVISION
     assert repair_planned.run.review_disposition is not None
     assert (
         repair_planned.run.review_disposition.action
@@ -3135,7 +3245,7 @@ def test_finalize_with_unrouted_review_returns_to_router(
     ready = _advance_to_step(
         service,
         _start_owned_planning(service, request).run.id,
-        PlanningRunStep.SCRIPT_CRITIC,
+        PlanningRunStep.SCRIPT_VERIFIER,
     )
     assert ready.project is not None
     high_review = ScriptReviewReport(
@@ -3258,10 +3368,12 @@ def test_enhanced_verifier_drives_focused_repair_without_final_cold_read(
 
     rejected = service.advance_planning_run(run.id)
 
-    assert rejected.run.current_step == PlanningRunStep.STORY_METADATA_REVISION
+    assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
     assert rejected.run.latest_revision_verification is not None
     assert rejected.run.latest_revision_verification.accepted is False
     assert rejected.run.revision_scene_sequences == [len(language.outline.scenes)]
+    assert language.metadata_revision_calls == 0
+    assert language.revision_scope_calls == 0
     rejected_verification = rejected.run.latest_revision_verification.model_dump(
         mode="json"
     )
@@ -3352,7 +3464,7 @@ def test_filtered_story_repair_keeps_critic_issue_id_through_verifier_and_ledger
             image_urls: list[str] | None = None,
             max_output_tokens: int = 2200,
         ) -> str:
-            if "script-critic Agent" in instructions:
+            if "Script Verifier Agent" in instructions:
                 self.critic_calls += 1
                 return ScriptReviewReport(
                     summary="一项下游建议和一项剧本问题。",
@@ -3445,25 +3557,11 @@ def test_source_contract_is_precompiled_and_reaches_repair_writer_and_verifier(
     assert language.repair_plan_calls == 0
 
     repair_planned = service.advance_planning_run(run.id)
-    assert repair_planned.run.current_step == (
-        PlanningRunStep.STORY_METADATA_REVISION
-    )
+    assert repair_planned.run.current_step == PlanningRunStep.SCENE_REVISION
     assert language.repair_plan_calls == 1
     assert language.metadata_revision_calls == 0
     assert language.revision_scope_calls == 0
-
-    metadata_aligned = service.advance_planning_run(run.id)
-    assert metadata_aligned.run.current_step == PlanningRunStep.REVISION_SCOPE
-    assert language.metadata_revision_calls == 1
-    metadata_contract = language.metadata_revision_inputs[0][
-        "explicit_story_source_contract"
-    ]
-    assert isinstance(metadata_contract, dict)
-    assert metadata_contract["explicit_commitments"] == [source]
-
-    queued = service.advance_planning_run(run.id)
-    assert queued.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert language.revision_scope_calls == 1
+    queued = repair_planned
     assert language.local_revision_calls == []
     assert language.revision_verifier_calls == 0
 
@@ -3504,11 +3602,11 @@ def test_critic_json_structure_retries_the_same_semantic_step_without_losing_sta
     language = MalformedCriticJsonClient(request)
     service = _service(tmp_path, language)
     run = _start_owned_planning(service, request).run
-    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_CRITIC)
+    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_VERIFIER)
 
     invalid = service.advance_planning_run(run.id)
 
-    assert invalid.run.current_step == PlanningRunStep.SCRIPT_CRITIC
+    assert invalid.run.current_step == PlanningRunStep.SCRIPT_VERIFIER
     assert invalid.run.review_report is None
     assert invalid.run.review_disposition is None
     assert invalid.run.step_retry_count == 1
@@ -3550,19 +3648,13 @@ def test_revision_verifier_triggers_one_targeted_writer_repair_before_acceptance
     assert language.local_revision_calls == [1, len(language.outline.scenes)]
 
     rejected = service.advance_planning_run(run.id)
-    assert rejected.run.current_step == (
-        PlanningRunStep.STORY_METADATA_REVISION
-    )
+    assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
     assert rejected.run.revision_repair_round == 1
     assert rejected.run.revision_scene_sequences == [1]
     assert rejected.run.next_revision_scene_index == 0
     assert language.revision_verifier_calls == 1
-    assert language.metadata_revision_calls == 1
-
-    metadata_repaired = service.advance_planning_run(run.id)
-    assert metadata_repaired.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert metadata_repaired.run.next_revision_scene_index == 0
-    assert language.metadata_revision_calls == 2
+    assert language.metadata_revision_calls == 0
+    assert language.revision_scope_calls == 0
     assert language.local_revision_calls == [1, len(language.outline.scenes)]
 
     repaired = service.advance_planning_run(run.id)
@@ -3608,7 +3700,7 @@ def test_revision_verifier_rejections_persist_and_continue_until_accepted(
 
     for repair_round in range(1, 4):
         rejected = service.advance_planning_run(run.id)
-        assert rejected.run.current_step == PlanningRunStep.STORY_METADATA_REVISION
+        assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
         assert rejected.run.revision_repair_round == repair_round
         assert rejected.run.revision_scene_sequences == [1]
         assert rejected.run.next_revision_scene_index == 0
@@ -3629,9 +3721,6 @@ def test_revision_verifier_rejections_persist_and_continue_until_accepted(
         assert persisted.run.latest_revision_verification is not None
         assert persisted.run.latest_revision_verification.accepted is False
 
-        metadata_repaired = service.advance_planning_run(run.id)
-        assert metadata_repaired.run.current_step == PlanningRunStep.SCENE_REVISION
-        assert metadata_repaired.run.revision_scene_sequences == [1]
         repaired_scene = service.advance_planning_run(run.id)
         assert repaired_scene.run.current_step == PlanningRunStep.REVISION_VERIFIER
 
@@ -3644,6 +3733,8 @@ def test_revision_verifier_rejections_persist_and_continue_until_accepted(
         == StoryReviewFollowup.FINALIZE
     )
     assert language.revision_verifier_calls == 4
+    assert language.metadata_revision_calls == 0
+    assert language.revision_scope_calls == 0
     assert language.final_cold_read_calls == 0
     assert any("定向修复 3 次" in warning for warning in accepted.run.warnings)
     assert not any("回退原稿" in warning for warning in accepted.run.warnings)

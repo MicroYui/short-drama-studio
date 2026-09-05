@@ -412,6 +412,13 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
         duration_seconds=8,
         media_inputs=[first],
     )
+    last_frame = build_h3_prompt(
+        document,
+        dialogue_shot,
+        route=VideoGenerationRoute.FRAME_LAST,
+        duration_seconds=8,
+        media_inputs=[last],
+    )
     first_last = build_h3_prompt(
         document,
         dialogue_shot,
@@ -433,6 +440,7 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
         duration_seconds=8,
         media_inputs=[first],
     )
+    keyframe_bindings = resolve_h3_media_bindings(document, [first, last], [])
 
     assert direct.startswith("integrated_multimodal_description:")
     assert "medium=纸雕与水墨混合视觉" in direct
@@ -443,6 +451,16 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
         "For the target video, at 0.00 seconds into the target video, "
         "<Picture 1> (from [Shot 1]) is fully referenced."
     )
+    assert [item.prompt_label for item in keyframe_bindings] == [
+        "<Picture 1>",
+        "<Picture 2>",
+    ]
+    assert last_frame.startswith(
+        "How the reference pictures align with the target video — "
+        "<Picture 1> (from [Shot 1]) aligns with the 8.00-second mark"
+    )
+    assert "only the final frame" in last_frame
+    assert "must not be treated as the opening image" in last_frame
     assert first_last.startswith(
         "How the reference pictures align with the target video — "
         "Picture 1 (from Shot 1) aligns with the 0.00-second mark"
@@ -460,7 +478,9 @@ def test_h3_prompt_skill_emits_official_mode_schemas_and_dialogue_markup() -> No
     assert [referenced.index(field) for field in fields] == sorted(
         referenced.index(field) for field in fields
     )
-    assert "<Picture 1>" in referenced
+    assert "<Subject 1>" in referenced
+    assert "extracted from its reference images" in referenced
+    assert "<Picture 1> provides" in referenced
     assert "medium=纸雕与水墨混合视觉" in referenced
     assert "says in an off-screen voiceover" in voiceover
     assert "lips remain completely closed" in voiceover
@@ -499,6 +519,13 @@ def test_shot_timeline_beats_require_contiguous_ranges_and_preserve_dialogue() -
     validated = ShotPlan.model_validate(base_payload)
     assert validated.timeline_beats[-1].end_seconds == source.duration_seconds
 
+    spanning_dialogue_payload = validated.model_dump(mode="python")
+    spanning_dialogue_payload["timeline_beats"][1]["dialogue_line_ids"] = [line_id]
+    spanning_dialogue = ShotPlan.model_validate(spanning_dialogue_payload)
+    assert [
+        beat.dialogue_line_ids for beat in spanning_dialogue.timeline_beats
+    ] == [[line_id], [line_id]]
+
     gap_payload = validated.model_dump(mode="python")
     gap_payload["timeline_beats"][1]["start_seconds"] = 3.2
     with pytest.raises(ValueError, match="contiguous and ordered"):
@@ -506,7 +533,7 @@ def test_shot_timeline_beats_require_contiguous_ranges_and_preserve_dialogue() -
 
     missing_dialogue_payload = validated.model_dump(mode="python")
     missing_dialogue_payload["timeline_beats"][0]["dialogue_line_ids"] = []
-    with pytest.raises(ValueError, match="every shot dialogue line exactly once and in order"):
+    with pytest.raises(ValueError, match="cover shot dialogue lines in order"):
         ShotPlan.model_validate(missing_dialogue_payload)
 
 
@@ -578,10 +605,13 @@ def test_h3_reference_prompt_emits_timed_beats_and_normalized_semantic_alias() -
     )
 
     assert media.reference_alias == "林夏_定妆"
-    assert "@林夏_定妆 = <Picture 1>" in prompt
+    assert "@林夏_定妆 = <Subject 1>" in prompt
+    assert "<Subject 1> is the reusable visible content" in prompt
+    assert "extracted from its reference images" in prompt
+    assert "<Picture 1> provides" in prompt
     assert "[0.00-4.00 seconds]" in prompt
     assert "[4.00-8.00 seconds]" in prompt
-    assert "@林夏_定妆 (<Picture 1>)" in prompt
+    assert "@林夏_定妆 (<Subject 1>)" in prompt
 
 
 def test_h3_reference_prompt_rejects_alias_collisions_after_normalization() -> None:
@@ -696,8 +726,114 @@ def test_legacy_h3_bindings_keep_distinct_naked_urls_separate() -> None:
     assert bindings[0].alias != bindings[1].alias
     assert bindings[0].provider_label == "<Picture 1>"
     assert bindings[1].provider_label == "<Picture 2>"
-    assert f"@{bindings[0].alias} = <Picture 1>" in prompt
-    assert f"@{bindings[1].alias} = <Picture 2>" in prompt
+    assert bindings[0].prompt_label == "<Subject 1>"
+    assert bindings[1].prompt_label == "<Subject 2>"
+    assert f"@{bindings[0].alias} = <Subject 1>" in prompt
+    assert f"@{bindings[1].alias} = <Subject 2>" in prompt
+    assert "<Subject 1> is the reusable visible content" in prompt
+    assert "<Picture 1> provides" in prompt
+    assert "<Picture 2> provides" in prompt
+
+
+def test_reference_views_for_one_explicit_subject_share_one_subject_label() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    shot = document.shots[0]
+    character_asset = next(
+        asset for asset in document.assets if asset.kind == AssetKind.CHARACTER
+    )
+    location_asset = next(
+        asset for asset in document.assets if asset.kind == AssetKind.LOCATION
+    )
+    media_inputs = [
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(
+                external_url=f"https://example.invalid/character-{view}.png"
+            ),
+            subject_asset_id=character_asset.id,
+            reference_alias=f"林夏_{view}",
+            binding_purpose=f"锁定林夏的{view}视图",
+            reference_tags=[view],
+        )
+        for view in ("front", "profile", "back")
+    ]
+    media_inputs.append(
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(
+                external_url="https://example.invalid/location-master.png"
+            ),
+            subject_asset_id=location_asset.id,
+            reference_alias="场景_主视图",
+            binding_purpose="锁定场景结构",
+        )
+    )
+
+    bindings = resolve_h3_media_bindings(document, media_inputs, [])
+    prompt = build_h3_prompt(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=5,
+        media_inputs=media_inputs,
+    )
+    definitions = prompt.split("\n\nsummary:", maxsplit=1)[0]
+
+    assert [item.provider_label for item in bindings] == [
+        "<Picture 1>",
+        "<Picture 2>",
+        "<Picture 3>",
+        "<Picture 4>",
+    ]
+    assert [item.prompt_label for item in bindings] == [
+        "<Subject 1>",
+        "<Subject 1>",
+        "<Subject 1>",
+        "<Subject 2>",
+    ]
+    assert definitions.count("<Subject 1> is the reusable visible content") == 1
+    assert definitions.count("<Subject 2> is the reusable visible content") == 1
+    assert all(
+        f"<Picture {index}> provides" in definitions for index in range(1, 5)
+    )
+    assert all(
+        f"reference tags: {view}" in definitions
+        for view in ("front", "profile", "back")
+    )
+    assert "<Subject 3>" not in prompt
+
+
+def test_reference_images_resolved_to_one_asset_share_one_subject_label() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    asset = next(
+        item for item in document.assets if item.kind == AssetKind.CHARACTER
+    )
+    first_version = asset.versions[0]
+    second_version = first_version.model_copy(
+        update={"id": "asset-version-shared-subject-2", "version": 2}
+    )
+    asset.versions.append(second_version)
+    media_inputs = [
+        H3MediaInput(
+            kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(
+                external_url=f"https://example.invalid/resolved-view-{index}.png"
+            ),
+            asset_version_id=version.id,
+        )
+        for index, version in enumerate((first_version, second_version), start=1)
+    ]
+
+    bindings = resolve_h3_media_bindings(document, media_inputs, [])
+
+    assert [item.prompt_label for item in bindings] == [
+        "<Subject 1>",
+        "<Subject 1>",
+    ]
+    assert bindings[0].alias == bindings[1].alias
 
 
 def test_empty_h3_reference_metadata_preserves_legacy_request_fingerprint(
@@ -841,6 +977,16 @@ def test_h3_compiler_enforces_routes_before_network() -> None:
     assert frame.ratio is None
     assert frame.content[1].role == H3MediaRole.FIRST_FRAME
 
+    final_frame = compile_h3_request(
+        route=VideoGenerationRoute.FRAME_LAST,
+        prompt="尾帧驱动",
+        duration_seconds=5,
+        media_inputs=[last],
+        resolve_url=lambda item: item.source.external_url or "unused",
+    )
+    assert final_frame.ratio is None
+    assert final_frame.content[1].role == H3MediaRole.LAST_FRAME
+
     both = compile_h3_request(
         route=VideoGenerationRoute.FRAME_FIRST_LAST,
         prompt="首尾帧驱动",
@@ -917,6 +1063,14 @@ def test_h3_compiler_enforces_routes_before_network() -> None:
             prompt="官方字段 schema 仍要求尾帧与首帧配对",
             duration_seconds=5,
             media_inputs=[last],
+            resolve_url=lambda _item: "unused",
+        )
+    with pytest.raises(H3CapabilityError, match="FRAME_LAST"):
+        compile_h3_request(
+            route=VideoGenerationRoute.FRAME_LAST,
+            prompt="尾帧路线不能接收首帧",
+            duration_seconds=5,
+            media_inputs=[first],
             resolve_url=lambda _item: "unused",
         )
     with pytest.raises(H3CapabilityError, match="nine reference images"):

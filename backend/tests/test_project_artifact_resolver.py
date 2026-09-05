@@ -8,6 +8,7 @@ from pathlib import Path
 from short_drama.agent_runtime import ArtifactRef
 from short_drama.agent_runtime.artifact_resolver import (
     ProjectArtifactResolver as RuntimeProjectArtifactResolver,
+    _storyboard_draft_summary,
     project_artifact_refs,
     project_summary,
 )
@@ -18,6 +19,20 @@ from short_drama.models import (
     PlanningRunStatus,
     PlanningRunStep,
     ProjectPlanningMetadata,
+)
+from short_drama.production_contracts import (
+    ClipGroup,
+    StoryboardClipGroupDraft,
+    StoryboardClipGroupOutline,
+    StoryboardDraftContent,
+    StoryboardDraftPhase,
+    StoryboardDraftVerificationFinding,
+    StoryboardDraftVerificationReport,
+    StoryboardDraftVerificationStatus,
+    StoryboardSceneNode,
+    StoryboardSourceRange,
+    StoryboardTimingAudit,
+    StoryboardTimingLedgerEntry,
 )
 from short_drama.production_manager import ProjectArtifactResolver
 from short_drama.repository import ShortDramaRepository
@@ -82,10 +97,355 @@ def test_resolver_preserves_focused_document_summaries(tmp_path: Path) -> None:
 
     assert script_summary is not None
     assert script_summary.title == f"Script v{script.version}"
-    assert script.structured_scenes[0].heading in script_summary.summary
+    script_payload = json.loads(script_summary.summary)
+    assert script_payload["screenplay_text"] == script.screenplay_text
+    assert script_payload["structured_scenes"][0]["heading"] == (
+        script.structured_scenes[0].heading
+    )
+    assert script_payload["structured_scenes"][0]["screenplay_text"] == (
+        script.structured_scenes[0].screenplay_text
+    )
     assert shot_summary is not None
     assert shot_summary.title == f"Shot {shot.sequence}"
     assert json.loads(shot_summary.summary)["id"] == shot.id
+
+
+def test_storyboard_draft_summary_exposes_resume_ledger_without_shot_prose() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    scene = document.script_versions[0].structured_scenes[0]
+    source_shots = [item for item in document.shots if item.dialogue_line_ids][:2]
+    line_ids = [item.dialogue_line_ids[0] for item in source_shots]
+    scene_node_id = f"scene-node-{scene.id}"
+    ranges = [
+        StoryboardSourceRange(
+            id=f"range-{line_id}",
+            scene_ids=[scene.id],
+            script_line_ids=[line_id],
+            description=f"Cover {line_id}.",
+        )
+        for line_id in line_ids
+    ]
+    timing_entries = [
+        StoryboardTimingLedgerEntry(
+            id=f"timing-{line_id}",
+            sequence=sequence,
+            scene_node_id=scene_node_id,
+            source_range=source_range,
+            source_text=f"Source beat {sequence}",
+            dialogue_units=2,
+            speech_rate_units_per_second=2.0,
+            minimum_spoken_duration_seconds=1.0,
+            non_speech_reserve_seconds=1.0,
+            allocated_duration_seconds=source_shot.duration_seconds,
+            natural_cut=f"Cut after source beat {sequence} lands.",
+            continuity_in=(
+                []
+                if sequence == 1
+                else ["The tray remains on the counter beside the protagonist."]
+            ),
+            visible_changes=[f"Source beat {sequence} completes visibly."],
+            continuity_out=[
+                "The tray remains on the counter beside the protagonist."
+                if sequence == 1
+                else "The protagonist now holds the tray."
+            ],
+            completes_scene=sequence == len(line_ids),
+            planned_clip_group_id=f"clip-{line_id}",
+            planned_shot_id=f"draft-shot-{sequence}",
+        )
+        for sequence, (line_id, source_range, source_shot) in enumerate(
+            zip(line_ids, ranges, source_shots, strict=True),
+            start=1,
+        )
+    ]
+    plans = [
+        StoryboardClipGroupOutline(
+            id=f"clip-{line_id}",
+            title=f"Clip {sequence}",
+            scene_node_id=scene_node_id,
+            scene_group_sequence=sequence,
+            source_range=source_range,
+            timing_entry_ids=[timing_entry.id],
+            duration_seconds=source_shot.duration_seconds,
+            objective=f"Stage source beat {sequence} without adding filler.",
+            continuity_in=list(timing_entry.continuity_in),
+            visible_changes=list(timing_entry.visible_changes),
+            continuity_out=list(timing_entry.continuity_out),
+        )
+        for sequence, (line_id, source_range, source_shot, timing_entry) in enumerate(
+            zip(line_ids, ranges, source_shots, timing_entries, strict=True),
+            start=1,
+        )
+    ]
+    first_shot = source_shots[0].model_copy(
+        update={
+            "id": "draft-shot-1",
+            "project_id": document.project.id,
+            "sequence": 1,
+            "scene_id": scene.id,
+            "visual": "LONG_CAMERA_TEXT_SHOULD_NOT_APPEAR",
+        },
+        deep=True,
+    )
+    committed = StoryboardClipGroupDraft(
+        work_unit_id="work-unit-1",
+        scene_node_id=scene_node_id,
+        scene_group_sequence=1,
+        source_range=ranges[0],
+        shots=[first_shot],
+        clip_group=ClipGroup(
+            id=plans[0].id,
+            title=plans[0].title,
+            shot_ids=[first_shot.id],
+            duration_seconds=first_shot.duration_seconds,
+            generation_intent="Generate the first beat.",
+            visible_changes=list(plans[0].visible_changes),
+            continuity_out=["The tray remains on the counter beside the protagonist."],
+        ),
+    )
+    draft = StoryboardDraftContent(
+        project_id=document.project.id,
+        title="Resume-safe storyboard draft",
+        script_version_id=document.script_versions[0].id,
+        bible_version_id=document.bible_versions[0].id,
+        production_spec_document_id="production-spec-1",
+        production_spec_version_id="production-spec-version-1",
+        script_line_ids=line_ids,
+        scene_nodes=[
+            StoryboardSceneNode(
+                id=scene_node_id,
+                scene_id=scene.id,
+                sequence=1,
+                heading=scene.heading,
+                summary=scene.summary,
+                source_line_ids=line_ids,
+            )
+        ],
+        timing_ledger=timing_entries,
+        planned_clip_groups=plans,
+        timing_audit=StoryboardTimingAudit(
+            target_duration_s=120.0,
+            dialogue_units_total=4,
+            minimum_spoken_duration_s=2.0,
+            non_speech_reserve_s=2.0,
+            computed_episode_duration_s=sum(
+                item.duration_seconds for item in plans
+            ),
+            clip_group_count=2,
+            timing_audit_passed=True,
+        ),
+        committed_groups=[committed],
+        verification=StoryboardDraftVerificationReport(
+            status=StoryboardDraftVerificationStatus.NEEDS_REVISION,
+            summary="The committed range needs one visible continuity repair.",
+            checked_clip_group_ids=[plans[0].id],
+            findings=[
+                StoryboardDraftVerificationFinding(
+                    id="finding-tray-state",
+                    summary="The next group must show how the tray changes position.",
+                    affected_clip_group_ids=[plans[0].id],
+                    suggested_revision="Add the visible pickup before the next action.",
+                )
+            ],
+        ),
+    )
+
+    summary = _storyboard_draft_summary(
+        "storyboard-draft-1",
+        "storyboard-draft-version-4",
+        4,
+        draft,
+    )
+    payload = json.loads(summary)
+
+    assert [item["clip_group_id"] for item in payload["planned_clip_groups"]] == [
+        plans[0].id,
+        plans[1].id,
+    ]
+    assert payload["timing_audit"]["clip_group_count"] == 2
+    assert payload["committed_clip_group_ids"] == [plans[0].id]
+    assert payload["next_uncommitted_group"]["clip_group_id"] == plans[1].id
+    assert payload["latest_continuity_out"] == [
+        "The tray remains on the counter beside the protagonist."
+    ]
+    assert payload["verification"]["status"] == "NEEDS_REVISION"
+    assert payload["verification"]["findings"][0]["id"] == "finding-tray-state"
+    assert "LONG_CAMERA_TEXT_SHOULD_NOT_APPEAR" not in summary
+
+
+def test_storyboard_draft_summary_supports_partial_planning_phases() -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    script = document.script_versions[0]
+    scene = script.structured_scenes[0]
+    line_ids = scene.line_ids[:2]
+    scene_node_id = f"scene-node-{scene.id}"
+    first_range = StoryboardSourceRange(
+        id="range-first-line",
+        scene_ids=[scene.id],
+        script_line_ids=[line_ids[0]],
+        description="Cover the first visible beat.",
+    )
+    second_range = StoryboardSourceRange(
+        id="range-second-line",
+        scene_ids=[scene.id],
+        script_line_ids=[line_ids[1]],
+        description="Cover the second visible beat.",
+    )
+    entries = [
+        StoryboardTimingLedgerEntry(
+            id="timing-first",
+            sequence=1,
+            scene_node_id=scene_node_id,
+            source_range=first_range,
+            source_text="First exact source beat.",
+            dialogue_units=2,
+            speech_rate_units_per_second=2.0,
+            minimum_spoken_duration_seconds=1.0,
+            non_speech_reserve_seconds=2.0,
+            allocated_duration_seconds=6.0,
+            natural_cut="First beat lands.",
+            continuity_out=["The tray remains on the counter."],
+        ),
+        StoryboardTimingLedgerEntry(
+            id="timing-second",
+            sequence=2,
+            scene_node_id=scene_node_id,
+            source_range=second_range,
+            source_text="Second exact source beat.",
+            dialogue_units=2,
+            speech_rate_units_per_second=2.0,
+            minimum_spoken_duration_seconds=1.0,
+            non_speech_reserve_seconds=2.0,
+            allocated_duration_seconds=6.0,
+            natural_cut="Second beat lands.",
+            continuity_in=["The tray remains on the counter."],
+            continuity_out=["The protagonist now holds the tray."],
+            completes_scene=True,
+        ),
+    ]
+    common = {
+        "project_id": document.project.id,
+        "title": "Partial storyboard plan",
+        "script_version_id": script.id,
+        "bible_version_id": document.bible_versions[0].id,
+        "production_spec_document_id": "production-spec-1",
+        "production_spec_version_id": "production-spec-1-v1",
+        "script_line_ids": line_ids,
+        "scene_nodes": [
+            StoryboardSceneNode(
+                id=scene_node_id,
+                scene_id=scene.id,
+                sequence=1,
+                heading=scene.heading,
+                summary=scene.summary,
+                source_line_ids=line_ids,
+            )
+        ],
+    }
+    ledger_building = StoryboardDraftContent(
+        phase=StoryboardDraftPhase.LEDGER_BUILDING,
+        timing_ledger=[entries[0]],
+        **common,
+    )
+
+    ledger_payload = json.loads(
+        _storyboard_draft_summary("draft-1", "draft-1-v2", 2, ledger_building)
+    )
+
+    assert ledger_payload["phase"] == "LEDGER_BUILDING"
+    assert ledger_payload["timing_audit"] is None
+    assert ledger_payload["progress"]["timing_ledger_entry_count"] == 1
+    assert ledger_payload["progress"]["planned_clip_group_count"] == 0
+    assert ledger_payload["next_unplanned_source"] == {
+        "scene_node_id": scene_node_id,
+        "script_line_id": line_ids[1],
+        "timing_entry_id": None,
+    }
+    assert ledger_payload["latest_planned_continuity_out"] == [
+        "The tray remains on the counter."
+    ]
+
+    first_plan = StoryboardClipGroupOutline(
+        id="clip-first",
+        title="First beat",
+        scene_node_id=scene_node_id,
+        scene_group_sequence=1,
+        source_range=first_range,
+        timing_entry_ids=[entries[0].id],
+        duration_seconds=6.0,
+        objective="Stage the first beat.",
+        continuity_out=list(entries[0].continuity_out),
+    )
+    outline_building = StoryboardDraftContent(
+        phase=StoryboardDraftPhase.OUTLINE_BUILDING,
+        timing_ledger=entries,
+        planned_clip_groups=[first_plan],
+        **common,
+    )
+    outline_payload = json.loads(
+        _storyboard_draft_summary("draft-1", "draft-1-v5", 5, outline_building)
+    )
+
+    assert outline_payload["phase"] == "OUTLINE_BUILDING"
+    assert len(outline_payload["timing_ledger"]) == 2
+    assert outline_payload["progress"]["outlined_timing_entry_count"] == 1
+    assert outline_payload["next_unplanned_source"]["timing_entry_id"] == (
+        "timing-second"
+    )
+    assert outline_payload["latest_planned_continuity_out"] == [
+        "The tray remains on the counter."
+    ]
+
+
+def test_resolver_rejects_stale_or_mismatched_versioned_refs(tmp_path: Path) -> None:
+    resolver, repository = _fixture_resolver(tmp_path)
+    document = repository.list_projects()[0]
+    script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    shot = document.shots[0]
+
+    assert resolver.summarize_artifact(
+        ArtifactRef(
+            project_id=document.project.id,
+            artifact_type="project",
+            artifact_id="another-project",
+        )
+    ) is None
+    assert resolver.summarize_artifact(
+        ArtifactRef(
+            project_id=document.project.id,
+            artifact_type="script_version",
+            artifact_id="another-script",
+            version=script.version,
+        )
+    ) is None
+    assert resolver.summarize_artifact(
+        ArtifactRef(
+            project_id=document.project.id,
+            artifact_type="script_version",
+            artifact_id=script.id,
+            version=script.version + 1,
+        )
+    ) is None
+    assert resolver.summarize_artifact(
+        ArtifactRef(
+            project_id=document.project.id,
+            artifact_type="scene",
+            artifact_id=script.structured_scenes[0].id,
+            version=script.version + 1,
+        )
+    ) is None
+    assert resolver.summarize_artifact(
+        ArtifactRef(
+            project_id=document.project.id,
+            artifact_type="shot",
+            artifact_id=shot.id,
+            version=shot.revision + 1,
+        )
+    ) is None
 
 
 def test_project_refs_and_missing_artifacts_remain_stable(tmp_path: Path) -> None:

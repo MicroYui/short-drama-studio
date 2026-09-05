@@ -3,20 +3,30 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import json
 from typing import Protocol
+
+from pydantic import JsonValue
 
 from short_drama.agent_runtime.models import (
     ActionDigest,
+    AgentResult,
+    AgentResultDigest,
     ArtifactRef,
     ArtifactSummary,
     ContextPack,
     DecisionMemory,
     ExperienceMemory,
+    WorkOrder,
 )
 from short_drama.agent_runtime.store import AgentRuntimeStore
 
 
 DEFAULT_CONTEXT_CHARACTER_BUDGET = 24_000
+
+
+class ContextManifestResolutionError(ValueError):
+    """Raised when an explicit WorkOrder context pointer cannot be resolved."""
 
 
 class ArtifactResolver(Protocol):
@@ -28,6 +38,18 @@ class ArtifactResolver(Protocol):
 
 def _unique_strings(values: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
+
+
+def _unique_artifact_refs(values: Sequence[ArtifactRef]) -> list[ArtifactRef]:
+    selected: list[ArtifactRef] = []
+    seen: set[tuple[str, str, str, int | None]] = set()
+    for ref in values:
+        identity = ref.identity()
+        if identity in seen:
+            continue
+        seen.add(identity)
+        selected.append(ref)
+    return selected
 
 
 class _CharacterBudget:
@@ -59,6 +81,15 @@ class _CharacterBudget:
             selected = f"{value[: available - 1].rstrip()}…"
         self.remaining -= len(selected)
         return selected
+
+    def take_exact(self, value: str, *, limit: int | None = None) -> bool:
+        """Consume a complete structured value or leave the budget untouched."""
+
+        available = self.remaining if limit is None else min(limit, self.remaining)
+        if len(value) > available:
+            return False
+        self.remaining -= len(value)
+        return True
 
 
 def _bounded_strings(
@@ -142,13 +173,90 @@ def _bounded_actions(
     budget: _CharacterBudget,
     values: Sequence[ActionDigest],
 ) -> list[ActionDigest]:
-    bounded: list[ActionDigest] = []
-    for item in values:
-        summary = budget.take(item.summary, limit=1_500)
+    newest_first: list[ActionDigest] = []
+    for item in reversed(values):
+        summary = budget.take(
+            item.summary,
+            limit=1_000,
+            reserve=256 if item.agent_result is not None else 0,
+        )
         if summary is None:
             break
-        bounded.append(item.model_copy(update={"summary": summary}))
+        agent_result = _bounded_agent_result(budget, item.agent_result)
+        newest_first.append(
+            item.model_copy(
+                update={"summary": summary, "agent_result": agent_result}
+            )
+        )
+    return list(reversed(newest_first))
+
+
+def _bounded_agent_result(
+    budget: _CharacterBudget,
+    result: AgentResultDigest | None,
+) -> AgentResultDigest | None:
+    if result is None:
+        return None
+    concise_summary = budget.take(result.concise_summary, limit=1_000)
+    if concise_summary is None:
+        return None
+    deliverable = _bounded_deliverable(budget, result.deliverable)
+    findings = _bounded_strings(budget, result.findings, item_limit=700)
+    evidence_refs: list[ArtifactRef] = []
+    for ref in result.evidence_refs[:8]:
+        serialized = ref.model_dump_json()
+        if not budget.take_exact(serialized, limit=600):
+            break
+        evidence_refs.append(ref)
+    return result.model_copy(
+        update={
+            "concise_summary": concise_summary,
+            "deliverable": deliverable,
+            "findings": findings,
+            "evidence_refs": evidence_refs,
+        }
+    )
+
+
+def _bounded_deliverable(
+    budget: _CharacterBudget,
+    deliverable: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    """Keep ordinary structured results intact and summarize oversized values."""
+
+    bounded: dict[str, JsonValue] = {}
+    remaining_limit = 2_000
+    for key, value in deliverable.items():
+        rendered = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        field_cost = len(key) + len(rendered)
+        if field_cost <= remaining_limit and budget.take_exact(
+            f"{key}:{rendered}",
+            limit=remaining_limit,
+        ):
+            bounded[key] = value
+            remaining_limit -= field_cost
+            continue
+        available = min(700, remaining_limit - len(key))
+        if available <= 0:
+            break
+        summarized = budget.take(rendered, limit=available)
+        if summarized is None:
+            break
+        bounded[key] = summarized
+        break
     return bounded
+
+
+def _agent_result_digest(result: AgentResult | None) -> AgentResultDigest | None:
+    if result is None:
+        return None
+    return AgentResultDigest(
+        status=result.status,
+        concise_summary=result.concise_summary,
+        deliverable=dict(result.deliverable),
+        findings=list(result.findings),
+        evidence_refs=list(result.evidence_refs),
+    )
 
 
 class ContextCompiler:
@@ -235,6 +343,11 @@ class ContextCompiler:
                 status=action.status,
                 summary=action.output_summary or action.input_summary,
                 artifact_refs=action.artifact_refs,
+                agent_result=_agent_result_digest(
+                    None
+                    if action.work_order_id is None
+                    else self._store.get_agent_result(action.work_order_id)
+                ),
             )
             for action in selected_actions
         ]
@@ -270,8 +383,8 @@ class ContextCompiler:
             budget,
             [] if run_memory is None else run_memory.next_actions,
         )
-        bounded_decisions = _bounded_decisions(budget, decisions)
         bounded_recent_actions = _bounded_actions(budget, recent_actions)
+        bounded_decisions = _bounded_decisions(budget, decisions)
         bounded_artifacts = _bounded_artifacts(budget, artifacts)
         bounded_experiences = _bounded_experiences(budget, experiences)
 
@@ -280,6 +393,7 @@ class ContextCompiler:
             project_id=run.project_id,
             objective=objective,
             active_skill_ids=run.active_skill_ids,
+            unattended=run.unattended,
             execution_target=run.execution_target,
             render_export=run.render_export,
             project_summary=project_summary,
@@ -299,17 +413,116 @@ class ContextCompiler:
         self,
         work_order_id: str,
         *,
-        experience_tags: Sequence[str] = (),
         max_characters: int = DEFAULT_CONTEXT_CHARACTER_BUDGET,
     ) -> ContextPack:
         work_order = self._store.get_work_order(work_order_id)
         if work_order is None:
             raise KeyError(f"Unknown work order: {work_order_id}")
-        return self.compile(
-            work_order.parent_run_id,
-            requested_artifact_refs=work_order.scope,
-            additional_constraints=work_order.constraints,
-            experience_tags=experience_tags,
-            objective_override=work_order.objective,
+        return self._compile_manifest(
+            work_order,
             max_characters=max_characters,
+        )
+
+    def _compile_manifest(
+        self,
+        work_order: WorkOrder,
+        *,
+        max_characters: int,
+    ) -> ContextPack:
+        """Resolve only IDs explicitly selected in the persisted manifest."""
+
+        manifest = work_order.context_manifest
+        if manifest is None:
+            raise ContextManifestResolutionError(
+                f"WorkOrder {work_order.id} has no ContextManifest"
+            )
+        run = self._store.get_run(work_order.parent_run_id)
+        if run is None:
+            raise ContextManifestResolutionError(
+                f"Unknown AgentRun referenced by WorkOrder: {work_order.parent_run_id}"
+            )
+
+        refs = _unique_artifact_refs(
+            [
+                *manifest.required_artifacts,
+                *[
+                    ref
+                    for boundary in manifest.adjacent_boundaries
+                    for ref in boundary.artifact_refs
+                ],
+            ]
+        )
+        resolved_artifacts: list[ArtifactSummary] = []
+        for ref in refs:
+            if ref.project_id != run.project_id:
+                raise ContextManifestResolutionError(
+                    "ContextManifest artifact references must belong to the AgentRun project"
+                )
+            summary = self._artifact_resolver.summarize_artifact(ref)
+            if summary is None or summary.ref.identity() != ref.identity():
+                raise ContextManifestResolutionError(
+                    "ContextManifest contains an unresolved artifact reference: "
+                    f"{ref.artifact_type}:{ref.artifact_id}@{ref.version}"
+                )
+            resolved_artifacts.append(summary)
+
+        decisions: list[DecisionMemory] = []
+        for decision_id in manifest.inherited_decision_ids:
+            decision = self._store.get_decision(decision_id)
+            if decision is None or decision.project_id != run.project_id:
+                raise ContextManifestResolutionError(
+                    f"ContextManifest contains an unresolved decision id: {decision_id}"
+                )
+            decisions.append(decision)
+
+        selected_tags = manifest.experience_tags
+        experiences = (
+            []
+            if not selected_tags
+            else self._store.list_experiences(
+                run.project_id,
+                skill_ids=manifest.selected_skill_ids,
+                tags=selected_tags,
+                limit=32,
+            )
+        )
+        if not manifest.selected_skill_ids:
+            experiences = [item for item in experiences if item.skill_id is None]
+
+        budget = _CharacterBudget(max_characters)
+        headline_limit = max(64, min(4_000, max_characters // 4))
+        objective = budget.take(manifest.objective, limit=headline_limit)
+        if objective is None:
+            raise ContextManifestResolutionError(
+                "ContextManifest objective does not fit the context budget"
+            )
+        bounded_constraints = _bounded_strings(budget, manifest.constraints)
+        bounded_questions = _bounded_strings(budget, manifest.open_questions)
+        bounded_decisions = _bounded_decisions(budget, decisions)
+        bounded_artifacts = _bounded_artifacts(budget, resolved_artifacts)
+        bounded_experiences = _bounded_experiences(budget, experiences)
+        if len(bounded_decisions) != len(decisions):
+            raise ContextManifestResolutionError(
+                "ContextManifest decisions do not fit the context budget"
+            )
+        if len(bounded_artifacts) != len(resolved_artifacts):
+            raise ContextManifestResolutionError(
+                "ContextManifest artifacts do not fit the context budget"
+            )
+
+        return ContextPack(
+            run_id=run.id,
+            project_id=run.project_id,
+            work_order_id=work_order.id,
+            context_manifest_id=manifest.id,
+            objective=objective,
+            active_skill_ids=manifest.selected_skill_ids,
+            unattended=run.unattended,
+            execution_target=run.execution_target,
+            render_export=run.render_export,
+            constraints=bounded_constraints,
+            decisions=bounded_decisions,
+            experiences=bounded_experiences,
+            artifacts=bounded_artifacts,
+            open_questions=bounded_questions,
         )

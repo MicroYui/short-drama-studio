@@ -5,7 +5,7 @@ export type ProjectAggregate = components['schemas']['ProjectAggregate']
 export type ProjectRecord = components['schemas']['ProjectRecord']
 export type GenerationTask = components['schemas']['GenerationTask']
 export type Take = components['schemas']['Take']
-export type ShotPlan = components['schemas']['ShotPlan']
+export type ShotPlan = components['schemas']['ShotPlan-Output']
 export type ScriptLine = components['schemas']['ScriptLine']
 export type TimelineManifest = components['schemas']['TimelineManifest']
 export type ExportRecord = components['schemas']['ExportRecord']
@@ -94,6 +94,7 @@ export type AgentUserInputRequest = components['schemas']['AgentUserInputRequest
 export type AgentWorkOrderView = components['schemas']['AgentWorkOrderView']
 export type AgentWorkOrderResultRequest = components['schemas']['AgentWorkOrderResultRequest']
 export type AgentWorkOrderResultResponse = components['schemas']['AgentWorkOrderResultResponse']
+export type TeamExecutionBatch = components['schemas']['TeamExecutionBatch']
 
 const listProjects = makeEndpointClient('/api/short-drama/projects', 'get')
 const createAgentProject = makeEndpointClient('/api/short-drama/agent-projects', 'post')
@@ -103,6 +104,7 @@ const listAgentRuns = makeEndpointClient('/api/short-drama/projects/{project_id}
 const createAgentRun = makeEndpointClient('/api/short-drama/projects/{project_id}/agent-runs', 'post')
 const getAgentRun = makeEndpointClient('/api/short-drama/agent-runs/{run_id}', 'get')
 const advanceAgentRun = makeEndpointClient('/api/short-drama/agent-runs/{run_id}/advance', 'post')
+const advanceAgentTeam = makeEndpointClient('/api/short-drama/agent-runs/{run_id}/team/advance', 'post')
 const replanAgentRun = makeEndpointClient('/api/short-drama/agent-runs/{run_id}/replan', 'post')
 const submitAgentUserInput = makeEndpointClient('/api/short-drama/agent-runs/{run_id}/user-input', 'post')
 const getAgentWorkOrder = makeEndpointClient('/api/short-drama/agent-work-orders/{work_order_id}', 'get')
@@ -228,6 +230,11 @@ export const ShortDramaApi = {
     { max_actions: maxActions },
     undefined,
     `/api/short-drama/agent-runs/${encodeURIComponent(runId)}/advance`,
+  ),
+  advanceAgentTeam: (runId: string) => advanceAgentTeam(
+    undefined,
+    undefined,
+    `/api/short-drama/agent-runs/${encodeURIComponent(runId)}/team/advance`,
   ),
   replanAgentRun: (runId: string, body: AgentRunReplanRequest) => replanAgentRun(
     body,

@@ -22,7 +22,7 @@
 
    - **输入：** 当前剧本、用户素材、期望风格、已存在的 Asset/AssetVersion 和可复用目录。
    - **决策：** 确定真人、动画、图形、档案素材、屏幕内容或混合媒介如何分工；只建立实际镜头会使用的角色、场景、道具、声音和风格锚点。
-   - **可调用 Tool：** `artifact.create_asset`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.search_stock`、`artifact.import_stock`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`artifact.review_version`、`artifact.add_reference_entry`。
+   - **可调用 Tool：** `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.search_stock`、`artifact.import_stock`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`image.enqueue`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry`。
    - **产物：** 与剧本一致的 Bible、资产清单、批准版本、来源与用途说明。
    - **检查与返工：** 缺少会阻碍当前镜头的媒体时才导入或生成；风格、事实、身份或授权来源不匹配的候选不进入当前参考绑定。
 
@@ -46,7 +46,7 @@
 
    - **输入：** 已选路线、参考计划、关键帧说明和缺失媒体列表。
    - **决策：** 只补齐路线真正需要的起点、终点、构图、身份、空间或声音输入；确认每份媒体承担单一清楚职责。
-   - **可调用 Tool：** `shot.compile_keyframe_brief`、`image.enqueue`、`image.advance`、`image.retry`、`image.recover_output`、`artifact.review_version`、`qa.list_visual_input_reports`、`qa.check_input_compatibility`。
+   - **可调用 Tool：** `shot.compile_keyframe_brief`、`image.enqueue`、`image.advance`、`image.retry`、`image.recover_output`、`qa.inspect_asset_version`、`artifact.review_version`、`qa.list_visual_input_reports`、`qa.check_input_compatibility`。
    - **产物：** 可读取、版本明确、用途清楚且彼此兼容的生成输入包。
    - **检查与返工：** 若关键帧本身已违背内容、构图或连续性，先修复图像或镜头；非阻断的美化项不应让整个项目停在准备阶段。
 

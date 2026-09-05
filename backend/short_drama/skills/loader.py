@@ -13,10 +13,12 @@ from short_drama.skills.models import (
     ProviderPromptSkill,
     ProductionSkill,
     ProductionSkillRole,
+    SkillProvenanceKind,
 )
 
 
-FrontmatterValue: TypeAlias = str | bool | int | list[str]
+FrontmatterStringLists: TypeAlias = dict[str, list[str]]
+FrontmatterValue: TypeAlias = str | bool | int | list[str] | FrontmatterStringLists
 Frontmatter: TypeAlias = dict[str, FrontmatterValue]
 
 DEFAULT_PRODUCTION_SKILLS_ROOT = Path(__file__).resolve().parent / "formats"
@@ -26,6 +28,20 @@ DEFAULT_PRODUCTION_WORKFLOW_PATH = (
 DEFAULT_PROVIDER_SKILLS_ROOT = Path(__file__).resolve().parent / "providers"
 DEFAULT_SHARED_SKILL_ROOT = Path(__file__).resolve().parent / "shared"
 DEFAULT_NARRATIVE_SKILLS_ROOT = Path(__file__).resolve().parent / "narrative"
+DEFAULT_PRODUCTION_METHOD_SKILLS_ROOT = Path(__file__).resolve().parent / "methods"
+DEFAULT_OFFICIAL_MINIMAX_H3_SKILLS_ROOT = (
+    Path(__file__).resolve().parent / "official" / "minimax_h3"
+)
+DEFAULT_OFFICIAL_MINIMAX_DESIGN_WORKFLOWS_ROOT = (
+    Path(__file__).resolve().parent
+    / "official"
+    / "minimax_design"
+    / "3.0.11"
+    / "workflows"
+)
+DEFAULT_MINIMAX_H3_SKILL_TRANSLATIONS_ROOT = (
+    Path(__file__).resolve().parent / "translations" / "minimax_h3"
+)
 
 
 def _parse_frontmatter_value(raw_value: str, *, path: Path) -> FrontmatterValue:
@@ -38,7 +54,7 @@ def _parse_frontmatter_value(raw_value: str, *, path: Path) -> FrontmatterValue:
         return False
     if value.isdecimal():
         return int(value)
-    if value.startswith("[") or value.startswith('"'):
+    if value.startswith("[") or value.startswith("{") or value.startswith('"'):
         try:
             decoded: object = json.loads(value)
         except json.JSONDecodeError as exc:
@@ -49,6 +65,18 @@ def _parse_frontmatter_value(raw_value: str, *, path: Path) -> FrontmatterValue:
             decoded_items = cast(list[object], decoded)
             if all(isinstance(item, str) for item in decoded_items):
                 return cast(list[str], decoded_items)
+        if isinstance(decoded, dict):
+            decoded_mapping = cast(dict[object, object], decoded)
+            if all(
+                isinstance(key, str)
+                and isinstance(items, list)
+                and all(isinstance(item, str) for item in cast(list[object], items))
+                for key, items in decoded_mapping.items()
+            ):
+                return {
+                    cast(str, key): cast(list[str], items)
+                    for key, items in decoded_mapping.items()
+                }
         raise ValueError(f"Unsupported frontmatter value in {path}: {value}")
     return value
 
@@ -70,6 +98,111 @@ def _read_markdown(path: Path) -> tuple[Frontmatter, str]:
             raise ValueError(f"Invalid frontmatter line in {path}: {line}")
         metadata[key.strip()] = _parse_frontmatter_value(raw_value, path=path)
     return metadata, _clean_markdown_body(text[closing + 5 :], path=path)
+
+
+def _read_source_document(path: Path) -> str:
+    """Read vendored Markdown/TXT without interpreting upstream frontmatter.
+
+    External Skill packages may use full YAML that is intentionally richer than
+    this project's compact frontmatter parser.  Their source stays byte-for-byte
+    on disk; the runtime only removes an optional metadata block before inserting
+    the authored body into an Agent prompt.
+    """
+
+    return _source_markdown_body(path)
+
+
+def _source_markdown_body(path: Path) -> str:
+    """Return an upstream Markdown body while leaving the vendored file untouched."""
+
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if text.startswith("---\n"):
+        closing = text.find("\n---\n", 4)
+        if closing < 0:
+            raise ValueError(f"Unclosed source frontmatter in {path}")
+        text = text[closing + 5 :]
+    body = text.strip()
+    if not body:
+        raise ValueError(f"Source document body is empty in {path}")
+    return body
+
+
+def _markdown_heading(line: str) -> tuple[int, str] | None:
+    stripped = line.strip()
+    level = 0
+    while level < len(stripped) and stripped[level] == "#":
+        level += 1
+    if level < 1 or level > 6 or level >= len(stripped) or stripped[level] != " ":
+        return None
+    title = stripped[level + 1 :].strip()
+    return None if not title else (level, title)
+
+
+def _read_source_section(path: Path, heading_title: str) -> str:
+    """Read one exact Markdown section from an upstream source document.
+
+    Adapters name the upstream heading explicitly.  This is declarative
+    role-to-source composition, not keyword routing over a user's request.
+    """
+
+    lines = _source_markdown_body(path).splitlines()
+    matches = [
+        index
+        for index, line in enumerate(lines)
+        if (heading := _markdown_heading(line)) is not None
+        and heading[1] == heading_title
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Source heading '{heading_title}' must appear exactly once in {path}"
+        )
+    start = matches[0]
+    start_heading = _markdown_heading(lines[start])
+    if start_heading is None:  # pragma: no cover - protected by the match above
+        raise AssertionError("Resolved source section is not a heading")
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        candidate = _markdown_heading(lines[index])
+        if candidate is not None and candidate[0] <= start_heading[0]:
+            end = index
+            break
+    section = "\n".join(lines[start:end]).strip()
+    if not section:
+        raise ValueError(f"Source section '{heading_title}' is empty in {path}")
+    return section
+
+
+def _read_role_source_section(
+    skill_directory: Path,
+    source_reference: str,
+    *,
+    skill_path: Path,
+) -> tuple[str, str]:
+    relative_path, separator, heading_title = source_reference.partition("::")
+    if not separator or not relative_path.strip() or not heading_title.strip():
+        raise ValueError(
+            "Role source section must use '<relative path>::<exact heading>' in "
+            f"{skill_path}: {source_reference}"
+        )
+    source_path = skill_directory / relative_path.strip()
+    if not source_path.is_file():
+        raise ValueError(
+            f"Role source section '{relative_path}' does not exist for {skill_path}"
+        )
+    return relative_path.strip(), _read_source_section(
+        source_path,
+        heading_title.strip(),
+    )
+
+
+def _render_official_reference(*, source_label: str, body: str) -> str:
+    # Source identity is retained in the Skill metadata and loader mapping.
+    # The Agent only needs the selected method text; repeating provenance tags
+    # around every section adds prompt noise and makes the upstream material
+    # look like a separate instruction hierarchy.  Shared role guidance owns
+    # the one-time Tool, interaction, and artifact boundary.
+    _ = source_label
+    return body.strip()
 
 
 def _clean_markdown_body(text: str, *, path: Path) -> str:
@@ -102,6 +235,20 @@ def _optional_bool(
     return value
 
 
+def _optional_provenance(
+    metadata: Frontmatter,
+    *,
+    path: Path,
+) -> SkillProvenanceKind:
+    value = metadata.get("provenance", SkillProvenanceKind.PROJECT_ORIGINAL.value)
+    if not isinstance(value, str):
+        raise ValueError(f"Frontmatter field 'provenance' must be a string in {path}")
+    try:
+        return SkillProvenanceKind(value)
+    except ValueError as exc:
+        raise ValueError(f"Unknown Skill provenance '{value}' in {path}") from exc
+
+
 def _optional_string_list(
     metadata: Frontmatter,
     key: str,
@@ -112,6 +259,31 @@ def _optional_string_list(
     if not isinstance(value, list):
         raise ValueError(f"Frontmatter field '{key}' must be a string list in {path}")
     return tuple(item.strip() for item in value if item.strip())
+
+
+def _optional_role_reference_map(
+    metadata: Frontmatter,
+    *,
+    path: Path,
+    key: str = "role_references",
+) -> dict[ProductionSkillRole, tuple[str, ...]]:
+    value = metadata.get(key, {})
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"Frontmatter field '{key}' must be an object in {path}"
+        )
+    references: dict[ProductionSkillRole, tuple[str, ...]] = {}
+    for raw_role, raw_paths in value.items():
+        try:
+            role = ProductionSkillRole(raw_role)
+        except ValueError as exc:
+            raise ValueError(
+                f"Unknown role reference target '{raw_role}' in {path}"
+            ) from exc
+        references[role] = tuple(
+            item.strip() for item in raw_paths if item.strip()
+        )
+    return references
 
 
 def _load_playbook(path: Path) -> tuple[str, tuple[str, ...]]:
@@ -164,12 +336,60 @@ def _load_role_prompts(
     skill_directory: Path,
     *,
     roles: tuple[ProductionSkillRole, ...] | None = None,
+    shared_role_prompt: str | None = None,
+    role_references: dict[ProductionSkillRole, tuple[str, ...]] | None = None,
+    role_source_sections: dict[ProductionSkillRole, tuple[str, ...]] | None = None,
+    allow_missing_roles: bool = False,
 ) -> dict[ProductionSkillRole, str]:
     prompts: dict[ProductionSkillRole, str] = {}
     requested_roles = tuple(ProductionSkillRole) if roles is None else roles
+    references_by_role = {} if role_references is None else role_references
+    source_sections_by_role = (
+        {} if role_source_sections is None else role_source_sections
+    )
+    if shared_role_prompt is not None:
+        shared_role_path = skill_directory / shared_role_prompt
+        if not shared_role_path.is_file():
+            raise ValueError(
+                f"Shared role prompt '{shared_role_prompt}' does not exist for "
+                f"{skill_directory / 'SKILL.md'}"
+            )
+        _metadata, body = _read_markdown(shared_role_path)
+        for role in requested_roles:
+            sections = [body]
+            for source_reference in source_sections_by_role.get(role, ()):
+                _relative_path, source_body = _read_role_source_section(
+                    skill_directory,
+                    source_reference,
+                    skill_path=skill_directory / "SKILL.md",
+                )
+                sections.append(
+                    _render_official_reference(
+                        source_label=source_reference,
+                        body=source_body,
+                    )
+                )
+            for relative_path in references_by_role.get(role, ()):
+                reference_path = skill_directory / relative_path
+                if not reference_path.is_file():
+                    raise ValueError(
+                        f"Role reference '{relative_path}' does not exist for "
+                        f"{skill_directory / 'SKILL.md'}"
+                    )
+                sections.append(
+                    _render_official_reference(
+                        source_label=relative_path,
+                        body=_read_source_document(reference_path),
+                    )
+                )
+            prompts[role] = "\n\n".join(sections)
+        return prompts
     for role in requested_roles:
         role_path = skill_directory / "roles" / f"{role.value.casefold()}.md"
         if not role_path.is_file():
+            if allow_missing_roles:
+                prompts[role] = ""
+                continue
             raise ValueError(
                 f"Production Skill declares role {role.value} but has no role file: {role_path}"
             )
@@ -185,6 +405,30 @@ def _load_role_prompts(
             _reference_metadata, reference_body = _read_markdown(reference_path)
             sections.append(
                 f"补充参考方法（{relative_path}）：\n{reference_body}"
+            )
+        for relative_path in references_by_role.get(role, ()):
+            reference_path = skill_directory / relative_path
+            if not reference_path.is_file():
+                raise ValueError(
+                    f"Role reference '{relative_path}' does not exist for {role_path}"
+                )
+            sections.append(
+                _render_official_reference(
+                    source_label=relative_path,
+                    body=_read_source_document(reference_path),
+                )
+            )
+        for source_reference in source_sections_by_role.get(role, ()):
+            _relative_path, source_body = _read_role_source_section(
+                skill_directory,
+                source_reference,
+                skill_path=skill_directory / "SKILL.md",
+            )
+            sections.append(
+                _render_official_reference(
+                    source_label=source_reference,
+                    body=source_body,
+                )
             )
         prompts[role] = "\n\n".join(sections)
     return prompts
@@ -202,13 +446,54 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
     skill_path = skill_directory / "SKILL.md"
     metadata, constitution = _read_markdown(skill_path)
     roles = _declared_roles(metadata, path=skill_path)
+    role_references = _optional_role_reference_map(metadata, path=skill_path)
+    role_source_sections = _optional_role_reference_map(
+        metadata,
+        path=skill_path,
+        key="role_source_sections",
+    )
+    unsupported_reference_roles = set(role_references).union(
+        role_source_sections
+    ).difference(roles)
+    if unsupported_reference_roles:
+        unsupported = ", ".join(
+            sorted(role.value for role in unsupported_reference_roles)
+        )
+        raise ValueError(
+            f"Role references target undeclared roles ({unsupported}) in {skill_path}"
+        )
+    if "constitution_references" in metadata:
+        raise ValueError(
+            "Whole upstream documents cannot be executable Skill constitutions; "
+            f"declare role_source_sections or role_references in {skill_path}"
+        )
+    shared_role_prompt_value = metadata.get("shared_role_prompt")
+    if shared_role_prompt_value is not None and not isinstance(
+        shared_role_prompt_value,
+        str,
+    ):
+        raise ValueError(
+            f"Frontmatter field 'shared_role_prompt' must be a string in {skill_path}"
+        )
     return ComposableProductionSkill(
         id=_required_string(metadata, "id", path=skill_path),
         label=_required_string(metadata, "label", path=skill_path),
         description=_required_string(metadata, "description", path=skill_path),
         constitution=constitution,
-        role_prompts=_load_role_prompts(skill_directory, roles=roles),
+        role_prompts=_load_role_prompts(
+            skill_directory,
+            roles=roles,
+            shared_role_prompt=shared_role_prompt_value,
+            role_references=role_references,
+            role_source_sections=role_source_sections,
+        ),
         source_path=str(skill_path),
+        provenance=_optional_provenance(metadata, path=skill_path),
+        upstream_sources=_optional_string_list(
+            metadata,
+            "upstream_sources",
+            path=skill_path,
+        ),
         user_overridable=_optional_bool(
             metadata,
             "user_overridable",
@@ -221,17 +506,40 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
 def load_narrative_skills(
     root: Path = DEFAULT_NARRATIVE_SKILLS_ROOT,
 ) -> tuple[ComposableProductionSkill, ...]:
-    """Load optional narrative methods without deciding when they apply."""
+    """Load explicitly supplied narrative methods, if any.
+
+    The built-in catalog is intentionally empty.  MiniMax-H3 does not publish a
+    generic short-drama narrative Skill, so this project does not substitute a
+    locally invented one.  The field remains for persisted-run compatibility
+    and for a future, source-verifiable upstream Skill.
+    """
 
     skill_directories = sorted(
         path.parent for path in root.glob("*/SKILL.md") if path.is_file()
     )
     if not skill_directories:
-        raise ValueError(f"No narrative Production Skills found in {root}")
+        return ()
     skills = tuple(_load_composable_skill(path) for path in skill_directories)
     skill_ids = [skill.id for skill in skills]
     if len(skill_ids) != len(set(skill_ids)):
         raise ValueError(f"Duplicate narrative Production Skill id in {root}")
+    return skills
+
+
+def load_production_method_skills(
+    root: Path = DEFAULT_PRODUCTION_METHOD_SKILLS_ROOT,
+) -> tuple[ComposableProductionSkill, ...]:
+    """Load optional production methods without deciding when they apply."""
+
+    skill_directories = sorted(
+        path.parent for path in root.glob("*/SKILL.md") if path.is_file()
+    )
+    if not skill_directories:
+        raise ValueError(f"No Production Method Skills found in {root}")
+    skills = tuple(_load_composable_skill(path) for path in skill_directories)
+    skill_ids = [skill.id for skill in skills]
+    if len(skill_ids) != len(set(skill_ids)):
+        raise ValueError(f"Duplicate Production Method Skill id in {root}")
     return skills
 
 
@@ -248,7 +556,7 @@ def _load_skill(skill_directory: Path) -> ProductionSkill:
         path=skill_path,
     )
     playbook, playbook_outline = _load_playbook(playbook_path)
-    prompts = _load_role_prompts(skill_directory)
+    prompts = _load_role_prompts(skill_directory, allow_missing_roles=True)
     return ProductionSkill(
         profile=profile,
         label=_required_string(metadata, "label", path=skill_path),
@@ -323,6 +631,12 @@ def _load_provider_prompt_skill(skill_directory: Path) -> ProviderPromptSkill:
         label=_required_string(metadata, "label", path=skill_path),
         instructions="\n\n".join(sections),
         reference_paths=reference_paths,
+        provenance=_optional_provenance(metadata, path=skill_path),
+        upstream_sources=_optional_string_list(
+            metadata,
+            "upstream_sources",
+            path=skill_path,
+        ),
     )
 
 

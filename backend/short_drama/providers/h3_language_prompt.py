@@ -222,6 +222,7 @@ def _route_media_bindings(
             "role": media.role.value,
             "kind": media.kind.value,
             "provider_label": resolved.provider_label,
+            "prompt_label": resolved.prompt_label,
             "reference_alias": f"@{resolved.alias}",
             "subject": resolved.subject,
             "subject_asset_id": resolved.subject_asset_id,
@@ -309,6 +310,7 @@ def build_language_prompt_input(
     route_guidance = {
         VideoGenerationRoute.DIRECT: "无图像锚点，提示词必须完整建立首帧人物、空间、构图和动作起点。",
         VideoGenerationRoute.FRAME_FIRST: "首帧图已批准；从首帧精确起步，保持人物、服装、空间、构图和道具外观。",
+        VideoGenerationRoute.FRAME_LAST: "尾帧图已批准；根据锁定镜头推导相容起始状态，让动作、机位和物理状态逐步收敛到尾帧，不得把尾帧当作开场。",
         VideoGenerationRoute.FRAME_FIRST_LAST: "首尾帧均已批准；连续完成中间动作，不改变两端已确定的身份、构图和道具状态。",
         VideoGenerationRoute.REFERENCE: "参考素材用于身份、空间或道具锚定；保持其外观，但不要把参考图理解成额外镜头或新增主体。",
     }[route]

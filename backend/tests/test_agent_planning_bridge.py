@@ -33,15 +33,20 @@ from short_drama.production_manager import (
     AgentRunCreateRequest,
     AgentRunReplanRequest,
     PlanStep,
+    ProductionManager,
     production_skill_id,
 )
 from short_drama.production_planner import (
     EpisodeOutline,
     NarrativeSkillSelection,
     PlannedDialogueLine,
+    ProductionMethodSelection,
     StoryOrientation,
     _fallback_ending_contract,
     _fallback_episode_outline,
+    _story_orientation_prompt,
+    _story_source_contract_prompt,
+    build_story_source_contract,
 )
 from short_drama.script_documents import EpisodeScenePatch
 from short_drama.service import ShortDramaService
@@ -64,6 +69,7 @@ def _story_orientation_response(
     *,
     story_intent: StoryIntent,
     selected_narrative_skills: list[NarrativeSkillSelection],
+    selected_method_skills: list[ProductionMethodSelection],
 ) -> str:
     payload = json.loads(input_text)
     return StoryOrientation(
@@ -76,6 +82,12 @@ def _story_orientation_response(
             "选择了与当前故事目标直接相关的组合技能。"
             if selected_narrative_skills
             else "当前故事使用通用角色与格式能力即可，不加载额外叙事技能。"
+        ),
+        selected_method_skills=selected_method_skills,
+        method_selection_rationale=(
+            "当前项目需要已选制片方法协调主张与可见证据。"
+            if selected_method_skills
+            else "当前项目不需要额外制片方法。"
         ),
     ).model_dump_json()
 
@@ -92,7 +104,11 @@ class StoryArchitectClient:
         self.outline = EpisodeOutline.model_validate(outline_payload)
         self.story_intent = _test_story_intent()
         self.selected_narrative_skills: list[NarrativeSkillSelection] = []
+        self.selected_method_skills: list[ProductionMethodSelection] = []
         self.calls = 0
+        self.production_manager_calls = 0
+        self.instructions: list[str] = []
+        self.manager_response_kind = "advance"
         self.fail_with_runtime_error = False
 
     def validate_credentials(self) -> None:
@@ -108,6 +124,7 @@ class StoryArchitectClient:
     ) -> str:
         del image_urls, max_output_tokens
         self.calls += 1
+        self.instructions.append(instructions)
         if self.fail_with_runtime_error:
             raise RuntimeError("temporary planning provider failure")
         payload = json.loads(input_text)
@@ -116,10 +133,60 @@ class StoryArchitectClient:
                 input_text,
                 story_intent=self.story_intent,
                 selected_narrative_skills=self.selected_narrative_skills,
+                selected_method_skills=self.selected_method_skills,
             )
         if "context" in payload and "available_tools" in payload:
+            self.production_manager_calls += 1
             current_plan = AgentPlanProposal.model_validate(payload["current_plan"])
             current_step = current_plan.steps[0]
+            if self.manager_response_kind == "user_input":
+                return AgentPlanProposal(
+                    summary=(
+                        "Advance to the requested story-orientation boundary, then pause "
+                        "for confirmation."
+                    ),
+                    steps=[
+                        PlanStep(
+                            id="advance-to-story-direction-confirmation",
+                            title="Advance to the story-direction boundary",
+                            kind=ActionKind.TOOL_CALL,
+                            assigned_agent="production-manager",
+                            tool_name="planning.advance",
+                            instructions=(
+                                "Advance exactly one persisted planning unit before the "
+                                "requested confirmation stop."
+                            ),
+                            arguments=dict(current_step.arguments),
+                            artifact_refs=list(current_step.artifact_refs),
+                        ),
+                        PlanStep(
+                            id="confirm-story-direction",
+                            title="Confirm story direction",
+                            kind=ActionKind.USER_INPUT,
+                            assigned_agent="production-manager",
+                            instructions=(
+                                "Review the story direction before content planning continues."
+                            ),
+                            depends_on=["advance-to-story-direction-confirmation"],
+                            artifact_refs=list(current_step.artifact_refs),
+                        )
+                    ],
+                ).model_dump_json()
+            if self.manager_response_kind == "downstream":
+                return AgentPlanProposal(
+                    summary="Incorrectly attempt downstream work.",
+                    steps=[
+                        PlanStep(
+                            id="inspect-project-too-early",
+                            title="Inspect project too early",
+                            kind=ActionKind.TOOL_CALL,
+                            assigned_agent="production-manager",
+                            tool_name="project.get",
+                            instructions="Attempt downstream project work.",
+                            arguments={"project_id": payload["context"]["project_id"]},
+                        )
+                    ],
+                ).model_dump_json()
             return AgentPlanProposal(
                 summary=(
                     "Retry the persisted planning unit now that the latest context "
@@ -167,8 +234,10 @@ class ScriptOnlyLanguageClient:
         self.outline = EpisodeOutline.model_validate(outline_payload)
         self.story_intent = _test_story_intent()
         self.selected_narrative_skills: list[NarrativeSkillSelection] = []
+        self.selected_method_skills: list[ProductionMethodSelection] = []
         self.scene_director_calls = 0
         self.final_cold_read_calls = 0
+        self.production_manager_calls = 0
 
     def validate_credentials(self) -> None:
         return None
@@ -188,7 +257,45 @@ class ScriptOnlyLanguageClient:
                 input_text,
                 story_intent=self.story_intent,
                 selected_narrative_skills=self.selected_narrative_skills,
+                selected_method_skills=self.selected_method_skills,
             )
+        if "context" in payload and "available_tools" in payload:
+            self.production_manager_calls += 1
+            if payload["current_plan"] is None:
+                return AgentPlanProposal(
+                    summary="Continue from the approved screenplay into production planning.",
+                    steps=[
+                        PlanStep(
+                            id="inspect-approved-screenplay",
+                            title="Inspect the approved screenplay",
+                            kind=ActionKind.TOOL_CALL,
+                            assigned_agent="production-manager",
+                            tool_name="project.get",
+                            instructions=(
+                                "Read the canonical screenplay before creating the production "
+                                "specification and storyboard."
+                            ),
+                            arguments={"project_id": payload["context"]["project_id"]},
+                        )
+                    ],
+                ).model_dump_json()
+            current_plan = AgentPlanProposal.model_validate(payload["current_plan"])
+            current_step = current_plan.steps[0]
+            return AgentPlanProposal(
+                summary="Continue the persisted content-planning job.",
+                steps=[
+                    PlanStep(
+                        id="continue-content-planning",
+                        title="Continue content planning",
+                        kind=ActionKind.TOOL_CALL,
+                        assigned_agent="production-manager",
+                        tool_name="planning.advance",
+                        instructions="Advance one bounded planning unit.",
+                        arguments=dict(current_step.arguments),
+                        artifact_refs=list(current_step.artifact_refs),
+                    )
+                ],
+            ).model_dump_json()
         if "story-architect Agent" in instructions:
             return self.outline.model_dump_json()
         if "Scene Writer Agent" in instructions:
@@ -240,7 +347,7 @@ class ScriptOnlyLanguageClient:
                 ),
                 requires_revision=False,
             ).model_dump_json()
-        if "script-critic Agent（剧本冷读 Agent）" in instructions:
+        if "唯一的 Script Verifier" in instructions:
             return ScriptReviewReport(
                 summary="异常、主角优势和首次爽点已清晰建立。",
                 strengths=["动作、反应和台词在同一时间线中推进"],
@@ -271,6 +378,23 @@ def _request() -> CreateProjectRequest:
         production_profile=ProductionProfile.AI_SHORT_DRAMA,
         target_duration_seconds=180,
     )
+
+
+def test_story_source_and_orientation_prompts_preserve_interaction_priority() -> None:
+    request = _request()
+    source_instructions, source_input = _story_source_contract_prompt(request)
+    orientation_instructions, orientation_input = _story_orientation_prompt(
+        request,
+        build_story_source_contract(request),
+    )
+
+    for instructions in (source_instructions, orientation_instructions):
+        assert "用户已明确的设定、数值和选择直接采用" in instructions
+        assert "不交互、直接完成或由 Agent 决定" in instructions
+        assert "用户明确要求在某个内容节点" in instructions
+        assert "GUIDED 只表示用户可参与" in instructions
+    assert json.loads(source_input)["run_mode"] == "AUTO_DRAFT"
+    assert json.loads(orientation_input)["run_mode"] == "AUTO_DRAFT"
 
 
 def _service(
@@ -341,7 +465,7 @@ def test_unowned_compat_project_creation_never_hides_language_generation(
     assert project.document.planning.run_id is None
 
 
-def test_script_only_agent_run_stops_with_a_complete_readable_screenplay(
+def test_script_only_owner_stops_and_later_run_can_continue_to_production(
     tmp_path: Path,
 ) -> None:
     request = CreateProjectRequest(
@@ -374,7 +498,10 @@ def test_script_only_agent_run_stops_with_a_complete_readable_screenplay(
                 item for item in current.snapshot.actions if item.id == action_id
             )
             assert action.tool_name == "planning.advance"
-            assert action.status == ActionStatus.SUCCEEDED
+            assert action.status in {
+                ActionStatus.RUNNING,
+                ActionStatus.SUCCEEDED,
+            }
             planning_action_ids.append(action_id)
     completed = current
     aggregate = service.get_project(created.project_id)
@@ -398,6 +525,13 @@ def test_script_only_agent_run_stops_with_a_complete_readable_screenplay(
     assert job.directed_scene_json == []
     assert language_client.scene_director_calls == 0
     assert language_client.final_cold_read_calls == 0
+    assert len(set(planning_action_ids)) == 1
+    completed_stage_action = next(
+        action
+        for action in completed.snapshot.actions
+        if action.id == planning_action_ids[-1]
+    )
+    assert completed_stage_action.status == ActionStatus.SUCCEEDED
 
     assert len(document.script_versions) == 1
     assert len(document.bible_versions) == 1
@@ -426,7 +560,29 @@ def test_script_only_agent_run_stops_with_a_complete_readable_screenplay(
     assert tool_names[0] == "project.create"
     assert set(tool_names) <= {"project.create", "planning.advance"}
     assert planning_action_ids
-    assert len(planning_action_ids) == tool_names.count("planning.advance")
+    assert len(set(planning_action_ids)) == tool_names.count("planning.advance")
+
+    manager_calls_before_continuation = language_client.production_manager_calls
+    continuation = service.create_agent_run(
+        created.project_id,
+        AgentRunCreateRequest(
+            objective=(
+                "Continue from the approved screenplay and create the production "
+                "specification, storyboard, and generation plan."
+            ),
+            execution_target=ProductionExecutionTarget.MOCK,
+        ),
+    )
+
+    continuation_plan = continuation.snapshot.current_plan
+    assert continuation.snapshot.run.id != completed.snapshot.run.id
+    assert continuation_plan is not None
+    assert continuation_plan.goal_complete is False
+    assert continuation_plan.steps[0].id == "inspect-approved-screenplay"
+    assert continuation_plan.steps[0].tool_name == "project.get"
+    assert language_client.production_manager_calls == (
+        manager_calls_before_continuation + 1
+    )
 
 
 def test_http_advance_exposes_each_planning_progress_unit_separately(
@@ -465,13 +621,11 @@ def test_http_advance_exposes_each_planning_progress_unit_separately(
         if item["id"] == first_action_id
     )
     assert first_action["tool_name"] == "planning.advance"
-    assert first_action["status"] == "SUCCEEDED"
+    assert first_action["status"] == "RUNNING"
     assert service.get_planning_run(planning.run_id).run.current_step == (
         PlanningRunStep.STORY_ARCHITECT
     )
-    assert first_payload["run"]["ready_steps"][0]["tool_name"] == (
-        "planning.advance"
-    )
+    assert first_payload["run"]["ready_steps"] == []
 
     second = client.post(
         f"/api/short-drama/agent-runs/{run_id}/advance",
@@ -488,8 +642,8 @@ def test_http_advance_exposes_each_planning_progress_unit_separately(
         if item["id"] == second_action_id
     )
     assert second_action["tool_name"] == "planning.advance"
-    assert second_action["status"] == "SUCCEEDED"
-    assert second_action_id != first_action_id
+    assert second_action["status"] == "RUNNING"
+    assert second_action_id == first_action_id
     assert service.get_planning_run(planning.run_id).run.current_step == (
         PlanningRunStep.SCENE_WRITER
     )
@@ -498,7 +652,7 @@ def test_http_advance_exposes_each_planning_progress_unit_separately(
         for item in second_payload["run"]["snapshot"]["actions"]
         if item["tool_name"] == "planning.advance"
     ]
-    assert len(planning_actions) == 2
+    assert len(planning_actions) == 1
 
 
 def test_short_auto_draft_agent_project_uses_owned_content_planning_job(
@@ -520,7 +674,7 @@ def test_short_auto_draft_agent_project_uses_owned_content_planning_job(
     aggregate = service.get_project(created.project_id)
     planning = aggregate.document.planning
 
-    assert language_client.calls == 0
+    assert language_client.calls == 1
     assert aggregate.document.project.stage == ProjectStage.INPUT
     assert planning is not None
     assert planning.status == PlanningRunStatus.RUNNING
@@ -540,10 +694,180 @@ def test_short_auto_draft_agent_project_uses_owned_content_planning_job(
     assert advanced.status_code == 200
     payload = advanced.json()
     assert len(payload["executed_action_ids"]) == 1
-    assert language_client.calls == 1
+    assert language_client.calls == 2
+    assert language_client.production_manager_calls == 1
     persisted = service.get_planning_run(planning.run_id).run
     assert persisted.current_step == PlanningRunStep.STORY_ARCHITECT
-    assert payload["run"]["ready_steps"][0]["tool_name"] == "planning.advance"
+    assert payload["run"]["ready_steps"] == []
+    assert payload["run"]["snapshot"]["actions"][-1]["status"] == "RUNNING"
+
+
+def test_owned_planning_run_can_pause_at_a_user_requested_semantic_milestone(
+    tmp_path: Path,
+) -> None:
+    request = _request().model_copy(
+        update={
+            "input_text": (
+                "Create the story autonomously, but pause after story orientation so I can "
+                "review that specific decision."
+            )
+        }
+    )
+    client = StoryArchitectClient(request)
+    client.manager_response_kind = "user_input"
+    service = _service(tmp_path, client)
+    created = _create_long_agent_project(service, request)
+
+    advanced = service.advance_agent_run(
+        created.run.snapshot.run.id,
+        AgentRunAdvanceRequest(max_actions=1),
+    )
+
+    assert client.production_manager_calls == 1
+    assert advanced.run.ready_steps[0].kind == ActionKind.USER_INPUT
+    assert advanced.run.ready_steps[0].id == "confirm-story-direction"
+    assert advanced.run.snapshot.actions[-1].status == ActionStatus.SUCCEEDED
+    planning = service.get_project(created.project_id).document.planning
+    assert planning is not None and planning.run_id is not None
+    assert service.get_planning_run(planning.run_id).run.current_step == (
+        PlanningRunStep.STORY_ARCHITECT
+    )
+    assert advanced.run.snapshot.current_plan is not None
+    assert advanced.run.snapshot.current_plan.goal_complete is False
+
+
+def test_semantic_planner_cannot_enter_downstream_before_content_plan_completes(
+    tmp_path: Path,
+) -> None:
+    request = _request()
+    client = StoryArchitectClient(request)
+    client.manager_response_kind = "downstream"
+    service = _service(tmp_path, client)
+    created = _create_long_agent_project(service, request)
+
+    advanced = service.advance_agent_run(
+        created.run.snapshot.run.id,
+        AgentRunAdvanceRequest(max_actions=1),
+    )
+
+    assert client.production_manager_calls == 1
+    assert advanced.run.ready_steps == []
+    assert advanced.run.snapshot.actions[-1].tool_name == "planning.advance"
+    assert advanced.run.snapshot.actions[-1].status == ActionStatus.RUNNING
+    assert advanced.run.snapshot.current_plan is not None
+    assert advanced.run.snapshot.current_plan.goal_complete is False
+
+
+def test_owned_script_stage_continues_across_internal_steps_without_leader_replan(
+    tmp_path: Path,
+) -> None:
+    request = CreateProjectRequest(
+        name="Three-scene cursor continuation",
+        source_mode=SourceMode.IDEA_EXPANSION,
+        input_text="Write three connected school scenes autonomously.",
+        run_mode=RunMode.AUTO_DRAFT,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
+        content_planning_output=ContentPlanningOutput.SCRIPT_ONLY,
+        target_duration_seconds=120,
+    )
+    client = ScriptOnlyLanguageClient(request)
+    outline_payload = client.outline.model_dump(mode="python")
+    source_scene = outline_payload["scenes"][0]
+    outline_payload["scenes"] = [
+        {
+            **source_scene,
+            "sequence": sequence,
+            "heading": f"内景·校园场景 {sequence}·日",
+            "summary": f"第 {sequence} 场继续推进同一个故事。",
+            "target_duration_seconds": 40,
+        }
+        for sequence in range(1, 4)
+    ]
+    client.outline = EpisodeOutline.model_validate(outline_payload)
+    service = _service(tmp_path, client)
+    created = _create_long_agent_project(service, request)
+    run_id = created.run.snapshot.run.id
+    initial_manager_calls = client.production_manager_calls
+    assert created.run.snapshot.current_plan is not None
+    script_plan_id = created.run.snapshot.current_plan.id
+
+    service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=8))
+    service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=8))
+
+    assert initial_manager_calls == 1
+    assert client.production_manager_calls == initial_manager_calls
+    planning = service.get_project(created.project_id).document.planning
+    assert planning is not None and planning.run_id is not None
+    assert service.get_planning_run(planning.run_id).run.current_step == (
+        PlanningRunStep.SCENE_WRITER
+    )
+
+    first_scene = service.advance_agent_run(
+        run_id,
+        AgentRunAdvanceRequest(max_actions=8),
+    )
+    second_scene = service.advance_agent_run(
+        run_id,
+        AgentRunAdvanceRequest(max_actions=8),
+    )
+
+    assert client.production_manager_calls == initial_manager_calls
+    assert first_scene.run.snapshot.current_plan is not None
+    assert second_scene.run.snapshot.current_plan is not None
+    assert first_scene.run.snapshot.current_plan.id == script_plan_id
+    assert second_scene.run.snapshot.current_plan.id == script_plan_id
+    assert len(first_scene.executed_action_ids) == 1
+    assert len(second_scene.executed_action_ids) == 1
+    assert first_scene.executed_action_ids == second_scene.executed_action_ids
+    assert service.get_planning_run(planning.run_id).run.current_step == (
+        PlanningRunStep.SCENE_WRITER
+    )
+    assert any(
+        "Script Stage persisted one bounded progress unit" in note
+        for note in first_scene.notes
+    )
+    assert any(
+        "Script Stage persisted one bounded progress unit" in note
+        for note in second_scene.notes
+    )
+
+    reached_verifier = service.advance_agent_run(
+        run_id,
+        AgentRunAdvanceRequest(max_actions=8),
+    )
+
+    assert client.production_manager_calls == initial_manager_calls
+    assert reached_verifier.run.snapshot.current_plan is not None
+    assert reached_verifier.run.snapshot.current_plan.id == script_plan_id
+    assert service.get_planning_run(planning.run_id).run.current_step == (
+        PlanningRunStep.SCRIPT_VERIFIER
+    )
+
+
+def test_owned_planning_uses_deterministic_advance_without_language_planner(
+    tmp_path: Path,
+) -> None:
+    request = _request()
+    client = StoryArchitectClient(request)
+    service = _service(tmp_path, client)
+    created = _create_long_agent_project(service, request)
+    local_manager = ProductionManager(
+        runtime=service.agent_runtime,
+        tools=service.tool_registry,
+        projects=service.repository,
+        language_client_resolver=lambda: None,
+    )
+
+    assert created.run.ready_steps[0].tool_name == "planning.advance"
+
+    replanned = local_manager.replan(
+        created.run.snapshot.run.id,
+        AgentRunReplanRequest(reason="Continue the owned planning cursor."),
+    )
+
+    assert replanned.ready_steps[0].tool_name == "planning.advance"
+    assert replanned.snapshot.current_plan is not None
+    assert replanned.snapshot.current_plan.goal_complete is False
 
 
 def test_default_content_planning_output_still_builds_the_full_plan(
@@ -593,7 +917,7 @@ def test_long_planning_is_exposed_as_one_bounded_agent_tool_action(
     assert planning.status == PlanningRunStatus.RUNNING
     assert planning.owner_agent_run_id == created.run.snapshot.run.id
     assert planning.run_id is not None
-    assert client.calls == 0
+    assert client.calls == 1
     assert created.run.ready_steps[0].tool_name == "planning.advance"
     assert [
         ref.artifact_type for ref in created.run.ready_steps[0].artifact_refs
@@ -609,10 +933,11 @@ def test_long_planning_is_exposed_as_one_bounded_agent_tool_action(
     )
     persisted = service.get_planning_run(planning.run_id).run
 
-    assert client.calls == 1
+    assert client.calls == 2
+    assert client.production_manager_calls == 1
     assert persisted.current_step == PlanningRunStep.STORY_ARCHITECT
-    assert advanced.run.ready_steps[0].tool_name == "planning.advance"
-    assert advanced.run.snapshot.actions[-1].status == ActionStatus.SUCCEEDED
+    assert advanced.run.ready_steps == []
+    assert advanced.run.snapshot.actions[-1].status == ActionStatus.RUNNING
     assert advanced.run.snapshot.actions[-1].kind == ActionKind.TOOL_CALL
     assert advanced.run.snapshot.actions[-1].tool_name == "planning.advance"
     planning_artifact = next(
@@ -666,7 +991,7 @@ def test_agent_trace_keeps_latest_revision_history_separate_from_active_cursor(
     assert trace.latest_revision_changed_scene_sequences == [2]
 
 
-def test_planning_narrative_context_is_exposed_to_the_owning_agent_run(
+def test_planning_official_method_context_is_exposed_to_the_owning_agent_run(
     tmp_path: Path,
 ) -> None:
     request = _request()
@@ -680,15 +1005,15 @@ def test_planning_narrative_context_is_exposed_to_the_owning_agent_run(
         drift_risks=["不要漂移成程序审计剧"],
     )
     client.story_intent = intent
-    client.selected_narrative_skills = [
-        NarrativeSkillSelection(
-            skill_id="narrative.payoff_escalation",
-            rationale="用公开反应和地位变化连续兑现爽感。",
-        ),
-        NarrativeSkillSelection(
-            skill_id="narrative.absurd_comedy",
-            rationale="用荒诞扩大保留设定的喜剧性。",
-        ),
+    client.selected_narrative_skills = []
+    client.narrative_skill_decision = (
+        "当前 Narrative Skill Catalog 为空；不使用本地自创替代。"
+    )
+    client.selected_method_skills = [
+        ProductionMethodSelection(
+            skill_id="method.minimax_h3.3d_animation_short",
+            rationale="用户明确选择官方 3D 动画短片方法。",
+        )
     ]
     service = _service(tmp_path, client)
     created = _create_long_agent_project(service, request)
@@ -705,8 +1030,16 @@ def test_planning_narrative_context_is_exposed_to_the_owning_agent_run(
     assert planning.story_intent == intent
     assert advanced.run.snapshot.run.active_skill_ids == [
         production_skill_id(request.production_profile),
-        "narrative.payoff_escalation",
-        "narrative.absurd_comedy",
+        "method.minimax_h3.3d_animation_short",
+    ]
+    assert advanced.run.snapshot.current_plan is not None
+    # The immutable Stage plan predates Story Orientation. Method selection is
+    # shared immediately through run context and the PlanningRun trace; it is
+    # copied into the next Leader plan after this Stage completes.
+    assert advanced.run.snapshot.current_plan.selected_method_skill_ids == []
+    assert advanced.run.content_planning_trace is not None
+    assert advanced.run.content_planning_trace.selected_method_skill_ids == [
+        "method.minimax_h3.3d_animation_short"
     ]
     run_decisions = [
         decision
@@ -720,15 +1053,15 @@ def test_planning_narrative_context_is_exposed_to_the_owning_agent_run(
     story_statements = [
         statement for statement in statements if statement.startswith("当前故事")
     ]
-    assert len(story_statements) == 3
+    assert len(story_statements) == 1
     assert any(
         statement.startswith("当前故事创作意图：观众体验：")
         and "不要漂移成程序审计剧" in statement
         for statement in statements
     )
     assert (
-        "当前故事选用叙事技能 narrative.payoff_escalation；"
-        "选择理由：用公开反应和地位变化连续兑现爽感。"
+        "当前项目选用制片方法 method.minimax_h3.3d_animation_short；"
+        "选择理由：用户明确选择官方 3D 动画短片方法。"
     ) in statements
     assert all(
         decision.artifact_refs
@@ -790,7 +1123,7 @@ def test_planning_tool_requires_the_owner_and_rejects_a_different_agent_run(
     assert unchanged.current_step == initial.current_step
     assert unchanged.completed_steps == initial.completed_steps
     assert unchanged.updated_at == initial.updated_at
-    assert client.calls == 0
+    assert client.calls == 1
 
     advanced = service.tool_registry.invoke(
         "planning.advance",
@@ -807,7 +1140,7 @@ def test_planning_tool_requires_the_owner_and_rejects_a_different_agent_run(
     ]
     persisted = service.get_planning_run(planning.run_id).run
     assert persisted.current_step == PlanningRunStep.STORY_ARCHITECT
-    assert client.calls == 1
+    assert client.calls == 2
 
 
 def test_project_document_only_projects_content_planning_job_state(
@@ -865,11 +1198,11 @@ def test_agent_owned_planning_run_has_no_legacy_http_advance(
     )
 
     assert response.status_code == 404
-    assert language_client.calls == 0
+    assert language_client.calls == 1
 
     internally_advanced = service.advance_planning_run(planning.run_id)
     assert internally_advanced.run.current_step == PlanningRunStep.STORY_ARCHITECT
-    assert language_client.calls == 1
+    assert language_client.calls == 2
 
 
 def test_initial_plan_cannot_bypass_an_incomplete_owned_planning_run(
@@ -896,7 +1229,7 @@ def test_initial_plan_cannot_bypass_an_incomplete_owned_planning_run(
     assert secondary.snapshot.current_plan.goal_complete is False
     assert secondary.snapshot.current_plan.steps[0].id == "wait-for-owner-planning-run"
     assert secondary.ready_steps[0].kind == ActionKind.USER_INPUT
-    assert client.calls == 0
+    assert client.calls == 1
 
 
 def test_proposed_plan_cannot_bypass_the_owner_planning_precondition(
@@ -922,7 +1255,7 @@ def test_proposed_plan_cannot_bypass_the_owner_planning_precondition(
     assert replanned.snapshot.current_plan is not None
     assert replanned.snapshot.current_plan.goal_complete is False
     assert replanned.ready_steps[0].tool_name == "planning.advance"
-    assert client.calls == 0
+    assert client.calls == 1
 
 
 def test_planning_attention_returns_to_the_agent_without_a_user_gate(
@@ -940,7 +1273,7 @@ def test_planning_attention_returns_to_the_agent_without_a_user_gate(
     )
 
     assert client.calls == 2
-    assert len(progress.executed_action_ids) == 1
+    assert progress.executed_action_ids == []
     assert progress.run.snapshot.run.status == AgentRunStatus.WAITING
     assert not any(
         action.kind == ActionKind.USER_INPUT
@@ -948,9 +1281,8 @@ def test_planning_attention_returns_to_the_agent_without_a_user_gate(
         for action in progress.run.snapshot.actions
     )
     assert any(
-        "temporary planning provider failure" in artifact.summary
-        for artifact in progress.run.context.artifacts
-        if artifact.ref.artifact_type == "content_planning_job"
+        "temporary planning provider failure" in blocker
+        for blocker in progress.run.snapshot.memory.blockers
     )
 
     client.fail_with_runtime_error = False
@@ -960,6 +1292,7 @@ def test_planning_attention_returns_to_the_agent_without_a_user_gate(
     )
 
     assert client.calls == 4
+    assert client.production_manager_calls == 1
     assert resumed.run.snapshot.run.status == AgentRunStatus.RUNNING
     assert len(resumed.executed_action_ids) == 1
     assert not any(
@@ -1005,7 +1338,7 @@ def test_failed_planning_run_is_semantically_replanned_without_user_confirmation
         and action.status == ActionStatus.RUNNING
         for action in failed.snapshot.actions
     )
-    assert client.calls == 1
+    assert client.calls == 2
 
 
 def test_restart_reconciles_to_the_persisted_planning_cursor(
@@ -1033,18 +1366,28 @@ def test_restart_reconciles_to_the_persisted_planning_cursor(
     )
     persisted = service.advance_planning_run(planning.run_id).run
     assert persisted.current_step == PlanningRunStep.STORY_ARCHITECT
-    assert client.calls == 1
+    assert client.calls == 2
 
     reopened = _service(tmp_path, client)
     recovered_action = reopened.agent_runtime_store.get_action(interrupted.id)
     recovered = reopened.get_agent_run(run_id)
 
-    assert client.calls == 1
+    assert client.calls == 2
     assert recovered_action is not None
-    assert recovered_action.status == ActionStatus.SUCCEEDED
+    assert recovered_action.status == ActionStatus.RUNNING
     assert "STORY_ARCHITECT" in (recovered_action.output_summary or "")
     assert reopened.get_planning_run(planning.run_id).run.current_step == (
         PlanningRunStep.STORY_ARCHITECT
     )
     assert recovered.snapshot.run.status == AgentRunStatus.RUNNING
-    assert recovered.ready_steps[0].tool_name == "planning.advance"
+    assert recovered.ready_steps == []
+
+    resumed = reopened.advance_agent_run(
+        run_id,
+        AgentRunAdvanceRequest(max_actions=8),
+    )
+    assert resumed.executed_action_ids == [interrupted.id]
+    assert reopened.get_planning_run(planning.run_id).run.current_step == (
+        PlanningRunStep.SCENE_WRITER
+    )
+    assert client.calls == 3

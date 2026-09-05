@@ -22,6 +22,16 @@ Prompt 以官方首帧对齐句开头：
 
 不要把 `<Picture 1>` 当成额外插入镜头，也不要重复发明图中不可见的人物。首帧本身有错误时，应修复资产，不通过文字要求模型忽略它。
 
+## FRAME_LAST / L2VA
+
+Prompt 以官方尾帧对齐句开头，并将时间写成任务的精确时长：
+
+`How the reference pictures align with the target video — <Picture 1> (from [Shot 1]) aligns with the {duration}.00-second mark of the target video.`
+
+`<Picture 1>` 只代表最终一帧。正文从已锁定的 ShotPlan 推导与尾帧相容的开场状态，说明人物、物体、摄影机、光线和声音如何逐步到达尾帧；不得把尾帧描述成 0 秒画面，也不得反向播放动作。
+
+L2VA 适合终态结果比开场更关键的镜头，例如姿态落点、道具最终状态、揭示结果或精确落幅。若尾帧无法由镜头声明的动作自然到达，应修复镜头或资产，而不是用 Prompt 掩盖矛盾。
+
 ## FRAME_FIRST_LAST / FL2VA
 
 Prompt 以首尾帧对齐句开头，并将末尾时间写成任务的精确时长：
@@ -51,4 +61,4 @@ Prompt 以首尾帧对齐句开头，并将末尾时间写成任务的精确时�
 
 ## 当前边界
 
-MiniMax 官方资料还描述尾帧引导等模式，但本项目当前枚举只支持 DIRECT、FRAME_FIRST、FRAME_FIRST_LAST 和 REFERENCE。没有对应 Tool 路线时，不输出 L2VA 专属格式，也不把尾帧伪装为首帧或普通参考图。
+项目当前支持 MiniMax H3 官方 Skill 所列的五类输入模式：DIRECT/T2VA、FRAME_FIRST/I2VA、FRAME_LAST/L2VA、FRAME_FIRST_LAST/FL2VA 与 REFERENCE/Ref2VA。路线必须由 Route Agent 或用户从已注册候选中显式选择；Prompt Compiler 不自行改变输入模式。

@@ -76,6 +76,7 @@ const inputClass = 'w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py
 const routeLabels: Record<VideoGenerationRoute, string> = {
   DIRECT: 'Direct · 文本直出',
   FRAME_FIRST: 'Frame · 首帧',
+  FRAME_LAST: 'Frame · 尾帧',
   FRAME_FIRST_LAST: 'Frame · 首尾帧',
   REFERENCE: 'Reference · 角色/视频/声音参考',
 }
@@ -134,6 +135,7 @@ const statusLabels: Record<string, string> = {
 const evidenceRouteLabels: Record<VideoGenerationRoute, string> = {
   DIRECT: 'D',
   FRAME_FIRST: 'F1',
+  FRAME_LAST: 'LF',
   FRAME_FIRST_LAST: 'F2',
   REFERENCE: 'R',
 }
@@ -395,9 +397,11 @@ export function H3LabPanel({
       ? []
       : route === 'FRAME_FIRST'
         ? ['first_frame']
-        : route === 'FRAME_FIRST_LAST'
-          ? ['first_frame', 'last_frame']
-          : ['reference_image', 'reference_video', 'reference_audio']
+        : route === 'FRAME_LAST'
+          ? ['last_frame']
+          : route === 'FRAME_FIRST_LAST'
+            ? ['first_frame', 'last_frame']
+            : ['reference_image', 'reference_video', 'reference_audio']
     return roles.flatMap((roleName) => drafts[roleName]
       .filter((draft) => draft.value.trim().length > 0)
       .map((draft): H3MediaInput => ({
@@ -410,6 +414,7 @@ export function H3LabPanel({
 
   const requiredInputsReady = route === 'DIRECT'
     || (route === 'FRAME_FIRST' && drafts.first_frame[0].value.trim().length > 0)
+    || (route === 'FRAME_LAST' && drafts.last_frame[0].value.trim().length > 0)
     || (route === 'FRAME_FIRST_LAST'
       && drafts.first_frame[0].value.trim().length > 0
       && drafts.last_frame[0].value.trim().length > 0)
@@ -450,6 +455,9 @@ export function H3LabPanel({
     if (route === 'FRAME_FIRST') {
       if (entry.version.media_type !== 'IMAGE') { onError('Frame 路线只能使用已批准图像'); return }
       roleName = 'first_frame'
+    } else if (route === 'FRAME_LAST') {
+      if (entry.version.media_type !== 'IMAGE') { onError('Frame 路线只能使用已批准图像'); return }
+      roleName = 'last_frame'
     } else if (route === 'FRAME_FIRST_LAST') {
       if (entry.version.media_type !== 'IMAGE') { onError('Frame 路线只能使用已批准图像'); return }
       roleName = drafts.first_frame[0].value.trim() ? 'last_frame' : 'first_frame'
@@ -542,6 +550,7 @@ export function H3LabPanel({
       project.document.project.id,
       plan.id,
       {
+        expected_state_revision: plan.state_revision,
         reuse_passed_takes: true,
         enqueue_new_generations: enqueueNew,
         inspect_reused_takes: true,
@@ -753,11 +762,13 @@ export function H3LabPanel({
   const evidenceRoutes = Object.keys(evidenceRouteLabels) as VideoGenerationRoute[]
   const inputRoles: H3MediaRole[] = route === 'FRAME_FIRST'
     ? ['first_frame']
-    : route === 'FRAME_FIRST_LAST'
-      ? ['first_frame', 'last_frame']
-      : route === 'REFERENCE'
-        ? ['reference_image', 'reference_video', 'reference_audio']
-        : []
+    : route === 'FRAME_LAST'
+      ? ['last_frame']
+      : route === 'FRAME_FIRST_LAST'
+        ? ['first_frame', 'last_frame']
+        : route === 'REFERENCE'
+          ? ['reference_image', 'reference_video', 'reference_audio']
+          : []
 
   return (
     <div className="space-y-6">

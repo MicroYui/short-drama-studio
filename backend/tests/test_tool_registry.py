@@ -125,6 +125,7 @@ def test_service_exposes_default_registry_and_keeps_injected_tools(tmp_path: Pat
         "audio.inspect_manifest",
         "image.enqueue",
         "planning.advance",
+        "planning.start_script_revision",
         "project.create",
         "project.get",
         "project.list",

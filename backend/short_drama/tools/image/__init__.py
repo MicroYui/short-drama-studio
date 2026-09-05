@@ -141,8 +141,9 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             version=1,
             category=ToolCategory.IMAGE,
             description=(
-                "Deterministically compose explicitly selected local AssetVersions "
-                "into one labeled character, scene, or lightweight reference sheet."
+                "在所需视图已分别生成或导入且 Agent 明确选定源版本后，"
+                "将 2–9 张本地图片确定性拼成角色、场景或轻量参考板。"
+                "它不生成缺失视图、不判断一致性，输出仍是需验收的 DRAFT。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
@@ -167,7 +168,12 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             id="image.enqueue",
             version=1,
             category=ToolCategory.IMAGE,
-            description="Queue a provider-neutral image generation or edit task.",
+            description=(
+                "在 Asset/brief 和本次要生成的精确视图、状态或区域已明确后，"
+                "为一个输出版本创建图像任务。GENERATE 不带输入图；从主图派生"
+                "视角/换装/状态通常用 EDIT，并显式绑定父版本与参考图。"
+                "本 Tool 只入队，之后用 image.advance 推进外部提交。"
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=ImageEnqueueInput,
@@ -182,7 +188,10 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             id="image.list",
             version=1,
             category=ToolCategory.IMAGE,
-            description="List persisted image tasks, optionally filtered by asset.",
+            description=(
+                "在继续、恢复或判断是否需要新建任务前，列出已持久化的图像"
+                "任务，可按 Asset 过滤；它不会改变任务状态。"
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=ImageListInput,
@@ -197,25 +206,25 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
     actions = (
         (
             "image.advance",
-            "Advance one image task by a single provider-task transition.",
+            "对已入队图像任务只推进一次 Provider 状态转换；返回后由 Agent 根据新状态决定继续查询、恢复、检查输出或改路线。",
             service.advance_image_task,
             ToolEffect.EXTERNAL,
         ),
         (
             "image.cancel",
-            "Cancel an image task that has not reached a terminal state.",
+            "当任务已不再必要且尚未终态时取消；不删除历史任务或已有版本。",
             service.cancel_image_task,
             ToolEffect.WRITE,
         ),
         (
             "image.retry",
-            "Create the supported retry transition for a failed image task.",
+            "当图像任务明确失败、原输入仍是当前版本且 Agent 决定同路线再试时，建立保留系谱的重试转换；SUBMIT_UNKNOWN 不用此 Tool 盲目重提。",
             service.retry_image_task,
             ToolEffect.WRITE,
         ),
         (
             "image.recover_output",
-            "Recover a persisted image output after an interrupted local transition.",
+            "当 Provider 输出已存在但本地下载/落盘转换中断时恢复它；不会重新创建远程任务。",
             service.recover_image_task_output,
             ToolEffect.EXTERNAL,
         ),
@@ -244,8 +253,9 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             version=1,
             category=ToolCategory.IMAGE,
             description=(
-                "Record that an uncertain image submission was not created so an "
-                "explicit lineage-preserving retry can be made."
+                "仅当对账已确认 SUBMIT_UNKNOWN 的远程任务实际未创建时，"
+                "记录该事实，使 Agent 之后可显式发起保留系谱的新尝试；"
+                "不能用来跳过对账。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,

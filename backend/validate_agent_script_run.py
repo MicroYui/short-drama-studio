@@ -28,7 +28,7 @@ JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
 
 DEFAULT_INPUT_TEXT = """
-创作一集约 3 分钟的中文竖屏 AI 爽剧完整剧本。主题是：所有人的数学水平突然倒退 100 倍，只有主角“我”完全不变。让观众尽快通过可见行动看懂异常，随后用连续升级的公开震惊、利益变化和身份翻盘兑现爽感。
+创作一集约 3 分钟的中文竖屏 AI 爽剧完整剧本。主题是：所有人的数学水平突然倒退 100 倍，只有高中生主角“我”完全不变。让观众尽快通过可见行动看懂异常，随后用连续升级的反差、公开震惊、局势反转和主角获得实际回报兑现爽感。
 
 允许荒诞、无厘头和适度逻辑跳跃，好看、节奏和情绪回报优先于现实主义论证。可以从日常小事暴露优势，再把影响扩大，但不要照搬固定桥段。人物、场景、冲突方式、叙事方法以及是否留下续集动力，都由 Agent 根据整体效果自主决定；本集需要形成完整且可见的情绪回报。对白自然可演，动作和反应共同推进剧情。
 
@@ -269,6 +269,32 @@ def _summarize_action(action: JsonObject) -> JsonObject:
     }
 
 
+_PLANNING_STEP_DISPLAY_NAMES = {
+    "SCRIPT_VERIFIER": "INITIAL_SCRIPT_VERIFICATION（首次整稿验证）",
+    "SCRIPT_CRITIC": "INITIAL_SCRIPT_VERIFICATION（首次整稿验证）",
+    "STORY_METADATA_REVISION": "STORY_METADATA_ALIGNMENT（全局故事元数据对齐）",
+    "REVISION_VERIFIER": "REVISION_VERIFICATION（修订稿验证）",
+}
+
+
+def _display_content_planning_step(value: str) -> str:
+    """Translate legacy planning cursor names only at the human trace boundary."""
+
+    direct = _PLANNING_STEP_DISPLAY_NAMES.get(value)
+    if direct is not None:
+        return direct
+
+    prefix = "Content planning job "
+    if not value.startswith(prefix):
+        return value
+    cursor = value[len(prefix) :]
+    step_name, separator, suffix = cursor.partition(" ")
+    display_name = _PLANNING_STEP_DISPLAY_NAMES.get(step_name)
+    if display_name is None:
+        return value
+    return prefix + display_name + (separator + suffix if separator else "")
+
+
 def _content_planning_step(run_view: JsonObject) -> str | None:
     context_value = run_view.get("context")
     if context_value is None:
@@ -280,7 +306,11 @@ def _content_planning_step(run_view: JsonObject) -> str | None:
         if ref.get("artifact_type") != "content_planning_job":
             continue
         title = artifact.get("title")
-        return title if isinstance(title, str) and title else None
+        return (
+            _display_content_planning_step(title)
+            if isinstance(title, str) and title
+            else None
+        )
     return None
 
 
@@ -403,9 +433,19 @@ def _refresh_content_planning_trace(
         for value in events
         for event in [_as_object(value, "semantic event")]
     }
+    completed_steps = {
+        _string(value, "planning completed step")
+        for value in _as_list(planning.get("completed_steps"), "planning completed steps")
+    }
+    initial_verifier_kind = (
+        "SCRIPT_VERIFIER"
+        if "SCRIPT_VERIFIER" in completed_steps
+        else "SCRIPT_CRITIC"
+    )
     event_fields = (
-        ("SCRIPT_CRITIC", "review_report"),
+        (initial_verifier_kind, "review_report"),
         ("REPAIR_PLAN", "latest_repair_plan"),
+        ("STORY_METADATA_PATCH", "latest_story_metadata_patch"),
         ("REVISION_VERIFIER", "latest_revision_verification"),
         ("FINAL_COLD_READ_COMPATIBILITY", "final_cold_read_report"),
     )
@@ -773,15 +813,15 @@ def _append_semantic_review_history(lines: list[str], trace: JsonObject) -> None
     )
     if not events and planning is None:
         return
-    lines.extend(["## Critic、修订与验证", ""])
+    lines.extend(["## 验证、修订与复验", ""])
     repair_index = 0
     verifier_index = 0
     for value in events:
         event = _as_object(value, "semantic event")
         kind = event.get("kind")
         payload = _as_object(event.get("payload"), "semantic event payload")
-        if kind == "SCRIPT_CRITIC":
-            lines.append("- 完整剧本 Critic：")
+        if kind in {"SCRIPT_VERIFIER", "SCRIPT_CRITIC"}:
+            lines.append("- 首次整稿验证（Verifier）：")
             _append_review_report(lines, payload)
         elif kind == "REPAIR_PLAN":
             repair_index += 1
@@ -794,12 +834,25 @@ def _append_semantic_review_history(lines: list[str], trace: JsonObject) -> None
                 lines.append(
                     "  - 影响场次 "
                     + str(action.get("affected_scene_sequences") or [])
+                    + "；同步全局元数据 "
+                    + str(action.get("metadata_targets") or [])
                     + "："
                     + str(action.get("recommended_change") or action.get("rationale") or "未记录")
                 )
+        elif kind == "STORY_METADATA_PATCH":
+            changed_fields = [
+                key
+                for key, value in payload.items()
+                if value not in (None, [], {})
+            ]
+            lines.append("- 全局故事元数据对齐：")
+            lines.append(
+                "  - 已更新字段："
+                + ("、".join(changed_fields) if changed_fields else "无（稀疏空 Patch）")
+            )
         elif kind == "REVISION_VERIFIER":
             verifier_index += 1
-            lines.append(f"- 增强 Verifier {verifier_index}：")
+            lines.append(f"- 修订稿验证（Verifier） {verifier_index}：")
             lines.append("  - 结论：" + str(payload.get("summary") or "未记录"))
             lines.append("  - 接受当前稿：" + ("是" if payload.get("accepted") else "否"))
             rationale = payload.get("followup_rationale")
@@ -812,6 +865,8 @@ def _append_semantic_review_history(lines: list[str], trace: JsonObject) -> None
                 lines.append(
                     "  - 未解决："
                     + str(violation.get("observation") or "未记录")
+                    + "；全局元数据 "
+                    + str(violation.get("metadata_targets") or [])
                     + "；下一步："
                     + str(violation.get("repair_instruction") or "未记录")
                 )
@@ -841,6 +896,12 @@ def _append_completion_basis(lines: list[str], trace: JsonObject) -> None:
     if planning_value is None:
         return
     planning = _as_object(planning_value, "trace content planning")
+    current_step = planning.get("current_step")
+    current_step_display = (
+        _display_content_planning_step(current_step)
+        if isinstance(current_step, str)
+        else "未记录"
+    )
     lines.extend(
         [
             "## Agent 停止依据",
@@ -848,7 +909,7 @@ def _append_completion_basis(lines: list[str], trace: JsonObject) -> None:
             "- Content Planning Job："
             + str(planning.get("status") or "未记录")
             + " / "
-            + str(planning.get("current_step") or "未记录"),
+            + current_step_display,
             "- 用户可见剧本修订轮次："
             + str(planning.get("revision_round") or 0),
             "- 独立 Final Cold Read："
@@ -897,6 +958,12 @@ def _write_trace_markdown(trace: JsonObject, output_path: Path) -> None:
     in_flight_value = trace.get("in_flight")
     if in_flight_value is not None:
         in_flight = _as_object(in_flight_value, "trace.in_flight")
+        in_flight_step = in_flight.get("content_planning_step")
+        in_flight_step_display = (
+            _display_content_planning_step(in_flight_step)
+            if isinstance(in_flight_step, str)
+            else "-"
+        )
         lines.extend(
             [
                 "## Currently running",
@@ -905,7 +972,7 @@ def _write_trace_markdown(trace: JsonObject, output_path: Path) -> None:
                 f"- Elapsed: {in_flight.get('elapsed_seconds')} seconds",
                 (
                     "- Content planning step: "
-                    f"{in_flight.get('content_planning_step') or '-'}"
+                    f"{in_flight_step_display}"
                 ),
                 f"- Run status: {in_flight.get('run_status') or '-'}",
                 "",
@@ -913,10 +980,20 @@ def _write_trace_markdown(trace: JsonObject, output_path: Path) -> None:
         )
     for phase_value in _as_list(trace.get("phases"), "trace.phases"):
         phase = _as_object(phase_value, "trace phase")
-        step_before = phase.get("content_planning_step_before")
-        step_after = (
+        raw_step_before = phase.get("content_planning_step_before")
+        raw_step_after = (
             phase.get("content_planning_step_after")
             or phase.get("content_planning_step")
+        )
+        step_before = (
+            _display_content_planning_step(raw_step_before)
+            if isinstance(raw_step_before, str)
+            else raw_step_before
+        )
+        step_after = (
+            _display_content_planning_step(raw_step_after)
+            if isinstance(raw_step_after, str)
+            else raw_step_after
         )
         transition_line = (
             f"- Content planning transition: {step_before} → {step_after or '-'}"
@@ -983,7 +1060,9 @@ def _write_trace_markdown(trace: JsonObject, output_path: Path) -> None:
         lines.append(
             "- PASS：AgentRun 已完成，且未生成资产、分镜、任务或 Take。"
         )
-        lines.append("- 此 PASS 只表示工程结构闭环；创作质量需由独立盲评判断。")
+        lines.append(
+            "- 工程结构闭环已通过；剧本质量判断以本次 Script Verifier 的语义验收记录为准。"
+        )
     else:
         lines.append(
             f"- Pending: probe outcome is `{trace.get('outcome')}`; "
@@ -1059,11 +1138,21 @@ def _prior_response_notes(phases: list[JsonValue]) -> list[str]:
 
 
 def _print_phase_progress(phase: JsonObject) -> None:
-    step_before = phase.get("content_planning_step_before")
-    step_after = (
+    raw_step_before = phase.get("content_planning_step_before")
+    raw_step_after = (
         phase.get("content_planning_step_after")
         or phase.get("content_planning_step")
         or "Agent planning"
+    )
+    step_before = (
+        _display_content_planning_step(raw_step_before)
+        if isinstance(raw_step_before, str)
+        else raw_step_before
+    )
+    step_after = (
+        _display_content_planning_step(raw_step_after)
+        if isinstance(raw_step_after, str)
+        else raw_step_after
     )
     step = (
         f"{step_before} -> {step_after}"

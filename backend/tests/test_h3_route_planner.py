@@ -53,6 +53,7 @@ from short_drama.models import (
     VideoGenerationRoute,
 )
 from short_drama.media import probe_media_with_ffmpeg
+from short_drama.providers.h3_media_bindings import resolve_h3_media_bindings
 from short_drama.providers.minimax_h3_compiler import build_h3_prompt
 from short_drama.h3_route_planner import _route_agent_batches
 from short_drama.language_models import LanguageProviderConfigUpdate
@@ -582,10 +583,7 @@ def test_route_agent_can_choose_tail_window_without_making_it_a_gate(
     assert decision.override_allowed is True
     assert fake.calls
     assert "所有 guide 都不是必选项" in fake.calls[0][0]
-    assert (
-        "当前制片技能：AI 原生短剧。"
-        in fake.calls[0][0]
-    )
+    assert "当前制片技能：AI 短剧（本地格式适配）。" in fake.calls[0][0]
     assert "生成路线规划的通用职责：" in fake.calls[0][0]
     assert "类型创作原则：" not in fake.calls[0][0]
 
@@ -616,6 +614,7 @@ def test_route_agent_can_choose_tail_window_without_making_it_a_gate(
             project.document.project.id,
             compiled.plan.id,
             H3ProductionRouteExecuteRequest(
+                expected_state_revision=compiled.plan.state_revision,
                 enqueue_new_generations=False,
                 inspect_reused_takes=False,
                 rebuild_manifest=False,
@@ -658,6 +657,7 @@ def test_route_plan_explicitly_reuses_reviewed_h3_takes_and_builds_real_manifest
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            expected_state_revision=compiled.plan.state_revision,
             enqueue_new_generations=True,
             inspect_reused_takes=False,
             semantic_review=False,
@@ -709,6 +709,7 @@ def test_reusable_take_does_not_override_unjudged_direct_technical_baseline(
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            expected_state_revision=compiled.plan.state_revision,
             enqueue_new_generations=True,
             inspect_reused_takes=False,
             rebuild_manifest=False,
@@ -934,7 +935,7 @@ def test_timeline_clip_window_respects_director_duration_and_preserves_action_en
     assert duration == 4.46
 
 
-def test_free_text_risk_does_not_choose_route_or_create_asset_preparations(
+def test_free_text_risk_does_not_auto_choose_a_route(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -965,6 +966,81 @@ def test_free_text_risk_does_not_choose_route_or_create_asset_preparations(
     assert compiled.plan.status == H3RoutePlanStatus.PARTIAL
     assert decision.asset_preparations == []
     assert decision.override_allowed is True
+
+
+@pytest.mark.parametrize(
+    ("candidate_prefix", "expected_route", "expected_missing_roles"),
+    [
+        (
+            "frame-last-pending",
+            VideoGenerationRoute.FRAME_LAST,
+            [H3MediaRole.LAST_FRAME.value],
+        ),
+        (
+            "frame-first-last-pending",
+            VideoGenerationRoute.FRAME_FIRST_LAST,
+            [
+                H3MediaRole.FIRST_FRAME.value,
+                H3MediaRole.LAST_FRAME.value,
+            ],
+        ),
+    ],
+)
+def test_route_agent_can_choose_last_frame_control_without_fixed_routing(
+    tmp_path: Path,
+    candidate_prefix: str,
+    expected_route: VideoGenerationRoute,
+    expected_missing_roles: list[str],
+) -> None:
+    service, agent = _service_with_route_agent(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    shot = next(item for item in document.shots if item.sequence == 2)
+    candidate_id = f"{candidate_prefix}:{shot.id}"
+    agent.output = (
+        '{"choices":[{'
+        f'"shot_id":"{shot.id}",'
+        f'"candidate_id":"{candidate_id}",'
+        '"rationale":"终态画面控制比固定路由更符合当前镜头意图。",'
+        '"qa_focus_categories":[],"warnings":[]}]}'
+    )
+
+    compiled = service.compile_h3_production_route_plan(
+        document.project.id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=True,
+            consider_video_guides=False,
+        ),
+    )
+
+    decision = compiled.plan.decisions[0]
+    assert decision.route == expected_route
+    assert decision.readiness == H3ShotRouteReadiness.NEEDS_ASSET
+    assert decision.missing_inputs == expected_missing_roles
+    assert [item.role.value for item in decision.asset_preparations] == (
+        [H3MediaRole.LAST_FRAME.value]
+        if expected_route == VideoGenerationRoute.FRAME_LAST
+        else [
+            H3MediaRole.FIRST_FRAME.value,
+            H3MediaRole.LAST_FRAME.value,
+        ]
+    )
+    route_agent_payload = json.loads(agent.calls[0][1])
+    candidate_ids = {
+        item["id"]
+        for item in route_agent_payload["shots"][0]["candidates"]
+    }
+    assert f"frame-first-pending:{shot.id}" in candidate_ids
+    assert f"frame-last-pending:{shot.id}" in candidate_ids
+    assert f"frame-first-last-pending:{shot.id}" in candidate_ids
+    direct_candidate = next(
+        item
+        for item in route_agent_payload["shots"][0]["candidates"]
+        if item["id"] == f"direct:{shot.id}"
+    )
+    assert direct_candidate["readiness"] == H3ShotRouteReadiness.READY.value
+    assert direct_candidate["warnings"] == []
 
 
 def test_lightweight_bindings_become_executable_reference_candidate(
@@ -1087,9 +1163,14 @@ def test_lightweight_bindings_become_executable_reference_candidate(
     assert all(item.subject_asset_id is not None for item in decision.media_inputs)
     assert all(item.reference_alias is not None for item in decision.media_inputs)
     assert all(item.binding_purpose is not None for item in decision.media_inputs)
+    bindings = resolve_h3_media_bindings(document, decision.media_inputs, [])
     assert all(
-        f"@{item.reference_alias} = <Picture {index}>" in decision.prompt
-        for index, item in enumerate(decision.media_inputs, start=1)
+        f"@{item.alias} = {item.prompt_label}" in decision.prompt
+        for item in bindings
+    )
+    assert all(
+        f"{item.provider_label} provides" in decision.prompt
+        for item in bindings
     )
 
 
@@ -1215,6 +1296,7 @@ def test_route_execution_invokes_intra_shot_and_boundary_observation_tools(
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            expected_state_revision=compiled.plan.state_revision,
             inspect_reused_takes=True,
             semantic_review=False,
             rebuild_manifest=False,
@@ -1250,6 +1332,7 @@ def test_route_plan_can_enqueue_production_tasks_without_calling_provider(
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            expected_state_revision=compiled.plan.state_revision,
             enqueue_new_generations=True,
             inspect_reused_takes=False,
             rebuild_manifest=False,
@@ -1281,6 +1364,7 @@ def test_route_plan_reexecution_is_idempotent_after_all_candidates_are_establish
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1296,7 +1380,9 @@ def test_route_plan_reexecution_is_idempotent_after_all_candidates_are_establish
     second = service.execute_h3_production_route_plan(
         project.document.project.id,
         compiled.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": first.plan.state_revision}
+        ),
     )
 
     persisted = service.repository.list_tasks_for_shot(
@@ -1306,6 +1392,88 @@ def test_route_plan_reexecution_is_idempotent_after_all_candidates_are_establish
     assert second.queued_tasks == []
     assert second.plan.decisions[0].task_ids == first_task_ids
     assert [item.id for item in persisted] == first_task_ids
+
+
+def test_route_plan_reconciles_and_completes_a_partially_persisted_candidate_batch(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = project.document.shots[0]
+    service.update_h3_config(H3ProviderConfigUpdate(api_key="test-key"))
+    compiled = service.compile_h3_production_route_plan(
+        project_id,
+        H3ProductionRoutePlanRequest(
+            shot_ids=[shot.id],
+            use_language_agent=False,
+            candidate_count=3,
+            shot_directives=[_direct_route_directive(shot.id)],
+        ),
+    )
+    document = service.repository.get_project(project_id)
+    plan = service.repository.get_h3_route_plan(compiled.plan.id)
+    assert document is not None
+    assert plan is not None
+    decision = plan.decisions[0]
+    media_inputs = service._resolve_approved_asset_inputs(
+        document,
+        decision.media_inputs,
+    )
+    task, run, evidence = service._new_h3_task_and_run(
+        document=document,
+        shot_id=shot.id,
+        route=decision.route,
+        duration_seconds=decision.duration_seconds,
+        prompt=decision.prompt,
+        media_inputs=media_inputs,
+        purpose=EvidencePurpose.PRODUCTION,
+        learning_objective=None,
+        regression_case_id=None,
+        candidate_index=1,
+        attempt=1,
+        retry_of_task_id=None,
+    )
+    decision.task_ids.append(task.id)
+    decision.execution_status = H3ShotRouteExecutionStatus.QUEUED
+    plan.status = H3RoutePlanStatus.EXECUTING
+    service._touch_h3_route_plan(plan)
+    service.repository.save_h3_route_task_bundle(
+        task=task,
+        run=run,
+        evidence=evidence,
+        plan=plan,
+    )
+
+    resumed = service.execute_h3_production_route_plan(
+        project_id,
+        plan.id,
+        H3ProductionRouteExecuteRequest(
+            expected_state_revision=plan.state_revision,
+            enqueue_new_generations=True,
+            inspect_reused_takes=False,
+            rebuild_manifest=False,
+        ),
+    )
+
+    assert [item.candidate_index for item in resumed.queued_tasks] == [2, 3]
+    all_tasks = service.repository.list_tasks_for_shot(project_id, shot.id)
+    assert [item.candidate_index for item in all_tasks] == [1, 2, 3]
+    assert resumed.plan.decisions[0].task_ids == [item.id for item in all_tasks]
+    assert len({item.request_fingerprint for item in all_tasks}) == 3
+
+    repeated = service.execute_h3_production_route_plan(
+        project_id,
+        plan.id,
+        H3ProductionRouteExecuteRequest(
+            expected_state_revision=resumed.plan.state_revision,
+            enqueue_new_generations=True,
+            inspect_reused_takes=False,
+            rebuild_manifest=False,
+        ),
+    )
+    assert repeated.queued_tasks == []
+    assert repeated.plan.decisions[0].task_ids == [item.id for item in all_tasks]
 
 
 def test_route_plan_candidate_bundle_rolls_back_when_plan_update_fails(
@@ -1325,6 +1493,7 @@ def test_route_plan_candidate_bundle_rolls_back_when_plan_update_fails(
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1395,6 +1564,7 @@ def test_route_plan_executes_the_agent_requested_candidate_batch_without_local_c
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            expected_state_revision=compiled.plan.state_revision,
             enqueue_new_generations=True,
             inspect_reused_takes=False,
             rebuild_manifest=False,
@@ -1443,6 +1613,7 @@ def test_route_plan_reexecution_never_derives_candidates_from_task_status(
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1463,7 +1634,9 @@ def test_route_plan_reexecution_never_derives_candidates_from_task_status(
     repeated = service.execute_h3_production_route_plan(
         project.document.project.id,
         compiled.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": first.plan.state_revision}
+        ),
     )
 
     assert repeated.queued_tasks == []
@@ -1487,6 +1660,7 @@ def test_route_plan_reexecution_ignores_quality_evidence_without_new_agent_plan(
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1501,7 +1675,9 @@ def test_route_plan_reexecution_ignores_quality_evidence_without_new_agent_plan(
     repeated = service.execute_h3_production_route_plan(
         project.document.project.id,
         compiled.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": first.plan.state_revision}
+        ),
     )
 
     assert repeated.queued_tasks == []
@@ -1536,6 +1712,7 @@ def test_route_plan_reexecution_does_not_use_quality_classification(
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1556,7 +1733,9 @@ def test_route_plan_reexecution_does_not_use_quality_classification(
     repeated = service.execute_h3_production_route_plan(
         project.document.project.id,
         compiled.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": first.plan.state_revision}
+        ),
     )
 
     assert repeated.queued_tasks == []
@@ -1580,6 +1759,7 @@ def test_route_plan_reexecution_does_not_use_review_pass_status(
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1600,7 +1780,9 @@ def test_route_plan_reexecution_does_not_use_review_pass_status(
     repeated = service.execute_h3_production_route_plan(
         project.document.project.id,
         compiled.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": first.plan.state_revision}
+        ),
     )
 
     assert repeated.queued_tasks == []
@@ -1624,6 +1806,7 @@ def test_agent_can_request_another_candidate_batch_with_a_new_route_plan(
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=first_plan.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1647,7 +1830,9 @@ def test_agent_can_request_another_candidate_batch_with_a_new_route_plan(
     next_batch = service.execute_h3_production_route_plan(
         project.document.project.id,
         next_plan.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": next_plan.plan.state_revision}
+        ),
     )
 
     assert [item.candidate_index for item in next_batch.queued_tasks] == [2, 3]
@@ -1672,6 +1857,7 @@ def test_route_plan_reexecution_does_not_use_retry_lineage(tmp_path: Path) -> No
         ),
     )
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1694,7 +1880,9 @@ def test_route_plan_reexecution_does_not_use_retry_lineage(tmp_path: Path) -> No
     repeated = service.execute_h3_production_route_plan(
         project.document.project.id,
         compiled.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": first.plan.state_revision}
+        ),
     )
 
     assert repeated.queued_tasks == []
@@ -1726,6 +1914,7 @@ def test_route_plan_executes_one_explicit_batch_per_shot(tmp_path: Path) -> None
     second_decision.readiness = H3ShotRouteReadiness.READY
     service.repository.save_h3_route_plan(compiled.plan)
     request = H3ProductionRouteExecuteRequest(
+        expected_state_revision=compiled.plan.state_revision,
         enqueue_new_generations=True,
         inspect_reused_takes=False,
         rebuild_manifest=False,
@@ -1745,7 +1934,9 @@ def test_route_plan_executes_one_explicit_batch_per_shot(tmp_path: Path) -> None
     second = service.execute_h3_production_route_plan(
         project.document.project.id,
         compiled.plan.id,
-        request,
+        request.model_copy(
+            update={"expected_state_revision": first.plan.state_revision}
+        ),
     )
     assert second.queued_tasks == []
 
@@ -1753,6 +1944,7 @@ def test_route_plan_executes_one_explicit_batch_per_shot(tmp_path: Path) -> None
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            expected_state_revision=second.plan.state_revision,
             enqueue_new_generations=True,
             inspect_reused_takes=False,
             rebuild_manifest=False,
@@ -1789,6 +1981,7 @@ def test_route_plan_execution_queues_the_full_explicit_candidate_batch(
         project.document.project.id,
         compiled.plan.id,
         H3ProductionRouteExecuteRequest(
+            expected_state_revision=compiled.plan.state_revision,
             enqueue_new_generations=True,
             inspect_reused_takes=False,
             rebuild_manifest=False,
@@ -1822,7 +2015,10 @@ def test_route_plan_becomes_stale_after_shot_revision_changes(tmp_path: Path) ->
         service.execute_h3_production_route_plan(
             project.document.project.id,
             compiled.plan.id,
-            H3ProductionRouteExecuteRequest(rebuild_manifest=False),
+            H3ProductionRouteExecuteRequest(
+                expected_state_revision=compiled.plan.state_revision,
+                rebuild_manifest=False,
+            ),
         )
 
     persisted = service.repository.get_h3_route_plan(compiled.plan.id)
@@ -1864,6 +2060,7 @@ def test_production_route_plan_api_supports_free_dry_run(client) -> None:
     executed = client.post(
         f"/api/short-drama/projects/{project_id}/h3/production-route-plans/{plan['id']}/execute",
         json={
+            "expected_state_revision": plan["state_revision"],
             "enqueue_new_generations": False,
             "inspect_reused_takes": False,
             "rebuild_manifest": False,

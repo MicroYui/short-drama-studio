@@ -17,6 +17,8 @@ from short_drama.h3_models import (
     H3ProviderRunsResponse,
     H3ReconcileRequest,
     H3ReconciliationCandidatesResponse,
+    H3RouteAssetPreparationUpdateRequest,
+    H3RouteAssetPreparationUpdateResponse,
     H3TakeReviewRequest,
     H3TakeReviewResponse,
     H3TaskActionResponse,
@@ -26,6 +28,11 @@ from short_drama.language_models import (
     LanguagePromptCompileResponse,
 )
 from short_drama.quality_learning import H3CapabilityProfileResponse
+from short_drama.production_contracts import (
+    GenerationPlanCompileRequest,
+    GenerationPlanMutationResponse,
+    GenerationPlanReadResponse,
+)
 from short_drama.tools.contracts import (
     ArtifactRef,
     ToolCategory,
@@ -38,6 +45,19 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class RouteToolService(Protocol):
+    def compile_generation_plan(
+        self,
+        project_id: str,
+        request: GenerationPlanCompileRequest,
+    ) -> GenerationPlanMutationResponse: ...
+
+    def get_generation_plan(
+        self,
+        project_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> GenerationPlanReadResponse: ...
+
     def get_h3_capability_profile(
         self,
         project_id: str,
@@ -92,6 +112,14 @@ class RouteToolService(Protocol):
         project_id: str,
     ) -> H3ProductionRoutePlanListResponse: ...
 
+    def update_h3_route_asset_preparation(
+        self,
+        project_id: str,
+        plan_id: str,
+        preparation_id: str,
+        request: H3RouteAssetPreparationUpdateRequest,
+    ) -> H3RouteAssetPreparationUpdateResponse: ...
+
     def execute_h3_production_route_plan(
         self,
         project_id: str,
@@ -140,6 +168,13 @@ class RoutePlanInput(ToolModel):
     request: H3ProductionRoutePlanRequest
 
 
+class RouteAssetPreparationUpdateInput(ToolModel):
+    project_id: str
+    plan_id: str
+    preparation_id: str
+    request: H3RouteAssetPreparationUpdateRequest
+
+
 class RouteExecuteInput(ToolModel):
     project_id: str
     plan_id: str
@@ -151,7 +186,99 @@ class RouteReviewTakeInput(ToolModel):
     request: H3TakeReviewRequest
 
 
+class GenerationPlanCompileInput(ToolModel):
+    project_id: str
+    request: GenerationPlanCompileRequest
+
+
+class GenerationPlanGetInput(ToolModel):
+    project_id: str
+    version_id: str | None = None
+
+
+def _generation_plan_refs(
+    project_id: str,
+    result: GenerationPlanReadResponse,
+) -> tuple[ArtifactRef, ...]:
+    refs = [
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="generation_plan",
+            artifact_id=result.document.id,
+            version=result.version.version,
+        )
+    ]
+    refs.extend(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="generation_unit",
+            artifact_id=unit.id,
+            version=result.version.version,
+        )
+        for unit in result.generation_plan.units
+    )
+    return tuple(refs)
+
+
 def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
+    def compile_generation_plan(
+        request: GenerationPlanCompileInput,
+    ) -> ToolExecution[GenerationPlanMutationResponse]:
+        result = service.compile_generation_plan(request.project_id, request.request)
+        return ToolExecution(
+            output=result,
+            artifact_refs=_generation_plan_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="route.compile_generation_plan",
+            version=1,
+            category=ToolCategory.ROUTE,
+            description=(
+                "把指定版本的 Storyboard ClipGroup 编译为 Provider-neutral"
+                " GenerationUnit，并保留每个 Shot 在生成视频中的源时间窗。"
+                "该工具只形成可执行计划，不调用 H3 或其他真实 Provider。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=GenerationPlanCompileInput,
+            output_model=GenerationPlanMutationResponse,
+            handler=compile_generation_plan,
+            tags=frozenset({"generation-plan", "generation-unit", "handoff"}),
+        )
+    )
+
+    def get_generation_plan(
+        request: GenerationPlanGetInput,
+    ) -> ToolExecution[GenerationPlanReadResponse]:
+        result = service.get_generation_plan(
+            request.project_id,
+            version_id=request.version_id,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_generation_plan_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="route.get_generation_plan",
+            version=1,
+            category=ToolCategory.ROUTE,
+            description=(
+                "读取当前或指定历史版本的 GenerationPlan 和 GenerationUnit，"
+                "供 H3 路由 Agent 与后续执行 Worker 精确交接。"
+            ),
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=GenerationPlanGetInput,
+            output_model=GenerationPlanReadResponse,
+            handler=get_generation_plan,
+            tags=frozenset({"generation-plan", "generation-unit", "read"}),
+        )
+    )
+
     registry.register(
         ToolSpec(
             id="route.h3_capability_profile",
@@ -374,7 +501,7 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
                     project_id=request.project_id,
                     artifact_type="h3_route_plan",
                     artifact_id=result.plan.id,
-                    version=result.plan.version,
+                    version=result.plan.state_revision,
                 ),
             ),
             warnings=tuple(result.plan.warnings),
@@ -412,6 +539,68 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
         )
     )
 
+    def update_asset_preparation(
+        request: RouteAssetPreparationUpdateInput,
+    ) -> ToolExecution[H3RouteAssetPreparationUpdateResponse]:
+        result = service.update_h3_route_asset_preparation(
+            request.project_id,
+            request.plan_id,
+            request.preparation_id,
+            request.request,
+        )
+        refs = [
+            ArtifactRef(
+                project_id=request.project_id,
+                artifact_type="h3_route_plan",
+                artifact_id=result.plan.id,
+                version=result.plan.state_revision,
+            ),
+            ArtifactRef(
+                project_id=request.project_id,
+                artifact_type="h3_route_asset_preparation",
+                artifact_id=result.preparation.id,
+                version=result.plan.state_revision,
+            ),
+        ]
+        if result.preparation.asset_id is not None:
+            refs.append(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="asset",
+                    artifact_id=result.preparation.asset_id,
+                )
+            )
+        if result.preparation.approved_version_id is not None:
+            refs.append(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="asset_version",
+                    artifact_id=result.preparation.approved_version_id,
+                    version=result.approved_version_number,
+                )
+            )
+        return ToolExecution(output=result, artifact_refs=tuple(refs))
+
+    registry.register(
+        ToolSpec(
+            id="route.update_h3_asset_preparation",
+            version=1,
+            category=ToolCategory.ROUTE,
+            description=(
+                "当图像 Worker 已开始、已产出并批准、或已拒绝某个精确 H3 "
+                "关键帧准备时，回写 GENERATING/READY/REJECTED 交接。"
+                "READY 只完成交接，不会改写原 NEEDS_ASSET 路线；随后必须再调用 "
+                "route.plan_h3，让新路线消费已批准版本。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=RouteAssetPreparationUpdateInput,
+            output_model=H3RouteAssetPreparationUpdateResponse,
+            handler=update_asset_preparation,
+            tags=frozenset({"asset", "handoff", "h3", "route"}),
+        )
+    )
+
     def execute(
         request: RouteExecuteInput,
     ) -> ToolExecution[H3ProductionRouteExecuteResponse]:
@@ -425,7 +614,7 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
                 project_id=request.project_id,
                 artifact_type="h3_route_plan",
                 artifact_id=result.plan.id,
-                version=result.plan.version,
+                version=result.plan.state_revision,
             )
         ]
         refs.extend(
@@ -510,6 +699,9 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
 
 
 __all__ = [
+    "GenerationPlanCompileInput",
+    "GenerationPlanGetInput",
+    "RouteAssetPreparationUpdateInput",
     "RouteExecuteInput",
     "RoutePlanInput",
     "RouteProbeInput",

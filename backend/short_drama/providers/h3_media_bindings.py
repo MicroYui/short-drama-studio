@@ -19,6 +19,7 @@ from short_drama.models import ProjectDocument
 @dataclass(frozen=True)
 class ResolvedH3MediaBinding:
     provider_label: str
+    prompt_label: str
     alias: str
     media: H3MediaInput
     subject: str
@@ -44,7 +45,10 @@ def resolve_h3_media_bindings(
     asset_index = {asset.id: asset for asset in document.assets}
     guide_index = {guide.id: guide for guide in video_guides}
     counters = {H3MediaKind.IMAGE: 0, H3MediaKind.VIDEO: 0, H3MediaKind.AUDIO: 0}
-    aliases: dict[str, tuple[str, ...]] = {}
+    subject_counter = 0
+    subject_labels: dict[str, str] = {}
+    aliases: dict[str, str] = {}
+    identities: set[tuple[str, ...]] = set()
     result: list[ResolvedH3MediaBinding] = []
 
     for media in media_inputs:
@@ -58,6 +62,22 @@ def resolve_h3_media_bindings(
         guide = guide_index.get(media.video_guide_id or "")
         resolved = version_index.get(media.asset_version_id or "")
         subject_asset = asset_index.get(media.subject_asset_id or "")
+        if (
+            media.kind == H3MediaKind.IMAGE
+            and media.role == H3MediaRole.REFERENCE_IMAGE
+        ):
+            subject_key = _reference_image_subject_key(
+                media,
+                resolved_asset_id=(resolved[0].id if resolved is not None else None),
+                fallback=provider_label,
+            )
+            prompt_label = subject_labels.get(subject_key, "")
+            if not prompt_label:
+                subject_counter += 1
+                prompt_label = f"<Subject {subject_counter}>"
+                subject_labels[subject_key] = prompt_label
+        else:
+            prompt_label = provider_label
 
         if guide is not None:
             subject = "the Route Agent's motion and continuity guide"
@@ -99,12 +119,13 @@ def resolve_h3_media_bindings(
 
         alias = media.reference_alias or _alias_token(default_alias)
         identity = _media_identity(media)
-        prior = aliases.get(alias)
-        if prior == identity:
+        if identity in identities:
             raise ValueError(
                 f"H3 media input duplicates semantic binding @{alias}; reuse one input"
             )
-        if prior is not None:
+        identities.add(identity)
+        prior = aliases.get(alias)
+        if prior is not None and prior != prompt_label:
             if media.reference_alias is not None:
                 raise ValueError(f"H3 reference alias @{alias} identifies multiple media inputs")
             stable_suffix = hashlib.sha256(
@@ -112,18 +133,15 @@ def resolve_h3_media_bindings(
             ).hexdigest()[:12]
             alias = _alias_with_stable_suffix(alias, stable_suffix)
             final_prior = aliases.get(alias)
-            if final_prior == identity:
-                raise ValueError(
-                    f"H3 media input duplicates semantic binding @{alias}; reuse one input"
-                )
             if final_prior is not None:
                 raise ValueError(
                     "Could not derive a unique H3 reference alias for the media input"
                 )
-        aliases[alias] = identity
+        aliases[alias] = prompt_label
         result.append(
             ResolvedH3MediaBinding(
                 provider_label=provider_label,
+                prompt_label=prompt_label,
                 alias=alias,
                 media=media,
                 subject=subject,
@@ -150,6 +168,19 @@ def _default_alias(media: H3MediaInput, subject: str) -> str:
     if len(tokens) == 1 and media.kind == H3MediaKind.AUDIO:
         tokens.append("voice")
     return "_".join(token for token in tokens if token) or "reference"
+
+
+def _reference_image_subject_key(
+    media: H3MediaInput,
+    *,
+    resolved_asset_id: str | None,
+    fallback: str,
+) -> str:
+    if media.subject_asset_id is not None:
+        return f"subject_asset:{media.subject_asset_id}"
+    if resolved_asset_id is not None:
+        return f"resolved_asset:{resolved_asset_id}"
+    return f"media:{fallback}"
 
 
 def _alias_token(value: str) -> str:

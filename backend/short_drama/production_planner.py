@@ -77,6 +77,7 @@ from short_drama.production_profiles import (
     ProductionSkillRole,
     compile_production_prompt,
     narrative_skill_catalog,
+    production_method_skill_catalog,
     production_skill,
 )
 from short_drama.reference_aliases import normalize_reference_alias
@@ -84,6 +85,16 @@ from short_drama.style_context import UNSPECIFIED_STYLE_VALUE
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
     LanguageProviderError,
+)
+
+
+_STORY_INTERACTION_PRIORITY = (
+    "交互意图按以下优先级理解：用户已明确的设定、数值和选择直接采用，"
+    "不得重复询问；用户明确要求在某个内容节点确认、审阅或选择时，完整保留该要求，"
+    "交由下游 Production Manager 只在对应语义节点暂停；其余部分若用户要求不交互、"
+    "直接完成或由 Agent 决定，则由 Agent 自主补齐并继续。"
+    "RunMode.GUIDED 只表示用户可参与，不代表每个阶段都必须确认；"
+    "RunMode.AUTO_DRAFT 表示除用户明确要求的确认外，应自主继续。"
 )
 
 
@@ -317,10 +328,14 @@ class PlannedShot(DomainModel):
             for beat in self.timeline_beats
             for index in beat.dialogue_line_indices
         ]
-        if assigned_dialogue != self.dialogue_line_indices:
+        ordered_dialogue: list[int] = []
+        for index in assigned_dialogue:
+            if not ordered_dialogue or ordered_dialogue[-1] != index:
+                ordered_dialogue.append(index)
+        if ordered_dialogue != self.dialogue_line_indices:
             raise ValueError(
-                "Planned shot timeline beats must assign every shot dialogue line exactly once "
-                "and in order"
+                "Planned shot timeline beats must cover shot dialogue lines in order; "
+                "one line may span adjacent beats"
             )
         alias_targets: dict[str, tuple[str, tuple[str, ...]]] = {}
         for beat in self.timeline_beats:
@@ -473,13 +488,12 @@ class EpisodeOutline(DomainModel):
                 "Scene contracts cannot repeat prop IDs: "
                 + ", ".join(str(sequence) for sequence in scenes_with_duplicate_prop_ids)
             )
-        planned_duration = sum(scene.target_duration_seconds for scene in self.scenes)
-        tolerance = max(1.0, self.target_duration_seconds * 0.2)
-        if abs(planned_duration - self.target_duration_seconds) > tolerance:
-            raise ValueError(
-                "Scene duration targets do not match the episode target: "
-                f"target={self.target_duration_seconds}, scenes={planned_duration}"
-            )
+        # Per-scene targets are planning evidence, not an atomic accounting
+        # invariant.  Incremental revision applies one scene patch at a time,
+        # so a legitimate cross-scene reallocation can temporarily make their
+        # sum drift from the episode target.  The semantic Verifier reviews the
+        # completed revision; this model only enforces structural correctness
+        # (including each scene target remaining positive).
         return self
 
 
@@ -556,6 +570,13 @@ class NarrativeSkillSelection(DomainModel):
     rationale: str = Field(min_length=1, max_length=1200)
 
 
+class ProductionMethodSelection(DomainModel):
+    """One optional production method selected by Story Orientation."""
+
+    skill_id: str = Field(min_length=1, max_length=160)
+    rationale: str = Field(min_length=1, max_length=1200)
+
+
 class StoryOrientation(DomainModel):
     """Semantic interpretation prepared before the concrete story blueprint."""
 
@@ -566,12 +587,20 @@ class StoryOrientation(DomainModel):
         max_length=24,
     )
     narrative_skill_decision: str = Field(min_length=1, max_length=2400)
+    selected_method_skills: list[ProductionMethodSelection] = Field(
+        default_factory=list[ProductionMethodSelection],
+        max_length=24,
+    )
+    method_selection_rationale: str | None = Field(default=None, max_length=2400)
 
     @model_validator(mode="after")
     def validate_unique_skill_ids(self) -> StoryOrientation:
         skill_ids = [selection.skill_id for selection in self.selected_narrative_skills]
         if len(skill_ids) != len(set(skill_ids)):
             raise ValueError("Story orientation repeats a narrative Skill id")
+        method_ids = [selection.skill_id for selection in self.selected_method_skills]
+        if len(method_ids) != len(set(method_ids)):
+            raise ValueError("Story orientation repeats a Production Method Skill id")
         return self
 
 
@@ -986,10 +1015,12 @@ def _story_orientation_prompt(
         roles=(ProductionSkillRole.CONCEPT,),
     )
     catalog = narrative_skill_catalog()
+    method_catalog = production_method_skill_catalog()
     instructions = (
         "你是 Story Orientation Agent（故事定向 Agent）。"
         "你在正式故事架构之前理解用户真正想看的体验，不写剧本、不拆场景、不写镜头。"
-        "只返回 JSON，并严格匹配 StoryOrientation。\n\n"
+        "只返回 JSON，并严格匹配 StoryOrientation。"
+        f"{_STORY_INTERACTION_PRIORITY}\n\n"
         "先把用户明确说出的承诺、禁止项、可自由创作部分与续集偏好整理进 "
         "source_contract；不得把你自己的创作选择伪装成用户要求。"
         "再用自然语言形成 story_intent：说清观众体验、戏剧发动机、推进方法、"
@@ -1001,11 +1032,18 @@ def _story_orientation_prompt(
         "结构化写入 source_contract.locked_dialogue。speaker 与 audio_kind 依据完整语义判断，"
         "每条 text 必须逐字取自 user_brief 并保持顺序；不要用关键词、正则或固定标点格式"
         "代替语义理解。若调用方已经提供 caller_structured_locked_dialogue，必须原样保留。\n\n"
-        "你可以从输入中提供的叙事技能目录自主选择零个、一个或多个真正有帮助的方法。"
-        "基于完整语义选择，并逐项说明理由；不得用关键词匹配、题材枚举或固定必选数量。"
-        "技能只是当前 Agent 主动装载的方法，不替代用户意图，也不构成固定工作流。"
-        "无论最终是否选择技能，都必须在 narrative_skill_decision 中说明整体判断；"
-        "空选择也要说明为什么当前故事只需要通用角色与格式能力。\n\n"
+        "从 available_narrative_skills 中按完整语义选择真正需要的叙事方法；目录为空时"
+        "selected_narrative_skills 保持为空，不得临时自创一个 Skill 冒充已收录能力。"
+        "narrative_skill_decision 只记录本次是否需要目录中的叙事方法。该字段继续保留，"
+        "用于兼容既有 ProjectDocument 和以后接入的新方法。\n\n"
+        "同一次语义判断中，从 available_production_methods 选择零个、一个或多个"
+        "真正能帮助这个项目的 Production Method。MiniMax Design 的 drama-series、"
+        "ad-tvc、mv 提供项目级主 Workflow；MiniMax-H3 方法提供可组合的任务级表达方法。"
+        "先判断当前项目是否需要一个项目 Workflow 作为主骨架，再按实际任务组合任务方法；"
+        "这不是固定的一主多辅规则，也不限制选择数量。只根据整段需求、素材、已有工件和目标"
+        "进行语义选择，不得用关键词匹配、题材枚举或固定类型路由。"
+        "选中时在 selected_method_skills 中逐项说明理由；method_selection_rationale "
+        "用于说明整体取舍，旧调用方没有这些字段时也可保持为空。\n\n"
         f"{profile_prompt.text}"
     )
     if retry_feedback:
@@ -1016,6 +1054,7 @@ def _story_orientation_prompt(
         )
     payload = {
         "source_mode": request.source_mode.value,
+        "run_mode": request.run_mode.value,
         "production_profile": request.production_profile.value,
         "project_name": request.name,
         "user_brief": request.input_text.strip(),
@@ -1043,6 +1082,16 @@ def _story_orientation_prompt(
             }
             for descriptor in catalog
         ],
+        "available_production_methods": [
+            {
+                "id": descriptor.id,
+                "label": descriptor.label,
+                "description": descriptor.description,
+                "supported_roles": [role.value for role in descriptor.supported_roles],
+                "user_overridable": descriptor.user_overridable,
+            }
+            for descriptor in method_catalog
+        ],
         "previous_structural_feedback": retry_feedback,
         "output_schema": StoryOrientation.model_json_schema(),
     }
@@ -1065,14 +1114,19 @@ def orient_story(
                 story_intent=_fallback_story_intent(request, source_contract),
                 selected_narrative_skills=[],
                 narrative_skill_decision=(
-                    "未配置 Story Orientation Agent；当前仅保留通用角色与格式能力，"
-                    "不由代码猜测应装载的叙事技能。"
+                    "当前内置 Narrative Skill Catalog 为空；"
+                    "本地兼容路径未虚构叙事方法。"
+                ),
+                selected_method_skills=[],
+                method_selection_rationale=(
+                    "未配置 Story Orientation Agent；本地兼容路径不替 Agent 选择"
+                    "MiniMax Design Workflow 或 MiniMax-H3 任务方法。"
                 ),
             ),
             used=False,
             warnings=[
                 "Story Orientation Agent 未配置；已保留用户原始承诺，"
-                "未替用户选择叙事技能。"
+                "且未由确定性代码猜测应采用的叙事或制片方法。"
             ],
         )
     instructions, input_text = _story_orientation_prompt(
@@ -1102,6 +1156,21 @@ def orient_story(
                 "Story Orientation selected unknown narrative Skills: "
                 + ", ".join(unknown_skill_ids)
             )
+        known_method_ids = {
+            descriptor.id for descriptor in production_method_skill_catalog()
+        }
+        unknown_method_ids = sorted(
+            {
+                selection.skill_id
+                for selection in orientation.selected_method_skills
+                if selection.skill_id not in known_method_ids
+            }
+        )
+        if unknown_method_ids:
+            raise ValueError(
+                "Story Orientation selected unknown Production Method Skills: "
+                + ", ".join(unknown_method_ids)
+            )
         return StoryOrientationResult(
             orientation=orientation,
             used=True,
@@ -1124,7 +1193,10 @@ def _outline_prompt(
     source_contract: StorySourceContract | None = None,
     story_intent: StoryIntent | None = None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
+    revision_instruction: str | None = None,
+    current_outline: EpisodeOutline | None = None,
 ) -> tuple[str, str]:
     resolved_source_contract = source_contract or build_story_source_contract(request)
     resolved_story_intent = story_intent or _fallback_story_intent(
@@ -1135,6 +1207,7 @@ def _outline_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.CONCEPT,),
         additional_skill_ids=selected_narrative_skill_ids,
+        method_skill_ids=selected_method_skill_ids,
     )
     locked = (
         _planned_locked_dialogue(resolved_source_contract)
@@ -1163,13 +1236,13 @@ def _outline_prompt(
         "不要写镜头、机位、关键帧或 Provider 提示词。\n\n"
         f"{skill_prompt.text}\n\n"
         "以已确定的 StoryIntent 为本剧创作方向，不得把共享职责或格式惯例当成题材答案。"
-        "允许类型化、夸张、荒诞、留白或现实主义等不同选择；只要求作品遵守自己建立的规则，"
-        "并兑现本剧承诺的观众体验。场景数量、长短、转折密度与解释程度由素材决定，"
-        "不套固定节拍或固定反转数。每个场景节点写清叙事作用、使用地点、少量可表演动作，"
-        "以及人物状态、道具状态、已知事实和待解决问题的紧凑连续性。"
-        "每个新场景都应改变人物可选行动、关系、利益或风险；数额、地点或围观规模变大，但仍按同一套"
-        "证明—震惊—授予流程运行，不足以单独构成新的场景作用。已经建立的群体态度、职位、资源和权限"
-        "要写进下一场入场状态，让下游承接而不是重新表演。"
+        "先稳定主导类型、主角行动路线与核心情绪，再让开篇尽快出现有冲击力的局面或台词，"
+        "使观众理解核心冲突、主角处境和继续看下去的动力。爽点、情感释放或反转都应从前面的"
+        "铺垫生长出来；决定性回报优先由主角可见的选择、行动或能力触发，并让对立力量的受挫、"
+        "改口或后果在剧中可见。夸张、荒诞、无厘头、类型化跳跃以及为了升级惊喜、压力或喜剧效果而设计的"
+        "重复都可以成立；只要观众能理解当前局面与结果，不必把类型爽感磨平成现实流程。"
+        "场景数量、长短、转折密度与解释程度由素材决定，不套固定节拍或固定反转数。"
+        "每个场景节点只需写清叙事作用、地点、少量可表演动作和下游必须承接的紧凑连续性。"
         "观众必须理解的推进应落到可表演动作、道具、界面或对白中，而不能只藏在元数据里。"
         "为每个常驻角色提供稳定 character_id，为每个地点和道具分别提供稳定 "
         "location_id 和 prop_id。每个场景的 prop_ids 只引用本场实际使用的已声明道具；"
@@ -1186,10 +1259,8 @@ def _outline_prompt(
         "无论哪种模式，本集都必须兑现 episode_payoff，并用真实可见的动作、反应、画面或对白"
         "形成 final_button；SERIES 可以在本集兑现后保留声明过的延续问题，"
         "STANDALONE 则关闭核心因果与情感任务，不保留续集钩子。\n\n"
-        "EndingContract 描述本集最终必须到达的状态，不是要求把每个 closure 分别扩写成一轮仪式或道具"
-        "核对。若工资、职位、权限、认可、空间变化等多项 closure 都在证明同一次身份或权力变化，选择最有"
-        "戏剧作用的决定性动作完成，其余可在同一结果中自然带出或省略。前段邀请、试探与最终正式落地都要"
-        "保留时，二者必须分别改变主角的选择和实际处境。\n\n"
+        "EndingContract 描述本集最终必须到达的状态；将相互重叠的 closure 收束在最有戏剧作用的"
+        "决定性行动和反应中，不把结尾写成事务清单或产品流程。\n\n"
         "可复用资产描述只写稳定身份和稳定外观；临时状态、用途和剧情意义写入场景动作与连续性。"
         "蓝图不返回 screenplay_text；最终动作与对白由 Scene Writer 逐场创作。"
         "AUTO_ORIGINAL 与 IDEA_EXPANSION 不返回 lines 或 dialogue_line_indices。"
@@ -1204,6 +1275,13 @@ def _outline_prompt(
             "Scene Writer 基于实际扩写证据提交的上游重规划请求。请根据其完整"
             "语义修正相应层级，保留其明确列出的用户承诺和已成立内容。"
         )
+    if revision_instruction is not None:
+        instructions += (
+            " 这是已有完整剧本的结构级修订。将 latest_user_revision_instruction "
+            "视为本轮权威要求，同时保留 original user brief 中未被新意见"
+            "明确覆盖的承诺。先读 current_complete_outline，再只重构确实需要改变的"
+            "全局故事、场次、角色或地点契约；不要把修订误当成从零创作。"
+        )
     payload = {
         "source_mode": request.source_mode.value,
         "production_profile": request.production_profile.value,
@@ -1213,7 +1291,14 @@ def _outline_prompt(
         "story_source_contract": resolved_source_contract.model_dump(mode="json"),
         "story_intent": resolved_story_intent.model_dump(mode="json"),
         "selected_narrative_skill_ids": list(selected_narrative_skill_ids),
+        "selected_method_skill_ids": list(selected_method_skill_ids),
         "previous_structural_feedback": retry_feedback,
+        "latest_user_revision_instruction": revision_instruction,
+        "current_complete_outline": (
+            current_outline.model_dump(mode="json")
+            if current_outline is not None
+            else None
+        ),
         "locked_dialogue": [line.model_dump(mode="json") for line in locked],
         "image_references": [
             {
@@ -1241,35 +1326,31 @@ def _story_critic_prompt(
     source_contract: StorySourceContract | None = None,
     issue_ledger: list[StoryIssueLedgerEntry] | None = None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
 ) -> tuple[str, str]:
     skill_prompt = compile_production_prompt(
         request.production_profile,
-        roles=(ProductionSkillRole.CRITIC,),
+        roles=(ProductionSkillRole.REVISION_VERIFIER,),
         include_constitution=False,
         additional_skill_ids=selected_narrative_skill_ids,
+        method_skill_ids=selected_method_skill_ids,
     )
     instructions = (
-        "你是独立的 script-critic Agent（剧本冷读 Agent），在分镜前以目标观众的身份阅读整部剧本。"
+        "你是这个 Leader / Worker 链路中唯一的 Script Verifier Agent，在分镜前以目标观众的身份阅读整部剧本。"
         "只返回 JSON，并严格匹配 ScriptReviewReport。你的第一判断依据是 StoryIntent 与用户明确承诺，"
         "不是隐藏答案、通用编剧教科书或你个人偏好的现实主义。先判断作品是否真的提供了它承诺的"
         "观看体验、戏剧推进、情绪释放和结尾效果，再指出有文本证据、且确实值得修复的问题。\n\n"
-        "逻辑服务于观众理解和本剧自身规则：夸张、荒诞、类型化跳跃、留白和无厘头并不天然是缺陷；"
-        "只有当它破坏 StoryIntent、用户承诺或本剧已经建立的规则时才报告。也不要假定所有作品都需要"
-        "更多反转、对白、场景、解释或剪辑。节奏只根据实际可读文本、动作、停顿和状态变化判断，"
-        "不要套固定语速、对白密度或数值门槛。"
-        "每个问题写明具体文本证据、受影响场次和最小修复建议；severity 只是描述影响，不触发代码阈值。\n\n"
-        "必须填写 performance_timing_assessment：不要相信场次上的目标秒数或总和，按自然语速、动作先后、"
-        "停顿、反应和观众读清数字所需的时间，从第一场到最后一场在脑中完整演一遍。除非剧本文字明确表示"
-        "同时发生、蒙太奇或可连续掠过，否则按顺序计入，不要假设尚未写出的快速剪辑。给出各场可信范围与"
-        "全剧范围，并说明实际文本是否能被目标时长自然承载、哪些段落可同时发生、哪些是主要压力点。这个字段"
-        "是审校证据，不是代码门禁；是否需要修订仍由你结合"
-        "用户约束和整体观看体验语义判断。若明显只能靠赶词或跳过关键动作完成，应把具体重复段落或可合并"
-        "事件写成 STORY_ARCHITECT 问题，而不是接受元数据自称合时长。\n\n"
-        "通读时还要把人物关系、群体态度、资源和权限当作跨场连续状态：每场结束后记录真正新增的状态变化，"
-        "下一场应从该状态继续。若后续只是再次让众人震惊、再次认可、再次让位，或把同一次授予拆成口头承诺、"
-        "文件交接、挂牌等多轮同义确认，却没有产生新的选择或后果，应把具体重复位置作为问题；不要因换了场地、"
-        "见证者或道具就误判为升级。\n\n"
+        "整稿只聚焦五件事：开篇是否迅速给出吸引人的局面或台词；主角的处境、目标和行动路线是否清楚；"
+        "铺垫是否真正转化为爽点、情绪释放或有效反转；对立力量的反应、受挫或反噬是否可见；结尾是否完成"
+        "EndingContract 承诺的本集回报。主角的决定性胜利应能看到其自身选择、行动或能力的作用；外部权威可以确认结果，"
+        "但不应成为唯一的戏剧发动机。\n\n"
+        "逻辑只服务于观众理解和本剧自身规则：夸张、荒诞、类型化跳跃、留白和无厘头并不天然是缺陷。"
+        "只有观众已经无法理解当前行动与结果，或文本违反了自己明确建立的规则时，才把逻辑列为需要修复的问题。"
+        "不要因局部现实性不足、升级过快或重复结构本身否决类型效果，也不假定所有作品都需要更多解释、场景或反转。"
+        "时长只做整体尺度判断：若实际可读文本与目标时长有明显冲突，可在 performance_timing_assessment 中简要说明主要压力点；"
+        "该字段可留空，不要逐场建立语速、动作和停顿账本。每个问题写明具体文本证据、受影响场次和最小修复建议；"
+        "severity 只描述影响，不触发代码阈值。\n\n"
         "为每个问题提供稳定 issue_id。参考 issue_ledger：语义上是同一个问题时沿用原 ID，并在 observation"
         "中说明它是持续存在、变形、回归还是进一步细化；确实不同的问题再建立新 ID。"
         "已经作为创作取舍被接受的问题，没有新的文本证据时不要反复打开。"
@@ -1280,7 +1361,7 @@ def _story_critic_prompt(
         "ScriptReviewReport 本身就是独立交付，不要求把审校附录写进场景。"
         "你已经完成了整稿冷读：若仍有具体疑点，就将它写成有文本证据的问题并语义决定"
         "是否修订；若已无需修订，recommended_followup 选择 FINALIZE，不再把同一份稿件交给另一个"
-        "独立 Final Cold Read 重复审校。FINAL_COLD_READ 枚举仅用于兼容旧运行记录，不是新流程的默认后续。"
+        "独立审校角色重复阅读。"
         "用 followup_rationale 说明收尾判断的文本依据。"
         "ending_contract 也按本剧选择判断：STANDALONE 完成本集核心任务；SERIES 先兑现本集，再保留"
         "有依据的延续问题。结尾要看实际可读剧本中的最后动作、反应、画面或台词，而不是元数据自称完成。\n\n"
@@ -1329,14 +1410,10 @@ def _normalize_review_report(
     force_story_owner: bool = False,
 ) -> ScriptReviewReport:
     _validate_review_report_semantics(report)
-    if report.performance_timing_assessment is None:
-        raise ValueError(
-            "Script Critic must report a natural-performance timing assessment"
-        )
     missing_ids = [index for index, issue in enumerate(report.issues, start=1) if issue.issue_id is None]
     if missing_ids:
         raise ValueError(
-            "Script Critic must provide a semantic issue_id for every issue: "
+            "Script Verifier must provide a semantic issue_id for every issue: "
             + ", ".join(str(index) for index in missing_ids)
         )
     issues = [
@@ -1364,18 +1441,15 @@ def _validate_review_report_semantics(report: ScriptReviewReport) -> None:
         for issue in report.issues
     ):
         raise ValueError(
-            "Script Critic set requires_revision=true without a "
+            "Script Verifier set requires_revision=true without a "
             "STORY_ARCHITECT issue describing what should change"
         )
 
 
 def _fresh_script_review_schema() -> dict[str, object]:
-    """Require fresh Critic evidence without breaking legacy stored reports."""
+    """Require issue identity without making optional review notes mandatory."""
 
     schema = ScriptReviewReport.model_json_schema()
-    report_required = cast(list[str], schema.setdefault("required", []))
-    if "performance_timing_assessment" not in report_required:
-        report_required.append("performance_timing_assessment")
     definitions = cast(dict[str, object], schema["$defs"])
     issue_schema = cast(dict[str, object], definitions["ScriptReviewIssue"])
     required = cast(list[str], issue_schema.setdefault("required", []))
@@ -1575,6 +1649,8 @@ def _story_source_contract_prompt(
     instructions = (
         "你是 source-contract Agent，只负责从用户输入中提取明确承诺，不创作、不润色剧本。"
         "只返回 JSON，并严格匹配 StorySourceContract。区分用户明确要求、明确禁止和仍可自由选择的事项；"
+        f"{_STORY_INTERACTION_PRIORITY} source-contract Agent 本身不创建暂停或确认步骤；"
+        "只将用户明确指定的确认节点作为承诺完整保留。"
         "保留用户说出的角色数量、人物名称、必要动作、先后因果、伦理约束、题材、时长、冲突规模、"
         "要求的结果与续集要求，不得把明确事件降级成建议，也不得从类型惯例或 Production Skill"
         "中发明用户承诺。若两项原始要求确实冲突，同时保留并把如何协调列为开放创作选择。"
@@ -1588,6 +1664,7 @@ def _story_source_contract_prompt(
     )
     payload = {
         "source_mode": request.source_mode.value,
+        "run_mode": request.run_mode.value,
         "production_profile": request.production_profile.value,
         "target_duration_seconds": request.resolved_target_duration_seconds(),
         "source_text": request.input_text.strip(),
@@ -1632,7 +1709,7 @@ def compile_story_source_contract(
     request: CreateProjectRequest,
     client: LanguageProviderClient | None,
 ) -> StorySourceContractResult:
-    """Extract explicit user promises independently from Writer and Critic."""
+    """Extract explicit user promises independently from Writer and Verifier."""
 
     fallback = _fallback_story_source_contract(request)
     if client is None:
@@ -1674,24 +1751,31 @@ def _story_repair_plan_prompt(
     source_contract: StorySourceContract,
     revision_history: list[dict[str, object]] | None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
 ) -> tuple[str, str]:
-    skill_prompt = compile_production_prompt(
-        request.production_profile,
-        roles=(ProductionSkillRole.STORY_REPAIR,),
-        include_constitution=False,
-        additional_skill_ids=selected_narrative_skill_ids,
-    )
     instructions = (
-        "你是 story-repair planner Agent，处在 Script Critic 与局部 Writer 之间。"
+        "你正在执行 Leader 的返修分派步骤，把 Verifier 的具体问题退回原 Writer Worker。"
         "只返回 JSON，并严格匹配 StoryRepairPlan；你只制定成组修复方案，不直接重写整集。"
-        "不要把 Critic 当答案，逐项对照用户 SourceContract、StoryIntent、当前剧本和历史版本重新诊断。"
+        "不要把 Verifier 当答案，逐项对照用户 SourceContract、StoryIntent、当前剧本和历史版本重新诊断。"
+        "当 routed issue 来自用户对当前版本的直接修改意见时标为 USER_REQUEST；"
+        "它是本轮权威目标，不是 Critic 缺陷，后来的 authoritative_user_override 优先于"
+        "与其冲突的旧创作选择。你仍需根据完整语义决定最小连贯范围：少数现有场可完成时列出"
+        "具体 affected_scene_sequences；需要修改全部现有场但不改变全局结构时列出全部场次；"
+        "只有必须增删重排场次、改变全局角色地点契约或重建主要因果结构时才不列场次，"
+        "将任务交回 Story Architect。"
         "输入前提本身缺少关键选择时标为 SOURCE_CONCEPT_GAP；当前文本制造了矛盾、动机断裂、"
         "负担过重或修订回归时标为 OUTLINE_DEFECT；缺少文本证据，或实际属于表演、资产、生成、"
         "镜头、剪辑的问题标为 CRITIC_OVERREACH，并设 should_revise=false。"
         "每个 routed issue 恰好诊断一次，但多个相关问题可以组织成同一组连贯修复。\n\n"
         "每个 action 必须原样引用 routed issue 的稳定 issue_id；issue_index 只是旧记录"
         "兼容字段，不能用它取代语义身份。"
+        "affected_scene_sequences 与 metadata_targets 是正交的语义分派：前者表示需要 Writer "
+        "修改的具体场次，后者表示还必须同步 TITLE、STORY_SUMMARY、STORY_INTENT、"
+        "ENDING_CONTRACT 或 PROJECT_BIBLE。只改全局元数据时允许不列场次但必须列出 "
+        "metadata_targets；场次和元数据都要改时两者都列。只有必须增删重排场次、改变"
+        "全局角色地点身份契约或重建主要因果结构，且不是现有元数据字段即可表达时，才让"
+        "场次和 metadata_targets 同时为空并交回 Story Architect。"
         "保护用户明确承诺、StoryIntent 和已经成立的优点；不能为了省制作成本删减用户承诺。"
         "后来的 authoritative_user_override 优先，不能偷偷回滚用户已经编辑的版本。"
         "审校报告是独立工件，不要求把审校文字或附录塞进故事。"
@@ -1702,8 +1786,7 @@ def _story_repair_plan_prompt(
         "快速兑现或无厘头，不要用现实主义标准把它磨平。修复计划停留在命题、场景、动作、对白"
         "与时长分配层，不写镜头。user_overridable 必须为 true。"
         "只有修复确实需要场景间移动时长时才设 target_duration_change_required=true，"
-        "并列出所有提供或接收时长的场景。\n\n"
-        f"{skill_prompt.text}"
+        "并列出所有提供或接收时长的场景。"
     )
     payload = {
         "source_contract": {
@@ -1720,6 +1803,8 @@ def _story_repair_plan_prompt(
         ),
         "current_outline": outline.model_dump(mode="json"),
         "routed_story_review": review.model_dump(mode="json"),
+        "selected_narrative_skill_ids": list(selected_narrative_skill_ids),
+        "selected_official_method_skill_ids": list(selected_method_skill_ids),
         "prior_revision_history": (revision_history or [])[-3:],
         "previous_structural_feedback": retry_feedback,
         "output_schema": _fresh_story_repair_plan_schema(),
@@ -1735,8 +1820,8 @@ def _fallback_story_repair_plan(
     source_promise = request.input_text.strip() or outline.story_summary
     return StoryRepairPlan(
         summary=(
-            "Repair Planner 不可用；按 Script Critic 已明确归属给 "
-            "Story Architect 的问题形成最小修订计划。"
+            "Leader 未取得新的语义返修方案；按 Verifier 已明确归属给 "
+            "Writer 的问题形成最小修订计划。"
         ),
         source_promise=source_promise[:1200],
         invariants=list(review.strengths),
@@ -1744,10 +1829,14 @@ def _fallback_story_repair_plan(
             StoryRepairAction(
                 issue_index=index,
                 issue_id=issue.issue_id,
-                diagnosis=StoryRepairDiagnosis.OUTLINE_DEFECT,
+                diagnosis=(
+                    StoryRepairDiagnosis.USER_REQUEST
+                    if issue.category == "USER_REQUEST"
+                    else StoryRepairDiagnosis.OUTLINE_DEFECT
+                ),
                 should_revise=True,
                 rationale=(
-                    "该问题已由 Script Critic 归属到 Story Architect，"
+                    "该问题已由 Verifier 归属到 Writer，"
                     "但未完成独立来源诊断。"
                 ),
                 affected_scene_sequences=list(issue.scene_sequences),
@@ -1770,6 +1859,8 @@ def _fresh_story_repair_plan_schema() -> dict[str, object]:
     required = cast(list[str], action_schema.setdefault("required", []))
     if "issue_id" not in required:
         required.append("issue_id")
+    if "metadata_targets" not in required:
+        required.append("metadata_targets")
     return schema
 
 
@@ -1777,7 +1868,7 @@ def normalize_story_repair_plan_issue_ids(
     review: ScriptReviewReport,
     plan: StoryRepairPlan,
 ) -> StoryRepairPlan:
-    """Resolve legacy indices once, then make stable Critic IDs authoritative."""
+    """Resolve legacy indices once, then make stable Verifier IDs authoritative."""
 
     issue_by_index = {
         index: issue for index, issue in enumerate(review.issues, start=1)
@@ -1828,7 +1919,7 @@ def _validate_story_repair_plan(
         or len(plan.actions) != len(expected_ids)
     ):
         raise ValueError(
-            "Story Repair Planner must diagnose every routed issue ID exactly once: "
+            "Leader must route every Verifier issue ID exactly once: "
             f"expected={sorted(expected_ids)}, actual={sorted(actual_ids)}"
         )
     if not expected_ids:
@@ -1836,7 +1927,7 @@ def _validate_story_repair_plan(
         actual_indices = {action.issue_index for action in plan.actions}
         if actual_indices != expected_indices:
             raise ValueError(
-                "Legacy Story Repair Planner must diagnose every routed issue exactly once: "
+                "Legacy repair plan must diagnose every routed issue exactly once: "
                 f"expected={sorted(expected_indices)}, actual={sorted(actual_indices)}"
             )
     known_scenes = {scene.sequence for scene in outline.scenes}
@@ -1850,7 +1941,7 @@ def _validate_story_repair_plan(
     )
     if invalid_scenes:
         raise ValueError(
-            "Story Repair Planner referenced unknown scenes: "
+            "Leader repair plan referenced unknown scenes: "
             + ", ".join(str(value) for value in invalid_scenes)
         )
     duration_sequences = {
@@ -1862,7 +1953,7 @@ def _validate_story_repair_plan(
     _validate_duration_reallocation_feasibility(
         outline,
         duration_sequences,
-        owner="Story Repair Planner",
+        owner="Leader repair routing",
     )
 
 
@@ -1898,21 +1989,28 @@ def _story_metadata_revision_prompt(
     source_contract: StorySourceContract,
     verification: StoryRevisionVerification | None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
 ) -> tuple[str, str]:
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.CONCEPT, ProductionSkillRole.WRITER),
         additional_skill_ids=selected_narrative_skill_ids,
+        method_skill_ids=selected_method_skill_ids,
     )
     instructions = (
         "你是 story-metadata revision Agent。只返回 JSON，并严格匹配 StoryMetadataRevisionPatch。"
         "这是稀疏的全局元数据对齐，不是场景或剧本重写。只可更新 title、story_summary、"
-        "已经存在的人物/地点/道具描述，以及现有全局 style。资产 patch 只能用 "
+        "StoryIntent、EndingContract、已经存在的人物/地点/道具描述，以及现有全局 style。"
+        "只处理 repair plan 的 active action 在 metadata_targets 中明确列出的类别；"
+        "资产 patch 只能用 "
         "character_id、location_id 或 prop_id 精确选择已有实体，不得用名称反推身份；"
         "不得增加、删除或改名资产，不得改变年龄，也不得返回场景、对白、时长、镜头语言"
         "或 schema 外字段。无需变化的字段全部省略；当前元数据已符合修复计划时允许空 patch。"
-        "SourceContract、StoryIntent、EndingContract 与实际可读剧本优先于 repair-plan invariants。"
+        "最新 authoritative_user_override 与 SourceContract 优先于继承下来的 StoryIntent、"
+        "EndingContract 和实际可读剧本；当用户本轮正是在纠正旧契约时，必须同步修正这些"
+        "字段，而不是把旧值当作不可修改的保护项。除此以外，SourceContract、StoryIntent、"
+        "EndingContract 与实际可读剧本优先于 repair-plan invariants。"
         "invariants 只表示尽量保留的已成立内容；若它与上游契约冲突，或只是声称了"
         "观众在剧本中看不到的信息，不得用它为缺失文本辩护。若提供 Verifier 反馈，"
         "只处理反馈涉及的元数据，保留无关内容。\n\n"
@@ -1929,6 +2027,25 @@ def _story_metadata_revision_prompt(
             else None
         ),
         "story_repair_plan": repair_plan.model_dump(mode="json"),
+        "requested_metadata_targets": sorted(
+            {
+                *(
+                    target.value
+                    for action in repair_plan.actions
+                    if action.should_revise
+                    for target in action.metadata_targets
+                ),
+                *(
+                    target.value
+                    for violation in (
+                        verification.violations
+                        if verification is not None
+                        else []
+                    )
+                    for target in violation.metadata_targets
+                ),
+            }
+        ),
         "revision_verification": (
             verification.model_dump(mode="json")
             if verification is not None
@@ -1937,6 +2054,16 @@ def _story_metadata_revision_prompt(
         "current_global_metadata": {
             "title": outline.title,
             "story_summary": outline.story_summary,
+            "story_intent": (
+                outline.story_intent.model_dump(mode="json")
+                if outline.story_intent is not None
+                else None
+            ),
+            "ending_contract": (
+                outline.ending_contract.model_dump(mode="json")
+                if outline.ending_contract is not None
+                else None
+            ),
             "characters": [
                 item.model_dump(mode="json") for item in outline.characters
             ],
@@ -1999,6 +2126,7 @@ def _story_revision_verifier_prompt(
     repair_plan: StoryRepairPlan,
     source_contract: StorySourceContract,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
     previous_verification: StoryRevisionVerification | None = None,
     issue_ledger: list[StoryIssueLedgerEntry] | None = None,
@@ -2008,41 +2136,37 @@ def _story_revision_verifier_prompt(
         roles=(ProductionSkillRole.REVISION_VERIFIER,),
         include_constitution=False,
         additional_skill_ids=selected_narrative_skill_ids,
+        method_skill_ids=selected_method_skill_ids,
     )
     instructions = (
         "你是 story-revision verifier Agent（终稿修订验收 Agent）。只返回 JSON，并严格匹配 "
-        "StoryRevisionVerification。你在同一次阅读中完成两项责任：先核对本轮局部 Writer 是否真正完成"
-        "repair plan 中 should_revise=true 的事项，再抛开修复说明，从第一场到最后一场自然冷读整份"
-        "修订稿。这不是第二个 Critic 和审美门禁，而是把修复验收与终稿通读合并成一个完整责任。"
-        "保护 SourceContract、StoryIntent、EndingContract 和后来的用户覆盖；只按普通观众能读到的剧本文本与跨场状态"
-        "判断，不要求镜头、资产、表演、生成或剪辑修改。只要不同创作选择确实解决了问题并让整稿成立，"
-        "就不能因为它不符合你的个人偏好而拒绝。repair-plan invariants 是保留意图，"
-        "不能压过 SourceContract、StoryIntent 或 EndingContract，也不能代替剧本本身展示因果。\n\n"
-        "修复核对时可使用 repair_verification_context 中的 Critic、Repair Plan、Issue Ledger 和"
-        "修订前后可读文本。进入整稿冷读后，只使用 audience_cold_read 中的 user_brief、"
-        "SourceContract、StoryIntent、EndingContract 与修订后可读终稿。不得用 outline summary、"
-        "prop brief、continuity、repair claim 或其他隐藏元数据为终稿补因果；界面宣告了结果"
-        "只能证明该结果出现，不能自动证明文本中缺失的原因或过程。\n\n"
-        "整稿冷读时，根据用户目标和 StoryIntent 语义判断观众体验、剧情推进、人物主动性、情绪或类型回报、"
-        "信息密度、重复结构与结尾落点。夸张、荒诞、无厘头和局部现实性跳跃不是天然缺陷；只有当它们破坏"
-        "本剧承诺、内部规则或观众跟随时才报告。把人物关系、群体态度、资源和权限当作跨场状态，问每一场究竟改变了什么；"
-        "换地点、换道具或换见证者但仍在重复震惊、认可、让位、授予、交接或庆功，不自动算新的推进。\n\n"
-        "按修订后成稿的实际顺序重新自然演读每一场：对白、动作、停顿、反应和观众读清信息都占用时间；"
-        "只有文字明确写出同时发生、蒙太奇或可连续掠过时才按并行处理，不替剧本补想象中的快切。在 summary 和"
-        "followup_rationale 中给出各场与全剧的可信表演时长判断、主要压力点，以及当前成稿是否能自然承载目标时长。"
-        "这些是 Agent 的阅读证据，不使用字数、语速、问题数、严重度或固定轮次代替判断。\n\n"
-        "以 Critic 的稳定 issue_id 作为修复身份：把已满足的 repair-plan 问题写入 "
+        "StoryRevisionVerification。你是唯一的 Script Verifier：在同一次阅读中先核对已分派的修复，再从头到尾"
+        "读一遍修订稿，不再转交第二个冷读角色。最新 authoritative_user_override 与 SourceContract "
+        "优先于继承的 StoryIntent、EndingContract；保护与本轮用户修改不冲突的契约和已成立内容。"
+        "只处理剧本文本，不把镜头、资产、表演、生成或剪辑问题退回 Writer。修订采用了不同写法但已经解决问题时，"
+        "不因个人偏好拒绝。\n\n"
+        "核对修复时使用 repair_verification_context；若 active repair action 声明了 metadata_targets，"
+        "必须同时比较 original_global_story_metadata 与 revised_global_story_metadata，确认对应字段已经"
+        "与最新用户要求和可读剧本一致。未声明 metadata target 时不要无故改动或审判隐藏元数据。"
+        "整稿通读时只使用 audience_cold_read 中的 user_brief、"
+        "SourceContract、StoryIntent、EndingContract 和修订后可读剧本；不用 outline summary、continuity、repair claim 或其他"
+        "隐藏元数据替观众补齐剧情。\n\n"
+        "整稿只聚焦五项：开篇是否迅速建立冲突和观看动力；主角的处境、目标与行动路线是否清楚；"
+        "铺垫是否释放成爽点、情绪回报或反转；对立力量的受挫、反应或反噬是否可见；结尾是否完成 EndingContract。"
+        "决定性胜利应能看到主角自身选择、行动或能力的作用。夸张、荒诞、无厘头、类型化跳跃或为了喜剧与爽感升级的"
+        "重复都不是天然缺陷。只有观众无法理解当前行动与结果，或文本违反自己明确建立的规则时，才以逻辑理由否决。"
+        "时长只做整体尺度判断；若成稿与目标时长明显不在同一尺度，在 summary 或 followup_rationale 中简要指出压力点即可，"
+        "不逐场建立表演时长账本。\n\n"
+        "以前次 Verifier 的稳定 issue_id 作为修复身份：把已满足的 repair-plan 问题写入 "
         "satisfied_issue_ids；satisfied_issue_indices 只作旧记录兼容。若输入带有上一轮"
-        "Issue Ledger 是该 issue_id 的历史证据，包括已接受取舍和交接状态；"
-        "用它区分持续问题、已解决问题与新回归，不要把历史本身当成新问题。"
-        "previous_revision_verification，必须逐项验收其 violation：已解决就把该 issue_id 写入"
+        "Issue Ledger，用它区分持续问题、已解决问题与新回归，不要把历史本身当成新问题。"
+        "若有 previous_revision_verification，已解决的 violation 将 issue_id 写入"
         "satisfied_issue_ids，仍未解决就在新 violation 中沿用同一 issue_id，不得遗忘"
-        "或换名。若整稿通读发现 Critic 先前漏检、修订后仍持续存在或本轮新引入的交付级问题，"
-        "为它创建稳定 issue_id。若原问题未真正解决，或者整稿通读仍发现会影响交付的具体问题，"
-        "则 accepted=false；每个 violation 都必须引用准确场次与文本证据，并给出"
-        "不会破坏已成立内容的聚焦返修指令。不得因审校附录没有写进场景而拒绝。只有返修确实需要移动场景目标秒数时"
-        "才标记时长变化，并列全相关场次。若修复事项和整稿冷读都已通过，则 accepted=true 且 recommended_followup=FINALIZE："
-        "你已经完成了终稿冷读，不再把稿件转交给独立 Final Cold Read。FINAL_COLD_READ 值仅用于兼容旧运行记录。"
+        "或换名。新发现的交付级问题使用新的稳定 issue_id。只有原问题未解决，或五项通读发现会实质破坏当前观看承诺的"
+        "具体问题时，才 accepted=false。每个 violation 引用准确场次与文本证据，并给出不破坏已成立内容的聚焦返修指令。"
+        "不得因审校附录没有写进场景而拒绝。只有返修确实需要移动场景目标秒数时才标记时长变化。"
+        "若修复事项和整稿通读都已通过，则 accepted=true 且 recommended_followup=FINALIZE："
+        "你已经完成了终稿冷读，不再把稿件转交给另一个独立审校角色。"
         "结果始终可被用户覆盖。\n\n"
         f"{skill_prompt.text}"
     )
@@ -2061,6 +2185,42 @@ def _story_revision_verifier_prompt(
     repair_verification_context = {
         "original_readable_screenplay": original_readable_screenplay,
         "revised_readable_screenplay": revised_readable_screenplay,
+        "original_global_story_metadata": {
+            "title": original_outline.title,
+            "story_summary": original_outline.story_summary,
+            "story_intent": (
+                original_outline.story_intent.model_dump(mode="json")
+                if original_outline.story_intent is not None
+                else None
+            ),
+            "ending_contract": (
+                original_outline.ending_contract.model_dump(mode="json")
+                if original_outline.ending_contract is not None
+                else None
+            ),
+            "characters": [
+                item.model_dump(mode="json") for item in original_outline.characters
+            ],
+            "locations": [
+                item.model_dump(mode="json") for item in original_outline.locations
+            ],
+            "props": [item.model_dump(mode="json") for item in original_outline.props],
+            "style": original_outline.style.model_dump(mode="json"),
+        },
+        "revised_global_story_metadata": {
+            "title": revised_outline.title,
+            "story_summary": revised_outline.story_summary,
+            "story_intent": resolved_story_intent,
+            "ending_contract": resolved_ending_contract,
+            "characters": [
+                item.model_dump(mode="json") for item in revised_outline.characters
+            ],
+            "locations": [
+                item.model_dump(mode="json") for item in revised_outline.locations
+            ],
+            "props": [item.model_dump(mode="json") for item in revised_outline.props],
+            "style": revised_outline.style.model_dump(mode="json"),
+        },
         "routed_story_review": review.model_dump(mode="json"),
         "story_repair_plan": repair_plan.model_dump(mode="json"),
         "issue_ledger": [
@@ -2113,10 +2273,12 @@ def _scene_director_prompt(
     handoff_in: SceneContinuitySummary,
     review_handoff: list[dict[str, object]] | None = None,
     retry_feedback: str | None = None,
+    selected_method_skill_ids: tuple[str, ...] = (),
 ) -> tuple[str, str]:
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.PLANNER, ProductionSkillRole.DIRECTOR),
+        method_skill_ids=selected_method_skill_ids,
     )
     next_scene = next(
         (item for item in outline.scenes if item.sequence == scene.sequence + 1),
@@ -2143,7 +2305,7 @@ def _scene_director_prompt(
         "只在反应镜头会改变解读或连续性时添加它。这是节奏建议，不是固定镜头数规则。"
         "不要为填满时长而拉长高风险的多接触动作。不要把场次粗略的非对白时间填成泛化的"
         "观望、等待、行走或重复证明；只使用场次契约已支持的动作，并让每个镜头揭示变化或必要因果。"
-        "路由过来的 Critic 意见只是制作建议：只处理由本层或后续制作层负责的部分，"
+        "路由过来的 Verifier 意见只是制作建议：只处理由本层或后续制作层负责的部分，"
         "不改写故事事实，不添加解释性对白。reference_needs 只使用全局资产已声明的名称，"
         "且只为镜头里真实可见的主体添加最小需求。只在台词中被提到的角色、明确留在画外的道具，"
         "或仅由离场转场提到的下一地点，都不应成为视觉参考需求。若一个镜头含有多个有意义的"
@@ -2692,7 +2854,10 @@ def create_story_architecture(
     source_contract: StorySourceContract | None = None,
     story_intent: StoryIntent | None = None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
+    revision_instruction: str | None = None,
+    current_outline: EpisodeOutline | None = None,
 ) -> StoryArchitectureResult:
     """Run one recoverable Story Architect unit, with a local scaffold fallback."""
 
@@ -2725,7 +2890,10 @@ def create_story_architecture(
         resolved_source_contract,
         resolved_story_intent,
         selected_narrative_skill_ids,
+        selected_method_skill_ids,
         retry_feedback,
+        revision_instruction,
+        current_outline,
     )
     try:
         output = client.generate_text(
@@ -2774,9 +2942,10 @@ def review_story_outline(
     source_contract: StorySourceContract | None = None,
     issue_ledger: list[StoryIssueLedgerEntry] | None = None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
 ) -> ScriptCritiqueResult:
-    """Run the independent script critic without blocking later planning."""
+    """Run the script Verifier without blocking later planning."""
 
     if client is None:
         return ScriptCritiqueResult(
@@ -2790,6 +2959,7 @@ def review_story_outline(
         source_contract=source_contract,
         issue_ledger=issue_ledger,
         selected_narrative_skill_ids=selected_narrative_skill_ids,
+        selected_method_skill_ids=selected_method_skill_ids,
         retry_feedback=retry_feedback,
     )
     try:
@@ -2845,8 +3015,8 @@ def _fallback_review_disposition(
                 issue_index=index,
                 owner=issue.owner,
                 rationale=(
-                    f"Script Critic 已把 {issue.issue_id or '未提供 issue_id 的旧问题'} "
-                    f"归属给 {issue.owner.value}；是否回到剧本修订由 Critic "
+                    f"Script Verifier 已把 {issue.issue_id or '未提供 issue_id 的旧问题'} "
+                    f"归属给 {issue.owner.value}；是否回到剧本修订由 Verifier "
                     "的 requires_revision 语义判断决定。"
                 ),
             )
@@ -2873,10 +3043,10 @@ def _validate_review_disposition(
     if disposition.action == ScriptReviewDispositionAction.REVISE_STORY:
         if not review.requires_revision or not has_story_revision:
             raise ValueError(
-                "REVISE_STORY requires the Critic to request revision and route a story issue"
+                "REVISE_STORY requires the Verifier to request revision and route a story issue"
             )
     elif review.requires_revision and has_story_revision:
-        raise ValueError("A Critic-requested story revision must return to the writer")
+        raise ValueError("A Verifier-requested story revision must return to the writer")
     if not review.issues and disposition.action != ScriptReviewDispositionAction.CONTINUE:
         raise ValueError("A review without issues must continue")
     if review.issues and disposition.action == ScriptReviewDispositionAction.CONTINUE:
@@ -2887,7 +3057,7 @@ def story_revision_issue_indices(
     review: ScriptReviewReport,
     disposition: ScriptReviewDisposition,
 ) -> set[int]:
-    """Return story issues selected by the Critic for the current revision pass."""
+    """Return story issues selected by the Verifier for the current revision pass."""
 
     issue_by_index = {
         index: issue for index, issue in enumerate(review.issues, start=1)
@@ -2907,16 +3077,16 @@ def route_story_review(
     review: ScriptReviewReport,
     client: LanguageProviderClient | None,
 ) -> ScriptReviewRoutingResult:
-    """Route the Critic's typed ownership without another serial model call."""
+    """Route the Verifier's typed ownership without another serial model call."""
 
     del request, outline, client
     disposition = _fallback_review_disposition(
         review,
         rationale=(
-            "直接执行 Script Critic 的结构化 owner 与 "
+            "直接执行 Script Verifier 的结构化 owner 与 "
             "requires_revision 判断，不另加关键词或次数门槛。"
             if review.issues
-            else "Script Critic 未报告问题，按其语义后续建议完成或进入最终冷读。"
+            else "Script Verifier 未报告问题，按其语义判断直接完成。"
         ),
     )
     _validate_review_disposition(review, disposition)
@@ -3056,9 +3226,10 @@ def plan_story_repair(
     source_contract: StorySourceContract | None = None,
     revision_history: list[dict[str, object]] | None = None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
 ) -> StoryRepairPlanningResult:
-    """Diagnose Writer versus Critic responsibility before changing the outline."""
+    """Let the Leader route Verifier findings back to the Writer."""
 
     contract_result = (
         compile_story_source_contract(request, client)
@@ -3078,7 +3249,7 @@ def plan_story_repair(
             used=False,
             warnings=[
                 *contract_result.warnings,
-                "Story Repair Planner 未配置，采用 routed review 的最小修订计划。",
+                "Leader 未配置语言模型，采用 Verifier 交接的最小修订计划。",
             ],
         )
     instructions, input_text = _story_repair_plan_prompt(
@@ -3088,6 +3259,7 @@ def plan_story_repair(
         resolved_source_contract,
         revision_history,
         selected_narrative_skill_ids,
+        selected_method_skill_ids,
         retry_feedback,
     )
     try:
@@ -3102,7 +3274,7 @@ def plan_story_repair(
             action.issue_id is None for action in plan.actions
         ):
             raise ValueError(
-                "Fresh Story Repair Planner actions require stable issue IDs"
+                "Fresh Leader repair actions require stable issue IDs"
             )
         plan = normalize_story_repair_plan_issue_ids(review_report, plan)
         _validate_story_repair_plan(review_report, outline, plan)
@@ -3119,7 +3291,8 @@ def plan_story_repair(
             used=False,
             warnings=[
                 *contract_result.warnings,
-                "Story Repair Planner 不可用，采用 routed review 的最小修订计划："
+                "Leader 本次未形成可采用的语义返修方案，"
+                "采用 Verifier 交接的最小修订计划："
                 + _compact_error(error)
             ],
         )
@@ -3214,6 +3387,16 @@ def apply_story_metadata_revision_patch(
                 if patch.story_summary is not None
                 else {}
             ),
+            **(
+                {"story_intent": patch.story_intent}
+                if patch.story_intent is not None
+                else {}
+            ),
+            **(
+                {"ending_contract": patch.ending_contract}
+                if patch.ending_contract is not None
+                else {}
+            ),
             "characters": characters,
             "locations": locations,
             "props": props,
@@ -3250,6 +3433,7 @@ def revise_story_metadata(
     *,
     verification: StoryRevisionVerification | None = None,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
 ) -> StoryMetadataRevisionResult:
     """Run one recoverable provider call that can change global metadata only."""
@@ -3271,6 +3455,7 @@ def revise_story_metadata(
         source_contract,
         verification,
         selected_narrative_skill_ids,
+        selected_method_skill_ids,
         retry_feedback,
     )
     try:
@@ -3322,6 +3507,8 @@ def _fresh_story_revision_verification_schema() -> dict[str, object]:
     )
     if "issue_id" not in violation_required:
         violation_required.append("issue_id")
+    if "metadata_targets" not in violation_required:
+        violation_required.append("metadata_targets")
     return schema
 
 
@@ -3451,12 +3638,13 @@ def _validate_story_revision_verification(
     unscoped_categories = [
         violation.category
         for violation in verification.violations
-        if not violation.scene_sequences
+        if not violation.scene_sequences and not violation.metadata_targets
     ]
     if unscoped_categories:
         raise ValueError(
             "Story Revision Verifier violations must identify at least one repairable "
-            "scene; independent ScriptReviewReport delivery is not a scene violation: "
+            "scene or global metadata target; independent ScriptReviewReport delivery "
+            "is not a repair violation: "
             + ", ".join(unscoped_categories)
         )
     duration_sequences = {
@@ -3482,6 +3670,7 @@ def verify_story_revision(
     client: LanguageProviderClient | None,
     *,
     selected_narrative_skill_ids: tuple[str, ...] = (),
+    selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
     previous_verification: StoryRevisionVerification | None = None,
     issue_ledger: list[StoryIssueLedgerEntry] | None = None,
@@ -3502,6 +3691,7 @@ def verify_story_revision(
         repair_plan,
         source_contract,
         selected_narrative_skill_ids,
+        selected_method_skill_ids,
         retry_feedback,
         previous_verification,
         issue_ledger,
@@ -3550,6 +3740,7 @@ def direct_story_scene(
     client: LanguageProviderClient | None,
     review_handoff: list[dict[str, object]] | None = None,
     retry_feedback: str | None = None,
+    selected_method_skill_ids: tuple[str, ...] = (),
 ) -> SceneDirectionResult:
     """Direct exactly one scene so callers can persist a recovery point after it."""
 
@@ -3573,6 +3764,7 @@ def direct_story_scene(
         handoff,
         review_handoff,
         retry_feedback,
+        selected_method_skill_ids,
     )
     try:
         output = client.generate_text(
@@ -3623,7 +3815,7 @@ def assemble_multi_agent_planning_result(
     _validate_locked_dialogue(request, resolved_source_contract, plan)
     planner = f"multi-agent:{outline_source}"
     if critic_used:
-        planner += " + script critic"
+        planner += " + script verifier"
     if revision_rounds:
         planner += f" revised-{revision_rounds}x"
     planner += " + scene directors"
@@ -3656,7 +3848,7 @@ def assemble_script_only_planning_result(
 
     planner = f"multi-agent:{outline_source}"
     if critic_used:
-        planner += " + script critic"
+        planner += " + script verifier"
     if revision_rounds:
         planner += f" revised-{revision_rounds}x"
     planner += " + script-only"

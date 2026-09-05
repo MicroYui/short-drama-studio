@@ -9,7 +9,7 @@
 其中：
 
 - **Tool** 是可独立调用的稳定能力，负责读取、修改、生成、检查或组装真实工件；
-- **Skill** 是可审阅、可编辑的文件化知识：共享中文角色保存通用职责，宽粒度 Format Skill 保存媒介/生产差异，Narrative Skills 保存可组合叙事方法；
+- **Skill** 是可审阅、可编辑的文件化知识：当前活动 Production Method Catalog 只包含 8 个来源可核验的 MiniMax-H3 官方仓库收录 Skill adapter，上游来源混合且只供维护；Format 只保留本地 schema/profile 映射，不自建领域创作理论；
 - **Agent** 理解用户目标，根据当前工件动态制定或修订计划，组合 Tools，并在需要专业角色时委派子 Agent；制作类型由用户或请求选择 `ProductionProfile`，再由 Production Manager 确定对应的 Skill 映射，不由 Agent 自行更换格式 Skill；
 - **Agent Harness** 只保留运行时所需的类型、依赖、持久化、恢复、有限推进和外部任务对账，不替 Agent 写死创作流程。
 
@@ -17,11 +17,11 @@
 
 首次剧本规划在职责上称为 **Content Planning Job**，当前代码、SQLite 记录和内部合同继续沿用兼容实现名 `PlanningRun`，本次不做全量类型重命名。它不是第二套项目控制面，只是 `planning.advance` Tool 背后的领域子任务和持久化内容规划游标：已配置语言模型的 Agent-owned 创作无论时长或 `GUIDED/AUTO_DRAFT` 模式，`project.create` 都先写入同一项目 ID 的 `INPUT` scaffold 与当前 AgentRun 拥有的 Content Planning Job，随后 Production Manager 每个 Action 只推进一个规划单元；FINALIZE 再把同一 ProjectDocument 更新为 `PLANNED` 或 `SCRIPT_READY`。不带 owner 的兼容创建只建立不补写创意的本地 scaffold，不允许语言 Provider 走同步整稿入口。AgentRun 决定是否、何时推进以及作业结束后的下一步；Content Planning Job 只拥有恢复内容规划所需的游标和中间工件，不拥有资产、生成、检查或时间线编排。旧 `AutonomousRun` 控制面已删除；Provider Task 继续使用自己的任务状态机完成提交、轮询、下载和结果对账。
 
-内容作业的 Story Orientation Agent 先保存 `StorySourceContract`（用户承诺/禁区/开放选择）与 `StoryIntent`（观众体验、戏剧引擎、推进策略、调性/可信度、受保护元素和偏移风险），再语义选择零个或多个 Narrative Skills。`SCRIPT_LOCKED` 普通文本中的有声台词由该 Agent 按完整语义结构化到 `StorySourceContract.locked_dialogue`；调用方也可以直接传入结构化条目。确定性代码只检查文本逐字存在、原始顺序和调用方结构未被改变，不用正则、冒号格式或关键词推断 speaker、旁白或内心音。`EndingContract` 另行保护本集兑现、线索闭合与续集策略；`ProjectBible.style` 只保存视觉、摄影、材质、色彩与声音表达。四者都是项目工件的不同责任，不相互代替。
+内容作业先保存 `StorySourceContract`（用户承诺/禁区/开放选择）与 `StoryIntent`（观众体验、戏剧引擎、推进策略、调性/可信度、受保护元素和偏移风险）。`SCRIPT_LOCKED` 普通文本中的有声台词由 Agent 按完整语义结构化到 `StorySourceContract.locked_dialogue`；调用方也可以直接传入结构化条目。确定性代码只检查文本逐字存在、原始顺序和调用方结构未被改变，不用正则、冒号格式或关键词推断 speaker、旁白或内心音。`EndingContract` 另行保护本集兑现、线索闭合与续集策略；`ProjectBible.style` 只保存视觉、摄影、材质、色彩与声音表达。这些都是项目工件的不同责任，不相互代替。
 
 当前不抽象通用 `ChildJob`。Content Planning Job 与 Provider Task 的状态、结果和恢复语义不同；在尚未出现多个具有相同生命周期的同级领域作业前，提取共同父模型只会模糊责任。未来只有在资产规划、批量生成等作业真实出现重复的创建、推进、取消和恢复合同时，再从已有实现中提取最小公共接口。
 
-当前 Content Planning Job 按可恢复游标推进 Story Orientation、轻量 Blueprint、逐场 Writer、当前整稿 Critic，以及语义需要时的 Repair/Verifier 或最终冷读。最终冷读只处理需要脱离大纲元数据重新通读的具体疑点，不是固定收尾门。Critic 为同一语义问题保留稳定 ID，在 Issue Ledger 中累积状态、文本/修复证据、演变、取舍和下游 handoff。它的 `requires_revision` 是目标观众视角的语义判断，Production Manager 直接执行；不再叠加一个严重度/问题数门槛或空的 Review Router Agent。修订以受影响场次为单位持久化，不使用一次性整稿覆盖；原先 40 场、跨场 12 场这类低常数创作上限已经移除，长任务按场次与修订单元推进；审校/修订不设固定轮数、问题清零目标或总超时。
+当前责任拓扑统一为 `Leader → Worker → Verifier`。Content Planning Job 使用可恢复游标持久化蓝图、逐场 Writer Worker 产出、Verifier 验收和必要的原 Worker 聚焦修订。Issue Ledger 仍保留问题证据和修复交接；`SCRIPT_CRITIC`、`STORY_REPAIR`、`REVIEW_ROUTER`、`FINAL_COLD_READ` 只作历史数据或状态兼容，不再对应活动链路中的独立 Agent/Skill。修订以受影响场次为单位持久化，不设固定轮数、问题数、严重度或总超时门槛。
 
 ## 1. 最终分层
 
@@ -61,7 +61,7 @@ Production Manager 是一次制片目标的根 Agent，负责：
 6. 根据 Tool 结果、AgentResult 和用户新指令继续、跳过、并行或修订计划；
 7. 在每个有意义的边界写入恢复检查点。
 
-它不是“Story Architect 后必须进 Critic”这类固定转移表。当用户只要修改第三场的一句台词时，Agent 可以直接计划“语义影响分析 → 局部 Patch → 受影响镜头复核”，无需重跑整部剧的默认 playbook。
+它不是固定的角色转移表。当用户只要修改第三场的一句台词时，Agent 可以直接计划“语义影响分析 → 局部 Patch → 受影响镜头复核”，无需重跑整部剧的默认 playbook。
 
 对应实现位于 `backend/short_drama/production_manager.py`。`LanguageProductionPlanner` 使用已配置语言模型基于完整语义生成计划；用户或测试也可直接提交类型化 `AgentPlanProposal`。未配置语言模型时，`LocalProductionPlanner` 只确认已经存在的终态事实，例如导出已完成、或调用方明确不要求导出且时间线已就绪；GUIDED bootstrap 建立项目后也可以结束在用户可继续编辑的状态。任何尚需创作、选择 Provider 路线、挑选候选或安排下游 Tool 的非终态目标，都必须由语言 Planner 或调用方显式计划，Local fallback 不根据 stage、目标文字、关键词或 Tool Catalog 猜路线。
 
@@ -131,9 +131,9 @@ Plan 是 Agent 可修订的工作假设，不是业务真相源。每次重新�
 → 基于最新 ContextPack 继续重规划，直到 goal_complete=true
 ```
 
-用户在已有项目上点击新的 Agent 制作任务时，直接调用 `POST /projects/{project_id}/agent-runs`。桌面端只为本次从默认入口启动的 `AUTO_DRAFT` Run 保持自动续跑：Mock 可快速执行当前就绪步骤；真实 H3 每轮只执行一个 Agent Action，并根据项目阶段、MiniMax 任务状态、Take、Manifest 与 Export 的实际变化决定是否重置等待时间，状态未变化时按 3/6/12/15 秒退避。续跑持续到完成、失败、需要 WorkOrder/用户输入或进入需人工处理状态；GUIDED 与 Agent 面板手动 Run 保持停靠式交互。
+用户在已有项目上点击新的 Agent 制作任务时，直接调用 `POST /projects/{project_id}/agent-runs`。桌面端只为本次从默认入口启动的 `AUTO_DRAFT` Run 保持自动续跑，并统一调用 `POST /agent-runs/{run_id}/advance`：后端根据 WorkOrder 的 `next_owner`，优先推进一个可由 Worker 继续的独立 Team batch，否则推进一个 Leader Action/重规划单元。一次调用不隐藏 drain、固定创作重试或 Worker 返回后的 Leader 重规划；批次失败直接可见并停止。真实 H3 仍根据项目阶段、MiniMax 任务状态、Take、Manifest 与 Export 的实际变化决定退避等待。续跑持续到完成、失败、明确 `USER_INPUT` 或进入确需人工处理状态；GUIDED 与 Agent 面板手动 Run 保持停靠式交互。
 
-同一项目无人值守推进期间，桌面端保留项目切换、刷新、Agent Run/WorkOrder 只读查看，但不挂载会主动写入的 Script、Assets、Shots、H3、Takes、Timeline 与 QA 面板，并在父级写处理器再次校验运行状态；这样 H3 面板的内部轮询也不会与 Agent 同时修改 `ProjectDocument`。当前桌面窗口一次只启动一个无人值守续跑，新建项目或启动另一个 `AUTO_DRAFT` 会等当前 Run 完成或暂停。进程重启后只恢复最新项目未结束且显式标记为 `unattended` 的 AgentRun；等待 WorkOrder 或用户输入的 Run 继续由 Agent 控制面展示。桌面端不查询、展示或推进独立 PlanningRun；Agent-owned Content Planning Job（当前 `PlanningRun`）只由所属 AgentRun 通过 `planning.advance` 推进。
+同一项目无人值守推进期间，桌面端保留项目切换、刷新、Agent Run/WorkOrder 只读查看，但不挂载会主动写入的 Script、Assets、Shots、H3、Takes、Timeline 与 QA 面板，并在父级写处理器再次校验运行状态；这样 H3 面板的内部轮询也不会与 Agent 同时修改 `ProjectDocument`。当前桌面窗口一次只启动一个无人值守续跑，新建项目或启动另一个 `AUTO_DRAFT` 会等当前 Run 完成或暂停。进程重启后只恢复最新项目未结束且显式标记为 `unattended` 的 AgentRun；`WORKER_DECISION/WORKER_TOOL` 会由统一 `advance` 续跑，只有 `USER_INPUT` 或真正无法自主推进的状态才暂停并在 Agent 控制面展示。桌面端不查询、展示或推进独立 PlanningRun；Agent-owned Content Planning Job（当前 `PlanningRun`）只由所属 AgentRun 通过 `planning.advance` 推进。
 
 ### 1.7 这几层与 workflow 的关系
 
@@ -202,30 +202,31 @@ backend/short_drama/skills/
 ├── shared/roles/*.md
 ├── workflows/
 │   └── end_to_end.md
-├── narrative/<skill>/
-│   ├── SKILL.md
-│   └── roles/*.md
+├── methods/minimax_h3_<method>/      # 8 个官方仓库收录 Skill 的本地薄 adapter
+│   └── SKILL.md
+├── official/minimax_h3/<skill>/     # pinned commit 的 23 个 Markdown/TXT + 8 个 meta.yaml
+├── translations/minimax_h3/<skill>/ # 官方英文附属 references 的忠实中译
 ├── formats/<format>/
 │   ├── SKILL.md
-│   ├── playbooks/default.md
-│   ├── references/*.md
-│   └── roles/*.md
+│   └── playbooks/default.md
 └── providers/<provider>/
     ├── SKILL.md
     └── references/*.md
 ```
 
-`workflows/end_to_end.md` 保存“内容→资产→分镜→生成→审片→时间线→导出”的中文通用方法；`shared/roles` 保存 Story Architect、Writer、Critic、Director 等中文通用职责；格式 `SKILL.md` 保存 profile、媒介、默认 playbook 路径和宽粒度稳定原则；`formats/*/roles` 只补充该格式差异；`narrative/<skill>` 保存可组合的叙事方法与支持角色。Provider Skill 只负责把 provider-neutral 镜头事实翻译成特定模型语法，不承担剧情、镜头决策或请求提交。
+`workflows/end_to_end.md` 保存现有工件与 Tool 的通用交接说明；`shared/roles` 保存 Leader、Worker 和 Verifier 使用的通用专业职责；格式 `SKILL.md` 只保存 profile/schema 适配。八个 MiniMax-H3 Method adapter 保留上游 `meta.yaml` 供内部版本维护，Agent-facing 标签保持中性，并按角色从 `official/minimax_h3` 和 `translations/minimax_h3` 加载上游原文/忠实中译的精确 section。Provider Skill 只负责把 provider-neutral 镜头事实翻译成特定模型语法，不承担剧情、镜头决策或请求提交。
 
-Story Orientation Agent 先阅读 Narrative Skill Catalog 的紧凑说明和支持角色，根据完整项目语义显式选择零个或多个 Skill。Loader/编译器只检查目录、ID 与角色支持，不使用关键词、正则、题材枚举或必选数量替 Agent 做选择。角色 Prompt 按“共享中文职责 → 宽粒度 Format Skill/Playbook → Agent 选中的 Narrative Skills → `StoryIntent` 与当前任务数据”组合；相关 `ExperienceMemory` 按需召回。H3 GPT 编译入口另叠加 `providers/minimax_h3` Prompt Skill。
+Production Manager 先阅读八个官方仓库收录 Production Method adapter 的紧凑说明和支持角色，根据完整项目语义显式选择零个或多个。Loader/编译器只检查 ID 与角色支持，不使用关键词、正则、trigger words、题材枚举或必选数量替 Agent 做选择。角色 Prompt 按“共享中文职责 → Format schema/profile adapter → 上游 Method 的角色相关精确 section → 当前任务数据”组合。H3 GPT 编译入口另叠加 `providers/minimax_h3` Prompt Skill。
+
+Production Manager 的计划修订可保留、替换或移除上游 Method IDs；专业 Worker/Verifier 只加载自己角色真正支持的上游 section。`CreatorInterests` 只能影响候选排序，不得作为运行时路由输入或权限边界。
 
 ### 3.2 Skill 负责与不负责的事
 
 Skill 负责：
 
-- 该类媒介/生产方式的长期原则；
-- 共享中文角色职责、格式角色补充和 Agent 可组合的叙事方法；
-- 共享流程上的详细类型制作方法；
+- 官方原文中的制作方法、工件合同和评审维度；
+- 共享中文职责与 Leader/Worker/Verifier 分工；
+- 本地 schema/profile 与官方方法的薄映射；
 - 对共享 Tools 的使用重点与结果解释。
 
 Skill 不负责：
@@ -233,25 +234,41 @@ Skill 不负责：
 - 不保存项目状态、Agent 进度或 Provider 任务；
 - 不定义第二套 Tool Schema；
 - 不直接发起外部调用；
-- 不用题材枚举、关键词路由或固定数量选择 Narrative Skills；
+- 不用题材枚举、关键词路由或固定数量选择 Skills；
 - playbook 不是可执行 DSL、强制工作流、Tool allowlist 或内容审批门。
+
+官方源文中的 Hub/Canvas 操作、强制确认、固定时长和固定重试次数会被原样保留用于溯源，但不成为当前 Harness 的执行契约。
 
 `StorySourceContract`、`StoryIntent`、`EndingContract` 与 `ProjectBible.style` 均是项目工件，不是 Skill 默认值。四视图或轻量群像资产、场景俯视/全景/功能区 coverage、时间线分镜的镜头/动作/台词/情绪拆分，以及 H3 中将 `@` alias 解析为真实 AssetVersion 与 Provider 媒体标签，分别属于资产、导演和 Provider 层。共享 Story Architect 不加载这些下游规则，免得为某个模型的输入格式反向改写故事。
 
 ## 4. 多视频类型：共享能力，分离制作方法
 
-当前文件化 Skill Catalog 包含：
+当前本地 Format schema/profile adapter 包含：
 
-| ProductionProfile | 内容重心 | Scene Director 等角色的差异 |
+| ProductionProfile | 本地适配责任 | 方法边界 |
 | --- | --- | --- |
-| `GENERAL_VIDEO` | 按用户意图选择节奏、氛围与视听形式 | 不强加短剧冲突、密度或剪辑偏好 |
-| `AI_SHORT_DRAMA` | 连续短剧消费场景、竖屏可读性与生成式生产 | 关注冷启动理解、多模态节奏、可生成镜头职责和局部返修，不预设爽剧、真人或动画答案 |
-| `DIGITAL_HUMAN` | 信息准确、主播身份稳定、自然语音、口型和辅助视觉的可读性 | 关注镜头视线、口播节奏、手势与 B-roll/图形是否真正帮助理解 |
-| `ANIME` | 角色设定、线条/材质、色彩、构图、动作与风格化一致性 | 关注 silhouette、pose、layout、镜头语言与有限动画资源分配，不照搬真人覆盖逻辑 |
+| `GENERAL_VIDEO` | 通用项目字段和工件映射 | 不自建通用创作方法 |
+| `AI_SHORT_DRAMA` | 短剧、单集、资产、镜头、Take 和时间线映射 | 不自建爽剧、真人短剧或动态漫方法 |
+| `DIGITAL_HUMAN` | 数字人项目字段和工件映射 | 不代表专用口型、主播或驱动方法已接入 |
+| `ANIME` | 动漫项目字段和工件映射 | 不代表补帧、骨骼或动态漫方法已接入 |
 
-四种 profile 使用同一项目、剧本、资产、分镜、生成任务、Take、QA 和时间线核心。差异通过宽粒度 Format Skill 和当前项目上下文表达；叙事特化来自 `StoryIntent` 与 Agent 选中的 Narrative Skills，视听特化来自 `ProjectBible.style`。
+四种 profile 使用同一项目、剧本、资产、分镜、生成任务、Take、QA 和时间线核心。差异由本地 schema/profile 和当前项目上下文表达；可核验的制作方法来自 3 个 MiniMax Design 项目 Workflow 与 8 个 MiniMax-H3 任务 Method，视听特化来自 `ProjectBible.style`。`drama-series` 已提供通用短剧/漫剧主骨架，不再把通用真人短剧、动态漫或爽剧整体记为能力缺口。
 
-“存在数字人或动漫 Skill”只证明 Agent 已能使用相应制作方法规划和评审，不自动证明专用虚拟主播、口型、补帧或动画 Provider 已经接入或达到成片质量。
+“存在数字人或动漫 profile adapter”只证明项目能保存和交接相应工件，不自动证明专用虚拟主播、口型、补帧、动画 Provider 或对应制作方法已经接入。
+
+### 4.1 MiniMax Design 定点审查后的目标补充
+
+2026-09-04 对 MiniMax Design 3.0.11 安装包、公开 Agent Team 文档、H3 Skills 和 ComfyUI 插件做了定点审查，详见 [MiniMax Design、Agent Team 与 H3 Skills 蓝图](43-minimax-design-agent-team-product-blueprint.md)。审查结论是运行时底座无需推倒重做；以下核心能力现已在单机后端落地。
+
+1. **渐进式上下文**：Root Planner 和 Specialist 先读紧凑 Role/Method/Tool Catalog；Agent 显式选择 Method/Role/Tool ID 后，再加载该角色需要的官方原文/忠实中译精确 section、Tool Schema 与工件内容。Loader 只校验 ID 和角色支持，不用关键词或正则路由。
+2. **`ContextManifest`**：Leader 为每个 WorkOrder 选择当前目标、精确 ArtifactRef 版本、相邻边界、必须继承的决定、经验标签和预期输出，代替对子 Agent 广播全项目记忆。
+3. **派生 Shared Board**：`ProductionBoardView` 从 ProjectDocument、AgentRun、Actions、WorkOrders、Decisions、AgentResults 和 Issue Ledger 投影当前目标、任务、工件、阻塞和下一步，不建立第二份可写真相。子 Agent 的中间进度可以简单 append-only `WorkOrderProgressEntry` 保留，无需事件溯源。
+4. **轻量本地 TeamExecutor**：已支持认领当前计划中 `next_owner=WORKER_DECISION/WORKER_TOOL` 的多个独立 WorkOrders，并行运行语言/只读工作，并通过 Production Manager 统一项目写通道串行化 WRITE/EXTERNAL Tool。`LEADER_REPLAN` 交回统一 advance 的 Leader 路径，`USER_INPUT` 明确暂停；Worker batch 失败可见且不自动重放。PlanRevision 使用显式 `carried_work_order_ids` 决定保留的后台工作，旧计划迟到结果只做历史交接。单用户桌面端不需要 Redis、Celery、租约或分布式 Agent 服务。
+5. **统一 Method 工件**：版本化 `ProductionDocument` 为品牌事实、文案锁、教学结构、参考拆解、音乐结构等中间成果提供稳定 identity、不可变 snapshot、当前项目内可解析的精确来源 ArtifactRef 和通用 Artifact Tools/API，不把它们继续只留在 Prompt 或另建方法状态岛；具有领域不变量的音频文档只能由专用操作写入。
+6. **音乐主轴后端闭环**：Master Audio、AudioStructureMap、TimedTextLock、音频 Tools/API、TimelineManifest 投影和导出换轨已经接通；`time_origin + duration` 定义成片长度，画面按需尾帧保持或裁切，导出统一规范声画长度；本机不能测量的节拍维度明确留空，不由 Agent 臆造。
+7. **H3 五模式精确交接**：`DIRECT/FRAME_FIRST/FRAME_LAST/FRAME_FIRST_LAST/REFERENCE` 共享完整 freshness、current-approved 资产检查、可恢复 asset preparation 和独立 `state_revision`，旧计划或旧关键帧不能被误用于新提交。
+
+MiniMax-H3 官方方法文件按 pinned commit 原样复制到本地；薄 adapter 只处理当前角色和工件映射。原文中属于 MiniMax Design 产品的 trigger words、Hub/Canvas、硬确认点、固定时长和固定返工次数不会被转为当前 Harness 的执行契约。ProjectDocument 仍是唯一内容真相。
 
 ## 5. ContextPack 与四层记忆
 
@@ -358,7 +375,7 @@ AgentResult 提交时只做普通的结构与完成性检查：
 
 Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更和真实依赖失效；之后 Production Manager 再根据实际需要调用资产、图像、ReferencePlan、H3、检查和时间线 Tools。因此用户只改一部分时，Agent 既能理解全局，又不会将整部项目重做。
 
-## 8. 七阶段迁移结果
+## 8. 八阶段迁移结果
 
 | 阶段 | 结果 | 主要位置 |
 | --- | --- | --- |
@@ -367,8 +384,9 @@ Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更�
 | 3. 动态 AgentRuntime | AgentRun、带 `goal_complete` 的 PlanRevision/PlanGraph、ActionRecord、跨 Run 记忆、字符预算 ContextPack、委派合同 | `backend/short_drama/agent_runtime/` |
 | 4. Production Manager | 从用户目标与当前工件制定/修订计划，调用 Tool 或委派子 Agent，并在有/无语言模型时选择相应 Planner | `production_manager.py` |
 | 5. 语义变更执行 | `ImpactPlan` 可编辑预览与局部 apply，精确失效下游 | `change_planner.py` / `change_executor.py` |
-| 6. 多格式 Skill | General、AI 短剧、数字人、动漫共享 Tools，使用独立角色 Prompt；具体 Style 属于项目 Bible | `skills/formats/` |
+| 6. 多格式适配 | General、AI 短剧、数字人、动漫共享 Tools，Format 只保留 schema/profile 映射；具体方法来自官方 Method，Style 属于项目 Bible | `skills/formats/` |
 | 7. 默认路径收口 | 新建 GUIDED/AUTO_DRAFT 经 `/agent-projects` 进入 AgentRun；删除旧 Run 公开路由与桌面端恢复链 | Agent API / desktop Agent panel |
+| 8. Design/Agent Team 能力补齐 | Production Method Catalog、渐进 Tool Schema、ContextManifest、精确工件交接、ProductionBoardView、append-only 进度、本地 TeamExecutor 与计划交接语义 | `skills/methods/`、`agent_runtime/`、`production_board.py`、`team_executor.py` |
 
 此次迁移采取增量内部切换：先将稳定领域能力包装为 Tools，再把 Skill 从 Python 数据结构移到 Markdown，最后引入 AgentRuntime 和 Production Manager。旧 PlanningRun/AutonomousRun 接口不保留兼容入口；独立 PlanningRun 与 AutonomousRun 控制面均已删除。内部只保留同一 ProjectDocument、AgentRun 拥有的 Content Planning Job（当前兼容实现名 `PlanningRun`）和 Provider Task 的必要恢复语义，不重建第二套数据源，也不提前建立通用 `ChildJob`。
 
@@ -377,14 +395,20 @@ Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更�
 ### 已实现的工程能力
 
 - 可发现、强类型、可注入的 Tool Registry 及现有能力适配器；
-- 四类宽粒度 Format Skills、中文共享角色、开放目录 Narrative Skills，以及 Agent 显式选择后的分角色 Prompt 编译；
-- Story Orientation 形成并持久化 `StorySourceContract`、`StoryIntent` 和 Narrative Skill 选择理由；`SCRIPT_LOCKED` 普通文本被语义结构化为 `locked_dialogue`，代码只做逐字/顺序保护；`EndingContract` 与剧本版本共同保存；
-- Critic Issue Ledger、逐场定向修订、Revision Verifier 和按需最终冷读的可恢复游标；
+- 四类本地 Format schema/profile adapter、八个按上游 `source` 区分的 MiniMax-H3 Method、角色精确 section 加载和分角色渐进 Prompt 编译；
+- Story Orientation 形成并持久化 `StorySourceContract`、`StoryIntent`；`SCRIPT_LOCKED` 普通文本被语义结构化为 `locked_dialogue`，代码只做逐字/顺序保护；`EndingContract` 与剧本版本共同保存；
+- Leader → Writer Worker → Verifier 的内容作业责任拓扑、Issue Ledger 和逐场定向修订游标；Critic、Repair、Review Router 和 Final Cold Read 只作历史状态兼容；
 - 动态 PlanGraph、计划修订、Action 记录、SQLite 恢复和有界 ContextPack；
 - `goal_complete` 驱动的目标反馈循环，以及 Tool 失败、WorkOrder 返回和用户输入后的动态重规划；
 - Project/Run/Decision/Experience 四层记忆，包括当前 Run 优先的项目跨 Run 决策召回、结果经验沉淀和去重；
 - 默认 24,000 字符内容预算及 ArtifactSummary/ActionDigest/记忆文本截断；
-- WorkOrder/AgentResult 委派闭环、显式 `production_skill_role` 职责装载、`specialist_turns` 单步请求/结果持久化、中断恢复、完成合同校验与可调用共享 Tools 的内置专业 Agent；
+- WorkOrder/AgentResult 委派闭环、显式 `production_skill_role`、持久化 `ContextManifest`、`specialist_turns` 单步请求/结果、append-only `WorkOrderProgressEntry`、中断恢复、完成合同校验与可调用共享 Tools 的内置专业 Agent；
+- Root Planner 与 Specialist 的紧凑 Tool Catalog 及 Agent 显式 schema 渐进披露；
+- 由 ProjectDocument/AgentRun/PlanningRun/WorkOrder/Result/Issue Ledger 派生的 `ProductionBoardView`，不建立第二份可写真相；
+- 单进程 `LocalTeamExecutor`：并行推进独立 WorkOrders，串行化同项目 WRITE/EXTERNAL Tool，并通过 `carried_work_order_ids` 避免旧计划结果污染新计划；
+- 通用版本化 `ProductionDocument` 及其 create/revise/get/list Artifact Tools/API，为不同 Production Method 提供统一结构化工件；
+- 版本化 Master Audio、实测 AudioStructureMap、精确 TimedTextLock、音频 Tools/API、TimelineManifest 投影与导出换轨；
+- H3 五类合法路线、首/尾/首尾帧 asset preparation、父计划完整 freshness 与精确 `state_revision` handoff；
 - 语义变更的无副作用 plan 和局部 apply；
 - capability catalog、Agent 项目 bootstrap、AgentRun 创建/查询/重新规划/推进/用户回复与 WorkOrder 回传 API；
 - 未配置语言模型时只确认终态事实、不推断创作或 Provider 路线的 `LocalProductionPlanner` fallback；
@@ -393,13 +417,14 @@ Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更�
 
 ### 仍需真实 Provider 或跨项目样本确认的能力
 
-- Story Orientation 对 Narrative Skill 的选择是否稳定命中用户意图，不同 `StoryIntent` 是否真正改善爽感、喜剧、悬念或其他目标体验；
-- Critic 是否减少重复挑错、过度现实主义和不必要修订，局部 Repair/Verifier 是否在改正问题的同时保护原稿优点；
+- Production Manager 是否会选择合适且克制的官方 Method 组合；
+- Leader/Worker/Verifier 是否在改正具体问题时保护原稿优点；
+- `drama-series` 在通用真人短剧、动态漫和爽剧等不同项目中的真实剧本质量、节奏与回报仍需样本验证；
 - 角色四视图/群像轻量资产、场景 coverage、分镜 timeline beats 和真实 H3 媒体绑定的组合是否在完整播放中提高连贯性；
 - 数字人主播的身份稳定、长口播口型、声线与稳定演播；
 - 动漫角色 model sheet、线条/材质一致、风格化动作与补帧路线；
 - 不同内容类型下默认 Tool 组合的成片质量与稳定性；
-- 真实多 Agent 长运行中的上下文量、委派粒度与重新规划策略。
+- 真实多 Agent 长运行中的上下文量、委派粒度、Method 选择与重新规划策略。
 
 这些是产品/质量验证项，不影响当前架构分层成立，也不应被 Mock、Prompt 文档、Schema 或类型检查提前宣称为已达到生产质量。
 
@@ -421,15 +446,16 @@ Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更�
 
 1. 桌面端新建 GUIDED/AUTO_DRAFT 通过 `POST /api/short-drama/agent-projects` 创建 AgentRun，再由 `project.create` 产生权威 ProjectDocument；
 2. Tool Registry 可列出和调用已注册能力，错误参数、未知 Tool 与处理失败都返回统一结果；
-3. 通用角色职责、宽粒度格式差异和可组合叙事方法分别在 `skills/shared/`、`skills/formats/`、`skills/narrative/` 的 Markdown 中审阅；Agent 可显式选择不同 Narrative Skills，但各角色仍调用相同 Tool 合同；
+3. 通用角色职责、Format schema/profile adapter 和八个官方 Production Method adapter 分别在 `skills/shared/`、`skills/formats/`、`skills/methods/` 的 Markdown 中审阅；官方 23 个源文件保持原样，Agent 从紧凑 Catalog 显式选择；
 4. Agent 可创建带依赖的计划、计算就绪步骤并替换计划；当当前 PlanGraph 完成但 `goal_complete=false` 时继续重新规划，只有 `goal_complete=true` 才完成整个 Run；
 5. 进程重启后可恢复当前 PlanRevision、Action、RunMemory 和待回复 WorkOrder；计划记录缺失 `goal_complete` 时使用模型默认值 `false`；
 6. 新 Run 能按“当前 Run 优先”召回项目内已确认决定，完成的有价值 AgentResult 能按 project/skill scope 沉淀并去重经验；
 7. ContextPack 除条目数之外受默认字符预算约束，会截断 ArtifactSummary、ActionDigest 与记忆文本，但保留稳定 ID 和 ArtifactRef；
-8. WorkOrder/AgentResult 能完成上下文编译、专业 Agent 的 Tool 调用与结果回传，并对完成结果执行比例适当的 Schema/完成性校验；
+8. WorkOrder/AgentResult 能通过精确 `ContextManifest` 完成上下文编译、渐进 Tool Schema、中间进度、专业 Agent Tool 调用与结果回传，并对完成结果执行比例适当的 Schema/完成性校验；
 9. `plan-change` 保持无副作用，`apply-change` 保留旧版本并只失效真正受影响分支，不隐式调用付费 Provider；
 10. AutonomousRun 旧控制面已删除；已配置语言模型的 Agent-owned 创作无论时长都由当前 AgentRun 拥有，并通过 `planning.advance` 逐步推进 Content Planning Job（当前兼容实现名 `PlanningRun`）；语言 Provider 不再有同步整稿规划入口，Provider Task 状态机仍独立对账；
-11. 全量回归包含后端测试、Pyright strict、TypeScript strict、OpenAPI 产物、前端构建、文档链接和 `git diff --check`。
+11. Production Method 可通过版本化 ProductionDocument 交接结构化工件；音乐主轴可从已批准 Master Audio 形成结构分析、精确文字和最终换轨；H3 五类路线与 preparation 使用精确新鲜度和状态版本；
+12. 全量回归包含后端测试、Pyright strict、TypeScript strict、OpenAPI 产物、前端构建、文档链接和 `git diff --check`。
 
 验收结果由最终交付轮次按实际命令更新；当前不用真实付费媒体 Provider 调用来代替架构和回归验收，也不将未完成的数字人/动漫真实质量实验记为通过。
 
@@ -444,3 +470,15 @@ Apply 本身不伪装成图像/视频已重新生成。它只执行语义变更�
 - 当前能力目录实际加载 63 个共享 Tools 与 4 个 Markdown Production Skills。
 
 本轮没有调用 GPT Image 2、MiniMax-H3、Azure Speech 或其他付费 Provider。真实数字人、动漫和长时间多 Agent 成片质量仍按第 9 节的产品实验边界处理，不混入本次工程验收结论。
+
+### 11.2 2026-09-04 早期 Agent Team 快照（已被当前 Skill 目录调整取代）
+
+- `./scripts/pnpm-project.sh backend:test`：1076 项后端测试全部通过；
+- `./scripts/pnpm-project.sh typecheck:py`：Pyright strict 为 0 errors / 0 warnings；
+- `./scripts/pnpm-project.sh typecheck:ts`：TypeScript strict 通过；
+- `./scripts/pnpm-project.sh openapi:generate`：FastAPI OpenAPI JSON 与 TypeScript 类型生成成功，连续两次生成的 SHA-256 一致；
+- `./scripts/pnpm-project.sh build:frontend`：React renderer、Electron main 与 preload 生产构建通过；
+- 57 个 Markdown 文件的本地链接目标检查与 `git diff --check` 通过；
+- 当时的运行时快照曾包含 7 个本地综合 Method 和 8 个官方仓库收录 Method。前者已退出活动 Catalog；当前只保留 8 个依据上游 `source` 分类的 Method adapter。
+
+本次验收没有调用真实付费媒体 Provider。它确认的是合同、恢复、调度和工件交接已形成可运行后端闭环；不同 Skill 组合与真实 H3 成片质量仍是下一阶段的作品实验。

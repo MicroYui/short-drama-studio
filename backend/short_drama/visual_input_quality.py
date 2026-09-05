@@ -1007,6 +1007,13 @@ def _technical_route_warnings(request: InputCompatibilityRequest) -> list[str]:
             warnings.append("FRAME_FIRST 不使用结束帧；如果需要锁定结束状态，请使用 FRAME_FIRST_LAST。")
         if request.reference_version_ids:
             warnings.append("同一次 H3 请求中不能混用帧模式和参考图模式。")
+    elif request.route == VideoGenerationRoute.FRAME_LAST:
+        if request.end_version_id is None:
+            warnings.append("FRAME_LAST 在提交 H3 之前需要结束帧。")
+        if request.start_version_id is not None:
+            warnings.append("FRAME_LAST 不使用起始帧；如果需要锁定两端，请使用 FRAME_FIRST_LAST。")
+        if request.reference_version_ids:
+            warnings.append("同一次 H3 请求中不能混用帧模式和参考图模式。")
     elif request.route == VideoGenerationRoute.FRAME_FIRST_LAST:
         if request.start_version_id is None or request.end_version_id is None:
             warnings.append("FRAME_FIRST_LAST 在提交 H3 之前同时需要起始帧和结束帧。")

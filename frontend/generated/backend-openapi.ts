@@ -707,6 +707,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/agent-runs/{run_id}/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Production Board */
+        get: operations["get_agent_production_board_api_short_drama_agent_runs__run_id__board_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/agent-runs/{run_id}/replan": {
         parameters: {
             query?: never;
@@ -718,6 +735,23 @@ export interface paths {
         put?: never;
         /** Replan Agent Run */
         post: operations["replan_agent_run_api_short_drama_agent_runs__run_id__replan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-runs/{run_id}/team/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Advance Agent Team */
+        post: operations["advance_agent_team_api_short_drama_agent_runs__run_id__team_advance_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -786,6 +820,24 @@ export interface paths {
         put?: never;
         /** Execute Agent Work Order */
         post: operations["execute_agent_work_order_api_short_drama_agent_work_orders__work_order_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/agent-work-orders/{work_order_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agent Work Order Progress */
+        get: operations["list_agent_work_order_progress_api_short_drama_agent_work_orders__work_order_id__progress_get"];
+        put?: never;
+        /** Append Agent Work Order Progress */
+        post: operations["append_agent_work_order_progress_api_short_drama_agent_work_orders__work_order_id__progress_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1202,6 +1254,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/audio/analyze-music": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze Music */
+        post: operations["analyze_music_api_short_drama_projects__project_id__audio_analyze_music_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/audio/master-binding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bind Master Audio */
+        post: operations["bind_master_audio_api_short_drama_projects__project_id__audio_master_binding_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/audio/timed-text-lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update Timed Text Lock */
+        post: operations["update_timed_text_lock_api_short_drama_projects__project_id__audio_timed_text_lock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/characters/{character_id}/voice-reference": {
         parameters: {
             query?: never;
@@ -1270,6 +1373,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/generation-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Generation Plan */
+        get: operations["get_generation_plan_api_short_drama_projects__project_id__generation_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/generation-plan/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compile Generation Plan */
+        post: operations["compile_generation_plan_api_short_drama_projects__project_id__generation_plan_compile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/h3/preview": {
         parameters: {
             query?: never;
@@ -1316,6 +1453,23 @@ export interface paths {
         put?: never;
         /** Compile H3 Production Route Plan */
         post: operations["compile_h3_production_route_plan_api_short_drama_projects__project_id__h3_production_route_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/h3/production-route-plans/{plan_id}/asset-preparations/{preparation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update H3 Route Asset Preparation */
+        post: operations["update_h3_route_asset_preparation_api_short_drama_projects__project_id__h3_production_route_plans__plan_id__asset_preparations__preparation_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1418,6 +1572,144 @@ export interface paths {
         put?: never;
         /** Rebuild Manifest */
         post: operations["rebuild_manifest_api_short_drama_projects__project_id__manifest_rebuild_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/output-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Output Slots */
+        get: operations["list_output_slots_api_short_drama_projects__project_id__output_slots_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/output-slots/bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bind Output Slot */
+        post: operations["bind_output_slot_api_short_drama_projects__project_id__output_slots_bind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/output-slots/{slot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Output Slot */
+        get: operations["get_output_slot_api_short_drama_projects__project_id__output_slots__slot_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/production-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Production Documents */
+        get: operations["list_production_documents_api_short_drama_projects__project_id__production_documents_get"];
+        put?: never;
+        /** Create Production Document */
+        post: operations["create_production_document_api_short_drama_projects__project_id__production_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/production-documents/{production_document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Production Document */
+        get: operations["get_production_document_api_short_drama_projects__project_id__production_documents__production_document_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/production-documents/{production_document_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revise Production Document */
+        post: operations["revise_production_document_api_short_drama_projects__project_id__production_documents__production_document_id__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/production-spec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Production Spec */
+        get: operations["get_production_spec_api_short_drama_projects__project_id__production_spec_get"];
+        put?: never;
+        /** Create Production Spec */
+        post: operations["create_production_spec_api_short_drama_projects__project_id__production_spec_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/production-spec/replacements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace Production Spec */
+        post: operations["replace_production_spec_api_short_drama_projects__project_id__production_spec_replacements_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1707,6 +1999,58 @@ export interface paths {
         put?: never;
         /** Enqueue Retake */
         post: operations["enqueue_retake_api_short_drama_projects__project_id__shots__shot_id__retake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Storyboard */
+        get: operations["get_storyboard_api_short_drama_projects__project_id__storyboard_get"];
+        put?: never;
+        /** Create Storyboard */
+        post: operations["create_storyboard_api_short_drama_projects__project_id__storyboard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard/patches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Patch Storyboard */
+        post: operations["patch_storyboard_api_short_drama_projects__project_id__storyboard_patches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard/replacements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace Storyboard */
+        post: operations["replace_storyboard_api_short_drama_projects__project_id__storyboard_replacements_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2202,6 +2546,8 @@ export interface components {
         };
         /** AgentAdvanceResponse */
         AgentAdvanceResponse: {
+            /** Advanced Work Order Ids */
+            advanced_work_order_ids?: string[];
             /** Created Work Order Ids */
             created_work_order_ids: string[];
             /** Executed Action Ids */
@@ -2212,6 +2558,8 @@ export interface components {
         };
         /** AgentCapabilityCatalog */
         AgentCapabilityCatalog: {
+            /** Production Methods */
+            production_methods: components["schemas"]["AgentProductionMethodSkillDescriptor"][];
             /** Skills */
             skills: components["schemas"]["ProductionSkillDescriptor"][];
             /** Tools */
@@ -2222,15 +2570,40 @@ export interface components {
          * @description A complete, replaceable plan authored by an Agent or supplied by a caller.
          */
         AgentPlanProposal: {
+            /** Carried Work Order Ids */
+            carried_work_order_ids?: string[];
             /**
              * Goal Complete
              * @default false
              */
             goal_complete: boolean;
+            /** Method Selection Rationale */
+            method_selection_rationale?: string | null;
+            /** Selected Method Skill Ids */
+            selected_method_skill_ids?: string[];
             /** Steps */
             steps?: components["schemas"]["PlanStep"][];
             /** Summary */
             summary: string;
+        };
+        /** AgentProductionMethodSkillDescriptor */
+        AgentProductionMethodSkillDescriptor: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            provenance: components["schemas"]["SkillProvenanceKind"];
+            /** Supported Roles */
+            supported_roles: components["schemas"]["ProductionSkillRole"][];
+            /** Upstream Sources */
+            upstream_sources: string[];
+            /**
+             * User Overridable
+             * @default true
+             */
+            user_overridable: boolean;
         };
         /**
          * AgentProjectCreateRequest
@@ -2279,8 +2652,16 @@ export interface components {
             findings?: string[];
             /** Id */
             id: string;
+            next_owner?: components["schemas"]["WorkOrderNextOwner"] | null;
             /** Recommended Next Actions */
             recommended_next_actions?: string[];
+            /**
+             * Stale Handoff
+             * @default false
+             */
+            stale_handoff: boolean;
+            /** Stale Reason */
+            stale_reason?: string | null;
             status: components["schemas"]["AgentResultStatus"];
             /** Unresolved Questions */
             unresolved_questions?: string[];
@@ -2414,6 +2795,20 @@ export interface components {
              */
             remember_as_decision: boolean;
         };
+        /** AgentWorkOrderProgressListResponse */
+        AgentWorkOrderProgressListResponse: {
+            /** Entries */
+            entries: components["schemas"]["WorkOrderProgressEntry"][];
+        };
+        /** AgentWorkOrderProgressRequest */
+        AgentWorkOrderProgressRequest: {
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Author */
+            author: string;
+            /** Summary */
+            summary: string;
+        };
         /** AgentWorkOrderResultRequest */
         AgentWorkOrderResultRequest: {
             /** Assumptions */
@@ -2428,6 +2823,7 @@ export interface components {
             evidence_refs?: components["schemas"]["ArtifactRef"][];
             /** Findings */
             findings?: string[];
+            next_owner?: components["schemas"]["WorkOrderNextOwner"] | null;
             /** Recommended Next Actions */
             recommended_next_actions?: string[];
             status: components["schemas"]["AgentResultStatus"];
@@ -2444,6 +2840,8 @@ export interface components {
         /** AgentWorkOrderView */
         AgentWorkOrderView: {
             context: components["schemas"]["ContextPack"];
+            /** Progress Entries */
+            progress_entries?: components["schemas"]["WorkOrderProgressEntry"][];
             /** System Prompt */
             system_prompt: string;
             work_order: components["schemas"]["WorkOrder"];
@@ -2823,6 +3221,13 @@ export interface components {
          * @enum {string}
          */
         AudioContinuityAssessment: "PASSED" | "REVIEW" | "UNKNOWN";
+        /** AudioEnergyPoint */
+        AudioEnergyPoint: {
+            /** Normalized Energy */
+            normalized_energy: number;
+            /** Time Seconds */
+            time_seconds: number;
+        };
         /** AudioInspectionReport */
         AudioInspectionReport: {
             /** Clip Inspections */
@@ -2880,6 +3285,17 @@ export interface components {
             project: components["schemas"]["ProjectAggregate"];
             report: components["schemas"]["AudioInspectionReport"];
         };
+        /** AudioKeyMoment */
+        AudioKeyMoment: {
+            /** Description */
+            description: string;
+            /** Kind */
+            kind: string;
+            /** Strength */
+            strength?: number | null;
+            /** Time Seconds */
+            time_seconds: number;
+        };
         /**
          * AudioKind
          * @enum {string}
@@ -2907,6 +3323,64 @@ export interface components {
             speech_intervals?: components["schemas"]["AudioTimeRange"][];
             /** Trailing Silence Seconds */
             trailing_silence_seconds: number;
+        };
+        /**
+         * AudioStructureMap
+         * @description Measured music structure; unavailable dimensions remain explicitly empty.
+         */
+        AudioStructureMap: {
+            /**
+             * Analysis Level
+             * @enum {string}
+             */
+            analysis_level: "BASIC_METADATA" | "RHYTHMIC";
+            /** Analyzer */
+            analyzer: string;
+            /** Asset Id */
+            asset_id: string;
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Beats */
+            beats?: number[];
+            /** Bpm */
+            bpm?: number | null;
+            /** Channels */
+            channels?: number | null;
+            /** Created At */
+            created_at: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Energy */
+            energy?: components["schemas"]["AudioEnergyPoint"][];
+            /** File Size Bytes */
+            file_size_bytes: number;
+            /** Key Moments */
+            key_moments?: components["schemas"]["AudioKeyMoment"][];
+            /** Mime Type */
+            mime_type?: string | null;
+            /** Notes */
+            notes?: string[];
+            /** Onsets */
+            onsets?: number[];
+            /** Sample Rate Hz */
+            sample_rate_hz?: number | null;
+            /** Sections */
+            sections?: components["schemas"]["AudioStructureSection"][];
+            /** Source In Seconds */
+            source_in_seconds: number;
+            /** Source Out Seconds */
+            source_out_seconds: number;
+            /** Time Origin Seconds */
+            time_origin_seconds: number;
+        };
+        /** AudioStructureSection */
+        AudioStructureSection: {
+            /** End Seconds */
+            end_seconds: number;
+            /** Label */
+            label?: string | null;
+            /** Start Seconds */
+            start_seconds: number;
         };
         /** AudioTimeRange */
         AudioTimeRange: {
@@ -3070,6 +3544,32 @@ export interface components {
             size_bytes: number;
         };
         /**
+         * ClipGroup
+         * @description Ordered editorial shots rendered together as one generated media clip.
+         */
+        ClipGroup: {
+            /** Continuity In */
+            continuity_in?: string[];
+            /** Continuity Out */
+            continuity_out?: string[];
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Generation Intent */
+            generation_intent: string;
+            /** Id */
+            id: string;
+            /** Reference Notes */
+            reference_notes?: string[];
+            /** Shot Ids */
+            shot_ids: string[];
+            /** Title */
+            title: string;
+            /** Transition Intent */
+            transition_intent?: string | null;
+            /** Visible Changes */
+            visible_changes?: string[];
+        };
+        /**
          * ContentPlanningOutput
          * @enum {string}
          */
@@ -3108,6 +3608,10 @@ export interface components {
             latest_revision_target_scene_sequences?: number[];
             latest_revision_verification?: components["schemas"]["StoryRevisionVerification"] | null;
             latest_story_metadata_patch?: components["schemas"]["StoryMetadataRevisionPatch"] | null;
+            /** Method Selection Rationale */
+            method_selection_rationale?: string | null;
+            /** Method Selection Reasons */
+            method_selection_reasons?: string[];
             /** Narrative Skill Decision */
             narrative_skill_decision?: string | null;
             /** Outline Json */
@@ -3129,6 +3633,8 @@ export interface components {
             scene_draft_json?: string[];
             /** Scene Timing Assessments */
             scene_timing_assessments?: components["schemas"]["SceneTimingAssessmentRecord"][];
+            /** Selected Method Skill Ids */
+            selected_method_skill_ids?: string[];
             /** Selected Narrative Skill Ids */
             selected_narrative_skill_ids?: string[];
             /** Skill Selection Reasons */
@@ -3138,6 +3644,72 @@ export interface components {
             story_intent?: components["schemas"]["StoryIntent"] | null;
             /** Warnings */
             warnings?: string[];
+        };
+        /**
+         * ContextBoundary
+         * @description Named neighboring context selected by the delegating Agent.
+         *
+         *     A boundary is descriptive metadata around exact canonical artifact pointers;
+         *     it never copies or owns the underlying project content.
+         */
+        ContextBoundary: {
+            /** Artifact Refs */
+            artifact_refs: components["schemas"]["ArtifactRef"][];
+            /** Guidance */
+            guidance?: string | null;
+            /** Relationship */
+            relationship: string;
+        };
+        /**
+         * ContextManifest
+         * @description Persisted, Agent-authored context selection for one WorkOrder.
+         *
+         *     The manifest records why the delegation exists and which canonical records
+         *     may be loaded. It is a control-plane contract, not a second project document.
+         */
+        ContextManifest: {
+            /** Acceptance Criteria */
+            acceptance_criteria?: string[];
+            /** Adjacent Boundaries */
+            adjacent_boundaries?: components["schemas"]["ContextBoundary"][];
+            /** Constraints */
+            constraints?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /**
+             * Exact Artifact Versions
+             * @default true
+             */
+            exact_artifact_versions: boolean;
+            /** Expected Output Schema */
+            expected_output_schema?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Expected Output Slot Ids */
+            expected_output_slot_ids?: string[];
+            /** Experience Tags */
+            experience_tags?: string[];
+            /** Id */
+            id: string;
+            /** Inherited Decision Ids */
+            inherited_decision_ids?: string[];
+            /** Inherited Decisions */
+            inherited_decisions?: string[];
+            /** Objective */
+            objective: string;
+            /** Open Questions */
+            open_questions?: string[];
+            /** Required Artifacts */
+            required_artifacts?: components["schemas"]["ArtifactRef"][];
+            /** Selected Skill Ids */
+            selected_skill_ids?: string[];
+            /** Why Now */
+            why_now: string;
+            /** Work Order Id */
+            work_order_id: string;
         };
         /**
          * ContextPack
@@ -3157,6 +3729,8 @@ export interface components {
             compiled_at?: string;
             /** Constraints */
             constraints?: string[];
+            /** Context Manifest Id */
+            context_manifest_id?: string | null;
             /** Decisions */
             decisions?: components["schemas"]["DecisionMemory"][];
             execution_target?: components["schemas"]["ProductionExecutionTarget"] | null;
@@ -3180,8 +3754,15 @@ export interface components {
             run_focus?: string | null;
             /** Run Id */
             run_id: string;
+            /**
+             * Unattended
+             * @default false
+             */
+            unattended: boolean;
             /** Unresolved Artifact Refs */
             unresolved_artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Work Order Id */
+            work_order_id?: string | null;
         };
         /**
          * ContinuationPreference
@@ -4017,6 +4598,62 @@ export interface components {
             /** Seed */
             seed?: number | null;
         };
+        /** GenerationPlanCompileRequest */
+        GenerationPlanCompileRequest: {
+            /** Base Version Id */
+            base_version_id?: string | null;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Production Spec Document Id */
+            production_spec_document_id: string;
+            /** Production Spec Version Id */
+            production_spec_version_id: string;
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            /** Storyboard Document Id */
+            storyboard_document_id: string;
+            /** Storyboard Version Id */
+            storyboard_version_id: string;
+        };
+        /**
+         * GenerationPlanContent
+         * @description Versioned bridge from a storyboard to provider generation tasks.
+         */
+        GenerationPlanContent: {
+            /** Bible Version Id */
+            bible_version_id: string;
+            /** Production Spec Document Id */
+            production_spec_document_id: string;
+            /** Production Spec Version Id */
+            production_spec_version_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Script Version Id */
+            script_version_id: string;
+            /** Shot Ids */
+            shot_ids: string[];
+            /** Storyboard Document Id */
+            storyboard_document_id: string;
+            /** Storyboard Version Id */
+            storyboard_version_id: string;
+            /** Total Duration Seconds */
+            total_duration_seconds: number;
+            /** Units */
+            units: components["schemas"]["GenerationUnit"][];
+        };
+        /** GenerationPlanMutationResponse */
+        GenerationPlanMutationResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            generation_plan: components["schemas"]["GenerationPlanContent"];
+            output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /** GenerationPlanReadResponse */
+        GenerationPlanReadResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            generation_plan: components["schemas"]["GenerationPlanContent"];
+            output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
         /** GenerationProgressResponse */
         GenerationProgressResponse: {
             /** Currentstep */
@@ -4043,6 +4680,8 @@ export interface components {
             attempt: number;
             /** Candidate Index */
             candidate_index: number;
+            /** Clip Group Id */
+            clip_group_id?: string | null;
             /** Created At */
             created_at: string;
             /** Error Code */
@@ -4051,6 +4690,12 @@ export interface components {
             error_message?: string | null;
             /** Finished At */
             finished_at?: string | null;
+            /** Generation Plan Document Id */
+            generation_plan_document_id?: string | null;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /** Id */
             id: string;
             /** Input Bible Version Id */
@@ -4062,6 +4707,10 @@ export interface components {
              * @default 1
              */
             input_shot_revision: number;
+            /** Input Shot Revisions */
+            input_shot_revisions?: {
+                [key: string]: number;
+            };
             /**
              * Input Voice Reference Revision
              * @default 0
@@ -4072,6 +4721,8 @@ export interface components {
             /** Model */
             model: string;
             operation: components["schemas"]["OperationKind"];
+            /** Output Slot Id */
+            output_slot_id?: string | null;
             /** Project Id */
             project_id: string;
             /** Provider */
@@ -4095,13 +4746,71 @@ export interface components {
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
             shot_id: string;
+            /** Shot Windows */
+            shot_windows?: components["schemas"]["GenerationUnitShotWindow"][];
             /** Started At */
             started_at?: string | null;
             status: components["schemas"]["TaskStatus"];
+            /** Storyboard Document Id */
+            storyboard_document_id?: string | null;
+            /** Storyboard Version Id */
+            storyboard_version_id?: string | null;
             /** Submitted At */
             submitted_at?: string | null;
             /** Updated At */
             updated_at: string;
+        };
+        /**
+         * GenerationUnit
+         * @description Provider-independent execution unit compiled from one ClipGroup.
+         */
+        GenerationUnit: {
+            /** Clip Group Id */
+            clip_group_id: string;
+            /** Continuity In */
+            continuity_in?: string[];
+            /** Continuity Out */
+            continuity_out?: string[];
+            /** Generation Intent */
+            generation_intent: string;
+            /** Id */
+            id: string;
+            /** Model */
+            model?: string | null;
+            /** Output Slot Id */
+            output_slot_id: string;
+            /** Provider */
+            provider?: string | null;
+            /** Reference Notes */
+            reference_notes?: string[];
+            /** Requested Duration Seconds */
+            requested_duration_seconds: number;
+            /** Resolution */
+            resolution?: string | null;
+            /** Shot Ids */
+            shot_ids: string[];
+            /** Shot Windows */
+            shot_windows: components["schemas"]["GenerationUnitShotWindow"][];
+            /** Transition Intent */
+            transition_intent?: string | null;
+            /** Visible Changes */
+            visible_changes?: string[];
+        };
+        /**
+         * GenerationUnitShotWindow
+         * @description One editorial Shot's source window inside a generated media artifact.
+         */
+        GenerationUnitShotWindow: {
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Shot Id */
+            shot_id: string;
+            /** Shot Revision */
+            shot_revision: number;
+            /** Source In Seconds */
+            source_in_seconds: number;
+            /** Source Out Seconds */
+            source_out_seconds: number;
         };
         /** GpuInfoResponse */
         GpuInfoResponse: {
@@ -4327,6 +5036,11 @@ export interface components {
              */
             enqueue_new_generations: boolean;
             /**
+             * Expected State Revision
+             * @description Exact persisted H3 route-plan state revision this execution continues from.
+             */
+            expected_state_revision: number;
+            /**
              * Inspect Reused Takes
              * @default true
              */
@@ -4384,8 +5098,16 @@ export interface components {
             id: string;
             /** Input Bible Version Id */
             input_bible_version_id: string;
+            /** Input Generation Plan Document Id */
+            input_generation_plan_document_id?: string | null;
+            /** Input Generation Plan Version Id */
+            input_generation_plan_version_id?: string | null;
             /** Input Script Version Id */
             input_script_version_id: string;
+            /** Input Storyboard Document Id */
+            input_storyboard_document_id?: string | null;
+            /** Input Storyboard Version Id */
+            input_storyboard_version_id?: string | null;
             /**
              * Input Voice Reference Revision
              * @default 0
@@ -4410,6 +5132,12 @@ export interface components {
              * @default 768P
              */
             resolution: string;
+            /**
+             * State Revision
+             * @description Monotonic revision of this plan record's mutable preparation and execution state. The plan version remains the compiled-plan ordinal.
+             * @default 1
+             */
+            state_revision: number;
             status: components["schemas"]["H3RoutePlanStatus"];
             /** Updated At */
             updated_at: string;
@@ -4436,10 +5164,16 @@ export interface components {
              * @default true
              */
             consider_video_guides: boolean;
+            /** Generation Plan Document Id */
+            generation_plan_document_id?: string | null;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
             /** Shot Directives */
             shot_directives?: components["schemas"]["H3ShotRouteDirective"][];
             /** Shot Ids */
             shot_ids?: string[];
+            /** Unit Ids */
+            unit_ids?: string[];
             /**
              * Use Language Agent
              * @default true
@@ -4492,6 +5226,8 @@ export interface components {
         };
         /** H3ProviderRun */
         H3ProviderRun: {
+            /** Clip Group Id */
+            clip_group_id?: string | null;
             /** Created At */
             created_at: string;
             /** Downloaded Path */
@@ -4500,6 +5236,12 @@ export interface components {
             estimated_cost_credits?: number | null;
             /** Estimated Cost Usd */
             estimated_cost_usd?: number | null;
+            /** Generation Plan Document Id */
+            generation_plan_document_id?: string | null;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /** Id */
             id: string;
             /** Last Error Code */
@@ -4511,6 +5253,8 @@ export interface components {
             learning_objective?: string | null;
             /** Media Inputs */
             media_inputs?: components["schemas"]["H3MediaInput"][];
+            /** Output Slot Id */
+            output_slot_id?: string | null;
             /** Output Url */
             output_url?: string | null;
             pricing: components["schemas"]["H3PricingSnapshot"];
@@ -4525,6 +5269,14 @@ export interface components {
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
             shot_id: string;
+            /** Shot Ids */
+            shot_ids?: string[];
+            /** Shot Windows */
+            shot_windows?: components["schemas"]["GenerationUnitShotWindow"][];
+            /** Storyboard Document Id */
+            storyboard_document_id?: string | null;
+            /** Storyboard Version Id */
+            storyboard_version_id?: string | null;
             /** Task Id */
             task_id: string;
             /** Updated At */
@@ -4619,6 +5371,39 @@ export interface components {
          * @enum {string}
          */
         H3RouteAssetPreparationStatus: "PLANNED" | "GENERATING" | "READY" | "REJECTED";
+        /** H3RouteAssetPreparationUpdateRequest */
+        H3RouteAssetPreparationUpdateRequest: {
+            /** Approved Version Id */
+            approved_version_id?: string | null;
+            /** Asset Id */
+            asset_id?: string | null;
+            /**
+             * Expected State Revision
+             * @description Exact H3 route-plan state revision used to prepare this mutation. Stale handoffs must be reloaded instead of overwriting newer state.
+             */
+            expected_state_revision: number;
+            /** Image Task Ids */
+            image_task_ids?: string[] | null;
+            /** Review Summary */
+            review_summary?: string | null;
+            role: components["schemas"]["H3MediaRole"];
+            /** Shot Id */
+            shot_id: string;
+            status: components["schemas"]["H3RouteAssetPreparationUpdateStatus"];
+        };
+        /** H3RouteAssetPreparationUpdateResponse */
+        H3RouteAssetPreparationUpdateResponse: {
+            /** Approved Version Number */
+            approved_version_number?: number | null;
+            plan: components["schemas"]["H3ProductionRoutePlan"];
+            preparation: components["schemas"]["H3RouteAssetPreparation"];
+        };
+        /**
+         * H3RouteAssetPreparationUpdateStatus
+         * @description Lifecycle states that may be recorded after a preparation is planned.
+         * @enum {string}
+         */
+        H3RouteAssetPreparationUpdateStatus: "GENERATING" | "READY" | "REJECTED";
         /**
          * H3RoutePlanStatus
          * @enum {string}
@@ -4637,11 +5422,16 @@ export interface components {
             camera_previs_motion?: components["schemas"]["H3CameraMotionPreset"] | null;
             /** Candidate Id */
             candidate_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /** Reference Selection Candidate Ids */
             reference_selection_candidate_ids?: string[] | null;
             /** Reuse Take Id */
             reuse_take_id?: string | null;
-            /** Shot Id */
+            /**
+             * Shot Id
+             * @default
+             */
             shot_id: string;
         };
         /**
@@ -4660,16 +5450,24 @@ export interface components {
              * @default 1
              */
             candidate_count: number;
+            /** Clip Group Id */
+            clip_group_id?: string | null;
             /** Duration Seconds */
             duration_seconds: number;
             /** @default PLANNED */
             execution_status: components["schemas"]["H3ShotRouteExecutionStatus"];
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /** Input Bible Version Id */
             input_bible_version_id: string;
             /** Input Script Version Id */
             input_script_version_id: string;
             /** Input Shot Revision */
             input_shot_revision: number;
+            /** Input Shot Revisions */
+            input_shot_revisions?: {
+                [key: string]: number;
+            };
             inspection: components["schemas"]["H3InspectionPolicy"];
             /** Inspection Ids */
             inspection_ids?: string[];
@@ -4679,6 +5477,8 @@ export interface components {
             media_inputs?: components["schemas"]["H3MediaInput"][];
             /** Missing Inputs */
             missing_inputs?: string[];
+            /** Output Slot Id */
+            output_slot_id?: string | null;
             /**
              * Override Allowed
              * @default true
@@ -4705,8 +5505,12 @@ export interface components {
             selected_video_guide_id?: string | null;
             /** Shot Id */
             shot_id: string;
+            /** Shot Ids */
+            shot_ids?: string[];
             /** Shot Sequence */
             shot_sequence: number;
+            /** Shot Source Windows */
+            shot_source_windows?: components["schemas"]["GenerationUnitShotWindow"][];
             /** Task Ids */
             task_ids?: string[];
             /** Video Guides */
@@ -6085,6 +6889,56 @@ export interface components {
             /** Upgrade Message */
             upgrade_message?: string | null;
         };
+        /** MasterAudioBindRequest */
+        MasterAudioBindRequest: {
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Base Version Id */
+            base_version_id?: string | null;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /**
+             * Source In Seconds
+             * @default 0
+             */
+            source_in_seconds: number;
+            /** Source Out Seconds */
+            source_out_seconds?: number | null;
+            /**
+             * Time Origin Seconds
+             * @default 0
+             */
+            time_origin_seconds: number;
+        };
+        /**
+         * MasterAudioBinding
+         * @description Approved audio window that defines time for an audio-led production.
+         */
+        MasterAudioBinding: {
+            /** Asset Id */
+            asset_id: string;
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /**
+             * Source In Seconds
+             * @default 0
+             */
+            source_in_seconds: number;
+            /** Source Out Seconds */
+            source_out_seconds: number;
+            /**
+             * Time Origin Seconds
+             * @default 0
+             */
+            time_origin_seconds: number;
+        };
+        /** MasterAudioBindingResponse */
+        MasterAudioBindingResponse: {
+            binding: components["schemas"]["MasterAudioBinding"];
+            document: components["schemas"]["ProductionDocument"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
         /** MediaSpec */
         MediaSpec: {
             /** Demo Video */
@@ -6150,6 +7004,17 @@ export interface components {
             /** Recommended Max Mib */
             recommended_max_mib?: number | null;
         };
+        /** MusicAnalysisRequest */
+        MusicAnalysisRequest: {
+            /** Master Audio Version Id */
+            master_audio_version_id: string;
+        };
+        /** MusicAnalysisResponse */
+        MusicAnalysisResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            structure: components["schemas"]["AudioStructureMap"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
         /**
          * ObservationConfidence
          * @enum {string}
@@ -6181,6 +7046,31 @@ export interface components {
             right: number;
             /** Top */
             top: number;
+        };
+        /** OutputSlotBindRequest */
+        OutputSlotBindRequest: {
+            artifact_ref: components["schemas"]["ProductionDocumentArtifactRef"];
+            /** Expected Revision */
+            expected_revision?: number | null;
+            /** Producer Agent Run Id */
+            producer_agent_run_id?: string | null;
+            /** Producer Work Order Id */
+            producer_work_order_id?: string | null;
+            /** Slot Id */
+            slot_id: string;
+        };
+        /** OutputSlotListResponse */
+        OutputSlotListResponse: {
+            /** Output Slots */
+            output_slots?: components["schemas"]["ProjectOutputSlot"][];
+        };
+        /** OutputSlotMutationResponse */
+        OutputSlotMutationResponse: {
+            output_slot: components["schemas"]["ProjectOutputSlot"];
+        };
+        /** OutputSlotReadResponse */
+        OutputSlotReadResponse: {
+            output_slot: components["schemas"]["ProjectOutputSlot"];
         };
         /** OutputSpec */
         OutputSpec: {
@@ -6245,6 +7135,8 @@ export interface components {
          * @description A replaceable plan graph proposed by the agent for one run.
          */
         PlanRevision: {
+            /** Carried Work Order Ids */
+            carried_work_order_ids?: string[];
             /**
              * Created At
              * Format: date-time
@@ -6257,10 +7149,14 @@ export interface components {
             goal_complete: boolean;
             /** Id */
             id: string;
+            /** Method Selection Rationale */
+            method_selection_rationale?: string | null;
             /** Revision */
             revision: number;
             /** Run Id */
             run_id: string;
+            /** Selected Method Skill Ids */
+            selected_method_skill_ids?: string[];
             /** Steps */
             steps?: components["schemas"]["PlanStep"][];
             /** Summary */
@@ -6301,7 +7197,7 @@ export interface components {
          * PlanningRunStep
          * @enum {string}
          */
-        PlanningRunStep: "STORY_ORIENTATION" | "STORY_ARCHITECT" | "SCENE_WRITER" | "SCRIPT_CRITIC" | "REVIEW_ROUTER" | "SOURCE_CONTRACT" | "STORY_REVISION" | "STORY_METADATA_REVISION" | "REVISION_SCOPE" | "SCENE_REVISION" | "REVISION_VERIFIER" | "REVISION_JUDGE" | "FINAL_COLD_READ" | "SCENE_DIRECTOR" | "FINALIZE" | "COMPLETE";
+        PlanningRunStep: "STORY_ORIENTATION" | "STORY_ARCHITECT" | "SCENE_WRITER" | "SCRIPT_VERIFIER" | "SCRIPT_CRITIC" | "REVIEW_ROUTER" | "SOURCE_CONTRACT" | "STORY_REVISION" | "STORY_METADATA_REVISION" | "REVISION_SCOPE" | "SCENE_REVISION" | "REVISION_VERIFIER" | "REVISION_JUDGE" | "FINAL_COLD_READ" | "SCENE_DIRECTOR" | "FINALIZE" | "COMPLETE";
         /** PreprocessingStep */
         PreprocessingStep: {
             /** Params */
@@ -6310,6 +7206,231 @@ export interface components {
             };
             /** Utility */
             utility: string;
+        };
+        /**
+         * ProductionAudioDirection
+         * @description Project-level sound and text treatment expressed in natural language.
+         */
+        ProductionAudioDirection: {
+            /** Ambience Intent */
+            ambience_intent?: string | null;
+            /** Bgm Intent */
+            bgm_intent?: string | null;
+            /** Dialogue Intent */
+            dialogue_intent?: string | null;
+            /** Subtitle Intent */
+            subtitle_intent?: string | null;
+        };
+        /** ProductionBoardStep */
+        ProductionBoardStep: {
+            /** Action Id */
+            action_id?: string | null;
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Assigned Agent */
+            assigned_agent: string;
+            /** Depends On */
+            depends_on?: string[];
+            /** Id */
+            id: string;
+            status: components["schemas"]["ProductionBoardStepStatus"];
+            /** Title */
+            title: string;
+            /** Work Order Id */
+            work_order_id?: string | null;
+        };
+        /**
+         * ProductionBoardStepStatus
+         * @enum {string}
+         */
+        ProductionBoardStepStatus: "READY" | "BLOCKED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED";
+        /**
+         * ProductionBoardView
+         * @description Ephemeral shared-board projection; never a second writable truth.
+         */
+        ProductionBoardView: {
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Blockers */
+            blockers?: string[];
+            /** Content Planning Status */
+            content_planning_status?: string | null;
+            /** Content Planning Step */
+            content_planning_step?: string | null;
+            /**
+             * Current Focus
+             * @default
+             */
+            current_focus: string;
+            /** Decisions */
+            decisions?: components["schemas"]["DecisionMemory"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+            /** Historical Work Orders */
+            historical_work_orders?: components["schemas"]["ProductionBoardWorkOrder"][];
+            /** Issue Ledger */
+            issue_ledger?: components["schemas"]["StoryIssueLedgerEntry"][];
+            /** Method Selection Rationale */
+            method_selection_rationale?: string | null;
+            /** Next Actions */
+            next_actions?: string[];
+            /** Objective */
+            objective: string;
+            /** Open Questions */
+            open_questions?: string[];
+            /** Plan Revision Id */
+            plan_revision_id?: string | null;
+            /** Plan Summary */
+            plan_summary?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Run Id */
+            run_id: string;
+            run_status: components["schemas"]["AgentRunStatus"];
+            /** Selected Method Skill Ids */
+            selected_method_skill_ids?: string[];
+            /** Steps */
+            steps?: components["schemas"]["ProductionBoardStep"][];
+            /** Work Orders */
+            work_orders?: components["schemas"]["ProductionBoardWorkOrder"][];
+        };
+        /** ProductionBoardWorkOrder */
+        ProductionBoardWorkOrder: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Context Manifest Id */
+            context_manifest_id?: string | null;
+            /** Id */
+            id: string;
+            next_owner?: components["schemas"]["WorkOrderNextOwner"] | null;
+            /** Objective */
+            objective: string;
+            /** Pending Tool Name */
+            pending_tool_name?: string | null;
+            /** Progress Entries */
+            progress_entries?: components["schemas"]["WorkOrderProgressEntry"][];
+            /** Recipient Role */
+            recipient_role: string;
+            result_status?: components["schemas"]["AgentResultStatus"] | null;
+            /** Result Summary */
+            result_summary?: string | null;
+            /** Source Plan Revision Id */
+            source_plan_revision_id?: string | null;
+            status: components["schemas"]["DelegationStatus"];
+            /** Superseded By Plan Revision Id */
+            superseded_by_plan_revision_id?: string | null;
+        };
+        /**
+         * ProductionDocument
+         * @description Stable identity and version history for reusable production knowledge.
+         */
+        ProductionDocument: {
+            /** Current Version Id */
+            current_version_id: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Project Id */
+            project_id: string;
+            /** Title */
+            title: string;
+            /** Versions */
+            versions: components["schemas"]["ProductionDocumentVersion"][];
+        };
+        /**
+         * ProductionDocumentArtifactRef
+         * @description Domain-side ArtifactRef compatible with the Agent runtime contract.
+         *
+         *     The Agent runtime imports domain models, so the canonical project document
+         *     cannot import ``agent_runtime.ArtifactRef`` without creating a cycle.  This
+         *     deliberately keeps the same serialized shape for lossless handoff.
+         */
+        ProductionDocumentArtifactRef: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Artifact Type */
+            artifact_type: string;
+            /** Project Id */
+            project_id: string;
+            /** Version */
+            version?: number | null;
+        };
+        /** ProductionDocumentCreateRequest */
+        ProductionDocumentCreateRequest: {
+            /** Kind */
+            kind: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Payload */
+            payload?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            /** Title */
+            title: string;
+        };
+        /** ProductionDocumentListResponse */
+        ProductionDocumentListResponse: {
+            /** Documents */
+            documents?: components["schemas"]["ProductionDocument"][];
+        };
+        /** ProductionDocumentMutationResponse */
+        ProductionDocumentMutationResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /**
+         * ProductionDocumentOrigin
+         * @description Who supplied one durable production-method document version.
+         * @enum {string}
+         */
+        ProductionDocumentOrigin: "USER" | "AGENT" | "IMPORT";
+        /** ProductionDocumentReadResponse */
+        ProductionDocumentReadResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /** ProductionDocumentReviseRequest */
+        ProductionDocumentReviseRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Payload */
+            payload?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+        };
+        /**
+         * ProductionDocumentVersion
+         * @description One immutable structured snapshot of a production-method document.
+         */
+        ProductionDocumentVersion: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Parent Version Id */
+            parent_version_id?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            /** Version */
+            version: number;
         };
         /**
          * ProductionExecutionTarget
@@ -6321,6 +7442,18 @@ export interface components {
          * @enum {string}
          */
         ProductionProfile: "GENERAL_VIDEO" | "AI_SHORT_DRAMA" | "DIGITAL_HUMAN" | "ANIME";
+        /**
+         * ProductionProviderPreference
+         * @description A user or Agent preference, not an authorization to call the Provider.
+         */
+        ProductionProviderPreference: {
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+            /** Resolution */
+            resolution?: string | null;
+        };
         /** ProductionSkillDescriptor */
         ProductionSkillDescriptor: {
             /** Id */
@@ -6340,6 +7473,89 @@ export interface components {
          * @enum {string}
          */
         ProductionSkillRole: "CONCEPT" | "WRITER" | "PLANNER" | "CRITIC" | "STORY_REPAIR" | "REVISION_VERIFIER" | "FINAL_COLD_READ" | "REVIEW_ROUTER" | "DIRECTOR" | "ASSET_REVIEWER" | "ROUTE_PLANNER" | "VIDEO_PROMPT_COMPILER" | "EPISODE_REVIEWER";
+        /**
+         * ProductionSpecContent
+         * @description Versioned production decisions shared by planning and execution Agents.
+         */
+        ProductionSpecContent: {
+            /** Agent Decisions */
+            agent_decisions?: string[];
+            /** Aspect Ratio */
+            aspect_ratio: string;
+            audio?: components["schemas"]["ProductionAudioDirection"];
+            /** Bible Version Id */
+            bible_version_id: string;
+            /** Duration Intent */
+            duration_intent?: string | null;
+            /** Genre And Setting */
+            genre_and_setting: string;
+            /** Language */
+            language: string;
+            /** Notes */
+            notes?: string[];
+            /** Production Mode */
+            production_mode: string;
+            /** Production Scope */
+            production_scope: string;
+            /** Project Id */
+            project_id: string;
+            provider_preference?: components["schemas"]["ProductionProviderPreference"] | null;
+            /** Script Version Id */
+            script_version_id: string;
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
+            /** Title */
+            title: string;
+            /** User Constraints */
+            user_constraints?: string[];
+            visual?: components["schemas"]["ProductionVisualDirection"];
+        };
+        /** ProductionSpecCreateRequest */
+        ProductionSpecCreateRequest: {
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            spec: components["schemas"]["ProductionSpecContent"];
+        };
+        /** ProductionSpecMutationResponse */
+        ProductionSpecMutationResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
+            spec: components["schemas"]["ProductionSpecContent"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /** ProductionSpecReadResponse */
+        ProductionSpecReadResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
+            spec: components["schemas"]["ProductionSpecContent"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /** ProductionSpecReplaceRequest */
+        ProductionSpecReplaceRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            spec: components["schemas"]["ProductionSpecContent"];
+        };
+        /**
+         * ProductionVisualDirection
+         * @description Project-level visual intent without turning style into a fixed template.
+         */
+        ProductionVisualDirection: {
+            /** Color Palette */
+            color_palette?: string[];
+            /** Forbidden Elements */
+            forbidden_elements?: string[];
+            /** Lighting Intent */
+            lighting_intent?: string | null;
+            /** Medium Lock */
+            medium_lock?: string | null;
+            /** Style Brief */
+            style_brief?: string[];
+        };
         /** ProgressSummary */
         ProgressSummary: {
             /** Export Ready */
@@ -6410,13 +7626,25 @@ export interface components {
         ProjectDocument: {
             /** Assets */
             assets: components["schemas"]["Asset"][];
+            /** Audio Structure Document Id */
+            audio_structure_document_id?: string | null;
             /** Bible Versions */
             bible_versions: components["schemas"]["ProjectBibleVersion"][];
             /** Execution Plan */
             execution_plan: components["schemas"]["ExecutionPlanEntry"][];
+            /** Generation Plan Document Id */
+            generation_plan_document_id?: string | null;
             /** Manifests */
             manifests: components["schemas"]["TimelineManifest"][];
+            /** Master Audio Document Id */
+            master_audio_document_id?: string | null;
+            /** Output Slots */
+            output_slots?: components["schemas"]["ProjectOutputSlot"][];
             planning?: components["schemas"]["ProjectPlanningMetadata"] | null;
+            /** Production Documents */
+            production_documents?: components["schemas"]["ProductionDocument"][];
+            /** Production Spec Document Id */
+            production_spec_document_id?: string | null;
             project: components["schemas"]["ProjectRecord"];
             /** Reference Packs */
             reference_packs?: components["schemas"]["ReferencePack"][];
@@ -6427,7 +7655,11 @@ export interface components {
             /** Script Versions */
             script_versions: components["schemas"]["ScriptVersion"][];
             /** Shots */
-            shots: components["schemas"]["ShotPlan"][];
+            shots: components["schemas"]["ShotPlan-Output"][];
+            /** Storyboard Document Id */
+            storyboard_document_id?: string | null;
+            /** Timed Text Document Id */
+            timed_text_document_id?: string | null;
             /** Voice References */
             voice_references?: components["schemas"]["VoiceReferenceBinding"][];
         };
@@ -6435,6 +7667,50 @@ export interface components {
         ProjectListResponse: {
             /** Projects */
             projects: components["schemas"]["ProjectRecord"][];
+        };
+        /**
+         * ProjectOutputSlot
+         * @description Stable logical pointer to the latest artifact produced for one purpose.
+         *
+         *     A slot is pointer metadata only.  The referenced artifact remains the
+         *     canonical content, while prior bindings stay available for provenance and
+         *     rollback-aware Agent handoffs.
+         */
+        ProjectOutputSlot: {
+            current_artifact_ref?: components["schemas"]["ProductionDocumentArtifactRef"] | null;
+            /** Id */
+            id: string;
+            /** Invalidation Reason */
+            invalidation_reason?: string | null;
+            /** Previous Artifact Refs */
+            previous_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            /** Producer Agent Run Id */
+            producer_agent_run_id?: string | null;
+            /** Producer Work Order Id */
+            producer_work_order_id?: string | null;
+            /** Revision */
+            revision: number;
+            /** Revision History */
+            revision_history?: components["schemas"]["ProjectOutputSlotRevision"][];
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * ProjectOutputSlotRevision
+         * @description Immutable snapshot of one logical output-slot revision.
+         */
+        ProjectOutputSlotRevision: {
+            current_artifact_ref?: components["schemas"]["ProductionDocumentArtifactRef"] | null;
+            /** Invalidation Reason */
+            invalidation_reason?: string | null;
+            /** Producer Agent Run Id */
+            producer_agent_run_id?: string | null;
+            /** Producer Work Order Id */
+            producer_work_order_id?: string | null;
+            /** Revision */
+            revision: number;
+            /** Updated At */
+            updated_at: string;
         };
         /**
          * ProjectPlanningMetadata
@@ -7666,7 +8942,48 @@ export interface components {
             userPrefersLtxApiVideoGenerations: boolean;
         };
         /** ShotPlan */
-        ShotPlan: {
+        "ShotPlan-Input": {
+            approval_status: components["schemas"]["ApprovalStatus"];
+            /** Audio Intent */
+            audio_intent: string;
+            /** Camera */
+            camera: string;
+            continuity: components["schemas"]["ContinuityState"];
+            /** Dialogue Line Ids */
+            dialogue_line_ids: string[];
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Framing */
+            framing: string;
+            freshness: components["schemas"]["Freshness"];
+            /** Id */
+            id: string;
+            /** Local Rework Risk */
+            local_rework_risk: string;
+            /** Merge Candidate */
+            merge_candidate: boolean;
+            /** Narrative Purpose */
+            narrative_purpose: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /** Scene Id */
+            scene_id?: string | null;
+            /** Sequence */
+            sequence: number;
+            /** Timeline Beats */
+            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
+            /** Transition Out */
+            transition_out: string;
+            /** Visual */
+            visual: string;
+        };
+        /** ShotPlan */
+        "ShotPlan-Output": {
             approval_status: components["schemas"]["ApprovalStatus"];
             /** Audio Intent */
             audio_intent: string;
@@ -7832,6 +9149,12 @@ export interface components {
             /** Visual */
             visual: string;
         };
+        /**
+         * SkillProvenanceKind
+         * @description How a local Skill relates to any upstream material.
+         * @enum {string}
+         */
+        SkillProvenanceKind: "PROJECT_ORIGINAL" | "PROJECT_SYNTHESIS" | "OFFICIAL_ORIGINAL" | "OFFICIAL_ORIGINAL_WITH_ADAPTER" | "OFFICIAL_TRANSLATION" | "OFFICIAL_TRANSLATION_WITH_ADAPTER" | "UPSTREAM_OFFICIAL_WITH_ADAPTER" | "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER" | "UPSTREAM_COMMUNITY_WITH_ADAPTER";
         /**
          * SourceMode
          * @enum {string}
@@ -8333,6 +9656,125 @@ export interface components {
             /** Texture */
             texture?: string | null;
         };
+        /**
+         * StoryboardContent
+         * @description Complete structured storyboard and its provider-independent clip groups.
+         */
+        "StoryboardContent-Input": {
+            /** Bible Version Id */
+            bible_version_id: string;
+            /** Clip Groups */
+            clip_groups: components["schemas"]["ClipGroup"][];
+            /** Computed Duration Seconds */
+            computed_duration_seconds: number;
+            /** Notes */
+            notes?: string[];
+            /** Production Spec Document Id */
+            production_spec_document_id: string;
+            /** Production Spec Version Id */
+            production_spec_version_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Script Line Ids */
+            script_line_ids?: string[];
+            /** Script Version Id */
+            script_version_id: string;
+            /** Shots */
+            shots: components["schemas"]["ShotPlan-Input"][];
+            /** Timing Notes */
+            timing_notes?: string[];
+            /** Title */
+            title: string;
+        };
+        /**
+         * StoryboardContent
+         * @description Complete structured storyboard and its provider-independent clip groups.
+         */
+        "StoryboardContent-Output": {
+            /** Bible Version Id */
+            bible_version_id: string;
+            /** Clip Groups */
+            clip_groups: components["schemas"]["ClipGroup"][];
+            /** Computed Duration Seconds */
+            computed_duration_seconds: number;
+            /** Notes */
+            notes?: string[];
+            /** Production Spec Document Id */
+            production_spec_document_id: string;
+            /** Production Spec Version Id */
+            production_spec_version_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Script Line Ids */
+            script_line_ids?: string[];
+            /** Script Version Id */
+            script_version_id: string;
+            /** Shots */
+            shots: components["schemas"]["ShotPlan-Output"][];
+            /** Timing Notes */
+            timing_notes?: string[];
+            /** Title */
+            title: string;
+        };
+        /** StoryboardCreateRequest */
+        StoryboardCreateRequest: {
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            storyboard: components["schemas"]["StoryboardContent-Input"];
+        };
+        /** StoryboardMutationResponse */
+        StoryboardMutationResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
+            storyboard: components["schemas"]["StoryboardContent-Output"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /**
+         * StoryboardPatchRequest
+         * @description Targeted shot revisions; structural rewrites use StoryboardReplaceRequest.
+         */
+        StoryboardPatchRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Clip Groups */
+            clip_groups?: components["schemas"]["ClipGroup"][] | null;
+            /** Notes */
+            notes?: string[] | null;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Replacements */
+            replacements?: components["schemas"]["StoryboardShotReplacement"][];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            /** Timing Notes */
+            timing_notes?: string[] | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** StoryboardReadResponse */
+        StoryboardReadResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
+            storyboard: components["schemas"]["StoryboardContent-Output"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /** StoryboardReplaceRequest */
+        StoryboardReplaceRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            storyboard: components["schemas"]["StoryboardContent-Input"];
+        };
+        /** StoryboardShotReplacement */
+        StoryboardShotReplacement: {
+            /** Expected Revision */
+            expected_revision: number;
+            replacement: components["schemas"]["ShotPlan-Input"];
+            /** Shot Id */
+            shot_id: string;
+        };
         /** StructuredScene */
         StructuredScene: {
             entry_state?: components["schemas"]["SceneContinuitySummary"] | null;
@@ -8376,14 +9818,18 @@ export interface components {
             end_seconds: number;
             /** Id */
             id: string;
+            /** Language */
+            language?: string | null;
             /** Script Line Id */
-            script_line_id: string;
+            script_line_id?: string | null;
             /** Speaker */
-            speaker: string;
+            speaker?: string | null;
             /** Start Seconds */
             start_seconds: number;
             /** Text */
             text: string;
+            /** Timed Text Id */
+            timed_text_id?: string | null;
         };
         /** SuggestGapPromptRequest */
         SuggestGapPromptRequest: {
@@ -8441,11 +9887,19 @@ export interface components {
             availability: components["schemas"]["TakeAvailability"];
             /** Candidate Index */
             candidate_index: number;
+            /** Clip Group Id */
+            clip_group_id?: string | null;
             /** Created At */
             created_at: string;
             /** Duration Seconds */
             duration_seconds: number;
             freshness: components["schemas"]["Freshness"];
+            /** Generation Plan Document Id */
+            generation_plan_document_id?: string | null;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /** Height */
             height: number;
             /** Id */
@@ -8460,6 +9914,8 @@ export interface components {
              */
             model: string;
             operation: components["schemas"]["OperationKind"];
+            /** Output Slot Id */
+            output_slot_id?: string | null;
             /** Project Id */
             project_id: string;
             /**
@@ -8471,8 +9927,16 @@ export interface components {
             qa_status: components["schemas"]["QaStatus"];
             /** @default DIRECT */
             route: components["schemas"]["VideoGenerationRoute"];
+            /** Selected Shot Ids */
+            selected_shot_ids?: string[];
             /** Shot Id */
             shot_id: string;
+            /** Shot Windows */
+            shot_windows?: components["schemas"]["GenerationUnitShotWindow"][];
+            /** Storyboard Document Id */
+            storyboard_document_id?: string | null;
+            /** Storyboard Version Id */
+            storyboard_version_id?: string | null;
             /** Task Id */
             task_id: string;
             /** Thumbnail Path */
@@ -8583,6 +10047,37 @@ export interface components {
          * @enum {string}
          */
         TaskStatus: "QUEUED" | "SUBMITTING" | "ACKNOWLEDGED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "SUBMIT_UNKNOWN" | "OUTPUT_MISSING";
+        /** TeamExecutionBatch */
+        TeamExecutionBatch: {
+            /** Advances */
+            advances?: components["schemas"]["TeamWorkAdvance"][];
+            /** Run Id */
+            run_id: string;
+            /** Selected Work Order Ids */
+            selected_work_order_ids?: string[];
+        };
+        /** TeamWorkAdvance */
+        TeamWorkAdvance: {
+            /** Error Kind */
+            error_kind?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            result_status?: components["schemas"]["AgentResultStatus"] | null;
+            /**
+             * Serialized Project Write
+             * @default false
+             */
+            serialized_project_write: boolean;
+            status: components["schemas"]["TeamWorkAdvanceStatus"];
+            /** Work Order Id */
+            work_order_id: string;
+            work_order_status?: components["schemas"]["DelegationStatus"] | null;
+        };
+        /**
+         * TeamWorkAdvanceStatus
+         * @enum {string}
+         */
+        TeamWorkAdvanceStatus: "ADVANCED" | "FAILED";
         /** TechnicalCheck */
         TechnicalCheck: {
             /** Detail */
@@ -8601,8 +10096,53 @@ export interface components {
             /** Expected Size Gb */
             expected_size_gb: number;
         };
+        /**
+         * TimedTextLock
+         * @description Exact on-screen text anchored to the Master Audio timeline.
+         */
+        TimedTextLock: {
+            /** End Seconds */
+            end_seconds: number;
+            /** Id */
+            id: string;
+            /** Language */
+            language?: string | null;
+            /** Speaker */
+            speaker?: string | null;
+            /** Start Seconds */
+            start_seconds: number;
+            /** Text */
+            text: string;
+        };
+        /** TimedTextLockResponse */
+        TimedTextLockResponse: {
+            document: components["schemas"]["ProductionDocument"];
+            lock: components["schemas"]["TimedTextLockSet"];
+            version: components["schemas"]["ProductionDocumentVersion"];
+        };
+        /** TimedTextLockSet */
+        TimedTextLockSet: {
+            /** Entries */
+            entries?: components["schemas"]["TimedTextLock"][];
+            /** Master Audio Version Id */
+            master_audio_version_id: string;
+        };
+        /** TimedTextLockUpdateRequest */
+        TimedTextLockUpdateRequest: {
+            /** Base Version Id */
+            base_version_id?: string | null;
+            /** Entries */
+            entries?: components["schemas"]["TimedTextLock"][];
+            /** Master Audio Version Id */
+            master_audio_version_id: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+        };
         /** TimelineAudioClip */
         TimelineAudioClip: {
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Asset Version Id */
+            asset_version_id?: string | null;
             /** Duration Seconds */
             duration_seconds: number;
             /** Gain Db */
@@ -8614,11 +10154,18 @@ export interface components {
             /** Role */
             role: string;
             /** Shot Id */
-            shot_id: string;
+            shot_id?: string | null;
+            /**
+             * Source In Seconds
+             * @default 0
+             */
+            source_in_seconds: number;
+            /** Source Out Seconds */
+            source_out_seconds?: number | null;
             /** Start Seconds */
             start_seconds: number;
             /** Take Id */
-            take_id: string;
+            take_id?: string | null;
         };
         /** TimelineManifest */
         TimelineManifest: {
@@ -8724,7 +10271,7 @@ export interface components {
          * VideoGenerationRoute
          * @enum {string}
          */
-        VideoGenerationRoute: "DIRECT" | "FRAME_FIRST" | "FRAME_FIRST_LAST" | "REFERENCE";
+        VideoGenerationRoute: "DIRECT" | "FRAME_FIRST" | "FRAME_LAST" | "FRAME_FIRST_LAST" | "REFERENCE";
         /** VideoInspectionReport */
         VideoInspectionReport: {
             /** Audio Present */
@@ -8872,10 +10419,13 @@ export interface components {
         WorkOrder: {
             /** Acceptance Criteria */
             acceptance_criteria?: string[];
+            /** Active Plan Revision Id */
+            active_plan_revision_id?: string | null;
             /** Confirmed Decisions */
             confirmed_decisions?: string[];
             /** Constraints */
             constraints?: string[];
+            context_manifest?: components["schemas"]["ContextManifest"] | null;
             /**
              * Created At
              * Format: date-time
@@ -8885,8 +10435,11 @@ export interface components {
             expected_output_schema?: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+            /** Expected Output Slot Ids */
+            expected_output_slot_ids?: string[];
             /** Id */
             id: string;
+            next_owner?: components["schemas"]["WorkOrderNextOwner"] | null;
             /** Objective */
             objective: string;
             /** Open Questions */
@@ -8900,10 +10453,16 @@ export interface components {
             scope?: components["schemas"]["ArtifactRef"][];
             /** Sender */
             sender: string;
+            /** Source Action Id */
+            source_action_id?: string | null;
+            /** Source Plan Revision Id */
+            source_plan_revision_id?: string | null;
             /** Specialist Turns */
             specialist_turns?: components["schemas"]["SpecialistTurnRecord"][];
             /** @default PENDING */
             status: components["schemas"]["DelegationStatus"];
+            /** Superseded By Plan Revision Id */
+            superseded_by_plan_revision_id?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -8911,6 +10470,35 @@ export interface components {
             updated_at?: string;
             /** Why Now */
             why_now: string;
+        };
+        /**
+         * WorkOrderNextOwner
+         * @description The persisted actor responsible for the next WorkOrder transition.
+         * @enum {string}
+         */
+        WorkOrderNextOwner: "WORKER_DECISION" | "WORKER_TOOL" | "LEADER_REPLAN" | "USER_INPUT";
+        /**
+         * WorkOrderProgressEntry
+         * @description One append-only progress note emitted while a WorkOrder is active.
+         */
+        WorkOrderProgressEntry: {
+            /** Artifact Refs */
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
+            /** Author */
+            author: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Id */
+            id: string;
+            /** Sequence */
+            sequence: number;
+            /** Summary */
+            summary: string;
+            /** Work Order Id */
+            work_order_id: string;
         };
         /** WorkerDrainRequest */
         WorkerDrainRequest: {
@@ -10590,6 +12178,46 @@ export interface operations {
             };
         };
     };
+    get_agent_production_board_api_short_drama_agent_runs__run_id__board_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionBoardView"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     replan_agent_run_api_short_drama_agent_runs__run_id__replan_post: {
         parameters: {
             query?: never;
@@ -10612,6 +12240,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentRunView"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    advance_agent_team_api_short_drama_agent_runs__run_id__team_advance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamExecutionBatch"];
                 };
             };
             /** @description Client Error */
@@ -10774,6 +12442,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentWorkOrderResultResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_agent_work_order_progress_api_short_drama_agent_work_orders__work_order_id__progress_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentWorkOrderProgressListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    append_agent_work_order_progress_api_short_drama_agent_work_orders__work_order_id__progress_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                work_order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentWorkOrderProgressRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkOrderProgressEntry"];
                 };
             };
             /** @description Client Error */
@@ -11895,6 +13647,138 @@ export interface operations {
             };
         };
     };
+    analyze_music_api_short_drama_projects__project_id__audio_analyze_music_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MusicAnalysisRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MusicAnalysisResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    bind_master_audio_api_short_drama_projects__project_id__audio_master_binding_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MasterAudioBindRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterAudioBindingResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    update_timed_text_lock_api_short_drama_projects__project_id__audio_timed_text_lock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimedTextLockUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimedTextLockResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     update_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_put: {
         parameters: {
             query?: never;
@@ -12073,6 +13957,92 @@ export interface operations {
             };
         };
     };
+    get_generation_plan_api_short_drama_projects__project_id__generation_plan_get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationPlanReadResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    compile_generation_plan_api_short_drama_projects__project_id__generation_plan_compile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationPlanCompileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationPlanMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     preview_h3_probe_api_short_drama_projects__project_id__h3_preview_post: {
         parameters: {
             query?: never;
@@ -12223,6 +14193,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["H3ProductionRoutePlanResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    update_h3_route_asset_preparation_api_short_drama_projects__project_id__h3_production_route_plans__plan_id__asset_preparations__preparation_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                plan_id: string;
+                preparation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["H3RouteAssetPreparationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["H3RouteAssetPreparationUpdateResponse"];
                 };
             };
             /** @description Client Error */
@@ -12478,6 +14494,433 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineManifest"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_output_slots_api_short_drama_projects__project_id__output_slots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutputSlotListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    bind_output_slot_api_short_drama_projects__project_id__output_slots_bind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutputSlotBindRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutputSlotMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_output_slot_api_short_drama_projects__project_id__output_slots__slot_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutputSlotReadResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_production_documents_api_short_drama_projects__project_id__production_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionDocumentListResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_production_document_api_short_drama_projects__project_id__production_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionDocumentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionDocumentMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_production_document_api_short_drama_projects__project_id__production_documents__production_document_id__get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+                production_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionDocumentReadResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    revise_production_document_api_short_drama_projects__project_id__production_documents__production_document_id__revisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                production_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionDocumentReviseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionDocumentMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_production_spec_api_short_drama_projects__project_id__production_spec_get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionSpecReadResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_production_spec_api_short_drama_projects__project_id__production_spec_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionSpecCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionSpecMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    replace_production_spec_api_short_drama_projects__project_id__production_spec_replacements_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionSpecReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionSpecMutationResponse"];
                 };
             };
             /** @description Client Error */
@@ -13234,6 +15677,180 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskActionResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    get_storyboard_api_short_drama_projects__project_id__storyboard_get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardReadResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_storyboard_api_short_drama_projects__project_id__storyboard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_storyboard_api_short_drama_projects__project_id__storyboard_patches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    replace_storyboard_api_short_drama_projects__project_id__storyboard_replacements_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardMutationResponse"];
                 };
             };
             /** @description Client Error */

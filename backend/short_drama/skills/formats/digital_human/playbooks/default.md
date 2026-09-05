@@ -22,7 +22,7 @@
 
    - **输入：** 主播定位、已有人像/数字人/声音参考、品牌视觉、背景需求、图表、演示素材和 B-roll。
    - **决策：** 分开管理主播身份、服装造型、声音身份、背景、产品/演示物、图形和补充画面；只准备当前稿件真正需要的素材。
-   - **可调用 Tool：** `artifact.create_asset`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`artifact.review_version`、`artifact.add_reference_entry`、`audio.update_voice_reference`。
+   - **可调用 Tool：** `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`image.enqueue`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry`、`audio.update_voice_reference`。
    - **产物：** 主播与声音的批准版本、背景/图形/B-roll 清单以及每项资产的用途。
    - **检查与返工：** 人脸、服装、声线、品牌样式或产品外观不一致时先修复资产；没有表达作用的 B-roll 不进入生产清单。
 
@@ -46,7 +46,7 @@
 
    - **输入：** 锁定台词、读音与韵律要求、选定路线、主播关键帧、背景和图形素材。
    - **决策：** 在产生依赖口型的候选前锁定本轮使用的文字/音频版本；只准备稳定身份、构图、视线、服装和背景所需的最小媒体。
-   - **可调用 Tool：** `audio.update_voice_reference`、`shot.compile_keyframe_brief`、`image.enqueue`、`image.advance`、`image.retry`、`artifact.review_version`、`qa.check_input_compatibility`、`qa.list_visual_input_reports`。
+   - **可调用 Tool：** `audio.update_voice_reference`、`shot.compile_keyframe_brief`、`image.enqueue`、`image.advance`、`image.retry`、`qa.inspect_asset_version`、`artifact.review_version`、`qa.check_input_compatibility`、`qa.list_visual_input_reports`。
    - **产物：** 版本明确的台词/声音基线和可执行的主播画面输入包。
    - **检查与返工：** 发音、数字、专名、语速或停顿不成立时先修正上游；主播关键帧的嘴型、视线或构图错误时先修图，不要求视频模型自动补救。
 

@@ -254,13 +254,16 @@ def test_scene_writer_keeps_fast_pacing_out_of_telegraphic_dialogue() -> None:
         [],
     )
 
-    assert "可见动作、反应、调度、情绪变化和停顿" in instructions
-    assert "不要为了显式说明而把场景契约" in instructions
+    assert "把当前节点写成可读、可演的场景" in instructions
+    assert "尽快进入当下目标与冲突" in instructions
+    assert "不要为了显式说明而让人物朗读场景契约" in instructions
     assert "对白必须电报化或口号化" in instructions
     assert "不要求每句都增加新信息" in instructions
-    assert "不要替成稿假设尚未写出的快速剪辑" in instructions
-    assert "给出可信的表演时长范围" in instructions
-    assert "再只写本场真正新增的变化" in instructions
+    assert "本场的铺垫走向清楚释放" in instructions
+    assert "对立力量的受挫、改口或反噬" in instructions
+    assert "完整行政或证明流程" in instructions
+    assert "可选的 performance_timing_assessment" in instructions
+    assert "逐项计时账本" in instructions
 
 
 def test_scene_writer_treats_playable_actions_as_semantic_intent() -> None:
@@ -273,9 +276,6 @@ def test_scene_writer_treats_playable_actions_as_semantic_intent() -> None:
     output = json.dumps(
         {
             "scene_sequence": scene.sequence,
-            "performance_timing_assessment": (
-                "按自然语速与动作顺序通读后，本场可在目标时长内完成。"
-            ),
             "blocks": [
                 {
                     "kind": "ACTION",
@@ -298,6 +298,7 @@ def test_scene_writer_treats_playable_actions_as_semantic_intent() -> None:
     patch = _parse_scene_writer_output(request, blueprint, scene, output)
 
     assert patch.playable_actions == scene.playable_actions
+    assert patch.performance_timing_assessment is None
     assert scene.playable_actions[0] not in patch.screenplay_text
     assert "他不解释，直接用结果让全场安静下来。" in patch.screenplay_text
 
@@ -327,6 +328,32 @@ def test_scene_writer_receives_story_intent_and_selected_skill_context() -> None
     assert payload["story_intent"] == story_intent.model_dump(mode="json")
     assert "优先使用可见的身份反转来兑现情绪。" in instructions
     assert "不要把它改写成固定模板" in instructions
+
+
+def test_scene_writer_receives_readable_episode_so_far_as_explicit_handoff() -> None:
+    request = _request(180)
+    blueprint = _explicit_multi_scene_blueprint(request, scene_count=3)
+    previous_patches = [
+        _scene_patch(blueprint, blueprint.scenes[0].sequence, "第一场完整可读剧本。"),
+        _scene_patch(blueprint, blueprint.scenes[1].sequence, "第二场完整可读剧本。"),
+    ]
+
+    _, input_text = _scene_writer_prompt(
+        request,
+        blueprint,
+        blueprint.scenes[2],
+        previous_patches,
+    )
+    payload = json.loads(input_text)
+
+    assert payload["readable_episode_so_far"] == [
+        {
+            "scene_sequence": patch.scene_sequence,
+            "screenplay_text": patch.screenplay_text,
+            "continuity_out": patch.continuity_out.model_dump(mode="json"),
+        }
+        for patch in previous_patches
+    ]
 
 
 def test_scene_writers_receive_only_explicitly_related_props_with_state() -> None:

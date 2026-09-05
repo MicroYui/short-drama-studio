@@ -35,6 +35,8 @@ from short_drama.production_planner import (
     PlannedLocation,
     PlannedProp,
     PlannedReferenceNeed,
+    PlannedShot,
+    PlannedShotTimelineBeat,
     ProductionPlan,
     _fallback_directed_scene_plan,
     _fallback_episode_outline,
@@ -63,6 +65,7 @@ from short_drama.production_planner import (
 from short_drama.production_profiles import (
     ProductionSkillRole,
     compile_production_prompt,
+    production_method_skill_catalog,
     production_skill,
     production_skill_catalog,
 )
@@ -102,6 +105,51 @@ LOCKED_DIALOGUE = [
     ),
     StoryLockedDialogueLine(speaker="周衡", text="现在，你还信自己吗？"),
 ]
+
+
+def test_planned_shot_dialogue_line_can_span_adjacent_timeline_beats() -> None:
+    shot = PlannedShot(
+        scene_sequence=1,
+        duration_seconds=4.0,
+        narrative_purpose="Deliver one two-part instruction.",
+        visual="The principal stops the calculator and questions the witnesses.",
+        framing="Medium close-up",
+        camera="Locked, then a small pan to the witnesses.",
+        audio_intent="One continuous spoken line with a short pause.",
+        dialogue_line_indices=[1],
+        timeline_beats=[
+            PlannedShotTimelineBeat(
+                start_seconds=0.0,
+                end_seconds=1.8,
+                visual="The principal raises one hand beside the calculator.",
+                framing="Close-up",
+                camera="Locked",
+                action="He stops anyone from touching the calculator.",
+                dialogue_line_indices=[1],
+                sound="First sentence of the line.",
+            ),
+            PlannedShotTimelineBeat(
+                start_seconds=1.8,
+                end_seconds=4.0,
+                visual="He turns from the calculator toward the witnesses.",
+                framing="Relationship close-up",
+                camera="Small pan",
+                action="He asks who saw the calculation.",
+                dialogue_line_indices=[1],
+                sound="Second sentence of the same line.",
+            ),
+        ],
+        character_positions="Principal at the counter; witnesses opposite him.",
+        eyeline="Principal moves his gaze from calculator to witnesses.",
+        prop_state_in="Calculator remains visible.",
+        prop_state_out="Calculator remains untouched.",
+        action_in="The principal has just arrived.",
+        action_out="A witness is ready to answer.",
+        transition_out="Cut to the witness response.",
+        local_rework_risk="Keep the calculator reading stable.",
+    )
+
+    assert [beat.dialogue_line_indices for beat in shot.timeline_beats] == [[1], [1]]
 
 
 def test_planned_characters_do_not_have_an_adult_only_content_gate() -> None:
@@ -237,18 +285,16 @@ def test_review_report_retries_when_revision_decision_has_no_story_issue() -> No
         _normalize_review_report(contradictory)
 
 
-def test_review_report_requires_a_natural_performance_timing_assessment() -> None:
+def test_review_report_accepts_missing_optional_timing_assessment() -> None:
     missing_timing_evidence = ScriptReviewReport(
         summary="剧本整体成立。",
         issues=[],
         requires_revision=False,
     )
 
-    with pytest.raises(
-        ValueError,
-        match="natural-performance timing assessment",
-    ):
-        _normalize_review_report(missing_timing_evidence)
+    normalized = _normalize_review_report(missing_timing_evidence)
+
+    assert normalized.performance_timing_assessment is None
 
 
 class RepairingLanguageClient:
@@ -346,7 +392,7 @@ class MultiAgentLanguageClient:
     ) -> str:
         del image_urls, max_output_tokens
         self.calls += 1
-        if "independent script-critic Agent" in instructions:
+        if "Script Verifier Agent" in instructions:
             self.critic_calls += 1
             requires_revision = self.critic_calls <= self.critic_revision_rounds_required
             return ScriptReviewReport(
@@ -402,7 +448,7 @@ class MultiAgentLanguageClient:
                 explicit_prohibitions=[],
                 open_creative_choices=["未由用户明确规定的剧情细节可调整"],
             ).model_dump_json()
-        if "story-repair planner Agent" in instructions:
+        if "Leader 的返修分派步骤" in instructions:
             self.repair_plan_calls += 1
             payload = json.loads(input_text)
             self.repair_plan_inputs.append(payload)
@@ -562,8 +608,14 @@ class SceneReferenceRepairClient:
 
 
 class StoryOrientationClient:
-    def __init__(self, *, skill_id: str = "narrative.payoff_escalation") -> None:
+    def __init__(
+        self,
+        *,
+        skill_id: str | None = None,
+        method_id: str | None = None,
+    ) -> None:
         self.skill_id = skill_id
+        self.method_id = method_id
         self.instructions = ""
         self.input_text = ""
 
@@ -599,15 +651,34 @@ class StoryOrientationClient:
                     "protected_elements": ["主角数学水平不变"],
                     "drift_risks": ["不要写成严肃制度推演"],
                 },
-                "selected_narrative_skills": [
-                    {
-                        "skill_id": self.skill_id,
-                        "rationale": "需要让同一核心能力不断产生更大的公开兑现。",
-                    }
-                ],
+                "selected_narrative_skills": (
+                    []
+                    if self.skill_id is None
+                    else [
+                        {
+                            "skill_id": self.skill_id,
+                            "rationale": "测试未知叙事 Skill 的拒绝路径。",
+                        }
+                    ]
+                ),
                 "narrative_skill_decision": (
-                    "核心命题需要持续放大公开回报，因此选择升级技能；"
-                    "其他方法由具体蓝图再判断。"
+                    "当前 Narrative Skill Catalog 为空；"
+                    "不使用本地自创替代。"
+                ),
+                "selected_method_skills": (
+                    []
+                    if self.method_id is None
+                    else [
+                        {
+                            "skill_id": self.method_id,
+                            "rationale": "项目需要该制片方法组织跨角色交接。",
+                        }
+                    ]
+                ),
+                "method_selection_rationale": (
+                    "不额外加载制片方法。"
+                    if self.method_id is None
+                    else "当前项目需要该制片方法。"
                 ),
             },
             ensure_ascii=False,
@@ -667,7 +738,7 @@ def _request() -> CreateProjectRequest:
     )
 
 
-def test_story_orientation_selects_narrative_skills_semantically() -> None:
+def test_story_orientation_exposes_only_source_verifiable_skill_catalogs() -> None:
     request = CreateProjectRequest(
         source_mode=SourceMode.IDEA_EXPANSION,
         production_profile=ProductionProfile.AI_SHORT_DRAMA,
@@ -680,18 +751,15 @@ def test_story_orientation_selects_narrative_skills_semantically() -> None:
 
     assert result.used
     assert result.orientation is not None
-    assert [
-        item.skill_id for item in result.orientation.selected_narrative_skills
-    ] == ["narrative.payoff_escalation"]
-    assert "基于完整语义选择" in client.instructions
+    assert result.orientation.selected_narrative_skills == []
+    assert "MiniMax Design 的 drama-series" in client.instructions
+    assert "MiniMax-H3 方法提供可组合的任务级表达方法" in client.instructions
+    assert "没有通用真人短剧" not in client.instructions
     payload = json.loads(client.input_text)
+    assert payload["available_narrative_skills"] == []
     assert {
-        item["id"] for item in payload["available_narrative_skills"]
-    } == {
-        "narrative.premise_amplification",
-        "narrative.payoff_escalation",
-        "narrative.absurd_comedy",
-    }
+        item["id"] for item in payload["available_production_methods"]
+    } == {descriptor.id for descriptor in production_method_skill_catalog()}
 
 
 def test_story_orientation_structures_plain_locked_dialogue_semantically() -> None:
@@ -719,11 +787,18 @@ def test_story_orientation_rejects_unknown_skill_without_keyword_fallback() -> N
         request,
         StoryOrientationClient(skill_id="narrative.keyword_selected"),
     )
+    invalid_method = orient_story(
+        request,
+        StoryOrientationClient(method_id="method.keyword_selected"),
+    )
     offline = orient_story(request, None)
 
     assert not invalid.used
     assert invalid.orientation is None
     assert "unknown narrative Skills" in invalid.warnings[0]
+    assert not invalid_method.used
+    assert invalid_method.orientation is None
+    assert "unknown Production Method Skills" in invalid_method.warnings[0]
     assert offline.orientation is not None
     assert offline.orientation.selected_narrative_skills == []
 
@@ -771,27 +846,14 @@ def test_production_skills_inject_distinct_policies_without_fixed_shot_count() -
     douyin_payload = json.loads(douyin_input)
 
     assert "留白、静默" in general_instructions
-    assert "比较若干个实质不同的构想" in douyin_instructions
+    assert "主导类型、主角行动路线与核心情绪" in douyin_instructions
     assert "办公室、文件、录音" not in douyin_instructions
     assert "借用签名" not in douyin_instructions
-    assert "本故事独有的承诺" in douyin_instructions
-    assert "日常语序、代词、语气词" in production_skill(
-        ProductionProfile.AI_SHORT_DRAMA
-    ).writer
-    assert "日常语序、代词、语气词" not in douyin_instructions
-    assert "日常语序、代词、语气词" not in general_instructions
-    assert "而不是把对白压缩得不自然" in production_skill(
-        ProductionProfile.AI_SHORT_DRAMA
-    ).writer
-    assert "不要求每句台词都新增事实" in production_skill(
-        ProductionProfile.AI_SHORT_DRAMA
-    ).writer
-    assert "朗读检查" in production_skill(
-        ProductionProfile.AI_SHORT_DRAMA
-    ).critic
-    assert "电报式" in production_skill(
-        ProductionProfile.AI_SHORT_DRAMA
-    ).critic
+    assert "用户已经确定的作品承诺" in douyin_instructions
+    assert production_skill(ProductionProfile.AI_SHORT_DRAMA).writer == ""
+    assert production_skill(ProductionProfile.AI_SHORT_DRAMA).critic == ""
+    assert "不是 MiniMax 官方 Skill" in douyin_instructions
+    assert "Leader → Worker → Verifier" in douyin_instructions
     assert "不得为提高密度而机械增加镜头" not in douyin_instructions
     assert len(douyin_instructions) < 20_000
     assert "真实皮肤" not in douyin_instructions
@@ -829,25 +891,30 @@ def test_douyin_long_form_prompts_leave_pacing_to_semantic_reading() -> None:
     critic_payload = json.loads(critic_input)
     scene_payload = json.loads(scene_input)
 
-    assert "单独生成、检查、替换和重新剪辑" in architect_instructions
-    assert "而不是把对白压缩得不自然" not in architect_instructions
+    assert "AI 短剧（本地格式适配）" in architect_instructions
+    assert "不再自建一套爆款、爽剧、喜剧" in architect_instructions
     assert "时长算术本身不代表内容成立" in architect_instructions
+    assert "主导类型、主角行动路线与核心情绪" in architect_instructions
+    assert "爽点、情感释放或反转都应从前面的铺垫" in architect_instructions
     assert "[grounded-institutional-causality]" not in architect_instructions
     assert "[separate-consequence-domains]" not in architect_instructions
-    assert "不要套固定语速、对白密度或数值门槛" in critic_instructions
-    assert "实际最后一场和最后一句" in critic_instructions
-    assert "冷启动观众能否辨认当前行动" in critic_instructions
-    assert "审看不是按预设答案找错" in critic_instructions
-    assert "给出各场可信范围与全剧范围" in critic_instructions
-    assert "不要假设尚未写出的快速剪辑" in critic_instructions
-    assert "换了场地、见证者或道具" in critic_instructions
+    assert "整稿只聚焦五件事" in critic_instructions
+    assert "主角的处境、目标和行动路线" in critic_instructions
+    assert "对立力量的反应、受挫或反噬" in critic_instructions
+    assert "结尾要看实际可读剧本" in critic_instructions
+    assert "第一判断依据是 StoryIntent" in critic_instructions
+    assert "performance_timing_assessment 中简要说明主要压力点" in critic_instructions
+    assert "不要逐场建立语速、动作和停顿账本" in critic_instructions
+    assert "performance_timing_assessment" not in critic_payload["output_schema"][
+        "required"
+    ]
     assert "pacing_evidence" not in critic_payload
-    assert "分别给出各场可信范围、全剧范围" in final_read_instructions
-    assert "逐场问本场究竟改变了什么" in final_read_instructions
+    assert "各场可信范围、全剧范围" in final_read_instructions
+    assert "本场究竟改变了什么" in final_read_instructions
     assert "不触发代码阈值" in final_read_instructions
     assert "观望、等待、行走或重复证明" in scene_instructions
     assert "导演的通用职责" in scene_instructions
-    assert "重新生成、更换关键帧、拆分镜头" in scene_instructions
+    assert "拆成可生成、可检查、可剪辑的单元" in scene_instructions
     assert "scene_pacing_evidence" not in scene_payload
 
 
@@ -862,7 +929,7 @@ def test_general_video_critic_does_not_treat_quiet_time_as_a_density_failure() -
     instructions, payload_json = _story_critic_prompt(request, outline)
     payload = json.loads(payload_json)
 
-    assert "安静内容不会仅因为安静就构成缺陷" in instructions
+    assert "留白和无厘头并不天然是缺陷" in instructions
     assert "pacing_evidence" not in payload
 
 
@@ -934,22 +1001,25 @@ def test_story_revision_prompts_treat_script_review_as_separate_delivery() -> No
     assert "语义判断" in critic_instructions
     assert "不触发代码阈值" in critic_instructions
     assert "你已经完成了整稿冷读" in critic_instructions
-    assert "FINAL_COLD_READ 枚举仅用于兼容旧运行记录" in critic_instructions
+    assert "不再把同一份稿件交给另一个独立审校角色" in critic_instructions
+    assert "旧运行记录" not in critic_instructions
     assert "审校报告是独立工件" in repair_instructions
     assert "CRITIC_OVERREACH" in repair_instructions
-    assert "故事修复规划的通用职责" in repair_instructions
     assert "编剧的通用职责" not in repair_instructions
     assert "内容审校的通用职责" not in repair_instructions
     assert "不得因审校附录没有写进场景" in verifier_instructions
-    assert "修复验收与终稿通读合并成一个完整责任" in verifier_instructions
-    assert "从第一场到最后一场自然冷读整份" in verifier_instructions
+    assert "你是唯一的 Script Verifier" in verifier_instructions
+    assert "在同一次阅读中先核对已分派的修复" in verifier_instructions
     assert "只使用 audience_cold_read" in verifier_instructions
-    assert "不得用 outline summary" in verifier_instructions
-    assert "不能自动证明文本中缺失的原因或过程" in verifier_instructions
-    assert "不能压过 SourceContract" in verifier_instructions
-    assert "观众体验、剧情推进、人物主动性" in verifier_instructions
+    assert "不用 outline summary" in verifier_instructions
+    assert "整稿只聚焦五项" in verifier_instructions
+    assert "铺垫是否释放成爽点" in verifier_instructions
+    assert "对立力量的受挫、反应或反噬" in verifier_instructions
+    assert "才以逻辑理由否决" in verifier_instructions
+    assert "不逐场建立表演时长账本" in verifier_instructions
     assert "recommended_followup=FINALIZE" in verifier_instructions
-    assert "不再把稿件转交给独立 Final Cold Read" in verifier_instructions
+    assert "不再把稿件转交给另一个独立审校角色" in verifier_instructions
+    assert "旧运行记录" not in verifier_instructions
     assert "不得因" in verifier_instructions
     assert "修订验收的通用职责" in verifier_instructions
     assert "内容审校的通用职责" not in verifier_instructions

@@ -408,6 +408,44 @@ class ShortDramaRepository:
             if project_cursor.rowcount != 1:
                 raise ValueError(f"Project does not exist: {project.id}")
 
+    def insert_planning_run_with_project(
+        self,
+        run: PlanningRunRecord,
+        document: ProjectDocument,
+    ) -> None:
+        """Atomically attach a new planning cursor to an existing project."""
+
+        project = document.project
+        if run.project_id != project.id:
+            raise ValueError(
+                "Planning run project does not match the project document: "
+                f"{run.project_id!r} != {project.id!r}"
+            )
+        with self._lock, self._connection() as connection:
+            project_cursor = connection.execute(
+                """
+                UPDATE projects
+                SET name = ?, stage = ?, updated_at = ?, document_json = ?
+                WHERE id = ?
+                """,
+                (
+                    project.name,
+                    project.stage.value,
+                    project.updated_at,
+                    document.model_dump_json(),
+                    project.id,
+                ),
+            )
+            if project_cursor.rowcount != 1:
+                raise ValueError(f"Project does not exist: {project.id}")
+            connection.execute(
+                """
+                INSERT INTO planning_runs(id, status, updated_at, record_json)
+                VALUES(?, ?, ?, ?)
+                """,
+                (run.id, run.status.value, run.updated_at, run.model_dump_json()),
+            )
+
     def get_planning_run(self, run_id: str) -> PlanningRunRecord | None:
         with self._lock, self._connection() as connection:
             row = connection.execute(
@@ -884,16 +922,11 @@ class ShortDramaRepository:
         return [GenerationTask.model_validate_json(cast(str, row["record_json"])) for row in rows]
 
     def list_tasks_for_shot(self, project_id: str, shot_id: str) -> list[GenerationTask]:
-        with self._lock, self._connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT record_json FROM generation_tasks
-                WHERE project_id = ? AND shot_id = ?
-                ORDER BY created_at ASC, candidate_index ASC, id ASC
-                """,
-                (project_id, shot_id),
-            ).fetchall()
-        return [GenerationTask.model_validate_json(cast(str, row["record_json"])) for row in rows]
+        return [
+            task
+            for task in self.list_tasks(project_id)
+            if shot_id in task.covered_shot_ids()
+        ]
 
     def next_runnable_task(
         self,
@@ -1061,39 +1094,59 @@ class ShortDramaRepository:
         return [Take.model_validate_json(cast(str, row["record_json"])) for row in rows]
 
     def list_takes_for_shot(self, project_id: str, shot_id: str) -> list[Take]:
-        with self._lock, self._connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT record_json FROM takes
-                WHERE project_id = ? AND shot_id = ?
-                ORDER BY created_at ASC, candidate_index ASC, id ASC
-                """,
-                (project_id, shot_id),
-            ).fetchall()
-        return [Take.model_validate_json(cast(str, row["record_json"])) for row in rows]
+        return [
+            take
+            for take in self.list_takes(project_id)
+            if shot_id in take.covered_shot_ids()
+        ]
 
-    def select_take(self, take_id: str) -> Take | None:
+    def select_take(
+        self,
+        take_id: str,
+        shot_ids: Sequence[str] | None = None,
+    ) -> Take | None:
         with self._lock:
             take = self.get_take(take_id)
             if take is None:
                 return None
-            for existing in self.list_takes_for_shot(take.project_id, take.shot_id):
-                next_selected = existing.id == take_id
-                if existing.is_selected != next_selected:
-                    existing.is_selected = next_selected
+            covered = set(take.covered_shot_ids())
+            selected_ids = set(shot_ids or covered)
+            if not selected_ids or not selected_ids.issubset(covered):
+                raise ValueError("Selected shot IDs must be covered by the Take")
+            selected_take: Take | None = None
+            for existing in self.list_takes(take.project_id):
+                overlap = selected_ids.intersection(existing.covered_shot_ids())
+                if not overlap:
+                    continue
+                next_selected_ids = set(existing.selected_shot_ids) - overlap
+                if existing.id == take_id:
+                    next_selected_ids.update(selected_ids)
+                normalized = [
+                    shot_id
+                    for shot_id in existing.covered_shot_ids()
+                    if shot_id in next_selected_ids
+                ]
+                if existing.selected_shot_ids != normalized:
+                    existing.selected_shot_ids = normalized
+                    existing.is_selected = bool(normalized)
                     self.save_take(existing)
-            take.is_selected = True
-            return take
+                if existing.id == take_id:
+                    selected_take = existing
+            return selected_take
 
     def mark_takes_stale(self, project_id: str, shot_ids: Sequence[str]) -> int:
         shot_id_set = set(shot_ids)
         changed = 0
         with self._lock:
             for take in self.list_takes(project_id):
-                if take.shot_id not in shot_id_set or take.freshness == Freshness.STALE:
+                if (
+                    not shot_id_set.intersection(take.covered_shot_ids())
+                    or take.freshness == Freshness.STALE
+                ):
                     continue
                 take.freshness = Freshness.STALE
                 take.is_selected = False
+                take.selected_shot_ids = []
                 self.save_take(take)
                 changed += 1
         return changed

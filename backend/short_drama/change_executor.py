@@ -29,6 +29,10 @@ from short_drama.models import (
     ScriptVersion,
     ShotPlan,
 )
+from short_drama.script_text import (
+    ScriptTextSynchronizationError,
+    synchronize_script_line_text,
+)
 from short_drama.worker import utc_now
 
 
@@ -225,6 +229,7 @@ def prepare_semantic_change(
         next_script.approval_status = ApprovalStatus.APPROVED
         next_script.freshness = Freshness.CURRENT
         next_script.created_at = now
+        previous_lines = [line.model_copy(deep=True) for line in current_script.lines]
         line_by_id = {line.id: line for line in next_script.lines}
         scene_by_id = {scene.id: scene for scene in next_script.structured_scenes}
         for patch in script_patches:
@@ -242,6 +247,24 @@ def prepare_semantic_change(
         next_script.subtitle_text = "\n".join(
             line.subtitle_text for line in next_script.lines
         )
+        if any(
+            patch.target_kind == ChangeTargetKind.SCRIPT_LINE
+            for patch in script_patches
+        ):
+            try:
+                (
+                    next_script.structured_scenes,
+                    next_script.screenplay_text,
+                ) = synchronize_script_line_text(
+                    previous_lines=previous_lines,
+                    revised_lines=next_script.lines,
+                    scenes=next_script.structured_scenes,
+                )
+            except ScriptTextSynchronizationError as exc:
+                raise ChangeExecutionError(str(exc)) from exc
+        next_script.review_report = None
+        next_script.review_disposition = None
+        next_script.final_cold_read_report = None
         current_script.approval_status = ApprovalStatus.SUPERSEDED
         current_script.freshness = Freshness.STALE
         updated.script_versions.append(next_script)

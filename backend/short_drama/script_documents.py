@@ -125,7 +125,13 @@ class ScriptRevisionContextPlan(DomainModel):
 
 
 class SceneDurationRevisionConstraint(DomainModel):
-    """Typed permission and deterministic balance target for one scene patch."""
+    """Typed permission and advisory episode-duration context for one scene patch.
+
+    The episode target is a creative planning target, not a millisecond-exact
+    acceptance rule.  ``required_scene_target_seconds`` remains readable for
+    older persisted runs, but new runs do not use it to force compensation in a
+    particular scene.
+    """
 
     allow_change: bool = False
     balance_episode_on_this_scene: bool = False
@@ -137,12 +143,8 @@ class SceneDurationRevisionConstraint(DomainModel):
     def validate_balance_contract(self) -> SceneDurationRevisionConstraint:
         if self.balance_episode_on_this_scene and not self.allow_change:
             raise ValueError("Episode duration balancing requires scene duration permission")
-        if self.balance_episode_on_this_scene != (
-            self.required_scene_target_seconds is not None
-        ):
-            raise ValueError(
-                "Balanced scene duration constraints require one exact scene target"
-            )
+        if self.required_scene_target_seconds is not None and not self.allow_change:
+            raise ValueError("A scene duration suggestion requires change permission")
         return self
 
 

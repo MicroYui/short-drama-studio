@@ -37,6 +37,23 @@ class SemanticAssetReview(DomainModel):
     summary: str = Field(min_length=1, max_length=3000)
 
 
+class AssetVersionInspectionRequest(DomainModel):
+    """Optional production context for inspecting one concrete image version."""
+
+    shot_id: str | None = Field(
+        default=None,
+        description="Only set when this version is intended for one concrete shot.",
+    )
+    canonical_reference_version_ids: list[str] = Field(
+        default_factory=list[str],
+        max_length=8,
+        description=(
+            "Current approved image versions that define the identity, appearance, "
+            "space, or prop structure the candidate should preserve."
+        ),
+    )
+
+
 def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
     bible = next(
         item

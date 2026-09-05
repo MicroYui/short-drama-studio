@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from short_drama.asset_inspection import (
+    AssetVersionInspectionRequest,
+    SemanticAssetReview,
+)
 from short_drama.models import EpisodeReviewRequest, EpisodeReviewResponse
 from short_drama.tools.contracts import (
     ArtifactRef,
@@ -26,6 +30,14 @@ from short_drama.visual_input_quality import (
 
 
 class QaToolService(Protocol):
+    def inspect_asset_version(
+        self,
+        project_id: str,
+        asset_id: str,
+        version_id: str,
+        request: AssetVersionInspectionRequest,
+    ) -> SemanticAssetReview: ...
+
     def review_current_episode(
         self,
         project_id: str,
@@ -64,6 +76,13 @@ class QaReviewEpisodeInput(ToolModel):
     request: EpisodeReviewRequest
 
 
+class QaAssetVersionInspectInput(ToolModel):
+    project_id: str
+    asset_id: str
+    version_id: str
+    request: AssetVersionInspectionRequest
+
+
 class QaReferenceRerankInput(ToolModel):
     project_id: str
     shot_id: str
@@ -87,6 +106,67 @@ class QaVisualReportsInput(ToolModel):
 
 
 def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
+    def inspect_asset_version(
+        request: QaAssetVersionInspectInput,
+    ) -> ToolExecution[SemanticAssetReview]:
+        result = service.inspect_asset_version(
+            request.project_id,
+            request.asset_id,
+            request.version_id,
+            request.request,
+        )
+        refs = [
+            ArtifactRef(
+                project_id=request.project_id,
+                artifact_type="asset",
+                artifact_id=request.asset_id,
+            ),
+            ArtifactRef(
+                project_id=request.project_id,
+                artifact_type="asset_version",
+                artifact_id=request.version_id,
+            ),
+        ]
+        if request.request.shot_id is not None:
+            refs.append(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="shot_plan",
+                    artifact_id=request.request.shot_id,
+                )
+            )
+        refs.extend(
+            ArtifactRef(
+                project_id=request.project_id,
+                artifact_type="asset_version",
+                artifact_id=version_id,
+            )
+            for version_id in dict.fromkeys(
+                request.request.canonical_reference_version_ids
+            )
+        )
+        return ToolExecution(output=result, artifact_refs=tuple(refs))
+
+    registry.register(
+        ToolSpec(
+            id="qa.inspect_asset_version",
+            version=1,
+            category=ToolCategory.QA,
+            description=(
+                "生成或导入一个实际图片版本后调用；对照资产 brief、"
+                "可选镜头与已批准标准参考进行多模态语义检查。它只返回"
+                "建议和问题，不会自动批准或拒绝；随后由 Agent 决定是否调用 "
+                "artifact.review_version 记录结论。"
+            ),
+            effect=ToolEffect.EXTERNAL,
+            idempotent=False,
+            input_model=QaAssetVersionInspectInput,
+            output_model=SemanticAssetReview,
+            handler=inspect_asset_version,
+            tags=frozenset({"asset", "image", "qa", "semantic-review"}),
+        )
+    )
+
     def review(request: QaReviewEpisodeInput) -> ToolExecution[EpisodeReviewResponse]:
         result = service.review_current_episode(request.project_id, request.request)
         return ToolExecution(
@@ -236,6 +316,7 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
 
 
 __all__ = [
+    "QaAssetVersionInspectInput",
     "QaInputCompatibilityInput",
     "QaKeyframeCompareInput",
     "QaReferenceRerankInput",

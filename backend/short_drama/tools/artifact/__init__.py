@@ -18,6 +18,21 @@ from short_drama.image_models import (
     AssetMutationResponse,
     AssetReviewRequest,
 )
+from short_drama.models import (
+    ProductionDocument,
+    ProductionDocumentCreateRequest,
+    ProductionDocumentListResponse,
+    ProductionDocumentMutationResponse,
+    ProductionDocumentReadResponse,
+    ProductionDocumentReviseRequest,
+    ProductionDocumentVersion,
+)
+from short_drama.production_contracts import (
+    ProductionSpecCreateRequest,
+    ProductionSpecMutationResponse,
+    ProductionSpecReadResponse,
+    ProductionSpecReplaceRequest,
+)
 from short_drama.reference_planner import (
     ReferencePackEntryCreateRequest,
     ReferencePackEntryMutationResponse,
@@ -39,6 +54,51 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class ArtifactToolService(Protocol):
+    def create_production_spec(
+        self,
+        project_id: str,
+        request: ProductionSpecCreateRequest,
+    ) -> ProductionSpecMutationResponse: ...
+
+    def replace_production_spec(
+        self,
+        project_id: str,
+        request: ProductionSpecReplaceRequest,
+    ) -> ProductionSpecMutationResponse: ...
+
+    def get_production_spec(
+        self,
+        project_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> ProductionSpecReadResponse: ...
+
+    def create_production_document(
+        self,
+        project_id: str,
+        request: ProductionDocumentCreateRequest,
+    ) -> ProductionDocumentMutationResponse: ...
+
+    def revise_production_document(
+        self,
+        project_id: str,
+        production_document_id: str,
+        request: ProductionDocumentReviseRequest,
+    ) -> ProductionDocumentMutationResponse: ...
+
+    def get_production_document(
+        self,
+        project_id: str,
+        production_document_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> ProductionDocumentReadResponse: ...
+
+    def list_production_documents(
+        self,
+        project_id: str,
+    ) -> ProductionDocumentListResponse: ...
+
     def create_asset(
         self,
         project_id: str,
@@ -165,6 +225,78 @@ class ReferencePackEntryAddInput(ToolModel):
     request: ReferencePackEntryCreateRequest
 
 
+class ProductionDocumentCreateInput(ToolModel):
+    project_id: str
+    request: ProductionDocumentCreateRequest
+
+
+class ProductionDocumentReviseInput(ToolModel):
+    project_id: str
+    production_document_id: str
+    request: ProductionDocumentReviseRequest
+
+
+class ProductionDocumentGetInput(ToolModel):
+    project_id: str
+    production_document_id: str
+    version_id: str | None = None
+
+
+class ProductionDocumentListInput(ToolModel):
+    project_id: str
+
+
+class ProductionSpecCreateInput(ToolModel):
+    project_id: str
+    request: ProductionSpecCreateRequest
+
+
+class ProductionSpecReplaceInput(ToolModel):
+    project_id: str
+    request: ProductionSpecReplaceRequest
+
+
+class ProductionSpecGetInput(ToolModel):
+    project_id: str
+    version_id: str | None = None
+
+
+def _production_document_refs(
+    project_id: str,
+    document: ProductionDocument,
+    version: ProductionDocumentVersion,
+) -> tuple[ArtifactRef, ArtifactRef]:
+    return (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="production_document",
+            artifact_id=document.id,
+            version=version.version,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="production_document_version",
+            artifact_id=version.id,
+            version=version.version,
+        ),
+    )
+
+
+def _production_spec_refs(
+    project_id: str,
+    result: ProductionSpecReadResponse,
+) -> tuple[ArtifactRef, ...]:
+    return (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="production_spec",
+            artifact_id=result.document.id,
+            version=result.version.version,
+        ),
+        *_production_document_refs(project_id, result.document, result.version),
+    )
+
+
 def _asset_mutation_execution(
     project_id: str,
     result: AssetMutationResponse,
@@ -188,6 +320,222 @@ def _asset_mutation_execution(
 
 
 def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None:
+    def create_production_spec(
+        request: ProductionSpecCreateInput,
+    ) -> ToolExecution[ProductionSpecMutationResponse]:
+        result = service.create_production_spec(request.project_id, request.request)
+        return ToolExecution(
+            output=result,
+            artifact_refs=_production_spec_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.create_production_spec",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "在完整剧本已确定、准备开始分镜和资产规划时，创建项目级"
+                " ProductionSpec。它统一记录时长意图、画幅、语言、视听方向与"
+                " Provider 偏好，但不会触发任何真实生成。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=ProductionSpecCreateInput,
+            output_model=ProductionSpecMutationResponse,
+            handler=create_production_spec,
+            tags=frozenset({"production-spec", "planning", "handoff"}),
+        )
+    )
+
+    def replace_production_spec(
+        request: ProductionSpecReplaceInput,
+    ) -> ToolExecution[ProductionSpecMutationResponse]:
+        result = service.replace_production_spec(request.project_id, request.request)
+        return ToolExecution(
+            output=result,
+            artifact_refs=_production_spec_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.replace_production_spec",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "当用户意图或 Agent 的制片判断发生整体变化时，基于当前版本替换"
+                " ProductionSpec 并保留历史版本；它不会静默改写既有分镜。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=ProductionSpecReplaceInput,
+            output_model=ProductionSpecMutationResponse,
+            handler=replace_production_spec,
+            tags=frozenset({"production-spec", "revision", "handoff"}),
+        )
+    )
+
+    def get_production_spec(
+        request: ProductionSpecGetInput,
+    ) -> ToolExecution[ProductionSpecReadResponse]:
+        result = service.get_production_spec(
+            request.project_id,
+            version_id=request.version_id,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_production_spec_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.get_production_spec",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "读取当前或指定历史版本的 ProductionSpec，供分镜、资产和生成 Agent"
+                " 使用同一份制片约束。"
+            ),
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=ProductionSpecGetInput,
+            output_model=ProductionSpecReadResponse,
+            handler=get_production_spec,
+            tags=frozenset({"production-spec", "read", "handoff"}),
+        )
+    )
+
+    def create_production_document(
+        request: ProductionDocumentCreateInput,
+    ) -> ToolExecution[ProductionDocumentMutationResponse]:
+        result = service.create_production_document(
+            request.project_id,
+            request.request,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_production_document_refs(
+                request.project_id,
+                result.document,
+                result.version,
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.create_production_document",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "Create a versioned structured production document for durable "
+                "cross-agent handoff."
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=ProductionDocumentCreateInput,
+            output_model=ProductionDocumentMutationResponse,
+            handler=create_production_document,
+            tags=frozenset({"production-document", "handoff", "planning"}),
+        )
+    )
+
+    def revise_production_document(
+        request: ProductionDocumentReviseInput,
+    ) -> ToolExecution[ProductionDocumentMutationResponse]:
+        result = service.revise_production_document(
+            request.project_id,
+            request.production_document_id,
+            request.request,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_production_document_refs(
+                request.project_id,
+                result.document,
+                result.version,
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.revise_production_document",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "Append a structured production-document version from its current base."
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=ProductionDocumentReviseInput,
+            output_model=ProductionDocumentMutationResponse,
+            handler=revise_production_document,
+            tags=frozenset({"production-document", "handoff", "revision"}),
+        )
+    )
+
+    def get_production_document(
+        request: ProductionDocumentGetInput,
+    ) -> ToolExecution[ProductionDocumentReadResponse]:
+        result = service.get_production_document(
+            request.project_id,
+            request.production_document_id,
+            version_id=request.version_id,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_production_document_refs(
+                request.project_id,
+                result.document,
+                result.version,
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.get_production_document",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description="Read one current or historical production-document version.",
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=ProductionDocumentGetInput,
+            output_model=ProductionDocumentReadResponse,
+            handler=get_production_document,
+            tags=frozenset({"production-document", "handoff", "read"}),
+        )
+    )
+
+    def list_production_documents(
+        request: ProductionDocumentListInput,
+    ) -> ToolExecution[ProductionDocumentListResponse]:
+        result = service.list_production_documents(request.project_id)
+        refs: list[ArtifactRef] = []
+        for document in result.documents:
+            version = next(
+                item
+                for item in document.versions
+                if item.id == document.current_version_id
+            )
+            refs.extend(
+                _production_document_refs(request.project_id, document, version)
+            )
+        return ToolExecution(output=result, artifact_refs=tuple(refs))
+
+    registry.register(
+        ToolSpec(
+            id="artifact.list_production_documents",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description="List durable production documents and their current versions.",
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=ProductionDocumentListInput,
+            output_model=ProductionDocumentListResponse,
+            handler=list_production_documents,
+            tags=frozenset({"production-document", "handoff", "discovery"}),
+        )
+    )
+
     def create_asset(request: AssetCreateInput) -> ToolExecution[AssetMutationResponse]:
         return _asset_mutation_execution(
             request.project_id,
@@ -199,7 +547,11 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.create_asset",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Create a canonical character, location, prop, or style asset.",
+            description=(
+                "当角色、场景、道具或通用参考需要稳定 ID 与版本系谱时"
+                "创建资产。只会建立结构化 Asset 和初始文本版本，不生成图片；"
+                "项目视听风格仍写入 ProjectBible.style。"
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=AssetCreateInput,
@@ -227,8 +579,9 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             version=1,
             category=ToolCategory.ARTIFACT,
             description=(
-                "Set structured identity, visual, material, texture, continuity, and "
-                "optional reference-view strategy for an existing canonical asset."
+                "在生成、导入或派生参考图之前，为已有核心资产写入身份/"
+                "空间锚点、气质、外观/材质、连续性、参考深度与所需视图。"
+                "当身份、状态或覆盖策略改变时再更新；它不自动生图。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=True,
@@ -244,7 +597,10 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.search_catalog",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Search reusable approved asset versions in the local project catalog.",
+            description=(
+                "在生成新图前搜索本地项目目录中可复用的已批准资产版本；"
+                "返回候选供 Agent 按当前 brief 与 Style 判断，不会自动导入。"
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=AssetCatalogSearchInput,
@@ -264,7 +620,12 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.inspect_coverage",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Inspect missing canonical reference views for one project.",
+            description=(
+                "当 Shot ReferencePlan 已说明跨镜复用需求时，检查当前"
+                " ReferencePack 缺失的角色身份/侧背面或场景反打/"
+                "交互区视图。它是镜头计划推导的复用建议，不等于"
+                " CoreAssetBrief.requested_views 已全部完成。"
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=AssetCoverageInput,
@@ -296,7 +657,11 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.import_catalog",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Import a reusable catalog version into the current project.",
+            description=(
+                "当 artifact.search_catalog 返回与当前 brief 匹配的已批准"
+                "候选时，将其导入当前项目作为新资产版本；导入后仍需"
+                "按本项目用途检查并记录结论。"
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=AssetCatalogImportInput,
@@ -311,7 +676,10 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.search_stock",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Search the configured stock catalog for an asset candidate.",
+            description=(
+                "当项目需要现实素材或构图/材质参考，且本地已批准目录"
+                "无合适结果时搜索配置的素材源。只返回候选，不会自动导入或推定人物身份。"
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=True,
             input_model=StockAssetSearchInput,
@@ -336,7 +704,10 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.import_stock",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Import or derive a selected stock asset into a canonical asset.",
+            description=(
+                "在 Agent 明确选中素材候选及其用途后，导入或派生为当前项目"
+                "的资产版本。人物素材默认只作视觉软参考，不默认复制真实身份。"
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=StockAssetImportInput,
@@ -363,7 +734,10 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.import_local_version",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Add a local media file as a new version of an existing asset.",
+            description=(
+                "当用户或其他 Worker 已提供本地媒体时，将文件登记为既有"
+                " Asset 的新版本。导入只建立可追溯版本，不代表内容已验收。"
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=AssetVersionImportLocalInput,
@@ -390,7 +764,11 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.import_url_version",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Add a remote media URL as a new version of an existing asset.",
+            description=(
+                "当用户或其他 Worker 已提供远程媒体 URL 时，将它登记为"
+                "既有 Asset 的新版本。导入后先调用 qa.inspect_asset_version "
+                "观察实际图像，再决定是否批准。"
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=AssetVersionImportUrlInput,
@@ -418,7 +796,11 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.review_version",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Record approval or rejection for a generated or imported asset version.",
+            description=(
+                "在 Agent 已观察实际媒体并完成语义判断后，记录对某个"
+                " AssetVersion 的批准或拒绝及理由。它只写入决策，不会自动看图；"
+                "图片候选通常先调用 qa.inspect_asset_version。"
+            ),
             effect=ToolEffect.WRITE,
             idempotent=True,
             input_model=AssetVersionReviewInput,
@@ -458,7 +840,11 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             id="artifact.add_reference_entry",
             version=1,
             category=ToolCategory.ARTIFACT,
-            description="Add an approved asset version to a subject reference pack.",
+            description=(
+                "当某个已批准图片版本将在后续镜头中承担明确的身份、"
+                "角度、空间或道具职责时，把该精确版本加入主体 ReferencePack。"
+                "只接受资产当前已批准正式图片，不会为草稿自动背书。"
+            ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=ReferencePackEntryAddInput,
@@ -478,6 +864,13 @@ __all__ = [
     "AssetVersionImportLocalInput",
     "AssetVersionImportUrlInput",
     "AssetVersionReviewInput",
+    "ProductionDocumentCreateInput",
+    "ProductionDocumentGetInput",
+    "ProductionDocumentListInput",
+    "ProductionDocumentReviseInput",
+    "ProductionSpecCreateInput",
+    "ProductionSpecGetInput",
+    "ProductionSpecReplaceInput",
     "ReferencePackEntryAddInput",
     "StockAssetImportInput",
     "StockAssetSearchInput",

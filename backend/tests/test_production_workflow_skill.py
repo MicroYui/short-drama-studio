@@ -36,7 +36,8 @@ def test_shared_end_to_end_workflow_is_loaded_into_planner_prompts() -> None:
     assert "每次规划前先回答的六个问题" in planner.text
     assert "route.compile_h3_prompt" in planner.text
     assert "change.preview" in planner.text
-    assert "竖屏导演重点确保核心动作" in planner.text
+    assert "Worker 按上游 Skill 产出" in planner.text
+    assert "竖屏导演重点确保核心动作" not in planner.text
     assert "当前类型在共享流程上的详细制作方法" not in director.text
 
 

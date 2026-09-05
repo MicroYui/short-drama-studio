@@ -46,11 +46,6 @@ from short_drama.script_documents import (
     build_episode_manifest,
 )
 
-
-def _duration_milliseconds(value: float) -> int:
-    return int(round(value * 1000))
-
-
 @dataclass(frozen=True)
 class SceneWritingResult:
     patch: EpisodeScenePatch | None
@@ -161,7 +156,11 @@ class SceneCreativeDraft(DomainModel):
         default_factory=list[SceneScriptBlock],
         max_length=500,
     )
-    performance_timing_assessment: str = Field(min_length=1, max_length=1200)
+    performance_timing_assessment: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=1200,
+    )
     upstream_replan_request: SceneUpstreamReplanRequest | None = None
 
     @model_validator(mode="after")
@@ -434,19 +433,18 @@ def _scene_writer_prompt(
         "只返回 JSON，并严格匹配 SceneCreativeDraft；只把当前场景节点扩写成按演出顺序排列的 "
         "ACTION、DIALOGUE、VOICEOVER blocks。heading、summary、duration、locations 与 continuity "
         "由代码从蓝图合并，不要在输出中重复，也不要改写全局蓝图、其他场次、角色、地点、道具或风格。"
-        "本阶段不写镜头、运镜、关键帧、剪辑或供应商提示词。让可见动作、反应、调度、情绪变化和停顿"
-        "直接承担状态变化；对白只说当下这些人物自然会对彼此说的话。不要为了显式说明而把场景契约、"
-        "连续性摘要、关系状态标签或制作指令念成对白。视听节奏快不等于对白必须电报化或口号化；"
-        "对白量应与场景时长大致相称，但没有固定行数，也不要求每句都增加新信息。避免复述 summary 的说明性对白。"
-        "返回 performance_timing_assessment：先在脑中按成稿顺序，以自然语速和真实动作完整演一遍当前场。"
-        "除非 blocks 本身明确写成同时发生、蒙太奇或可连续掠过的画面，否则把对白、辨认、动作、反应和停顿"
-        "视为依次占用表演时间，不要替成稿假设尚未写出的快速剪辑。给出可信的表演时长范围，指出最耗时的"
-        "顺序节拍，以及你已删掉、合并或改为同时发生的内容；若成稿仍与目标时长明显冲突，应实际继续取舍"
-        "或请求上游重规划，而不是只在自评中宣称可以装入。不得只复述秒数标签，也不得假设演员持续赶词。这个判断用于"
-        "下一位 Agent 理解创作取舍，不由代码按字数、语速或真假值设门禁。"
-        "延续精简上下文中的已知事实、关系位置和未结线索，不要提前解决后续场景。先确认入场时已经成立的"
-        "群众态度、人物关系、资源与权限，再只写本场真正新增的变化；若一次认可、让位、授予或交接只是在"
-        "换措辞重演既有状态，应压成过渡或让它产生新的实际后果。blocks 必须是最终演出顺序，"
+        "本阶段不写镜头、运镜、关键帧、剪辑或供应商提示词。把当前节点写成可读、可演的场景："
+        "尽快进入当下目标与冲突，用可见动作、反应、调度、情绪变化和对白推动。"
+        "不要为了显式说明而让人物朗读场景契约、连续性摘要、修订说明或制作指令。"
+        "视听节奏快不等于对白必须电报化或口号化；对白量与场景尺度大致相称即可，"
+        "没有固定行数，也不要求每句都增加新信息。"
+        "如果本项目承诺爽感或强情绪，让本场的铺垫走向清楚释放：主角通过自己的选择、行动或能力改变局面，"
+        "对立力量的受挫、改口或反噬在场内可见。夸张、荒诞、无厘头以及重复节拍都可以用来升级惊喜、压力或喜剧效果；"
+        "只要观众能理解此刻的局面和结果，不需要把它补成现实世界的完整行政或证明流程。"
+        "target_duration_seconds 是创作尺度，不是逐项计时账本。只有发现当前成稿与目标时长明显冲突时，"
+        "才需要在可选的 performance_timing_assessment 中简要说明；不用给出逐句范围、顺序节拍或删改清单。"
+        "延续精简上下文中的已知事实、关系位置和未结线索，不提前解决后续场景。"
+        "blocks 必须是最终演出顺序，"
         "自然交错动作、反应、情绪转折、停顿与对白。playable_actions 是 Story Architect 给出的语义意图，"
         "不是必须逐字写进 screenplay 的文本清单；可以合并、压缩、重排，或用等价的可见行为完成，"
         "但要守住本场 narrative_purpose 与 continuity_out。covers_action_indices 只是可选的意图来源标注："
@@ -537,6 +535,14 @@ def _scene_writer_prompt(
             if previous_scene is not None
             else None
         ),
+        "readable_episode_so_far": [
+            {
+                "scene_sequence": patch.scene_sequence,
+                "screenplay_text": patch.screenplay_text,
+                "continuity_out": patch.continuity_out.model_dump(mode="json"),
+            }
+            for patch in previous_patches
+        ],
         "older_scene_outcomes": older_summaries,
         "next_scene_nodes": next_nodes,
         "output_schema": SceneCreativeDraft.model_json_schema(),
@@ -896,22 +902,20 @@ def revise_story_scene(
         f"{duration_instruction} 地点只能使用全局已声明的地点。"
         "保持 prop_ids 不变；episode_manifest.props 只提供本场已关联道具的稳定 ID 和外观，"
         "当前状态在 current_scene.continuity_in/out 中。道具简介、场景 summary、continuity "
-        "或 repair invariant 只是创作上下文，不能替代观众在 screenplay_text 中实际看到的因果。"
+        "或 repair invariant 只是创作上下文，不能替代观众在 screenplay_text 中实际看到的行动和结果。"
         "已声明的核心角色必须用 speaker_character_id 引用 episode_manifest.characters "
         "中的稳定 ID；确实只属于本场的群众、店员或其他临时说话者可不绑定全局 ID。"
         "当用户指令确有需要时，可以修改本场的 heading、summary、narrative_purpose、playable_actions、"
         "连续性衔接、对白与 screenplay_text。screenplay_text 应按演出顺序自然呈现。"
         "playable_actions 是场景语义意图，不要求逐字出现在 screenplay_text 中；可以通过合并、压缩、"
-        "重排或等价的可见动作来落实。若修复要求合并重复证明、反应或交接，不能只把原动作缩句、并排写成"
-        "蒙太奇或宣称同时发生；先判断它们是否在证明同一状态，保留最有力的一次，其余真正删除，或转化为"
-        "新的选择、代价和后果。按修订后成稿顺序自然演读；未明确写成同时发生的动作、辨认、反应和停顿都"
-        "依次占用时间，不用假想快切替文本完成时长修复。普通创作模式下，对白也不以字符串逐字覆盖作为质量判断；"
+        "重排或等价的可见动作落实。修订时保住已成立的铺垫和人物声音，并让当前冲突、主角行动、"
+        "对立反应与情绪释放更清楚。重复节拍若正在升级惊喜、压力或喜剧效果可以保留；"
+        "只有它没有带来新效果时才聚焦压缩。普通创作模式下，对白也不以字符串逐字覆盖作为质量判断；"
         "由你保持 lines 与 screenplay_text 的语义一致。只有 source_mode=SCRIPT_LOCKED 时，"
         "用户锁定的对白或文字必须原样保留。不要改变整集标题、全局角色/资产/风格、无关场景、"
         "镜头、媒体或时间线，也不要为了处理下游调度或生成问题而补写解释。"
-        "必须填写 performance_timing_assessment，只评价本次实际返回的 screenplay_text：说明你实际删除或"
-        "合并了什么、哪些动作必须依次发生、哪些确实能同时发生，并给出自然表演范围。若仍装不下，应在本次"
-        "patch 中继续取舍，而不是描述未来还需删除的内容。该字段只进入 trace 和后续语义判断，不触发代码阈值。"
+        "performance_timing_assessment 是可选修订说明；只有实际返回的 screenplay_text 与目标时长仍有"
+        "明显冲突时，才简要说明主要压力点。不必逐项计时，也不为了凑目标秒数机械改稿。"
         "若提供 previous_revision_verification，只处理其中明确落在当前场次的 violation；"
         "把 violation.issue_id 当作连续语义身份，保留它已确认成立的内容，不扩大返修范围。"
         f"{skill_prompt.text}"
@@ -970,15 +974,6 @@ def revise_story_scene(
             and patch.target_duration_seconds != scene.target_duration_seconds
         ):
             raise ValueError("Scene revision changed target_duration_seconds")
-        required_duration = duration_constraint.required_scene_target_seconds
-        if required_duration is not None and _duration_milliseconds(
-            patch.target_duration_seconds
-        ) != _duration_milliseconds(required_duration):
-            raise ValueError(
-                "Final duration compensation requires target_duration_seconds="
-                f"{required_duration:g}; received={patch.target_duration_seconds:g}; "
-                f"episode_target={duration_constraint.episode_target_seconds:g}"
-            )
         known_locations = {location.name for location in outline.locations}
         if not set(patch.location_names) <= known_locations:
             raise ValueError("Scene revision used undeclared locations")

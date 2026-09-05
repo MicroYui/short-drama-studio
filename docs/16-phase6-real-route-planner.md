@@ -20,6 +20,16 @@ Phase 6 已把既有 `ShotPlan`、`ReferencePlan`、批准资产、H3 `RouteEvid
 
 计划在执行前检查上述版本是否仍为当前版本。这是普通正确性保护，不是额外冻结、SHA 锁定或审批门。若用户不接受计划，仍可在 H3 实验台修改路线、媒体或直接忽略建议。
 
+### 关键帧资产交接
+
+当 Route Agent 选择的候选缺少首帧或尾帧时，`asset_preparations` 是图像 Worker 与 RoutePlan 之间的持久化交接工件，而不是另一份项目状态。每次回写都必须精确指定项目、RoutePlan、镜头、preparation ID 和 H3 媒体 role：
+
+- `GENERATING`：记录正在产出该关键帧的 Asset，可同时保存 ImageTask ID；
+- `READY`：只接受该 Asset 当前已批准、媒体可用的图片 AssetVersion；
+- `REJECTED`：保留资产与任务来源，清除可执行版本并写入退回原因。
+
+回写直接更新原 RoutePlan 的 JSON 记录，因此应用重启后仍可恢复。后续重新编译 RoutePlan 时，规划器会把最近的 `READY` preparation 转为真实 H3 媒体输入；若分镜、剧本、Bible 或资产批准状态已变更，则不会沿用过期图片。这个交接不会自动审批图片；批准仍由现有的资产审核能力完成。
+
 ## 证据优先的选路顺序
 
 1. 若存在当前版本、媒体可用、非合同冒烟、`REVIEWED + HARD_PASS` 的 H3 Take，直接复用。
@@ -77,6 +87,7 @@ Phase 6 已把既有 `ShotPlan`、`ReferencePlan`、批准资产、H3 `RouteEvid
 
 - `POST /projects/{project_id}/h3/production-route-plans`：编译并持久化 dry-run；
 - `GET /projects/{project_id}/h3/production-route-plans`：读取计划历史；
+- `POST /projects/{project_id}/h3/production-route-plans/{plan_id}/asset-preparations/{preparation_id}`：精确回写关键帧的生成中、已就绪或已退回状态；
 - `POST /projects/{project_id}/h3/production-route-plans/{plan_id}/execute`：复用已通过 Take，可选入队缺口生产任务，自动观察并在条件成立时重建 Manifest/导出；
 - H3 页面新增整集路线面板，展示复用/新生成、路线、风险、抽帧量、边界观察、资产 brief、费用估算和可忽略问题。
 

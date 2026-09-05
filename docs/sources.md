@@ -16,6 +16,15 @@
 
 ### MiniMax
 
+- [MiniMax Design](https://design.minimax.io/)
+- [MiniMax Design 使用指南](https://my.feishu.cn/wiki/VEoVwpfCKiTHvHkAGQ7cQJxCncf)
+- [MiniMax H3 本地/ComfyUI 活动页](https://design.minimaxi.com/campaign)
+- [Agent Team: Building a Production-Grade Multi-Agent System](https://www.minimax.io/blog/minimax-agent-team-long-running-1779893953)
+- [MiniMax Agent: What We Learned While Building in 2025](https://www.minimax.io/news/minimax-agent-what-we-learned-while-building-in-2025)
+- [Why Is Interleaved Thinking Important for M2](https://www.minimax.io/news/why-is-interleaved-thinking-important-for-m2)
+- [MiniMax M2 Technical Report](https://arxiv.org/abs/2605.26494)
+- [MiniMax M2.7](https://www.minimax.io/news/minimax-m27-en)
+- [MiniMax M3](https://www.minimax.io/blog/minimax-m3)
 - [Video Generation Guide](https://platform.minimax.io/docs/guides/video-generation)
 - [Create Video Generation Task V2](https://platform.minimax.io/docs/api-reference/video-generation-v2-create)
 - [Query Video Generation Task V2](https://platform.minimax.io/docs/api-reference/video-generation-v2-query)
@@ -101,6 +110,18 @@ Phase 26 为验证视频质量和低重试机制重新拉取了相关仓库。�
 | [AESR](https://github.com/oceanflowlab/AESR) | [`a2b3d010e4b66eed0398ead1b592bc9038f8f6db`](https://github.com/oceanflowlab/AESR/commit/a2b3d010e4b66eed0398ead1b592bc9038f8f6db) | 黑盒模型 Playbook、时间定位与按失败类型修复；未发现明确软件 License，只研究机制 |
 | [MSVBench](https://github.com/HITsz-TMG/MSVBench) | [`309318bf29594fe21a487d4fd78284faef0d777b`](https://github.com/HITsz-TMG/MSVBench/commit/309318bf29594fe21a487d4fd78284faef0d777b) | 多镜头分层评测、物理状态和摄影语法连续性 |
 | [MultiShotMaster](https://github.com/KlingAIResearch/MultiShotMaster) | [`1df812dda262639e4a3ca6e4a1da9000b0a8e124`](https://github.com/KlingAIResearch/MultiShotMaster/commit/1df812dda262639e4a3ca6e4a1da9000b0a8e124) | global invariants、per-shot captions 和模型内部多镜边界 |
+
+### MiniMax Design / Agent Team 补充快照
+
+| 项目 | 本轮审查 commit | 本轮用途 |
+| --- | --- | --- |
+| [MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3) | [`d21241f0a4b3acbb34c97dae47fa417b7065e438`](https://github.com/MiniMax-AI/MiniMax-H3/commit/d21241f0a4b3acbb34c97dae47fa417b7065e438) | H3 Prompt 合同、多模态参考语义与公开 Skills |
+| [Mini-Agent](https://github.com/MiniMax-AI/Mini-Agent) | [`d76a4f6389688cabda39c224a6cdfa274215d47c`](https://github.com/MiniMax-AI/Mini-Agent/commit/d76a4f6389688cabda39c224a6cdfa274215d47c) | 单 Agent 工具循环、渐进 Skill 披露、session note 和取消/日志边界 |
+| [MiniMax Design Plugin for ComfyUI](https://github.com/MiniMax-AI/minimax-desgin-plugin) | [`bef9de2101e9d873619c83553b8f03ebb0c10663`](https://github.com/MiniMax-AI/minimax-desgin-plugin/commit/bef9de2101e9d873619c83553b8f03ebb0c10663) | Design/Hub 嵌入、Agent 编辑/编译/执行、草稿恢复、Agent Hint 和工作流版本新鲜度 |
+
+MiniMax Design 3.0.11 安装包、`agent-profiles/v2`、内置 ComfyUI 0.2.4、H3 示例工程与本地已安装 Skills 为 `LOCAL-PACKAGE-OBSERVED`，不是开源仓库事实或未来产品承诺。其 `drama-series`、`ad-tvc`、`mv` 三个 active workflow、根文档与 `_shared` 已按 3.0.11 (1035) 快照纳入 `backend/short_drama/skills/official/minimax_design/3.0.11/workflows/`，不包含 `_disabled/`；这是安装包原文快照，不意味着 Design 私有 Agent Runtime 已开源。详见 [MiniMax Design、Agent Team 与 H3 Skills 蓝图](43-minimax-design-agent-team-product-blueprint.md)。
+
+MiniMax-H3 官方仓库收录的 8 个任务/风格 Skill 及其 references 已按提交 `d21241f0a4b3acbb34c97dae47fa417b7065e438` 以 23 个 Markdown/TXT 和 8 个 `meta.yaml` 文件原样纳入本地。只有英文的附属 references 同时保留原文与忠实中译；上游作者和收录来源混合，原始元数据仅供版本维护，Agent-facing 标签保持中性且不参与方法选择或验收。当前活动 Catalog 将三个 Design 项目 Workflow 与八个 H3 任务 Method 分层；原有七个 `PROJECT_SYNTHESIS` Method 与三个自创 Narrative Skill 不再是活动能力。`drama-series` 已覆盖通用短剧/漫剧主骨架，不再把通用真人短剧、动态漫或爽剧整体声明为能力缺口。
 
 ## 4. 前沿论文与评测资料
 

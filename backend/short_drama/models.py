@@ -5,7 +5,14 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_validator,
+    model_validator,
+)
 
 from short_drama.reference_aliases import normalize_reference_alias
 
@@ -52,10 +59,18 @@ class PlanningRunStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class PlanningRunOperation(StrEnum):
+    INITIAL = "INITIAL"
+    SCRIPT_REVISION = "SCRIPT_REVISION"
+
+
 class PlanningRunStep(StrEnum):
     STORY_ORIENTATION = "STORY_ORIENTATION"
     STORY_ARCHITECT = "STORY_ARCHITECT"
     SCENE_WRITER = "SCENE_WRITER"
+    SCRIPT_VERIFIER = "SCRIPT_VERIFIER"
+    # Compatibility-only cursor for jobs persisted before the producer/verifier
+    # topology made the active responsibility explicit.
     SCRIPT_CRITIC = "SCRIPT_CRITIC"
     REVIEW_ROUTER = "REVIEW_ROUTER"
     SOURCE_CONTRACT = "SOURCE_CONTRACT"
@@ -199,6 +214,17 @@ class StoryRepairDiagnosis(StrEnum):
     SOURCE_CONCEPT_GAP = "SOURCE_CONCEPT_GAP"
     OUTLINE_DEFECT = "OUTLINE_DEFECT"
     CRITIC_OVERREACH = "CRITIC_OVERREACH"
+    USER_REQUEST = "USER_REQUEST"
+
+
+class StoryMetadataTarget(StrEnum):
+    """Global story state that a semantic repair must keep aligned."""
+
+    TITLE = "TITLE"
+    STORY_SUMMARY = "STORY_SUMMARY"
+    STORY_INTENT = "STORY_INTENT"
+    ENDING_CONTRACT = "ENDING_CONTRACT"
+    PROJECT_BIBLE = "PROJECT_BIBLE"
 
 
 class VideoInspectionScope(StrEnum):
@@ -372,6 +398,7 @@ class ExecutionStrategy(StrEnum):
 class VideoGenerationRoute(StrEnum):
     DIRECT = "DIRECT"
     FRAME_FIRST = "FRAME_FIRST"
+    FRAME_LAST = "FRAME_LAST"
     FRAME_FIRST_LAST = "FRAME_FIRST_LAST"
     REFERENCE = "REFERENCE"
 
@@ -566,7 +593,6 @@ class StorySourceContract(DomainModel):
     open_creative_choices: list[str] = Field(default_factory=list[str], max_length=20)
     authoritative_user_overrides: list[str] = Field(
         default_factory=list[str],
-        max_length=20,
     )
     locked_dialogue: list[StoryLockedDialogueLine] = Field(
         default_factory=list[StoryLockedDialogueLine],
@@ -624,6 +650,9 @@ class StoryRepairAction(DomainModel):
     affected_scene_sequences: list[int] = Field(
         default_factory=list[int],
     )
+    metadata_targets: list[StoryMetadataTarget] = Field(
+        default_factory=list[StoryMetadataTarget],
+    )
     target_duration_change_required: bool = False
     recommended_change: str = Field(min_length=1, max_length=1600)
     remove_or_simplify: list[str] = Field(default_factory=list[str], max_length=12)
@@ -642,6 +671,12 @@ class StoryRepairAction(DomainModel):
             raise ValueError(
                 "Scene duration changes must identify their affected scenes"
             )
+        if self.metadata_targets and not self.should_revise:
+            raise ValueError(
+                "Story metadata targets require an active story repair action"
+            )
+        if len(self.metadata_targets) != len(set(self.metadata_targets)):
+            raise ValueError("Story repair metadata targets must be unique")
         return self
 
 
@@ -830,6 +865,8 @@ class StoryMetadataRevisionPatch(DomainModel):
 
     title: str | None = Field(default=None, min_length=1, max_length=120)
     story_summary: str | None = Field(default=None, min_length=1, max_length=2400)
+    story_intent: StoryIntent | None = None
+    ending_contract: EndingContract | None = None
     character_patches: list[StoryCharacterMetadataPatch] = Field(
         default_factory=list[StoryCharacterMetadataPatch],
         max_length=12,
@@ -867,6 +904,9 @@ class StoryRevisionViolation(DomainModel):
     issue_id: str | None = Field(default=None, min_length=1, max_length=120)
     category: str = Field(min_length=1, max_length=120)
     scene_sequences: list[int] = Field(default_factory=list[int])
+    metadata_targets: list[StoryMetadataTarget] = Field(
+        default_factory=list[StoryMetadataTarget],
+    )
     target_duration_change_required: bool = False
     observation: str = Field(min_length=1, max_length=1200)
     repair_instruction: str = Field(min_length=1, max_length=1200)
@@ -877,6 +917,8 @@ class StoryRevisionViolation(DomainModel):
             raise ValueError(
                 "Duration repair violations must identify at least one scene"
             )
+        if len(self.metadata_targets) != len(set(self.metadata_targets)):
+            raise ValueError("Story revision metadata targets must be unique")
         return self
 
 
@@ -1308,9 +1350,14 @@ class ShotPlan(DomainModel):
             for beat in self.timeline_beats
             for line_id in beat.dialogue_line_ids
         ]
-        if assigned_dialogue != self.dialogue_line_ids:
+        ordered_dialogue: list[str] = []
+        for line_id in assigned_dialogue:
+            if not ordered_dialogue or ordered_dialogue[-1] != line_id:
+                ordered_dialogue.append(line_id)
+        if ordered_dialogue != self.dialogue_line_ids:
             raise ValueError(
-                "Shot timeline beats must assign every shot dialogue line exactly once and in order"
+                "Shot timeline beats must cover shot dialogue lines in order; "
+                "one line may span adjacent beats"
             )
         alias_targets: dict[str, tuple[str, tuple[str, ...]]] = {}
         for beat in self.timeline_beats:
@@ -1432,22 +1479,61 @@ class TimelineVideoClip(DomainModel):
 
 class TimelineAudioClip(DomainModel):
     id: str
-    shot_id: str
-    take_id: str
+    shot_id: str | None = None
+    take_id: str | None = None
+    asset_id: str | None = None
+    asset_version_id: str | None = None
     media_path: str
     start_seconds: float
+    source_in_seconds: float = Field(default=0.0, ge=0.0)
+    source_out_seconds: float | None = Field(default=None, gt=0.0)
     duration_seconds: float
     gain_db: float
     role: str
 
+    @model_validator(mode="after")
+    def validate_source_binding(self) -> TimelineAudioClip:
+        if (self.shot_id is None) != (self.take_id is None):
+            raise ValueError("Timeline audio shot_id and take_id must be supplied together")
+        if self.take_id is None and self.asset_version_id is None:
+            raise ValueError(
+                "Timeline audio must reference either a Take or an audio AssetVersion"
+            )
+        if (
+            self.source_out_seconds is not None
+            and self.source_out_seconds <= self.source_in_seconds
+        ):
+            raise ValueError("Timeline audio source_out_seconds must follow source_in_seconds")
+        if self.source_out_seconds is not None and abs(
+            self.source_out_seconds
+            - self.source_in_seconds
+            - self.duration_seconds
+        ) > 0.001:
+            raise ValueError(
+                "Timeline audio duration_seconds must match its selected source window"
+            )
+        return self
+
 
 class SubtitleCue(DomainModel):
     id: str
-    script_line_id: str
+    script_line_id: str | None = None
+    timed_text_id: str | None = None
     start_seconds: float
     end_seconds: float
     text: str
-    speaker: str
+    speaker: str | None = None
+    language: str | None = None
+
+    @model_validator(mode="after")
+    def validate_cue_source(self) -> SubtitleCue:
+        if self.script_line_id is None and self.timed_text_id is None:
+            raise ValueError(
+                "Subtitle cues must reference a script line or locked timed text"
+            )
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("Subtitle cue end_seconds must follow start_seconds")
+        return self
 
 
 class OutputSpec(DomainModel):
@@ -1519,6 +1605,347 @@ class ProjectPlanningMetadata(DomainModel):
         return self
 
 
+class ProductionDocumentOrigin(StrEnum):
+    """Who supplied one durable production-method document version."""
+
+    USER = "USER"
+    AGENT = "AGENT"
+    IMPORT = "IMPORT"
+
+
+class MasterAudioBinding(DomainModel):
+    """Approved audio window that defines time for an audio-led production."""
+
+    asset_id: str = Field(min_length=1)
+    asset_version_id: str = Field(min_length=1)
+    source_in_seconds: float = Field(default=0.0, ge=0.0)
+    source_out_seconds: float = Field(gt=0.0)
+    time_origin_seconds: float = Field(default=0.0, ge=0.0)
+    duration_seconds: float = Field(gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_source_window(self) -> MasterAudioBinding:
+        if self.source_out_seconds <= self.source_in_seconds:
+            raise ValueError("Master Audio source window must have positive duration")
+        source_duration = self.source_out_seconds - self.source_in_seconds
+        if abs(source_duration - self.duration_seconds) > 0.001:
+            raise ValueError(
+                "Master Audio duration_seconds must match its selected source window"
+            )
+        return self
+
+
+class AudioEnergyPoint(DomainModel):
+    time_seconds: float = Field(ge=0.0)
+    normalized_energy: float = Field(ge=0.0, le=1.0)
+
+
+class AudioStructureSection(DomainModel):
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(gt=0.0)
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> AudioStructureSection:
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("Audio section end_seconds must follow start_seconds")
+        return self
+
+
+class AudioKeyMoment(DomainModel):
+    time_seconds: float = Field(ge=0.0)
+    kind: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=500)
+    strength: float | None = Field(default=None, ge=0.0)
+
+
+class AudioStructureMap(DomainModel):
+    """Measured music structure; unavailable dimensions remain explicitly empty."""
+
+    asset_id: str = Field(min_length=1)
+    asset_version_id: str = Field(min_length=1)
+    source_in_seconds: float = Field(ge=0.0)
+    source_out_seconds: float = Field(gt=0.0)
+    time_origin_seconds: float = Field(ge=0.0)
+    duration_seconds: float = Field(gt=0.0)
+    analysis_level: Literal["BASIC_METADATA", "RHYTHMIC"]
+    analyzer: str = Field(min_length=1, max_length=160)
+    bpm: float | None = Field(default=None, gt=0.0)
+    beats: list[float] = Field(default_factory=list[float])
+    onsets: list[float] = Field(default_factory=list[float])
+    energy: list[AudioEnergyPoint] = Field(default_factory=list[AudioEnergyPoint])
+    sections: list[AudioStructureSection] = Field(
+        default_factory=list[AudioStructureSection]
+    )
+    key_moments: list[AudioKeyMoment] = Field(
+        default_factory=list[AudioKeyMoment]
+    )
+    sample_rate_hz: int | None = Field(default=None, gt=0)
+    channels: int | None = Field(default=None, gt=0)
+    file_size_bytes: int = Field(ge=0)
+    mime_type: str | None = None
+    notes: list[str] = Field(default_factory=list[str])
+    created_at: str = Field(min_length=1)
+
+
+class TimedTextLock(DomainModel):
+    """Exact on-screen text anchored to the Master Audio timeline."""
+
+    id: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=4000)
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(gt=0.0)
+    language: str | None = Field(default=None, min_length=1, max_length=40)
+    speaker: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_exact_text(self) -> TimedTextLock:
+        if not self.text.strip():
+            raise ValueError("Timed text must contain visible characters")
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("Timed text end_seconds must follow start_seconds")
+        return self
+
+
+class TimedTextLockSet(DomainModel):
+    master_audio_version_id: str = Field(min_length=1)
+    entries: list[TimedTextLock] = Field(default_factory=list[TimedTextLock])
+
+    @model_validator(mode="after")
+    def validate_unique_entries(self) -> TimedTextLockSet:
+        entry_ids = [item.id for item in self.entries]
+        if len(entry_ids) != len(set(entry_ids)):
+            raise ValueError("Timed text IDs must be unique")
+        return self
+
+
+class ProductionDocumentArtifactRef(DomainModel):
+    """Domain-side ArtifactRef compatible with the Agent runtime contract.
+
+    The Agent runtime imports domain models, so the canonical project document
+    cannot import ``agent_runtime.ArtifactRef`` without creating a cycle.  This
+    deliberately keeps the same serialized shape for lossless handoff.
+    """
+
+    project_id: str = Field(min_length=1)
+    artifact_type: str = Field(min_length=1)
+    artifact_id: str = Field(min_length=1)
+    version: int | None = Field(default=None, ge=1)
+
+
+class ProjectOutputSlotRevision(DomainModel):
+    """Immutable snapshot of one logical output-slot revision."""
+
+    revision: int = Field(ge=1)
+    current_artifact_ref: ProductionDocumentArtifactRef | None = None
+    invalidation_reason: str | None = Field(default=None, min_length=1, max_length=2000)
+    producer_agent_run_id: str | None = Field(default=None, min_length=1)
+    producer_work_order_id: str | None = Field(default=None, min_length=1)
+    updated_at: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_snapshot_state(self) -> ProjectOutputSlotRevision:
+        if self.current_artifact_ref is None:
+            if self.invalidation_reason is None:
+                raise ValueError(
+                    "An invalidated output-slot revision requires a reason"
+                )
+            return self
+        if self.invalidation_reason is not None:
+            raise ValueError(
+                "A bound output-slot revision cannot have an invalidation reason"
+            )
+        return self
+
+
+class ProjectOutputSlot(DomainModel):
+    """Stable logical pointer to the latest artifact produced for one purpose.
+
+    A slot is pointer metadata only.  The referenced artifact remains the
+    canonical content, while prior bindings stay available for provenance and
+    rollback-aware Agent handoffs.
+    """
+
+    id: str = Field(min_length=1, max_length=200)
+    revision: int = Field(ge=1)
+    current_artifact_ref: ProductionDocumentArtifactRef | None = None
+    previous_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    revision_history: list[ProjectOutputSlotRevision] = Field(
+        default_factory=list[ProjectOutputSlotRevision]
+    )
+    invalidation_reason: str | None = Field(default=None, min_length=1, max_length=2000)
+    producer_agent_run_id: str | None = Field(default=None, min_length=1)
+    producer_work_order_id: str | None = Field(default=None, min_length=1)
+    updated_at: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_artifact_history(self) -> ProjectOutputSlot:
+        history_revisions = [item.revision for item in self.revision_history]
+        if history_revisions != sorted(history_revisions):
+            raise ValueError("Output slot revision history must be ordered")
+        if len(history_revisions) != len(set(history_revisions)):
+            raise ValueError("Output slot revision history must be unique")
+        if any(revision >= self.revision for revision in history_revisions):
+            raise ValueError(
+                "Output slot revision history must precede the current revision"
+            )
+        previous_keys = [
+            _production_artifact_ref_key(item)
+            for item in self.previous_artifact_refs
+        ]
+        if len(previous_keys) != len(set(previous_keys)):
+            raise ValueError("Output slot previous artifact refs must be unique")
+        if self.current_artifact_ref is None:
+            if not self.previous_artifact_refs:
+                raise ValueError(
+                    "An invalidated output slot must retain at least one prior artifact ref"
+                )
+            if self.invalidation_reason is None:
+                raise ValueError("An invalidated output slot requires a reason")
+            return self
+        if self.invalidation_reason is not None:
+            raise ValueError("A bound output slot cannot have an invalidation reason")
+        if _production_artifact_ref_key(self.current_artifact_ref) in previous_keys:
+            raise ValueError(
+                "Output slot current artifact ref cannot also be in its history"
+            )
+        return self
+
+
+def _production_artifact_ref_key(
+    artifact_ref: ProductionDocumentArtifactRef,
+) -> tuple[str, str, str, int | None]:
+    return (
+        artifact_ref.project_id,
+        artifact_ref.artifact_type,
+        artifact_ref.artifact_id,
+        artifact_ref.version,
+    )
+
+
+class ProductionDocumentVersion(DomainModel):
+    """One immutable structured snapshot of a production-method document."""
+
+    id: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    parent_version_id: str | None = Field(default=None, min_length=1)
+    payload: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+    created_at: str = Field(min_length=1)
+
+
+class ProductionDocument(DomainModel):
+    """Stable identity and version history for reusable production knowledge."""
+
+    id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    kind: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1, max_length=240)
+    current_version_id: str = Field(min_length=1)
+    versions: list[ProductionDocumentVersion] = Field(min_length=1)
+
+    @field_validator("kind", "title", mode="before")
+    @classmethod
+    def trim_descriptive_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_version_history(self) -> ProductionDocument:
+        version_ids = [item.id for item in self.versions]
+        version_numbers = [item.version for item in self.versions]
+        if len(version_ids) != len(set(version_ids)):
+            raise ValueError("Production document version IDs must be unique")
+        if len(version_numbers) != len(set(version_numbers)):
+            raise ValueError("Production document version numbers must be unique")
+        if self.current_version_id not in version_ids:
+            raise ValueError(
+                "Production document current_version_id must reference a stored version"
+            )
+        return self
+
+
+class ProductionDocumentCreateRequest(DomainModel):
+    kind: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=1, max_length=240)
+    payload: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+
+    @field_validator("kind", "title", mode="before")
+    @classmethod
+    def trim_descriptive_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class ProductionDocumentReviseRequest(DomainModel):
+    base_version_id: str = Field(min_length=1)
+    payload: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+
+
+class ProductionDocumentReadResponse(DomainModel):
+    document: ProductionDocument
+    version: ProductionDocumentVersion
+
+
+class ProductionDocumentMutationResponse(ProductionDocumentReadResponse):
+    pass
+
+
+class ProductionDocumentListResponse(DomainModel):
+    documents: list[ProductionDocument] = Field(
+        default_factory=list[ProductionDocument]
+    )
+
+
+class MasterAudioBindRequest(DomainModel):
+    asset_version_id: str = Field(min_length=1)
+    source_in_seconds: float = Field(default=0.0, ge=0.0)
+    source_out_seconds: float | None = Field(default=None, gt=0.0)
+    time_origin_seconds: float = Field(default=0.0, ge=0.0)
+    base_version_id: str | None = Field(default=None, min_length=1)
+    origin: ProductionDocumentOrigin
+
+
+class MasterAudioBindingResponse(DomainModel):
+    binding: MasterAudioBinding
+    document: ProductionDocument
+    version: ProductionDocumentVersion
+
+
+class TimedTextLockUpdateRequest(DomainModel):
+    master_audio_version_id: str = Field(min_length=1)
+    entries: list[TimedTextLock] = Field(default_factory=list[TimedTextLock])
+    base_version_id: str | None = Field(default=None, min_length=1)
+    origin: ProductionDocumentOrigin
+
+
+class TimedTextLockResponse(DomainModel):
+    lock: TimedTextLockSet
+    document: ProductionDocument
+    version: ProductionDocumentVersion
+
+
+class MusicAnalysisRequest(DomainModel):
+    master_audio_version_id: str = Field(min_length=1)
+
+
+class MusicAnalysisResponse(DomainModel):
+    structure: AudioStructureMap
+    document: ProductionDocument
+    version: ProductionDocumentVersion
+
+
 class ProjectDocument(DomainModel):
     project: ProjectRecord
     planning: ProjectPlanningMetadata | None = None
@@ -1536,6 +1963,83 @@ class ProjectDocument(DomainModel):
     repair_history: list[DirectorRepairRecord] = Field(
         default_factory=list[DirectorRepairRecord]
     )
+    production_documents: list[ProductionDocument] = Field(
+        default_factory=list[ProductionDocument]
+    )
+    master_audio_document_id: str | None = None
+    audio_structure_document_id: str | None = None
+    timed_text_document_id: str | None = None
+    production_spec_document_id: str | None = None
+    storyboard_document_id: str | None = None
+    generation_plan_document_id: str | None = None
+    output_slots: list[ProjectOutputSlot] = Field(
+        default_factory=list[ProjectOutputSlot]
+    )
+
+    @model_validator(mode="after")
+    def validate_production_documents(self) -> ProjectDocument:
+        document_ids = [item.id for item in self.production_documents]
+        if len(document_ids) != len(set(document_ids)):
+            raise ValueError("Production document IDs must be unique within a project")
+        if any(
+            item.project_id != self.project.id for item in self.production_documents
+        ):
+            raise ValueError("Production documents must belong to their containing project")
+        for field_name in (
+            "master_audio_document_id",
+            "audio_structure_document_id",
+            "timed_text_document_id",
+            "production_spec_document_id",
+            "storyboard_document_id",
+            "generation_plan_document_id",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and value not in document_ids:
+                raise ValueError(
+                    f"{field_name} must reference a stored ProductionDocument"
+                )
+        output_slot_ids = [item.id for item in self.output_slots]
+        if len(output_slot_ids) != len(set(output_slot_ids)):
+            raise ValueError("Project output slot IDs must be unique")
+        if any(
+            (
+                slot.current_artifact_ref is not None
+                and slot.current_artifact_ref.project_id != self.project.id
+            )
+            or any(
+                item.project_id != self.project.id
+                for item in slot.previous_artifact_refs
+            )
+            for slot in self.output_slots
+        ):
+            raise ValueError("Project output slots may only reference project artifacts")
+        return self
+
+
+class GenerationUnitShotWindow(DomainModel):
+    """One editorial Shot's source window inside a generated media artifact."""
+
+    shot_id: str = Field(min_length=1)
+    shot_revision: int = Field(ge=1)
+    source_in_seconds: float = Field(ge=0.0)
+    source_out_seconds: float = Field(gt=0.0)
+    duration_seconds: float = Field(gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_source_window(self) -> GenerationUnitShotWindow:
+        if self.source_out_seconds <= self.source_in_seconds:
+            raise ValueError("Generation-unit source window must have positive duration")
+        if abs(
+            self.source_out_seconds
+            - self.source_in_seconds
+            - self.duration_seconds
+        ) > 0.001:
+            raise ValueError(
+                "Generation-unit source window must match the shot duration"
+            )
+        return self
+
+
 class GenerationTask(DomainModel):
     id: str
     project_id: str
@@ -1553,6 +2057,17 @@ class GenerationTask(DomainModel):
     input_script_version_id: str
     input_bible_version_id: str
     input_shot_revision: int = Field(default=1, ge=1)
+    input_shot_revisions: dict[str, int] = Field(default_factory=dict[str, int])
+    storyboard_document_id: str | None = None
+    storyboard_version_id: str | None = None
+    generation_plan_document_id: str | None = None
+    generation_plan_version_id: str | None = None
+    generation_unit_id: str | None = None
+    clip_group_id: str | None = None
+    output_slot_id: str | None = None
+    shot_windows: list[GenerationUnitShotWindow] = Field(
+        default_factory=list[GenerationUnitShotWindow]
+    )
     input_voice_reference_revision: int = Field(default=0, ge=0)
     requested_duration_seconds: float
     attempt: int
@@ -1565,6 +2080,49 @@ class GenerationTask(DomainModel):
     finished_at: str | None = None
     created_at: str
     updated_at: str
+
+    @model_validator(mode="after")
+    def validate_generation_unit_binding(self) -> GenerationTask:
+        if (self.storyboard_document_id is None) != (
+            self.storyboard_version_id is None
+        ):
+            raise ValueError(
+                "Storyboard document and version IDs must be supplied together"
+            )
+        if (self.generation_plan_document_id is None) != (
+            self.generation_plan_version_id is None
+        ):
+            raise ValueError(
+                "Generation-plan document and version IDs must be supplied together"
+            )
+        if not self.shot_windows:
+            return self
+        shot_ids = [item.shot_id for item in self.shot_windows]
+        if shot_ids[0] != self.shot_id or len(shot_ids) != len(set(shot_ids)):
+            raise ValueError(
+                "Generation-task shot windows must be unique and start with shot_id"
+            )
+        if self.generation_unit_id is None:
+            raise ValueError("Shot windows require a generation_unit_id")
+        if set(self.input_shot_revisions) != set(shot_ids):
+            raise ValueError(
+                "Generation-task input revisions must cover every shot window"
+            )
+        if any(
+            self.input_shot_revisions[item.shot_id] != item.shot_revision
+            for item in self.shot_windows
+        ):
+            raise ValueError(
+                "Generation-task shot windows and input revisions must agree"
+            )
+        return self
+
+    def covered_shot_ids(self) -> list[str]:
+        return (
+            [item.shot_id for item in self.shot_windows]
+            if self.shot_windows
+            else [self.shot_id]
+        )
 
 
 class QaIssue(DomainModel):
@@ -1623,6 +2181,17 @@ class Take(DomainModel):
     provider: str = "mock"
     model: str = "deterministic-media-v1"
     route: VideoGenerationRoute = VideoGenerationRoute.DIRECT
+    storyboard_document_id: str | None = None
+    storyboard_version_id: str | None = None
+    generation_plan_document_id: str | None = None
+    generation_plan_version_id: str | None = None
+    generation_unit_id: str | None = None
+    clip_group_id: str | None = None
+    output_slot_id: str | None = None
+    shot_windows: list[GenerationUnitShotWindow] = Field(
+        default_factory=list[GenerationUnitShotWindow]
+    )
+    selected_shot_ids: list[str] = Field(default_factory=list[str])
     media_path: str
     thumbnail_path: str
     duration_seconds: float
@@ -1634,6 +2203,53 @@ class Take(DomainModel):
     freshness: Freshness
     qa_report: QAReport
     created_at: str
+
+    @model_validator(mode="after")
+    def validate_generation_unit_binding(self) -> Take:
+        if (self.storyboard_document_id is None) != (
+            self.storyboard_version_id is None
+        ):
+            raise ValueError(
+                "Storyboard document and version IDs must be supplied together"
+            )
+        if (self.generation_plan_document_id is None) != (
+            self.generation_plan_version_id is None
+        ):
+            raise ValueError(
+                "Generation-plan document and version IDs must be supplied together"
+            )
+        covered = self.covered_shot_ids()
+        if self.shot_windows:
+            if covered[0] != self.shot_id or len(covered) != len(set(covered)):
+                raise ValueError(
+                    "Take shot windows must be unique and start with shot_id"
+                )
+            if self.generation_unit_id is None:
+                raise ValueError("Take shot windows require a generation_unit_id")
+        if self.is_selected and not self.selected_shot_ids:
+            self.selected_shot_ids = list(covered)
+        if len(self.selected_shot_ids) != len(set(self.selected_shot_ids)):
+            raise ValueError("Selected Take shot IDs must be unique")
+        if any(shot_id not in covered for shot_id in self.selected_shot_ids):
+            raise ValueError("A Take may select only shots covered by its media")
+        self.is_selected = bool(self.selected_shot_ids)
+        return self
+
+    def covered_shot_ids(self) -> list[str]:
+        return (
+            [item.shot_id for item in self.shot_windows]
+            if self.shot_windows
+            else [self.shot_id]
+        )
+
+    def source_window_for_shot(
+        self,
+        shot_id: str,
+    ) -> GenerationUnitShotWindow | None:
+        return next(
+            (item for item in self.shot_windows if item.shot_id == shot_id),
+            None,
+        )
 
 
 class RouteEvidence(DomainModel):
@@ -2060,12 +2676,17 @@ class PlanningRunRecord(DomainModel):
 
     id: str
     job_kind: Literal["CONTENT_PLANNING"] = "CONTENT_PLANNING"
+    operation: PlanningRunOperation = PlanningRunOperation.INITIAL
     status: PlanningRunStatus
     current_step: PlanningRunStep
     completed_steps: list[PlanningRunStep] = Field(
         default_factory=list[PlanningRunStep]
     )
     request: CreateProjectRequest
+    revision_instruction: str | None = Field(default=None, max_length=50000)
+    base_script_version_id: str | None = Field(default=None, max_length=240)
+    base_bible_version_id: str | None = Field(default=None, max_length=240)
+    parent_planning_run_id: str | None = Field(default=None, max_length=240)
     outline_json: str | None = None
     review_report: ScriptReviewReport | None = None
     review_disposition: ScriptReviewDisposition | None = None
@@ -2081,6 +2702,15 @@ class PlanningRunRecord(DomainModel):
         max_length=24,
     )
     narrative_skill_decision: str | None = Field(default=None, max_length=2400)
+    selected_method_skill_ids: list[str] = Field(
+        default_factory=list[str],
+        max_length=24,
+    )
+    method_selection_reasons: list[str] = Field(
+        default_factory=list[str],
+        max_length=24,
+    )
+    method_selection_rationale: str | None = Field(default=None, max_length=2400)
     issue_ledger: list[StoryIssueLedgerEntry] = Field(
         default_factory=list[StoryIssueLedgerEntry]
     )
@@ -2123,7 +2753,11 @@ class PlanningRunRecord(DomainModel):
         max_length=2000,
     )
     scene_script_retry_count: int = Field(default=0, ge=0)
-    step_retry_feedback: str | None = Field(default=None, max_length=2000)
+    # This field also carries structured semantic handoffs (for example, a
+    # Leader repair plan returned to Story Architect), not only short provider
+    # retry text.  Those handoffs are already bounded by their typed source
+    # models and can legitimately exceed the legacy 2,000-character limit.
+    step_retry_feedback: str | None = None
     step_retry_count: int = Field(default=0, ge=0)
     step_retry_events: list[str] = Field(default_factory=list[str])
     directed_scene_json: list[str] = Field(default_factory=list[str], max_length=500)

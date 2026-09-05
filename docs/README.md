@@ -1,6 +1,8 @@
 # 调研总览
 
-最新的 Skill 深化与成熟实现复核见 [制片 Skill 研究与增补边界](41-production-skill-research-and-enrichment.md)；AI 原生短剧的形态边界、观众行为和 Skill 落地见 [AI 原生短剧的创作形态、观众行为与 Skill 落地](42-ai-short-drama-forms-behavior-and-rhythm.md)。当前四类视频共享端到端流程和 Tool Catalog，各自维护类型原则、详细 Playbook 与按角色选择的参考方法；具体视觉与节奏写入项目 Bible Style，不由 Profile 硬编码。
+当前产品形态、复用边界和后续实施顺序以 [AI Agent 视频制片桌面产品 PRD 与里程碑](product-prd-and-roadmap.md) 为准。本文及编号文档继续保存调研、实现和实验历史；与当前 PRD 冲突的旧阶段计划不再作为执行路线。
+
+最新的 Skill 深化与成熟实现复核见 [制片 Skill 研究与增补边界](41-production-skill-research-and-enrichment.md)；AI 原生短剧的形态边界、观众行为和 Skill 落地见 [AI 原生短剧的创作形态、观众行为与 Skill 落地](42-ai-short-drama-forms-behavior-and-rhythm.md)；MiniMax Design 3.0.11、Agent Team、创作领域、实际安装 Skills、Stage Plan 和 ComfyUI 分层的定点审查见 [MiniMax Design、Agent Team 与 H3 Skills 蓝图](43-minimax-design-agent-team-product-blueprint.md)；当前 Tool / Artifact 实现状态见 [Agent Tool / Artifact 就绪度核对](44-agent-tool-artifact-readiness-audit.md)，完整分镜到 H3 生成单元的数据和执行合同见 [从完整分镜到 H3 生成单元的后端闭环](45-storyboard-generation-unit-backend-closure.md)。当前方法层已直接接入 MiniMax Design 的 `drama-series`、`ad-tvc`、`mv` 三个项目 Workflow，并与 8 个 MiniMax-H3 任务 Method 分层组合；四类视频仍共享 ProjectDocument、Agent Harness 和 Tool Catalog，具体视觉与节奏写入项目 Bible Style，不由 Profile 硬编码。
 
 ## 调研问题
 
@@ -87,7 +89,7 @@ H3 的首帧/尾帧角色与 reference image/video/audio 角色不能在同一�
 - Wind Comic：成片模块最丰富，但系统面太宽，当前 GPT Image 与 MiniMax 适配器不能代表现有候选能力；
 - LumenX：产品形态和生成工作台成熟，但 Provider contract 偏现有模型，部分导出参数仍是占位或未应用。
 
-首版已经确定采用“LTX Desktop 壳 + 自建短剧/任务核心”：保留桌面媒体壳、Take/Retake/Gap Fill、时间线与 FFmpeg 能力，用 SQLite/API 和持久化 Worker 接管项目与任务状态。Jellyfish 只参考领域与任务语义，并在 LTX Desktop 出现已定义的结构性失败时回退；LumenX 不进入底座实现。真实实验只比较 H3 内部 Direct、Frame、Reference、镜头分组和声音路线，以及 GPT Image 辅助是否带来增益，不测试 LTX 模型。闭源平台只贡献设计规律，不进入底座或运行时。
+首版已经确定采用“LTX Desktop 壳 + 自建短剧/任务核心”：保留桌面媒体壳、多 Take 交互、时间线与 FFmpeg 能力，用 SQLite/API 和持久化 Worker 接管项目与任务状态。不启用 LTX 本地模型 Provider；需要新媒体的 Retake/Extend 意图统一返回 H3 Agent 路线。Jellyfish 只参考领域与任务语义，并在 LTX Desktop 出现已定义的结构性失败时回退；LumenX 不进入底座实现。真实实验只比较 H3 内部 Direct、Frame、Reference、镜头分组和声音路线，以及 GPT Image 辅助是否带来增益，不测试 LTX 模型。闭源平台只贡献设计规律，不进入底座或运行时。
 
 ## 研究限制
 

@@ -34,6 +34,8 @@ from short_drama.h3_models import (
     H3ProviderRunsResponse,
     H3ReconcileRequest,
     H3ReconciliationCandidatesResponse,
+    H3RouteAssetPreparationUpdateRequest,
+    H3RouteAssetPreparationUpdateResponse,
     H3TakeReviewRequest,
     H3TakeReviewResponse,
     H3TaskActionResponse,
@@ -67,7 +69,16 @@ from short_drama.models import (
     ExportRecord,
     ExportRequest,
     LocalReworkRequest,
+    MasterAudioBindingResponse,
+    MasterAudioBindRequest,
+    MusicAnalysisRequest,
+    MusicAnalysisResponse,
     OperationKind,
+    ProductionDocumentCreateRequest,
+    ProductionDocumentListResponse,
+    ProductionDocumentMutationResponse,
+    ProductionDocumentReadResponse,
+    ProductionDocumentReviseRequest,
     ProjectAggregate,
     ProjectListResponse,
     ReviseScriptLineRequest,
@@ -77,6 +88,8 @@ from short_drama.models import (
     TakeComparisonResponse,
     TaskActionResponse,
     TimelineManifest,
+    TimedTextLockResponse,
+    TimedTextLockUpdateRequest,
     VideoInspectionRequest,
     VideoInspectionResponse,
     WorkerDrainRequest,
@@ -96,9 +109,41 @@ from short_drama.production_manager import (
     AgentUserInputRequest,
     AgentWorkOrderResultRequest,
     AgentWorkOrderResultResponse,
+    AgentWorkOrderProgressListResponse,
+    AgentWorkOrderProgressRequest,
     AgentWorkOrderView,
     ProductionManagerError,
 )
+from short_drama.production_contracts import (
+    GenerationPlanCompileRequest,
+    GenerationPlanMutationResponse,
+    GenerationPlanReadResponse,
+    OutputSlotBindRequest,
+    OutputSlotListResponse,
+    OutputSlotMutationResponse,
+    OutputSlotReadResponse,
+    ProductionSpecCreateRequest,
+    ProductionSpecMutationResponse,
+    ProductionSpecReadResponse,
+    ProductionSpecReplaceRequest,
+    StoryboardCreateRequest,
+    StoryboardDraftAppendRequest,
+    StoryboardDraftBeginRequest,
+    StoryboardDraftFinalizeRequest,
+    StoryboardDraftGroupReplaceRequest,
+    StoryboardDraftLedgerCompleteRequest,
+    StoryboardDraftLedgerSegmentAppendRequest,
+    StoryboardDraftMutationResponse,
+    StoryboardDraftOutlineCompleteRequest,
+    StoryboardDraftOutlineSegmentAppendRequest,
+    StoryboardDraftVerificationRequest,
+    StoryboardMutationResponse,
+    StoryboardPatchRequest,
+    StoryboardReadResponse,
+    StoryboardReplaceRequest,
+)
+from short_drama.agent_runtime import WorkOrderProgressEntry
+from short_drama.production_board import ProductionBoardView
 from short_drama.reference_planner import (
     DirectorAdviceRequest,
     DirectorAdviceResponse,
@@ -112,6 +157,7 @@ from short_drama.reference_planner import (
     ReferencePlanPreviewResponse,
     ShotReferencePlanUpdateRequest,
 )
+from short_drama.team_executor import TeamExecutionBatch
 from short_drama.service import (
     ArtifactNotFoundError,
     ProviderOperationError,
@@ -228,6 +274,20 @@ def get_agent_run(
         raise _translate_error(ProductionManagerError(str(exc))) from exc
 
 
+@router.get(
+    "/agent-runs/{run_id}/board",
+    response_model=ProductionBoardView,
+)
+def get_agent_production_board(
+    run_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionBoardView:
+    try:
+        return service.get_agent_production_board(run_id)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
 @router.post(
     "/agent-runs/{run_id}/replan",
     response_model=AgentRunView,
@@ -259,6 +319,20 @@ def advance_agent_run(
 
 
 @router.post(
+    "/agent-runs/{run_id}/team/advance",
+    response_model=TeamExecutionBatch,
+)
+def advance_agent_team(
+    run_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> TeamExecutionBatch:
+    try:
+        return service.advance_agent_team(run_id)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.post(
     "/agent-runs/{run_id}/user-input",
     response_model=AgentRunView,
 )
@@ -283,6 +357,35 @@ def get_agent_work_order(
 ) -> AgentWorkOrderView:
     try:
         return service.get_agent_work_order(work_order_id)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.post(
+    "/agent-work-orders/{work_order_id}/progress",
+    response_model=WorkOrderProgressEntry,
+)
+def append_agent_work_order_progress(
+    work_order_id: str,
+    request: AgentWorkOrderProgressRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> WorkOrderProgressEntry:
+    try:
+        return service.append_agent_work_order_progress(work_order_id, request)
+    except (ProductionManagerError, KeyError) as exc:
+        raise _translate_error(ProductionManagerError(str(exc))) from exc
+
+
+@router.get(
+    "/agent-work-orders/{work_order_id}/progress",
+    response_model=AgentWorkOrderProgressListResponse,
+)
+def list_agent_work_order_progress(
+    work_order_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> AgentWorkOrderProgressListResponse:
+    try:
+        return service.list_agent_work_order_progress(work_order_id)
     except (ProductionManagerError, KeyError) as exc:
         raise _translate_error(ProductionManagerError(str(exc))) from exc
 
@@ -766,6 +869,29 @@ def list_h3_production_route_plans(
 
 
 @router.post(
+    "/projects/{project_id}/h3/production-route-plans/{plan_id}/"
+    "asset-preparations/{preparation_id}",
+    response_model=H3RouteAssetPreparationUpdateResponse,
+)
+def update_h3_route_asset_preparation(
+    project_id: str,
+    plan_id: str,
+    preparation_id: str,
+    request: H3RouteAssetPreparationUpdateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> H3RouteAssetPreparationUpdateResponse:
+    try:
+        return service.update_h3_route_asset_preparation(
+            project_id,
+            plan_id,
+            preparation_id,
+            request,
+        )
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
     "/projects/{project_id}/h3/production-route-plans/{plan_id}/execute",
     response_model=H3ProductionRouteExecuteResponse,
 )
@@ -1124,6 +1250,483 @@ def get_project(
 ) -> ProjectAggregate:
     try:
         return service.get_project(project_id)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/production-spec",
+    response_model=ProductionSpecMutationResponse,
+)
+def create_production_spec(
+    project_id: str,
+    request: ProductionSpecCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionSpecMutationResponse:
+    try:
+        return service.create_production_spec(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/production-spec",
+    response_model=ProductionSpecReadResponse,
+)
+def get_production_spec(
+    project_id: str,
+    version_id: str | None = None,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionSpecReadResponse:
+    try:
+        return service.get_production_spec(project_id, version_id=version_id)
+    except (ProjectNotFoundError, ArtifactNotFoundError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/production-spec/replacements",
+    response_model=ProductionSpecMutationResponse,
+)
+def replace_production_spec(
+    project_id: str,
+    request: ProductionSpecReplaceRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionSpecMutationResponse:
+    try:
+        return service.replace_production_spec(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts",
+    response_model=StoryboardDraftMutationResponse,
+)
+def begin_storyboard_draft(
+    project_id: str,
+    request: StoryboardDraftBeginRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        return service.begin_storyboard_draft(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/ledger/segments",
+    response_model=StoryboardDraftMutationResponse,
+)
+def append_storyboard_ledger_segment(
+    project_id: str,
+    draft_document_id: str,
+    request: StoryboardDraftLedgerSegmentAppendRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        return service.append_storyboard_ledger_segment(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/ledger/complete",
+    response_model=StoryboardDraftMutationResponse,
+)
+def complete_storyboard_ledger(
+    project_id: str,
+    draft_document_id: str,
+    request: StoryboardDraftLedgerCompleteRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        return service.complete_storyboard_ledger(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/outline/segments",
+    response_model=StoryboardDraftMutationResponse,
+)
+def append_storyboard_outline_segment(
+    project_id: str,
+    draft_document_id: str,
+    request: StoryboardDraftOutlineSegmentAppendRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        return service.append_storyboard_outline_segment(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/outline/complete",
+    response_model=StoryboardDraftMutationResponse,
+)
+def complete_storyboard_outline(
+    project_id: str,
+    draft_document_id: str,
+    request: StoryboardDraftOutlineCompleteRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        return service.complete_storyboard_outline(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/groups",
+    response_model=StoryboardDraftMutationResponse,
+)
+def append_storyboard_group(
+    project_id: str,
+    draft_document_id: str,
+    request: StoryboardDraftAppendRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        return service.append_storyboard_group(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/groups/{clip_group_id}/replacement",
+    response_model=StoryboardDraftMutationResponse,
+)
+def replace_storyboard_draft_group(
+    project_id: str,
+    draft_document_id: str,
+    clip_group_id: str,
+    request: StoryboardDraftGroupReplaceRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        if clip_group_id != request.replaced_clip_group_id:
+            raise WorkflowConflictError(
+                "Storyboard ClipGroup ID in the path does not match the request body"
+            )
+        return service.replace_storyboard_draft_group(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/verification",
+    response_model=StoryboardDraftMutationResponse,
+)
+def record_storyboard_draft_verification(
+    project_id: str,
+    draft_document_id: str,
+    request: StoryboardDraftVerificationRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardDraftMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        return service.record_storyboard_draft_verification(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard-drafts/{draft_document_id}/finalize",
+    response_model=StoryboardMutationResponse,
+)
+def finalize_storyboard(
+    project_id: str,
+    draft_document_id: str,
+    request: StoryboardDraftFinalizeRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardMutationResponse:
+    try:
+        if draft_document_id != request.draft_document_id:
+            raise WorkflowConflictError(
+                "Storyboard draft document ID in the path does not match the request body"
+            )
+        return service.finalize_storyboard(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard",
+    response_model=StoryboardMutationResponse,
+)
+def create_storyboard(
+    project_id: str,
+    request: StoryboardCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardMutationResponse:
+    try:
+        return service.create_storyboard(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/storyboard",
+    response_model=StoryboardReadResponse,
+)
+def get_storyboard(
+    project_id: str,
+    version_id: str | None = None,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardReadResponse:
+    try:
+        return service.get_storyboard(project_id, version_id=version_id)
+    except (ProjectNotFoundError, ArtifactNotFoundError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard/replacements",
+    response_model=StoryboardMutationResponse,
+)
+def replace_storyboard(
+    project_id: str,
+    request: StoryboardReplaceRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardMutationResponse:
+    try:
+        return service.replace_storyboard(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/storyboard/patches",
+    response_model=StoryboardMutationResponse,
+)
+def patch_storyboard(
+    project_id: str,
+    request: StoryboardPatchRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> StoryboardMutationResponse:
+    try:
+        return service.patch_storyboard(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/generation-plan/compile",
+    response_model=GenerationPlanMutationResponse,
+)
+def compile_generation_plan(
+    project_id: str,
+    request: GenerationPlanCompileRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> GenerationPlanMutationResponse:
+    try:
+        return service.compile_generation_plan(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/generation-plan",
+    response_model=GenerationPlanReadResponse,
+)
+def get_generation_plan(
+    project_id: str,
+    version_id: str | None = None,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> GenerationPlanReadResponse:
+    try:
+        return service.get_generation_plan(project_id, version_id=version_id)
+    except (ProjectNotFoundError, ArtifactNotFoundError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/output-slots",
+    response_model=OutputSlotListResponse,
+)
+def list_output_slots(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> OutputSlotListResponse:
+    try:
+        return service.list_output_slots(project_id)
+    except ProjectNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/output-slots/{slot_id}",
+    response_model=OutputSlotReadResponse,
+)
+def get_output_slot(
+    project_id: str,
+    slot_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> OutputSlotReadResponse:
+    try:
+        return service.get_output_slot(project_id, slot_id)
+    except (ProjectNotFoundError, ArtifactNotFoundError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/output-slots/bind",
+    response_model=OutputSlotMutationResponse,
+)
+def bind_output_slot(
+    project_id: str,
+    request: OutputSlotBindRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> OutputSlotMutationResponse:
+    try:
+        return service.bind_output_slot(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/production-documents",
+    response_model=ProductionDocumentMutationResponse,
+)
+def create_production_document(
+    project_id: str,
+    request: ProductionDocumentCreateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionDocumentMutationResponse:
+    try:
+        return service.create_production_document(project_id, request)
+    except (ProjectNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/production-documents",
+    response_model=ProductionDocumentListResponse,
+)
+def list_production_documents(
+    project_id: str,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionDocumentListResponse:
+    try:
+        return service.list_production_documents(project_id)
+    except ProjectNotFoundError as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/projects/{project_id}/production-documents/{production_document_id}",
+    response_model=ProductionDocumentReadResponse,
+)
+def get_production_document(
+    project_id: str,
+    production_document_id: str,
+    version_id: str | None = None,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionDocumentReadResponse:
+    try:
+        return service.get_production_document(
+            project_id,
+            production_document_id,
+            version_id=version_id,
+        )
+    except (ProjectNotFoundError, ArtifactNotFoundError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/production-documents/{production_document_id}/revisions",
+    response_model=ProductionDocumentMutationResponse,
+)
+def revise_production_document(
+    project_id: str,
+    production_document_id: str,
+    request: ProductionDocumentReviseRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> ProductionDocumentMutationResponse:
+    try:
+        return service.revise_production_document(
+            project_id,
+            production_document_id,
+            request,
+        )
+    except (
+        ProjectNotFoundError,
+        ArtifactNotFoundError,
+        WorkflowConflictError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/audio/master-binding",
+    response_model=MasterAudioBindingResponse,
+)
+def bind_master_audio(
+    project_id: str,
+    request: MasterAudioBindRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> MasterAudioBindingResponse:
+    try:
+        return service.bind_master_audio(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/audio/timed-text-lock",
+    response_model=TimedTextLockResponse,
+)
+def update_timed_text_lock(
+    project_id: str,
+    request: TimedTextLockUpdateRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> TimedTextLockResponse:
+    try:
+        return service.update_timed_text_lock(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post(
+    "/projects/{project_id}/audio/analyze-music",
+    response_model=MusicAnalysisResponse,
+)
+def analyze_music(
+    project_id: str,
+    request: MusicAnalysisRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> MusicAnalysisResponse:
+    try:
+        return service.analyze_music(project_id, request)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
         raise _translate_error(exc) from exc
 

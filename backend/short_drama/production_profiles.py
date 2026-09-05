@@ -15,6 +15,7 @@ from functools import lru_cache
 from short_drama.models import ProductionProfile
 from short_drama.skills.loader import (
     load_narrative_skills,
+    load_production_method_skills,
     load_production_skills,
     load_production_workflow,
     load_shared_role_prompts,
@@ -23,6 +24,7 @@ from short_drama.skills.models import (
     ComposableProductionSkill,
     CompiledProductionPrompt,
     NarrativeSkillDescriptor,
+    ProductionMethodSkillDescriptor,
     ProductionSkill,
     ProductionSkillRole,
 )
@@ -53,6 +55,11 @@ def _production_skill_library() -> tuple[ProductionSkill, ...]:
 @lru_cache(maxsize=1)
 def _narrative_skill_library() -> tuple[ComposableProductionSkill, ...]:
     return load_narrative_skills()
+
+
+@lru_cache(maxsize=1)
+def _production_method_skill_library() -> tuple[ComposableProductionSkill, ...]:
+    return load_production_method_skills()
 
 
 @lru_cache(maxsize=1)
@@ -102,6 +109,32 @@ def narrative_skill_catalog() -> tuple[NarrativeSkillDescriptor, ...]:
     )
 
 
+def production_method_skill(skill_id: str) -> ComposableProductionSkill:
+    """Resolve one Agent-selected production method by its open, file-backed id."""
+
+    for skill in _production_method_skill_library():
+        if skill.id == skill_id:
+            return skill
+    raise KeyError(skill_id)
+
+
+def production_method_skill_catalog() -> tuple[ProductionMethodSkillDescriptor, ...]:
+    """Return compact method metadata for semantic selection by an Agent."""
+
+    return tuple(
+        ProductionMethodSkillDescriptor(
+            id=skill.id,
+            label=skill.label,
+            description=skill.description,
+            supported_roles=tuple(skill.role_prompts),
+            provenance=skill.provenance,
+            upstream_sources=skill.upstream_sources,
+            user_overridable=skill.user_overridable,
+        )
+        for skill in _production_method_skill_library()
+    )
+
+
 def shared_role_prompt(role: ProductionSkillRole) -> str:
     """Return the format-neutral Chinese responsibility for one Agent role."""
 
@@ -134,6 +167,24 @@ def _resolve_narrative_skills(
     return resolved_skill_ids, tuple(selected_skills)
 
 
+def _resolve_production_method_skills(
+    skill_ids: Sequence[str],
+    *,
+    roles: Sequence[ProductionSkillRole],
+) -> tuple[tuple[str, ...], tuple[ComposableProductionSkill, ...]]:
+    resolved_roles = tuple(dict.fromkeys(roles))
+    resolved_skill_ids = tuple(dict.fromkeys(skill_ids))
+    selected_skills: list[ComposableProductionSkill] = []
+    for skill_id in resolved_skill_ids:
+        try:
+            selected_skill = production_method_skill(skill_id)
+        except KeyError as exc:
+            raise ValueError(f"Unknown Production Method Skill: {skill_id}") from exc
+        if any(selected_skill.supports(role) for role in resolved_roles):
+            selected_skills.append(selected_skill)
+    return resolved_skill_ids, tuple(selected_skills)
+
+
 def _render_narrative_skill_prompt(
     selected_skills: Sequence[ComposableProductionSkill],
     *,
@@ -156,6 +207,28 @@ def _render_narrative_skill_prompt(
     return "\n\n".join(parts)
 
 
+def _render_production_method_skill_prompt(
+    selected_skills: Sequence[ComposableProductionSkill],
+    *,
+    roles: Sequence[ProductionSkillRole],
+) -> str:
+    resolved_roles = tuple(dict.fromkeys(roles))
+    parts: list[str] = []
+    for selected_skill in selected_skills:
+        sections = [
+            f"Agent 已根据当前项目完整语义选择制片方法技能“{selected_skill.label}”"
+            f"（{selected_skill.id}）：{selected_skill.constitution}"
+        ]
+        sections.extend(
+            f"{_ROLE_LABELS[role]}的制片方法补充："
+            f"{selected_skill.role_prompts[role]}"
+            for role in resolved_roles
+            if selected_skill.supports(role)
+        )
+        parts.append("\n".join(sections))
+    return "\n\n".join(parts)
+
+
 def compile_narrative_skill_prompt(
     skill_ids: Sequence[str],
     *,
@@ -168,6 +241,20 @@ def compile_narrative_skill_prompt(
         roles=roles,
     )
     return _render_narrative_skill_prompt(selected_skills, roles=roles)
+
+
+def compile_production_method_skill_prompt(
+    skill_ids: Sequence[str],
+    *,
+    roles: Sequence[ProductionSkillRole],
+) -> str:
+    """Compile only Agent-selected production methods for requested roles."""
+
+    _resolved_ids, selected_skills = _resolve_production_method_skills(
+        skill_ids,
+        roles=roles,
+    )
+    return _render_production_method_skill_prompt(selected_skills, roles=roles)
 
 
 @lru_cache(maxsize=1)
@@ -183,11 +270,12 @@ def compile_production_prompt(
     roles: Sequence[ProductionSkillRole],
     include_constitution: bool = True,
     additional_skill_ids: Sequence[str] = (),
+    method_skill_ids: Sequence[str] = (),
 ) -> CompiledProductionPrompt:
-    """Compose shared roles, one format, and Agent-selected narrative methods.
+    """Compose shared roles, one format, and Agent-selected production methods.
 
     This compiler validates and loads explicit ids. It deliberately does not infer
-    narrative methods from the user's words, the production profile, or keywords.
+    narrative or production methods from words, profiles, categories, or keywords.
     """
 
     skill = production_skill(profile)
@@ -195,6 +283,12 @@ def compile_production_prompt(
     resolved_skill_ids, selected_skills = _resolve_narrative_skills(
         additional_skill_ids,
         roles=resolved_roles,
+    )
+    resolved_method_skill_ids, selected_method_skills = (
+        _resolve_production_method_skills(
+            method_skill_ids,
+            roles=resolved_roles,
+        )
     )
     policy_by_role = {
         ProductionSkillRole.CONCEPT: skill.concept,
@@ -230,7 +324,14 @@ def compile_production_prompt(
     parts.extend(
         f"{_ROLE_LABELS[role]}的当前格式补充：{policy_by_role[role]}"
         for role in resolved_roles
+        if policy_by_role[role].strip()
     )
+    method_prompt = _render_production_method_skill_prompt(
+        selected_method_skills,
+        roles=resolved_roles,
+    )
+    if method_prompt:
+        parts.append(method_prompt)
     narrative_prompt = _render_narrative_skill_prompt(
         selected_skills,
         roles=resolved_roles,
@@ -242,18 +343,23 @@ def compile_production_prompt(
         roles=resolved_roles,
         text="\n\n".join(parts),
         selected_skill_ids=resolved_skill_ids,
+        selected_method_skill_ids=resolved_method_skill_ids,
     )
 
 
 __all__ = [
     "CompiledProductionPrompt",
     "NarrativeSkillDescriptor",
+    "ProductionMethodSkillDescriptor",
     "ProductionSkill",
     "ProductionSkillRole",
     "compile_narrative_skill_prompt",
+    "compile_production_method_skill_prompt",
     "compile_production_prompt",
     "narrative_skill",
     "narrative_skill_catalog",
+    "production_method_skill",
+    "production_method_skill_catalog",
     "production_skill",
     "production_skill_catalog",
     "production_workflow",

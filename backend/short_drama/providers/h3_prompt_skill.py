@@ -9,10 +9,12 @@ only the model adapter at the final prompt boundary.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from short_drama.h3_models import (
     H3MediaInput,
     H3MediaKind,
+    H3MediaRole,
     H3VideoGuide,
     H3VideoGuideKind,
 )
@@ -30,6 +32,9 @@ from short_drama.providers.h3_media_bindings import (
     resolve_h3_media_bindings,
 )
 from short_drama.style_context import declared_style_value
+
+if TYPE_CHECKING:
+    from short_drama.production_contracts import GenerationUnit
 
 
 _BASE_FIELDS = (
@@ -79,6 +84,81 @@ def compile_h3_prompt_ir(
     return prompt
 
 
+def compile_h3_generation_unit_prompt_ir(
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    *,
+    route: VideoGenerationRoute,
+    duration_seconds: int | None = None,
+    media_inputs: list[H3MediaInput] | None = None,
+    video_guides: list[H3VideoGuide] | None = None,
+) -> str:
+    """Compile an ordered multi-shot generation unit into one H3 request prompt.
+
+    Editorial shots remain explicit in the prompt and in the generation-unit windows;
+    combining them into one provider request never erases their downstream edit boundaries.
+    """
+
+    duration = duration_seconds or math.ceil(unit.requested_duration_seconds)
+    if not shots:
+        raise ValueError("An H3 generation unit requires at least one editorial shot")
+    shot_by_id = {shot.id: shot for shot in shots}
+    ordered_shots = [
+        shot_by_id[window.shot_id]
+        for window in unit.shot_windows
+        if window.shot_id in shot_by_id
+    ]
+    if len(ordered_shots) != len(unit.shot_windows):
+        raise ValueError("Generation-unit windows reference an unknown editorial shot")
+    if len({shot.id for shot in ordered_shots}) != len(ordered_shots):
+        raise ValueError("Generation-unit editorial shots must be unique")
+
+    inputs = list(media_inputs or [])
+    description = _generation_unit_timeline_description(
+        document,
+        unit,
+        ordered_shots,
+        duration=duration,
+        references=(
+            resolve_h3_media_bindings(document, inputs, video_guides or [])
+            if route == VideoGenerationRoute.REFERENCE
+            else []
+        ),
+    )
+    instruction = _generation_unit_frame_alignment(route, duration)
+    soundscape = " ".join(
+        dict.fromkeys(_soundscape(shot) for shot in ordered_shots)
+    )
+    if route == VideoGenerationRoute.REFERENCE:
+        references = resolve_h3_media_bindings(document, inputs, video_guides or [])
+        definitions = " ".join(_reference_definitions(references)) or (
+            "No external reference media is declared."
+        )
+        retention = " ".join(_retention_analysis(references)) or "N/A"
+        prompt = (
+            f"{instruction}"
+            f"subject_definitions: {definitions}\n\n"
+            "summary: Ref2VA generation for one "
+            f"{duration}-second 9:16 video containing {len(ordered_shots)} ordered "
+            "editorial shots.\n\n"
+            f"retention_analysis: {retention}\n\n"
+            f"detailed_description: {description}\n\n"
+            f"overall_soundscape: {soundscape}\n\n"
+            "non_diegetic_music: N/A"
+        )
+    else:
+        prompt = (
+            f"{instruction}"
+            f"integrated_multimodal_description: {description}\n\n"
+            f"overall_soundscape: {soundscape}\n\n"
+            "non_diegetic_music: N/A"
+        )
+    if len(prompt) > 7000:
+        raise ValueError("Compiled H3 generation-unit prompt exceeds 7000 characters")
+    return prompt
+
+
 def validate_h3_prompt_ir(
     prompt: str,
     document: ProjectDocument,
@@ -114,6 +194,14 @@ def validate_h3_prompt_ir(
         )
         if not stripped.startswith(required):
             raise ValueError("H3 I2VA prompt omitted the official first-frame alignment line")
+    elif route == VideoGenerationRoute.FRAME_LAST:
+        alignment = (
+            "How the reference pictures align with the target video — "
+            f"<Picture 1> (from [Shot 1]) aligns with the {duration_seconds:.2f}-second "
+            "mark of the target video."
+        )
+        if not stripped.startswith(alignment):
+            raise ValueError("H3 L2VA prompt omitted the official last-frame alignment line")
     elif route == VideoGenerationRoute.FRAME_FIRST_LAST:
         alignment = (
             "How the reference pictures align with the target video — "
@@ -162,7 +250,12 @@ def validate_h3_prompt_ir(
                     "H3 Ref2VA prompt omitted reference label "
                     f"{reference.provider_label}"
                 )
-            binding = f"@{reference.alias} = {reference.provider_label}"
+            if reference.prompt_label not in stripped:
+                raise ValueError(
+                    "H3 Ref2VA prompt omitted reusable content label "
+                    f"{reference.prompt_label}"
+                )
+            binding = f"@{reference.alias} = {reference.prompt_label}"
             if reference.media.reference_alias is not None and binding not in stripped:
                 raise ValueError(f"H3 Ref2VA prompt omitted semantic binding {binding}")
 
@@ -201,6 +294,89 @@ def validate_h3_prompt_ir(
     ]
 
 
+def validate_h3_generation_unit_prompt_ir(
+    prompt: str,
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    *,
+    route: VideoGenerationRoute,
+    duration_seconds: int,
+    media_inputs: list[H3MediaInput] | None = None,
+) -> list[str]:
+    """Validate a multi-shot prompt without applying creative-content gates."""
+
+    stripped = prompt.strip()
+    if not stripped:
+        raise ValueError("H3 generation-unit prompt is empty")
+    if len(stripped) > 7000:
+        raise ValueError("H3 generation-unit prompt exceeds 7000 characters")
+    if "```" in stripped:
+        raise ValueError("H3 generation-unit prompt contains Markdown fencing")
+    if "9:16" not in stripped:
+        raise ValueError("H3 generation-unit prompt omitted the locked 9:16 ratio")
+    fields = _REFERENCE_FIELDS if route == VideoGenerationRoute.REFERENCE else _BASE_FIELDS
+    positions = [stripped.find(field) for field in fields]
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        raise ValueError(
+            "H3 generation-unit prompt omitted or reordered required fields: "
+            + ", ".join(fields)
+        )
+    expected_alignment = _generation_unit_frame_alignment(route, duration_seconds)
+    if expected_alignment and not stripped.startswith(expected_alignment):
+        raise ValueError("H3 generation-unit prompt omitted its frame-alignment line")
+
+    shot_by_id = {shot.id: shot for shot in shots}
+    script = next(
+        version
+        for version in document.script_versions
+        if version.id == document.project.current_script_version_id
+    )
+    line_by_id = {line.id: line for line in script.lines}
+    for index, window in enumerate(unit.shot_windows, start=1):
+        shot = shot_by_id.get(window.shot_id)
+        if shot is None:
+            raise ValueError(
+                f"Generation-unit window references unknown shot {window.shot_id}"
+            )
+        marker = _generation_unit_window_marker(
+            index,
+            window.source_in_seconds,
+            window.duration_seconds,
+        )
+        if marker not in stripped:
+            raise ValueError(f"H3 generation-unit prompt omitted locked window {marker}")
+        for line_id in shot.dialogue_line_ids:
+            line = line_by_id.get(line_id)
+            if line is not None and (
+                line.spoken_text not in stripped or line.speaker not in stripped
+            ):
+                raise ValueError(
+                    f"H3 generation-unit prompt changed or omitted dialogue for {line.speaker}"
+                )
+
+    if route == VideoGenerationRoute.REFERENCE:
+        references = resolve_h3_media_bindings(document, media_inputs or [], [])
+        for reference in references:
+            if reference.provider_label not in stripped:
+                raise ValueError(
+                    "H3 Ref2VA generation-unit prompt omitted reference label "
+                    f"{reference.provider_label}"
+                )
+            if reference.media.reference_alias is not None and (
+                f"@{reference.alias} = {reference.prompt_label}" not in stripped
+            ):
+                raise ValueError(
+                    "H3 Ref2VA generation-unit prompt omitted semantic binding "
+                    f"@{reference.alias}"
+                )
+    return [
+        "official MiniMax-H3 prompt field order preserved",
+        f"{len(unit.shot_windows)} editorial shot window(s) preserved in order",
+        f"locked 9:16 ratio and {duration_seconds}-second provider duration preserved",
+    ]
+
+
 def prompt_schema_for_route(route: VideoGenerationRoute) -> dict[str, object]:
     """Small serializable contract for the optional GPT prompt compiler."""
 
@@ -210,12 +386,18 @@ def prompt_schema_for_route(route: VideoGenerationRoute) -> dict[str, object]:
             "fields_in_order": list(_REFERENCE_FIELDS),
             "rewrite_language": "English, except original dialogue and visible text",
             "reference_binding": (
-                "Preserve every supplied @semantic_alias = <Picture|Video|Audio N> mapping"
+                "For REFERENCE_IMAGE, preserve @semantic_alias = <Subject N> and define "
+                "that reusable visible content as extracted from its uploaded <Picture N> "
+                "source or sources. Bindings with the same <Subject N> are multiple assets "
+                "for one subject, not separate subjects, and every source <Picture N> remains "
+                "traceable. Concrete first, key, and last frames keep <Picture N>. Preserve "
+                "supplied <Video N> and <Audio N> mappings."
             ),
         }
     mode = {
         VideoGenerationRoute.DIRECT: "T2VA",
         VideoGenerationRoute.FRAME_FIRST: "I2VA",
+        VideoGenerationRoute.FRAME_LAST: "L2VA",
         VideoGenerationRoute.FRAME_FIRST_LAST: "FL2VA",
     }[route]
     return {
@@ -238,6 +420,12 @@ def _compile_base_prompt(
             "For the target video, at 0.00 seconds into the target video, "
             "<Picture 1> (from [Shot 1]) is fully referenced.\n\n"
         )
+    elif route == VideoGenerationRoute.FRAME_LAST:
+        instruction = (
+            "How the reference pictures align with the target video — "
+            f"<Picture 1> (from [Shot 1]) aligns with the {duration:.2f}-second mark "
+            "of the target video.\n\n"
+        )
     elif route == VideoGenerationRoute.FRAME_FIRST_LAST:
         instruction = (
             "How the reference pictures align with the target video — "
@@ -251,6 +439,12 @@ def _compile_base_prompt(
         VideoGenerationRoute.FRAME_FIRST: (
             "The opening identity, wardrobe, setting, lighting, subject placement, and "
             "composition fully match <Picture 1>. "
+        ),
+        VideoGenerationRoute.FRAME_LAST: (
+            "Infer a plausible compatible opening state from the locked ShotPlan, then let "
+            "the declared action, object state, camera, lighting, and composition gradually "
+            "converge on the exact visible state of <Picture 1> at the end. <Picture 1> is "
+            "only the final frame and must not be treated as the opening image. "
         ),
         VideoGenerationRoute.FRAME_FIRST_LAST: (
             "The shot begins in the exact visible state and composition of <Picture 1>, "
@@ -279,14 +473,12 @@ def _compile_reference_prompt(
 ) -> str:
     skill = production_skill(document.project.production_profile)
     references = resolve_h3_media_bindings(document, media_inputs, video_guides)
-    definitions = " ".join(
-        f"@{item.alias} = {item.provider_label}; {item.provider_label} defines "
-        f"{item.subject}: {item.descriptor}."
-        for item in references
-    ) or "No external reference media is declared."
-    retention = " ".join(_retention_sentence(item) for item in references) or "N/A"
+    definitions = " ".join(_reference_definitions(references)) or (
+        "No external reference media is declared."
+    )
+    retention = " ".join(_retention_analysis(references)) or "N/A"
     bindings = " ".join(
-        f"{item.subject} follows @{item.alias} ({item.provider_label}) for {item.purpose}."
+        f"{item.subject} follows @{item.alias} ({item.prompt_label}) for {item.purpose}."
         for item in references
     )
     timeline = _timeline_description(
@@ -307,6 +499,217 @@ def _compile_reference_prompt(
         f"overall_soundscape: {_soundscape(shot)}\n\n"
         "non_diegetic_music: N/A"
     )
+
+
+def _generation_unit_frame_alignment(
+    route: VideoGenerationRoute,
+    duration: int,
+) -> str:
+    if route == VideoGenerationRoute.FRAME_FIRST:
+        return (
+            "For the target video, at 0.00 seconds into the target video, "
+            "<Picture 1> (from [Shot 1]) is fully referenced.\n\n"
+        )
+    if route == VideoGenerationRoute.FRAME_LAST:
+        return (
+            "How the reference pictures align with the target video — "
+            f"<Picture 1> (from the final editorial shot) aligns with the {duration:.2f}-second "
+            "mark of the target video.\n\n"
+        )
+    if route == VideoGenerationRoute.FRAME_FIRST_LAST:
+        return (
+            "How the reference pictures align with the target video — "
+            "Picture 1 (from [Shot 1]) aligns with the 0.00-second mark of the target video; "
+            f"Picture 2 (from the final editorial shot) aligns with the {duration:.2f}-second "
+            "mark of the target video.\n\n"
+        )
+    return ""
+
+
+def _generation_unit_window_marker(
+    index: int,
+    source_in_seconds: float,
+    duration_seconds: float,
+) -> str:
+    return (
+        f"[Shot {index}] [{source_in_seconds:.2f}-"
+        f"{source_in_seconds + duration_seconds:.2f} seconds]"
+    )
+
+
+def _generation_unit_timeline_description(
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    *,
+    duration: int,
+    references: list[ResolvedH3MediaBinding],
+) -> str:
+    bible = next(
+        (
+            item
+            for item in document.bible_versions
+            if item.id == document.project.current_bible_version_id
+        ),
+        document.bible_versions[-1],
+    )
+    style_fields = [
+        f"{label}={value}"
+        for label, raw_value in (
+            ("medium", bible.style.medium),
+            ("cinematography", bible.style.cinematography),
+            ("color", bible.style.color),
+            ("texture", bible.style.texture),
+        )
+        if (value := declared_style_value(raw_value)) is not None
+    ]
+    opening = (
+        f"Generate one {duration}-second 9:16 vertical video containing "
+        f"{len(shots)} editorial shots in exactly the declared order. "
+        f"Generation intent: {unit.generation_intent}. "
+        "Opening continuity: "
+        + (
+            "; ".join(unit.continuity_in)
+            if unit.continuity_in
+            else (
+                f"{shots[0].continuity.action_in}; "
+                f"{shots[0].continuity.prop_state_in}"
+            )
+        )
+        + ". "
+    )
+    if style_fields:
+        opening += "Project style: " + "; ".join(style_fields) + ". "
+
+    parts = [opening]
+    for index, (window, shot) in enumerate(
+        zip(unit.shot_windows, shots, strict=True),
+        start=1,
+    ):
+        marker = _generation_unit_window_marker(
+            index,
+            window.source_in_seconds,
+            window.duration_seconds,
+        )
+        segment = [
+            marker,
+            f"Framing: {shot.framing}.",
+            f"Observable image: {shot.visual}.",
+            f"Narrative purpose: {shot.narrative_purpose}.",
+            f"Camera direction: {shot.camera}.",
+            (
+                f"Visible state moves from {shot.continuity.action_in} to "
+                f"{shot.continuity.action_out}."
+            ),
+            (
+                f"Props move from {shot.continuity.prop_state_in} to "
+                f"{shot.continuity.prop_state_out}."
+            ),
+            (
+                f"Character staging and eyeline: {shot.continuity.character_positions}; "
+                f"{shot.continuity.eyeline}."
+            ),
+        ]
+        action_constraints = _structured_action_constraints(document, shot)
+        if action_constraints:
+            segment.append(action_constraints)
+        if shot.timeline_beats:
+            segment.extend(
+                _generation_unit_beat_description(
+                    document,
+                    shot,
+                    beat,
+                    offset_seconds=window.source_in_seconds,
+                    references=references,
+                )
+                for beat in shot.timeline_beats
+                if beat.start_seconds < window.duration_seconds
+            )
+        else:
+            dialogue = _dialogue_description(document, shot)
+            segment.append(
+                dialogue
+                if dialogue
+                else "No one speaks; only declared ambient and physical sounds are heard."
+            )
+        segment.append(f"Editorial transition out: {shot.transition_out}.")
+        parts.append(" ".join(segment))
+    parts.extend(
+        [
+            (
+                "Closing continuity: "
+                + (
+                    "; ".join(unit.continuity_out)
+                    if unit.continuity_out
+                    else (
+                        f"{shots[-1].continuity.action_out}; "
+                        f"{shots[-1].continuity.prop_state_out}"
+                    )
+                )
+                + "."
+            ),
+            *(
+                ["Required visible changes: " + "; ".join(unit.visible_changes) + "."]
+                if unit.visible_changes
+                else []
+            ),
+            (
+                "Audio intent across the generated unit: "
+                + " ".join(dict.fromkeys(shot.audio_intent for shot in shots))
+                + "."
+            ),
+            *(
+                [f"Transition intent: {unit.transition_intent}."]
+                if unit.transition_intent is not None
+                else []
+            ),
+            *(
+                ["Reference notes: " + "; ".join(unit.reference_notes) + "."]
+                if unit.reference_notes
+                else []
+            ),
+            (
+                "Preserve every [Shot N] boundary and time window so the single generated "
+                "file can be split back into independently editable editorial shots."
+            ),
+            "Do not introduce undeclared characters, props, actions, scenes, or dialogue.",
+            "No subtitles, watermark, or additional readable text appear in the image.",
+        ]
+    )
+    return " ".join(parts)
+
+
+def _generation_unit_beat_description(
+    document: ProjectDocument,
+    shot: ShotPlan,
+    beat: ShotTimelineBeat,
+    *,
+    offset_seconds: float,
+    references: list[ResolvedH3MediaBinding],
+) -> str:
+    parts = [
+        _beat_time_marker(
+            offset_seconds + beat.start_seconds,
+            offset_seconds + beat.end_seconds,
+        ),
+        f"Framing: {beat.framing}.",
+        f"Camera and focus: {beat.camera}.",
+        f"Observable image: {beat.visual}.",
+        f"Action: {beat.action}.",
+    ]
+    if beat.performance is not None:
+        parts.append(f"Performance: {beat.performance}.")
+    if beat.emotion is not None:
+        parts.append(f"Emotion or atmosphere: {beat.emotion}.")
+    dialogue = _dialogue_description(document, shot, beat.dialogue_line_ids)
+    if dialogue:
+        parts.append(f"Dialogue in this range only: {dialogue}")
+    if beat.sound is not None:
+        parts.append(f"Sound in this range: {beat.sound}.")
+    reference_text = _timeline_reference_cues(document, beat, references)
+    if reference_text:
+        parts.append(f"Reference cues: {reference_text}.")
+    return " ".join(parts)
 
 
 def _timeline_description(
@@ -462,7 +865,7 @@ def _timeline_reference_cues(
         if matches:
             selected = min(matches, key=lambda item: (len(item.tags), item.alias))
             rendered.append(
-                f"@{selected.alias} ({selected.provider_label}) for {cue.purpose}"
+                f"@{selected.alias} ({selected.prompt_label}) for {cue.purpose}"
             )
         else:
             subject = asset_names.get(cue.subject_asset_id, cue.alias)
@@ -574,6 +977,94 @@ def _soundscape(shot: ShotPlan) -> str:
     )
 
 
+def _reference_definitions(
+    references: list[ResolvedH3MediaBinding],
+) -> list[str]:
+    rendered: list[str] = []
+    rendered_subjects: set[str] = set()
+    for reference in references:
+        if not _is_reusable_image_subject(reference):
+            rendered.append(
+                f"@{reference.alias} = {reference.prompt_label}; "
+                f"{reference.prompt_label} defines {reference.subject}: "
+                f"{reference.descriptor}."
+            )
+            continue
+        if reference.prompt_label in rendered_subjects:
+            continue
+        group = [
+            item
+            for item in references
+            if _is_reusable_image_subject(item)
+            and item.prompt_label == reference.prompt_label
+        ]
+        rendered_subjects.add(reference.prompt_label)
+        alias_bindings = "; ".join(
+            f"@{alias} = {reference.prompt_label}"
+            for alias in dict.fromkeys(item.alias for item in group)
+        )
+        source_descriptions = "; ".join(
+            _reference_image_source_definition(item)
+            for item in group
+        )
+        rendered.append(
+            f"{alias_bindings}; {reference.prompt_label} is the reusable visible content for "
+            f"{reference.subject} extracted from its reference images: "
+            f"{source_descriptions}."
+        )
+    return rendered
+
+
+def _reference_image_source_definition(reference: ResolvedH3MediaBinding) -> str:
+    tags = (
+        f" (reference tags: {', '.join(reference.tags)})"
+        if reference.tags
+        else ""
+    )
+    return (
+        f"{reference.provider_label} provides {reference.descriptor} for "
+        f"{reference.purpose}{tags}"
+    )
+
+
+def _retention_analysis(
+    references: list[ResolvedH3MediaBinding],
+) -> list[str]:
+    rendered: list[str] = []
+    rendered_subjects: set[str] = set()
+    for reference in references:
+        if not _is_reusable_image_subject(reference):
+            rendered.append(_retention_sentence(reference))
+            continue
+        if reference.prompt_label in rendered_subjects:
+            continue
+        group = [
+            item
+            for item in references
+            if _is_reusable_image_subject(item)
+            and item.prompt_label == reference.prompt_label
+        ]
+        rendered_subjects.add(reference.prompt_label)
+        aliases = ", ".join(
+            f"@{alias}" for alias in dict.fromkeys(item.alias for item in group)
+        )
+        sources = ", ".join(item.provider_label for item in group)
+        rendered.append(
+            f"{reference.prompt_label} ({aliases}; extracted from {sources}): "
+            "fully_preserved - the declared subject identity and stable visible appearance "
+            "are retained while pose and framing change only as required by this shot; "
+            "unrelated source-image content is not copied."
+        )
+    return rendered
+
+
+def _is_reusable_image_subject(reference: ResolvedH3MediaBinding) -> bool:
+    return (
+        reference.media.kind == H3MediaKind.IMAGE
+        and reference.media.role == H3MediaRole.REFERENCE_IMAGE
+    )
+
+
 def _retention_sentence(reference: ResolvedH3MediaBinding) -> str:
     if reference.video_guide is not None:
         if reference.video_guide.kind == H3VideoGuideKind.CAMERA_PREVIS:
@@ -602,7 +1093,7 @@ def _retention_sentence(reference: ResolvedH3MediaBinding) -> str:
             "unrequested subjects, dialogue, and edits are not copied."
         )
     return (
-        f"@{reference.alias} ({reference.provider_label}) fully preserves the declared subject "
+        f"@{reference.alias} ({reference.prompt_label}) fully preserves the declared subject "
         "identity and stable visible "
         "appearance while pose and framing change only as required by this shot."
     )

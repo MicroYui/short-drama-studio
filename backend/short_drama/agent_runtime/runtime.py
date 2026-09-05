@@ -22,6 +22,8 @@ from short_drama.agent_runtime.models import (
     AgentRunSnapshot,
     AgentRunStatus,
     ArtifactRef,
+    ContextBoundary,
+    ContextManifest,
     ContextPack,
     DecisionMemory,
     DelegationStatus,
@@ -31,6 +33,8 @@ from short_drama.agent_runtime.models import (
     PlanStep,
     RunMemory,
     WorkOrder,
+    WorkOrderNextOwner,
+    WorkOrderProgressEntry,
     utc_now,
 )
 from short_drama.skills.models import ProductionSkillRole
@@ -148,6 +152,9 @@ class AgentRuntime:
         *,
         summary: str,
         steps: Sequence[PlanStep],
+        selected_method_skill_ids: Sequence[str] = (),
+        method_selection_rationale: str | None = None,
+        carried_work_order_ids: Sequence[str] = (),
         goal_complete: bool = False,
     ) -> PlanRevision:
         run = self._require_run(run_id)
@@ -158,6 +165,9 @@ class AgentRuntime:
             revision=next_revision,
             summary=summary,
             steps=list(steps),
+            selected_method_skill_ids=list(selected_method_skill_ids),
+            method_selection_rationale=method_selection_rationale,
+            carried_work_order_ids=list(carried_work_order_ids),
             goal_complete=goal_complete,
         )
         run.current_plan_revision_id = revision.id
@@ -171,12 +181,18 @@ class AgentRuntime:
         *,
         summary: str,
         steps: Sequence[PlanStep],
+        selected_method_skill_ids: Sequence[str] = (),
+        method_selection_rationale: str | None = None,
+        carried_work_order_ids: Sequence[str] = (),
         goal_complete: bool = False,
     ) -> PlanRevision:
         return self.revise_plan(
             run_id,
             summary=summary,
             steps=steps,
+            selected_method_skill_ids=selected_method_skill_ids,
+            method_selection_rationale=method_selection_rationale,
+            carried_work_order_ids=carried_work_order_ids,
             goal_complete=goal_complete,
         )
 
@@ -186,6 +202,9 @@ class AgentRuntime:
         *,
         summary: str,
         steps: Sequence[PlanStep],
+        selected_method_skill_ids: Sequence[str] = (),
+        method_selection_rationale: str | None = None,
+        carried_work_order_ids: Sequence[str] = (),
         goal_complete: bool = False,
     ) -> PlanRevision:
         """Replace the active plan by appending a recoverable new revision."""
@@ -194,6 +213,9 @@ class AgentRuntime:
             run_id,
             summary=summary,
             steps=steps,
+            selected_method_skill_ids=selected_method_skill_ids,
+            method_selection_rationale=method_selection_rationale,
+            carried_work_order_ids=carried_work_order_ids,
             goal_complete=goal_complete,
         )
 
@@ -535,8 +557,6 @@ class AgentRuntime:
             raise ValueError("Only a COMPLETED AgentResult can become experience memory")
         run = self._require_run(work_order.parent_run_id)
         selected_skill_id = skill_id
-        if selected_skill_id is None and run.active_skill_ids:
-            selected_skill_id = run.active_skill_ids[0]
         evidence_text = evidence
         if evidence_text is None:
             evidence_parts = _unique_strings([*result.findings, *result.decisions])
@@ -573,14 +593,61 @@ class AgentRuntime:
         scope: Sequence[ArtifactRef] = (),
         constraints: Sequence[str] = (),
         confirmed_decisions: Sequence[str] = (),
+        inherited_decision_ids: Sequence[str] = (),
+        adjacent_boundaries: Sequence[ContextBoundary] = (),
+        experience_tags: Sequence[str] = (),
         open_questions: Sequence[str] = (),
         expected_output_schema: dict[str, JsonValue] | None = None,
+        expected_output_slot_ids: Sequence[str] = (),
         acceptance_criteria: Sequence[str] = (),
+        source_plan_revision_id: str | None = None,
+        source_action_id: str | None = None,
     ) -> WorkOrder:
-        self._require_run(run_id)
+        run = self._require_run(run_id)
+        scoped_refs = [
+            *scope,
+            *[
+                ref
+                for boundary in adjacent_boundaries
+                for ref in boundary.artifact_refs
+            ],
+        ]
+        if any(ref.project_id != run.project_id for ref in scoped_refs):
+            raise ValueError(
+                "WorkOrder context artifacts must belong to the AgentRun project"
+            )
+        for decision_id in inherited_decision_ids:
+            decision = self.store.get_decision(decision_id)
+            if decision is None or decision.project_id != run.project_id:
+                raise ValueError(
+                    f"Unknown inherited decision for this AgentRun: {decision_id}"
+                )
+        work_order_id = _new_id("work-order")
+        now = utc_now()
+        manifest = ContextManifest(
+            id=_new_id("context-manifest"),
+            work_order_id=work_order_id,
+            objective=objective,
+            why_now=why_now,
+            required_artifacts=list(scope),
+            adjacent_boundaries=list(adjacent_boundaries),
+            inherited_decision_ids=list(inherited_decision_ids),
+            inherited_decisions=list(confirmed_decisions),
+            selected_skill_ids=list(run.active_skill_ids),
+            experience_tags=list(experience_tags),
+            constraints=list(constraints),
+            open_questions=list(open_questions),
+            expected_output_schema=expected_output_schema or {},
+            expected_output_slot_ids=list(expected_output_slot_ids),
+            acceptance_criteria=list(acceptance_criteria),
+            created_at=now,
+        )
         work_order = WorkOrder(
-            id=_new_id("work-order"),
+            id=work_order_id,
             parent_run_id=run_id,
+            source_plan_revision_id=source_plan_revision_id,
+            source_action_id=source_action_id,
+            active_plan_revision_id=source_plan_revision_id,
             sender=sender,
             recipient_role=recipient_role,
             production_skill_role=production_skill_role,
@@ -591,9 +658,19 @@ class AgentRuntime:
             confirmed_decisions=list(confirmed_decisions),
             open_questions=list(open_questions),
             expected_output_schema=expected_output_schema or {},
+            expected_output_slot_ids=list(expected_output_slot_ids),
             acceptance_criteria=list(acceptance_criteria),
+            context_manifest=manifest,
+            created_at=now,
+            updated_at=now,
         )
         self.store.save_work_order(work_order)
+        self.append_work_order_progress(
+            work_order.id,
+            author=sender,
+            summary=f"WorkOrder created: {objective}",
+            artifact_refs=scope,
+        )
         return work_order
 
     def delegate(
@@ -608,9 +685,15 @@ class AgentRuntime:
         scope: Sequence[ArtifactRef] = (),
         constraints: Sequence[str] = (),
         confirmed_decisions: Sequence[str] = (),
+        inherited_decision_ids: Sequence[str] = (),
+        adjacent_boundaries: Sequence[ContextBoundary] = (),
+        experience_tags: Sequence[str] = (),
         open_questions: Sequence[str] = (),
         expected_output_schema: dict[str, JsonValue] | None = None,
+        expected_output_slot_ids: Sequence[str] = (),
         acceptance_criteria: Sequence[str] = (),
+        source_plan_revision_id: str | None = None,
+        source_action_id: str | None = None,
     ) -> WorkOrder:
         return self.create_work_order(
             run_id,
@@ -622,9 +705,15 @@ class AgentRuntime:
             scope=scope,
             constraints=constraints,
             confirmed_decisions=confirmed_decisions,
+            inherited_decision_ids=inherited_decision_ids,
+            adjacent_boundaries=adjacent_boundaries,
+            experience_tags=experience_tags,
             open_questions=open_questions,
             expected_output_schema=expected_output_schema,
+            expected_output_slot_ids=expected_output_slot_ids,
             acceptance_criteria=acceptance_criteria,
+            source_plan_revision_id=source_plan_revision_id,
+            source_action_id=source_action_id,
         )
 
     def begin_work_order(self, work_order_id: str) -> WorkOrder:
@@ -632,7 +721,44 @@ class AgentRuntime:
         work_order.status = DelegationStatus.IN_PROGRESS
         work_order.updated_at = utc_now()
         self.store.save_work_order(work_order)
+        self.append_work_order_progress(
+            work_order.id,
+            author=work_order.recipient_role,
+            summary="Specialist work started or resumed.",
+        )
         return work_order
+
+    def append_work_order_progress(
+        self,
+        work_order_id: str,
+        *,
+        author: str,
+        summary: str,
+        artifact_refs: Sequence[ArtifactRef] = (),
+    ) -> WorkOrderProgressEntry:
+        """Append visible progress without mutating canonical project content."""
+
+        work_order = self._require_work_order(work_order_id)
+        run = self._require_run(work_order.parent_run_id)
+        if any(ref.project_id != run.project_id for ref in artifact_refs):
+            raise ValueError(
+                "WorkOrder progress artifacts must belong to the AgentRun project"
+            )
+        return self.store.append_work_order_progress(
+            entry_id=_new_id("work-order-progress"),
+            work_order_id=work_order_id,
+            author=author,
+            summary=summary,
+            artifact_refs=artifact_refs,
+            created_at=utc_now(),
+        )
+
+    def work_order_progress(
+        self,
+        work_order_id: str,
+    ) -> list[WorkOrderProgressEntry]:
+        self._require_work_order(work_order_id)
+        return self.store.list_work_order_progress(work_order_id)
 
     def record_agent_result(
         self,
@@ -640,6 +766,7 @@ class AgentRuntime:
         *,
         status: AgentResultStatus,
         concise_summary: str,
+        deliverable: dict[str, JsonValue] | None = None,
         created_artifacts: Sequence[ArtifactRef] = (),
         updated_artifacts: Sequence[ArtifactRef] = (),
         findings: Sequence[str] = (),
@@ -648,6 +775,9 @@ class AgentRuntime:
         unresolved_questions: Sequence[str] = (),
         evidence_refs: Sequence[ArtifactRef] = (),
         recommended_next_actions: Sequence[str] = (),
+        next_owner: WorkOrderNextOwner | None = None,
+        stale_handoff: bool = False,
+        stale_reason: str | None = None,
     ) -> AgentResult:
         work_order = self._require_work_order(work_order_id)
         result = AgentResult(
@@ -655,6 +785,7 @@ class AgentRuntime:
             work_order_id=work_order_id,
             status=status,
             concise_summary=concise_summary,
+            deliverable=dict(deliverable or {}),
             created_artifacts=list(created_artifacts),
             updated_artifacts=list(updated_artifacts),
             findings=list(findings),
@@ -663,9 +794,26 @@ class AgentRuntime:
             unresolved_questions=list(unresolved_questions),
             evidence_refs=list(evidence_refs),
             recommended_next_actions=list(recommended_next_actions),
+            next_owner=next_owner,
+            stale_handoff=stale_handoff,
+            stale_reason=stale_reason,
         )
-        validate_agent_result_contract(work_order, result)
+        # A late result from a superseded plan is retained for traceability, but
+        # it no longer claims to satisfy the active WorkOrder contract.  Normal
+        # results still receive the full completion check before they can merge.
+        if not stale_handoff:
+            validate_agent_result_contract(work_order, result)
         self.store.save_agent_result(result)
+        self.append_work_order_progress(
+            work_order_id,
+            author=work_order.recipient_role,
+            summary=f"{status.value}: {concise_summary}",
+            artifact_refs=[
+                *created_artifacts,
+                *updated_artifacts,
+                *evidence_refs,
+            ],
+        )
         return result
 
     def record_result(
@@ -674,6 +822,7 @@ class AgentRuntime:
         *,
         status: AgentResultStatus,
         concise_summary: str,
+        deliverable: dict[str, JsonValue] | None = None,
         created_artifacts: Sequence[ArtifactRef] = (),
         updated_artifacts: Sequence[ArtifactRef] = (),
         findings: Sequence[str] = (),
@@ -682,11 +831,15 @@ class AgentRuntime:
         unresolved_questions: Sequence[str] = (),
         evidence_refs: Sequence[ArtifactRef] = (),
         recommended_next_actions: Sequence[str] = (),
+        next_owner: WorkOrderNextOwner | None = None,
+        stale_handoff: bool = False,
+        stale_reason: str | None = None,
     ) -> AgentResult:
         return self.record_agent_result(
             work_order_id,
             status=status,
             concise_summary=concise_summary,
+            deliverable=deliverable,
             created_artifacts=created_artifacts,
             updated_artifacts=updated_artifacts,
             findings=findings,
@@ -695,6 +848,9 @@ class AgentRuntime:
             unresolved_questions=unresolved_questions,
             evidence_refs=evidence_refs,
             recommended_next_actions=recommended_next_actions,
+            next_owner=next_owner,
+            stale_handoff=stale_handoff,
+            stale_reason=stale_reason,
         )
 
     def resume(self, run_id: str) -> AgentRunSnapshot:
@@ -749,14 +905,12 @@ class AgentRuntime:
         self,
         work_order_id: str,
         *,
-        experience_tags: Sequence[str] = (),
         max_characters: int = DEFAULT_CONTEXT_CHARACTER_BUDGET,
     ) -> ContextPack:
         if self._context_compiler is None:
             raise RuntimeError("AgentRuntime was created without a ContextCompiler")
         return self._context_compiler.compile_for_work_order(
             work_order_id,
-            experience_tags=experience_tags,
             max_characters=max_characters,
         )
 

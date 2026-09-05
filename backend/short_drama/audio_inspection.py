@@ -283,9 +283,10 @@ class AudioInspector:
             sorted(manifest.audio_clips, key=lambda item: item.start_seconds),
             start=1,
         ):
+            clip_label = _clip_shot_id(clip)
             inspected = self._inspect_clip(
                 clip=clip,
-                destination=clip_dir / f"{sequence:02d}-{clip.shot_id}.wav",
+                destination=clip_dir / f"{sequence:02d}-{clip_label}.wav",
                 expects_dialogue=any(
                     cue.script_line_id in line_by_id
                     and cue.start_seconds < clip.start_seconds + clip.duration_seconds
@@ -309,6 +310,27 @@ class AudioInspector:
             sorted(manifest.subtitle_cues, key=lambda item: item.start_seconds),
             start=1,
         ):
+            if cue.script_line_id is None:
+                clip = _clip_for_cue(
+                    manifest.audio_clips,
+                    cue.start_seconds,
+                    cue.end_seconds,
+                )
+                if clip is None:
+                    unmapped_cues += 1
+                    issues.append(
+                        QaIssue(
+                            code="AUDIO_TIMED_TEXT_OUTSIDE_CLIP",
+                            severity="HIGH",
+                            message=(
+                                f"Timed-text cue {cue.id} is not covered by a timeline "
+                                "audio clip."
+                            ),
+                            repair_layer="TIMELINE_SUBTITLE",
+                            category=QaFailureCategory.DIALOGUE_AUDIO,
+                        )
+                    )
+                continue
             line = line_by_id.get(cue.script_line_id)
             if line is None:
                 unmapped_cues += 1
@@ -456,7 +478,7 @@ class AudioInspector:
             _extract_audio(
                 source=Path(clip.media_path).expanduser().resolve(),
                 destination=destination,
-                start_seconds=0.0,
+                start_seconds=clip.source_in_seconds,
                 duration_seconds=clip.duration_seconds,
             )
             metrics = _signal_metrics(destination)
@@ -474,8 +496,8 @@ class AudioInspector:
             issues.append(issue)
             return AudioClipInspection(
                 clip_id=clip.id,
-                shot_id=clip.shot_id,
-                take_id=clip.take_id,
+                shot_id=_clip_shot_id(clip),
+                take_id=_clip_take_id(clip),
                 media_path=clip.media_path,
                 timeline_start_seconds=clip.start_seconds,
                 expected_duration_seconds=clip.duration_seconds,
@@ -555,8 +577,8 @@ class AudioInspector:
             )
         return AudioClipInspection(
             clip_id=clip.id,
-            shot_id=clip.shot_id,
-            take_id=clip.take_id,
+            shot_id=_clip_shot_id(clip),
+            take_id=_clip_take_id(clip),
             media_path=clip.media_path,
             timeline_start_seconds=clip.start_seconds,
             expected_duration_seconds=clip.duration_seconds,
@@ -592,7 +614,7 @@ class AudioInspector:
             _extract_audio(
                 source=Path(clip.media_path).expanduser().resolve(),
                 destination=destination,
-                start_seconds=local_start,
+                start_seconds=clip.source_in_seconds + local_start,
                 duration_seconds=duration,
             )
             segment_metrics = _signal_metrics(destination)
@@ -609,8 +631,8 @@ class AudioInspector:
                 _unavailable_dialogue_check(
                     cue=cue,
                     line=line,
-                    shot_id=clip.shot_id,
-                    take_id=clip.take_id,
+                    shot_id=_clip_shot_id(clip),
+                    take_id=_clip_take_id(clip),
                     status=SemanticReviewStatus.FAILED,
                     issue=issue,
                 ),
@@ -732,8 +754,8 @@ class AudioInspector:
             DialogueAudioCheck(
                 cue_id=cue.id,
                 script_line_id=line.id,
-                shot_id=clip.shot_id,
-                take_id=clip.take_id,
+                shot_id=_clip_shot_id(clip),
+                take_id=_clip_take_id(clip),
                 expected_speaker=line.speaker,
                 expected_text=line.spoken_text,
                 cue_start_seconds=cue.start_seconds,
@@ -983,6 +1005,14 @@ def _clip_for_cue(
     return min(matches, key=lambda item: item.duration_seconds)
 
 
+def _clip_shot_id(clip: TimelineAudioClip) -> str:
+    return clip.shot_id or "MASTER_AUDIO"
+
+
+def _clip_take_id(clip: TimelineAudioClip) -> str:
+    return clip.take_id or clip.asset_version_id or "MASTER_AUDIO"
+
+
 def _speaker_binding(
     document: ProjectDocument,
     line: ScriptLine,
@@ -1157,7 +1187,7 @@ def _manifest_technical_checks(
         ),
         TechnicalCheck(
             name="subtitle-cues-map-to-audio",
-            passed=unmapped_cues == 0 and len(dialogue_checks) == len(manifest.subtitle_cues),
+            passed=unmapped_cues == 0,
             detail=f"unmapped cues={unmapped_cues}",
         ),
         TechnicalCheck(

@@ -22,7 +22,7 @@
 
    - **输入：** 当前剧本、用户设定图、角色/场景/道具/风格资产和可复用目录。
    - **决策：** 固定世界规则、角色轮廓和比例、脸型发型、服装、色板、线条、材质、背景、光影、道具状态与运动风格；将 canonical 设定与单镜关键帧分离。
-   - **可调用 Tool：** `artifact.create_asset`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`artifact.review_version`、`artifact.add_reference_entry`、`image.enqueue`。
+   - **可调用 Tool：** `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`image.enqueue`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry`。
    - **产物：** ProjectBibleVersion、批准的角色/场景/道具/风格 AssetVersion 和用途明确的 ReferencePack。
    - **检查与返工：** 只补齐实际镜位所需视角和状态；临时镜头图不能未经审核覆盖角色造型基准，有意变形或换装需记录触发条件。
 
@@ -46,7 +46,7 @@
 
    - **输入：** 路线计划、角色/场景设定、动作节拍、关键帧 brief 和缺失媒体。
    - **决策：** 生成或编辑当前镜头必要的布局、首帧、尾帧、关键姿势或合成参考；让身份、构图、风格、空间和运动职责清楚分离。
-   - **可调用 Tool：** `shot.compile_keyframe_brief`、`image.enqueue`、`image.advance`、`image.retry`、`image.recover_output`、`artifact.review_version`、`qa.compare_keyframes`、`qa.check_input_compatibility`、`qa.list_visual_input_reports`。
+   - **可调用 Tool：** `shot.compile_keyframe_brief`、`image.enqueue`、`image.advance`、`image.retry`、`image.recover_output`、`qa.inspect_asset_version`、`artifact.review_version`、`qa.compare_keyframes`、`qa.check_input_compatibility`、`qa.list_visual_input_reports`。
    - **产物：** 已审核的镜头关键帧/布局、ReferencePlan 和兼容输入包。
    - **检查与返工：** 起始姿势、轮廓、比例、手部/道具接触、场景透视或终态错误时先修图；不要求视频阶段从错误关键帧恢复。
 

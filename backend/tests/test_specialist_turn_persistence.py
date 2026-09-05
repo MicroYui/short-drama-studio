@@ -164,12 +164,18 @@ def test_specialist_model_and_tool_turns_resume_from_persisted_work_order(
 
     assert completed.result.status == AgentResultStatus.COMPLETED
     assert completed.run.snapshot.run.id == run_id
-    assert completed.run.snapshot.run.status == AgentRunStatus.COMPLETED
+    assert completed.run.snapshot.run.status == AgentRunStatus.RUNNING
     assert len(client.inputs) == 2
     final_input = json.loads(client.inputs[-1])
     assert len(final_input["tool_history"]) == 1
     assert final_input["tool_history"][0]["result"]["status"] == "SUCCEEDED"
     assert completed.result.evidence_refs[0].artifact_id == project.id
+
+    settled = reopened_again.advance_agent_run(
+        run_id,
+        AgentRunAdvanceRequest(),
+    )
+    assert settled.run.snapshot.run.status == AgentRunStatus.COMPLETED
 
 
 def test_restart_marks_in_flight_specialist_tool_as_interrupted_without_replay(

@@ -17,7 +17,8 @@
 ## 项目中的职责映射
 
 - `route.h3_capability_profile`：读取项目已经验证的 H3 能力和限制。
-- `route.plan_h3`：根据 ShotPlan、资产和当前能力选择 DIRECT、FRAME_FIRST、FRAME_FIRST_LAST 或 REFERENCE。
+- `route.plan_h3`：根据 ShotPlan、资产和当前能力选择 DIRECT、FRAME_FIRST、FRAME_LAST、FRAME_FIRST_LAST 或 REFERENCE。
+- `route.update_h3_asset_preparation`：在图像 Worker 建立并审核关键帧资产后，把 `GENERATING`、`READY` 或 `REJECTED` 状态精确回写到原 RoutePlan；后续 RoutePlan 编译只会消费当前已批准的图片版本。
 - `route.compile_h3_prompt`：把已确定镜头编译成 H3 Prompt IR。
 - `route.preview_h3_probe`：在提交前查看最终请求和成本敏感输入。
 - `route.execute_h3_plan`：建立真实 MiniMax-H3 生成任务；`video.enqueue` 是确定性 Mock 路径，不会提交 H3。

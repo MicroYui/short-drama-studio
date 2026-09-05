@@ -12,6 +12,7 @@ from short_drama.models import (
     EvidencePurpose,
     ExportRecord,
     GenerationTask,
+    GenerationUnitShotWindow,
     ProjectAggregate,
     QaStatus,
     QaIssue,
@@ -180,6 +181,14 @@ class H3RouteAssetPreparationStatus(StrEnum):
     REJECTED = "REJECTED"
 
 
+class H3RouteAssetPreparationUpdateStatus(StrEnum):
+    """Lifecycle states that may be recorded after a preparation is planned."""
+
+    GENERATING = "GENERATING"
+    READY = "READY"
+    REJECTED = "REJECTED"
+
+
 class H3InspectionPolicy(DomainModel):
     scopes: list[VideoInspectionScope] = Field(min_length=1, max_length=2)
     max_frames: int = Field(ge=6, le=24)
@@ -199,7 +208,7 @@ class H3RouteAssetPreparation(DomainModel):
     advisory_only: Literal[True] = True
     status: H3RouteAssetPreparationStatus = H3RouteAssetPreparationStatus.PLANNED
     asset_id: str | None = None
-    image_task_ids: list[str] = Field(default_factory=list[str], max_length=10)
+    image_task_ids: list[str] = Field(default_factory=list[str])
     approved_version_id: str | None = None
     review_summary: str | None = Field(default=None, max_length=4000)
 
@@ -242,6 +251,15 @@ class H3VideoGuide(DomainModel):
 class H3ShotRoutePlan(DomainModel):
     shot_id: str
     shot_sequence: int = Field(ge=1)
+    generation_unit_id: str | None = Field(default=None, min_length=1, max_length=200)
+    clip_group_id: str | None = Field(default=None, min_length=1, max_length=200)
+    output_slot_id: str | None = Field(default=None, min_length=1, max_length=240)
+    shot_ids: list[str] = Field(default_factory=list[str], max_length=500)
+    input_shot_revisions: dict[str, int] = Field(default_factory=dict[str, int])
+    shot_source_windows: list[GenerationUnitShotWindow] = Field(
+        default_factory=list[GenerationUnitShotWindow],
+        max_length=500,
+    )
     input_script_version_id: str
     input_bible_version_id: str
     input_shot_revision: int = Field(ge=1)
@@ -288,6 +306,29 @@ class H3ShotRoutePlan(DomainModel):
 
     @model_validator(mode="after")
     def validate_action_target(self) -> H3ShotRoutePlan:
+        if len(self.shot_ids) != len(set(self.shot_ids)):
+            raise ValueError("H3 route-plan shot IDs must be unique")
+        if any(revision < 1 for revision in self.input_shot_revisions.values()):
+            raise ValueError("H3 route-plan shot revisions must be positive")
+        if self.generation_unit_id is not None:
+            window_ids = [item.shot_id for item in self.shot_source_windows]
+            if not self.shot_ids:
+                raise ValueError("A generation-unit route requires shot_ids")
+            if window_ids != self.shot_ids:
+                raise ValueError(
+                    "Generation-unit shot windows must follow the declared shot_ids order"
+                )
+            if set(self.input_shot_revisions) != set(self.shot_ids):
+                raise ValueError(
+                    "Generation-unit route revisions must cover every declared shot"
+                )
+            if any(
+                self.input_shot_revisions[item.shot_id] != item.shot_revision
+                for item in self.shot_source_windows
+            ):
+                raise ValueError(
+                    "Generation-unit shot windows and revision map must agree"
+                )
         if self.action == H3ShotRouteAction.REUSE_TAKE and self.reuse_take_id is None:
             raise ValueError("REUSE_TAKE requires reuse_take_id")
         if self.action == H3ShotRouteAction.GENERATE and self.reuse_take_id is not None:
@@ -319,6 +360,14 @@ class H3ProductionRoutePlan(DomainModel):
     id: str
     project_id: str
     version: int = Field(ge=1)
+    state_revision: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Monotonic revision of this plan record's mutable preparation and "
+            "execution state. The plan version remains the compiled-plan ordinal."
+        ),
+    )
     provider: str = "minimax"
     model: str = "MiniMax-H3"
     resolution: str = "768P"
@@ -326,6 +375,10 @@ class H3ProductionRoutePlan(DomainModel):
     planner: str
     input_script_version_id: str
     input_bible_version_id: str
+    input_storyboard_document_id: str | None = None
+    input_storyboard_version_id: str | None = None
+    input_generation_plan_document_id: str | None = None
+    input_generation_plan_version_id: str | None = None
     input_voice_reference_revision: int = Field(default=0, ge=0)
     decisions: list[H3ShotRoutePlan] = Field(min_length=1)
     estimated_new_h3_seconds: int = Field(ge=0)
@@ -337,10 +390,60 @@ class H3ProductionRoutePlan(DomainModel):
     executed_at: str | None = None
 
 
+class H3RouteAssetPreparationUpdateRequest(DomainModel):
+    expected_state_revision: int = Field(
+        ge=1,
+        description=(
+            "Exact H3 route-plan state revision used to prepare this mutation. "
+            "Stale handoffs must be reloaded instead of overwriting newer state."
+        ),
+    )
+    shot_id: str = Field(min_length=1, max_length=200)
+    role: H3MediaRole
+    status: H3RouteAssetPreparationUpdateStatus
+    asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    image_task_ids: list[str] | None = None
+    approved_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+    review_summary: str | None = Field(default=None, min_length=1, max_length=4000)
+
+    @model_validator(mode="after")
+    def validate_lifecycle_payload(self) -> H3RouteAssetPreparationUpdateRequest:
+        if self.image_task_ids is not None and len(self.image_task_ids) != len(
+            set(self.image_task_ids)
+        ):
+            raise ValueError("Image task IDs for an H3 asset preparation must be unique")
+        if (
+            self.status == H3RouteAssetPreparationUpdateStatus.GENERATING
+            and self.asset_id is None
+        ):
+            raise ValueError(f"{self.status.value} requires asset_id")
+        if self.status == H3RouteAssetPreparationUpdateStatus.READY:
+            if self.approved_version_id is None:
+                raise ValueError("READY requires approved_version_id")
+        elif self.approved_version_id is not None:
+            raise ValueError("Only READY may declare approved_version_id")
+        if self.status == H3RouteAssetPreparationUpdateStatus.REJECTED and (
+            self.review_summary is None or not self.review_summary.strip()
+        ):
+            raise ValueError("REJECTED requires review_summary")
+        return self
+
+
+class H3RouteAssetPreparationUpdateResponse(DomainModel):
+    plan: H3ProductionRoutePlan
+    preparation: H3RouteAssetPreparation
+    approved_version_number: int | None = Field(default=None, ge=1)
+
+
 class H3ShotRouteDirective(DomainModel):
     """Explicit per-shot production intent supplied by the calling Agent or user."""
 
-    shot_id: str = Field(min_length=1, max_length=200)
+    shot_id: str = Field(default="", max_length=200)
+    generation_unit_id: str | None = Field(default=None, min_length=1, max_length=200)
     candidate_id: str | None = Field(default=None, min_length=1, max_length=300)
     reuse_take_id: str | None = Field(default=None, min_length=1, max_length=200)
     reference_selection_candidate_ids: list[str] | None = None
@@ -348,6 +451,10 @@ class H3ShotRouteDirective(DomainModel):
 
     @model_validator(mode="after")
     def validate_route_choice(self) -> H3ShotRouteDirective:
+        if bool(self.shot_id) == (self.generation_unit_id is not None):
+            raise ValueError(
+                "An H3 route directive must target exactly one shot or generation unit"
+            )
         if self.candidate_id is not None and self.reuse_take_id is not None:
             raise ValueError(
                 "An H3 shot route directive may choose candidate_id or reuse_take_id, not both"
@@ -363,6 +470,17 @@ class H3ShotRouteDirective(DomainModel):
 
 class H3ProductionRoutePlanRequest(DomainModel):
     shot_ids: list[str] = Field(default_factory=list[str], max_length=500)
+    generation_plan_document_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+    generation_plan_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+    unit_ids: list[str] = Field(default_factory=list[str], max_length=500)
     use_language_agent: bool = True
     candidate_count: int = Field(
         default=1,
@@ -377,9 +495,43 @@ class H3ProductionRoutePlanRequest(DomainModel):
 
     @model_validator(mode="after")
     def validate_shot_directives(self) -> H3ProductionRoutePlanRequest:
-        directive_ids = [item.shot_id for item in self.shot_directives]
+        generation_plan_selected = any(
+            (
+                self.generation_plan_document_id is not None,
+                self.generation_plan_version_id is not None,
+                bool(self.unit_ids),
+            )
+        )
+        if generation_plan_selected and self.shot_ids:
+            raise ValueError(
+                "Choose generation_plan_document_id/version_id/unit_ids or shot_ids, not both"
+            )
+        if (
+            self.generation_plan_document_id is None
+        ) != (self.generation_plan_version_id is None):
+            raise ValueError(
+                "generation_plan_document_id and generation_plan_version_id are required together"
+            )
+        if self.unit_ids and self.generation_plan_document_id is None:
+            raise ValueError("unit_ids require a generation plan document and version")
+        if len(self.unit_ids) != len(set(self.unit_ids)):
+            raise ValueError("H3 generation-unit IDs must be unique")
+        directive_ids = [
+            item.shot_id or item.generation_unit_id or ""
+            for item in self.shot_directives
+        ]
         if len(directive_ids) != len(set(directive_ids)):
-            raise ValueError("H3 shot route directives must use unique shot IDs")
+            raise ValueError("H3 route directives must use unique targets")
+        if generation_plan_selected and any(
+            bool(item.shot_id) for item in self.shot_directives
+        ):
+            raise ValueError(
+                "Generation-plan route directives must target generation_unit_id"
+            )
+        if not generation_plan_selected and any(
+            item.generation_unit_id is not None for item in self.shot_directives
+        ):
+            raise ValueError("Shot route directives must target shot_id")
         return self
 
 
@@ -392,6 +544,12 @@ class H3ProductionRoutePlanListResponse(DomainModel):
 
 
 class H3ProductionRouteExecuteRequest(DomainModel):
+    expected_state_revision: int = Field(
+        ge=1,
+        description=(
+            "Exact persisted H3 route-plan state revision this execution continues from."
+        ),
+    )
     reuse_passed_takes: bool = True
     enqueue_new_generations: bool = False
     inspect_reused_takes: bool = True
@@ -534,6 +692,17 @@ class H3ProviderRun(DomainModel):
     task_id: str
     project_id: str
     shot_id: str
+    generation_plan_document_id: str | None = None
+    generation_plan_version_id: str | None = None
+    storyboard_document_id: str | None = None
+    storyboard_version_id: str | None = None
+    generation_unit_id: str | None = None
+    clip_group_id: str | None = None
+    output_slot_id: str | None = None
+    shot_ids: list[str] = Field(default_factory=list[str])
+    shot_windows: list[GenerationUnitShotWindow] = Field(
+        default_factory=list[GenerationUnitShotWindow]
+    )
     route: VideoGenerationRoute
     purpose: EvidencePurpose
     learning_objective: str | None = None

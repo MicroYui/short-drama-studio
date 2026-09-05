@@ -24,6 +24,22 @@ class ProductionSkillRole(StrEnum):
     EPISODE_REVIEWER = "EPISODE_REVIEWER"
 
 
+class SkillProvenanceKind(StrEnum):
+    """How a local Skill relates to any upstream material."""
+
+    PROJECT_ORIGINAL = "PROJECT_ORIGINAL"
+    PROJECT_SYNTHESIS = "PROJECT_SYNTHESIS"
+    OFFICIAL_ORIGINAL = "OFFICIAL_ORIGINAL"
+    OFFICIAL_ORIGINAL_WITH_ADAPTER = "OFFICIAL_ORIGINAL_WITH_ADAPTER"
+    OFFICIAL_TRANSLATION = "OFFICIAL_TRANSLATION"
+    OFFICIAL_TRANSLATION_WITH_ADAPTER = "OFFICIAL_TRANSLATION_WITH_ADAPTER"
+    UPSTREAM_OFFICIAL_WITH_ADAPTER = "UPSTREAM_OFFICIAL_WITH_ADAPTER"
+    UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER = (
+        "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER"
+    )
+    UPSTREAM_COMMUNITY_WITH_ADAPTER = "UPSTREAM_COMMUNITY_WITH_ADAPTER"
+
+
 @dataclass(frozen=True)
 class ProductionSkill:
     profile: ProductionProfile
@@ -58,6 +74,8 @@ class ComposableProductionSkill:
     constitution: str
     role_prompts: dict[ProductionSkillRole, str]
     source_path: str
+    provenance: SkillProvenanceKind = SkillProvenanceKind.PROJECT_ORIGINAL
+    upstream_sources: tuple[str, ...] = ()
     user_overridable: bool = True
 
     def supports(self, role: ProductionSkillRole) -> bool:
@@ -76,11 +94,26 @@ class NarrativeSkillDescriptor:
 
 
 @dataclass(frozen=True)
+class ProductionMethodSkillDescriptor:
+    """Compact metadata an Agent can inspect before choosing production methods."""
+
+    id: str
+    label: str
+    description: str
+    supported_roles: tuple[ProductionSkillRole, ...]
+    provenance: SkillProvenanceKind = SkillProvenanceKind.PROJECT_ORIGINAL
+    upstream_sources: tuple[str, ...] = ()
+    user_overridable: bool = True
+
+
+@dataclass(frozen=True)
 class ProviderPromptSkill:
     provider: str
     label: str
     instructions: str
     reference_paths: tuple[str, ...]
+    provenance: SkillProvenanceKind = SkillProvenanceKind.PROJECT_ORIGINAL
+    upstream_sources: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -89,3 +122,4 @@ class CompiledProductionPrompt:
     roles: tuple[ProductionSkillRole, ...]
     text: str
     selected_skill_ids: tuple[str, ...] = ()
+    selected_method_skill_ids: tuple[str, ...] = ()

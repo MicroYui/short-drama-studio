@@ -68,6 +68,15 @@ class AgentResultStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class WorkOrderNextOwner(StrEnum):
+    """The persisted actor responsible for the next WorkOrder transition."""
+
+    WORKER_DECISION = "WORKER_DECISION"
+    WORKER_TOOL = "WORKER_TOOL"
+    LEADER_REPLAN = "LEADER_REPLAN"
+    USER_INPUT = "USER_INPUT"
+
+
 class SpecialistTurnStatus(StrEnum):
     """Persisted lifecycle of one Tool request made by a specialist Agent."""
 
@@ -94,6 +103,11 @@ class ArtifactRef(RuntimeModel):
     def identity(self) -> tuple[str, str, str, int | None]:
         return (self.project_id, self.artifact_type, self.artifact_id, self.version)
 
+    def requires_explicit_version(self) -> bool:
+        """Whether this artifact kind is mutable and needs a pinned version."""
+
+        return self.artifact_type in _VERSIONED_CONTEXT_ARTIFACT_TYPES
+
 
 class ArtifactSummary(RuntimeModel):
     """Small context projection resolved from an :class:`ArtifactRef`."""
@@ -101,6 +115,137 @@ class ArtifactSummary(RuntimeModel):
     ref: ArtifactRef
     title: str | None = None
     summary: str = Field(min_length=1)
+
+
+_VERSIONED_CONTEXT_ARTIFACT_TYPES = frozenset(
+    {
+        "script",
+        "script_version",
+        "bible",
+        "bible_version",
+        "character",
+        "scene",
+        "shot",
+        "asset_version",
+        "production_document",
+        "production_document_version",
+        "production_spec",
+        "storyboard",
+        "storyboard_draft",
+        "generation_plan",
+        "generation_unit",
+        "clip_group",
+        "output_slot",
+        "timeline",
+        "timeline_manifest",
+        "h3_route_plan",
+        "h3_route_asset_preparation",
+    }
+)
+
+
+class ContextBoundary(RuntimeModel):
+    """Named neighboring context selected by the delegating Agent.
+
+    A boundary records semantic entry/exit context for a WorkOrder.  It may
+    anchor that guidance to exact canonical artifact pointers when such an
+    artifact exists, but the first or last unit can legitimately have guidance
+    without a neighboring artifact.  It never copies or owns project content.
+    """
+
+    relationship: str = Field(min_length=1)
+    artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    guidance: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_boundary(self) -> Self:
+        if not self.artifact_refs and self.guidance is None:
+            raise ValueError(
+                "Context boundary must include artifact references or guidance"
+            )
+        identities = [ref.identity() for ref in self.artifact_refs]
+        if len(identities) != len(set(identities)):
+            raise ValueError("Context boundary artifact references must be unique")
+        return self
+
+
+class ContextManifest(RuntimeModel):
+    """Persisted, Agent-authored context selection for one WorkOrder.
+
+    The manifest records why the delegation exists and which canonical records
+    may be loaded. It is a control-plane contract, not a second project document.
+    """
+
+    id: str = Field(min_length=1)
+    work_order_id: str = Field(min_length=1)
+    objective: str = Field(min_length=1)
+    why_now: str = Field(min_length=1)
+    required_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    adjacent_boundaries: list[ContextBoundary] = Field(
+        default_factory=list[ContextBoundary]
+    )
+    inherited_decision_ids: list[str] = Field(default_factory=list[str])
+    inherited_decisions: list[str] = Field(default_factory=list[str])
+    selected_skill_ids: list[str] = Field(default_factory=list[str])
+    experience_tags: list[str] = Field(default_factory=list[str])
+    constraints: list[str] = Field(default_factory=list[str])
+    open_questions: list[str] = Field(default_factory=list[str])
+    expected_output_schema: dict[str, JsonValue] = Field(
+        default_factory=dict[str, JsonValue]
+    )
+    expected_output_slot_ids: list[str] = Field(default_factory=list[str])
+    acceptance_criteria: list[str] = Field(default_factory=list[str])
+    exact_artifact_versions: bool = True
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def validate_manifest(self) -> Self:
+        relationships = [boundary.relationship for boundary in self.adjacent_boundaries]
+        if len(relationships) != len(set(relationships)):
+            raise ValueError("Context boundary relationships must be unique")
+
+        required_identities = [ref.identity() for ref in self.required_artifacts]
+        if len(required_identities) != len(set(required_identities)):
+            raise ValueError("Required context artifact references must be unique")
+
+        refs = [
+            *self.required_artifacts,
+            *[
+                ref
+                for boundary in self.adjacent_boundaries
+                for ref in boundary.artifact_refs
+            ],
+        ]
+        if self.exact_artifact_versions:
+            missing_versions = [
+                ref
+                for ref in refs
+                if ref.requires_explicit_version() and ref.version is None
+            ]
+            if missing_versions:
+                first = missing_versions[0]
+                raise ValueError(
+                    "Context manifest requires an explicit version for "
+                    f"{first.artifact_type}:{first.artifact_id}"
+                )
+
+        for field_name in (
+            "inherited_decision_ids",
+            "inherited_decisions",
+            "selected_skill_ids",
+            "experience_tags",
+            "constraints",
+            "open_questions",
+            "expected_output_slot_ids",
+            "acceptance_criteria",
+        ):
+            values = getattr(self, field_name)
+            normalized = [value.strip() for value in values if value.strip()]
+            if normalized != values or len(normalized) != len(set(normalized)):
+                raise ValueError(
+                    f"Context manifest {field_name} entries must be trimmed and unique"
+                )
+        return self
 
 
 class AgentRun(RuntimeModel):
@@ -153,11 +298,38 @@ class PlanRevision(RuntimeModel):
     revision: int = Field(ge=1)
     summary: str = Field(min_length=1)
     steps: list[PlanStep] = Field(default_factory=list[PlanStep])
+    selected_method_skill_ids: list[str] = Field(default_factory=list[str])
+    method_selection_rationale: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=4000,
+    )
+    carried_work_order_ids: list[str] = Field(default_factory=list[str])
     goal_complete: bool = False
     created_at: datetime = Field(default_factory=utc_now)
 
     @model_validator(mode="after")
     def validate_graph(self) -> Self:
+        normalized_method_ids = [
+            skill_id.strip()
+            for skill_id in self.selected_method_skill_ids
+            if skill_id.strip()
+        ]
+        if normalized_method_ids != self.selected_method_skill_ids or len(
+            normalized_method_ids
+        ) != len(set(normalized_method_ids)):
+            raise ValueError(
+                "Plan selected_method_skill_ids must be trimmed and unique"
+            )
+        normalized_carried_ids = [
+            work_order_id.strip()
+            for work_order_id in self.carried_work_order_ids
+            if work_order_id.strip()
+        ]
+        if normalized_carried_ids != self.carried_work_order_ids or len(
+            normalized_carried_ids
+        ) != len(set(normalized_carried_ids)):
+            raise ValueError("Plan carried_work_order_ids must be trimmed and unique")
         step_by_id = {step.id: step for step in self.steps}
         if len(step_by_id) != len(self.steps):
             raise ValueError("Plan step ids must be unique within a revision")
@@ -274,11 +446,32 @@ class SpecialistTurnRecord(RuntimeModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class SpecialistProtocolFeedback(RuntimeModel):
+    """Persisted feedback for correcting one malformed Worker response.
+
+    This is control-plane state, not creative review.  Keeping the rejected
+    response beside typed validation issues lets the same specialist repair its
+    handoff without asking the Leader to decompose or rewrite the WorkOrder.
+    """
+
+    id: str = Field(min_length=1)
+    rejected_response: str = Field(min_length=1)
+    validation_issues: dict[str, list[dict[str, JsonValue]]] = Field(
+        default_factory=dict[str, list[dict[str, JsonValue]]]
+    )
+    loaded_tool_schema_ids: list[str] = Field(default_factory=list[str])
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class WorkOrder(RuntimeModel):
     """Concise, self-contained contract for delegating work to another agent."""
 
     id: str = Field(min_length=1)
     parent_run_id: str = Field(min_length=1)
+    source_plan_revision_id: str | None = Field(default=None, min_length=1)
+    source_action_id: str | None = Field(default=None, min_length=1)
+    active_plan_revision_id: str | None = Field(default=None, min_length=1)
+    superseded_by_plan_revision_id: str | None = Field(default=None, min_length=1)
     sender: str = Field(min_length=1)
     recipient_role: str = Field(min_length=1)
     production_skill_role: ProductionSkillRole | None = None
@@ -291,13 +484,142 @@ class WorkOrder(RuntimeModel):
     expected_output_schema: dict[str, JsonValue] = Field(
         default_factory=dict[str, JsonValue]
     )
+    expected_output_slot_ids: list[str] = Field(default_factory=list[str])
     acceptance_criteria: list[str] = Field(default_factory=list[str])
+    context_manifest: ContextManifest | None = None
     specialist_turns: list[SpecialistTurnRecord] = Field(
         default_factory=list[SpecialistTurnRecord]
     )
+    pending_protocol_feedback: SpecialistProtocolFeedback | None = None
     status: DelegationStatus = DelegationStatus.PENDING
+    next_owner: WorkOrderNextOwner | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def validate_context_manifest(self) -> Self:
+        manifest = self.context_manifest
+        if manifest is None:
+            # Records written before ContextManifest existed remain readable. New
+            # delegations always supply an exact manifest from AgentRuntime.
+            self.context_manifest = ContextManifest(
+                id=f"context-manifest-{self.id}",
+                work_order_id=self.id,
+                objective=self.objective,
+                why_now=self.why_now,
+                required_artifacts=list(self.scope),
+                inherited_decisions=list(self.confirmed_decisions),
+                constraints=list(self.constraints),
+                open_questions=list(self.open_questions),
+                expected_output_schema=dict(self.expected_output_schema),
+                expected_output_slot_ids=list(self.expected_output_slot_ids),
+                acceptance_criteria=list(self.acceptance_criteria),
+                exact_artifact_versions=False,
+                created_at=self.created_at,
+            )
+            return self
+
+        if manifest.work_order_id != self.id:
+            raise ValueError("Context manifest must belong to its WorkOrder")
+        mirrored_values = (
+            ("objective", manifest.objective, self.objective),
+            ("why_now", manifest.why_now, self.why_now),
+            ("required_artifacts", manifest.required_artifacts, self.scope),
+            (
+                "inherited_decisions",
+                manifest.inherited_decisions,
+                self.confirmed_decisions,
+            ),
+            ("constraints", manifest.constraints, self.constraints),
+            ("open_questions", manifest.open_questions, self.open_questions),
+            (
+                "expected_output_schema",
+                manifest.expected_output_schema,
+                self.expected_output_schema,
+            ),
+            (
+                "expected_output_slot_ids",
+                manifest.expected_output_slot_ids,
+                self.expected_output_slot_ids,
+            ),
+            (
+                "acceptance_criteria",
+                manifest.acceptance_criteria,
+                self.acceptance_criteria,
+            ),
+        )
+        mismatch = next(
+            (
+                name
+                for name, manifest_value, value in mirrored_values
+                if manifest_value != value
+            ),
+            None,
+        )
+        if mismatch is not None:
+            raise ValueError(
+                f"Context manifest {mismatch} must match the WorkOrder contract"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def restore_legacy_next_owner(self) -> Self:
+        """Infer the next actor for records written before this field existed."""
+
+        if self.status in {
+            DelegationStatus.COMPLETED,
+            DelegationStatus.FAILED,
+            DelegationStatus.CANCELLED,
+        }:
+            object.__setattr__(self, "next_owner", None)
+            return self
+        if self.next_owner is not None:
+            return self
+        pending_tool = any(
+            turn.status == SpecialistTurnStatus.REQUESTED
+            for turn in self.specialist_turns
+        )
+        completed_tool = any(
+            turn.status in {
+                SpecialistTurnStatus.COMPLETED,
+                SpecialistTurnStatus.INTERRUPTED,
+            }
+            for turn in self.specialist_turns
+        )
+        if pending_tool:
+            object.__setattr__(
+                self,
+                "next_owner",
+                WorkOrderNextOwner.WORKER_TOOL,
+            )
+        elif self.status in {
+            DelegationStatus.PENDING,
+            DelegationStatus.IN_PROGRESS,
+        } or completed_tool:
+            object.__setattr__(
+                self,
+                "next_owner",
+                WorkOrderNextOwner.WORKER_DECISION,
+            )
+        else:
+            object.__setattr__(
+                self,
+                "next_owner",
+                WorkOrderNextOwner.LEADER_REPLAN,
+            )
+        return self
+
+
+class WorkOrderProgressEntry(RuntimeModel):
+    """One append-only progress note emitted while a WorkOrder is active."""
+
+    id: str = Field(min_length=1)
+    work_order_id: str = Field(min_length=1)
+    sequence: int = Field(ge=1)
+    author: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class AgentResult(RuntimeModel):
@@ -307,6 +629,9 @@ class AgentResult(RuntimeModel):
     work_order_id: str = Field(min_length=1)
     status: AgentResultStatus
     concise_summary: str = Field(min_length=1)
+    deliverable: dict[str, JsonValue] = Field(
+        default_factory=dict[str, JsonValue]
+    )
     created_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     updated_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     findings: list[str] = Field(default_factory=list[str])
@@ -315,7 +640,42 @@ class AgentResult(RuntimeModel):
     unresolved_questions: list[str] = Field(default_factory=list[str])
     evidence_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     recommended_next_actions: list[str] = Field(default_factory=list[str])
+    next_owner: WorkOrderNextOwner | None = None
+    stale_handoff: bool = False
+    stale_reason: str | None = Field(default=None, min_length=1)
     created_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def validate_stale_handoff(self) -> Self:
+        if self.stale_handoff != (self.stale_reason is not None):
+            raise ValueError("A stale AgentResult requires one stale_reason")
+        if self.status == AgentResultStatus.PARTIAL:
+            if self.next_owner is None:
+                object.__setattr__(
+                    self,
+                    "next_owner",
+                    WorkOrderNextOwner.LEADER_REPLAN,
+                )
+        elif self.next_owner is not None:
+            raise ValueError("Only a PARTIAL AgentResult can name a next owner")
+        return self
+
+
+class AgentResultDigest(RuntimeModel):
+    """Bounded semantic handoff from one completed delegated WorkOrder.
+
+    The full :class:`AgentResult` remains persisted in the runtime store.  This
+    projection carries only the fields the Leader needs when choosing the next
+    plan, without replaying the Worker's complete conversational context.
+    """
+
+    status: AgentResultStatus
+    concise_summary: str = Field(min_length=1)
+    deliverable: dict[str, JsonValue] = Field(
+        default_factory=dict[str, JsonValue]
+    )
+    findings: list[str] = Field(default_factory=list[str])
+    evidence_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
 
 
 class ActionDigest(RuntimeModel):
@@ -324,6 +684,7 @@ class ActionDigest(RuntimeModel):
     status: ActionStatus
     summary: str
     artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    agent_result: AgentResultDigest | None = None
 
 
 class ContextPack(RuntimeModel):
@@ -332,7 +693,10 @@ class ContextPack(RuntimeModel):
     run_id: str
     project_id: str
     objective: str
+    work_order_id: str | None = None
+    context_manifest_id: str | None = None
     active_skill_ids: list[str] = Field(default_factory=list[str])
+    unattended: bool = False
     execution_target: ProductionExecutionTarget | None = None
     render_export: bool | None = None
     project_summary: str | None = None

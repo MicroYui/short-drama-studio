@@ -19,6 +19,20 @@ class LanguageProviderError(RuntimeError):
     """The configured language provider could not be validated."""
 
 
+class LanguageProviderIncompleteError(LanguageProviderError):
+    """The provider stopped a generation before a complete payload existed."""
+
+    def __init__(
+        self,
+        *,
+        reason: str,
+        partial_output_characters: int,
+    ) -> None:
+        self.reason = reason
+        self.partial_output_characters = partial_output_characters
+        super().__init__(f"GPT-5.6-sol generation incomplete: {reason}")
+
+
 class LanguageProviderClient(Protocol):
     def validate_credentials(self) -> None: ...
 
@@ -106,6 +120,7 @@ class OpenAICompatibleLanguageClient:
         completion_type = "unknown_error"
         first_text_delta_at: float | None = None
         output_text = ""
+        partial_output_characters = 0
         success = False
         error_kind: str | None = None
         input_payload: object = input_text
@@ -159,6 +174,10 @@ class OpenAICompatibleLanguageClient:
                         response,
                         first_text_delta_observer=capture_first_text_delta,
                     )
+                except LanguageProviderIncompleteError as exc:
+                    completion_type = f"sse_incomplete_{exc.reason}"
+                    partial_output_characters = exc.partial_output_characters
+                    raise
                 except LanguageProviderError:
                     completion_type = "sse_error"
                     raise
@@ -191,7 +210,10 @@ class OpenAICompatibleLanguageClient:
                 ),
                 instruction_characters=len(instructions),
                 input_characters=len(input_text),
-                output_characters=len(output_text),
+                output_characters=max(
+                    len(output_text),
+                    partial_output_characters,
+                ),
                 error_kind=error_kind,
             )
 
@@ -362,10 +384,18 @@ class OpenAICompatibleLanguageClient:
                     )
                     raise LanguageProviderError(message)
                 if event_type == "response.incomplete":
-                    raise LanguageProviderError(
-                        OpenAICompatibleLanguageClient._stream_error_message(
+                    reason = (
+                        OpenAICompatibleLanguageClient._stream_incomplete_reason(
                             event_payload
                         )
+                        or "unknown"
+                    )
+                    raise LanguageProviderIncompleteError(
+                        reason=reason,
+                        partial_output_characters=max(
+                            len("".join(text_deltas)),
+                            len(completed_text or ""),
+                        ),
                     )
         except requests.RequestException as exc:
             raise LanguageProviderError(
@@ -448,6 +478,22 @@ class OpenAICompatibleLanguageClient:
         if isinstance(message, str) and message.strip():
             return message
         return "GPT-5.6-sol generation stream failed"
+
+    @staticmethod
+    def _stream_incomplete_reason(event: dict[str, object]) -> str | None:
+        candidates: list[object] = [event.get("incomplete_details")]
+        response = event.get("response")
+        if isinstance(response, dict):
+            candidates.append(
+                cast(dict[str, object], response).get("incomplete_details")
+            )
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            reason = cast(dict[str, object], candidate).get("reason")
+            if isinstance(reason, str) and reason.strip():
+                return reason.strip()
+        return None
 
     @staticmethod
     def _raise_error(response: Response) -> None:

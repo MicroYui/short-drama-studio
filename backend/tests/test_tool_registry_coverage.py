@@ -9,16 +9,37 @@ from short_drama.tools import ToolCallStatus, ToolCategory, ToolEffect
 
 
 REQUIRED_PRODUCTION_TOOLS = {
-    "audio": {"audio.inspect_manifest", "audio.update_voice_reference"},
+    "project": {
+        "project.bind_output_slot",
+        "project.create",
+        "project.get",
+        "project.get_output_slot",
+        "project.list",
+        "project.list_output_slots",
+    },
+    "audio": {
+        "audio.analyze_music",
+        "audio.bind_master",
+        "audio.inspect_manifest",
+        "audio.update_timed_text_lock",
+        "audio.update_voice_reference",
+    },
     "artifact": {
         "artifact.add_reference_entry",
         "artifact.create_asset",
+        "artifact.create_production_document",
+        "artifact.create_production_spec",
+        "artifact.get_production_document",
+        "artifact.get_production_spec",
         "artifact.import_catalog",
         "artifact.import_local_version",
         "artifact.import_stock",
         "artifact.import_url_version",
         "artifact.inspect_coverage",
+        "artifact.list_production_documents",
         "artifact.review_version",
+        "artifact.replace_production_spec",
+        "artifact.revise_production_document",
         "artifact.search_catalog",
         "artifact.search_stock",
         "artifact.update_brief",
@@ -33,12 +54,25 @@ REQUIRED_PRODUCTION_TOOLS = {
         "image.resolve_not_submitted",
         "image.retry",
     },
-    "planning": {"planning.advance"},
+    "planning": {"planning.advance", "planning.start_script_revision"},
     "shot": {
         "shot.apply_director_repair",
+        "shot.append_storyboard_group",
+        "shot.append_storyboard_ledger_segment",
+        "shot.append_storyboard_outline_segment",
+        "shot.begin_storyboard_draft",
         "shot.compile_keyframe_brief",
+        "shot.complete_storyboard_ledger",
+        "shot.complete_storyboard_outline",
+        "shot.create_storyboard",
         "shot.director_advice",
+        "shot.finalize_storyboard",
         "shot.preview_reference_plan",
+        "shot.get_storyboard",
+        "shot.patch_storyboard",
+        "shot.record_storyboard_draft_verification",
+        "shot.replace_storyboard_draft_group",
+        "shot.replace_storyboard",
         "shot.run_director_loop",
         "shot.update_reference_plan",
     },
@@ -63,15 +97,18 @@ REQUIRED_PRODUCTION_TOOLS = {
     "qa": {
         "qa.check_input_compatibility",
         "qa.compare_keyframes",
+        "qa.inspect_asset_version",
         "qa.list_visual_input_reports",
         "qa.rerank_reference_visuals",
         "qa.review_episode",
     },
     "route": {
+        "route.compile_generation_plan",
         "route.compile_h3_prompt",
         "route.enqueue_h3_probe",
         "route.execute_h3_plan",
         "route.h3_capability_profile",
+        "route.get_generation_plan",
         "route.list_h3_plans",
         "route.list_h3_reconciliation",
         "route.list_h3_runs",
@@ -80,6 +117,7 @@ REQUIRED_PRODUCTION_TOOLS = {
         "route.resolve_h3_not_submitted",
         "route.resolve_h3_submission",
         "route.review_h3_take",
+        "route.update_h3_asset_preparation",
     },
 }
 
@@ -117,6 +155,110 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert reconciliation.effect == ToolEffect.EXTERNAL
     assert reconciliation.idempotent is True
     assert reconciliation.input_schema["required"] == ["project_id", "task_id"]
+
+    assert "ProjectBible.style" in descriptors["artifact.create_asset"].description
+    assert "不会自动看图" in descriptors["artifact.review_version"].description
+    assert "artifact.review_version" in descriptors["qa.inspect_asset_version"].description
+    assert "再调用 route.plan_h3" in descriptors[
+        "route.update_h3_asset_preparation"
+    ].description
+    assert "不会触发任何真实生成" in descriptors[
+        "artifact.create_production_spec"
+    ].description
+    assert "不会生成视频" in descriptors["shot.create_storyboard"].description
+    assert "轻量 seed" in descriptors[
+        "shot.begin_storyboard_draft"
+    ].description
+    begin_schema = descriptors["shot.begin_storyboard_draft"].input_schema
+    begin_request_schema = begin_schema["$defs"]["StoryboardDraftBeginRequest"]
+    assert "seed" in begin_request_schema["properties"]
+    assert "draft" not in begin_request_schema["properties"]
+    assert "不设固定秒数" in descriptors[
+        "shot.append_storyboard_ledger_segment"
+    ].description
+    assert "不是 Scene、ClipGroup、Shot 或 ComfyUI 节点边界" in descriptors[
+        "shot.append_storyboard_ledger_segment"
+    ].description
+    assert "completes_scene 默认为 false" in descriptors[
+        "shot.append_storyboard_ledger_segment"
+    ].description
+    assert "完整分区为各自精确 4–15 秒整数" in descriptors[
+        "shot.append_storyboard_ledger_segment"
+    ].description
+    assert "不得修改台词内容" in descriptors[
+        "shot.append_storyboard_ledger_segment"
+    ].description
+    assert "不得用目标总时长倒推分配" in descriptors[
+        "shot.append_storyboard_ledger_segment"
+    ].description
+    ledger_schema = descriptors[
+        "shot.append_storyboard_ledger_segment"
+    ].input_schema["$defs"]["StoryboardTimingLedgerEntry"]
+    assert ledger_schema["properties"]["completes_scene"] == {
+        "default": False,
+        "title": "Completes Scene",
+        "type": "boolean",
+    }
+    assert "不是用户审批门" in descriptors[
+        "shot.complete_storyboard_ledger"
+    ].description
+    assert "每场 allocations 能按连续顺序完整分区" in descriptors[
+        "shot.complete_storyboard_ledger"
+    ].description
+    assert "不改台词，不用目标总时长倒推" in descriptors[
+        "shot.complete_storyboard_ledger"
+    ].description
+    assert "同一 WorkOrder 可连续追加多段" in descriptors[
+        "shot.append_storyboard_outline_segment"
+    ].description
+    assert "4–15 秒整数" in descriptors[
+        "shot.append_storyboard_outline_segment"
+    ].description
+    outline_schema = descriptors[
+        "shot.append_storyboard_outline_segment"
+    ].input_schema["$defs"]["StoryboardClipGroupOutline"]
+    assert outline_schema["properties"]["duration_seconds"] == {
+        "maximum": 15,
+        "minimum": 4,
+        "title": "Duration Seconds",
+        "type": "integer",
+    }
+    assert "不会强制固定分组数" in descriptors[
+        "shot.complete_storyboard_outline"
+    ].description
+    assert "WorkOrder 可以小于或大于场次" in descriptors[
+        "shot.append_storyboard_group"
+    ].description
+    assert "Shot 时长之和必须等于组时长" in descriptors[
+        "shot.append_storyboard_group"
+    ].description
+    assert "不要为通过字符串逐字相等而复制措辞" in descriptors[
+        "shot.append_storyboard_group"
+    ].description
+    group_schema = descriptors["shot.append_storyboard_group"].input_schema
+    assert group_schema["$defs"]["ClipGroup"]["properties"][
+        "duration_seconds"
+    ]["type"] == "integer"
+    assert group_schema["$defs"]["ShotPlan"]["properties"][
+        "duration_seconds"
+    ]["type"] == "number"
+    assert "旧 Verifier 结论会自动失效" in descriptors[
+        "shot.replace_storyboard_draft_group"
+    ].description
+    assert "不是用户审批门" in descriptors[
+        "shot.record_storyboard_draft_verification"
+    ].description
+    assert "canonical Storyboard" in descriptors[
+        "shot.finalize_storyboard"
+    ].description
+    assert "不做逐字等值匹配" in descriptors[
+        "shot.finalize_storyboard"
+    ].description
+    assert "兼容旧调用" in descriptors["shot.create_storyboard"].description
+    assert descriptors["route.compile_generation_plan"].effect == ToolEffect.WRITE
+    assert "不调用 H3" in descriptors[
+        "route.compile_generation_plan"
+    ].description
 
 
 def test_read_adapters_use_the_real_service_without_bypassing_it(tmp_path: Path) -> None:

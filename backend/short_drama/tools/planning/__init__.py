@@ -26,6 +26,15 @@ class PlanningToolService(Protocol):
         owner_agent_run_id: str,
     ) -> PlanningRunResponse: ...
 
+    def start_script_revision(
+        self,
+        project_id: str,
+        *,
+        owner_agent_run_id: str,
+        instruction: str,
+        base_script_version_id: str,
+    ) -> PlanningRunResponse: ...
+
 
 class PlanningAdvanceInput(ToolModel):
     project_id: str
@@ -33,7 +42,67 @@ class PlanningAdvanceInput(ToolModel):
     owner_agent_run_id: str
 
 
+class PlanningStartScriptRevisionInput(ToolModel):
+    project_id: str
+    owner_agent_run_id: str
+    instruction: str
+    base_script_version_id: str
+
+
 def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None:
+    def start_script_revision(
+        request: PlanningStartScriptRevisionInput,
+    ) -> ToolExecution[PlanningRunResponse]:
+        response = service.start_script_revision(
+            request.project_id,
+            owner_agent_run_id=request.owner_agent_run_id,
+            instruction=request.instruction,
+            base_script_version_id=request.base_script_version_id,
+        )
+        return ToolExecution(
+            output=response,
+            artifact_refs=(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="content_planning_job",
+                    artifact_id=response.run.id,
+                ),
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="project",
+                    artifact_id=request.project_id,
+                ),
+            ),
+            warnings=tuple(dict.fromkeys(response.run.warnings)),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="planning.start_script_revision",
+            version=1,
+            category=ToolCategory.PLANNING,
+            description=(
+                "Start a resumable screenplay revision for the current project. "
+                "It preserves the original brief and current Script/Bible, then lets "
+                "the Leader decide scene patches, all-scene rewriting, or structural "
+                "re-architecture from the full user instruction."
+            ),
+            effect=ToolEffect.EXTERNAL,
+            idempotent=False,
+            input_model=PlanningStartScriptRevisionInput,
+            output_model=PlanningRunResponse,
+            handler=start_script_revision,
+            tags=frozenset(
+                {
+                    "planning",
+                    "script-revision",
+                    "agent-runtime",
+                    "resumable",
+                }
+            ),
+        )
+    )
+
     def advance_planning(
         request: PlanningAdvanceInput,
     ) -> ToolExecution[PlanningRunResponse]:
@@ -98,4 +167,8 @@ def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None
     )
 
 
-__all__ = ["PlanningAdvanceInput", "register_tools"]
+__all__ = [
+    "PlanningAdvanceInput",
+    "PlanningStartScriptRevisionInput",
+    "register_tools",
+]

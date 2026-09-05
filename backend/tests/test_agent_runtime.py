@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from datetime import timedelta
 from pathlib import Path
 
@@ -22,14 +23,18 @@ from short_drama.agent_runtime import (
     AgentRuntimeStore,
     ArtifactRef,
     ArtifactSummary,
+    ContextBoundary,
     ContextCompiler,
+    ContextManifestResolutionError,
     ContextPack,
     DelegationStatus,
     ExperienceConfidence,
     PlanRevision,
     PlanStep,
     ProjectMemory,
+    WorkOrderNextOwner,
 )
+from short_drama.agent_runtime.models import utc_now
 from short_drama.models import ProductionExecutionTarget
 from short_drama.observability import LOGGER_NAME
 
@@ -42,6 +47,20 @@ class FakeArtifactResolver:
     def summarize_artifact(self, ref: ArtifactRef) -> ArtifactSummary | None:
         self.requested.append(ref)
         return self._summaries.get(ref.identity())
+
+
+def test_context_boundary_allows_guidance_without_neighboring_artifact() -> None:
+    boundary = ContextBoundary(
+        relationship="opening-state",
+        guidance="The first shot begins before anyone has reacted.",
+    )
+
+    assert boundary.artifact_refs == []
+
+
+def test_context_boundary_rejects_an_entirely_empty_handoff() -> None:
+    with pytest.raises(ValidationError, match="artifact references or guidance"):
+        ContextBoundary(relationship="opening-state")
 
 
 def _runtime(
@@ -74,7 +93,18 @@ def _context_content_characters(context: ContextPack) -> int:
         if artifact.title is not None:
             values.append(artifact.title)
         values.append(artifact.summary)
-    values.extend(action.summary for action in context.recent_actions)
+    for action in context.recent_actions:
+        values.append(action.summary)
+        if action.agent_result is None:
+            continue
+        values.append(action.agent_result.concise_summary)
+        values.append(
+            json.dumps(action.agent_result.deliverable, ensure_ascii=False)
+        )
+        values.extend(action.agent_result.findings)
+        values.extend(
+            ref.model_dump_json() for ref in action.agent_result.evidence_refs
+        )
     return sum(len(value) for value in values)
 
 
@@ -375,6 +405,7 @@ def test_context_compiler_uses_artifact_refs_and_bounded_summaries(tmp_path: Pat
         objective="修改第三场",
         root_agent="production-manager",
         active_skill_ids=["format.douyin-short-drama"],
+        unattended=True,
         execution_target=ProductionExecutionTarget.REAL_H3,
         render_export=False,
     )
@@ -419,6 +450,7 @@ def test_context_compiler_uses_artifact_refs_and_bounded_summaries(tmp_path: Pat
     )
 
     assert context.project_summary == "一部竖屏情感短剧，主线是林夏保护家人。"
+    assert context.unattended is True
     assert context.execution_target == ProductionExecutionTarget.REAL_H3
     assert context.render_export is False
     assert context.run_focus == "仅修改第三场"
@@ -527,6 +559,189 @@ def test_context_character_budget_truncates_large_summaries_and_actions(
         runtime.context(run.id, max_characters=255)
 
 
+def test_context_budget_keeps_latest_actions_before_decisions_in_time_order(
+    tmp_path: Path,
+) -> None:
+    _store, runtime, _compiler = _runtime(
+        tmp_path / "runtime.sqlite3",
+        FakeArtifactResolver([]),
+    )
+    run = runtime.create_run(
+        project_id="project-latest-action-budget",
+        objective="Determine whether the completed Storyboard needs another action.",
+        root_agent="production-manager",
+    )
+    for index in range(3):
+        runtime.remember_decision(
+            project_id=run.project_id,
+            run_id=run.id,
+            statement=f"decision-{index} " * 200,
+            rationale=f"rationale-{index} " * 200,
+        )
+
+    actions = []
+    for index in range(4):
+        action = runtime.start_action(
+            run.id,
+            kind=ActionKind.CHECKPOINT,
+            agent_id="production-manager",
+            input_summary=f"action-{index}",
+        )
+        artifact_refs = []
+        if index == 3:
+            artifact_refs = [
+                ArtifactRef(
+                    project_id=run.project_id,
+                    artifact_type="storyboard",
+                    artifact_id="production-document-storyboard",
+                    version=1,
+                )
+            ]
+        actions.append(
+            runtime.complete_action(
+                action.id,
+                output_summary=f"completed-action-{index} " * 100,
+                artifact_refs=artifact_refs,
+            )
+        )
+
+    context = runtime.context(run.id, max_characters=2_600)
+    retained_ids = [item.id for item in context.recent_actions]
+
+    assert retained_ids == [
+        item.id for item in actions if item.id in set(retained_ids)
+    ]
+    assert context.recent_actions[-1].id == actions[-1].id
+    assert context.recent_actions[-1].status == ActionStatus.SUCCEEDED
+    assert context.recent_actions[-1].artifact_refs == [
+        ArtifactRef(
+            project_id=run.project_id,
+            artifact_type="storyboard",
+            artifact_id="production-document-storyboard",
+            version=1,
+        )
+    ]
+    assert context.decisions == []
+    assert _context_content_characters(context) <= 2_600
+
+
+def test_recent_delegation_action_carries_bounded_agent_result_semantics(
+    tmp_path: Path,
+) -> None:
+    store, runtime, _compiler = _runtime(
+        tmp_path / "runtime.sqlite3",
+        FakeArtifactResolver([]),
+    )
+    run = runtime.create_run(
+        project_id="project-result-context",
+        objective="Decide whether the storyboard draft is ready to publish.",
+        root_agent="production-manager",
+    )
+    draft_ref = ArtifactRef(
+        project_id=run.project_id,
+        artifact_type="storyboard_draft",
+        artifact_id="storyboard-draft-1",
+        version=4,
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="storyboard-verifier",
+        objective="Read the exact draft and return its semantic conclusion.",
+        why_now="All planned ClipGroups have been committed.",
+        scope=[draft_ref],
+    )
+    action = runtime.start_action(
+        run.id,
+        kind=ActionKind.DELEGATION,
+        agent_id="storyboard-verifier",
+        input_summary="Verify the complete storyboard draft.",
+        work_order_id=order.id,
+    )
+    runtime.record_result(
+        order.id,
+        status=AgentResultStatus.COMPLETED,
+        concise_summary="The draft needs one continuity repair.",
+        deliverable={
+            "verification_status": "NEEDS_REVISION",
+            "affected_clip_group_ids": ["clip-group-2"],
+        },
+        findings=["The tray changes hands without a visible pickup action."],
+        evidence_refs=[draft_ref],
+    )
+    runtime.complete_action(
+        action.id,
+        output_summary="Verifier returned a semantic result.",
+        artifact_refs=[draft_ref],
+    )
+
+    context = runtime.context(run.id, max_characters=6_000)
+
+    assert len(context.recent_actions) == 1
+    digest = context.recent_actions[0].agent_result
+    assert digest is not None
+    assert digest.status == AgentResultStatus.COMPLETED
+    assert digest.concise_summary == "The draft needs one continuity repair."
+    assert digest.deliverable == {
+        "verification_status": "NEEDS_REVISION",
+        "affected_clip_group_ids": ["clip-group-2"],
+    }
+    assert digest.findings == [
+        "The tray changes hands without a visible pickup action."
+    ]
+    assert digest.evidence_refs == [draft_ref]
+    assert _context_content_characters(context) <= 6_000
+    assert store.get_agent_result(order.id) is not None
+
+
+def test_recent_action_agent_result_respects_the_shared_character_budget(
+    tmp_path: Path,
+) -> None:
+    _store, runtime, _compiler = _runtime(
+        tmp_path / "runtime.sqlite3",
+        FakeArtifactResolver([]),
+    )
+    run = runtime.create_run(
+        project_id="project-large-result-context",
+        objective="Read one large verifier result without overflowing context.",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="storyboard-verifier",
+        objective="Return the semantic verification result.",
+        why_now="The storyboard draft is complete.",
+    )
+    action = runtime.start_action(
+        run.id,
+        kind=ActionKind.DELEGATION,
+        agent_id="storyboard-verifier",
+        input_summary="Read the complete draft.",
+        work_order_id=order.id,
+    )
+    runtime.record_result(
+        order.id,
+        status=AgentResultStatus.COMPLETED,
+        concise_summary="summary " * 1_000,
+        deliverable={"report": "report " * 2_000},
+        findings=["finding " * 1_000],
+    )
+    runtime.complete_action(
+        action.id,
+        output_summary="Verifier result persisted.",
+    )
+
+    context = runtime.context(run.id, max_characters=4_000)
+    digest = context.recent_actions[0].agent_result
+
+    assert digest is not None
+    assert digest.concise_summary.endswith("…")
+    assert isinstance(digest.deliverable["report"], str)
+    assert digest.deliverable["report"].endswith("…")
+    assert _context_content_characters(context) <= 4_000
+
+
 def test_structured_delegation_round_trip_and_work_order_context(tmp_path: Path) -> None:
     shot_ref = ArtifactRef(
         project_id="project-4",
@@ -583,6 +798,298 @@ def test_structured_delegation_round_trip_and_work_order_context(tmp_path: Path)
     assert saved_order.status == DelegationStatus.COMPLETED
     assert store.get_agent_result(order.id) == result
     assert runtime.snapshot(run.id).pending_work_orders == []
+
+
+def test_work_order_manifest_loads_only_explicit_artifacts_decisions_and_tags(
+    tmp_path: Path,
+) -> None:
+    required_ref = ArtifactRef(
+        project_id="project-manifest",
+        artifact_type="scene",
+        artifact_id="scene-2",
+        version=3,
+    )
+    previous_ref = ArtifactRef(
+        project_id="project-manifest",
+        artifact_type="scene",
+        artifact_id="scene-1",
+        version=3,
+    )
+    ambient_ref = ArtifactRef(
+        project_id="project-manifest",
+        artifact_type="scene",
+        artifact_id="scene-9",
+        version=3,
+    )
+    resolver = FakeArtifactResolver(
+        [
+            ArtifactSummary(ref=required_ref, summary="The selected scene."),
+            ArtifactSummary(ref=previous_ref, summary="The preceding scene."),
+            ArtifactSummary(ref=ambient_ref, summary="Unrelated run memory."),
+        ]
+    )
+    database_path = tmp_path / "runtime.sqlite3"
+    store, runtime, compiler = _runtime(database_path, resolver)
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=required_ref.project_id,
+        objective="Review the whole project",
+        root_agent="production-manager",
+        active_skill_ids=["method.fast-payoff"],
+        unattended=True,
+    )
+    runtime.checkpoint(
+        run.id,
+        current_focus="An unrelated run-level focus",
+        artifact_refs=[ambient_ref],
+    )
+    inherited = runtime.remember_decision(
+        project_id=run.project_id,
+        run_id=run.id,
+        statement="Keep the accepted reveal",
+        rationale="The user accepted it",
+        artifact_refs=[required_ref],
+    )
+    runtime.remember_decision(
+        project_id=run.project_id,
+        statement="Unrelated global decision",
+        rationale="Must not leak into this handoff",
+    )
+    runtime.remember_experience(
+        summary="Land the reaction immediately after the reveal",
+        applicability="Fast payoff scenes",
+        evidence="A prior scene review",
+        confidence=ExperienceConfidence.MEDIUM,
+        tags=["reaction-timing"],
+        skill_id="method.fast-payoff",
+        project_id=run.project_id,
+    )
+    runtime.remember_experience(
+        summary="Unrelated camera lesson",
+        applicability="Landscape montage",
+        evidence="Another project unit",
+        confidence=ExperienceConfidence.MEDIUM,
+        tags=["landscape"],
+        project_id=run.project_id,
+    )
+
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="scene-writer",
+        objective="Tighten scene 2 without changing its reveal",
+        why_now="Scene 1 is accepted and scene 2 is ready for a local pass",
+        scope=[required_ref],
+        adjacent_boundaries=[
+            ContextBoundary(
+                relationship="previous-scene",
+                artifact_refs=[previous_ref],
+                guidance="Preserve the entry state inherited from scene 1",
+            )
+        ],
+        inherited_decision_ids=[inherited.id],
+        confirmed_decisions=[inherited.statement],
+        experience_tags=["reaction-timing"],
+        constraints=["Do not rewrite scene 1"],
+        expected_output_schema={"type": "object"},
+        acceptance_criteria=["Return a canonical scene artifact reference"],
+    )
+    runtime.set_run_active_skills(run.id, ["method.slow-burn"])
+    context = compiler.compile_for_work_order(order.id)
+
+    assert order.context_manifest is not None
+    assert order.context_manifest.required_artifacts == [required_ref]
+    assert order.context_manifest.inherited_decision_ids == [inherited.id]
+    assert order.context_manifest.selected_skill_ids == ["method.fast-payoff"]
+    assert resolver.requested == [required_ref, previous_ref]
+    assert [artifact.ref for artifact in context.artifacts] == [
+        required_ref,
+        previous_ref,
+    ]
+    assert [decision.id for decision in context.decisions] == [inherited.id]
+    assert [experience.summary for experience in context.experiences] == [
+        "Land the reaction immediately after the reveal"
+    ]
+    assert context.active_skill_ids == ["method.fast-payoff"]
+    assert context.unattended is True
+    assert context.project_summary is None
+    assert context.run_focus is None
+    assert context.recent_actions == []
+    assert context.work_order_id == order.id
+    assert context.context_manifest_id == order.context_manifest.id
+
+    reopened = AgentRuntimeStore(database_path).get_work_order(order.id)
+    assert reopened is not None
+    assert reopened.context_manifest == order.context_manifest
+
+
+def test_manifest_preserves_boundary_semantics_while_loading_duplicate_ref_once(
+    tmp_path: Path,
+) -> None:
+    scene_ref = ArtifactRef(
+        project_id="project-shared-boundary",
+        artifact_type="scene",
+        artifact_id="scene-1",
+        version=2,
+    )
+    resolver = FakeArtifactResolver(
+        [ArtifactSummary(ref=scene_ref, summary="The selected cafeteria scene.")]
+    )
+    store, runtime, compiler = _runtime(tmp_path / "runtime.sqlite3", resolver)
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=scene_ref.project_id,
+        objective="Storyboard the selected scene",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="storyboard-director",
+        objective="Create the first clip group",
+        why_now="The storyboard draft is ready",
+        scope=[scene_ref],
+        adjacent_boundaries=[
+            ContextBoundary(
+                relationship="opening-state",
+                guidance="No prior clip exists; begin from the untouched lunch queue.",
+            ),
+            ContextBoundary(
+                relationship="outgoing-state",
+                artifact_refs=[scene_ref],
+                guidance="End before the calculator reveals its result.",
+            ),
+        ],
+    )
+
+    context = compiler.compile_for_work_order(order.id)
+
+    assert order.context_manifest is not None
+    assert [item.relationship for item in order.context_manifest.adjacent_boundaries] == [
+        "opening-state",
+        "outgoing-state",
+    ]
+    assert resolver.requested == [scene_ref]
+    assert [item.ref for item in context.artifacts] == [scene_ref]
+    assert store.get_work_order(order.id) == order
+
+
+@pytest.mark.parametrize(
+    "artifact_type",
+    ["shot", "h3_route_plan", "h3_route_asset_preparation"],
+)
+def test_exact_context_manifest_rejects_missing_or_stale_versions(
+    tmp_path: Path,
+    artifact_type: str,
+) -> None:
+    stale_ref = ArtifactRef(
+        project_id="project-exact-version",
+        artifact_type=artifact_type,
+        artifact_id="artifact-1",
+        version=2,
+    )
+    resolver = FakeArtifactResolver([])
+    _store, runtime, compiler = _runtime(tmp_path / "runtime.sqlite3", resolver)
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=stale_ref.project_id,
+        objective="Review one exact shot revision",
+        root_agent="production-manager",
+    )
+
+    with pytest.raises(ValueError, match="explicit version"):
+        runtime.create_work_order(
+            run.id,
+            sender="production-manager",
+            recipient_role="scene-director",
+            objective="Review shot 1",
+            why_now="The shot changed",
+            scope=[stale_ref.model_copy(update={"version": None})],
+        )
+
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="scene-director",
+        objective="Review shot 1",
+        why_now="The shot changed",
+        scope=[stale_ref],
+    )
+    with pytest.raises(ContextManifestResolutionError, match="unresolved artifact"):
+        compiler.compile_for_work_order(order.id)
+
+
+def test_work_order_progress_is_append_only_and_survives_restart(tmp_path: Path) -> None:
+    database_path = tmp_path / "runtime.sqlite3"
+    store, runtime, _compiler = _runtime(database_path)
+    run = runtime.create_run(
+        project_id="project-progress",
+        objective="Complete a delegated scene pass",
+        root_agent="production-manager",
+    )
+    scene_ref = ArtifactRef(
+        project_id=run.project_id,
+        artifact_type="scene",
+        artifact_id="scene-1",
+        version=1,
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="scene-writer",
+        objective="Revise scene 1",
+        why_now="The critique is available",
+        scope=[scene_ref],
+    )
+
+    second = runtime.append_work_order_progress(
+        order.id,
+        author="scene-writer",
+        summary="Loaded the exact scene and inherited context.",
+    )
+    third = runtime.append_work_order_progress(
+        order.id,
+        author="scene-writer",
+        summary="Drafted the local revision.",
+        artifact_refs=[scene_ref],
+    )
+
+    entries = store.list_work_order_progress(order.id)
+    assert [entry.sequence for entry in entries] == [1, 2, 3]
+    assert entries[1:] == [second, third]
+    reopened = AgentRuntimeStore(database_path)
+    assert reopened.list_work_order_progress(order.id) == entries
+
+
+def test_pre_manifest_work_order_records_remain_readable(tmp_path: Path) -> None:
+    database_path = tmp_path / "runtime.sqlite3"
+    _store, runtime, _compiler = _runtime(database_path)
+    run = runtime.create_run(
+        project_id="project-legacy-order",
+        objective="Resume a legacy delegation",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="scene-writer",
+        objective="Resume scene work",
+        why_now="The application restarted",
+    )
+    legacy_json = order.model_dump_json(exclude={"context_manifest"})
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "UPDATE agent_work_orders SET record_json = ? WHERE id = ?",
+            (legacy_json, order.id),
+        )
+
+    restored = AgentRuntimeStore(database_path).get_work_order(order.id)
+
+    assert restored is not None
+    assert restored.context_manifest is not None
+    assert restored.context_manifest.work_order_id == order.id
+    assert restored.context_manifest.objective == order.objective
+    assert not restored.context_manifest.exact_artifact_versions
 
 
 def test_completed_result_contract_checks_schema_and_completion_evidence(
@@ -659,6 +1166,136 @@ def test_completed_result_contract_checks_schema_and_completion_evidence(
         )
 
 
+def test_completed_result_can_return_a_task_specific_structured_deliverable(
+    tmp_path: Path,
+) -> None:
+    store, runtime, _compiler = _runtime(tmp_path / "runtime.sqlite3")
+    run = runtime.create_run(
+        project_id="project-deliverable",
+        objective="Collect one exact storyboard handoff.",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="storyboard-director",
+        objective="Return the persisted ClipGroup identity.",
+        why_now="The append Tool has completed.",
+        expected_output_schema={
+            "type": "object",
+            "required": ["draft_version_id", "clip_group_id"],
+            "properties": {
+                "draft_version_id": {"type": "string"},
+                "clip_group_id": {"type": "string"},
+            },
+        },
+        acceptance_criteria=["Name the exact persisted group."],
+    )
+
+    result = runtime.record_result(
+        order.id,
+        status=AgentResultStatus.COMPLETED,
+        concise_summary="The ClipGroup was persisted.",
+        deliverable={
+            "draft_version_id": "draft-v2",
+            "clip_group_id": "clip-group-1",
+        },
+    )
+
+    assert result.deliverable["draft_version_id"] == "draft-v2"
+    assert store.get_agent_result(order.id) == result
+
+
+def test_legacy_partial_result_restores_leader_owner_from_persisted_result(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "runtime.sqlite3"
+    store, runtime, _compiler = _runtime(database_path)
+    run = runtime.create_run(
+        project_id="project-legacy-partial",
+        objective="Resume an old partial handoff.",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="story-reviewer",
+        objective="Review one bounded story issue.",
+        why_now="The prior process stopped after persisting a partial result.",
+    )
+    runtime.record_result(
+        order.id,
+        status=AgentResultStatus.PARTIAL,
+        concise_summary="The active plan needs revision.",
+        unresolved_questions=["Which replacement step should the Leader choose?"],
+        next_owner=WorkOrderNextOwner.LEADER_REPLAN,
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        work_order_row = connection.execute(
+            "SELECT record_json FROM agent_work_orders WHERE id = ?",
+            (order.id,),
+        ).fetchone()
+        result_row = connection.execute(
+            "SELECT record_json FROM agent_results WHERE work_order_id = ?",
+            (order.id,),
+        ).fetchone()
+        assert work_order_row is not None
+        assert result_row is not None
+        work_order_payload = json.loads(str(work_order_row[0]))
+        result_payload = json.loads(str(result_row[0]))
+        del work_order_payload["next_owner"]
+        del result_payload["next_owner"]
+        connection.execute(
+            "UPDATE agent_work_orders SET record_json = ? WHERE id = ?",
+            (json.dumps(work_order_payload), order.id),
+        )
+        connection.execute(
+            "UPDATE agent_results SET record_json = ? WHERE work_order_id = ?",
+            (json.dumps(result_payload), order.id),
+        )
+
+    restored = AgentRuntimeStore(database_path).get_work_order(order.id)
+    assert restored is not None
+    assert restored.status == DelegationStatus.NEEDS_ATTENTION
+    assert restored.next_owner == WorkOrderNextOwner.LEADER_REPLAN
+
+
+def test_explicit_newer_work_order_owner_is_not_replaced_by_an_older_partial_result(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "runtime.sqlite3"
+    store, runtime, _compiler = _runtime(database_path)
+    run = runtime.create_run(
+        project_id="project-worker-failure",
+        objective="Return a failed worker decision to the Leader.",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="storyboard-director",
+        objective="Persist one bounded storyboard group.",
+        why_now="The group is ready to author.",
+    )
+    runtime.record_result(
+        order.id,
+        status=AgentResultStatus.PARTIAL,
+        concise_summary="The Tool completed and the Worker should inspect its result.",
+        next_owner=WorkOrderNextOwner.WORKER_DECISION,
+    )
+    failed = store.get_work_order(order.id)
+    assert failed is not None
+    failed.next_owner = WorkOrderNextOwner.LEADER_REPLAN
+    failed.updated_at = utc_now()
+    store.save_work_order(failed)
+
+    restored = AgentRuntimeStore(database_path).get_work_order(order.id)
+
+    assert restored is not None
+    assert restored.next_owner == WorkOrderNextOwner.LEADER_REPLAN
+
+
 def test_completed_result_can_be_distilled_and_deduplicated_as_experience(
     tmp_path: Path,
 ) -> None:
@@ -697,6 +1334,7 @@ def test_completed_result_can_be_distilled_and_deduplicated_as_experience(
         applicability="Local ending revisions",
         confidence=ExperienceConfidence.MEDIUM,
         tags=["ending"],
+        skill_id="format.douyin-short-drama",
     )
     merged = runtime.distill_experience_from_result(
         order.id,
@@ -704,6 +1342,7 @@ def test_completed_result_can_be_distilled_and_deduplicated_as_experience(
         evidence="The director review confirmed the silent reaction",
         confidence=ExperienceConfidence.HIGH,
         tags=["director-review"],
+        skill_id="format.douyin-short-drama",
     )
 
     assert merged.id == first.id
@@ -757,6 +1396,7 @@ def test_pending_work_order_survives_runtime_restart(tmp_path: Path) -> None:
         project_id=run.project_id,
         artifact_type="shot",
         artifact_id="shot-1",
+        version=1,
     )
     order = runtime.create_work_order(
         run.id,

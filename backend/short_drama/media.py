@@ -20,6 +20,7 @@ from short_drama.models import (
     ShotPlan,
     TechnicalCheck,
     TimelineManifest,
+    TimelineAudioClip,
     TimelineVideoClip,
     OutputSpec,
 )
@@ -400,6 +401,24 @@ class TimelineExporter:
                 ]
             )
 
+        master_audio_clips = [
+            clip for clip in manifest.audio_clips if clip.role == "MASTER_AUDIO"
+        ]
+        if len(master_audio_clips) > 1:
+            raise MediaGenerationError(
+                "TimelineManifest contains more than one MASTER_AUDIO clip"
+            )
+        if master_audio_clips:
+            native_path = export_dir / "final-native-audio.mp4"
+            shutil.move(clean_path, native_path)
+            self._replace_with_master_audio(
+                video_path=native_path,
+                master_audio=master_audio_clips[0],
+                output_path=clean_path,
+                timeline_duration=manifest.duration_seconds,
+                spec=spec,
+            )
+
         if manifest.subtitle_cues:
             _run_ffmpeg(
                 [
@@ -548,6 +567,78 @@ class TimelineExporter:
             ]
         )
 
+    def _replace_with_master_audio(
+        self,
+        *,
+        video_path: Path,
+        master_audio: TimelineAudioClip,
+        output_path: Path,
+        timeline_duration: float,
+        spec: OutputSpec,
+    ) -> None:
+        delay_ms = max(0, round(master_audio.start_seconds * 1000))
+        volume = f",volume={master_audio.gain_db:.3f}dB" if master_audio.gain_db else ""
+        filter_graph = (
+            "[0:v:0]"
+            f"tpad=stop_mode=clone:stop_duration={timeline_duration:.6f},"
+            f"trim=duration={timeline_duration:.6f},"
+            "setpts=PTS-STARTPTS,"
+            f"fps={spec.fps},format={spec.pixel_format}[video];"
+            "[1:a:0]"
+            f"atrim=start={master_audio.source_in_seconds:.6f}:"
+            f"duration={master_audio.duration_seconds:.6f},"
+            "asetpts=PTS-STARTPTS,"
+            f"adelay={delay_ms}:all=1,"
+            f"apad=pad_dur={timeline_duration:.6f},"
+            f"atrim=duration={timeline_duration:.6f},"
+            f"aresample={spec.audio_sample_rate},"
+            f"aformat=channel_layouts=stereo{volume}[master]"
+        )
+        _run_ffmpeg(
+            [
+                "-y",
+                "-i",
+                str(video_path),
+                "-i",
+                master_audio.media_path,
+                "-filter_complex",
+                filter_graph,
+                "-map",
+                "[video]",
+                "-map",
+                "[master]",
+                "-t",
+                f"{timeline_duration:.6f}",
+                "-c:v",
+                "libx264",
+                "-profile:v",
+                spec.profile,
+                "-preset",
+                "ultrafast",
+                "-crf",
+                str(spec.crf),
+                "-pix_fmt",
+                spec.pixel_format,
+                "-color_primaries",
+                spec.color_space,
+                "-color_trc",
+                spec.color_space,
+                "-colorspace",
+                spec.color_space,
+                "-c:a",
+                spec.audio_codec,
+                "-ar",
+                str(spec.audio_sample_rate),
+                "-ac",
+                "2",
+                "-b:a",
+                f"{spec.audio_bitrate_kbps}k",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
+        )
+
     def _build_srt(self, manifest: TimelineManifest) -> str:
         blocks = [
             "\n".join(
@@ -577,7 +668,7 @@ Style: Default,PingFang SC,48,&H00FFFFFF,&H000000FF,&H00101010,&H66000000,-1,0,0
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
         events = [
-            f"Dialogue: 0,{_format_ass_time(cue.start_seconds)},{_format_ass_time(cue.end_seconds)},Default,{cue.speaker},0,0,0,,{_escape_ass_text(cue.text)}"
+            f"Dialogue: 0,{_format_ass_time(cue.start_seconds)},{_format_ass_time(cue.end_seconds)},Default,{cue.speaker or ''},0,0,0,,{_escape_ass_text(cue.text)}"
             for cue in manifest.subtitle_cues
         ]
         return header + "\n".join(events) + ("\n" if events else "")

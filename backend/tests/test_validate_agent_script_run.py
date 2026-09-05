@@ -7,6 +7,8 @@ from validate_agent_script_run import (
     INTERNAL_PLAN_REBUILD_NOTE,
     _build_agent_project_payload,
     _content_planning_record,
+    _content_planning_step,
+    _display_content_planning_step,
     _duration_label,
     _new_scene_timing_assessments,
     _refresh_content_planning_trace,
@@ -133,6 +135,29 @@ def test_trace_prefers_structured_agent_run_creative_evidence() -> None:
     assert _content_planning_record(run_view) == record
 
 
+def test_human_trace_maps_legacy_critic_and_verifier_cursor_names() -> None:
+    run_view = {
+        "context": {
+            "artifacts": [
+                {
+                    "ref": {"artifact_type": "content_planning_job"},
+                    "title": "Content planning job SCRIPT_CRITIC",
+                }
+            ]
+        }
+    }
+
+    assert _content_planning_step(run_view) == (
+        "Content planning job INITIAL_SCRIPT_VERIFICATION（首次整稿验证）"
+    )
+    assert _display_content_planning_step("REVISION_VERIFIER") == (
+        "REVISION_VERIFICATION（修订稿验证）"
+    )
+    assert _display_content_planning_step("SCRIPT_VERIFIER") == (
+        "INITIAL_SCRIPT_VERIFICATION（首次整稿验证）"
+    )
+
+
 def test_human_trace_reports_semantic_work_without_plan_revision_noise(
     tmp_path: Path,
 ) -> None:
@@ -147,9 +172,11 @@ def test_human_trace_reports_semantic_work_without_plan_revision_noise(
             "open_creative_choices": ["人物与场景由 Agent 决定"],
             "continuation_preference": "AGENT_DECIDES",
         },
-        "selected_narrative_skill_ids": ["narrative.payoff_escalation"],
-        "skill_selection_reasons": ["需要连续可见的身份与利益回报。"],
-        "narrative_skill_decision": "根据整段需求语义选择，而非关键词匹配。",
+        "selected_narrative_skill_ids": [],
+        "skill_selection_reasons": [],
+        "narrative_skill_decision": (
+            "当前 Narrative Skill Catalog 为空；不使用本地自创替代。"
+        ),
         "story_intent": {
             "audience_experience": "快速看懂设定并持续获得爽感。",
             "dramatic_engine": "普通计算能力不断改变主角选择权。",
@@ -276,7 +303,24 @@ def test_human_trace_reports_semantic_work_without_plan_revision_noise(
                     INTERNAL_PLAN_REBUILD_NOTE,
                     "保留这条面向用户的阶段说明。",
                 ],
-            }
+            },
+            {
+                "phase": 2,
+                "operation": "advance_agent_run(max_actions=1)",
+                "run_status": "RUNNING",
+                "content_planning_step": (
+                    "Content planning job REVISION_VERIFIER"
+                ),
+                "content_planning_step_before": (
+                    "Content planning job SCRIPT_CRITIC"
+                ),
+                "content_planning_step_after": (
+                    "Content planning job REVISION_VERIFIER"
+                ),
+                "new_actions": [],
+                "scene_timing_assessments": [],
+                "notes": [],
+            },
         ],
         "validation": {"errors": []},
     }
@@ -286,17 +330,26 @@ def test_human_trace_reports_semantic_work_without_plan_revision_noise(
     markdown = (tmp_path / "trace.md").read_text(encoding="utf-8")
 
     assert "## 创作定向" in markdown
-    assert "narrative.payoff_escalation" in markdown
+    assert "不使用本地自创替代" in markdown
     assert "## 初始故事蓝图" in markdown
     assert "## 当前场次产物" in markdown
-    assert "## Critic、修订与验证" in markdown
-    assert "增强 Verifier" in markdown
+    assert "## 验证、修订与复验" in markdown
+    assert "首次整稿验证（Verifier）" in markdown
+    assert "修订稿验证（Verifier）" in markdown
+    assert "完整剧本 Critic" not in markdown
     assert "无需再增加独立冷读" in markdown
     assert "工程结构闭环" in markdown
     assert (
         "Content planning transition: Content planning job STORY_ORIENTATION "
         "→ Content planning job STORY_ARCHITECT"
     ) in markdown
+    assert (
+        "Content planning transition: Content planning job "
+        "INITIAL_SCRIPT_VERIFICATION（首次整稿验证） → Content planning job "
+        "REVISION_VERIFICATION（修订稿验证）"
+    ) in markdown
+    assert "Content planning job SCRIPT_CRITIC" not in markdown
+    assert "Content planning job REVISION_VERIFIER" not in markdown
     assert "`planning.advance` → SUCCEEDED (36936 ms)" in markdown
     assert INTERNAL_PLAN_REBUILD_NOTE not in markdown
     assert "保留这条面向用户的阶段说明" in markdown

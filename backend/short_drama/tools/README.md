@@ -20,7 +20,7 @@ Tool 表示“现在可以执行的一项能力”，不是“所有项目都必
 每次行动前先判断：
 
 1. 当前用户目标是创建、读取、修改、生成、检查还是导出？
-2. `ProjectDocument` 中最新有效的剧本、Bible、资产版本、Shot、Take 和时间线分别是什么？
+2. `ProjectDocument` 中最新有效的剧本、Bible、ProductionSpec、Storyboard、GenerationPlan、资产版本、Take 和时间线分别是什么？对于跨 Agent 交付，先解析稳定 output slot，再读取其精确 ArtifactRef。
 3. 下一步缺的是专业内容判断，还是已有明确输入的确定性执行？前者可委派专业 Agent，后者调用 Tool。
 4. 调用会产生 `READ`、`WRITE` 还是 `EXTERNAL` 效果？外部任务状态不确定时应先对账，不重复提交。
 
@@ -32,19 +32,33 @@ Tool 的 Pydantic Schema 是参数真相；Skill 中的建议不能覆盖 Schema
 
 | 生产阶段 | Agent 的选择依据 | 主要 Tool ID | 典型输入与产物 | 失败后的处理 |
 | --- | --- | --- | --- | --- |
-| 1. 读取目标与项目上下文 | 先确认是新项目、已有项目续作还是局部修改；已有项目优先读取完整聚合，不凭旧对话猜状态 | `project.list`、`project.get`、`project.create` | 输入项目 ID 或创建请求；产出唯一 ProjectDocument，长内容可同时建立 AgentRun 拥有的 Content Planning Job | 项目不存在时重新发现或澄清目标；创建中断时先读取项目状态，避免重复创建 |
-| 2. 内容方案与剧本 | 长内容或从零创作使用可恢复规划；只改选定台词时使用局部剧本 Tool；涉及下游语义时先做影响预览 | `planning.advance`、`script.revise_lines`、`change.preview`、`change.apply` | 输入所属 AgentRun、Content Planning Job 游标、选定台词或语义补丁；产出 ScriptVersion、修订结果和受影响分支 | 内容判断失败时委派编剧/审校或重新规划；参数错误按 Schema 修正；不要为一句话修改重写整部剧本 |
-| 3. Bible、角色、场景、道具与风格资产 | 先检索和复用已批准资产，再检查当前镜头真正缺什么；用户已有素材时直接导入版本 | `artifact.create_asset`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.search_stock`、`artifact.import_stock`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage` | 输入资产描述、检索条件或媒体位置；产出 Asset、AssetVersion、候选和覆盖缺口 | 检索为空时再生成或请求素材；导入失败先修正媒体位置/格式；不要把可选三视图或九宫格升级为固定前置 |
-| 4. 图像生成、审核与参考包 | 只为当前镜头缺失的身份、空间、构图或状态生成图像；候选需审核后才能进入参考包 | `image.enqueue`、`image.list`、`image.advance`、`image.cancel`、`image.retry`、`image.resolve_not_submitted`、`image.recover_output`、`artifact.review_version`、`artifact.add_reference_entry` | 输入资产、图像任务请求和审核结论；产出 ImageTask、AssetVersion、审核状态和 ReferencePack 条目 | 外部状态未知时先恢复/查询，确认远端未创建后再显式解除提交未知状态，不盲目重提；图像内容错误时修图或换版本 |
-| 5. 场次、镜头与连续性计划 | 根据剧本作用、相邻镜头状态和可生成性建立 Shot/ReferencePlan；只需建议时不必直接写入 | `shot.preview_reference_plan`、`shot.update_reference_plan`、`shot.compile_keyframe_brief`、`shot.director_advice` | 输入项目、镜头、参考绑定和动作关系；产出解析预览、ReferencePlan、关键帧 brief 或导演建议 | 镜头粒度、动作或空间关系不成立时回到 ShotPlan/ReferencePlan；不要靠增加随机候选掩盖错误镜头设计 |
-| 6. 生成路线与输入检查 | 按镜头风险选择纯文本、首帧、首尾帧或全参考路线；Provider 能力和实际媒体绑定决定可执行组合 | `qa.rerank_reference_visuals`、`qa.compare_keyframes`、`qa.check_input_compatibility`、`qa.list_visual_input_reports`、`route.h3_capability_profile`、`route.plan_h3`、`route.list_h3_plans` | 输入镜头意图、候选参考、关键帧和项目能力证据；产出视觉比较报告、兼容性报告和 H3 RoutePlan | 若输入冲突或全部不可用，修资产、换关键帧、拆镜或换路线；不要把 Provider 易变限制写成格式规则 |
-| 7. Prompt 编译与视频任务提交 | 镜头事实和路线已经确定后，才翻译成 Provider 请求；需要检查最终请求时先预览 | REAL_H3：`route.compile_h3_prompt`、`route.preview_h3_probe`、`route.enqueue_h3_probe`、`route.execute_h3_plan`；MOCK：`video.enqueue` | 输入 Shot/ReferencePlan、媒体绑定、时长和 Agent 本次明确决定的候选数；产出最终 Prompt、Provider 请求、GenerationTask 或 H3 run，本地不另设固定候选上限 | 请求不合法时改路线或输入；提交结果不确定时进入对账，不重复 POST；内容事实错误应回上游工件修正 |
+| 1. 读取目标与项目上下文 | 先确认是新项目、已有项目续作还是局部修改；已有项目优先读取完整聚合和相关逻辑输出，不凭旧对话猜状态 | `project.list`、`project.get`、`project.create`、`project.list_output_slots`、`project.get_output_slot`、`project.bind_output_slot` | 输入项目 ID、创建请求或 slot ID；产出唯一 ProjectDocument，以及逻辑输出的当前/历史 ArtifactRef | 项目不存在时重新发现或澄清目标；换绑前解析实际工件；创建中断时先读取项目状态，避免重复创建 |
+| 2. 内容方案、剧本与制作规格 | 长内容或从零创作使用可恢复规划；已有完整剧本收到创意修改时启动同项目修订任务，由 Leader 结合原始要求、当前剧本和新意见语义决定修少数场、逐场修全稿或重构故事；只改已明确选定的台词时使用局部剧本 Tool | `planning.start_script_revision`、`planning.advance`、`script.revise_lines`、`change.preview`、`change.apply`、`artifact.create_production_spec`、`artifact.replace_production_spec`、`artifact.get_production_spec` | 输入完整用户修改意见、当前 ScriptVersion、Content Planning Job 游标、选定台词或语义补丁；产出新 ScriptVersion、ProductionSpec 版本和受影响分支 | 修订启动中断时先对账项目中已持久化的修订 Job，不重复创建；不要为一句话修改重写整部剧本；ProductionSpec 的 Provider 偏好不等于允许调用远程 Provider |
+| 3. Bible 风格、角色、场景、道具与参考资产 | 先判断是否真需要跨镜锚点，再检索和复用已批准版本；用户已有素材时直接导入 | `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.search_stock`、`artifact.import_stock`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage` | 输入结构化 brief、检索条件或媒体位置；产出 Asset、AssetVersion、候选和镜头推导的覆盖缺口 | `artifact.create_asset` 只建档不生图；Style 属于 `ProjectBible.style`；`inspect_coverage` 不等于 brief 全部视图的完成门禁 |
+| 4. 图像生成、语义检查与参考包 | 只为确实缺失的身份、空间、构图或状态生成图像；候选先看图再记录批准 | `image.enqueue`、`image.list`、`image.advance`、`image.cancel`、`image.retry`、`image.resolve_not_submitted`、`image.recover_output`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry` | 输入精确视图职责、最终 prompt、有序参考和语义判断；产出 ImageTask、AssetVersion、检查建议、批准状态和 ReferencePack 条目 | `review_version` 只写决策，不会自动看图；拼板只组合已有视图且输出仍为 DRAFT；外部状态未知时先对账，不盲目重提 |
+| 5. 完整分镜、生成组与连续性 | 根据剧本作用、相邻镜头状态和可生成性建立 Storyboard；Shot 保留编辑边界，Agent 自主判断哪些连续 Shot 组成 ClipGroup | `shot.create_storyboard`、`shot.replace_storyboard`、`shot.patch_storyboard`、`shot.get_storyboard`、`shot.preview_reference_plan`、`shot.update_reference_plan`、`shot.compile_keyframe_brief`、`shot.director_advice` | 输入完整分镜或指定 Shot revision 的局部替换；产出版本化 Storyboard、Shot/ClipGroup refs、ReferencePlan 和连续性决策 | 结构性重拆使用 replace，只改指定镜头使用 patch；不靠增加随机候选掩盖错误镜头设计 |
+| 6. 生成计划、路线与输入检查 | 先将 ClipGroup 确定性编译为带 Shot source windows 的 GenerationUnit，再按该单元的风险选择纯文本、关键帧或全参考路线 | `route.compile_generation_plan`、`route.get_generation_plan`、`qa.rerank_reference_visuals`、`qa.compare_keyframes`、`qa.check_input_compatibility`、`route.h3_capability_profile`、`route.plan_h3`、`route.list_h3_plans`、`route.update_h3_asset_preparation` | 输入当前 Storyboard/ProductionSpec 版本、候选参考和关键帧；产出 GenerationPlan/GenerationUnit refs、视觉比较报告、H3 RoutePlan 与可恢复的媒体准备状态 | 上游版本变化时重新编译；缺关键帧时由图像 Worker 产出并审核 AssetVersion；输入冲突时修资产、换关键帧、拆组或换路线 |
+| 7. Prompt 编译与视频任务提交 | 镜头事实和路线已经确定后，才翻译成 Provider 请求；单 Shot 和多 Shot GenerationUnit 均由同一 H3 路线层消费 | REAL_H3：`route.compile_h3_prompt`、`route.preview_h3_probe`、`route.enqueue_h3_probe`、`route.execute_h3_plan`；MOCK：`video.enqueue` | 输入 Shot/ReferencePlan 或 GenerationUnit、媒体绑定、时长和 Agent 本次明确决定的候选数；产出最终 Prompt、Provider 请求、GenerationTask 或 H3 run，并保留组内 Shot source windows | 请求不合法时改路线或输入；提交结果不确定时进入对账，不重复 POST；内容事实错误应回上游工件修正 |
 | 8. 外部任务推进与恢复 | REAL_H3 用 `task.advance` 单步推进，MOCK 可用有步数上限的 `task.drain`；取消、失败、提交未知和下载中断使用各自恢复动作 | 共用：`task.advance`、`task.cancel`、`task.retry`、`task.recover_output`；MOCK：`task.drain`、`task.reconcile`；H3 专属：`route.list_h3_runs`、`route.list_h3_reconciliation`、`route.resolve_h3_submission`、`route.resolve_h3_not_submitted` | 输入 task/run ID；产出持久化任务状态、Provider 对账结果和 Take | 先区分“明确失败”“明确未提交”“已提交但本地未知”“输出已生成但未落盘”；重试前必须确认原输入仍是当前版本 |
 | 9. Take 检查、比较、选择与局部返工 | 先检查技术可读性和镜头职责，再比较同镜候选；相对最好不等于可用，允许全部拒绝 | `video.inspect_take`、`video.compare_takes`、`video.select_take`、`route.review_h3_take`、`shot.director_advice`、`shot.apply_director_repair`、`shot.run_director_loop` | 输入 Take、检查维度或候选集合；产出 inspection、comparison、选择结果、RouteEvidence 和修复建议 | 把问题路由到最小责任层：故事回剧本，构图/动作回镜头，身份/空间回资产，随机执行缺陷才同路线再生成 |
 | 10. 局部视频修复 | 只有当前镜头或局部时间段失败时，优先保留合格内容并产生新候选 | MOCK：`video.retake`、`video.extend`、`video.gap_fill`；REAL_H3 回到 H3 路线计划 | 输入项目、镜头和局部返工请求；产出新的 GenerationTask，旧 Take 继续保留 | 局部操作不支持或边界状态不成立时，换路线、拆镜或回到关键帧；不要自动覆盖当前选片 |
-| 11. 音频、字幕与时间线 | 有选定 Take 后重建时间线；指定声线时更新角色绑定；先检查音画与字幕关系再导出 | `audio.update_voice_reference`、`timeline.rebuild`、`audio.inspect_manifest` | 输入角色声线版本或项目 ID；产出 VoiceReference、TimelineManifest 和音频检查报告 | 声音来源、对白或字幕时间错误时修对应音频/文本/时间线层；未注册的配音或口型能力必须明确列为缺口 |
+| 11. 音频、字幕与时间线 | 对话型项目可使用 Take 原生音轨；音频驱动项目可由 Agent 选择绑定 Master Audio、分析其结构、锁定精确文字，再重建时间线 | `audio.update_voice_reference`、`audio.bind_master`、`audio.analyze_music`、`audio.update_timed_text_lock`、`timeline.rebuild`、`audio.inspect_manifest` | 输入当前已批准音频版本、音频窗口或精确时间文字；产出版本化 MasterAudioBinding、AudioStructureMap、TimedTextLock、TimelineManifest 和音频检查报告 | 分析维度不可用时保留可验证基础元数据并明确留空，不伪造节拍或段落；声音来源、对白或字幕时间错误时修对应音频/文本/时间线层 |
 | 12. 整集验收与导出 | 从整集承诺、连续性、节奏、音画和交付规格判断是否完成；只有当前时间线通过后导出 | `qa.review_episode`、`timeline.export` | 输入项目、审看请求或导出请求；产出 EpisodeReview、ExportRecord 和成片文件 | 阻断问题通过相应 Tool 建立最小返工分支，修复后重建并复核时间线；可选打磨项不应伪装成失败 |
+| 跨阶段：Method 结构化工件 | 品牌事实、文案锁、教学结构、参考拆解、音乐结构等需要跨 Agent/阶段复用，但尚不需要独立领域表时 | `artifact.create_production_document`、`artifact.revise_production_document`、`artifact.get_production_document`、`artifact.list_production_documents` | 输入 kind、title、结构化 payload、精确来源 ArtifactRef 和来源角色；产出稳定 document ID 与不可变版本 | 修订必须基于当前 base version；引用或结构错误时修正工件，不把自由文本白板当作第二份项目真相 |
+| 跨阶段：稳定输出交接 | Main Agent 希望 Worker 交付某个逻辑结果，且该结果会继续修订或重生时 | `project.list_output_slots`、`project.get_output_slot`、`project.bind_output_slot` | WorkOrder 使用 `expected_output_slot_ids` 表达交付意图；Tool 将当前 ArtifactRef 绑到 ProjectOutputSlot，并保留旧引用 | 上游变化时使当前绑定失效但不删除历史产物；工件不可解析或已过期时先修正工件 |
 | 跨阶段：专业委派 | 当前步骤需要编剧、导演、资产审核、路线规划或成片审校的专业判断，且目标与工件范围可以明确时 | 可选 `agent.delegate`（当前基础服务未注册） | 输入角色、有限目标、ArtifactRef、约束和期望输出；产出可跟踪的 delegation/AgentResult | 委派范围过大时缩小 WorkOrder；返回缺少证据时让专业 Agent 读取共享工件，不复制第二份项目状态 |
+
+## 核心资产的 Agent 调用语义
+
+MiniMax-H3 公开内容提供的是角色卡、场景卡和 H3 参考语义，不是一套可直接替换的核心资产 Tool 源码。当前后端因此保持三层：
+
+1. Asset Worker 基于复用、连续性风险和下游职责，自主决定轻量图、角色标准视图、场景 coverage 或镜头专用关键帧。
+2. WorkOrder 传递稳定 Asset ID、最终 prompt、有序 AssetVersion refs、依赖与期望输出；状态、换装、伤势、昼夜和关键道具从已批准 base 派生。
+3. 通用 Image Tool 执行生成/编辑，`qa.inspect_asset_version` 观察实际图片，`artifact.review_version` 记录 Agent 决策，只有当前已批准正式版本进入 ReferencePack。
+
+同一角色或场景的多视图可在各自检查后拼成一份紧凑参考卡，供需要整体身份锁的下游使用。若已传递拼板，不再无差别重复绑定全部源图；只在某张单图另外承担精确角度、状态或构图职责时保留它。
+
+角色/场景/风格参考用于定义身份和环境时，应作为 H3 Subject/reference media；只有某张图本身确实定义镜头开场、结束或构图时，才把它用作首帧、尾帧或关键帧。不把角色卡自动当首帧，也不把真正的开场构图只当普通角色参考。
 
 ## Tool Result 与通用故障处理
 

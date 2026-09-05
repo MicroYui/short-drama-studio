@@ -313,6 +313,7 @@ def test_changing_voice_reference_stales_an_existing_route_plan(tmp_path: Path) 
             project_id,
             plan.id,
             H3ProductionRouteExecuteRequest(
+                expected_state_revision=plan.state_revision,
                 enqueue_new_generations=False,
                 inspect_reused_takes=False,
                 semantic_review=False,

@@ -11,11 +11,21 @@ REFERENCE / Ref2VA 使用六个字段，并严格保持此顺序：
 5. `overall_soundscape:`
 6. `non_diegetic_music:`
 
-图片、视频、音频标签必须与实际 `route_media_bindings` 一一对应，使用 `<Picture N>`、`<Video N>`、`<Audio N>`。不得引用请求中不存在的编号，也不得遗漏已声明需要使用的媒体。
+实际上传的图片、视频、音频标签必须与 `route_media_bindings` 一一对应，依次使用 `<Picture N>`、`<Video N>`、`<Audio N>`。不得引用请求中不存在的编号，也不得遗漏已声明需要使用的媒体。
+
+Prompt 中还要区分“上传的源文件”和“从源文件提取的可复用可见内容”：
+
+- `REFERENCE_IMAGE` 上传后仍由 `<Picture N>` 追踪实际文件，但角色、场景、道具、服饰或风格等可复用内容必须定义为 `<Subject N>`，并说明它从哪个 `<Picture N>` 提取。
+- 只有图片本身就是当前镜头的首帧、关键帧、尾帧、编辑目标帧或构图锚点时，才在时间线中直接把 `<Picture N>` 当作具体画面。
+- `<Video N>` 和 `<Audio N>` 继续表示实际视频或音频源。当前 `REFERENCE_VIDEO` binding 仅把视频用作已声明的运动、时序、机位或连续性参考；需要稳定人物、物件或场景身份时，应另外绑定经批准的 `REFERENCE_IMAGE` 来建立 `<Subject N>`。
 
 ## subject_definitions
 
-先给每个标签一个稳定主体名称和简洁描述，回答“这份参考是谁或是什么”。主体可以是人物、地点、物件、视觉风格、运动特征或声音，但同一标签不能在后文改变身份。
+先给每个可复用内容一个稳定的 `<Subject N>` 和简洁描述，回答“目标视频实际要复用谁或什么”，并保留源 `<Picture N>` 以便追溯。例如：
+
+`@男主 = <Subject 1>; <Subject 1> is the reusable visible character content for the male lead extracted from its reference images: <Picture 1> provides the front view; <Picture 2> provides the profile view; <Picture 3> provides the back view.`
+
+主体可以是人物、地点、物件、视觉风格、运动特征或声音，但同一 `<Subject N>` 不能在后文改变身份。一张 `<Picture N>` 可提供多个主体，一个主体也可以综合多份参考。因此，同一角色的正面、侧面、背面或服饰细节图应共享一个 `<Subject N>`，每张实际源图仍保留独立 `<Picture N>` 供 Provider 上传与追溯。当 binding 显式具有同一 `subject_asset_id` 时按该主体合并；未显式声明时，只在它们解析到同一 Asset 时合并，不根据名称或提示词猜测。
 
 定义应只包含参考真正负责的特征。例如角色图负责面部、发型和服装，不自动负责图中的背景；场景图负责空间布局和材质，不自动把图中路人带入镜头；音频负责声线或声音质感，不自动复制其语义内容。
 
@@ -40,7 +50,7 @@ REFERENCE / Ref2VA 使用六个字段，并严格保持此顺序：
 典型表达逻辑是：
 
 1. 开场画面与主体位置；
-2. `<Picture N>` 锚定的角色或环境如何出现在当前镜头；
+2. `<Subject N>` 表示的角色或环境如何出现在当前镜头；仅当图片是具体帧或构图锚点时才在此使用 `<Picture N>`；
 3. `<Video N>` 的运动、表演或镜头特征在哪个动作阶段被采用；
 4. `<Audio N>` 的声线或声音素材由谁、在何时使用；
 5. 当前镜头自己的动作、摄影机和声音如何连续发展；
@@ -56,6 +66,7 @@ REFERENCE / Ref2VA 使用六个字段，并严格保持此顺序：
 
 - 六个字段齐全且顺序正确；
 - 每个实际参考标签都被定义和使用；
+- `REFERENCE_IMAGE` 生成的 `<Subject N>` 已与源 `<Picture N>` 明确关联，后续镜头不再把源图整幅当成角色或场景；
 - `retention_analysis` 同时说明保留、转移与不复制项；
 - 没有把参考背景、字幕、无关角色或原视频事件带进来；
 - 参考用途与 `route_media_bindings` 描述一致；

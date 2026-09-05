@@ -23,6 +23,8 @@ extraResources:
     filter:
       - "**/*.py"
       - "short_drama/skills/**/*.md"
+      - "short_drama/skills/**/*.txt"
+      - "short_drama/skills/**/*.yaml"
       - pyproject.toml
       - runtime_config/lora_catalog.json
       - "!**/__pycache__/**"

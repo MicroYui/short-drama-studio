@@ -71,14 +71,23 @@ type AgentAutoContinueTarget = {
 
 type AgentAutoPauseReason = 'COMPLETED' | 'NEEDS_ATTENTION' | 'TERMINAL' | 'WORK_ORDER' | 'USER_INPUT'
 
+function hasAutonomousWorkOrders(run: AgentRunView): boolean {
+  return (run.snapshot.pending_work_orders ?? []).some((order) => (
+    order.next_owner === 'WORKER_DECISION'
+    || order.next_owner === 'WORKER_TOOL'
+    || order.next_owner === 'LEADER_REPLAN'
+  ))
+}
+
 function agentAutoPauseReason(run: AgentRunView): AgentAutoPauseReason | null {
   const status = String(run.snapshot.run.status)
   if (status === 'COMPLETED') return 'COMPLETED'
-  if (status === 'NEEDS_ATTENTION') return 'NEEDS_ATTENTION'
   if (status === 'FAILED' || status === 'CANCELLED') return 'TERMINAL'
   if ((run.snapshot.pending_work_orders ?? []).some((order) => (
-    String(order.status) === 'NEEDS_ATTENTION'
-  ))) return 'NEEDS_ATTENTION'
+    order.next_owner === 'USER_INPUT'
+  ))) return 'USER_INPUT'
+  if (hasAutonomousWorkOrders(run)) return null
+  if (status === 'NEEDS_ATTENTION') return 'NEEDS_ATTENTION'
   if ((run.snapshot.pending_work_orders?.length ?? 0) > 0) return 'WORK_ORDER'
   if ((run.snapshot.actions ?? []).some((action) => (
     action.kind === 'USER_INPUT' && action.status === 'RUNNING'
@@ -88,7 +97,9 @@ function agentAutoPauseReason(run: AgentRunView): AgentAutoPauseReason | null {
 }
 
 function isWaitingWithoutReadyStep(run: AgentRunView): boolean {
-  return run.snapshot.run.status === 'WAITING' && run.ready_steps.length === 0
+  return run.snapshot.run.status === 'WAITING'
+    && run.ready_steps.length === 0
+    && !hasAutonomousWorkOrders(run)
 }
 
 function unattendedExecutionTarget(run: AgentRunView): ProductionExecutionTarget | null {
@@ -337,7 +348,7 @@ function OverviewPanel({
             </div>
             <h2 className="text-2xl font-semibold text-white">从任意输入到可播放成片的一键闭环</h2>
             <p className="mt-3 text-sm leading-6 text-zinc-300">
-              自定义时长先由 Story Architect 规划整集，Script Critic 做开放式剧本审阅，再由 Scene Director 逐场展开并传递精简连续性状态；后续资产、H3、QA、Director 返工和时间线继续共享同一可恢复项目。
+              自定义时长先由 Story Architect 规划整集，Scene Writer 逐场完成剧本，再由 Script Verifier 做一次整稿语义验收；后续资产、H3、QA、Director 返工和时间线继续共享同一可恢复项目。
             </p>
           </div>
           <div className="flex min-w-56 flex-col gap-2">
@@ -494,7 +505,7 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
       {review && (
         <section className={`mb-5 rounded-xl border p-4 ${reviewNeedsStoryRevision ? 'border-amber-500/20 bg-amber-500/5' : 'border-emerald-500/20 bg-emerald-500/5'}`}>
           <div className="flex items-start justify-between gap-3">
-            <div><h3 className="text-sm font-medium text-white">Script Critic 剧本审阅</h3><p className="mt-1 text-xs leading-5 text-zinc-400">{review.summary}</p></div>
+            <div><h3 className="text-sm font-medium text-white">Script Verifier 剧本验收</h3><p className="mt-1 text-xs leading-5 text-zinc-400">{review.summary}</p></div>
             <Badge tone={reviewNeedsStoryRevision ? 'amber' : 'green'}>{reviewBadge}</Badge>
           </div>
           {reviewStrengths.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{reviewStrengths.map((strength) => <Badge key={strength} tone="green">{strength}</Badge>)}</div>}
@@ -518,7 +529,7 @@ function ScriptPanel({ project, onRevise }: { project: ProjectAggregate; onRevis
               })}
             </div>
           )}
-          <p className="mt-3 text-[11px] text-zinc-600">Critic 只报告观察；当前 Production Skill 的 Review Router 决定默认修订或下放。用户始终可以继续、编辑、让 Agent 改写或忽略。</p>
+          <p className="mt-3 text-[11px] text-zinc-600">Verifier 保留可追溯的问题与证据；Production Manager 根据当前目标决定聚焦修订、下游交接或继续。用户始终可以编辑、让 Agent 改写或忽略。</p>
         </section>
       )}
       <section className="mb-5">
@@ -1263,8 +1274,9 @@ export function ShortDramaStudio() {
           setError(`Agent 无人值守推进已停止：${advanceResult.error.message}`)
           return
         }
-
         const latestRun = advanceResult.data.run
+        const madeProgress = advanceResult.data.executed_action_ids.length > 0
+          || (advanceResult.data.advanced_work_order_ids?.length ?? 0) > 0
         setLatestAutoRun(latestRun)
         const projectResult = await ShortDramaApi.getProject(target.projectId)
         if (cancelled || agentAutoStartGeneration.current !== target.generation) return
@@ -1304,17 +1316,16 @@ export function ShortDramaStudio() {
 
         const progressSignature = agentProjectProgressSignature(projectResult.data)
         const progressChanged = progressSignature !== target.progressSignature
-        const executedAction = advanceResult.data.executed_action_ids.length > 0
         const waitingForProvider = waitsForMinimaxProvider(projectResult.data)
         const nextDelayMs = target.executionTarget === 'REAL_H3'
           ? progressChanged
             ? 750
             : waitingForProvider
               ? nextProviderPollDelay(target.delayMs)
-              : executedAction
+              : madeProgress
                 ? 750
                 : nextProviderPollDelay(target.delayMs)
-          : executedAction
+          : madeProgress
             ? 750
             : nextProviderPollDelay(target.delayMs)
         setAgentAutoContinue({
@@ -1396,27 +1407,32 @@ export function ShortDramaStudio() {
           for (let batch = 0; batch < 8; batch += 1) {
             if (agentAutoStartGeneration.current !== startGeneration) return
             const status = String(latestRun.snapshot.run.status)
-            const workOrderNeedsAttention = (latestRun.snapshot.pending_work_orders ?? []).some((order) => (
-              String(order.status) === 'NEEDS_ATTENTION'
-            ))
-            const waitingForWorkOrder = (latestRun.snapshot.pending_work_orders?.length ?? 0) > 0
-            const waitingForUser = (latestRun.snapshot.actions ?? []).some((action) => (
+            const hasAutonomousWork = hasAutonomousWorkOrders(latestRun)
+            const waitingForWorkOrder = !hasAutonomousWork
+              && (latestRun.snapshot.pending_work_orders?.length ?? 0) > 0
+            const waitingForUser = (latestRun.snapshot.pending_work_orders ?? []).some((order) => (
+              order.next_owner === 'USER_INPUT'
+            )) || (latestRun.snapshot.actions ?? []).some((action) => (
               action.kind === 'USER_INPUT' && action.status === 'RUNNING'
             ))
             if (status === 'COMPLETED') {
               stopReason = 'COMPLETED'
               break
             }
-            if (status === 'FAILED' || status === 'CANCELLED' || status === 'NEEDS_ATTENTION' || workOrderNeedsAttention) {
+            if (status === 'FAILED' || status === 'CANCELLED') {
               stopReason = 'TERMINAL'
+              break
+            }
+            if (waitingForUser) {
+              stopReason = 'USER_INPUT'
               break
             }
             if (waitingForWorkOrder) {
               stopReason = 'WORK_ORDER'
               break
             }
-            if (waitingForUser) {
-              stopReason = 'USER_INPUT'
+            if (status === 'NEEDS_ATTENTION') {
+              stopReason = 'TERMINAL'
               break
             }
 
@@ -1431,27 +1447,33 @@ export function ShortDramaStudio() {
             executedActions += advanceResult.data.executed_action_ids.length
 
             const nextStatus = String(latestRun.snapshot.run.status)
-            const nextWorkOrderNeedsAttention = (latestRun.snapshot.pending_work_orders ?? []).some((order) => (
-              String(order.status) === 'NEEDS_ATTENTION'
-            ))
-            const hasPendingWorkOrder = (latestRun.snapshot.pending_work_orders?.length ?? 0) > 0
-            const hasPendingUserInput = (latestRun.snapshot.actions ?? []).some((action) => (
+            const hasNextAutonomousWork = hasAutonomousWorkOrders(latestRun)
+            const hasPendingWorkOrder = !hasNextAutonomousWork
+              && (latestRun.snapshot.pending_work_orders?.length ?? 0) > 0
+            const hasPendingUserInput = (latestRun.snapshot.pending_work_orders ?? []).some((order) => (
+              order.next_owner === 'USER_INPUT'
+            )) || (latestRun.snapshot.actions ?? []).some((action) => (
               action.kind === 'USER_INPUT' && action.status === 'RUNNING'
             ))
             if (nextStatus === 'COMPLETED') {
               stopReason = 'COMPLETED'
               break
             }
-            if (nextStatus === 'FAILED' || nextStatus === 'CANCELLED' || nextStatus === 'NEEDS_ATTENTION' || nextWorkOrderNeedsAttention) {
+            if (nextStatus === 'FAILED' || nextStatus === 'CANCELLED') {
               stopReason = 'TERMINAL'
-              break
-            }
-            if (hasPendingWorkOrder) {
-              stopReason = 'WORK_ORDER'
               break
             }
             if (hasPendingUserInput) {
               stopReason = 'USER_INPUT'
+              break
+            }
+            if (hasNextAutonomousWork) continue
+            if (hasPendingWorkOrder) {
+              stopReason = 'WORK_ORDER'
+              break
+            }
+            if (nextStatus === 'NEEDS_ATTENTION') {
+              stopReason = 'TERMINAL'
               break
             }
             if (isWaitingWithoutReadyStep(latestRun)) {

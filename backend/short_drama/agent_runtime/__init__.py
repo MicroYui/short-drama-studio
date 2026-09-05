@@ -4,6 +4,7 @@ from short_drama.agent_runtime.context import (
     DEFAULT_CONTEXT_CHARACTER_BUDGET,
     ArtifactResolver,
     ContextCompiler,
+    ContextManifestResolutionError,
 )
 from short_drama.agent_runtime.contract_validation import AgentResultContractError
 from short_drama.agent_runtime.models import (
@@ -11,12 +12,15 @@ from short_drama.agent_runtime.models import (
     ActionRecord,
     ActionStatus,
     AgentResult,
+    AgentResultDigest,
     AgentResultStatus,
     AgentRun,
     AgentRunSnapshot,
     AgentRunStatus,
     ArtifactRef,
     ArtifactSummary,
+    ContextBoundary,
+    ContextManifest,
     ContextPack,
     DecisionMemory,
     DelegationStatus,
@@ -26,9 +30,12 @@ from short_drama.agent_runtime.models import (
     PlanStep,
     ProjectMemory,
     RunMemory,
+    SpecialistProtocolFeedback,
     SpecialistTurnRecord,
     SpecialistTurnStatus,
     WorkOrder,
+    WorkOrderNextOwner,
+    WorkOrderProgressEntry,
 )
 from short_drama.agent_runtime.plan_graph import PlanGraph
 from short_drama.agent_runtime.runtime import AgentRuntime
@@ -39,6 +46,7 @@ __all__ = [
     "ActionRecord",
     "ActionStatus",
     "AgentResult",
+    "AgentResultDigest",
     "AgentResultContractError",
     "AgentResultStatus",
     "AgentRun",
@@ -49,6 +57,9 @@ __all__ = [
     "ArtifactRef",
     "ArtifactResolver",
     "ArtifactSummary",
+    "ContextBoundary",
+    "ContextManifest",
+    "ContextManifestResolutionError",
     "ContextCompiler",
     "ContextPack",
     "DEFAULT_CONTEXT_CHARACTER_BUDGET",
@@ -61,7 +72,10 @@ __all__ = [
     "PlanStep",
     "ProjectMemory",
     "RunMemory",
+    "SpecialistProtocolFeedback",
     "SpecialistTurnRecord",
     "SpecialistTurnStatus",
     "WorkOrder",
+    "WorkOrderNextOwner",
+    "WorkOrderProgressEntry",
 ]

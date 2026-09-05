@@ -58,8 +58,13 @@ from short_drama.production_profiles import (
     ProductionSkillRole,
     compile_production_prompt,
 )
+from short_drama.production_contracts import (
+    GENERATION_PLAN_OUTPUT_SLOT_ID,
+    GenerationUnit,
+)
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
+    build_h3_generation_unit_prompt,
     build_h3_prompt,
     validate_h3_probe,
 )
@@ -152,7 +157,33 @@ def build_h3_production_route_plan(
     video_guides: dict[str, list[H3VideoGuide]] | None = None,
     video_guide_warnings: list[str] | None = None,
     shot_directives: list[H3ShotRouteDirective] | None = None,
+    generation_units: list[GenerationUnit] | None = None,
+    generation_plan_document_id: str | None = None,
+    generation_plan_version_id: str | None = None,
+    storyboard_document_id: str | None = None,
+    storyboard_version_id: str | None = None,
 ) -> H3ProductionRoutePlan:
+    if generation_units is not None:
+        if shot_ids:
+            raise RoutePlanningError(
+                "A route plan may target generation units or legacy shots, not both"
+            )
+        return _build_h3_generation_unit_route_plan(
+            document=document,
+            pricing=pricing,
+            version=version,
+            created_at=created_at,
+            generation_units=generation_units,
+            candidate_count=candidate_count,
+            language_client=language_client,
+            prepared_media_inputs=prepared_media_inputs or {},
+            shot_directives=shot_directives or [],
+            generation_plan_document_id=generation_plan_document_id,
+            generation_plan_version_id=generation_plan_version_id,
+            storyboard_document_id=storyboard_document_id,
+            storyboard_version_id=storyboard_version_id,
+            warnings=list(video_guide_warnings or []),
+        )
     selected_ids = set(shot_ids)
     known_ids = {shot.id for shot in document.shots}
     unknown = sorted(selected_ids - known_ids)
@@ -166,7 +197,9 @@ def build_h3_production_route_plan(
     if not shots:
         raise RoutePlanningError("A production route plan requires at least one shot")
     directive_by_shot = {
-        item.shot_id: item for item in (shot_directives or [])
+        item.shot_id: item
+        for item in (shot_directives or [])
+        if item.shot_id
     }
     unexpected_directives = sorted(set(directive_by_shot) - {item.id for item in shots})
     if unexpected_directives:
@@ -433,6 +466,405 @@ def build_h3_production_route_plan(
     )
 
 
+def _build_h3_generation_unit_route_plan(
+    *,
+    document: ProjectDocument,
+    pricing: H3PricingSnapshot,
+    version: int,
+    created_at: str,
+    generation_units: list[GenerationUnit],
+    candidate_count: int,
+    language_client: LanguageProviderClient | None,
+    prepared_media_inputs: dict[str, list[H3MediaInput]],
+    shot_directives: list[H3ShotRouteDirective],
+    generation_plan_document_id: str | None,
+    generation_plan_version_id: str | None,
+    storyboard_document_id: str | None,
+    storyboard_version_id: str | None,
+    warnings: list[str],
+) -> H3ProductionRoutePlan:
+    if not generation_units:
+        raise RoutePlanningError(
+            "A generation-plan route requires at least one generation unit"
+        )
+    unit_ids = [item.id for item in generation_units]
+    if len(unit_ids) != len(set(unit_ids)):
+        raise RoutePlanningError("Generation-unit route targets must be unique")
+    shot_by_id = {shot.id: shot for shot in document.shots}
+    for unit in generation_units:
+        unknown = [shot_id for shot_id in unit.shot_ids if shot_id not in shot_by_id]
+        if unknown:
+            raise RoutePlanningError(
+                f"Generation unit {unit.id} references unknown shots: "
+                + ", ".join(unknown)
+            )
+        stale = [
+            window.shot_id
+            for window in unit.shot_windows
+            if shot_by_id[window.shot_id].revision != window.shot_revision
+        ]
+        if stale:
+            raise RoutePlanningError(
+                f"Generation unit {unit.id} uses outdated shot revisions: "
+                + ", ".join(stale)
+            )
+
+    directive_by_unit = {
+        item.generation_unit_id: item
+        for item in shot_directives
+        if item.generation_unit_id is not None
+    }
+    unexpected_directives = sorted(set(directive_by_unit) - set(unit_ids))
+    if unexpected_directives:
+        raise RoutePlanningError(
+            "Route directives refer to generation units outside this plan: "
+            + ", ".join(unexpected_directives)
+        )
+
+    candidates_by_unit: dict[str, list[_RouteCandidate]] = {}
+    synthetic_by_unit: dict[str, ShotPlan] = {}
+    for unit in generation_units:
+        shots = [shot_by_id[shot_id] for shot_id in unit.shot_ids]
+        synthetic_by_unit[unit.id] = _synthetic_shot_for_generation_unit(unit, shots)
+        unit_inputs = prepared_media_inputs.get(unit.id)
+        if unit_inputs is None:
+            unit_inputs = [
+                item.model_copy(deep=True)
+                for shot_id in unit.shot_ids
+                for item in prepared_media_inputs.get(shot_id, [])
+            ]
+        candidates_by_unit[unit.id] = _build_generation_unit_candidates(
+            document=document,
+            unit=unit,
+            shots=shots,
+            media_inputs=unit_inputs,
+        )
+
+    agent_choices: dict[str, _AgentRouteChoice] = {}
+    planner = "evidence-first-generation-unit-route-agent-v1"
+    if language_client is not None:
+        synthetic_shots = [synthetic_by_unit[item.id] for item in generation_units]
+        try:
+            agent_choices = _choose_with_language_agent(
+                document=document,
+                shots=synthetic_shots,
+                candidates_by_shot=candidates_by_unit,
+                risks_by_shot={item.id: ([], []) for item in synthetic_shots},
+                client=language_client,
+            )
+        except (LanguageProviderError, ValueError) as exc:
+            warnings.append(
+                "GPT-5.6-sol route advice unavailable for generation units; "
+                "provider-compatible candidates remain visible, but execution waits for "
+                f"a structured Agent decision: {exc}"
+            )
+        else:
+            planner += "+gpt-5.6-sol"
+
+    decisions: list[H3ShotRoutePlan] = []
+    new_seconds = 0
+    unresolved = False
+    for unit in generation_units:
+        shots = [shot_by_id[shot_id] for shot_id in unit.shot_ids]
+        candidates = candidates_by_unit[unit.id]
+        chosen = _technical_baseline_candidate(candidates)
+        choice_warnings: list[str] = []
+        has_structured_choice = False
+
+        agent_choice = agent_choices.get(unit.id)
+        if agent_choice is not None:
+            selected = next(
+                (item for item in candidates if item.id == agent_choice.candidate_id),
+                None,
+            )
+            if selected is None:
+                choice_warnings.append(
+                    "Language Agent returned an unknown generation-unit candidate."
+                )
+            elif agent_choice.reference_selection_candidate_ids:
+                choice_warnings.append(
+                    "Generation-unit routes do not expose implicit reference-selection "
+                    "candidates; choose one of the already materialized route candidates."
+                )
+            else:
+                chosen = selected
+                chosen.rationale = agent_choice.rationale
+                choice_warnings.extend(agent_choice.warnings)
+                has_structured_choice = True
+
+        directive = directive_by_unit.get(unit.id)
+        if directive is not None:
+            if directive.reuse_take_id is not None:
+                raise RoutePlanningError(
+                    "Generation-unit Take reuse is only available after a matching "
+                    "generation-unit candidate has been persisted"
+                )
+            if directive.reference_selection_candidate_ids:
+                raise RoutePlanningError(
+                    "Generation-unit directives must select a materialized candidate; "
+                    "they cannot add implicit reference selections"
+                )
+            if directive.candidate_id is not None:
+                selected = next(
+                    (item for item in candidates if item.id == directive.candidate_id),
+                    None,
+                )
+                if selected is None:
+                    raise RoutePlanningError(
+                        f"Explicit H3 route candidate {directive.candidate_id} is unavailable "
+                        f"for generation unit {unit.id}"
+                    )
+                chosen = selected
+                has_structured_choice = True
+
+        if not has_structured_choice:
+            unresolved = True
+            choice_warnings.append(
+                "No structured Route Agent decision or explicit generation-unit directive "
+                "was available. DIRECT remains a technical baseline and is not executed yet."
+            )
+        readiness = (
+            chosen.readiness
+            if has_structured_choice
+            else H3ShotRouteReadiness.NEEDS_AGENT_DECISION
+        )
+        if has_structured_choice and chosen.action == H3ShotRouteAction.GENERATE:
+            new_seconds += chosen.duration_seconds * candidate_count
+        first_shot = shots[0]
+        decisions.append(
+            H3ShotRoutePlan(
+                shot_id=first_shot.id,
+                shot_sequence=first_shot.sequence,
+                generation_unit_id=unit.id,
+                clip_group_id=unit.clip_group_id,
+                output_slot_id=unit.output_slot_id,
+                shot_ids=list(unit.shot_ids),
+                input_shot_revisions={
+                    item.shot_id: item.shot_revision for item in unit.shot_windows
+                },
+                shot_source_windows=[
+                    item.model_copy(deep=True) for item in unit.shot_windows
+                ],
+                input_script_version_id=document.project.current_script_version_id,
+                input_bible_version_id=document.project.current_bible_version_id,
+                input_shot_revision=first_shot.revision,
+                action=chosen.action,
+                route=chosen.route,
+                duration_seconds=chosen.duration_seconds,
+                prompt=chosen.prompt,
+                media_inputs=[item.model_copy(deep=True) for item in chosen.media_inputs],
+                reuse_take_id=chosen.reuse_take_id,
+                route_evidence_ids=list(chosen.evidence_ids),
+                rationale=chosen.rationale,
+                warnings=list(dict.fromkeys([*chosen.warnings, *choice_warnings])),
+                missing_inputs=list(chosen.missing_inputs),
+                candidate_count=(
+                    1
+                    if chosen.action == H3ShotRouteAction.REUSE_TAKE
+                    else candidate_count
+                ),
+                inspection=_inspection_policy(synthetic_by_unit[unit.id], []),
+                readiness=readiness,
+            )
+        )
+
+    status = (
+        H3RoutePlanStatus.READY
+        if all(
+            decision.readiness
+            in {H3ShotRouteReadiness.READY, H3ShotRouteReadiness.READY_WITH_WARNINGS}
+            for decision in decisions
+        )
+        else H3RoutePlanStatus.PARTIAL
+    )
+    if unresolved:
+        planner += "+awaiting-agent-decision"
+    return H3ProductionRoutePlan(
+        id=f"h3-route-plan-{uuid4().hex}",
+        project_id=document.project.id,
+        version=version,
+        status=status,
+        planner=planner,
+        input_script_version_id=document.project.current_script_version_id,
+        input_bible_version_id=document.project.current_bible_version_id,
+        input_storyboard_document_id=storyboard_document_id,
+        input_storyboard_version_id=storyboard_version_id,
+        input_generation_plan_document_id=generation_plan_document_id,
+        input_generation_plan_version_id=generation_plan_version_id,
+        input_voice_reference_revision=document.project.voice_reference_revision,
+        decisions=decisions,
+        estimated_new_h3_seconds=new_seconds,
+        estimated_cost_usd=round(new_seconds * pricing.output_per_second, 6),
+        estimated_cost_credits=round(
+            new_seconds * pricing.billing_output_per_second,
+            6,
+        ),
+        warnings=warnings,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+
+def _build_generation_unit_candidates(
+    *,
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    media_inputs: list[H3MediaInput],
+) -> list[_RouteCandidate]:
+    duration, duration_warnings, supported = _duration_for_h3(
+        unit.requested_duration_seconds
+    )
+    direct_prompt = build_h3_generation_unit_prompt(
+        document,
+        unit,
+        shots,
+        route=VideoGenerationRoute.DIRECT,
+        duration_seconds=duration,
+    )
+    candidates = [
+        _RouteCandidate(
+            id=f"direct:{unit.id}",
+            action=H3ShotRouteAction.GENERATE,
+            route=VideoGenerationRoute.DIRECT,
+            prompt=direct_prompt,
+            duration_seconds=duration,
+            media_inputs=[],
+            rationale=(
+                "Generate this ordered editorial shot group as one H3 clip while retaining "
+                "its typed source windows for later timeline splitting."
+            ),
+            warnings=duration_warnings,
+            missing_inputs=(
+                [] if supported else ["H3 supports 4–15 seconds per request"]
+            ),
+            readiness=(
+                H3ShotRouteReadiness.READY_WITH_WARNINGS
+                if supported and duration_warnings
+                else (
+                    H3ShotRouteReadiness.READY
+                    if supported
+                    else H3ShotRouteReadiness.UNSUPPORTED
+                )
+            ),
+        )
+    ]
+    if not supported or not media_inputs:
+        return candidates
+    try:
+        route = _generation_unit_media_route(media_inputs)
+        prompt = build_h3_generation_unit_prompt(
+            document,
+            unit,
+            shots,
+            route=route,
+            duration_seconds=duration,
+            media_inputs=media_inputs,
+        )
+        validate_h3_probe(
+            route=route,
+            prompt=prompt,
+            duration_seconds=duration,
+            media_inputs=media_inputs,
+        )
+    except H3CapabilityError as exc:
+        candidates[0].warnings.append(
+            f"Prepared generation-unit media is not a valid H3 route: {exc}"
+        )
+        return candidates
+    route_name = {
+        VideoGenerationRoute.FRAME_FIRST: "frame-first",
+        VideoGenerationRoute.FRAME_LAST: "frame-last",
+        VideoGenerationRoute.FRAME_FIRST_LAST: "frame-first-last",
+        VideoGenerationRoute.REFERENCE: "reference",
+        VideoGenerationRoute.DIRECT: "direct",
+    }[route]
+    candidates.append(
+        _RouteCandidate(
+            id=f"{route_name}:{unit.id}",
+            action=H3ShotRouteAction.GENERATE,
+            route=route,
+            prompt=prompt,
+            duration_seconds=duration,
+            media_inputs=[item.model_copy(deep=True) for item in media_inputs],
+            rationale=(
+                "Use the explicitly prepared media for the whole generation unit while "
+                "preserving each editorial shot's declared source window."
+            ),
+            warnings=list(duration_warnings),
+            readiness=(
+                H3ShotRouteReadiness.READY_WITH_WARNINGS
+                if duration_warnings
+                else H3ShotRouteReadiness.READY
+            ),
+        )
+    )
+    return candidates
+
+
+def _generation_unit_media_route(
+    media_inputs: list[H3MediaInput],
+) -> VideoGenerationRoute:
+    roles = {item.role for item in media_inputs}
+    reference_roles = {
+        H3MediaRole.REFERENCE_IMAGE,
+        H3MediaRole.REFERENCE_VIDEO,
+        H3MediaRole.REFERENCE_AUDIO,
+    }
+    if roles & reference_roles:
+        return VideoGenerationRoute.REFERENCE
+    if roles == {H3MediaRole.FIRST_FRAME, H3MediaRole.LAST_FRAME}:
+        return VideoGenerationRoute.FRAME_FIRST_LAST
+    if roles == {H3MediaRole.FIRST_FRAME}:
+        return VideoGenerationRoute.FRAME_FIRST
+    if roles == {H3MediaRole.LAST_FRAME}:
+        return VideoGenerationRoute.FRAME_LAST
+    raise H3CapabilityError(
+        "Prepared generation-unit media does not match one H3 route"
+    )
+
+
+def _synthetic_shot_for_generation_unit(
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+) -> ShotPlan:
+    first = shots[0]
+    last = shots[-1]
+    return first.model_copy(
+        update={
+            "id": unit.id,
+            "sequence": first.sequence,
+            "scene_id": first.scene_id,
+            "duration_seconds": unit.requested_duration_seconds,
+            "narrative_purpose": unit.generation_intent,
+            "visual": " | ".join(shot.visual for shot in shots),
+            "framing": " -> ".join(
+                dict.fromkeys(shot.framing for shot in shots)
+            ),
+            "camera": " -> ".join(dict.fromkeys(shot.camera for shot in shots)),
+            "audio_intent": " ".join(
+                dict.fromkeys(shot.audio_intent for shot in shots)
+            ),
+            "dialogue_line_ids": [
+                line_id for shot in shots for line_id in shot.dialogue_line_ids
+            ],
+            "timeline_beats": [],
+            "continuity": first.continuity.model_copy(
+                update={
+                    "action_out": last.continuity.action_out,
+                    "prop_state_out": last.continuity.prop_state_out,
+                }
+            ),
+            "transition_out": last.transition_out,
+            "merge_candidate": True,
+            "local_rework_risk": " ".join(
+                dict.fromkeys(shot.local_rework_risk for shot in shots)
+            ),
+            "revision": max(shot.revision for shot in shots),
+        }
+    )
+
+
 def validate_route_plan_freshness(
     plan: H3ProductionRoutePlan,
     document: ProjectDocument,
@@ -443,12 +875,87 @@ def validate_route_plan_freshness(
         raise RoutePlanningError("Route plan uses an outdated project Bible")
     if plan.input_voice_reference_revision != document.project.voice_reference_revision:
         raise RoutePlanningError("Route plan uses outdated character voice references")
+    if plan.input_storyboard_document_id is not None:
+        if plan.input_storyboard_document_id != document.storyboard_document_id:
+            raise RoutePlanningError("Route plan uses a different Storyboard document")
+        storyboard_document = next(
+            (
+                item
+                for item in document.production_documents
+                if item.id == plan.input_storyboard_document_id
+            ),
+            None,
+        )
+        if (
+            storyboard_document is None
+            or storyboard_document.current_version_id
+            != plan.input_storyboard_version_id
+        ):
+            raise RoutePlanningError("Route plan uses an outdated Storyboard version")
+    if plan.input_generation_plan_document_id is not None:
+        if (
+            plan.input_generation_plan_document_id
+            != document.generation_plan_document_id
+        ):
+            raise RoutePlanningError(
+                "Route plan uses a different GenerationPlan document"
+            )
+        generation_document = next(
+            (
+                item
+                for item in document.production_documents
+                if item.id == plan.input_generation_plan_document_id
+            ),
+            None,
+        )
+        if (
+            generation_document is None
+            or generation_document.current_version_id
+            != plan.input_generation_plan_version_id
+        ):
+            raise RoutePlanningError(
+                "Route plan uses an outdated GenerationPlan version"
+            )
+        generation_version = next(
+            (
+                item
+                for item in generation_document.versions
+                if item.id == plan.input_generation_plan_version_id
+            ),
+            None,
+        )
+        generation_slot = next(
+            (
+                item
+                for item in document.output_slots
+                if item.id == GENERATION_PLAN_OUTPUT_SLOT_ID
+            ),
+            None,
+        )
+        if (
+            generation_version is None
+            or generation_slot is None
+            or generation_slot.current_artifact_ref is None
+            or generation_slot.current_artifact_ref.artifact_id
+            != generation_document.id
+            or generation_slot.current_artifact_ref.version
+            != generation_version.version
+        ):
+            raise RoutePlanningError(
+                "Route plan's GenerationPlan output slot is no longer current"
+            )
     revision_by_shot = {item.id: item.revision for item in document.shots}
-    stale = [
-        item.shot_id
-        for item in plan.decisions
-        if revision_by_shot.get(item.shot_id) != item.input_shot_revision
-    ]
+    stale: list[str] = []
+    for item in plan.decisions:
+        expected_revisions = item.input_shot_revisions or {
+            item.shot_id: item.input_shot_revision
+        }
+        stale.extend(
+            shot_id
+            for shot_id, revision in expected_revisions.items()
+            if revision_by_shot.get(shot_id) != revision
+        )
+    stale = list(dict.fromkeys(stale))
     if stale:
         raise RoutePlanningError(
             "Route plan uses outdated shot revisions: " + ", ".join(stale)
@@ -599,33 +1106,36 @@ def _build_candidates(
                 )
             )
 
-    frame_control_repair_applied = (
-        applied_repair_strategy
-        in {
-            DirectorRepairStrategy.CHANGE_KEYFRAME,
-            DirectorRepairStrategy.CHANGE_CAMERA,
-        }
-    )
     preparations = _asset_preparations(
         document,
         shot,
         reference_plan,
-        force_start=frame_control_repair_applied,
     )
     start_preparation = next(
         (item for item in preparations if item.role == H3MediaRole.FIRST_FRAME),
         None,
     )
+    end_preparation = next(
+        (item for item in preparations if item.role == H3MediaRole.LAST_FRAME),
+        None,
+    )
+    first_frame = next(
+        (
+            item
+            for item in prepared_media_inputs
+            if item.role == H3MediaRole.FIRST_FRAME
+        ),
+        None,
+    )
+    last_frame = next(
+        (
+            item
+            for item in prepared_media_inputs
+            if item.role == H3MediaRole.LAST_FRAME
+        ),
+        None,
+    )
     if supported and start_preparation is not None:
-        first_frame = next(
-            (
-                item
-                for item in prepared_media_inputs
-                if item.role == H3MediaRole.FIRST_FRAME
-            ),
-            None,
-        )
-        selected_preparation = start_preparation
         if first_frame is None:
             candidates.append(
                 _RouteCandidate(
@@ -641,20 +1151,21 @@ def _build_candidates(
                     duration_seconds=duration,
                     media_inputs=[],
                     rationale=(
-                        "Prepare one shot-specific start frame before H3 because the declared "
-                        "interaction or local rework risk benefits from stronger composition and "
-                        "continuity control. The user may still override this recommendation."
+                        "Prepare one shot-specific start frame when stronger opening composition, "
+                        "identity, or continuity control is useful. Interaction and repair history "
+                        "are evidence for the Route Agent, not eligibility gates."
                     ),
                     warnings=[
                         *duration_warnings,
                         "The recommended Frame-first route needs an approved start frame before submission.",
                     ],
                     missing_inputs=[H3MediaRole.FIRST_FRAME.value],
-                    preparations=[selected_preparation],
+                    preparations=[start_preparation.model_copy(deep=True)],
                     readiness=H3ShotRouteReadiness.NEEDS_ASSET,
                 )
             )
         else:
+            selected_preparation = start_preparation.model_copy(deep=True)
             selected_preparation.status = H3RouteAssetPreparationStatus.READY
             selected_preparation.approved_version_id = first_frame.asset_version_id
             frame_prompt = build_h3_prompt(
@@ -692,6 +1203,173 @@ def _build_candidates(
                     )
                 )
 
+    if supported and end_preparation is not None:
+        if last_frame is None:
+            candidates.append(
+                _RouteCandidate(
+                    id=f"frame-last-pending:{shot.id}",
+                    action=H3ShotRouteAction.GENERATE,
+                    route=VideoGenerationRoute.FRAME_LAST,
+                    prompt=build_h3_prompt(
+                        document,
+                        shot,
+                        route=VideoGenerationRoute.FRAME_LAST,
+                        duration_seconds=duration,
+                    ),
+                    duration_seconds=duration,
+                    media_inputs=[],
+                    rationale=(
+                        "Prepare one shot-specific final frame when the terminal pose, prop "
+                        "state, composition, or reveal matters more than locking the opening. "
+                        "The Route Agent must still compare backward-inference risk with the "
+                        "other candidates."
+                    ),
+                    warnings=[
+                        *duration_warnings,
+                        "The Last-frame route needs an approved final frame before submission.",
+                    ],
+                    missing_inputs=[H3MediaRole.LAST_FRAME.value],
+                    preparations=[end_preparation.model_copy(deep=True)],
+                    readiness=H3ShotRouteReadiness.NEEDS_ASSET,
+                )
+            )
+        else:
+            selected_preparation = end_preparation.model_copy(deep=True)
+            selected_preparation.status = H3RouteAssetPreparationStatus.READY
+            selected_preparation.approved_version_id = last_frame.asset_version_id
+            frame_prompt = build_h3_prompt(
+                document,
+                shot,
+                route=VideoGenerationRoute.FRAME_LAST,
+                duration_seconds=duration,
+                media_inputs=[last_frame],
+            )
+            try:
+                validate_h3_probe(
+                    route=VideoGenerationRoute.FRAME_LAST,
+                    prompt=frame_prompt,
+                    duration_seconds=duration,
+                    media_inputs=[last_frame],
+                )
+            except H3CapabilityError:
+                pass
+            else:
+                candidates.append(
+                    _RouteCandidate(
+                        id=f"frame-last:{shot.id}",
+                        action=H3ShotRouteAction.GENERATE,
+                        route=VideoGenerationRoute.FRAME_LAST,
+                        prompt=frame_prompt,
+                        duration_seconds=duration,
+                        media_inputs=[last_frame.model_copy(deep=True)],
+                        rationale=(
+                            "Use the approved shot-specific final frame to lock the terminal "
+                            "pose, prop state, reveal, and composition while leaving the opening "
+                            "for H3 to infer from the declared ShotPlan."
+                        ),
+                        warnings=duration_warnings,
+                        preparations=[selected_preparation],
+                    )
+                )
+
+    if (
+        supported
+        and start_preparation is not None
+        and end_preparation is not None
+    ):
+        missing_frame_roles = [
+            role.value
+            for role, media_input in (
+                (H3MediaRole.FIRST_FRAME, first_frame),
+                (H3MediaRole.LAST_FRAME, last_frame),
+            )
+            if media_input is None
+        ]
+        both_preparations: list[H3RouteAssetPreparation] = []
+        for preparation, media_input in (
+            (start_preparation, first_frame),
+            (end_preparation, last_frame),
+        ):
+            selected_preparation = preparation.model_copy(deep=True)
+            if media_input is not None:
+                selected_preparation.status = H3RouteAssetPreparationStatus.READY
+                selected_preparation.approved_version_id = media_input.asset_version_id
+            both_preparations.append(selected_preparation)
+        if missing_frame_roles:
+            candidates.append(
+                _RouteCandidate(
+                    id=f"frame-first-last-pending:{shot.id}",
+                    action=H3ShotRouteAction.GENERATE,
+                    route=VideoGenerationRoute.FRAME_FIRST_LAST,
+                    prompt=build_h3_prompt(
+                        document,
+                        shot,
+                        route=VideoGenerationRoute.FRAME_FIRST_LAST,
+                        duration_seconds=duration,
+                    ),
+                    duration_seconds=duration,
+                    media_inputs=[
+                        item.model_copy(deep=True)
+                        for item in (first_frame, last_frame)
+                        if item is not None
+                    ],
+                    rationale=(
+                        "Prepare the missing shot-specific boundary frame or frames only when "
+                        "both the opening composition and terminal state must be locked. The "
+                        "Route Agent should avoid this route when two anchors would make the "
+                        "performance rigid or hide an incompatible action path."
+                    ),
+                    warnings=[
+                        *duration_warnings,
+                        "The First-and-last-frame route needs both approved boundary frames before submission.",
+                    ],
+                    missing_inputs=missing_frame_roles,
+                    preparations=both_preparations,
+                    readiness=H3ShotRouteReadiness.NEEDS_ASSET,
+                )
+            )
+        else:
+            assert first_frame is not None
+            assert last_frame is not None
+            boundary_inputs = [
+                first_frame.model_copy(deep=True),
+                last_frame.model_copy(deep=True),
+            ]
+            frame_prompt = build_h3_prompt(
+                document,
+                shot,
+                route=VideoGenerationRoute.FRAME_FIRST_LAST,
+                duration_seconds=duration,
+                media_inputs=boundary_inputs,
+            )
+            try:
+                validate_h3_probe(
+                    route=VideoGenerationRoute.FRAME_FIRST_LAST,
+                    prompt=frame_prompt,
+                    duration_seconds=duration,
+                    media_inputs=boundary_inputs,
+                )
+            except H3CapabilityError:
+                pass
+            else:
+                candidates.append(
+                    _RouteCandidate(
+                        id=f"frame-first-last:{shot.id}",
+                        action=H3ShotRouteAction.GENERATE,
+                        route=VideoGenerationRoute.FRAME_FIRST_LAST,
+                        prompt=frame_prompt,
+                        duration_seconds=duration,
+                        media_inputs=boundary_inputs,
+                        rationale=(
+                            "Use both approved boundary frames because this shot needs explicit "
+                            "control of its opening composition and terminal visible state. H3 "
+                            "must still have a plausible continuous action path between them."
+                        ),
+                        warnings=duration_warnings,
+                        preparations=both_preparations,
+                    )
+                )
+
     if supported:
         reference_candidate = _reference_candidate(
             document=document,
@@ -715,7 +1393,7 @@ def _build_candidates(
 
     direct_readiness = (
         H3ShotRouteReadiness.READY_WITH_WARNINGS
-        if preparations or duration_warnings
+        if duration_warnings
         else H3ShotRouteReadiness.READY
     )
     if supported:
@@ -731,14 +1409,7 @@ def _build_candidates(
                     "Direct H3 generation is the always-executable fallback. Missing visual "
                     "anchors remain advisory quality risks and do not block the user."
                 ),
-                warnings=[
-                    *duration_warnings,
-                    *(
-                        ["Visual anchor preparation is recommended before paid generation."]
-                        if preparations
-                        else []
-                    ),
-                ],
+                warnings=duration_warnings,
                 readiness=direct_readiness,
             )
         )
@@ -1417,11 +2088,7 @@ def _asset_preparations(
     document: ProjectDocument,
     shot: ShotPlan,
     plan: ReferencePlanEntry,
-    *,
-    force_start: bool = False,
 ) -> list[H3RouteAssetPreparation]:
-    if not force_start and not plan.interactions:
-        return []
     result: list[H3RouteAssetPreparation] = []
     try:
         start = compile_keyframe_brief(
@@ -1444,36 +2111,37 @@ def _asset_preparations(
                 input_version_ids=start.input_version_ids,
                 rationale=(
                     "A shot-specific start frame can bake identity, location, prop state, "
-                    "and action-ready composition into one H3 input."
+                    "and action-ready composition into one H3 input. Declared interactions "
+                    "and repair history are supporting evidence rather than eligibility rules."
                 ),
             )
         )
-    if plan.interactions:
-        try:
-            end = compile_keyframe_brief(
-                document,
-                shot,
-                plan,
-                KeyframeBriefCompileRequest(position=KeyframePosition.END),
+    try:
+        end = compile_keyframe_brief(
+            document,
+            shot,
+            plan,
+            KeyframeBriefCompileRequest(position=KeyframePosition.END),
+        )
+    except ValueError:
+        end = None
+    if end is not None:
+        result.append(
+            H3RouteAssetPreparation(
+                id=f"route-asset-prep-{uuid4().hex}",
+                shot_id=shot.id,
+                role=H3MediaRole.LAST_FRAME,
+                name=f"镜头 {shot.sequence:02d} 终态关键帧",
+                descriptor=f"镜头 {shot.sequence:02d} 的动作终态和空间连续性画面",
+                prompt=end.prompt,
+                input_version_ids=end.input_version_ids,
+                rationale=(
+                    "An end frame may improve terminal-state control, but the Director "
+                    "should compare L2VA or FL2VA with backward-inference and stiffness risk. "
+                    "Interaction evidence can strengthen the case without gating the option."
+                ),
             )
-        except ValueError:
-            end = None
-        if end is not None:
-            result.append(
-                H3RouteAssetPreparation(
-                    id=f"route-asset-prep-{uuid4().hex}",
-                    shot_id=shot.id,
-                    role=H3MediaRole.LAST_FRAME,
-                    name=f"镜头 {shot.sequence:02d} 终态关键帧",
-                    descriptor=f"镜头 {shot.sequence:02d} 的动作终态和空间连续性画面",
-                    prompt=end.prompt,
-                    input_version_ids=end.input_version_ids,
-                    rationale=(
-                        "An end frame may improve terminal-state control, but the Director "
-                        "should compare it with stiffness risk before choosing F2."
-                    ),
-                )
-            )
+        )
     return result
 
 
@@ -1643,6 +2311,9 @@ def _choose_with_language_agent(
         "机位时，才重点比较 TAIL_WINDOW 或 PREVIOUS_TAKE：前者适合承接边界姿态、道具"
         "状态、银幕方向或摄影机惯性，后者只在更大范围的调度与场景信息确有价值时使用。"
         "如果目标镜头改变景别、反打或开始新动作，应优先比较帧控制候选。以 "
+        "FRAME_LAST 适合终态姿态、道具状态、揭示结果或落幅比开场更重要的镜头，但模型"
+        "需要反推开场，不能把尾帧误当作首帧。FRAME_FIRST_LAST 同时锁定两端，只在动作"
+        "路径确实相容且双端控制收益高于表演僵硬风险时选择。"
         "TARGET_START_FRAME 为底图的 CAMERA_PREVIS 可以在保留批准构图的同时试验粗略"
         "运镜；以 PREVIOUS_BOUNDARY_FRAME 为底图时可能继承错误机位。二维预演不能验证"
         "真实身体调度，也不能保证计划中的终态动作。若来源 Take 的 QA 问题可能传播，"

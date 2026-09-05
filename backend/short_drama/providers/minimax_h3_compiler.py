@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from short_drama.h3_models import (
     H3ContentItem,
@@ -16,7 +17,13 @@ from short_drama.h3_models import (
     H3VideoRequest,
 )
 from short_drama.models import ProjectDocument, ShotPlan, VideoGenerationRoute
-from short_drama.providers.h3_prompt_skill import compile_h3_prompt_ir
+from short_drama.providers.h3_prompt_skill import (
+    compile_h3_generation_unit_prompt_ir,
+    compile_h3_prompt_ir,
+)
+
+if TYPE_CHECKING:
+    from short_drama.production_contracts import GenerationUnit
 
 
 class H3CapabilityError(ValueError):
@@ -63,6 +70,30 @@ def build_h3_prompt(
         raise H3CapabilityError(str(exc)) from exc
 
 
+def build_h3_generation_unit_prompt(
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    *,
+    route: VideoGenerationRoute = VideoGenerationRoute.DIRECT,
+    duration_seconds: int | None = None,
+    media_inputs: list[H3MediaInput] | None = None,
+    video_guides: list[H3VideoGuide] | None = None,
+) -> str:
+    try:
+        return compile_h3_generation_unit_prompt_ir(
+            document,
+            unit,
+            shots,
+            route=route,
+            duration_seconds=duration_seconds,
+            media_inputs=media_inputs,
+            video_guides=video_guides,
+        )
+    except ValueError as exc:
+        raise H3CapabilityError(str(exc)) from exc
+
+
 def validate_h3_probe(
     *,
     route: VideoGenerationRoute,
@@ -97,7 +128,11 @@ def validate_h3_probe(
         raise H3CapabilityError("H3 frame roles and reference roles are mutually exclusive")
     if roles[H3MediaRole.FIRST_FRAME] > 1 or roles[H3MediaRole.LAST_FRAME] > 1:
         raise H3CapabilityError("H3 accepts at most one first frame and one last frame")
-    if roles[H3MediaRole.LAST_FRAME] and not roles[H3MediaRole.FIRST_FRAME]:
+    if (
+        route != VideoGenerationRoute.FRAME_LAST
+        and roles[H3MediaRole.LAST_FRAME]
+        and not roles[H3MediaRole.FIRST_FRAME]
+    ):
         raise H3CapabilityError("H3 last_frame must be paired with first_frame")
     if roles[H3MediaRole.REFERENCE_IMAGE] > 9:
         raise H3CapabilityError("H3 accepts at most nine reference images")
@@ -111,6 +146,9 @@ def validate_h3_probe(
     if route == VideoGenerationRoute.FRAME_FIRST:
         if roles != Counter({H3MediaRole.FIRST_FRAME: 1}):
             raise H3CapabilityError("FRAME_FIRST requires exactly one first_frame image")
+    if route == VideoGenerationRoute.FRAME_LAST:
+        if roles != Counter({H3MediaRole.LAST_FRAME: 1}):
+            raise H3CapabilityError("FRAME_LAST requires exactly one last_frame image")
     if route == VideoGenerationRoute.FRAME_FIRST_LAST:
         expected = Counter({H3MediaRole.FIRST_FRAME: 1, H3MediaRole.LAST_FRAME: 1})
         if roles != expected:
@@ -147,6 +185,7 @@ def compile_h3_request(
             content.append(H3ContentItem(type="audio_url", audio_url=url, role=media.role))
     ratio = None if route in {
         VideoGenerationRoute.FRAME_FIRST,
+        VideoGenerationRoute.FRAME_LAST,
         VideoGenerationRoute.FRAME_FIRST_LAST,
     } else "9:16"
     return H3VideoRequest(content=content, duration=duration_seconds, ratio=ratio)

@@ -400,6 +400,54 @@ def test_language_client_keeps_first_delta_metric_when_stream_fails(
     assert event["time_to_first_text_delta_seconds"] == 0.75
 
 
+def test_language_client_reports_incomplete_stream_reason_and_partial_size(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    response = FakeResponse(
+        200,
+        {},
+        headers={"Content-Type": "text/event-stream"},
+        stream_lines=[
+            'data: {"type":"response.output_text.delta","delta":"partial-json"}',
+            "",
+            (
+                'data: {"type":"response.incomplete","response":'
+                '{"status":"incomplete","incomplete_details":'
+                '{"reason":"max_output_tokens"}}}'
+            ),
+            "",
+        ],
+    )
+    clock_values = iter([40.0, 40.5, 42.0])
+    client = OpenAICompatibleLanguageClient(
+        api_key="",
+        base_url="http://localhost:4141/v1",
+        session=FakeSession(response),  # type: ignore[arg-type]
+        monotonic_clock=lambda: next(clock_values),
+    )
+
+    with pytest.raises(
+        LanguageProviderError,
+        match="generation incomplete: max_output_tokens",
+    ):
+        client.generate_text(instructions="instructions", input_text="input")
+
+    event = next(
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == LOGGER_NAME
+        and json.loads(record.getMessage()).get("event")
+        == "provider.language_generation"
+    )
+    assert event["success"] is False
+    assert event["completion_type"] == "sse_incomplete_max_output_tokens"
+    assert event["time_to_first_text_delta_seconds"] == 0.5
+    assert event["output_characters"] == len("partial-json")
+    assert event["error_kind"] == "LanguageProviderIncompleteError"
+    assert response.closed is True
+
+
 def test_language_client_sends_multimodal_responses_input() -> None:
     session = FakeSession(FakeResponse(200, {"output_text": "结构化计划"}))
     client = OpenAICompatibleLanguageClient(
@@ -636,7 +684,8 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
     )
     payload = json.loads(input_text)
 
-    assert "当前制作类型为AI 原生短剧" in instructions
+    assert "当前制作类型为按项目和已选上游 Skill 声明的视觉媒介" in instructions
+    assert "当前制片技能：AI 短剧（本地格式适配）。" in instructions
     assert "视频提示词编译的通用职责" in instructions
     assert "类型创作原则：" not in instructions
     assert payload["production_profile"] == "AI_SHORT_DRAMA"
@@ -873,6 +922,7 @@ def test_language_prompt_binds_route_media_descriptors() -> None:
             "role": "reference_image",
             "kind": "IMAGE",
             "provider_label": "<Picture 1>",
+            "prompt_label": "<Subject 1>",
             "reference_alias": "@林夏定妆",
             "subject": "林夏定妆",
             "subject_asset_id": linxia.id,

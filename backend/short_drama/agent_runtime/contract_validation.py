@@ -19,7 +19,9 @@ def validate_agent_result_contract(work_order: WorkOrder, result: AgentResult) -
     Partial and failed results may intentionally be incomplete.  Completed results
     must be internally complete, expose some structured completion evidence when
     prose acceptance criteria were supplied, and match the supported JSON Schema
-    subset in ``expected_output_schema``.
+    subset in ``expected_output_schema``. New WorkOrders describe the dedicated
+    ``deliverable`` object; legacy results without one retain the original
+    whole-AgentResult validation behavior.
     """
 
     if result.status != AgentResultStatus.COMPLETED:
@@ -34,12 +36,16 @@ def validate_agent_result_contract(work_order: WorkOrder, result: AgentResult) -
             "one finding, decision, artifact update, evidence reference, or next action"
         )
     if work_order.expected_output_schema:
-        payload = cast(
-            JsonValue,
-            result.model_dump(
-                mode="json",
-                exclude={"id", "work_order_id", "created_at"},
-            ),
+        payload = (
+            cast(JsonValue, result.deliverable)
+            if result.deliverable
+            else cast(
+                JsonValue,
+                result.model_dump(
+                    mode="json",
+                    exclude={"id", "work_order_id", "created_at"},
+                ),
+            )
         )
         _validate_schema(payload, work_order.expected_output_schema, path="AgentResult")
 
@@ -47,6 +53,7 @@ def validate_agent_result_contract(work_order: WorkOrder, result: AgentResult) -
 def _has_completion_evidence(result: AgentResult) -> bool:
     return bool(
         result.created_artifacts
+        or result.deliverable
         or result.updated_artifacts
         or result.findings
         or result.decisions

@@ -22,6 +22,7 @@ from short_drama.models import (
     EvidenceStatus,
     Freshness,
     GenerationTask,
+    ProjectDocument,
     QAReport,
     QaFailureCategory,
     QaIssue,
@@ -251,11 +252,28 @@ class PersistentH3Worker:
         document = self.repository.get_project(task.project_id)
         if document is None:
             return "The project document no longer exists"
-        shot = next((item for item in document.shots if item.id == task.shot_id), None)
-        if shot is None:
-            return "The task's shot no longer exists"
-        if shot.revision != task.input_shot_revision:
-            return "The shot plan changed after this H3 task was compiled"
+        revision_by_shot = {item.id: item.revision for item in document.shots}
+        expected_revisions = task.input_shot_revisions or {
+            task.shot_id: task.input_shot_revision
+        }
+        missing_shots = [
+            shot_id for shot_id in expected_revisions if shot_id not in revision_by_shot
+        ]
+        if missing_shots:
+            return (
+                "The task's editorial shot no longer exists: "
+                + ", ".join(missing_shots)
+            )
+        stale_shots = [
+            shot_id
+            for shot_id, revision in expected_revisions.items()
+            if revision_by_shot[shot_id] != revision
+        ]
+        if stale_shots:
+            return (
+                "The shot plan changed after this H3 task was compiled: "
+                + ", ".join(stale_shots)
+            )
         if task.input_script_version_id != document.project.current_script_version_id:
             return "The script changed after this H3 task was compiled"
         if task.input_bible_version_id != document.project.current_bible_version_id:
@@ -265,10 +283,57 @@ class PersistentH3Worker:
             != document.project.voice_reference_revision
         ):
             return "Character voice references changed after this H3 task was compiled"
+        if task.generation_unit_id is not None:
+            if not task.shot_windows:
+                return "The H3 generation unit has no editorial shot windows"
+            if task.storyboard_document_id is None:
+                return "The H3 generation unit has no pinned storyboard"
+            if task.generation_plan_document_id is None:
+                return "The H3 generation unit has no pinned generation plan"
+
+        pinned_storyboard_reason = self._pinned_document_staleness_reason(
+            document=document,
+            label="storyboard",
+            project_document_id=document.storyboard_document_id,
+            task_document_id=task.storyboard_document_id,
+            task_version_id=task.storyboard_version_id,
+        )
+        if pinned_storyboard_reason is not None:
+            return pinned_storyboard_reason
+        pinned_generation_plan_reason = self._pinned_document_staleness_reason(
+            document=document,
+            label="generation plan",
+            project_document_id=document.generation_plan_document_id,
+            task_document_id=task.generation_plan_document_id,
+            task_version_id=task.generation_plan_version_id,
+        )
+        if pinned_generation_plan_reason is not None:
+            return pinned_generation_plan_reason
 
         provider_run = run or self.repository.get_provider_run(task.id)
         if provider_run is None:
             return "The H3 provider run is missing"
+        for field_name in (
+            "storyboard_document_id",
+            "storyboard_version_id",
+            "generation_plan_document_id",
+            "generation_plan_version_id",
+            "generation_unit_id",
+            "clip_group_id",
+            "output_slot_id",
+        ):
+            if getattr(provider_run, field_name) != getattr(task, field_name):
+                return (
+                    "The H3 provider run no longer matches task metadata: "
+                    + field_name
+                )
+        if provider_run.shot_windows != task.shot_windows:
+            return "The H3 provider run no longer matches task shot windows"
+        if (
+            (task.generation_unit_id is not None or provider_run.shot_ids)
+            and provider_run.shot_ids != task.covered_shot_ids()
+        ):
+            return "The H3 provider run no longer matches task editorial shots"
         for media in provider_run.media_inputs:
             version_id = media.asset_version_id
             if version_id is None:
@@ -297,6 +362,39 @@ class PersistentH3Worker:
                     f"Media asset version {version_id} is no longer the current "
                     "approved version"
                 )
+        return None
+
+    @staticmethod
+    def _pinned_document_staleness_reason(
+        *,
+        document: ProjectDocument,
+        label: str,
+        project_document_id: str | None,
+        task_document_id: str | None,
+        task_version_id: str | None,
+    ) -> str | None:
+        if task_document_id is None and task_version_id is None:
+            return None
+        if task_document_id is None or task_version_id is None:
+            return f"The H3 task has an incomplete pinned {label} reference"
+        if project_document_id != task_document_id:
+            return f"The current {label} document changed after this H3 task was compiled"
+        production_document = next(
+            (
+                item
+                for item in document.production_documents
+                if item.id == task_document_id
+            ),
+            None,
+        )
+        if production_document is None:
+            return f"The pinned {label} document no longer exists"
+        if not any(
+            item.id == task_version_id for item in production_document.versions
+        ):
+            return f"The pinned {label} version no longer exists"
+        if production_document.current_version_id != task_version_id:
+            return f"The {label} changed after this H3 task was compiled"
         return None
 
     def _prepare(self, task: GenerationTask) -> GenerationTask:
@@ -497,7 +595,7 @@ class PersistentH3Worker:
             self.workspace_root
             / task.project_id
             / "takes"
-            / task.shot_id
+            / (task.generation_unit_id or task.shot_id)
             / f"h3-{task.id}.mp4"
         )
         run.output_url = url
@@ -512,7 +610,21 @@ class PersistentH3Worker:
         aspect_ok = media.height > media.width and abs(media.width / media.height - 9 / 16) < 0.04
         resolution_ok = 700 <= min(media.width, media.height) <= 820
         duration_ok = abs(media.duration_seconds - task.requested_duration_seconds) <= 0.75
-        technical_passed = aspect_ok and resolution_ok and duration_ok and media.audio_present
+        required_window_end = max(
+            (item.source_out_seconds for item in task.shot_windows),
+            default=0.0,
+        )
+        windows_covered = (
+            not task.shot_windows
+            or media.duration_seconds + 0.05 >= required_window_end
+        )
+        technical_passed = (
+            aspect_ok
+            and resolution_ok
+            and duration_ok
+            and windows_covered
+            and media.audio_present
+        )
         issues: list[QaIssue] = []
         if not aspect_ok:
             issues.append(
@@ -542,6 +654,19 @@ class PersistentH3Worker:
                     message=(
                         f"Expected {task.requested_duration_seconds:.1f}s, "
                         f"got {media.duration_seconds:.2f}s"
+                    ),
+                    repair_layer="PROVIDER_RETRY",
+                    category=QaFailureCategory.TECHNICAL_MEDIA,
+                )
+            )
+        if not windows_covered:
+            issues.append(
+                QaIssue(
+                    code="H3_SHOT_WINDOWS_TRUNCATED",
+                    severity="ERROR",
+                    message=(
+                        f"Generated media ends at {media.duration_seconds:.2f}s but the "
+                        f"last editorial shot window ends at {required_window_end:.2f}s"
                     ),
                     repair_layer="PROVIDER_RETRY",
                     category=QaFailureCategory.TECHNICAL_MEDIA,
@@ -585,6 +710,14 @@ class PersistentH3Worker:
             provider=task.provider,
             model=task.model,
             route=task.route,
+            storyboard_document_id=task.storyboard_document_id,
+            storyboard_version_id=task.storyboard_version_id,
+            generation_plan_document_id=task.generation_plan_document_id,
+            generation_plan_version_id=task.generation_plan_version_id,
+            generation_unit_id=task.generation_unit_id,
+            clip_group_id=task.clip_group_id,
+            output_slot_id=task.output_slot_id,
+            shot_windows=[item.model_copy(deep=True) for item in task.shot_windows],
             media_path=str(media.media_path.resolve()),
             thumbnail_path=str(media.thumbnail_path.resolve()),
             duration_seconds=media.duration_seconds,

@@ -7,6 +7,7 @@ file without changing current project or provider-task migrations.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from collections.abc import Iterator, Sequence
@@ -21,6 +22,7 @@ from short_drama.agent_runtime.models import (
     AgentResultStatus,
     AgentRun,
     AgentRunStatus,
+    ArtifactRef,
     DecisionMemory,
     DelegationStatus,
     ExperienceMemory,
@@ -28,6 +30,7 @@ from short_drama.agent_runtime.models import (
     ProjectMemory,
     RunMemory,
     WorkOrder,
+    WorkOrderProgressEntry,
     utc_now,
 )
 
@@ -155,6 +158,18 @@ class AgentRuntimeStore:
                     created_at TEXT NOT NULL,
                     record_json TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS agent_work_order_progress (
+                    id TEXT PRIMARY KEY,
+                    work_order_id TEXT NOT NULL
+                        REFERENCES agent_work_orders(id) ON DELETE CASCADE,
+                    sequence INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    UNIQUE(work_order_id, sequence)
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_work_order_progress_order
+                    ON agent_work_order_progress(work_order_id, sequence ASC);
                 """
             )
 
@@ -447,6 +462,16 @@ class AgentRuntimeStore:
                 ),
             )
 
+    def get_decision(self, decision_id: str) -> DecisionMemory | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM agent_decisions WHERE id = ?",
+                (decision_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return DecisionMemory.model_validate_json(cast(str, row["record_json"]))
+
     def list_decisions(
         self,
         project_id: str,
@@ -590,7 +615,7 @@ class AgentRuntimeStore:
             ).fetchone()
         if row is None:
             return None
-        return WorkOrder.model_validate_json(cast(str, row["record_json"]))
+        return self._load_work_order(cast(str, row["record_json"]))
 
     def list_work_orders(
         self,
@@ -613,7 +638,35 @@ class AgentRuntimeStore:
                 """,
                 values,
             ).fetchall()
-        return [WorkOrder.model_validate_json(cast(str, row["record_json"])) for row in rows]
+        return [self._load_work_order(cast(str, row["record_json"])) for row in rows]
+
+    def _load_work_order(self, serialized: str) -> WorkOrder:
+        payload = json.loads(serialized)
+        legacy_next_owner_missing = (
+            isinstance(payload, dict) and "next_owner" not in payload
+        )
+        return self._restore_result_next_owner(
+            WorkOrder.model_validate(payload),
+            legacy_next_owner_missing=legacy_next_owner_missing,
+        )
+
+    def _restore_result_next_owner(
+        self,
+        work_order: WorkOrder,
+        *,
+        legacy_next_owner_missing: bool,
+    ) -> WorkOrder:
+        """Prefer the persisted partial result when migrating legacy WorkOrders."""
+
+        if (
+            not legacy_next_owner_missing
+            or work_order.status != DelegationStatus.NEEDS_ATTENTION
+        ):
+            return work_order
+        result = self.get_agent_result(work_order.id)
+        if result is not None and result.status == AgentResultStatus.PARTIAL:
+            work_order.next_owner = result.next_owner
+        return work_order
 
     def save_agent_result(self, result: AgentResult) -> WorkOrder:
         """Save a specialist result and update its work order in one transaction."""
@@ -626,13 +679,17 @@ class AgentRuntimeStore:
             if row is None:
                 raise KeyError(f"Unknown work order: {result.work_order_id}")
             work_order = WorkOrder.model_validate_json(cast(str, row["record_json"]))
-            if result.status == AgentResultStatus.COMPLETED:
-                work_order.status = DelegationStatus.COMPLETED
-            elif result.status == AgentResultStatus.PARTIAL:
-                work_order.status = DelegationStatus.NEEDS_ATTENTION
-            else:
-                work_order.status = DelegationStatus.FAILED
-            work_order.updated_at = utc_now()
+            if not result.stale_handoff:
+                if result.status == AgentResultStatus.COMPLETED:
+                    work_order.status = DelegationStatus.COMPLETED
+                elif result.status == AgentResultStatus.PARTIAL:
+                    work_order.status = DelegationStatus.NEEDS_ATTENTION
+                    work_order.next_owner = result.next_owner
+                else:
+                    work_order.status = DelegationStatus.FAILED
+                if result.status != AgentResultStatus.PARTIAL:
+                    work_order.next_owner = None
+                work_order.updated_at = utc_now()
 
             connection.execute(
                 """
@@ -674,3 +731,74 @@ class AgentRuntimeStore:
         if row is None:
             return None
         return AgentResult.model_validate_json(cast(str, row["record_json"]))
+
+    def append_work_order_progress(
+        self,
+        *,
+        entry_id: str,
+        work_order_id: str,
+        author: str,
+        summary: str,
+        artifact_refs: Sequence[ArtifactRef],
+        created_at: datetime,
+    ) -> WorkOrderProgressEntry:
+        """Append one progress event and assign its per-WorkOrder sequence."""
+
+        with self._lock, self._connection() as connection:
+            work_order = connection.execute(
+                "SELECT 1 FROM agent_work_orders WHERE id = ?",
+                (work_order_id,),
+            ).fetchone()
+            if work_order is None:
+                raise KeyError(f"Unknown work order: {work_order_id}")
+            row = connection.execute(
+                """
+                SELECT MAX(sequence) AS latest
+                FROM agent_work_order_progress
+                WHERE work_order_id = ?
+                """,
+                (work_order_id,),
+            ).fetchone()
+            latest_value = None if row is None else row["latest"]
+            latest = 0 if latest_value is None else cast(int, latest_value)
+            entry = WorkOrderProgressEntry(
+                id=entry_id,
+                work_order_id=work_order_id,
+                sequence=latest + 1,
+                author=author,
+                summary=summary,
+                artifact_refs=list(artifact_refs),
+                created_at=created_at,
+            )
+            connection.execute(
+                """
+                INSERT INTO agent_work_order_progress(
+                    id, work_order_id, sequence, created_at, record_json
+                ) VALUES(?, ?, ?, ?, ?)
+                """,
+                (
+                    entry.id,
+                    entry.work_order_id,
+                    entry.sequence,
+                    _timestamp(entry.created_at),
+                    entry.model_dump_json(),
+                ),
+            )
+        return entry
+
+    def list_work_order_progress(
+        self,
+        work_order_id: str,
+    ) -> list[WorkOrderProgressEntry]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_json FROM agent_work_order_progress
+                WHERE work_order_id = ? ORDER BY sequence ASC
+                """,
+                (work_order_id,),
+            ).fetchall()
+        return [
+            WorkOrderProgressEntry.model_validate_json(cast(str, row["record_json"]))
+            for row in rows
+        ]

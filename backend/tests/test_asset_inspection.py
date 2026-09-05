@@ -13,6 +13,8 @@ from short_drama.asset_inspection import (
     inspect_asset_image,
 )
 from short_drama.fixture import build_dont_trust_me_fixture
+from short_drama.image_models import AssetImportLocalRequest
+from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     ApprovalStatus,
     AssetKind,
@@ -26,6 +28,8 @@ from short_drama.models import (
     ShotReferenceCue,
     ShotTimelineBeat,
 )
+from short_drama.service import ShortDramaService
+from short_drama.tools import ToolCallStatus
 
 
 class CapturingLanguageClient:
@@ -88,7 +92,7 @@ def test_prop_reference_prompt_excludes_full_people_and_story_context(tmp_path) 
     assert "不得为了丰富画面凭空增加部件" in prompt
     assert "不生成乱码或可读正文" in prompt
     assert "视觉色彩与材质" not in prompt
-    assert "当前制片技能：AI 原生短剧。" in prompt
+    assert "当前制片技能：AI 短剧（本地格式适配）。" in prompt
     assert "资产审核的通用职责：" in prompt
     assert "类型创作原则：" not in prompt
 
@@ -119,7 +123,7 @@ def test_prop_reference_prompt_excludes_full_people_and_story_context(tmp_path) 
     assert "画面美观不能抵消" in client.instructions
     assert "若 ShotPlan 显式把演员、手、道具或状态" in client.instructions
     assert "其缺席就是符合要求的证据" in client.instructions
-    assert "当前制片技能：AI 原生短剧。" in client.instructions
+    assert "当前制片技能：AI 短剧（本地格式适配）。" in client.instructions
     assert "资产审核的通用职责：" in client.instructions
     assert "类型创作原则：" not in client.instructions
 
@@ -476,3 +480,62 @@ def test_asset_review_compares_candidate_with_approved_canonical_images(tmp_path
         },
     ]
     assert "Image 1 始终是待审核候选" in client.instructions
+
+
+def test_asset_version_semantic_inspection_is_agent_callable_before_review(
+    tmp_path: Path,
+) -> None:
+    language = CapturingLanguageClient()
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _api_key, _base_url: language,
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    project = service.initialize_fixture()
+    asset = next(
+        item for item in project.document.assets if item.kind == AssetKind.CHARACTER
+    )
+    candidate_path = tmp_path / "agent-inspection-candidate.png"
+    Image.new("RGB", (64, 96), (112, 92, 80)).save(candidate_path)
+    imported = service.import_local_asset_version(
+        project.document.project.id,
+        asset.id,
+        AssetImportLocalRequest(
+            local_path=str(candidate_path),
+            descriptor="待 Agent 观察的角色正面候选",
+        ),
+    )
+
+    result = service.tool_registry.invoke(
+        "qa.inspect_asset_version",
+        {
+            "project_id": project.document.project.id,
+            "asset_id": asset.id,
+            "version_id": imported.version.id,
+            "request": {
+                "canonical_reference_version_ids": [],
+            },
+        },
+    )
+
+    assert result.status == ToolCallStatus.SUCCEEDED
+    assert result.output == {
+        "recommended": True,
+        "score": 4.5,
+        "issues": [],
+        "summary": "The prop is coherent across the reference views.",
+    }
+    assert {item.artifact_type for item in result.artifact_refs} == {
+        "asset",
+        "asset_version",
+    }
+    assert len(language.image_urls) == 1
+    current = service.get_project(project.document.project.id)
+    current_asset = next(item for item in current.document.assets if item.id == asset.id)
+    current_version = next(
+        item for item in current_asset.versions if item.id == imported.version.id
+    )
+    assert current_version.approval_status == ApprovalStatus.DRAFT
