@@ -8,8 +8,17 @@ import pytest
 
 from short_drama.models import (
     ContentPlanningOutput,
+    DurationAlignment,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationMismatchResolution,
+    DurationRange,
+    DurationTargetOrigin,
+    ProductionDocumentArtifactRef,
     ProductionDocumentOrigin,
     ProjectStage,
+    ScriptRevisionOrigin,
 )
 from short_drama.production_contracts import (
     ClipGroup,
@@ -17,6 +26,7 @@ from short_drama.production_contracts import (
     ProductionProviderPreference,
     ProductionSpecContent,
     ProductionSpecCreateRequest,
+    ProductionSpecReplaceRequest,
     ProductionVisualDirection,
     StoryboardClipGroupOutline,
     StoryboardClipGroupDraft,
@@ -375,6 +385,304 @@ def _append_all_groups(
         current_version_id = response.progress.draft_version_id
     assert last_progress is not None
     return last_progress
+
+
+def test_target_led_duration_conflict_returns_to_script_revision_with_exact_evidence(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    document, script, initial_spec, dialogue_shots = _prepare_script_only_project(
+        service
+    )
+    target_seconds = 120.0
+    duration_contract = DurationContract(
+        target_seconds=target_seconds,
+        target_origin=DurationTargetOrigin.USER_DECLARED,
+        authority=DurationAuthority.TARGET_LED,
+        acceptable_range_seconds=DurationRange(
+            minimum_seconds=115.0,
+            maximum_seconds=125.0,
+        ),
+        source_fidelity_policy=DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS,
+        mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        decision_basis="用户明确要求成片约两分钟。",
+    )
+    target_spec = service.replace_production_spec(
+        document.project.id,
+        ProductionSpecReplaceRequest(
+            base_version_id=initial_spec.version.id,
+            spec=initial_spec.spec.model_copy(
+                update={
+                    "target_duration_seconds": target_seconds,
+                    "duration_intent": "以 120 秒为制片目标。",
+                    "duration_contract": duration_contract,
+                },
+                deep=True,
+            ),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    draft = _draft(
+        document,
+        script,
+        target_spec,
+        dialogue_shots=dialogue_shots,
+    )
+    assert draft.timing_audit is not None
+    natural_duration = draft.timing_audit.computed_episode_duration_s
+    correct_audit = draft.timing_audit.model_copy(
+        update={
+            "target_duration_s": target_seconds,
+            "alignment": DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+            "difference_seconds": natural_duration - target_seconds,
+        },
+        deep=True,
+    )
+    begun = service.begin_storyboard_draft(
+        document.project.id,
+        StoryboardDraftBeginRequest(
+            seed=_seed_from_draft(draft),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    ledger = service.append_storyboard_ledger_segment(
+        document.project.id,
+        StoryboardDraftLedgerSegmentAppendRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=begun.draft_version_id,
+            entries=draft.timing_ledger,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    ledger_complete = service.complete_storyboard_ledger(
+        document.project.id,
+        StoryboardDraftLedgerCompleteRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=ledger.draft_version_id,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    outline = service.append_storyboard_outline_segment(
+        document.project.id,
+        StoryboardDraftOutlineSegmentAppendRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=ledger_complete.draft_version_id,
+            groups=draft.planned_clip_groups,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+
+    with pytest.raises(WorkflowConflictError, match="alignment"):
+        service.complete_storyboard_outline(
+            document.project.id,
+            StoryboardDraftOutlineCompleteRequest(
+                draft_document_id=begun.draft_ref.artifact_id,
+                base_version_id=outline.draft_version_id,
+                timing_audit=correct_audit.model_copy(
+                    update={"alignment": DurationAlignment.ALIGNED}
+                ),
+                origin=ProductionDocumentOrigin.AGENT,
+            ),
+        )
+
+    reconciliation = service.complete_storyboard_outline(
+        document.project.id,
+        StoryboardDraftOutlineCompleteRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=outline.draft_version_id,
+            timing_audit=correct_audit,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    assert reconciliation.phase == StoryboardDraftPhase.DURATION_RECONCILIATION
+    assert reconciliation.total_planned_duration_seconds == natural_duration
+
+    with pytest.raises(WorkflowConflictError, match="duration reconciliation"):
+        _append_all_groups(
+            service,
+            document=document,
+            script=script,
+            dialogue_shots=dialogue_shots,
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=reconciliation.draft_version_id,
+        )
+    with pytest.raises(WorkflowConflictError, match="duration reconciliation"):
+        service.record_storyboard_draft_verification(
+            document.project.id,
+            StoryboardDraftVerificationRequest(
+                draft_document_id=begun.draft_ref.artifact_id,
+                base_version_id=reconciliation.draft_version_id,
+                report=StoryboardDraftVerificationReport(
+                    status=StoryboardDraftVerificationStatus.READY,
+                    summary="不应在时长冲突状态接受。",
+                    checked_clip_group_ids=[draft.planned_clip_groups[0].id],
+                ),
+                origin=ProductionDocumentOrigin.AGENT,
+            ),
+        )
+    with pytest.raises(WorkflowConflictError, match="duration reconciliation"):
+        service.finalize_storyboard(
+            document.project.id,
+            StoryboardDraftFinalizeRequest(
+                draft_document_id=begun.draft_ref.artifact_id,
+                draft_version_id=reconciliation.draft_version_id,
+                origin=ProductionDocumentOrigin.AGENT,
+            ),
+        )
+
+    current = service.get_project(document.project.id).document
+    current_script = next(
+        item
+        for item in current.script_versions
+        if item.id == current.project.current_script_version_id
+    )
+    prior_overrides = (
+        []
+        if current_script.source_contract is None
+        else list(current_script.source_contract.authoritative_user_overrides)
+    )
+    evidence_refs = [
+        ProductionDocumentArtifactRef(
+            project_id=document.project.id,
+            artifact_type="script_version",
+            artifact_id=current_script.id,
+            version=current_script.version,
+        ),
+        ProductionDocumentArtifactRef(
+            project_id=document.project.id,
+            artifact_type="production_spec",
+            artifact_id=target_spec.document.id,
+            version=target_spec.version.version,
+        ),
+        reconciliation.draft_ref,
+    ]
+    revision = service.start_script_revision(
+        document.project.id,
+        owner_agent_run_id="agent-run-duration-reconciliation",
+        instruction="保留剧情承诺，重新收敛事件密度以符合制片时长契约。",
+        base_script_version_id=current_script.id,
+        revision_origin=ScriptRevisionOrigin.PRODUCTION_CONSTRAINT,
+        evidence_refs=evidence_refs,
+    ).run
+    assert revision.revision_origin == ScriptRevisionOrigin.PRODUCTION_CONSTRAINT
+    assert revision.revision_evidence_refs == evidence_refs
+    assert revision.source_contract is not None
+    assert revision.source_contract.authoritative_user_overrides == prior_overrides
+    assert revision.review_report is not None
+    assert revision.review_report.issues[0].category == "DURATION_CONTRACT"
+    assert revision.issue_ledger[0].semantic_cluster == (
+        "duration-contract-reconciliation"
+    )
+
+
+def test_target_led_duration_without_an_accepted_range_remains_unresolved(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    document, script, spec, dialogue_shots = _prepare_script_only_project(service)
+    contract = DurationContract(
+        target_seconds=90.0,
+        target_origin=DurationTargetOrigin.USER_DECLARED,
+        authority=DurationAuthority.TARGET_LED,
+        acceptable_range_seconds=None,
+        source_fidelity_policy=DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS,
+        mismatch_resolution=DurationMismatchResolution.ASK_USER,
+        decision_basis="只有目标，尚未声明可接受范围。",
+    )
+    unresolved_spec = spec.spec.model_copy(
+        update={
+            "target_duration_seconds": 90.0,
+            "duration_contract": contract,
+        },
+        deep=True,
+    )
+
+    alignment, difference = service._storyboard_duration_alignment(
+        unresolved_spec,
+        72.0,
+    )
+
+    assert alignment == DurationAlignment.UNRESOLVED
+    assert difference == -18.0
+    assert document.project.id == script.project_id
+
+    target_spec = service.replace_production_spec(
+        document.project.id,
+        ProductionSpecReplaceRequest(
+            base_version_id=spec.version.id,
+            spec=unresolved_spec,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    draft = _draft(
+        document,
+        script,
+        target_spec,
+        dialogue_shots=dialogue_shots,
+    )
+    assert draft.timing_audit is not None
+    natural_duration = draft.timing_audit.computed_episode_duration_s
+    unresolved_audit = draft.timing_audit.model_copy(
+        update={
+            "target_duration_s": contract.target_seconds,
+            "alignment": DurationAlignment.UNRESOLVED,
+            "difference_seconds": natural_duration - 90.0,
+        },
+        deep=True,
+    )
+    begun = service.begin_storyboard_draft(
+        document.project.id,
+        StoryboardDraftBeginRequest(
+            seed=_seed_from_draft(draft),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    ledger = service.append_storyboard_ledger_segment(
+        document.project.id,
+        StoryboardDraftLedgerSegmentAppendRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=begun.draft_version_id,
+            entries=draft.timing_ledger,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    ledger_complete = service.complete_storyboard_ledger(
+        document.project.id,
+        StoryboardDraftLedgerCompleteRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=ledger.draft_version_id,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    outline = service.append_storyboard_outline_segment(
+        document.project.id,
+        StoryboardDraftOutlineSegmentAppendRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=ledger_complete.draft_version_id,
+            groups=draft.planned_clip_groups,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+    reconciliation = service.complete_storyboard_outline(
+        document.project.id,
+        StoryboardDraftOutlineCompleteRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=outline.draft_version_id,
+            timing_audit=unresolved_audit,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    ).progress
+
+    assert reconciliation.phase == StoryboardDraftPhase.DURATION_RECONCILIATION
+    assert reconciliation.total_planned_duration_seconds == natural_duration
+    persisted = service.get_production_document(
+        document.project.id,
+        reconciliation.draft_ref.artifact_id,
+        version_id=reconciliation.draft_version_id,
+    )
+    reconciled = StoryboardDraftContent.model_validate(persisted.version.payload)
+    assert reconciled.timing_audit is not None
+    assert reconciled.timing_audit.alignment == DurationAlignment.UNRESOLVED
 
 
 def test_incremental_draft_persists_progress_without_publishing_until_finalize(

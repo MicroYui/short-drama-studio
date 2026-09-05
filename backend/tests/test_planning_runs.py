@@ -17,6 +17,12 @@ from short_drama.models import (
     ContinuationPreference,
     CreateProjectRequest,
     CreativeInputImage,
+    DurationAlignment,
+    DurationAuthority,
+    DurationFitAssessment,
+    DurationMismatchResolution,
+    DurationRange,
+    DurationTargetOrigin,
     EndingContract,
     PlanningRunRecord,
     PlanningRunStatus,
@@ -48,6 +54,8 @@ from short_drama.models import (
     StorySourceContract,
     StoryRevisionVerification,
     StoryRevisionViolation,
+    StoryVerificationResolutionDecision,
+    StoryVerificationSource,
 )
 from short_drama.production_planner import (
     EpisodeOutline,
@@ -60,6 +68,7 @@ from short_drama.production_planner import (
     SceneShotPlan,
     StoryOrientation,
     ProductionMethodSelection,
+    _fallback_duration_contract,
 )
 from short_drama.providers.language_config import LanguageProviderConfigUpdate
 from short_drama.providers.openai_compatible_language_client import (
@@ -74,6 +83,40 @@ from short_drama.script_documents import (
     scene_dialogue_lines,
 )
 from short_drama.hierarchical_script import compose_scene_screenplay
+
+
+def _aligned_duration_fit_assessment(
+    request: CreateProjectRequest,
+) -> DurationFitAssessment:
+    target = request.resolved_target_duration_seconds()
+    return DurationFitAssessment(
+        estimated_range_seconds=DurationRange(
+            minimum_seconds=target,
+            maximum_seconds=target,
+        ),
+        alignment=DurationAlignment.ALIGNED,
+        pressure_points=[],
+        concurrent_performance=[],
+        resolution=_fallback_duration_contract(request).mismatch_resolution,
+        rationale="测试 Verifier 已语义确认当前剧本尺度与时长意图对齐。",
+    )
+
+
+def _outside_duration_fit_assessment(
+    request: CreateProjectRequest,
+) -> DurationFitAssessment:
+    target = request.resolved_target_duration_seconds()
+    return DurationFitAssessment(
+        estimated_range_seconds=DurationRange(
+            minimum_seconds=target + 20,
+            maximum_seconds=target + 40,
+        ),
+        alignment=DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+        pressure_points=["中段两次规则解释挤压了动作节奏"],
+        concurrent_performance=["群演反应可与主角动作并行"],
+        resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        rationale="完整冷读后，自然表演时长超出当前契约范围。",
+    )
 
 
 def _staged_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
@@ -298,6 +341,7 @@ class StagedLanguageClient:
                     tone_and_plausibility="保持图形化悬疑调性，服从剧内证据规则。",
                     protected_elements=list(source_contract.explicit_commitments),
                     drift_risks=["避免把证据核对写成无关说明"],
+                    duration_contract=_fallback_duration_contract(self.request),
                 ),
                 selected_narrative_skills=[],
                 narrative_skill_decision=(
@@ -372,6 +416,9 @@ class StagedLanguageClient:
                 ],
                 performance_timing_assessment=(
                     "自然通读对白、动作与停顿后，目标时长可承载当前文本。"
+                ),
+                duration_fit_assessment=_aligned_duration_fit_assessment(
+                    self.request
                 ),
                 requires_revision=requires_revision,
             ).model_dump_json()
@@ -462,6 +509,9 @@ class StagedLanguageClient:
                 satisfied_issue_ids=required_ids,
                 satisfied_issue_indices=required_indices,
                 violations=[],
+                duration_fit_assessment=_aligned_duration_fit_assessment(
+                    self.request
+                ),
                 followup_rationale=(
                     "各场对白、动作、停顿与反应按顺序演读后，"
                     "全剧可在目标时长中自然完成。"
@@ -899,6 +949,9 @@ class AdvisoryStoryReviewClient(StagedLanguageClient):
                 performance_timing_assessment=(
                     "自然通读完整剧本后，现有内容无需依靠赶词完成。"
                 ),
+                duration_fit_assessment=_aligned_duration_fit_assessment(
+                    self.request
+                ),
                 requires_revision=False,
             ).model_dump_json()
         if "You are the Review Router Agent inside" in instructions:
@@ -1004,18 +1057,28 @@ class RevisionRegressionClient(StagedLanguageClient):
                             repair_instruction="统一断线发生时间并保留已成立的供电链。",
                         )
                     ],
+                    duration_fit_assessment=_aligned_duration_fit_assessment(
+                        self.request
+                    ),
                 ).model_dump_json()
             return StoryRevisionVerification(
                 accepted=True,
                 summary="定向修复后供电状态一致。",
-                satisfied_issue_ids=[
-                    action["issue_id"]
-                    for action in payload["story_repair_plan"]["actions"]
-                    if action["should_revise"]
-                ]
-                + ["RESOURCE-STATE-REGRESSION"],
+                satisfied_issue_ids=list(
+                    dict.fromkeys(
+                        [
+                            action["issue_id"]
+                            for action in payload["story_repair_plan"]["actions"]
+                            if action["should_revise"]
+                        ]
+                        + ["RESOURCE-STATE-REGRESSION"]
+                    )
+                ),
                 satisfied_issue_indices=required,
                 violations=[],
+                duration_fit_assessment=_aligned_duration_fit_assessment(
+                    self.request
+                ),
             ).model_dump_json()
         return super().generate_text(
             instructions=instructions,
@@ -1053,15 +1116,23 @@ class RepeatedRevisionRegressionClient(StagedLanguageClient):
                 if action["should_revise"]
             ]
             if self.revision_verifier_calls <= self.rejections_before_acceptance:
+                satisfied_ids = [
+                    action["issue_id"]
+                    for action in payload["story_repair_plan"]["actions"]
+                    if action["should_revise"]
+                    and action["issue_id"] != "RESOURCE-STATE-REGRESSION"
+                ]
+                satisfied_indices = [
+                    action["issue_index"]
+                    for action in payload["story_repair_plan"]["actions"]
+                    if action["should_revise"]
+                    and action["issue_id"] != "RESOURCE-STATE-REGRESSION"
+                ]
                 return StoryRevisionVerification(
                     accepted=False,
                     summary="Writer 修订仍有一处供电时序回归。",
-                    satisfied_issue_ids=[
-                        action["issue_id"]
-                        for action in payload["story_repair_plan"]["actions"]
-                        if action["should_revise"]
-                    ],
-                    satisfied_issue_indices=required,
+                    satisfied_issue_ids=satisfied_ids,
+                    satisfied_issue_indices=satisfied_indices,
                     violations=[
                         StoryRevisionViolation(
                             issue_id="RESOURCE-STATE-REGRESSION",
@@ -1071,18 +1142,28 @@ class RepeatedRevisionRegressionClient(StagedLanguageClient):
                             repair_instruction="继续只修正第 1 场的时序描述。",
                         )
                     ],
+                    duration_fit_assessment=_aligned_duration_fit_assessment(
+                        self.request
+                    ),
                 ).model_dump_json()
             return StoryRevisionVerification(
                 accepted=True,
                 summary="多轮定向修复后供电时序一致。",
-                satisfied_issue_ids=[
-                    action["issue_id"]
-                    for action in payload["story_repair_plan"]["actions"]
-                    if action["should_revise"]
-                ]
-                + ["RESOURCE-STATE-REGRESSION"],
+                satisfied_issue_ids=list(
+                    dict.fromkeys(
+                        [
+                            action["issue_id"]
+                            for action in payload["story_repair_plan"]["actions"]
+                            if action["should_revise"]
+                        ]
+                        + ["RESOURCE-STATE-REGRESSION"]
+                    )
+                ),
                 satisfied_issue_indices=required,
                 violations=[],
+                duration_fit_assessment=_aligned_duration_fit_assessment(
+                    self.request
+                ),
             ).model_dump_json()
         return super().generate_text(
             instructions=instructions,
@@ -1172,6 +1253,31 @@ class VerifierDurationReallocationClient(StagedLanguageClient):
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
+        if "Leader 的返修分派步骤" in instructions:
+            output = super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+            plan = StoryRepairPlan.model_validate_json(output)
+            if any(
+                action.issue_id == "SCENE-DURATION-REALLOCATION"
+                for action in plan.actions
+            ):
+                plan.actions = [
+                    action.model_copy(
+                        update={
+                            "affected_scene_sequences": [
+                                1,
+                                len(self.outline.scenes),
+                            ],
+                            "target_duration_change_required": True,
+                        }
+                    )
+                    for action in plan.actions
+                ]
+            return plan.model_dump_json()
         if "story-revision verifier Agent" in instructions:
             if not self.rejected_duration_once:
                 self.rejected_duration_once = True
@@ -1203,6 +1309,9 @@ class VerifierDurationReallocationClient(StagedLanguageClient):
                             ),
                         )
                     ],
+                    duration_fit_assessment=_aligned_duration_fit_assessment(
+                        self.request
+                    ),
                 ).model_dump_json()
             return super().generate_text(
                 instructions=instructions,
@@ -1453,11 +1562,43 @@ def _start_owned_planning(
     return service.get_planning_run(project.document.planning.run_id)
 
 
+def _continue_verifier_handoff_for_test(
+    service: ShortDramaService,
+    response,
+):
+    """Act as the owning Leader in tests that are exercising later stages."""
+
+    run = response.run
+    if run.status != PlanningRunStatus.NEEDS_ATTENTION:
+        return response
+    if run.current_step not in {
+        PlanningRunStep.SCRIPT_VERIFIER,
+        PlanningRunStep.SCRIPT_CRITIC,
+        PlanningRunStep.REVISION_VERIFIER,
+    }:
+        return response
+    return service.resolve_story_verification(
+        run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION,
+        rationale=(
+            "测试正在验证后续修订链路；模拟所属 AgentRun Leader "
+            "阅读精确 Verifier 结果后选择聚焦修订。"
+        ),
+    )
+
+
 def _finish(service: ShortDramaService, run_id: str, *, max_steps: int = 80):
     response = service.get_planning_run(run_id)
     for _ in range(max_steps):
         if response.run.status == PlanningRunStatus.COMPLETE:
             return response
+        continued = _continue_verifier_handoff_for_test(service, response)
+        if continued is not response:
+            response = continued
+            if response.run.status == PlanningRunStatus.COMPLETE:
+                return response
         response = service.advance_planning_run(run_id)
     raise AssertionError("planning run did not finish within the test bound")
 
@@ -1473,8 +1614,62 @@ def _advance_to_step(
     for _ in range(max_steps):
         if response.run.current_step == step:
             return response
+        continued = _continue_verifier_handoff_for_test(service, response)
+        if continued is not response:
+            response = continued
+            if response.run.current_step == step:
+                return response
         response = service.advance_planning_run(run_id)
     raise AssertionError(f"planning run did not reach {step} within the test bound")
+
+
+def _replace_duration_authority_for_test(
+    service: ShortDramaService,
+    response,
+    authority: DurationAuthority,
+):
+    assert response.project is not None
+    run = response.run.model_copy(deep=True)
+    assert run.story_intent is not None
+    contract = run.story_intent.duration_contract
+    assert contract is not None
+    contract_updates: dict[str, object] = {"authority": authority}
+    if authority == DurationAuthority.SOURCE_LED:
+        contract_updates.update(
+            {
+                "target_origin": DurationTargetOrigin.SOURCE_DECLARED,
+                "mismatch_resolution": (
+                    DurationMismatchResolution.REPORT_NATURAL_RUNTIME
+                ),
+            }
+        )
+    elif authority == DurationAuthority.AUDIO_LED:
+        contract_updates.update(
+            {
+                "target_origin": DurationTargetOrigin.MASTER_AUDIO,
+                "mismatch_resolution": DurationMismatchResolution.FOLLOW_MASTER_AUDIO,
+            }
+        )
+    revised_intent = run.story_intent.model_copy(
+        deep=True,
+        update={
+            "duration_contract": contract.model_copy(
+                deep=True,
+                update=contract_updates,
+            )
+        },
+    )
+    outline = EpisodeOutline.model_validate_json(run.outline_json or "")
+    run.story_intent = revised_intent
+    run.outline_json = outline.model_copy(
+        deep=True,
+        update={"story_intent": revised_intent},
+    ).model_dump_json()
+    service.repository.save_planning_run_with_project(
+        run,
+        response.project.document,
+    )
+    return service.get_planning_run(run.id)
 
 
 def test_legacy_critic_final_cold_read_followup_is_not_dispatched(
@@ -2179,23 +2374,35 @@ def test_planning_run_persists_revision_and_scene_progress_across_restart(
     assert len(restored_writer.run.scene_script_json) == 1
     _advance_to_step(restarted_writer, run.id, PlanningRunStep.SCRIPT_VERIFIER)
     after_critic = restarted_writer.advance_planning_run(run.id)
-    assert after_critic.run.current_step == PlanningRunStep.STORY_REVISION
+    assert after_critic.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert after_critic.run.current_step == PlanningRunStep.SCRIPT_VERIFIER
     assert after_critic.run.review_report is not None
-    assert after_critic.run.review_disposition is not None
+    assert after_critic.run.review_report.requires_revision is True
+    assert after_critic.run.review_disposition is None
     assert after_critic.run.source_contract is not None
     assert language.review_router_calls == 0
 
     restarted_after_critic = _service(tmp_path, language)
     restored_critic = restarted_after_critic.get_planning_run(run.id).run
-    assert restored_critic.current_step == PlanningRunStep.STORY_REVISION
+    assert restored_critic.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert restored_critic.current_step == PlanningRunStep.SCRIPT_VERIFIER
     assert restored_critic.review_report == after_critic.run.review_report
-    assert restored_critic.review_disposition == after_critic.run.review_disposition
+    assert restored_critic.review_disposition is None
+    resolved = restarted_after_critic.resolve_story_verification(
+        after_critic.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION,
+        rationale="精确因果问题适合由 Repair Leader 重新规划最小修订范围。",
+    )
+    assert resolved.run.current_step == PlanningRunStep.STORY_REVISION
+    assert resolved.run.review_disposition is not None
     review_snapshots = (
         restarted_after_critic.repository.list_planning_review_snapshots(run.id)
     )
     assert len(review_snapshots) == 1
-    assert review_snapshots[0].report == after_critic.run.review_report
-    assert review_snapshots[0].disposition == after_critic.run.review_disposition
+    assert review_snapshots[0].report == resolved.run.review_report
+    assert review_snapshots[0].disposition == resolved.run.review_disposition
     assert language.review_router_calls == 0
 
     after_repair_plan = restarted_after_critic.advance_planning_run(run.id)
@@ -2526,14 +2733,21 @@ def test_provider_backed_planning_stage_failure_retries_the_same_cursor(
 
     succeeded = restarted.advance_planning_run(run.id)
 
-    assert succeeded.run.status == PlanningRunStatus.RUNNING
-    assert succeeded.run.current_step != step
     assert succeeded.run.step_retry_count == 0
     assert succeeded.run.step_retry_feedback is None
     assert succeeded.run.step_retry_events == failed.run.step_retry_events
-    if step == PlanningRunStep.SCRIPT_CRITIC:
-        assert PlanningRunStep.SCRIPT_CRITIC in succeeded.run.completed_steps
-        assert PlanningRunStep.SCRIPT_VERIFIER not in succeeded.run.completed_steps
+    if step in {
+        PlanningRunStep.SCRIPT_VERIFIER,
+        PlanningRunStep.SCRIPT_CRITIC,
+    }:
+        assert succeeded.run.status == PlanningRunStatus.NEEDS_ATTENTION
+        assert succeeded.run.current_step == step
+        assert succeeded.run.review_report is not None
+        assert succeeded.run.review_report.requires_revision is True
+        assert step not in succeeded.run.completed_steps
+    else:
+        assert succeeded.run.status == PlanningRunStatus.RUNNING
+        assert succeeded.run.current_step != step
 
 
 @pytest.mark.parametrize("failure_mode", ["timeout", "structure"])
@@ -2729,18 +2943,48 @@ def test_verifier_duration_reallocation_permission_survives_restart(
     run = _start_owned_planning(service, request).run
     ready = _advance_to_step(service, run.id, PlanningRunStep.REVISION_VERIFIER)
     initial_outline = EpisodeOutline.model_validate_json(ready.run.outline_json or "")
+    prior_queue = list(ready.run.revision_scene_sequences)
+    prior_cursor = ready.run.next_revision_scene_index
 
     rejected = service.advance_planning_run(run.id)
 
-    assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
+    assert rejected.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert rejected.run.current_step == PlanningRunStep.REVISION_VERIFIER
     assert rejected.run.latest_revision_verification is not None
     assert rejected.run.latest_revision_verification.accepted is False
     assert rejected.run.latest_revision_verification.violations[
         0
     ].target_duration_change_required is True
-    assert rejected.run.revision_scene_sequences == [1, len(language.outline.scenes)]
+    assert rejected.run.revision_scene_sequences == prior_queue
+    assert rejected.run.next_revision_scene_index == prior_cursor
+
+    blocked = service.advance_planning_run(run.id)
+    assert blocked.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert blocked.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert language.revision_verifier_calls == 1
+
+    resolved = service.resolve_story_verification(
+        rejected.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=(
+            StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION
+        ),
+        rationale="时长冲突有精确场次证据，交由 Repair Leader 重新规划。",
+    )
+    assert resolved.run.current_step == PlanningRunStep.STORY_REVISION
+    assert resolved.run.story_verification_resolutions[-1].revision_verification == (
+        rejected.run.latest_revision_verification
+    )
 
     restarted = _service(tmp_path, language)
+    repair_planned = restarted.advance_planning_run(run.id)
+    assert repair_planned.run.current_step == PlanningRunStep.SCENE_REVISION
+    assert repair_planned.run.revision_scene_sequences == [
+        1,
+        len(language.outline.scenes),
+    ]
+
     first_repair = restarted.advance_planning_run(run.id)
     assert first_repair.run.current_step == PlanningRunStep.SCENE_REVISION
     assert first_repair.run.next_revision_scene_index == 1
@@ -3364,14 +3608,18 @@ def test_enhanced_verifier_drives_focused_repair_without_final_cold_read(
     )
     service = _service(tmp_path, language)
     run = _start_owned_planning(service, request).run
-    _advance_to_step(service, run.id, PlanningRunStep.REVISION_VERIFIER)
+    ready = _advance_to_step(service, run.id, PlanningRunStep.REVISION_VERIFIER)
+    prior_queue = list(ready.run.revision_scene_sequences)
+    prior_cursor = ready.run.next_revision_scene_index
 
     rejected = service.advance_planning_run(run.id)
 
-    assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
+    assert rejected.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert rejected.run.current_step == PlanningRunStep.REVISION_VERIFIER
     assert rejected.run.latest_revision_verification is not None
     assert rejected.run.latest_revision_verification.accepted is False
-    assert rejected.run.revision_scene_sequences == [len(language.outline.scenes)]
+    assert rejected.run.revision_scene_sequences == prior_queue
+    assert rejected.run.next_revision_scene_index == prior_cursor
     assert language.metadata_revision_calls == 0
     assert language.revision_scope_calls == 0
     rejected_verification = rejected.run.latest_revision_verification.model_dump(
@@ -3390,7 +3638,18 @@ def test_enhanced_verifier_drives_focused_repair_without_final_cold_read(
         for entry in rejected.run.issue_ledger
     )
 
-    response = rejected
+    resolved = service.resolve_story_verification(
+        rejected.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=(
+            StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION
+        ),
+        rationale="末场回收是可定位的剧本问题，交回 Repair Leader 选择最小范围。",
+    )
+    assert resolved.run.current_step == PlanningRunStep.STORY_REVISION
+
+    response = resolved
     for _ in range(80):
         response = service.advance_planning_run(run.id)
         if (
@@ -3401,7 +3660,6 @@ def test_enhanced_verifier_drives_focused_repair_without_final_cold_read(
     else:
         raise AssertionError("planning run did not complete focused verifier repair")
 
-    assert response.run.revision_round == 1
     assert response.run.latest_revision_verification is not None
     assert response.run.latest_revision_verification.accepted is True
     assert "ENDING-PAYOFF-RESIDUAL" in (
@@ -3411,31 +3669,23 @@ def test_enhanced_verifier_drives_focused_repair_without_final_cold_read(
     assert language.critic_calls == 1
     assert language.revision_verifier_calls == 2
     assert language.final_cold_read_calls == 0
-    assert language.repair_plan_calls == 1
+    assert language.repair_plan_calls == 2
     assert language.repair_plan_inputs[0]["prior_revision_history"] == []
     local_instruction = json.loads(
         language.local_revision_inputs[-1]["user_instruction"]
     )
-    assert local_instruction["original_repair_instruction"]["invariants"] == [
+    assert local_instruction["invariants"] == [
         "保留已经成立的悬念推进"
     ]
-    assert "仅修复 Verifier 已定位的终稿问题" in local_instruction[
-        "instruction"
-    ]
-    assert "实际可读终稿优先于旧 repair invariant" in local_instruction[
-        "instruction"
-    ]
     assert "不得替剧本辩护观众看不到的因果" in local_instruction[
-        "original_repair_instruction"
-    ]["authority_order"]
-    assert (
-        language.local_revision_inputs[-1]["previous_revision_verification"]
-        == rejected_verification
+        "authority_order"
+    ]
+    leader_handoff = json.loads(
+        language.repair_plan_inputs[-1]["previous_structural_feedback"]
     )
-    assert (
-        language.revision_verifier_inputs[-1]["previous_revision_verification"]
-        == rejected_verification
-    )
+    assert leader_handoff["story_verification_resolution"][
+        "revision_verification"
+    ] == rejected_verification
     verifier_ledger = language.revision_verifier_inputs[-1]["issue_ledger"]
     assert any(
         entry["issue_id"] == "ENDING-PAYOFF-RESIDUAL"
@@ -3490,6 +3740,9 @@ def test_filtered_story_repair_keeps_critic_issue_id_through_verifier_and_ledger
                         ),
                     ],
                     performance_timing_assessment="当前时长可承载聚焦修订。",
+                    duration_fit_assessment=_aligned_duration_fit_assessment(
+                        self.request
+                    ),
                     requires_revision=True,
                 ).model_dump_json()
             return super().generate_text(
@@ -3627,6 +3880,483 @@ def test_critic_json_structure_retries_the_same_semantic_step_without_losing_sta
     assert language.final_cold_read_calls == 0
 
 
+def test_initial_script_verifier_revision_waits_for_agent_run_leader(
+    tmp_path: Path,
+) -> None:
+    request = _request(180).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = StagedLanguageClient(request, revision_rounds_required=1)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_VERIFIER)
+
+    handed_back = service.advance_planning_run(run.id)
+
+    assert handed_back.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert handed_back.run.current_step == PlanningRunStep.SCRIPT_VERIFIER
+    assert handed_back.run.review_report is not None
+    assert handed_back.run.review_report.requires_revision is True
+    exact_report = handed_back.run.review_report.model_copy(deep=True)
+    assert handed_back.run.review_disposition is None
+    assert language.critic_calls == 1
+    assert language.repair_plan_calls == 0
+    assert language.local_revision_calls == []
+
+    blocked = service.advance_planning_run(run.id)
+    assert blocked.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert blocked.run.current_step == PlanningRunStep.SCRIPT_VERIFIER
+    assert blocked.run.review_report == exact_report
+    assert language.critic_calls == 1
+    assert language.repair_plan_calls == 0
+
+    restarted = _service(tmp_path, language)
+    persisted = restarted.get_planning_run(run.id)
+    assert persisted.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert persisted.run.review_report == exact_report
+
+    resolved = restarted.resolve_story_verification(
+        handed_back.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION,
+        rationale=(
+            "首轮 Verifier 定位了首尾因果闭环，"
+            "交给 Story Repair Leader 重新判断最小修订范围。"
+        ),
+    )
+
+    assert resolved.run.status == PlanningRunStatus.RUNNING
+    assert resolved.run.current_step == PlanningRunStep.STORY_REVISION
+    assert resolved.run.review_disposition is not None
+    resolution = resolved.run.story_verification_resolutions[-1]
+    assert resolution.source == StoryVerificationSource.SCRIPT_VERIFIER
+    assert resolution.script_review_report == exact_report
+    assert resolution.revision_verification is None
+    assert language.repair_plan_calls == 0
+    assert language.local_revision_calls == []
+
+    repair_planned = restarted.advance_planning_run(run.id)
+    assert repair_planned.run.current_step == PlanningRunStep.SCENE_REVISION
+    assert language.repair_plan_calls == 1
+
+
+def test_initial_script_verifier_can_return_to_story_architect_without_stale_block(
+    tmp_path: Path,
+) -> None:
+    request = _request(180).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = StagedLanguageClient(request, revision_rounds_required=1)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_VERIFIER)
+    handed_back = service.advance_planning_run(run.id)
+    exact_report = handed_back.run.review_report
+    assert exact_report is not None
+
+    resolved = service.resolve_story_verification(
+        handed_back.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.RETURN_TO_STORY_ARCHITECT,
+        rationale="该因果缺口来自整体结构，需要 Story Architect 重新组织场次。",
+    )
+
+    assert resolved.run.status == PlanningRunStatus.RUNNING
+    assert resolved.run.current_step == PlanningRunStep.STORY_ARCHITECT
+    assert resolved.run.story_verification_resolutions[-1].script_review_report == (
+        exact_report
+    )
+    rearchitected = service.advance_planning_run(run.id)
+    assert rearchitected.run.status == PlanningRunStatus.RUNNING
+    assert rearchitected.run.current_step == PlanningRunStep.SCENE_WRITER
+    assert rearchitected.run.error_message is None
+
+
+def test_target_led_outside_duration_from_initial_verifier_waits_for_leader(
+    tmp_path: Path,
+) -> None:
+    class OutsideDurationClient(StagedLanguageClient):
+        def generate_text(
+            self,
+            *,
+            instructions: str,
+            input_text: str,
+            image_urls: list[str] | None = None,
+            max_output_tokens: int = 2200,
+        ) -> str:
+            if "Script Verifier Agent" in instructions:
+                self.critic_calls += 1
+                return ScriptReviewReport(
+                    summary="剧情成立，但自然表演时长超出目标契约范围。",
+                    strengths=["核心因果和回报完整"],
+                    issues=[],
+                    performance_timing_assessment="慢点来自中段规则解释。",
+                    duration_fit_assessment=_outside_duration_fit_assessment(
+                        self.request
+                    ),
+                    requires_revision=False,
+                ).model_dump_json()
+            return super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+
+    request = _request(180).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = OutsideDurationClient(request)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_VERIFIER)
+
+    handed_back = service.advance_planning_run(run.id)
+
+    assert handed_back.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert handed_back.run.current_step == PlanningRunStep.SCRIPT_VERIFIER
+    assert handed_back.run.review_report is not None
+    assert handed_back.run.review_report.requires_revision is False
+    assert (
+        handed_back.run.review_report.duration_fit_assessment is not None
+        and handed_back.run.review_report.duration_fit_assessment.alignment
+        == DurationAlignment.OUTSIDE_ACCEPTED_RANGE
+    )
+    exact_report = handed_back.run.review_report.model_copy(deep=True)
+    assert language.critic_calls == 1
+    blocked = service.advance_planning_run(run.id)
+    assert blocked.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert language.critic_calls == 1
+
+    resolved = service.resolve_story_verification(
+        handed_back.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.ACCEPT_TRADEOFF,
+        rationale="当前剧情回报优先，明确接受这次目标时长取舍。",
+    )
+    assert resolved.run.current_step == PlanningRunStep.FINALIZE
+    resolution = resolved.run.story_verification_resolutions[-1]
+    assert resolution.source == StoryVerificationSource.SCRIPT_VERIFIER
+    assert resolution.script_review_report == exact_report
+    assert any(
+        entry.semantic_cluster == "duration-contract-outside-accepted-range"
+        and entry.accepted_tradeoff is not None
+        for entry in resolved.run.issue_ledger
+    )
+
+
+@pytest.mark.parametrize(
+    ("authority", "resolution"),
+    [
+        (
+            DurationAuthority.SOURCE_LED,
+            DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+        ),
+        (
+            DurationAuthority.AUDIO_LED,
+            DurationMismatchResolution.FOLLOW_MASTER_AUDIO,
+        ),
+    ],
+)
+def test_non_target_led_outside_duration_does_not_force_initial_leader_handoff(
+    tmp_path: Path,
+    authority: DurationAuthority,
+    resolution: DurationMismatchResolution,
+) -> None:
+    class OutsideDurationClient(StagedLanguageClient):
+        def generate_text(
+            self,
+            *,
+            instructions: str,
+            input_text: str,
+            image_urls: list[str] | None = None,
+            max_output_tokens: int = 2200,
+        ) -> str:
+            if "Script Verifier Agent" in instructions:
+                self.critic_calls += 1
+                assessment = _outside_duration_fit_assessment(self.request).model_copy(
+                    update={"resolution": resolution}
+                )
+                return ScriptReviewReport(
+                    summary="剧情可交付，自然表演时长仅作契约对照。",
+                    strengths=["来源或主音频权威已明确"],
+                    issues=[],
+                    performance_timing_assessment="保留当前自然表演。",
+                    duration_fit_assessment=assessment,
+                    requires_revision=False,
+                ).model_dump_json()
+            return super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+
+    request = _request(180).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = OutsideDurationClient(request)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    ready = _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_VERIFIER)
+    ready = _replace_duration_authority_for_test(service, ready, authority)
+
+    reviewed = service.advance_planning_run(run.id)
+
+    assert reviewed.run.status == PlanningRunStatus.RUNNING
+    assert reviewed.run.current_step == PlanningRunStep.FINALIZE
+    assert reviewed.run.review_report is not None
+    assert reviewed.run.review_report.requires_revision is False
+    assert reviewed.run.story_verification_resolutions == []
+
+
+def test_missing_script_verifier_duration_assessment_waits_for_leader_resolution(
+    tmp_path: Path,
+) -> None:
+    class MissingDurationAssessmentClient(StagedLanguageClient):
+        def generate_text(
+            self,
+            *,
+            instructions: str,
+            input_text: str,
+            image_urls: list[str] | None = None,
+            max_output_tokens: int = 2200,
+        ) -> str:
+            output = super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+            if "Script Verifier Agent" in instructions:
+                report = ScriptReviewReport.model_validate_json(output)
+                return report.model_copy(
+                    update={"duration_fit_assessment": None}
+                ).model_dump_json()
+            return output
+
+    request = _request(120).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = MissingDurationAssessmentClient(request)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    _advance_to_step(service, run.id, PlanningRunStep.SCRIPT_VERIFIER)
+
+    handed_back = service.advance_planning_run(run.id)
+
+    assert handed_back.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert handed_back.run.current_step == PlanningRunStep.SCRIPT_VERIFIER
+    assert handed_back.run.review_report is not None
+    assessment = handed_back.run.review_report.duration_fit_assessment
+    assert assessment is not None
+    assert assessment.alignment == DurationAlignment.UNRESOLVED
+    critic_calls = language.critic_calls
+
+    blocked = service.advance_planning_run(run.id)
+    assert blocked.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert blocked.run.current_step == PlanningRunStep.SCRIPT_VERIFIER
+    assert language.critic_calls == critic_calls
+
+    resolved = service.resolve_story_verification(
+        handed_back.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.ACCEPT_TRADEOFF,
+        rationale="当前剧本质量可交付，保留未解析的时长判断供后续重新评估。",
+    )
+
+    assert resolved.run.current_step == PlanningRunStep.FINALIZE
+    assert resolved.run.review_report is not None
+    assert resolved.run.review_report.duration_fit_assessment is not None
+    assert (
+        resolved.run.review_report.duration_fit_assessment.alignment
+        == DurationAlignment.UNRESOLVED
+    )
+    resolution = resolved.run.story_verification_resolutions[-1]
+    assert resolution.script_review_report == handed_back.run.review_report
+    assert resolution.decision == StoryVerificationResolutionDecision.ACCEPT_TRADEOFF
+    assert any(entry.accepted_tradeoff for entry in resolved.run.issue_ledger)
+    assert _finish(service, run.id, max_steps=3).run.status == PlanningRunStatus.COMPLETE
+
+
+def test_leader_can_accept_rejected_revision_tradeoff_without_faking_acceptance(
+    tmp_path: Path,
+) -> None:
+    request = _request(180).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = RevisionRegressionClient(request)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    ready = _advance_to_step(service, run.id, PlanningRunStep.REVISION_VERIFIER)
+    prior_writer_calls = list(language.local_revision_calls)
+
+    rejected = service.advance_planning_run(run.id)
+    assert rejected.run.latest_revision_verification is not None
+    assert rejected.run.latest_revision_verification.accepted is False
+
+    resolved = service.resolve_story_verification(
+        rejected.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.ACCEPT_TRADEOFF,
+        rationale="当前运行允许保留这一可见状态取舍，后续仍可从记录重开修订。",
+    )
+
+    assert resolved.run.current_step == PlanningRunStep.FINALIZE
+    assert resolved.run.latest_revision_verification is not None
+    assert resolved.run.latest_revision_verification.accepted is False
+    resolution = resolved.run.story_verification_resolutions[-1]
+    assert resolution.revision_verification == rejected.run.latest_revision_verification
+    assert resolution.decision == StoryVerificationResolutionDecision.ACCEPT_TRADEOFF
+    violation_entry = next(
+        entry
+        for entry in resolved.run.issue_ledger
+        if entry.issue_id == "RESOURCE-STATE-REGRESSION"
+    )
+    assert violation_entry.accepted_tradeoff is not None
+    assert language.local_revision_calls == prior_writer_calls
+    completed = _finish(service, ready.run.id, max_steps=3)
+    assert completed.run.status == PlanningRunStatus.COMPLETE
+    assert completed.run.latest_revision_verification is not None
+    assert completed.run.latest_revision_verification.accepted is False
+
+
+def test_target_led_outside_duration_from_accepted_revision_verifier_waits_for_leader(
+    tmp_path: Path,
+) -> None:
+    class AcceptedOutsideDurationClient(StagedLanguageClient):
+        def __init__(self, request: CreateProjectRequest) -> None:
+            super().__init__(request, revision_rounds_required=1)
+
+        def generate_text(
+            self,
+            *,
+            instructions: str,
+            input_text: str,
+            image_urls: list[str] | None = None,
+            max_output_tokens: int = 2200,
+        ) -> str:
+            output = super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+            if "story-revision verifier Agent" not in instructions:
+                return output
+            verification = StoryRevisionVerification.model_validate_json(output)
+            return verification.model_copy(
+                update={
+                    "duration_fit_assessment": _outside_duration_fit_assessment(
+                        self.request
+                    )
+                }
+            ).model_dump_json()
+
+    request = _request(180).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = AcceptedOutsideDurationClient(request)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    ready = _advance_to_step(service, run.id, PlanningRunStep.REVISION_VERIFIER)
+
+    handed_back = service.advance_planning_run(run.id)
+
+    assert handed_back.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert handed_back.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    verification = handed_back.run.latest_revision_verification
+    assert verification is not None
+    assert verification.accepted is True
+    assert (
+        verification.duration_fit_assessment is not None
+        and verification.duration_fit_assessment.alignment
+        == DurationAlignment.OUTSIDE_ACCEPTED_RANGE
+    )
+    exact_verification = verification.model_copy(deep=True)
+
+    resolved = service.resolve_story_verification(
+        handed_back.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=StoryVerificationResolutionDecision.ACCEPT_TRADEOFF,
+        rationale="终稿故事回报成立，明确接受这次 TARGET_LED 时长取舍。",
+    )
+    assert resolved.run.current_step == PlanningRunStep.FINALIZE
+    assert resolved.run.latest_revision_verification == exact_verification
+    resolution = resolved.run.story_verification_resolutions[-1]
+    assert resolution.source == StoryVerificationSource.REVISION_VERIFIER
+    assert resolution.revision_verification == exact_verification
+
+
+@pytest.mark.parametrize(
+    ("authority", "resolution"),
+    [
+        (
+            DurationAuthority.SOURCE_LED,
+            DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+        ),
+        (
+            DurationAuthority.AUDIO_LED,
+            DurationMismatchResolution.FOLLOW_MASTER_AUDIO,
+        ),
+    ],
+)
+def test_non_target_led_outside_duration_does_not_reject_revision_verifier(
+    tmp_path: Path,
+    authority: DurationAuthority,
+    resolution: DurationMismatchResolution,
+) -> None:
+    class AcceptedOutsideDurationClient(StagedLanguageClient):
+        def __init__(self, request: CreateProjectRequest) -> None:
+            super().__init__(request, revision_rounds_required=1)
+
+        def generate_text(
+            self,
+            *,
+            instructions: str,
+            input_text: str,
+            image_urls: list[str] | None = None,
+            max_output_tokens: int = 2200,
+        ) -> str:
+            output = super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+            if "story-revision verifier Agent" not in instructions:
+                return output
+            verification = StoryRevisionVerification.model_validate_json(output)
+            assessment = _outside_duration_fit_assessment(self.request).model_copy(
+                update={"resolution": resolution}
+            )
+            return verification.model_copy(
+                update={"duration_fit_assessment": assessment}
+            ).model_dump_json()
+
+    request = _request(180).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = AcceptedOutsideDurationClient(request)
+    service = _service(tmp_path, language)
+    run = _start_owned_planning(service, request).run
+    ready = _advance_to_step(service, run.id, PlanningRunStep.REVISION_VERIFIER)
+    ready = _replace_duration_authority_for_test(service, ready, authority)
+
+    verified = service.advance_planning_run(run.id)
+
+    assert verified.run.status == PlanningRunStatus.RUNNING
+    assert verified.run.current_step == PlanningRunStep.FINALIZE
+    assert verified.run.latest_revision_verification is not None
+    assert verified.run.latest_revision_verification.accepted is True
+
+
 def test_revision_verifier_triggers_one_targeted_writer_repair_before_acceptance(
     tmp_path: Path,
 ) -> None:
@@ -3646,16 +4376,33 @@ def test_revision_verifier_triggers_one_targeted_writer_repair_before_acceptance
         assert language.revision_verifier_calls == 0
     assert current.run.current_step == PlanningRunStep.REVISION_VERIFIER
     assert language.local_revision_calls == [1, len(language.outline.scenes)]
+    prior_queue = list(current.run.revision_scene_sequences)
+    prior_cursor = current.run.next_revision_scene_index
 
     rejected = service.advance_planning_run(run.id)
-    assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
-    assert rejected.run.revision_repair_round == 1
-    assert rejected.run.revision_scene_sequences == [1]
-    assert rejected.run.next_revision_scene_index == 0
+    assert rejected.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert rejected.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert rejected.run.revision_scene_sequences == prior_queue
+    assert rejected.run.next_revision_scene_index == prior_cursor
     assert language.revision_verifier_calls == 1
     assert language.metadata_revision_calls == 0
     assert language.revision_scope_calls == 0
     assert language.local_revision_calls == [1, len(language.outline.scenes)]
+
+    resolved = service.resolve_story_verification(
+        rejected.run.project_id,
+        run_id=run.id,
+        owner_agent_run_id=run.owner_agent_run_id,
+        decision=(
+            StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION
+        ),
+        rationale="供电状态回归可定位于第 1 场，让 Repair Leader 重新定界。",
+    )
+    assert resolved.run.current_step == PlanningRunStep.STORY_REVISION
+
+    repair_planned = service.advance_planning_run(run.id)
+    assert repair_planned.run.current_step == PlanningRunStep.SCENE_REVISION
+    assert repair_planned.run.revision_scene_sequences == [1]
 
     repaired = service.advance_planning_run(run.id)
     assert repaired.run.current_step == PlanningRunStep.REVISION_VERIFIER
@@ -3675,7 +4422,13 @@ def test_revision_verifier_triggers_one_targeted_writer_repair_before_acceptance
         == StoryReviewFollowup.FINALIZE
     )
     assert language.final_cold_read_calls == 0
-    assert any("定向修复 1 次" in item for item in revised.run.warnings)
+    assert len(
+        [
+            resolution
+            for resolution in revised.run.story_verification_resolutions
+            if resolution.source == StoryVerificationSource.REVISION_VERIFIER
+        ]
+    ) == 1
     snapshots = service.repository.list_planning_outline_snapshots(run.id)
     assert snapshots[-1].revision_verification is not None
     assert snapshots[-1].revision_verification.accepted is True
@@ -3699,11 +4452,13 @@ def test_revision_verifier_rejections_persist_and_continue_until_accepted(
     assert current.run.current_step == PlanningRunStep.REVISION_VERIFIER
 
     for repair_round in range(1, 4):
+        prior_queue = list(current.run.revision_scene_sequences)
+        prior_cursor = current.run.next_revision_scene_index
         rejected = service.advance_planning_run(run.id)
-        assert rejected.run.current_step == PlanningRunStep.SCENE_REVISION
-        assert rejected.run.revision_repair_round == repair_round
-        assert rejected.run.revision_scene_sequences == [1]
-        assert rejected.run.next_revision_scene_index == 0
+        assert rejected.run.status == PlanningRunStatus.NEEDS_ATTENTION
+        assert rejected.run.current_step == PlanningRunStep.REVISION_VERIFIER
+        assert rejected.run.revision_scene_sequences == prior_queue
+        assert rejected.run.next_revision_scene_index == prior_cursor
         assert rejected.run.latest_revision_verification is not None
         assert rejected.run.latest_revision_verification.accepted is False
         assert rejected.project is not None
@@ -3715,14 +4470,31 @@ def test_revision_verifier_rejections_persist_and_continue_until_accepted(
 
         service = _service(tmp_path, language)
         persisted = service.get_planning_run(run.id)
-        assert persisted.run.revision_repair_round == repair_round
-        assert persisted.run.revision_scene_sequences == [1]
-        assert persisted.run.next_revision_scene_index == 0
+        assert persisted.run.status == PlanningRunStatus.NEEDS_ATTENTION
+        assert persisted.run.current_step == PlanningRunStep.REVISION_VERIFIER
         assert persisted.run.latest_revision_verification is not None
         assert persisted.run.latest_revision_verification.accepted is False
 
+        resolved = service.resolve_story_verification(
+            rejected.run.project_id,
+            run_id=run.id,
+            owner_agent_run_id=run.owner_agent_run_id,
+            decision=(
+                StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION
+            ),
+            rationale=(
+                f"第 {repair_round} 次 Verifier handoff 仍是第 1 场的精确时序问题，"
+                "继续交给 Repair Leader 语义决定。"
+            ),
+        )
+        assert resolved.run.current_step == PlanningRunStep.STORY_REVISION
+        planned = service.advance_planning_run(run.id)
+        assert planned.run.current_step == PlanningRunStep.SCENE_REVISION
+        assert planned.run.revision_scene_sequences == [1]
+
         repaired_scene = service.advance_planning_run(run.id)
         assert repaired_scene.run.current_step == PlanningRunStep.REVISION_VERIFIER
+        current = repaired_scene
 
     accepted = service.advance_planning_run(run.id)
     assert accepted.run.current_step == PlanningRunStep.FINALIZE
@@ -3736,7 +4508,13 @@ def test_revision_verifier_rejections_persist_and_continue_until_accepted(
     assert language.metadata_revision_calls == 0
     assert language.revision_scope_calls == 0
     assert language.final_cold_read_calls == 0
-    assert any("定向修复 3 次" in warning for warning in accepted.run.warnings)
+    assert len(
+        [
+            resolution
+            for resolution in accepted.run.story_verification_resolutions
+            if resolution.source == StoryVerificationSource.REVISION_VERIFIER
+        ]
+    ) == 3
     assert not any("回退原稿" in warning for warning in accepted.run.warnings)
     accepted_snapshots = service.repository.list_planning_outline_snapshots(run.id)
     assert accepted_snapshots[-1].revision_verification is not None

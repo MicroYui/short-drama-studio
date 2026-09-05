@@ -10,6 +10,7 @@ from short_drama.production_profiles import (
 )
 from short_drama.skills.loader import (
     DEFAULT_OFFICIAL_MINIMAX_DESIGN_WORKFLOWS_ROOT,
+    load_production_method_skills,
 )
 from short_drama.skills.models import SkillProvenanceKind
 
@@ -102,8 +103,28 @@ def test_design_methods_share_the_local_interaction_precedence_preamble() -> Non
         assert "MiniMax-H3 上游 Markdown" not in role_prompt
 
 
+def test_official_method_prompts_end_with_local_execution_precedence() -> None:
+    for method in load_production_method_skills():
+        for role_prompt in method.role_prompts.values():
+            footer_index = role_prompt.rfind("上游原文提供成熟的制片经验")
+
+            assert footer_index >= 0
+            assert "创作数值和步骤数量" in role_prompt[footer_index:]
+            assert "只是可选发想起点" in role_prompt[footer_index:]
+            assert "H3 单个生成组的 4–15 秒能力" in role_prompt[footer_index:]
+            assert role_prompt.rstrip().endswith("不得使用关键词、正则、固定次数或额外审批门代替这个判断。")
+
+
 def test_design_methods_load_only_role_relevant_original_sections() -> None:
     drama = production_method_skill("method.minimax_design.drama_series")
+    assert "DurationContract.rhythm_shape" in drama.constitution
+    assert "可根据当前题材、单篇时长" in drama.constitution
+    assert "不把原文的秒数、百分比、集数或连续次数变成剧本配额" in (
+        drama.constitution
+    )
+    assert "单篇完结的“尾”可以是已兑现的收束按钮" in (
+        drama.constitution
+    )
     script_role_sections = {
         ProductionSkillRole.CONCEPT: {
             "## 创作大纲",

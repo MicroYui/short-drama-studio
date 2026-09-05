@@ -894,7 +894,19 @@ def test_complete_eight_shot_mock_timeline_export_and_local_invalidation(client)
         f"/api/short-drama/projects/{project_id}/manifest/rebuild"
     )
     assert manifest_three.status_code == 200, manifest_three.text
-    assert manifest_three.json()["version"] == 3
+    manifest_three_payload = manifest_three.json()
+    assert manifest_three_payload["version"] == 3
+    revised_script_id = revised["document"]["project"]["current_script_version_id"]
+    source_script_by_shot = {
+        clip["shot_id"]: clip["source_script_version_id"]
+        for clip in manifest_three_payload["video_clips"]
+    }
+    assert source_script_by_shot[shot_two_id] == revised_script_id
+    assert {
+        source_script_id
+        for shot_id, source_script_id in source_script_by_shot.items()
+        if shot_id != shot_two_id
+    } == {initialized["document"]["project"]["current_script_version_id"]}
 
     shot_three_id = initialized["document"]["shots"][2]["id"]
     shot_four_id = initialized["document"]["shots"][3]["id"]

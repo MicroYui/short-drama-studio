@@ -51,6 +51,9 @@ from short_drama.agent_runtime.models import utc_now
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
     ContentPlanningOutput,
+    DurationAlignment,
+    DurationAuthority,
+    DurationFitAssessment,
     ProductionExecutionTarget,
     CreateProjectRequest,
     DomainModel,
@@ -59,12 +62,14 @@ from short_drama.models import (
     PlanningRunOperation,
     PlanningRunStep,
     PlanningRunStatus,
+    ProductionDocumentArtifactRef,
     ProductionProfile,
     ProjectDocument,
     ProjectStage,
     RevisionJudgeRecommendation,
     RunMode,
     SceneTimingAssessmentRecord,
+    ScriptRevisionOrigin,
     ScriptReviewDisposition,
     ScriptReviewReport,
     StoryIntent,
@@ -73,6 +78,8 @@ from short_drama.models import (
     StoryRepairPlan,
     StoryRevisionVerification,
     StorySourceContract,
+    StoryVerificationResolution,
+    StoryVerificationResolutionDecision,
     Take,
 )
 from short_drama.production_profiles import (
@@ -364,6 +371,9 @@ class ContentPlanningTraceView(DomainModel):
     latest_repair_plan: StoryRepairPlan | None = None
     latest_story_metadata_patch: StoryMetadataRevisionPatch | None = None
     latest_revision_verification: StoryRevisionVerification | None = None
+    story_verification_resolutions: list[StoryVerificationResolution] = Field(
+        default_factory=list[StoryVerificationResolution]
+    )
     revision_judge: RevisionJudgeRecommendation | None = None
     revision_round: int = Field(ge=0)
     revision_scene_sequences: list[int] = Field(default_factory=list[int])
@@ -486,6 +496,10 @@ def _content_planning_trace_view(
             if run.latest_revision_verification is not None
             else None
         ),
+        story_verification_resolutions=[
+            resolution.model_copy(deep=True)
+            for resolution in run.story_verification_resolutions
+        ],
         revision_judge=(
             run.revision_judge.model_copy(deep=True)
             if run.revision_judge is not None
@@ -748,8 +762,21 @@ class LanguageProductionPlanner:
             "当专业 Agent 应依据当前 Production Skill 完成任务时使用 DELEGATION；"
             f"{_AGENT_INTERACTION_PRIORITY} USER_INPUT 必须符合这一优先级。"
             "若当前存在属于本 AgentRun 且尚未完成的 content_planning_job，"
-            "本轮只能编排 planning.advance Script Stage 和必要的 USER_INPUT 停靠点；"
-            "用户要求当前规划单元后确认时，先安排 planning.advance，再安排一个"
+            "本轮只能编排该 Script Stage 的 planning.advance、"
+            "planning.resolve_story_verification 和必要的 USER_INPUT 停靠点。"
+            "通常使用 planning.advance；但当精确 planning record 处于 "
+            "NEEDS_ATTENTION，且 Script/Revision Verifier 已交回 rejected、"
+            "duration_fit_assessment=UNRESOLVED，或 TARGET_LED 契约下的 "
+            "OUTSIDE_ACCEPTED_RANGE 时，不得再次 advance 同一 "
+            "Verifier。Production Manager Leader 必须通读精确 report/verification，"
+            "再调用 planning.resolve_story_verification，语义选择 "
+            "CONTINUE_FOCUSED_REVISION、RETURN_TO_STORY_ARCHITECT 或 ACCEPT_TRADEOFF，"
+            "并写明 rationale。若确实缺少用户决策，外层 Agent 可安排 "
+            "USER_INPUT，但不得用固定次数或自动循环代替判断。"
+            "SOURCE_LED 或 AUDIO_LED 契约下的 OUTSIDE_ACCEPTED_RANGE "
+            "本身不触发该 handoff，保留来源或主音频时长权威。"
+            "用户要求当前规划单元后确认时，先安排当前状态适用的 planning Tool，"
+            "再安排一个"
             " depends_on 该步骤的 USER_INPUT，使停靠发生在指定语义边界。"
             "不得进入下游制作，也不得声称总目标已完成。步骤依赖必须构成无环图。"
             "当已有完整剧本且用户提出创意性修改时，可选择 planning.start_script_revision；"
@@ -758,6 +785,10 @@ class LanguageProductionPlanner:
             "承担场景、人物、节奏或因果层面的改写。"
             "当目标是从已确认剧本制作分镜时，对外最终结果仍是一份绑定到 "
             "storyboard.current 的完整 Storyboard，不按场次创建多份正式分镜文档。"
+            "为当前剧本创建或替换 ProductionSpec 时，duration_contract 必须逐字段复制"
+            "当前精确 ScriptVersion.story_intent.duration_contract；如果判断契约本身需要"
+            "变化，先修订上游 StoryIntent/ScriptVersion，不能只在 ProductionSpec 中制造"
+            "第二份时长真相。"
             "这是 MiniMax Design「剧本 → 时长账本 → 完整分镜」的本地执行适配："
             "Leader 应先委派一个负责全片编译计划的 Planner WorkOrder。该 "
             "WorkOrder 先检查当前 Tool history；若其中没有当前精确 "
@@ -779,7 +810,7 @@ class LanguageProductionPlanner:
             "每个场次的有序 timing entries 都存在一个连续、完整、不跨场的分区，"
             "且每组 allocated_duration_seconds 之和精确为 4–15 秒整数。"
             "若不可分，先在账本中拆分或调整确实可分的动作、反应和停顿预留，"
-            "但不改台词、事件或自然表演总意图，也不从用户的 120 秒等目标总时长倒推分配。"
+            "但不改台词、事件或自然表演总意图，也不从目标总时长机械均摊每个镜头。"
             "不得先封存账本，再在 outline 阶段才发现无法装箱。"
             "只在账本已按源顺序完整覆盖剧本且该分区可行时调用 "
             "shot.complete_storyboard_ledger，不得边看台词边临时发明最终镜头组。"
@@ -791,9 +822,16 @@ class LanguageProductionPlanner:
             "不跨场次，"
             "可以包含多个可编辑 Shot。全部大纲片段落盘后，再读取最新精确 draft，"
             "在全局检查来源覆盖、连续性、分组和实算时长后，"
-            "再用 shot.complete_storyboard_outline 写入 timing_audit 并进入详细分镜阶段。"
-            "用户或剧本声明的目标时长只作并列对比，不得倒推镜头秒数、平均分配或"
-            "静默删改剧本。Planner 在 begin、多次 ledger append、ledger complete、多次 "
+            "再用 shot.complete_storyboard_outline 写入 timing_audit。服务端会用该草稿绑定的精确 "
+            "ProductionSpec.duration_contract 重算 alignment 与 difference_seconds；Planner "
+            "不得为贴合目标而改写账本得出的自然总时长。若契约为 TARGET_LED "
+            "且 alignment 为 OUTSIDE_ACCEPTED_RANGE 或 UNRESOLVED，草稿将进入 "
+            "DURATION_RECONCILIATION，"
+            "本 Planner WorkOrder 必须返回 PARTIAL、next_owner=LEADER_REPLAN，并交回当前精确 "
+            "ScriptVersion、ProductionSpec 和 storyboard_draft 证据；不得继续委派 Director。"
+            "Planner 应根据契约、剧情承诺与实算差异说明建议的修复范围："
+            "SCRIPT、STORYBOARD_PLAN 或 PRODUCTION_SPEC，而不是自动循环修订。"
+            "Planner 在 begin、多次 ledger append、ledger complete、多次 "
             "outline append 与 outline complete 之间持续使用同一 WorkOrder；每个 Tool "
             "结果会回到同一 Specialist，它可直接取得真实 draft document/version ID 并继续请求"
             "下一个 Tool。不得仅为获取 begin 生成的 ID 就结束 WorkOrder、交回 Leader "
@@ -822,10 +860,18 @@ class LanguageProductionPlanner:
             "对白覆盖、重复膨胀和末态检查项，并语义通读每个组间边界："
             "同场次核对可见状态与动作是否自然承接，跨场次核对上一场退场、下一场入场和"
             "时空转换是否清楚。不用 continuity 文本逐字相等代替内容判断。结论写入"
-            "shot.record_storyboard_draft_verification。若报告只涉及组内镜头语言、表演或"
-            "连续性实现，Leader 定向安排 shot.replace_storyboard_draft_group 修复受影响组；"
-            "若问题涉及账本、时长、来源范围或组边界，则从当前剧本重新完成整份账本并 begin "
-            "一个新的完整草稿，不能用局部替换偷改编译计划。修复后再依当前语义判断是否需要"
+            "shot.record_storyboard_draft_verification，每条 finding 显式给出 repair_scope。"
+            "CLIP_GROUP 由 Leader 定向安排 shot.replace_storyboard_draft_group 修复受影响组；"
+            "STORYBOARD_PLAN 从同一 ScriptVersion 重新编译 ledger/outline 并 begin 新草稿；"
+            "SCRIPT 由 Leader 调用 planning.start_script_revision，传 revision_origin=PRODUCTION_CONSTRAINT "
+            "以及当前精确 ScriptVersion、ProductionSpec、storyboard_draft evidence_refs；"
+            "PRODUCTION_SPEC 只修复对上游 DurationContract 的逐字段投影或精确 MasterAudio "
+            "绑定；若契约本身要变，仍先修订上游 StoryIntent/ScriptVersion，再重编分镜。"
+            "AUDIO_LED 的 ProductionSpec 必须绑定当前精确 MasterAudio version，目标时长等于 "
+            "time_origin_seconds + duration_seconds；主音频重绑后下游失效。账本仍记录自然表演，"
+            "最终时间线遵循主音频，不把两者差值误判成 TARGET_LED 剧情缺陷。"
+            "不能用局部替换偷改账本或编译计划。"
+            "修复后再依当前语义判断是否需要"
             "Verifier 重读；不使用固定轮次或 Critic 循环。Verifier 认为完整可用后才 finalize。"
             "场次索引用于组织一份 Storyboard 内的章节和连续性，不代表 ComfyUI 的节点、"
             "workflow 或视觉 group；未来 Comfy 投影以每个 ClipGroup 的 visual-gen work item "
@@ -1247,6 +1293,9 @@ def _compact_specialist_tool_arguments(
                 "overloaded_shot_ids": audit.get("overloaded_shot_ids"),
                 "overloaded_group_ids": audit.get("overloaded_group_ids"),
                 "timing_audit_passed": audit.get("timing_audit_passed"),
+                "alignment": audit.get("alignment"),
+                "difference_seconds": audit.get("difference_seconds"),
+                "assessment": audit.get("assessment"),
             },
             "source_artifact_refs": request.get("source_artifact_refs"),
             "origin": request.get("origin"),
@@ -1829,6 +1878,9 @@ class LanguageSpecialistAgent:
                 else "当前没有可用 Tool，请直接返回最终结果。"
             )
             + "如果 WorkOrder 要编写分镜，对外最终仍是一份完整 Storyboard。"
+            "为当前剧本创建或替换 ProductionSpec 时，duration_contract 必须逐字段复制"
+            "当前精确 ScriptVersion.story_intent.duration_contract；如果契约本身需要变化，"
+            "先交回 Leader 修订上游 StoryIntent/ScriptVersion，不能只改 ProductionSpec。"
             "如果当前 WorkOrder 的语义责任是编译全片时长账本与分组大纲，"
             "先检查当前 Tool history 是否已有当前精确 ScriptVersion 和 "
             "ProjectBibleVersion 正文；如果没有，第一个 Tool 请求必须是 project.get。"
@@ -1847,7 +1899,7 @@ class LanguageSpecialistAgent:
             "每个场次的有序 timing entries 都能分成连续、完整、不跨场的组，"
             "且每组 allocated_duration_seconds 之和精确为 4–15 秒整数。"
             "如果当前条目无法合法分组，先拆分或调整确实可分的动作、反应和停顿预留，"
-            "但不改台词、事件或自然表演总意图，也不从 120 秒等用户目标总时长倒推分配。"
+            "但不改台词、事件或自然表演总意图，也不从目标总时长机械均摊每个镜头。"
             "不得先封存账本，再在 outline 阶段发现无法装箱。"
             "只在账本完整覆盖剧本源顺序且上述分区可行时，调用 "
             "shot.complete_storyboard_ledger。"
@@ -1860,6 +1912,13 @@ class LanguageSpecialistAgent:
             "再用 artifact.get_production_document 读取最新精确草稿，对完整 ledger "
             "与 planned_clip_groups 做全局核对，然后用 "
             "shot.complete_storyboard_outline 写入 timing_audit。"
+            "服务端会从草稿绑定的精确 ProductionSpec.duration_contract "
+            "重算 alignment 和 difference_seconds，不接受为贴合目标而改写自然总时长。"
+            "若 TARGET_LED 契约的 alignment 为 OUTSIDE_ACCEPTED_RANGE 或 UNRESOLVED，草稿会进入 "
+            "DURATION_RECONCILIATION；立即停止 Director 阶段，以 PARTIAL、"
+            "next_owner=LEADER_REPLAN 交回精确 ScriptVersion、ProductionSpec 和 "
+            "storyboard_draft 证据，并根据契约和剧情承诺说明建议范围 "
+            "SCRIPT、STORYBOARD_PLAN 或 PRODUCTION_SPEC。不自动递归修订。"
             "begin、ledger 增量、ledger 完成、outline 增量和 outline 完成是同一 Planner "
             "WorkOrder 的连续工作。每次 Tool 结果会回到你手上，其中的真实 draft "
             "document/version ID 可直接用于下一次请求；不要仅因为 begin 产生了新 ID "
@@ -1881,17 +1940,24 @@ class LanguageSpecialistAgent:
             "为事实基础，但无需逐字复制。同场次要语义承接人物、道具、站位、动作和声音；"
             "跨场次要明确上一场退场/结束状态、下一场入场/起始状态和时间或空间转换。"
             "人物、道具或站位发生变化时，本组必须包含观众可见的过渡动作，不能让 Leader "
-            "摘要替代工件末态。组内镜头语言、表演或连续性"
-            "返修使用 shot.replace_storyboard_draft_group，并保持计划组的 ID、范围、"
-            "顺序和时长；若发现账本、时长、来源范围或组边界错误，应把结论交回 Leader，"
-            "由 Leader 从当前剧本重新编译并 begin 新的完整草稿，不能用 replace 偷改计划。"
+            "摘要替代工件末态。需要返修时明确给出 repair_scope：CLIP_GROUP "
+            "使用 shot.replace_storyboard_draft_group 且保持计划组的 ID、范围、顺序和时长；"
+            "STORYBOARD_PLAN 交回 Leader 从同一 ScriptVersion 重编整份账本并 begin 新草稿；"
+            "SCRIPT 交回 Leader 调用 planning.start_script_revision，revision_origin 为 "
+            "PRODUCTION_CONSTRAINT，并提供当前精确 ScriptVersion、ProductionSpec 与 "
+            "storyboard_draft evidence_refs；PRODUCTION_SPEC 只修复对上游契约的逐字段投影或"
+            "精确 MasterAudio 绑定，契约本身变化仍通过 SCRIPT 修订 StoryIntent。"
+            "AUDIO_LED 的 ProductionSpec 必须绑定当前精确 MasterAudio version，目标时长等于"
+            " time_origin_seconds + duration_seconds；重绑会使旧制片下游失效，最终时间线"
+            "遵循主音频，不能把自然表演差值当成 TARGET_LED 剧情缺陷。"
+            "不能用 replace 偷改账本、来源范围或组边界。"
             "如果 WorkOrder 的职责是 REVISION_VERIFIER，必须先用 "
             "artifact.get_production_document 读取当前最新精确版本，通读完整草稿并依据"
             "已选方法的完整分镜检查项审阅。对每个组间边界做内容判断："
             "同场次查可见状态与动作是否自然承接，跨场次查上一场退场、下一场入场和"
             "时空转换是否清楚；不用 continuity 文本逐字相等代替语义判断。然后调用 "
             "shot.record_storyboard_draft_verification，写入 READY 或 "
-            "NEEDS_REVISION；审阅任务本身随后以 COMPLETED 交回 Leader，由 Leader "
+            "NEEDS_REVISION，并为每条 finding 写 repair_scope；审阅任务本身随后以 COMPLETED 交回 Leader，由 Leader "
             "决定 finalize 或定向修订，不用 Critic 循环或固定轮次。"
             "只有完整覆盖剧本的对白、可见动作、反应和状态变化且语义核对接受后，"
             "才调用 shot.finalize_storyboard。场次索引是单份 Storyboard 内的结构，"
@@ -2551,6 +2617,33 @@ class ProductionManager:
                 method_selection_rationale=method_selection_rationale,
             )
 
+        planning_run = self.projects.get_planning_run(planning.run_id)
+        if self._planning_run_awaits_story_verification_resolution(planning_run):
+            if semantic_planning_available:
+                return None
+            return AgentPlanProposal(
+                summary=(
+                    "A persisted story verifier result requires an explicit semantic "
+                    "decision from the owning AgentRun Leader."
+                ),
+                steps=[
+                    PlanStep(
+                        id="resolve-story-verification-handoff",
+                        title="Resolve the story verifier handoff",
+                        kind=ActionKind.USER_INPUT,
+                        assigned_agent="production-manager",
+                        instructions=(
+                            "Read the exact content_planning_job verifier payload, then "
+                            "submit a plan that calls planning.resolve_story_verification "
+                            "with a reasoned decision. Do not advance the same verifier again."
+                        ),
+                        artifact_refs=[planning_ref],
+                    )
+                ],
+                selected_method_skill_ids=selected_method_skill_ids,
+                method_selection_rationale=method_selection_rationale,
+            )
+
         if planning.status in {
             PlanningRunStatus.FAILED,
             PlanningRunStatus.NEEDS_ATTENTION,
@@ -2594,7 +2687,62 @@ class ProductionManager:
         )
 
     @staticmethod
+    def _planning_duration_fit_requires_resolution(
+        planning_run: PlanningRunRecord,
+        assessment: DurationFitAssessment | None,
+    ) -> bool:
+        if assessment is None:
+            return False
+        if assessment.alignment == DurationAlignment.UNRESOLVED:
+            return True
+        if assessment.alignment != DurationAlignment.OUTSIDE_ACCEPTED_RANGE:
+            return False
+        story_intent = planning_run.story_intent
+        contract = None if story_intent is None else story_intent.duration_contract
+        return (
+            contract is not None
+            and contract.authority == DurationAuthority.TARGET_LED
+        )
+
+    @staticmethod
+    def _planning_run_awaits_story_verification_resolution(
+        planning_run: PlanningRunRecord | None,
+    ) -> bool:
+        if (
+            planning_run is None
+            or planning_run.status != PlanningRunStatus.NEEDS_ATTENTION
+        ):
+            return False
+        if planning_run.current_step in {
+            PlanningRunStep.SCRIPT_VERIFIER,
+            PlanningRunStep.SCRIPT_CRITIC,
+        }:
+            report = planning_run.review_report
+            return (
+                report is not None
+                and (
+                    report.requires_revision
+                    or ProductionManager._planning_duration_fit_requires_resolution(
+                        planning_run,
+                        report.duration_fit_assessment,
+                    )
+                )
+            )
+        verification = planning_run.latest_revision_verification
+        return (
+            planning_run.current_step == PlanningRunStep.REVISION_VERIFIER
+            and verification is not None
+            and (
+                not verification.accepted
+                or ProductionManager._planning_duration_fit_requires_resolution(
+                    planning_run,
+                    verification.duration_fit_assessment,
+                )
+            )
+        )
+
     def _is_content_planning_plan(
+        self,
         proposal: AgentPlanProposal,
         *,
         agent_run_id: str,
@@ -2612,10 +2760,16 @@ class ProductionManager:
             or planning.status == PlanningRunStatus.COMPLETE
         ):
             return False
+        planning_run = self.projects.get_planning_run(planning.run_id)
+        expected_tool = (
+            "planning.resolve_story_verification"
+            if self._planning_run_awaits_story_verification_resolution(planning_run)
+            else "planning.advance"
+        )
         for step in proposal.steps:
             if step.kind == ActionKind.USER_INPUT:
                 continue
-            if step.kind != ActionKind.TOOL_CALL or step.tool_name != "planning.advance":
+            if step.kind != ActionKind.TOOL_CALL or step.tool_name != expected_tool:
                 return False
             if (
                 step.arguments.get("project_id") != document.project.id
@@ -3312,7 +3466,13 @@ class ProductionManager:
             ),
             None,
         )
-        refs = [*request.created_artifacts, *request.updated_artifacts]
+        refs = _unique_artifact_refs(
+            [
+                *request.created_artifacts,
+                *request.updated_artifacts,
+                *request.evidence_refs,
+            ]
+        )
         if action is not None:
             if request.status == AgentResultStatus.COMPLETED:
                 self.runtime.complete_action(
@@ -4497,11 +4657,77 @@ class ProductionManager:
                         "planning.advance must be executed by its owning Agent run"
                     )
 
+        if tool_name == "planning.resolve_story_verification":
+            run_id = arguments.get("run_id")
+            requested_owner_agent_run_id = arguments.get("owner_agent_run_id")
+            rationale = arguments.get("rationale")
+            document = self.projects.get_project(project_id)
+            planning = None if document is None else document.planning
+            planning_run = (
+                self.projects.get_planning_run(run_id)
+                if isinstance(run_id, str)
+                else None
+            )
+            if (
+                planning is None
+                or planning.run_id != run_id
+                or planning.owner_agent_run_id != agent_run_id
+                or planning_run is None
+                or planning_run.owner_agent_run_id != agent_run_id
+                or not self._planning_run_awaits_story_verification_resolution(
+                    planning_run
+                )
+            ):
+                raise ProductionManagerError(
+                    "planning.resolve_story_verification requires the current "
+                    "project's pending verifier handoff"
+                )
+            if requested_owner_agent_run_id != agent_run_id:
+                raise ProductionManagerError(
+                    "planning.resolve_story_verification owner_agent_run_id must "
+                    "match the current Agent run"
+                )
+            try:
+                StoryVerificationResolutionDecision(arguments.get("decision"))
+            except (TypeError, ValueError) as exc:
+                raise ProductionManagerError(
+                    "planning.resolve_story_verification requires a valid decision"
+                ) from exc
+            if not isinstance(rationale, str) or not rationale.strip():
+                raise ProductionManagerError(
+                    "planning.resolve_story_verification requires the Leader's "
+                    "semantic rationale"
+                )
+
         if tool_name == "planning.start_script_revision":
             document = self.projects.get_project(project_id)
             requested_owner_agent_run_id = arguments.get("owner_agent_run_id")
             base_script_version_id = arguments.get("base_script_version_id")
             instruction = arguments.get("instruction")
+            raw_revision_origin = arguments.get(
+                "revision_origin",
+                ScriptRevisionOrigin.USER_FEEDBACK.value,
+            )
+            try:
+                revision_origin = ScriptRevisionOrigin(raw_revision_origin)
+            except (TypeError, ValueError) as exc:
+                raise ProductionManagerError(
+                    "planning.start_script_revision requires a valid revision_origin"
+                ) from exc
+            raw_evidence_refs = arguments.get("evidence_refs", [])
+            if not isinstance(raw_evidence_refs, list):
+                raise ProductionManagerError(
+                    "planning.start_script_revision evidence_refs must be a list"
+                )
+            try:
+                revision_evidence_refs = [
+                    ProductionDocumentArtifactRef.model_validate(item)
+                    for item in cast(list[object], raw_evidence_refs)
+                ]
+            except ValueError as exc:
+                raise ProductionManagerError(
+                    "planning.start_script_revision evidence_refs are invalid"
+                ) from exc
             if document is None:
                 raise ProductionManagerError(
                     "planning.start_script_revision requires an existing project"
@@ -4517,7 +4743,30 @@ class ProductionManager:
                 )
             if not isinstance(instruction, str) or not instruction.strip():
                 raise ProductionManagerError(
-                    "planning.start_script_revision requires the complete user feedback"
+                    "planning.start_script_revision requires the complete revision instruction"
+                )
+            resolver = ProjectArtifactResolver(self.projects)
+            for evidence_ref in revision_evidence_refs:
+                if evidence_ref.project_id != project_id:
+                    raise ProductionManagerError(
+                        "planning.start_script_revision evidence must belong to the current project"
+                    )
+                if evidence_ref.version is None:
+                    raise ProductionManagerError(
+                        "planning.start_script_revision evidence must pin exact versions"
+                    )
+                if resolver.summarize_artifact(
+                    ArtifactRef.model_validate(evidence_ref.model_dump(mode="json"))
+                ) is None:
+                    raise ProductionManagerError(
+                        "planning.start_script_revision evidence must resolve exactly"
+                    )
+            if (
+                revision_origin == ScriptRevisionOrigin.PRODUCTION_CONSTRAINT
+                and not revision_evidence_refs
+            ):
+                raise ProductionManagerError(
+                    "A production-constraint script revision requires exact evidence_refs"
                 )
 
         for key in ("project_id", "current_project_id"):
@@ -4718,6 +4967,51 @@ class ProductionManager:
                             else action_step.arguments
                         )
                         instruction = arguments.get("instruction")
+                        try:
+                            action_revision_origin = ScriptRevisionOrigin(
+                                arguments.get(
+                                    "revision_origin",
+                                    ScriptRevisionOrigin.USER_FEEDBACK.value,
+                                )
+                            )
+                        except (TypeError, ValueError):
+                            action_revision_origin = None
+                        raw_evidence_refs = arguments.get("evidence_refs", [])
+                        action_evidence_valid = isinstance(raw_evidence_refs, list)
+                        try:
+                            action_evidence_refs = (
+                                [
+                                    ProductionDocumentArtifactRef.model_validate(item)
+                                    for item in cast(list[object], raw_evidence_refs)
+                                ]
+                                if isinstance(raw_evidence_refs, list)
+                                else []
+                            )
+                        except ValueError:
+                            action_evidence_refs = []
+                            action_evidence_valid = False
+                        action_evidence_keys = {
+                            (
+                                item.project_id,
+                                item.artifact_type,
+                                item.artifact_id,
+                                item.version,
+                            )
+                            for item in action_evidence_refs
+                        }
+                        persisted_evidence_keys = {
+                            (
+                                item.project_id,
+                                item.artifact_type,
+                                item.artifact_id,
+                                item.version,
+                            )
+                            for item in (
+                                []
+                                if planning_run is None
+                                else planning_run.revision_evidence_refs
+                            )
+                        }
                         if (
                             planning_run is not None
                             and planning_run.operation
@@ -4731,6 +5025,10 @@ class ProductionManager:
                             and isinstance(instruction, str)
                             and instruction.strip()
                             == planning_run.revision_instruction
+                            and action_revision_origin
+                            == planning_run.revision_origin
+                            and action_evidence_valid
+                            and action_evidence_keys == persisted_evidence_keys
                         ):
                             planning_refs = [
                                 ArtifactRef(
@@ -4750,6 +5048,104 @@ class ProductionManager:
                                     "Reconciled planning.start_script_revision with "
                                     "the persisted screenplay revision job "
                                     f"{planning_run.id} after restart."
+                                ),
+                                artifact_refs=planning_refs,
+                            )
+                            self._synchronize_planning_narrative_context(
+                                agent_run_id=run.id,
+                                document=document,
+                                planning_run_id=planning_run.id,
+                            )
+                            self.refresh_project_memory(document)
+                            recovered = True
+                            recovered_domain_action = True
+                            continue
+
+                    if (
+                        action.tool_name == "planning.resolve_story_verification"
+                        and document is not None
+                        and document.planning is not None
+                        and document.planning.run_id is not None
+                        and document.planning.owner_agent_run_id == run.id
+                    ):
+                        planning_run = self.projects.get_planning_run(
+                            document.planning.run_id
+                        )
+                        action_plan = next(
+                            (
+                                plan
+                                for plan in self.runtime.store.list_plan_revisions(
+                                    run.id
+                                )
+                                if plan.id == action.plan_revision_id
+                            ),
+                            None,
+                        )
+                        action_step = (
+                            None
+                            if action_plan is None
+                            else next(
+                                (
+                                    step
+                                    for step in action_plan.steps
+                                    if step.id == action.plan_step_id
+                                ),
+                                None,
+                            )
+                        )
+                        arguments = (
+                            {}
+                            if action_step is None
+                            or action_step.tool_name
+                            != "planning.resolve_story_verification"
+                            else action_step.arguments
+                        )
+                        try:
+                            action_decision = StoryVerificationResolutionDecision(
+                                arguments.get("decision")
+                            )
+                        except (TypeError, ValueError):
+                            action_decision = None
+                        rationale = arguments.get("rationale")
+                        latest_resolution = (
+                            planning_run.story_verification_resolutions[-1]
+                            if planning_run is not None
+                            and planning_run.story_verification_resolutions
+                            else None
+                        )
+                        if (
+                            planning_run is not None
+                            and planning_run.project_id == run.project_id
+                            and planning_run.owner_agent_run_id == run.id
+                            and arguments.get("project_id") == run.project_id
+                            and arguments.get("run_id") == planning_run.id
+                            and arguments.get("owner_agent_run_id") == run.id
+                            and isinstance(rationale, str)
+                            and latest_resolution is not None
+                            and latest_resolution.owner_agent_run_id == run.id
+                            and latest_resolution.decision == action_decision
+                            and latest_resolution.rationale == rationale.strip()
+                            and not self._planning_run_awaits_story_verification_resolution(
+                                planning_run
+                            )
+                        ):
+                            planning_refs = [
+                                ArtifactRef(
+                                    project_id=run.project_id,
+                                    artifact_type="content_planning_job",
+                                    artifact_id=planning_run.id,
+                                ),
+                                ArtifactRef(
+                                    project_id=run.project_id,
+                                    artifact_type="project",
+                                    artifact_id=run.project_id,
+                                ),
+                            ]
+                            self.runtime.complete_action(
+                                action.id,
+                                output_summary=(
+                                    "Reconciled planning.resolve_story_verification "
+                                    "with the persisted Leader decision after restart."
                                 ),
                                 artifact_refs=planning_refs,
                             )

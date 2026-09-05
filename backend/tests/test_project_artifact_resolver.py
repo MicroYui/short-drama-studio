@@ -15,13 +15,31 @@ from short_drama.agent_runtime.artifact_resolver import (
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.models import (
     CreateProjectRequest,
+    DurationAlignment,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationFitAssessment,
+    DurationMismatchResolution,
+    DurationRange,
+    DurationTargetOrigin,
     PlanningRunRecord,
     PlanningRunStatus,
     PlanningRunStep,
+    ProductionDocument,
+    ProductionDocumentArtifactRef,
+    ProductionDocumentOrigin,
+    ProductionDocumentVersion,
     ProjectPlanningMetadata,
+    ProjectOutputSlot,
+    StoryIntent,
 )
 from short_drama.production_contracts import (
     ClipGroup,
+    PRODUCTION_SPEC_DOCUMENT_KIND,
+    PRODUCTION_SPEC_OUTPUT_SLOT_ID,
+    STORYBOARD_DRAFT_DOCUMENT_KIND,
+    ProductionSpecContent,
     StoryboardClipGroupDraft,
     StoryboardClipGroupOutline,
     StoryboardDraftContent,
@@ -105,6 +123,9 @@ def test_resolver_preserves_focused_document_summaries(tmp_path: Path) -> None:
     assert script_payload["structured_scenes"][0]["screenplay_text"] == (
         script.structured_scenes[0].screenplay_text
     )
+    assert script_payload["story_intent"] is None
+    assert script_payload["ending_contract"] is None
+    assert script_payload["source_contract"] is None
     assert shot_summary is not None
     assert shot_summary.title == f"Shot {shot.sequence}"
     assert json.loads(shot_summary.summary)["id"] == shot.id
@@ -203,6 +224,7 @@ def test_storyboard_draft_summary_exposes_resume_ledger_without_shot_prose() -> 
             continuity_out=["The tray remains on the counter beside the protagonist."],
         ),
     )
+    computed_duration = sum(item.duration_seconds for item in plans)
     draft = StoryboardDraftContent(
         project_id=document.project.id,
         title="Resume-safe storyboard draft",
@@ -224,14 +246,27 @@ def test_storyboard_draft_summary_exposes_resume_ledger_without_shot_prose() -> 
         timing_ledger=timing_entries,
         planned_clip_groups=plans,
         timing_audit=StoryboardTimingAudit(
-            target_duration_s=120.0,
+            target_duration_s=computed_duration,
             dialogue_units_total=4,
             minimum_spoken_duration_s=2.0,
             non_speech_reserve_s=2.0,
-            computed_episode_duration_s=sum(
-                item.duration_seconds for item in plans
-            ),
+            computed_episode_duration_s=computed_duration,
             clip_group_count=2,
+            alignment=DurationAlignment.ALIGNED,
+            difference_seconds=0.0,
+            assessment=DurationFitAssessment(
+                estimated_range_seconds=DurationRange(
+                    minimum_seconds=computed_duration,
+                    maximum_seconds=computed_duration,
+                ),
+                alignment=DurationAlignment.ALIGNED,
+                pressure_points=["Dialogue and visible actions fit the sealed outline."],
+                concurrent_performance=[
+                    "The reaction can play under the final spoken beat."
+                ],
+                resolution=DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+                rationale="The natural runtime matches the pinned target.",
+            ),
             timing_audit_passed=True,
         ),
         committed_groups=[committed],
@@ -263,6 +298,14 @@ def test_storyboard_draft_summary_exposes_resume_ledger_without_shot_prose() -> 
         plans[1].id,
     ]
     assert payload["timing_audit"]["clip_group_count"] == 2
+    assert payload["timing_audit"]["alignment"] == "ALIGNED"
+    assert payload["timing_audit"]["difference_seconds"] == 0.0
+    assert payload["timing_audit"]["assessment"]["resolution"] == (
+        "REPORT_NATURAL_RUNTIME"
+    )
+    assert payload["timing_audit"]["assessment"]["rationale"] == (
+        "The natural runtime matches the pinned target."
+    )
     assert payload["committed_clip_group_ids"] == [plans[0].id]
     assert payload["next_uncommitted_group"]["clip_group_id"] == plans[1].id
     assert payload["latest_continuity_out"] == [
@@ -270,6 +313,8 @@ def test_storyboard_draft_summary_exposes_resume_ledger_without_shot_prose() -> 
     ]
     assert payload["verification"]["status"] == "NEEDS_REVISION"
     assert payload["verification"]["findings"][0]["id"] == "finding-tray-state"
+    assert payload["verification"]["findings"][0]["repair_scope"] == "CLIP_GROUP"
+    assert payload["verification"]["findings"][0]["affected_scene_sequences"] == []
     assert "LONG_CAMERA_TEXT_SHOULD_NOT_APPEAR" not in summary
 
 
@@ -395,6 +440,356 @@ def test_storyboard_draft_summary_supports_partial_planning_phases() -> None:
     assert outline_payload["latest_planned_continuity_out"] == [
         "The tray remains on the counter."
     ]
+
+
+def test_duration_reconciliation_prioritizes_only_the_active_story_branch(
+    tmp_path: Path,
+) -> None:
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    pinned_script = document.script_versions[0]
+    current_script = pinned_script.model_copy(
+        update={
+            "id": f"{pinned_script.id}-current",
+            "version": pinned_script.version + 1,
+            "parent_version_id": pinned_script.id,
+            "change_reason": "A later unrelated screenplay revision.",
+        },
+        deep=True,
+    )
+    document.script_versions.append(current_script)
+    document.project.current_script_version_id = current_script.id
+
+    pinned_contract = DurationContract(
+        target_seconds=30.0,
+        target_origin=DurationTargetOrigin.USER_DECLARED,
+        authority=DurationAuthority.TARGET_LED,
+        acceptable_range_seconds=DurationRange(
+            minimum_seconds=28.0,
+            maximum_seconds=32.0,
+        ),
+        source_fidelity_policy=DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS,
+        mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        decision_basis="The user explicitly requested a 30-second episode.",
+    )
+    pinned_spec = ProductionSpecContent(
+        project_id=document.project.id,
+        script_version_id=pinned_script.id,
+        bible_version_id=document.bible_versions[0].id,
+        title="Pinned duration spec",
+        production_scope="Compile the complete screenplay into one episode.",
+        production_mode="Agent-led storyboard production.",
+        genre_and_setting="A rainy-night convenience-store confrontation.",
+        language="zh-CN",
+        aspect_ratio="9:16",
+        target_duration_seconds=30.0,
+        duration_intent="Keep the requested short-form runtime explicit.",
+        duration_contract=pinned_contract,
+    )
+    current_spec = pinned_spec.model_copy(
+        update={
+            "script_version_id": current_script.id,
+            "target_duration_seconds": 45.0,
+            "duration_contract": pinned_contract.model_copy(
+                update={
+                    "target_seconds": 45.0,
+                    "acceptable_range_seconds": DurationRange(
+                        minimum_seconds=42.0,
+                        maximum_seconds=48.0,
+                    ),
+                    "decision_basis": "A later unrelated production-spec revision.",
+                }
+            ),
+        },
+        deep=True,
+    )
+    pinned_spec_version = ProductionDocumentVersion(
+        id="production-spec-version-pinned",
+        version=1,
+        payload=pinned_spec.model_dump(mode="json"),
+        origin=ProductionDocumentOrigin.AGENT,
+        created_at="2026-09-02T00:00:01+00:00",
+    )
+    current_spec_version = ProductionDocumentVersion(
+        id="production-spec-version-current",
+        version=2,
+        parent_version_id=pinned_spec_version.id,
+        payload=current_spec.model_dump(mode="json"),
+        origin=ProductionDocumentOrigin.AGENT,
+        created_at="2026-09-02T00:00:02+00:00",
+    )
+    spec_document = ProductionDocument(
+        id="production-spec-duration-context",
+        project_id=document.project.id,
+        kind=PRODUCTION_SPEC_DOCUMENT_KIND,
+        title="Duration context spec",
+        current_version_id=current_spec_version.id,
+        versions=[pinned_spec_version, current_spec_version],
+    )
+
+    scene = pinned_script.structured_scenes[0]
+    line_id = scene.line_ids[0]
+    scene_node_id = f"scene-node-{scene.id}"
+    source_range = StoryboardSourceRange(
+        id="range-duration-reconciliation",
+        scene_ids=[scene.id],
+        script_line_ids=[line_id],
+        description="Cover the first complete source beat.",
+    )
+    timing_entry = StoryboardTimingLedgerEntry(
+        id="timing-duration-reconciliation",
+        sequence=1,
+        scene_node_id=scene_node_id,
+        source_range=source_range,
+        source_text="The complete source beat plays without filler.",
+        dialogue_units=2,
+        speech_rate_units_per_second=2.0,
+        minimum_spoken_duration_seconds=1.0,
+        non_speech_reserve_seconds=1.0,
+        allocated_duration_seconds=12.0,
+        natural_cut="The source beat resolves.",
+        completes_scene=True,
+    )
+    plan = StoryboardClipGroupOutline(
+        id="clip-duration-reconciliation",
+        title="Complete source beat",
+        scene_node_id=scene_node_id,
+        scene_group_sequence=1,
+        source_range=source_range,
+        timing_entry_ids=[timing_entry.id],
+        duration_seconds=12.0,
+        objective="Preserve the complete source beat.",
+    )
+    assessment = DurationFitAssessment(
+        estimated_range_seconds=DurationRange(
+            minimum_seconds=11.0,
+            maximum_seconds=13.0,
+        ),
+        alignment=DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+        pressure_points=[
+            "Extending the beat to 28 seconds would add unsupported dramatic material."
+        ],
+        concurrent_performance=[
+            "The visible reaction already overlaps the final spoken beat."
+        ],
+        resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        rationale=(
+            "The sealed outline runs 18 seconds shorter than the pinned target and "
+            "cannot reach its accepted range without a story-level decision."
+        ),
+    )
+    draft = StoryboardDraftContent(
+        phase=StoryboardDraftPhase.DURATION_RECONCILIATION,
+        project_id=document.project.id,
+        title="Duration reconciliation draft",
+        script_version_id=pinned_script.id,
+        bible_version_id=document.bible_versions[0].id,
+        production_spec_document_id=spec_document.id,
+        production_spec_version_id=pinned_spec_version.id,
+        script_line_ids=[line_id],
+        scene_nodes=[
+            StoryboardSceneNode(
+                id=scene_node_id,
+                scene_id=scene.id,
+                sequence=1,
+                heading=scene.heading,
+                summary=scene.summary,
+                source_line_ids=[line_id],
+            )
+        ],
+        timing_ledger=[timing_entry],
+        planned_clip_groups=[plan],
+        timing_audit=StoryboardTimingAudit(
+            target_duration_s=30.0,
+            dialogue_units_total=2,
+            minimum_spoken_duration_s=1.0,
+            non_speech_reserve_s=1.0,
+            computed_episode_duration_s=12.0,
+            clip_group_count=1,
+            alignment=DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+            difference_seconds=-18.0,
+            assessment=assessment,
+            timing_audit_passed=True,
+        ),
+    )
+    draft_version = ProductionDocumentVersion(
+        id="storyboard-draft-version-reconciliation",
+        version=4,
+        payload=draft.model_dump(mode="json"),
+        origin=ProductionDocumentOrigin.AGENT,
+        created_at="2026-09-02T00:00:03+00:00",
+    )
+    draft_document = ProductionDocument(
+        id="storyboard-draft-duration-context",
+        project_id=document.project.id,
+        kind=STORYBOARD_DRAFT_DOCUMENT_KIND,
+        title="Duration reconciliation draft",
+        current_version_id=draft_version.id,
+        versions=[draft_version],
+    )
+    document.production_documents.extend([spec_document, draft_document])
+    document.production_spec_document_id = spec_document.id
+    document.output_slots.append(
+        ProjectOutputSlot(
+            id=PRODUCTION_SPEC_OUTPUT_SLOT_ID,
+            revision=1,
+            current_artifact_ref=ProductionDocumentArtifactRef(
+                project_id=document.project.id,
+                artifact_type="production_spec",
+                artifact_id=spec_document.id,
+                version=current_spec_version.version,
+            ),
+            updated_at="2026-09-02T00:00:02+00:00",
+        )
+    )
+
+    pinned_script_ref = ArtifactRef(
+        project_id=document.project.id,
+        artifact_type="script_version",
+        artifact_id=pinned_script.id,
+        version=pinned_script.version,
+    )
+    pinned_spec_ref = ArtifactRef(
+        project_id=document.project.id,
+        artifact_type="production_spec",
+        artifact_id=spec_document.id,
+        version=pinned_spec_version.version,
+    )
+    current_spec_ref = pinned_spec_ref.model_copy(
+        update={"version": current_spec_version.version}
+    )
+    current_script_ref = pinned_script_ref.model_copy(
+        update={
+            "artifact_id": current_script.id,
+            "version": current_script.version,
+        }
+    )
+    draft_ref = ArtifactRef(
+        project_id=document.project.id,
+        artifact_type="storyboard_draft",
+        artifact_id=draft_document.id,
+        version=draft_version.version,
+    )
+    draft_document_ref = ArtifactRef(
+        project_id=document.project.id,
+        artifact_type="production_document",
+        artifact_id=draft_document.id,
+        version=draft_version.version,
+    )
+    draft_version_ref = ArtifactRef(
+        project_id=document.project.id,
+        artifact_type="production_document_version",
+        artifact_id=draft_version.id,
+        version=draft_version.version,
+    )
+    refs = project_artifact_refs(document)
+
+    assert refs[1] == current_script_ref
+    assert pinned_script_ref not in refs
+    assert pinned_spec_ref not in refs
+    assert draft_ref not in refs
+    assert draft_document_ref not in refs
+    assert draft_version_ref not in refs
+
+    current_script.story_intent = StoryIntent(
+        audience_experience="Follow the current screenplay's exact duration promise.",
+        dramatic_engine="The current visible source beat drives the episode.",
+        progression_strategy="Keep the current production branch coherent.",
+        tone_and_plausibility="Preserve the established current-story semantics.",
+        duration_contract=current_spec.duration_contract.model_copy(deep=True),
+    )
+    document.project.target_duration_seconds = 45.0
+    assert draft.timing_audit is not None
+    active_draft = draft.model_copy(
+        deep=True,
+        update={
+            "script_version_id": current_script.id,
+            "production_spec_version_id": current_spec_version.id,
+            "timing_audit": draft.timing_audit.model_copy(
+                deep=True,
+                update={
+                    "target_duration_s": 45.0,
+                    "difference_seconds": -33.0,
+                },
+            ),
+        },
+    )
+    active_draft_version = ProductionDocumentVersion(
+        id="storyboard-draft-version-active-reconciliation",
+        version=5,
+        parent_version_id=draft_version.id,
+        payload=active_draft.model_dump(mode="json"),
+        origin=ProductionDocumentOrigin.AGENT,
+        created_at="2026-09-02T00:00:04+00:00",
+    )
+    draft_document.versions.append(active_draft_version)
+    draft_document.current_version_id = active_draft_version.id
+    active_draft_ref = draft_ref.model_copy(update={"version": 5})
+    active_draft_document_ref = draft_document_ref.model_copy(
+        update={"version": 5}
+    )
+    active_draft_version_ref = draft_version_ref.model_copy(
+        update={
+            "artifact_id": active_draft_version.id,
+            "version": 5,
+        }
+    )
+    active_refs = project_artifact_refs(document)
+
+    assert active_refs[1:4] == [
+        current_script_ref,
+        current_spec_ref,
+        active_draft_ref,
+    ]
+    assert pinned_script_ref not in active_refs
+    assert pinned_spec_ref not in active_refs
+    assert active_draft_document_ref in active_refs
+    assert active_draft_version_ref in active_refs
+
+    active_story_intent = current_script.story_intent
+    assert active_story_intent is not None
+    current_script.story_intent = active_story_intent.model_copy(
+        deep=True,
+        update={
+            "duration_contract": current_spec.duration_contract.model_copy(
+                deep=True,
+                update={"target_seconds": 44.0},
+            )
+        },
+    )
+    mismatched_refs = project_artifact_refs(document)
+    assert mismatched_refs[1] == current_script_ref
+    assert current_spec_ref not in mismatched_refs
+    assert active_draft_ref not in mismatched_refs
+    assert active_draft_document_ref not in mismatched_refs
+    assert active_draft_version_ref not in mismatched_refs
+    current_script.story_intent = active_story_intent
+
+    repository = ShortDramaRepository(tmp_path / "duration-context.sqlite3")
+    repository.save_project(document)
+    resolver = RuntimeProjectArtifactResolver(repository)
+    spec_summary = resolver.summarize_artifact(pinned_spec_ref)
+    draft_summary = resolver.summarize_artifact(draft_ref)
+
+    assert spec_summary is not None
+    spec_payload = json.loads(spec_summary.summary)
+    assert spec_payload["production_spec_version_id"] == pinned_spec_version.id
+    assert spec_payload["production_spec_version"] == pinned_spec_version.version
+    assert spec_payload["script_version_id"] == pinned_script.id
+    assert spec_payload["duration_contract"]["target_seconds"] == 30.0
+
+    assert draft_summary is not None
+    draft_payload = json.loads(draft_summary.summary)
+    assert draft_payload["draft_version_id"] == draft_version.id
+    assert draft_payload["script_version_id"] == pinned_script.id
+    assert draft_payload["production_spec_version_id"] == pinned_spec_version.id
+    assert draft_payload["timing_audit"]["alignment"] == (
+        "OUTSIDE_ACCEPTED_RANGE"
+    )
+    assert draft_payload["timing_audit"]["difference_seconds"] == -18.0
+    assert draft_payload["timing_audit"]["assessment"]["resolution"] == (
+        "REVISE_SCRIPT"
+    )
+    assert '"alignment":"OUTSIDE_ACCEPTED_RANGE"' in draft_summary.summary[:3000]
 
 
 def test_resolver_rejects_stale_or_mismatched_versioned_refs(tmp_path: Path) -> None:

@@ -2023,6 +2023,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Begin Storyboard Draft */
+        post: operations["begin_storyboard_draft_api_short_drama_projects__project_id__storyboard_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize Storyboard */
+        post: operations["finalize_storyboard_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append Storyboard Group */
+        post: operations["append_storyboard_group_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/groups/{clip_group_id}/replacement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace Storyboard Draft Group */
+        post: operations["replace_storyboard_draft_group_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__groups__clip_group_id__replacement_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/ledger/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Storyboard Ledger */
+        post: operations["complete_storyboard_ledger_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__ledger_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/ledger/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append Storyboard Ledger Segment */
+        post: operations["append_storyboard_ledger_segment_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__ledger_segments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/outline/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Storyboard Outline */
+        post: operations["complete_storyboard_outline_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__outline_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/outline/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append Storyboard Outline Segment */
+        post: operations["append_storyboard_outline_segment_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__outline_segments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Storyboard Draft Verification */
+        post: operations["record_storyboard_draft_verification_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/storyboard/patches": {
         parameters: {
             query?: never;
@@ -2470,6 +2623,7 @@ export interface components {
         };
         /** ActionDigest */
         ActionDigest: {
+            agent_result?: components["schemas"]["AgentResultDigest"] | null;
             /** Artifact Refs */
             artifact_refs?: components["schemas"]["ArtifactRef"][];
             /** Id */
@@ -2646,6 +2800,10 @@ export interface components {
             created_at?: string;
             /** Decisions */
             decisions?: string[];
+            /** Deliverable */
+            deliverable?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
             /** Evidence Refs */
             evidence_refs?: components["schemas"]["ArtifactRef"][];
             /** Findings */
@@ -2669,6 +2827,27 @@ export interface components {
             updated_artifacts?: components["schemas"]["ArtifactRef"][];
             /** Work Order Id */
             work_order_id: string;
+        };
+        /**
+         * AgentResultDigest
+         * @description Bounded semantic handoff from one completed delegated WorkOrder.
+         *
+         *     The full :class:`AgentResult` remains persisted in the runtime store.  This
+         *     projection carries only the fields the Leader needs when choosing the next
+         *     plan, without replaying the Worker's complete conversational context.
+         */
+        AgentResultDigest: {
+            /** Concise Summary */
+            concise_summary: string;
+            /** Deliverable */
+            deliverable?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Evidence Refs */
+            evidence_refs?: components["schemas"]["ArtifactRef"][];
+            /** Findings */
+            findings?: string[];
+            status: components["schemas"]["AgentResultStatus"];
         };
         /**
          * AgentResultStatus
@@ -2819,6 +2998,10 @@ export interface components {
             created_artifacts?: components["schemas"]["ArtifactRef"][];
             /** Decisions */
             decisions?: string[];
+            /** Deliverable */
+            deliverable?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
             /** Evidence Refs */
             evidence_refs?: components["schemas"]["ArtifactRef"][];
             /** Findings */
@@ -3642,6 +3825,8 @@ export interface components {
             source_contract?: components["schemas"]["StorySourceContract"] | null;
             status: components["schemas"]["PlanningRunStatus"];
             story_intent?: components["schemas"]["StoryIntent"] | null;
+            /** Story Verification Resolutions */
+            story_verification_resolutions?: components["schemas"]["StoryVerificationResolution"][];
             /** Warnings */
             warnings?: string[];
         };
@@ -3649,12 +3834,14 @@ export interface components {
          * ContextBoundary
          * @description Named neighboring context selected by the delegating Agent.
          *
-         *     A boundary is descriptive metadata around exact canonical artifact pointers;
-         *     it never copies or owns the underlying project content.
+         *     A boundary records semantic entry/exit context for a WorkOrder.  It may
+         *     anchor that guidance to exact canonical artifact pointers when such an
+         *     artifact exists, but the first or last unit can legitimately have guidance
+         *     without a neighboring artifact.  It never copies or owns project content.
          */
         ContextBoundary: {
             /** Artifact Refs */
-            artifact_refs: components["schemas"]["ArtifactRef"][];
+            artifact_refs?: components["schemas"]["ArtifactRef"][];
             /** Guidance */
             guidance?: string | null;
             /** Relationship */
@@ -4163,6 +4350,85 @@ export interface components {
             /** Size Bytes */
             size_bytes: number;
         };
+        /**
+         * DurationAlignment
+         * @enum {string}
+         */
+        DurationAlignment: "ALIGNED" | "OUTSIDE_ACCEPTED_RANGE" | "NOT_APPLICABLE" | "UNRESOLVED";
+        /**
+         * DurationAuthority
+         * @enum {string}
+         */
+        DurationAuthority: "TARGET_LED" | "SOURCE_LED" | "AUDIO_LED";
+        /**
+         * DurationContract
+         * @description Semantic runtime authority shared across story and production planning.
+         */
+        DurationContract: {
+            acceptable_range_seconds?: components["schemas"]["DurationRange"] | null;
+            authority: components["schemas"]["DurationAuthority"];
+            /** Decision Basis */
+            decision_basis: string;
+            mismatch_resolution: components["schemas"]["DurationMismatchResolution"];
+            /** Rhythm Shape */
+            rhythm_shape?: components["schemas"]["DurationRhythmSection"][];
+            source_fidelity_policy: components["schemas"]["DurationFidelityPolicy"];
+            target_origin: components["schemas"]["DurationTargetOrigin"];
+            /** Target Seconds */
+            target_seconds?: number | null;
+            /**
+             * User Overridable
+             * @default true
+             */
+            user_overridable: boolean;
+        };
+        /**
+         * DurationFidelityPolicy
+         * @enum {string}
+         */
+        DurationFidelityPolicy: "PRESERVE_VERBATIM" | "PRESERVE_STORY_COMMITMENTS" | "REWRITABLE";
+        /** DurationFitAssessment */
+        DurationFitAssessment: {
+            alignment: components["schemas"]["DurationAlignment"];
+            /** Concurrent Performance */
+            concurrent_performance?: string[];
+            estimated_range_seconds?: components["schemas"]["DurationRange"] | null;
+            /** Pressure Points */
+            pressure_points?: string[];
+            /** Rationale */
+            rationale: string;
+            resolution: components["schemas"]["DurationMismatchResolution"];
+        };
+        /**
+         * DurationMismatchResolution
+         * @enum {string}
+         */
+        DurationMismatchResolution: "REVISE_SCRIPT" | "REPORT_NATURAL_RUNTIME" | "FOLLOW_MASTER_AUDIO" | "ASK_USER";
+        /** DurationRange */
+        DurationRange: {
+            /** Maximum Seconds */
+            maximum_seconds: number;
+            /** Minimum Seconds */
+            minimum_seconds: number;
+        };
+        /** DurationRhythmSection */
+        DurationRhythmSection: {
+            /** Label */
+            label: string;
+            /** Narrative Function */
+            narrative_function: string;
+            /** Payoff Or Handoff */
+            payoff_or_handoff?: string | null;
+            /** Relative Density */
+            relative_density: string;
+            /** Scene Sequences */
+            scene_sequences?: number[];
+        };
+        /**
+         * DurationTargetOrigin
+         * @enum {string}
+         */
+        DurationTargetOrigin: "USER_DECLARED" | "PROFILE_DEFAULT" | "SOURCE_DECLARED" | "MASTER_AUDIO" | "LEGACY_UNKNOWN";
         /**
          * EndingContract
          * @description Episode payoff and continuation policy protected across later revisions.
@@ -7477,7 +7743,7 @@ export interface components {
          * ProductionSpecContent
          * @description Versioned production decisions shared by planning and execution Agents.
          */
-        ProductionSpecContent: {
+        "ProductionSpecContent-Input": {
             /** Agent Decisions */
             agent_decisions?: string[];
             /** Aspect Ratio */
@@ -7485,12 +7751,55 @@ export interface components {
             audio?: components["schemas"]["ProductionAudioDirection"];
             /** Bible Version Id */
             bible_version_id: string;
+            duration_contract: components["schemas"]["DurationContract"];
             /** Duration Intent */
             duration_intent?: string | null;
             /** Genre And Setting */
             genre_and_setting: string;
             /** Language */
             language: string;
+            /** Master Audio Binding Version Id */
+            master_audio_binding_version_id?: string | null;
+            /** Notes */
+            notes?: string[];
+            /** Production Mode */
+            production_mode: string;
+            /** Production Scope */
+            production_scope: string;
+            /** Project Id */
+            project_id: string;
+            provider_preference?: components["schemas"]["ProductionProviderPreference"] | null;
+            /** Script Version Id */
+            script_version_id: string;
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
+            /** Title */
+            title: string;
+            /** User Constraints */
+            user_constraints?: string[];
+            visual?: components["schemas"]["ProductionVisualDirection"];
+        };
+        /**
+         * ProductionSpecContent
+         * @description Versioned production decisions shared by planning and execution Agents.
+         */
+        "ProductionSpecContent-Output": {
+            /** Agent Decisions */
+            agent_decisions?: string[];
+            /** Aspect Ratio */
+            aspect_ratio: string;
+            audio?: components["schemas"]["ProductionAudioDirection"];
+            /** Bible Version Id */
+            bible_version_id: string;
+            duration_contract: components["schemas"]["DurationContract"];
+            /** Duration Intent */
+            duration_intent?: string | null;
+            /** Genre And Setting */
+            genre_and_setting: string;
+            /** Language */
+            language: string;
+            /** Master Audio Binding Version Id */
+            master_audio_binding_version_id?: string | null;
             /** Notes */
             notes?: string[];
             /** Production Mode */
@@ -7515,20 +7824,20 @@ export interface components {
             origin: components["schemas"]["ProductionDocumentOrigin"];
             /** Source Artifact Refs */
             source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
-            spec: components["schemas"]["ProductionSpecContent"];
+            spec: components["schemas"]["ProductionSpecContent-Input"];
         };
         /** ProductionSpecMutationResponse */
         ProductionSpecMutationResponse: {
             document: components["schemas"]["ProductionDocument"];
             output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
-            spec: components["schemas"]["ProductionSpecContent"];
+            spec: components["schemas"]["ProductionSpecContent-Output"];
             version: components["schemas"]["ProductionDocumentVersion"];
         };
         /** ProductionSpecReadResponse */
         ProductionSpecReadResponse: {
             document: components["schemas"]["ProductionDocument"];
             output_slot?: components["schemas"]["ProjectOutputSlot"] | null;
-            spec: components["schemas"]["ProductionSpecContent"];
+            spec: components["schemas"]["ProductionSpecContent-Output"];
             version: components["schemas"]["ProductionDocumentVersion"];
         };
         /** ProductionSpecReplaceRequest */
@@ -7538,7 +7847,7 @@ export interface components {
             origin: components["schemas"]["ProductionDocumentOrigin"];
             /** Source Artifact Refs */
             source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
-            spec: components["schemas"]["ProductionSpecContent"];
+            spec: components["schemas"]["ProductionSpecContent-Input"];
         };
         /**
          * ProductionVisualDirection
@@ -8615,6 +8924,7 @@ export interface components {
         };
         /** ScriptReviewReport */
         ScriptReviewReport: {
+            duration_fit_assessment?: components["schemas"]["DurationFitAssessment"] | null;
             /** Followup Rationale */
             followup_rationale?: string | null;
             /** Issues */
@@ -9212,6 +9522,33 @@ export interface components {
             voice_identity?: string | null;
         };
         /**
+         * SpecialistProtocolFeedback
+         * @description Persisted feedback for correcting one malformed Worker response.
+         *
+         *     This is control-plane state, not creative review.  Keeping the rejected
+         *     response beside typed validation issues lets the same specialist repair its
+         *     handoff without asking the Leader to decompose or rewrite the WorkOrder.
+         */
+        SpecialistProtocolFeedback: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Id */
+            id: string;
+            /** Loaded Tool Schema Ids */
+            loaded_tool_schema_ids?: string[];
+            /** Rejected Response */
+            rejected_response: string;
+            /** Validation Issues */
+            validation_issues?: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["JsonValue"];
+                }[];
+            };
+        };
+        /**
          * SpecialistTurnRecord
          * @description Recoverable trace for one specialist decision followed by one Tool action.
          */
@@ -9422,6 +9759,7 @@ export interface components {
             dramatic_engine: string;
             /** Drift Risks */
             drift_risks?: string[];
+            duration_contract?: components["schemas"]["DurationContract"] | null;
             /** Progression Strategy */
             progression_strategy: string;
             /** Protected Elements */
@@ -9486,21 +9824,31 @@ export interface components {
          * @description Typed, sparse patch for global story metadata only.
          *
          *     Stable entity IDs are selectors, not editable values. Scene contracts, dialogue,
-         *     and target duration are intentionally absent from this schema.
+         *     and a standalone target-duration field are intentionally absent from this schema.
+         *     When StoryIntent is deliberately revised, its nested DurationContract remains the
+         *     authoritative story-level duration decision and is projected by the workflow.
          */
         StoryMetadataRevisionPatch: {
             /** Character Patches */
             character_patches?: components["schemas"]["StoryCharacterMetadataPatch"][];
+            ending_contract?: components["schemas"]["EndingContract"] | null;
             /** Location Patches */
             location_patches?: components["schemas"]["StoryLocationMetadataPatch"][];
             /** Prop Patches */
             prop_patches?: components["schemas"]["StoryPropMetadataPatch"][];
+            story_intent?: components["schemas"]["StoryIntent"] | null;
             /** Story Summary */
             story_summary?: string | null;
             style?: components["schemas"]["StoryStyleMetadataPatch"] | null;
             /** Title */
             title?: string | null;
         };
+        /**
+         * StoryMetadataTarget
+         * @description Global story state that a semantic repair must keep aligned.
+         * @enum {string}
+         */
+        StoryMetadataTarget: "TITLE" | "STORY_SUMMARY" | "STORY_INTENT" | "ENDING_CONTRACT" | "PROJECT_BIBLE";
         /**
          * StoryPropMetadataPatch
          * @description Sparse descriptive updates for one existing prop selected by stable ID.
@@ -9523,6 +9871,8 @@ export interface components {
             issue_id?: string | null;
             /** Issue Index */
             issue_index: number;
+            /** Metadata Targets */
+            metadata_targets?: components["schemas"]["StoryMetadataTarget"][];
             /** Preserve */
             preserve?: string[];
             /** Rationale */
@@ -9546,7 +9896,7 @@ export interface components {
          * @description Where a routed story issue actually originates after a second look.
          * @enum {string}
          */
-        StoryRepairDiagnosis: "SOURCE_CONCEPT_GAP" | "OUTLINE_DEFECT" | "CRITIC_OVERREACH";
+        StoryRepairDiagnosis: "SOURCE_CONCEPT_GAP" | "OUTLINE_DEFECT" | "CRITIC_OVERREACH" | "USER_REQUEST";
         /**
          * StoryRepairPlan
          * @description Cross-round diagnosis and minimal repair plan prepared before rewriting.
@@ -9579,6 +9929,7 @@ export interface components {
         StoryRevisionVerification: {
             /** Accepted */
             accepted: boolean;
+            duration_fit_assessment?: components["schemas"]["DurationFitAssessment"] | null;
             /** Followup Rationale */
             followup_rationale?: string | null;
             /** @default FINALIZE */
@@ -9603,6 +9954,8 @@ export interface components {
             category: string;
             /** Issue Id */
             issue_id?: string | null;
+            /** Metadata Targets */
+            metadata_targets?: components["schemas"]["StoryMetadataTarget"][];
             /** Observation */
             observation: string;
             /** Repair Instruction */
@@ -9657,6 +10010,84 @@ export interface components {
             texture?: string | null;
         };
         /**
+         * StoryVerificationResolution
+         * @description Persisted Leader decision over one exact verifier result.
+         *
+         *     The captured verifier payload remains unchanged so accepting a tradeoff never
+         *     rewrites a rejected or unresolved result into an accepted one.
+         */
+        StoryVerificationResolution: {
+            /** Created At */
+            created_at: string;
+            decision: components["schemas"]["StoryVerificationResolutionDecision"];
+            /** Owner Agent Run Id */
+            owner_agent_run_id: string;
+            /** Rationale */
+            rationale: string;
+            revision_verification?: components["schemas"]["StoryRevisionVerification"] | null;
+            script_review_report?: components["schemas"]["ScriptReviewReport"] | null;
+            source: components["schemas"]["StoryVerificationSource"];
+        };
+        /**
+         * StoryVerificationResolutionDecision
+         * @enum {string}
+         */
+        StoryVerificationResolutionDecision: "CONTINUE_FOCUSED_REVISION" | "RETURN_TO_STORY_ARCHITECT" | "ACCEPT_TRADEOFF";
+        /**
+         * StoryVerificationSource
+         * @enum {string}
+         */
+        StoryVerificationSource: "SCRIPT_VERIFIER" | "REVISION_VERIFIER";
+        /**
+         * StoryboardClipGroupDraft
+         * @description One bounded, incrementally persisted ClipGroup with its editorial Shots.
+         */
+        StoryboardClipGroupDraft: {
+            clip_group: components["schemas"]["ClipGroup"];
+            /** Handoff Notes */
+            handoff_notes?: string[];
+            /** Scene Group Sequence */
+            scene_group_sequence: number;
+            /** Scene Node Id */
+            scene_node_id: string;
+            /** Shots */
+            shots: components["schemas"]["ShotPlan-Input"][];
+            source_range: components["schemas"]["StoryboardSourceRange"];
+            /** Work Unit Id */
+            work_unit_id: string;
+        };
+        /**
+         * StoryboardClipGroupOutline
+         * @description One immutable row in the private whole-episode ClipGroup ledger.
+         *
+         *     The Agent derives this outline from the dialogue/action timing scratch pass
+         *     before any detailed Shot is authored. It is a factual authoring plan, not a
+         *     target-duration allocation: each later commit must land on the exact row.
+         */
+        StoryboardClipGroupOutline: {
+            /** Continuity In */
+            continuity_in?: string[];
+            /** Continuity Out */
+            continuity_out?: string[];
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Id */
+            id: string;
+            /** Objective */
+            objective: string;
+            /** Scene Group Sequence */
+            scene_group_sequence: number;
+            /** Scene Node Id */
+            scene_node_id: string;
+            source_range: components["schemas"]["StoryboardSourceRange"];
+            /** Timing Entry Ids */
+            timing_entry_ids: string[];
+            /** Title */
+            title: string;
+            /** Visible Changes */
+            visible_changes?: string[];
+        };
+        /**
          * StoryboardContent
          * @description Complete structured storyboard and its provider-independent clip groups.
          */
@@ -9675,6 +10106,8 @@ export interface components {
             production_spec_version_id: string;
             /** Project Id */
             project_id: string;
+            /** Scene Nodes */
+            scene_nodes?: components["schemas"]["StoryboardSceneNode"][];
             /** Script Line Ids */
             script_line_ids?: string[];
             /** Script Version Id */
@@ -9705,6 +10138,8 @@ export interface components {
             production_spec_version_id: string;
             /** Project Id */
             project_id: string;
+            /** Scene Nodes */
+            scene_nodes?: components["schemas"]["StoryboardSceneNode"][];
             /** Script Line Ids */
             script_line_ids?: string[];
             /** Script Version Id */
@@ -9723,6 +10158,283 @@ export interface components {
             source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
             storyboard: components["schemas"]["StoryboardContent-Input"];
         };
+        /** StoryboardDraftAppendRequest */
+        StoryboardDraftAppendRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Draft Document Id */
+            draft_document_id: string;
+            group: components["schemas"]["StoryboardClipGroupDraft"];
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            work_unit: components["schemas"]["StoryboardWorkUnitContract"];
+        };
+        /** StoryboardDraftBeginRequest */
+        StoryboardDraftBeginRequest: {
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            seed: components["schemas"]["StoryboardDraftSeed"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+        };
+        /** StoryboardDraftFinalizeRequest */
+        StoryboardDraftFinalizeRequest: {
+            /** Draft Document Id */
+            draft_document_id: string;
+            /** Draft Version Id */
+            draft_version_id: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+        };
+        /** StoryboardDraftGroupReplaceRequest */
+        StoryboardDraftGroupReplaceRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Draft Document Id */
+            draft_document_id: string;
+            group: components["schemas"]["StoryboardClipGroupDraft"];
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Replaced Clip Group Id */
+            replaced_clip_group_id: string;
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            work_unit: components["schemas"]["StoryboardWorkUnitContract"];
+        };
+        /** StoryboardDraftLedgerCompleteRequest */
+        StoryboardDraftLedgerCompleteRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Draft Document Id */
+            draft_document_id: string;
+            /** Notes */
+            notes?: string[];
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+        };
+        /** StoryboardDraftLedgerSegmentAppendRequest */
+        StoryboardDraftLedgerSegmentAppendRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Draft Document Id */
+            draft_document_id: string;
+            /** Entries */
+            entries: components["schemas"]["StoryboardTimingLedgerEntry"][];
+            /** Notes */
+            notes?: string[];
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+        };
+        /** StoryboardDraftMutationResponse */
+        StoryboardDraftMutationResponse: {
+            progress: components["schemas"]["StoryboardDraftProgress"];
+        };
+        /** StoryboardDraftOutlineCompleteRequest */
+        StoryboardDraftOutlineCompleteRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Draft Document Id */
+            draft_document_id: string;
+            /** Notes */
+            notes?: string[];
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+            timing_audit: components["schemas"]["StoryboardTimingAudit"];
+        };
+        /** StoryboardDraftOutlineSegmentAppendRequest */
+        StoryboardDraftOutlineSegmentAppendRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Draft Document Id */
+            draft_document_id: string;
+            /** Groups */
+            groups: components["schemas"]["StoryboardClipGroupOutline"][];
+            /** Notes */
+            notes?: string[];
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+        };
+        /**
+         * StoryboardDraftPhase
+         * @description Private authoring phase of one recoverable storyboard draft.
+         * @enum {string}
+         */
+        StoryboardDraftPhase: "LEDGER_BUILDING" | "OUTLINE_BUILDING" | "DURATION_RECONCILIATION" | "GROUP_AUTHORING";
+        /**
+         * StoryboardDraftProgress
+         * @description Compact Tool result suitable for traces and long-running Agent context.
+         */
+        StoryboardDraftProgress: {
+            /** Committed Clip Group Count */
+            committed_clip_group_count: number;
+            /** Committed Duration Seconds */
+            committed_duration_seconds: number;
+            /** Committed Shot Count */
+            committed_shot_count: number;
+            /** Covered Script Line Count */
+            covered_script_line_count: number;
+            draft_ref: components["schemas"]["ProductionDocumentArtifactRef"];
+            /** Draft Version Id */
+            draft_version_id: string;
+            /** Latest Clip Group Id */
+            latest_clip_group_id?: string | null;
+            /** Latest Continuity Out */
+            latest_continuity_out?: string[];
+            /** Latest Planned Continuity Out */
+            latest_planned_continuity_out?: string[];
+            /** Latest Scene Node Id */
+            latest_scene_node_id?: string | null;
+            /** Latest Shot Ids */
+            latest_shot_ids?: string[];
+            /** Ledger Covered Script Line Count */
+            ledger_covered_script_line_count: number;
+            /** Next Unplanned Scene Node Id */
+            next_unplanned_scene_node_id?: string | null;
+            /** Next Unplanned Script Line Id */
+            next_unplanned_script_line_id?: string | null;
+            /** Outlined Script Line Count */
+            outlined_script_line_count: number;
+            /** Outlined Timing Entry Count */
+            outlined_timing_entry_count: number;
+            phase: components["schemas"]["StoryboardDraftPhase"];
+            /** Planned Clip Group Count */
+            planned_clip_group_count: number;
+            /** Remaining Duration Seconds */
+            remaining_duration_seconds?: number | null;
+            /** Remaining Script Line Count */
+            remaining_script_line_count: number;
+            /** Scene Node Count */
+            scene_node_count: number;
+            /** Scene Progress */
+            scene_progress: components["schemas"]["StoryboardDraftSceneProgress"][];
+            /** Timing Ledger Entry Count */
+            timing_ledger_entry_count: number;
+            /** Total Planned Duration Seconds */
+            total_planned_duration_seconds?: number | null;
+            verification_status?: components["schemas"]["StoryboardDraftVerificationStatus"] | null;
+        };
+        /** StoryboardDraftSceneProgress */
+        StoryboardDraftSceneProgress: {
+            /** Committed Clip Group Count */
+            committed_clip_group_count: number;
+            /** Committed Duration Seconds */
+            committed_duration_seconds: number;
+            /** Covered Script Line Count */
+            covered_script_line_count: number;
+            /** Planned Clip Group Count */
+            planned_clip_group_count: number;
+            /** Planned Duration Seconds */
+            planned_duration_seconds: number;
+            /** Planned Script Line Count */
+            planned_script_line_count: number;
+            /** Remaining Duration Seconds */
+            remaining_duration_seconds: number;
+            /** Remaining Script Line Count */
+            remaining_script_line_count: number;
+            /** Scene Id */
+            scene_id: string;
+            /** Scene Node Id */
+            scene_node_id: string;
+        };
+        /**
+         * StoryboardDraftSceneSeed
+         * @description Agent-selected scene identity and continuity, before source hydration.
+         */
+        StoryboardDraftSceneSeed: {
+            /** Continuity In */
+            continuity_in?: string[];
+            /** Continuity Out */
+            continuity_out?: string[];
+            /** Id */
+            id: string;
+            /** Notes */
+            notes?: string[];
+            /** Scene Id */
+            scene_id: string;
+            /** Sequence */
+            sequence: number;
+        };
+        /**
+         * StoryboardDraftSeed
+         * @description Small source lock used to open a draft without emitting its whole plan.
+         */
+        StoryboardDraftSeed: {
+            /** Base Storyboard Version Id */
+            base_storyboard_version_id?: string | null;
+            /** Bible Version Id */
+            bible_version_id: string;
+            /** Notes */
+            notes?: string[];
+            /** Production Spec Document Id */
+            production_spec_document_id: string;
+            /** Production Spec Version Id */
+            production_spec_version_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Scene Nodes */
+            scene_nodes: components["schemas"]["StoryboardDraftSceneSeed"][];
+            /** Script Version Id */
+            script_version_id: string;
+            /** Timing Notes */
+            timing_notes?: string[];
+            /** Title */
+            title: string;
+        };
+        /** StoryboardDraftVerificationFinding */
+        StoryboardDraftVerificationFinding: {
+            /** Affected Clip Group Ids */
+            affected_clip_group_ids?: string[];
+            /** Affected Scene Sequences */
+            affected_scene_sequences?: number[];
+            /** Id */
+            id: string;
+            /** @default CLIP_GROUP */
+            repair_scope: components["schemas"]["StoryboardRepairScope"];
+            /** Suggested Revision */
+            suggested_revision?: string | null;
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * StoryboardDraftVerificationReport
+         * @description Semantic Verifier output attached to one exact draft content version.
+         *
+         *     This is Agent state, not a user approval or publishing gate. Any subsequent
+         *     group append/replacement clears it so stale conclusions cannot look current.
+         */
+        StoryboardDraftVerificationReport: {
+            /** Checked Clip Group Ids */
+            checked_clip_group_ids: string[];
+            /** Continuity Assessment */
+            continuity_assessment?: string[];
+            /** Findings */
+            findings?: components["schemas"]["StoryboardDraftVerificationFinding"][];
+            status: components["schemas"]["StoryboardDraftVerificationStatus"];
+            /** Summary */
+            summary: string;
+            /** Timing Assessment */
+            timing_assessment?: string[];
+        };
+        /** StoryboardDraftVerificationRequest */
+        StoryboardDraftVerificationRequest: {
+            /** Base Version Id */
+            base_version_id: string;
+            /** Draft Document Id */
+            draft_document_id: string;
+            origin: components["schemas"]["ProductionDocumentOrigin"];
+            report: components["schemas"]["StoryboardDraftVerificationReport"];
+            /** Source Artifact Refs */
+            source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
+        };
+        /**
+         * StoryboardDraftVerificationStatus
+         * @enum {string}
+         */
+        StoryboardDraftVerificationStatus: "READY" | "NEEDS_REVISION";
         /** StoryboardMutationResponse */
         StoryboardMutationResponse: {
             document: components["schemas"]["ProductionDocument"];
@@ -9758,6 +10470,11 @@ export interface components {
             storyboard: components["schemas"]["StoryboardContent-Output"];
             version: components["schemas"]["ProductionDocumentVersion"];
         };
+        /**
+         * StoryboardRepairScope
+         * @enum {string}
+         */
+        StoryboardRepairScope: "CLIP_GROUP" | "STORYBOARD_PLAN" | "SCRIPT" | "PRODUCTION_SPEC";
         /** StoryboardReplaceRequest */
         StoryboardReplaceRequest: {
             /** Base Version Id */
@@ -9767,6 +10484,37 @@ export interface components {
             source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
             storyboard: components["schemas"]["StoryboardContent-Input"];
         };
+        /**
+         * StoryboardSceneNode
+         * @description Stable scene index inside the single canonical Storyboard document.
+         *
+         *     The name describes a semantic aggregation node in the content graph.  It
+         *     is not a separate MiniMax canvas document or a ComfyUI execution node.
+         */
+        StoryboardSceneNode: {
+            /** Clip Group Ids */
+            clip_group_ids?: string[];
+            /** Continuity In */
+            continuity_in?: string[];
+            /** Continuity Out */
+            continuity_out?: string[];
+            /** Heading */
+            heading: string;
+            /** Id */
+            id: string;
+            /** Notes */
+            notes?: string[];
+            /** Scene Id */
+            scene_id: string;
+            /** Sequence */
+            sequence: number;
+            /** Shot Ids */
+            shot_ids?: string[];
+            /** Source Line Ids */
+            source_line_ids?: string[];
+            /** Summary */
+            summary: string;
+        };
         /** StoryboardShotReplacement */
         StoryboardShotReplacement: {
             /** Expected Revision */
@@ -9774,6 +10522,133 @@ export interface components {
             replacement: components["schemas"]["ShotPlan-Input"];
             /** Shot Id */
             shot_id: string;
+        };
+        /**
+         * StoryboardSourceRange
+         * @description A semantic source span selected by the Leader, not a timed chunk.
+         *
+         *     A range may cover part of one scene or cross scene boundaries.  Dialogue
+         *     line IDs provide exact traceability where the script has spoken lines;
+         *     natural-language anchors retain action-only beats without inventing a
+         *     second screenplay representation.
+         */
+        StoryboardSourceRange: {
+            /** Description */
+            description: string;
+            /** Ends Before */
+            ends_before?: string | null;
+            /** Id */
+            id: string;
+            /** Scene Ids */
+            scene_ids: string[];
+            /** Script Line Ids */
+            script_line_ids?: string[];
+            /** Starts After */
+            starts_after?: string | null;
+        };
+        /**
+         * StoryboardTimingAudit
+         * @description Persisted summary of MiniMax Design's private timing scratch pass.
+         *
+         *     Neither a source declaration nor a target may be divided into synthetic
+         *     ClipGroup budgets. ``computed_episode_duration_s`` is derived from the
+         *     natural ledger and is then compared with the pinned DurationContract.
+         */
+        StoryboardTimingAudit: {
+            /** @default NOT_APPLICABLE */
+            alignment: components["schemas"]["DurationAlignment"];
+            assessment?: components["schemas"]["DurationFitAssessment"] | null;
+            /** Clip Group Count */
+            clip_group_count: number;
+            /** Computed Episode Duration S */
+            computed_episode_duration_s: number;
+            /** Dialogue Units Total */
+            dialogue_units_total: number;
+            /** Difference Seconds */
+            difference_seconds?: number | null;
+            /** Minimum Spoken Duration S */
+            minimum_spoken_duration_s: number;
+            /** Non Speech Reserve S */
+            non_speech_reserve_s: number;
+            /** Notes */
+            notes?: string[];
+            /** Overloaded Group Ids */
+            overloaded_group_ids?: string[];
+            /** Overloaded Shot Ids */
+            overloaded_shot_ids?: string[];
+            /** Source Declared Duration S */
+            source_declared_duration_s?: number | null;
+            /** Target Duration S */
+            target_duration_s?: number | null;
+            /** Timing Audit Passed */
+            timing_audit_passed: boolean;
+        };
+        /**
+         * StoryboardTimingLedgerEntry
+         * @description One dialogue or visible-action row in the private timing ledger.
+         */
+        StoryboardTimingLedgerEntry: {
+            /** Allocated Duration Seconds */
+            allocated_duration_seconds: number;
+            /**
+             * Completes Scene
+             * @default false
+             */
+            completes_scene: boolean;
+            /** Continuity In */
+            continuity_in?: string[];
+            /** Continuity Out */
+            continuity_out?: string[];
+            /** Dialogue Units */
+            dialogue_units: number;
+            /** Id */
+            id: string;
+            /** Minimum Spoken Duration Seconds */
+            minimum_spoken_duration_seconds: number;
+            /** Natural Cut */
+            natural_cut: string;
+            /** Non Speech Reserve Seconds */
+            non_speech_reserve_seconds: number;
+            /** Planned Clip Group Id */
+            planned_clip_group_id?: string | null;
+            /** Planned Shot Id */
+            planned_shot_id?: string | null;
+            /** Scene Node Id */
+            scene_node_id: string;
+            /** Sequence */
+            sequence: number;
+            source_range: components["schemas"]["StoryboardSourceRange"];
+            /** Source Text */
+            source_text: string;
+            /** Speech Rate Units Per Second */
+            speech_rate_units_per_second?: number | null;
+            /** Visible Changes */
+            visible_changes?: string[];
+        };
+        /**
+         * StoryboardWorkUnitContract
+         * @description One dynamically planned authoring scope carried by an Agent WorkOrder.
+         *
+         *     This contract deliberately does not equate a WorkOrder with a script scene,
+         *     an editorial Shot, or a provider ClipGroup.  One unit may produce multiple
+         *     groups, and a later Leader revision may split or combine semantic ranges.
+         */
+        StoryboardWorkUnitContract: {
+            /** Completion Criteria */
+            completion_criteria: string[];
+            /** Constraints */
+            constraints?: string[];
+            /** Continuity Context */
+            continuity_context?: string[];
+            /** Id */
+            id: string;
+            /** Objective */
+            objective: string;
+            /** Ordering Guidance */
+            ordering_guidance?: string | null;
+            source_range: components["schemas"]["StoryboardSourceRange"];
+            /** Title */
+            title: string;
         };
         /** StructuredScene */
         StructuredScene: {
@@ -10203,8 +11078,16 @@ export interface components {
             media_path: string;
             /** Shot Id */
             shot_id: string;
+            /** Source Bible Version Id */
+            source_bible_version_id?: string | null;
             /** Source In Seconds */
             source_in_seconds: number;
+            /** Source Script Version Id */
+            source_script_version_id?: string | null;
+            /** Source Storyboard Document Id */
+            source_storyboard_document_id?: string | null;
+            /** Source Storyboard Version Id */
+            source_storyboard_version_id?: string | null;
             /** Start Seconds */
             start_seconds: number;
             /** Take Id */
@@ -10446,6 +11329,7 @@ export interface components {
             open_questions?: string[];
             /** Parent Run Id */
             parent_run_id: string;
+            pending_protocol_feedback?: components["schemas"]["SpecialistProtocolFeedback"] | null;
             production_skill_role?: components["schemas"]["ProductionSkillRole"] | null;
             /** Recipient Role */
             recipient_role: string;
@@ -15763,6 +16647,411 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoryboardMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    begin_storyboard_draft_api_short_drama_projects__project_id__storyboard_drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftBeginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    finalize_storyboard_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftFinalizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    append_storyboard_group_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftAppendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    replace_storyboard_draft_group_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__groups__clip_group_id__replacement_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+                clip_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftGroupReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    complete_storyboard_ledger_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__ledger_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftLedgerCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    append_storyboard_ledger_segment_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__ledger_segments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftLedgerSegmentAppendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    complete_storyboard_outline_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__outline_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftOutlineCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    append_storyboard_outline_segment_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__outline_segments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftOutlineSegmentAppendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    record_storyboard_draft_verification_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                draft_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoryboardDraftVerificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryboardDraftMutationResponse"];
                 };
             };
             /** @description Client Error */

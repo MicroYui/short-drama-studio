@@ -1,7 +1,7 @@
 # AI Agent 视频制片桌面产品 PRD 与里程碑
 
 > 状态：当前产品定义
-> 更新日期：2026-09-04
+> 更新日期：2026-09-05
 > 适用范围：单用户、本地桌面软件
 
 本文是当前产品形态、复用边界和实施顺序的权威说明。历史调研和阶段实验仍保留，但与本文冲突时，以本文为准。
@@ -63,6 +63,18 @@
 4. 其余情况由 Agent 判断。只有缺失信息会实质改变作品或执行路线，而且无法从现有工件推断时才询问用户；
 5. 不使用正则、关键词路由、固定确认次数、创意重试次数或审批门实现上述逻辑。
 
+### 3.4 时长与内容密度
+
+目标时长不是分镜阶段再把现有文本机械压进固定秒数，而是剧本创作前就进入版本化 `DurationContract`。Agent 结合用户是否明确给出时长、是否要求保留既有剧本、是否存在 Master Audio，以及当前 Workflow 的叙事方法，判断本项目由目标时长、来源文本还是主音频主导，并说明可接受区间、来源保真程度、失配时的处理方式和相对节奏形状。
+
+- 原创或可改写内容以目标时长控制故事规模、场次数量、事件密度和对白量；Writer 在写作中估算自然表演时间，Verifier 从头冷读成稿并给出结构化时长适配结论；
+- 用户锁定的完整剧本以来源为主，分镜忠实计算自然时长，不为命中目标而删台词、并行动作或平均压缩；
+- 音乐视频等由 Master Audio 主导的项目以音频时间轴为准；ProductionSpec 精确绑定当前 MasterAudio version，目标长度等于时间原点加所选音频窗口，重绑后旧分镜和生成计划失效；
+- 可接受区间由 Agent 针对当前作品语义提出并可被用户覆盖，不使用全局固定百分比或代码阈值；
+- 分镜的 timing ledger 记录实际对白、动作、停顿和反应，语速是 Agent 对当前台词表演的语义判断，不在共享 schema 设置单一上限。若目标主导项目的结论为 `OUTSIDE_ACCEPTED_RANGE` 或 `UNRESOLVED`，Agent 交回 Leader：可回到现有剧本局部/整体修订链路，也可依据完整证据明确接受取舍；修订时携带精确 Script、ProductionSpec 和 StoryboardDraft 版本证据。来源或音频主导不被偷偷压缩。
+
+MiniMax-H3 的 4–15 秒只约束单次 `ClipGroup / GenerationUnit`，不等于场次、镜头或整集的创作时长。一个场次可以包含多个连续 ClipGroup，一个 ClipGroup 也可以包含多个编辑 Shot。
+
 ## 4. 最终产品界面
 
 最终工作区可以采用 MiniMax Design 类似的组织方式：
@@ -102,6 +114,7 @@ LTX 时间线、多轨编辑、定向修改与 FFmpeg 导出
 - `PlanRevision + WorkOrder + AgentResult`：任务分解、委派和工件交接；
 - `ContextManifest + ArtifactRef`：为 Worker 提供最小且精确的上下文；
 - `ProductionSpec + Storyboard + GenerationPlan`：使用版本化 ProductionDocument 承载制作决策、完整分镜和 Provider 无关的生成单元；
+- `DurationContract + DurationFitAssessment`：在故事、剧本审阅、制作规格和分镜账本之间传递同一时长权威与自然表演判断；
 - `ProjectOutputSlot`：用稳定逻辑名称交接当前产物，换绑时保留历史 ArtifactRef；
 - `ProductionBoardView`：从权威状态派生的用户可见进度和工件视图；
 - Typed Tool Registry：资产、图片、视频、音频、时间线和修改能力。

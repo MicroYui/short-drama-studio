@@ -29,6 +29,13 @@ from short_drama.models import (
     CoreAssetBrief,
     CreateProjectRequest,
     DomainModel,
+    DurationAlignment,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationFitAssessment,
+    DurationMismatchResolution,
+    DurationTargetOrigin,
     EndingContract,
     ExecutionPlanEntry,
     ExecutionStrategy,
@@ -96,6 +103,11 @@ _STORY_INTERACTION_PRIORITY = (
     "RunMode.GUIDED 只表示用户可参与，不代表每个阶段都必须确认；"
     "RunMode.AUTO_DRAFT 表示除用户明确要求的确认外，应自主继续。"
 )
+
+# PlannedShot remains a positive-duration runtime model. Local fallback shots use
+# this schema-compatible technical placeholder only; it is not an estimate of
+# natural performance time and must not be scaled to the episode/scene target.
+_UNRESOLVED_FALLBACK_SHOT_DURATION_SECONDS = 4.0
 
 
 class PlannedDialogueLine(DomainModel):
@@ -682,14 +694,6 @@ class ProductionPlan(DomainModel):
                 "Dialogue lines reference unknown planned character IDs: "
                 + ", ".join(unknown_speaker_ids)
             )
-        if self.shots:
-            duration = sum(shot.duration_seconds for shot in self.shots)
-            tolerance = max(15.0, self.target_duration_seconds * 0.2)
-            if abs(duration - self.target_duration_seconds) > tolerance:
-                raise ValueError(
-                    "Planned episode duration does not match the requested target: "
-                    f"target={self.target_duration_seconds}, shots={duration}"
-                )
         line_count = len(self.lines)
         invalid = sorted(
             {
@@ -1002,7 +1006,93 @@ def _fallback_story_intent(
             "不要用通用类型惯例取代用户的核心命题。",
             "不要为了表面严谨而削弱本剧真正承诺的观看体验。",
         ],
+        duration_contract=_fallback_duration_contract(request),
     )
+
+
+def _fallback_duration_contract(request: CreateProjectRequest) -> DurationContract:
+    """Keep compatibility deterministic without inventing a timing tolerance."""
+
+    target_origin = (
+        DurationTargetOrigin.USER_DECLARED
+        if request.target_duration_seconds is not None
+        else DurationTargetOrigin.PROFILE_DEFAULT
+    )
+    if request.source_mode == SourceMode.SCRIPT_LOCKED:
+        return DurationContract(
+            target_seconds=request.resolved_target_duration_seconds(),
+            target_origin=target_origin,
+            authority=DurationAuthority.SOURCE_LED,
+            acceptable_range_seconds=None,
+            source_fidelity_policy=DurationFidelityPolicy.PRESERVE_VERBATIM,
+            mismatch_resolution=DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+            decision_basis=(
+                "本地兼容路径优先保留 SCRIPT_LOCKED 来源中的完整内容；"
+                "目标秒数保留为参考，由后续 Agent 自然演读并报告错配。"
+            ),
+            rhythm_shape=[],
+        )
+    return DurationContract(
+        target_seconds=request.resolved_target_duration_seconds(),
+        target_origin=target_origin,
+        authority=DurationAuthority.TARGET_LED,
+        acceptable_range_seconds=None,
+        source_fidelity_policy=(
+            DurationFidelityPolicy.REWRITABLE
+            if request.source_mode == SourceMode.AUTO_ORIGINAL
+            else DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+        ),
+        mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        decision_basis=(
+            "本地兼容路径将用户明确时长或格式默认值作为原创规模；"
+            "不自动虚构可接受容差。"
+        ),
+        rhythm_shape=[],
+    )
+
+
+def _resolved_duration_contract(
+    request: CreateProjectRequest,
+    story_intent: StoryIntent | None,
+) -> DurationContract:
+    if story_intent is not None and story_intent.duration_contract is not None:
+        return story_intent.duration_contract
+    return _fallback_duration_contract(request)
+
+
+def _unresolved_duration_fit_assessment(
+    request: CreateProjectRequest,
+    story_intent: StoryIntent | None,
+    *,
+    verifier_name: str,
+) -> DurationFitAssessment:
+    """Preserve a missing fresh Verifier judgment as an explicit Leader handoff."""
+
+    contract = _resolved_duration_contract(request, story_intent)
+    return DurationFitAssessment(
+        estimated_range_seconds=None,
+        alignment=DurationAlignment.UNRESOLVED,
+        pressure_points=[],
+        concurrent_performance=[],
+        resolution=contract.mismatch_resolution,
+        rationale=(
+            f"{verifier_name} 未返回结构化时长演读结果；系统不用固定容差或"
+            "确定性规则代替 Agent 判断，将本次时长判断显式交回 Leader，"
+            "由 Leader 结合 DurationContract 与剧本文本证据决定后续。"
+        ),
+    )
+
+
+def _fresh_story_orientation_schema() -> dict[str, object]:
+    """Require new runs to persist timing intent while loading old records."""
+
+    schema = StoryOrientation.model_json_schema()
+    definitions = cast(dict[str, object], schema["$defs"])
+    intent_schema = cast(dict[str, object], definitions["StoryIntent"])
+    required = cast(list[str], intent_schema.setdefault("required", []))
+    if "duration_contract" not in required:
+        required.append("duration_contract")
+    return schema
 
 
 def _story_orientation_prompt(
@@ -1026,6 +1116,17 @@ def _story_orientation_prompt(
         "再用自然语言形成 story_intent：说清观众体验、戏剧发动机、推进方法、"
         "调性与本剧所需的可信度、必须保护的元素和最容易发生的创作漂移。"
         "StoryIntent 是后续 Agent 可讨论、可修订的创作方向，不是评分表或门禁。"
+        "在 story_intent.duration_contract 中单独处理时长：区分用户明确提出的"
+        " user_declared_target_duration_seconds 与 profile 仅供创作启动的"
+        " working_target_duration_seconds，再根据完整需求、来源约束、主音轨与当前 Method"
+        "语义判断 target_origin、authority、source_fidelity_policy 和 mismatch_resolution，"
+        "不得用关键词或 source_mode 枚举代替这个判断。acceptable_range_seconds "
+        "只在完整项目语义真正支持时填写：可以来自用户、来源或已定制作上下文，也可由你"
+        "根据内容不确定性、媒介用途、来源保真与当前 Method 提出项目级范围，但必须在"
+        "decision_basis 说明依据，不按固定百分比或全局默认自动造容差。"
+        "decision_basis 还要说清时间权威与错配处理的语义依据。"
+        "rhythm_shape 只在对创作有帮助时描述叙事功能、相邻段的相对密度与回报或交接；"
+        "可根据题材合并、省略或改名，不把‘钩—缓—爽—顶—尾’变成固定五段、秒数、百分比或次数配额。"
         "不要默认现实主义，也不要因为题材夸张、荒诞、类型化就主动把它改得理性克制；"
         "同样不要把任何输入都强行改成爽剧、喜剧或高反转。\n\n"
         "若 source_mode 为 SCRIPT_LOCKED，你还负责把所有用户要求锁定的有声台词"
@@ -1061,7 +1162,8 @@ def _story_orientation_prompt(
         "caller_structured_locked_dialogue": [
             line.model_dump(mode="json") for line in request.locked_dialogue
         ],
-        "target_duration_seconds": request.resolved_target_duration_seconds(),
+        "user_declared_target_duration_seconds": request.target_duration_seconds,
+        "working_target_duration_seconds": request.resolved_target_duration_seconds(),
         "lossless_source_contract": source_contract.model_dump(mode="json"),
         "image_references": [
             {
@@ -1093,7 +1195,7 @@ def _story_orientation_prompt(
             for descriptor in method_catalog
         ],
         "previous_structural_feedback": retry_feedback,
-        "output_schema": StoryOrientation.model_json_schema(),
+        "output_schema": _fresh_story_orientation_schema(),
     }
     return instructions, _compact_json(payload)
 
@@ -1142,6 +1244,24 @@ def orient_story(
             max_output_tokens=7000,
         )
         orientation = StoryOrientation.model_validate_json(_strip_json_fence(output))
+        warnings: list[str] = []
+        if orientation.story_intent.duration_contract is None:
+            orientation = orientation.model_copy(
+                deep=True,
+                update={
+                    "story_intent": orientation.story_intent.model_copy(
+                        deep=True,
+                        update={
+                            "duration_contract": _fallback_duration_contract(request)
+                        },
+                    )
+                },
+            )
+            warnings.append(
+                "Story Orientation Agent 返回了旧版合法结构，但未包含 "
+                "story_intent.duration_contract；已注入不虚构固定容差的"
+                "兼容 DurationContract，其他字段仍按新结构正常验证。"
+            )
         _validate_locked_source_contract(request, orientation.source_contract)
         known_skill_ids = {descriptor.id for descriptor in narrative_skill_catalog()}
         unknown_skill_ids = sorted(
@@ -1174,7 +1294,7 @@ def orient_story(
         return StoryOrientationResult(
             orientation=orientation,
             used=True,
-            warnings=[],
+            warnings=warnings,
         )
     except (LanguageProviderError, ValueError) as error:
         return StoryOrientationResult(
@@ -1203,6 +1323,7 @@ def _outline_prompt(
         request,
         resolved_source_contract,
     )
+    duration_contract = _resolved_duration_contract(request, resolved_story_intent)
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.CONCEPT,),
@@ -1251,8 +1372,13 @@ def _outline_prompt(
         "SCRIPT_LOCKED 的对白若属于该角色，"
         "用 speaker_character_id 显式引用该 ID。旁白、环境声或未建模说话者可以不绑定，"
         "不要让下游根据说话人名称反猜角色。"
-        f"本集目标时长约 {request.resolved_target_duration_seconds():g} 秒；"
-        "时长分配要与实际可表演内容相称，但时长算术本身不代表内容成立。\n\n"
+        "先读取 StoryIntent.duration_contract，再确定作品的内容规模、场景数量和每场"
+        " target_duration_seconds envelope。TARGET_LED 项目若在蓝图阶段已能看出事件、动作"
+        "与对白不可能在契约尺度内自然完成，现在就重做场次与因果蓝图，不把超载"
+        "留给 Writer 或分镜。SOURCE_LED 项目按来源保真策略保留事实源并容纳自然演读"
+        "时长；AUDIO_LED 项目服从已定主音轨。rhythm_shape 是可合并、可省略的相对叙事"
+        "功能，不是固定五段或配额。场景时长分配是内容 envelope，时长算术本身不代表"
+        "可表演内容成立。\n\n"
         "在逐场写作前建立 ending_contract。只按用户原意判断续集偏好："
         "用户明确要求完整无续集时才是 STANDALONE，明确要求延续时才是 SERIES，"
         "否则为 AGENT_DECIDES，并由你根据这一个故事自主选择、说明依据。"
@@ -1288,6 +1414,9 @@ def _outline_prompt(
         "project_name": request.name,
         "user_brief": request.input_text.strip(),
         "target_duration_seconds": request.resolved_target_duration_seconds(),
+        "user_declared_target_duration_seconds": request.target_duration_seconds,
+        "working_target_duration_seconds": request.resolved_target_duration_seconds(),
+        "duration_contract": duration_contract.model_dump(mode="json"),
         "story_source_contract": resolved_source_contract.model_dump(mode="json"),
         "story_intent": resolved_story_intent.model_dump(mode="json"),
         "selected_narrative_skill_ids": list(selected_narrative_skill_ids),
@@ -1329,6 +1458,7 @@ def _story_critic_prompt(
     selected_method_skill_ids: tuple[str, ...] = (),
     retry_feedback: str | None = None,
 ) -> tuple[str, str]:
+    duration_contract = _resolved_duration_contract(request, outline.story_intent)
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.REVISION_VERIFIER,),
@@ -1348,8 +1478,14 @@ def _story_critic_prompt(
         "逻辑只服务于观众理解和本剧自身规则：夸张、荒诞、类型化跳跃、留白和无厘头并不天然是缺陷。"
         "只有观众已经无法理解当前行动与结果，或文本违反了自己明确建立的规则时，才把逻辑列为需要修复的问题。"
         "不要因局部现实性不足、升级过快或重复结构本身否决类型效果，也不假定所有作品都需要更多解释、场景或反转。"
-        "时长只做整体尺度判断：若实际可读文本与目标时长有明显冲突，可在 performance_timing_assessment 中简要说明主要压力点；"
-        "该字段可留空，不要逐场建立语速、动作和停顿账本。每个问题写明具体文本证据、受影响场次和最小修复建议；"
+        "在同一次通读中按 DurationContract 的时间权威完成自然演读，并必须填写"
+        " duration_fit_assessment：TARGET_LED 原创稿要判断是否仍处于契约尺度，并将可聚焦修复"
+        "的压力点落到准确场次；SOURCE_LED 且未授权缩写时，报告自然时长而不把超出"
+        "参考目标误判为剧本缺陷；AUDIO_LED 服从主音轨。估算要包含对白、动作、停顿、"
+        "反应及明确同时发生的表演，不用字数公式、固定容差或逐句账本代替语义判断。"
+        "同时判断 rhythm_shape 声明的相对密度与叙事功能是否真正落地，不检查固定五段、"
+        "固定位置或固定次数。旧的 performance_timing_assessment 可仅作兼容摘要。"
+        "每个问题写明具体文本证据、受影响场次和最小修复建议；"
         "severity 只描述影响，不触发代码阈值。\n\n"
         "为每个问题提供稳定 issue_id。参考 issue_ledger：语义上是同一个问题时沿用原 ID，并在 observation"
         "中说明它是持续存在、变形、回归还是进一步细化；确实不同的问题再建立新 ID。"
@@ -1373,8 +1509,10 @@ def _story_critic_prompt(
             "source_mode": request.source_mode.value,
             "production_profile": request.production_profile.value,
             "target_duration_seconds": request.resolved_target_duration_seconds(),
+            "user_declared_target_duration_seconds": request.target_duration_seconds,
             "source_text": request.input_text.strip(),
         },
+        "duration_contract": duration_contract.model_dump(mode="json"),
         "source_contract": resolved_source_contract.model_dump(mode="json"),
         "ending_contract": (
             outline.ending_contract.model_dump(mode="json")
@@ -1455,6 +1593,9 @@ def _fresh_script_review_schema() -> dict[str, object]:
     required = cast(list[str], issue_schema.setdefault("required", []))
     if "issue_id" not in required:
         required.append("issue_id")
+    report_required = cast(list[str], schema.setdefault("required", []))
+    if "duration_fit_assessment" not in report_required:
+        report_required.append("duration_fit_assessment")
     return schema
 
 
@@ -1944,42 +2085,6 @@ def _validate_story_repair_plan(
             "Leader repair plan referenced unknown scenes: "
             + ", ".join(str(value) for value in invalid_scenes)
         )
-    duration_sequences = {
-        sequence
-        for action in plan.actions
-        if action.should_revise and action.target_duration_change_required
-        for sequence in action.affected_scene_sequences
-    }
-    _validate_duration_reallocation_feasibility(
-        outline,
-        duration_sequences,
-        owner="Leader repair routing",
-    )
-
-
-def _validate_duration_reallocation_feasibility(
-    outline: EpisodeOutline,
-    scene_sequences: set[int],
-    *,
-    owner: str,
-) -> None:
-    if not scene_sequences:
-        return
-    fixed_milliseconds = sum(
-        int(round(scene.target_duration_seconds * 1000))
-        for scene in outline.scenes
-        if scene.sequence not in scene_sequences
-    )
-    available_milliseconds = (
-        int(round(outline.target_duration_seconds * 1000))
-        - fixed_milliseconds
-    )
-    if available_milliseconds <= 0:
-        raise ValueError(
-            f"{owner} selected an infeasible scene-duration scope: "
-            f"available={available_milliseconds / 1000:g}, "
-            f"scenes={sorted(scene_sequences)}"
-        )
 
 
 def _story_metadata_revision_prompt(
@@ -2005,8 +2110,12 @@ def _story_metadata_revision_prompt(
         "只处理 repair plan 的 active action 在 metadata_targets 中明确列出的类别；"
         "资产 patch 只能用 "
         "character_id、location_id 或 prop_id 精确选择已有实体，不得用名称反推身份；"
-        "不得增加、删除或改名资产，不得改变年龄，也不得返回场景、对白、时长、镜头语言"
-        "或 schema 外字段。无需变化的字段全部省略；当前元数据已符合修复计划时允许空 patch。"
+        "不得增加、删除或改名资产，不得改变年龄，也不得返回场景、对白、独立的"
+        " target_duration_seconds、镜头语言或 schema 外字段。如果 metadata_targets 明确包含"
+        " STORY_INTENT，且上游语义确实要求改变时长权威，可以在 StoryIntent.duration_contract"
+        " 内修改；其非空 target_seconds 会同步成为 EpisodeOutline 的目标时长，但场次时长"
+        "仍由后续场次修订与 Verifier 结合完整语义处理。无需变化的字段全部省略；"
+        "当前元数据已符合修复计划时允许空 patch。"
         "最新 authoritative_user_override 与 SourceContract 优先于继承下来的 StoryIntent、"
         "EndingContract 和实际可读剧本；当用户本轮正是在纠正旧契约时，必须同步修正这些"
         "字段，而不是把旧值当作不可修改的保护项。除此以外，SourceContract、StoryIntent、"
@@ -2131,6 +2240,10 @@ def _story_revision_verifier_prompt(
     previous_verification: StoryRevisionVerification | None = None,
     issue_ledger: list[StoryIssueLedgerEntry] | None = None,
 ) -> tuple[str, str]:
+    duration_contract = _resolved_duration_contract(
+        request,
+        revised_outline.story_intent,
+    )
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.REVISION_VERIFIER,),
@@ -2155,8 +2268,12 @@ def _story_revision_verifier_prompt(
         "铺垫是否释放成爽点、情绪回报或反转；对立力量的受挫、反应或反噬是否可见；结尾是否完成 EndingContract。"
         "决定性胜利应能看到主角自身选择、行动或能力的作用。夸张、荒诞、无厘头、类型化跳跃或为了喜剧与爽感升级的"
         "重复都不是天然缺陷。只有观众无法理解当前行动与结果，或文本违反自己明确建立的规则时，才以逻辑理由否决。"
-        "时长只做整体尺度判断；若成稿与目标时长明显不在同一尺度，在 summary 或 followup_rationale 中简要指出压力点即可，"
-        "不逐场建立表演时长账本。\n\n"
+        "在同一次通读中按 DurationContract 声明的时间权威完成自然演读，并必须返回"
+        " duration_fit_assessment。TARGET_LED 原创稿已超出契约尺度时，将真正压力点聚焦到"
+        "最小可修场次；SOURCE_LED 且未授权缩写时，保留来源承诺并报告自然时长；"
+        "AUDIO_LED 服从已定主音轨。估算要自然纳入对白、动作、停顿、反应与明确并行表演，"
+        "不用字数公式、固定容差或逐句账本代替判断。同时阅读 rhythm_shape 的叙事功能和"
+        "相邻段相对密度，但不要检查固定五段、固定位置或固定次数。\n\n"
         "以前次 Verifier 的稳定 issue_id 作为修复身份：把已满足的 repair-plan 问题写入 "
         "satisfied_issue_ids；satisfied_issue_indices 只作旧记录兼容。若输入带有上一轮"
         "Issue Ledger，用它区分持续问题、已解决问题与新回归，不要把历史本身当成新问题。"
@@ -2237,8 +2354,10 @@ def _story_revision_verifier_prompt(
             "source_mode": request.source_mode.value,
             "production_profile": request.production_profile.value,
             "target_duration_seconds": request.resolved_target_duration_seconds(),
+            "user_declared_target_duration_seconds": request.target_duration_seconds,
             "source_text": request.input_text.strip(),
         },
+        "duration_contract": duration_contract.model_dump(mode="json"),
         "explicit_story_source_contract": source_contract.model_dump(mode="json"),
         "story_intent": resolved_story_intent,
         "ending_contract": resolved_ending_contract,
@@ -2259,6 +2378,7 @@ def _story_revision_verifier_prompt(
             "source_contract": source_contract.model_dump(mode="json"),
             "story_intent": resolved_story_intent,
             "ending_contract": resolved_ending_contract,
+            "duration_contract": duration_contract.model_dump(mode="json"),
             "readable_final_screenplay": revised_readable_screenplay,
         },
         "output_schema": _fresh_story_revision_verification_schema(),
@@ -2516,14 +2636,9 @@ def _fallback_scaffold_plan(request: CreateProjectRequest) -> ProductionPlan:
     # This split only satisfies the locked-text field capacity; it is not a beat rule.
     shot_count = max(1, math.ceil(len(lines) / 40))
     line_buckets = _distribute_line_indices(len(lines), shot_count)
-    duration = round(target / shot_count, 3)
     shots = [
         PlannedShot(
-            duration_seconds=(
-                duration
-                if sequence < shot_count
-                else round(target - duration * (shot_count - 1), 3)
-            ),
+            duration_seconds=_UNRESOLVED_FALLBACK_SHOT_DURATION_SECONDS,
             narrative_purpose=(
                 f"承载用户输入中的第 {sequence} 个制作单元；"
                 "本地回退不补写题材、反转或节奏模板"
@@ -2548,7 +2663,9 @@ def _fallback_scaffold_plan(request: CreateProjectRequest) -> ProductionPlan:
             action_out="本制作单元的离开状态由用户输入和后续内容决定",
             transition_out="由 Agent 根据当前段落与整体节奏决定",
             merge_candidate=False,
-            local_rework_risk="待 Agent 按具体方案评估",
+            local_rework_risk=(
+                "自然时长尚未由 Agent 判定；生成前必须用正式分镜时序替换技术占位"
+            ),
         )
         for sequence in range(1, shot_count + 1)
     ]
@@ -2583,15 +2700,14 @@ def _fallback_scaffold_plan(request: CreateProjectRequest) -> ProductionPlan:
     )
 
 
-
-
-def _retime_shots(
+def _select_fallback_shots(
     templates: list[PlannedShot],
     *,
-    target_duration_seconds: float,
     scene_sequence: int,
     preferred_count: int | None = None,
 ) -> list[PlannedShot]:
+    """Select structural containers without inventing Agent-authored timing."""
+
     if not templates:
         raise ValueError("At least one shot template is required")
     requested_count = preferred_count if preferred_count is not None else len(templates)
@@ -2605,22 +2721,13 @@ def _retime_shots(
         ]
     else:
         selected = [templates[index % len(templates)] for index in range(count)]
-    duration = round(target_duration_seconds / count, 3)
-    shots = [
+    return [
         template.model_copy(
             deep=True,
-            update={
-                "scene_sequence": scene_sequence,
-                "duration_seconds": duration,
-            },
+            update={"scene_sequence": scene_sequence},
         )
         for template in selected
     ]
-    shots[-1].duration_seconds = round(
-        target_duration_seconds - sum(shot.duration_seconds for shot in shots[:-1]),
-        3,
-    )
-    return shots
 
 
 def _fallback_scene_state(
@@ -2654,7 +2761,6 @@ def _fallback_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
     target = request.resolved_target_duration_seconds()
     # Use the minimum valid container. Creative scene segmentation belongs to the Agent.
     scene_count = 1
-    scene_duration = target
     lines = list(base.lines)
     line_buckets = _distribute_line_indices(len(lines), scene_count)
     setting = base.locations[0].name
@@ -2674,11 +2780,8 @@ def _fallback_episode_outline(request: CreateProjectRequest) -> EpisodeOutline:
                 "保留用户输入与锁定事实，为 Agent 后续补全本单元的剧情、Style 和节奏"
             ),
             playable_actions=[],
-            target_duration_seconds=(
-                round(scene_duration, 3)
-                if sequence < scene_count
-                else round(target - round(scene_duration, 3) * (scene_count - 1), 3)
-            ),
+            # This is the episode's working envelope, not estimated performance time.
+            target_duration_seconds=target,
             dialogue_line_indices=line_buckets[sequence - 1],
             location_names=[setting],
             continuity_in=_fallback_scene_state(
@@ -2742,9 +2845,8 @@ def _fallback_directed_scene_plan(
     base = _fallback_scaffold_plan(request)
     # Use one placeholder shot unless locked-text capacity requires another container.
     preferred_count = max(1, math.ceil(len(scene.dialogue_line_indices) / 40))
-    shots = _retime_shots(
+    shots = _select_fallback_shots(
         base.shots,
-        target_duration_seconds=scene.target_duration_seconds,
         scene_sequence=scene.sequence,
         preferred_count=preferred_count,
     )
@@ -2782,13 +2884,6 @@ def _validate_directed_scene_plan(
     expected = scene.dialogue_line_indices
     if sorted(assigned) != sorted(expected) or len(assigned) != len(set(assigned)):
         raise ValueError("Scene director changed, duplicated, or omitted assigned dialogue lines")
-    duration = sum(shot.duration_seconds for shot in plan.shots)
-    tolerance = max(10.0, scene.target_duration_seconds * 0.2)
-    if abs(duration - scene.target_duration_seconds) > tolerance:
-        raise ValueError(
-            "Directed scene duration does not match its contract: "
-            f"target={scene.target_duration_seconds}, shots={duration}"
-        )
     known_subjects = (
         {item.name for item in outline.characters}
         | {item.name for item in outline.locations}
@@ -2970,11 +3065,28 @@ def review_story_outline(
             max_output_tokens=6000,
         )
         report = ScriptReviewReport.model_validate_json(_strip_json_fence(output))
+        warnings: list[str] = []
+        if report.duration_fit_assessment is None:
+            report = report.model_copy(
+                deep=True,
+                update={
+                    "duration_fit_assessment": _unresolved_duration_fit_assessment(
+                        request,
+                        outline.story_intent,
+                        verifier_name="Script Verifier",
+                    )
+                },
+            )
+            warnings.append(
+                "Script Verifier 未返回 duration_fit_assessment；"
+                "已将本次时长判断显式记录为 UNRESOLVED 并交回 Leader，"
+                "不自动重试、不虚构剧本缺陷。"
+            )
         report = _normalize_review_report(report)
         return ScriptCritiqueResult(
             report=report,
             used=True,
-            warnings=[],
+            warnings=warnings,
         )
     except (LanguageProviderError, ValueError) as error:
         return ScriptCritiqueResult(
@@ -3302,7 +3414,13 @@ def apply_story_metadata_revision_patch(
     outline: EpisodeOutline,
     patch: StoryMetadataRevisionPatch,
 ) -> EpisodeOutline:
-    """Apply only the global metadata fields exposed by the typed patch."""
+    """Apply only the global metadata fields exposed by the typed patch.
+
+    ``target_duration_seconds`` cannot be patched independently. If the Agent
+    intentionally replaces StoryIntent with a DurationContract carrying an
+    exact target, that target is projected onto the episode envelope so the
+    future ScriptVersion has one duration truth.
+    """
 
     character_by_id = {
         item.character_id: item for item in patch.character_patches
@@ -3374,6 +3492,17 @@ def apply_story_metadata_revision_patch(
             else {}
         )
     )
+    revised_story_intent = (
+        patch.story_intent
+        if patch.story_intent is not None
+        else outline.story_intent
+    )
+    revised_duration_target = (
+        None
+        if revised_story_intent is None
+        or revised_story_intent.duration_contract is None
+        else revised_story_intent.duration_contract.target_seconds
+    )
     revised = EpisodeOutline.model_validate(
         {
             **outline.model_dump(mode="python"),
@@ -3388,8 +3517,14 @@ def apply_story_metadata_revision_patch(
                 else {}
             ),
             **(
-                {"story_intent": patch.story_intent}
+                {"story_intent": revised_story_intent}
                 if patch.story_intent is not None
+                else {}
+            ),
+            **(
+                {"target_duration_seconds": revised_duration_target}
+                if patch.story_intent is not None
+                and revised_duration_target is not None
                 else {}
             ),
             **(
@@ -3403,8 +3538,6 @@ def apply_story_metadata_revision_patch(
             "style": style,
         }
     )
-    if revised.target_duration_seconds != outline.target_duration_seconds:
-        raise ValueError("Story metadata revision changed target duration")
     if revised.lines != outline.lines:
         raise ValueError("Story metadata revision changed dialogue lines")
     if revised.scenes != outline.scenes:
@@ -3498,6 +3631,8 @@ def _fresh_story_revision_verification_schema() -> dict[str, object]:
     required = cast(list[str], schema.setdefault("required", []))
     if "satisfied_issue_ids" not in required:
         required.append("satisfied_issue_ids")
+    if "duration_fit_assessment" not in required:
+        required.append("duration_fit_assessment")
     definitions = cast(dict[str, object], schema["$defs"])
     violation_schema = cast(
         dict[str, object], definitions["StoryRevisionViolation"]
@@ -3647,17 +3782,6 @@ def _validate_story_revision_verification(
             "is not a repair violation: "
             + ", ".join(unscoped_categories)
         )
-    duration_sequences = {
-        sequence
-        for violation in verification.violations
-        if violation.target_duration_change_required
-        for sequence in violation.scene_sequences
-    }
-    _validate_duration_reallocation_feasibility(
-        outline,
-        duration_sequences,
-        owner="Story Revision Verifier",
-    )
 
 
 def verify_story_revision(
@@ -3706,6 +3830,23 @@ def verify_story_revision(
         verification = StoryRevisionVerification.model_validate_json(
             _strip_json_fence(output)
         )
+        warnings: list[str] = []
+        if verification.duration_fit_assessment is None:
+            verification = verification.model_copy(
+                deep=True,
+                update={
+                    "duration_fit_assessment": _unresolved_duration_fit_assessment(
+                        request,
+                        revised_outline.story_intent,
+                        verifier_name="Story Revision Verifier",
+                    )
+                },
+            )
+            warnings.append(
+                "Story Revision Verifier 未返回 duration_fit_assessment；"
+                "已将本次时长判断显式记录为 UNRESOLVED 并交回 Leader，"
+                "不改写其剧情验收结论，也不自动开启新一轮修订。"
+            )
         verification = normalize_story_revision_verification_issue_ids(
             repair_plan,
             verification,
@@ -3719,7 +3860,7 @@ def verify_story_revision(
         return StoryRevisionVerificationResult(
             verification=verification,
             used=True,
-            warnings=[],
+            warnings=warnings,
         )
     except (LanguageProviderError, ValueError) as error:
         return StoryRevisionVerificationResult(
@@ -4372,8 +4513,11 @@ def build_project_document_from_plan(
             skipped_optional_steps=["真实视频生成", "可选关键帧生成", "可选外部声音修复"],
             provider="mock",
             capability_snapshot=capability.model_copy(deep=True),
-            candidate_count=2,
-            fallback="普通失败自动重试当前镜头；质量失败进入通用 Director 修复循环",
+            candidate_count=1,
+            fallback=(
+                "Leader 读取当前生成结果与错误证据后，自主决定重试当前镜头、"
+                "调整输入或路线、局部修复，或停止并说明缺失条件；不自动进入固定循环。"
+            ),
         )
         for shot in shots
     ]
@@ -4438,7 +4582,13 @@ def build_project_document_from_plan(
         run_mode=request.run_mode,
         production_profile=request.production_profile,
         content_planning_output=request.content_planning_output,
-        target_duration_seconds=request.resolved_target_duration_seconds(),
+        target_duration_seconds=(
+            script.story_intent.duration_contract.target_seconds
+            if script.story_intent is not None
+            and script.story_intent.duration_contract is not None
+            and script.story_intent.duration_contract.target_seconds is not None
+            else request.resolved_target_duration_seconds()
+        ),
         input_text=request.input_text,
         input_images=[image.model_copy(deep=True) for image in request.input_images],
         linked_asset_project_ids=list(request.linked_asset_project_ids),

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from short_drama.models import (
+    EnqueueRequest,
     Freshness,
     GenerationTask,
     OperationKind,
@@ -28,7 +31,7 @@ from short_drama.production_contracts import (
     StoryboardCreateRequest,
     StoryboardReplaceRequest,
 )
-from short_drama.service import ShortDramaService
+from short_drama.service import ShortDramaService, WorkflowConflictError
 
 
 def _service(tmp_path: Path) -> ShortDramaService:
@@ -43,6 +46,11 @@ def _selected_take(
     shot_id: str,
     task_id: str,
     duration: float,
+    *,
+    storyboard_document_id: str,
+    storyboard_version_id: str,
+    generation_plan_document_id: str,
+    generation_plan_version_id: str,
 ) -> Take:
     take_id = f"take-{shot_id}"
     return Take(
@@ -54,6 +62,10 @@ def _selected_take(
         operation=OperationKind.GENERATE,
         provider="minimax",
         model="MiniMax-H3",
+        storyboard_document_id=storyboard_document_id,
+        storyboard_version_id=storyboard_version_id,
+        generation_plan_document_id=generation_plan_document_id,
+        generation_plan_version_id=generation_plan_version_id,
         media_path=f"/tmp/{take_id}.mp4",
         thumbnail_path=f"/tmp/{take_id}.jpg",
         duration_seconds=duration,
@@ -75,6 +87,48 @@ def _selected_take(
         ),
         created_at="2026-09-04T12:00:00+08:00",
     )
+
+
+def test_timeline_rejects_legacy_take_from_previous_script_version(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    document = service.initialize_fixture().document
+    project_id = document.project.id
+    service.enqueue(project_id, EnqueueRequest(candidate_count=1))
+    assert service.drain(project_id, 500).remaining_runnable == 0
+    assert service.rebuild_manifest(project_id).script_version_id == (
+        document.project.current_script_version_id
+    )
+
+    document = service.get_project(project_id).document
+    current_script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    changed_line = current_script.lines[0].model_copy(
+        update={
+            "spoken_text": "这句新台词没有经过正常的分镜与 Take 失效传播。",
+            "subtitle_text": "这句新台词没有经过正常的分镜与 Take 失效传播。",
+        }
+    )
+    replacement = current_script.model_copy(
+        deep=True,
+        update={
+            "id": f"{project_id}-script-v2",
+            "version": current_script.version + 1,
+            "lines": [changed_line, *current_script.lines[1:]],
+            "parent_version_id": current_script.id,
+            "change_reason": "验证时间线不得把旧 Take 冒充为新剧本产物。",
+        },
+    )
+    document.script_versions.append(replacement)
+    document.project.current_script_version_id = replacement.id
+    service.repository.save_project(document)
+
+    with pytest.raises(WorkflowConflictError, match="outdated ScriptVersion"):
+        service.rebuild_manifest(project_id)
 
 
 def test_clip_group_only_revision_stales_exactly_affected_takes(
@@ -169,6 +223,10 @@ def test_clip_group_only_revision_stales_exactly_affected_takes(
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
             input_shot_revision=shot.revision,
+            storyboard_document_id=created.document.id,
+            storyboard_version_id=created.version.id,
+            generation_plan_document_id=generation_plan.document.id,
+            generation_plan_version_id=generation_plan.version.id,
             requested_duration_seconds=shot.duration_seconds,
             attempt=1,
             finished_at="2026-09-04T12:00:00+08:00",
@@ -177,7 +235,16 @@ def test_clip_group_only_revision_stales_exactly_affected_takes(
         )
         service.repository.save_task(task)
         service.repository.save_take(
-            _selected_take(project_id, shot.id, task.id, shot.duration_seconds)
+            _selected_take(
+                project_id,
+                shot.id,
+                task.id,
+                shot.duration_seconds,
+                storyboard_document_id=created.document.id,
+                storyboard_version_id=created.version.id,
+                generation_plan_document_id=generation_plan.document.id,
+                generation_plan_version_id=generation_plan.version.id,
+            )
         )
     manifest = service.rebuild_manifest(project_id)
 

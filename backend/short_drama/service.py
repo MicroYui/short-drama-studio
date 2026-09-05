@@ -163,6 +163,8 @@ from short_drama.models import (
     DirectorRepairDecision,
     DirectorRepairRecord,
     DirectorRepairStrategy,
+    DurationAlignment,
+    DurationAuthority,
     EnqueueRequest,
     EpisodeReviewReport,
     EpisodeReviewRequest,
@@ -222,6 +224,7 @@ from short_drama.models import (
     ReviseScriptLineRequest,
     ReviseScriptLinesRequest,
     ScriptLineRevision,
+    ScriptRevisionOrigin,
     ScriptReviewIssue,
     ScriptReviewIssueRoute,
     ScriptReviewSeverity,
@@ -236,6 +239,9 @@ from short_drama.models import (
     ShotPlan,
     SourceMode,
     StoryIssueLedgerEntry,
+    StoryVerificationResolution,
+    StoryVerificationResolutionDecision,
+    StoryVerificationSource,
     SubtitleCue,
     Take,
     TakeAvailability,
@@ -900,6 +906,180 @@ class ShortDramaService:
 
         return self.get_planning_run(job_id)
 
+    def resolve_story_verification(
+        self,
+        project_id: str,
+        *,
+        run_id: str,
+        owner_agent_run_id: str,
+        decision: StoryVerificationResolutionDecision,
+        rationale: str,
+    ) -> PlanningRunResponse:
+        """Persist the owning Leader's semantic decision over a verifier handoff."""
+
+        normalized_rationale = rationale.strip()
+        if not normalized_rationale:
+            raise WorkflowConflictError(
+                "Story verification resolution rationale cannot be empty"
+            )
+        lock = self._planning_run_lock(run_id)
+        if not lock.acquire(blocking=False):
+            raise WorkflowConflictError(
+                f"Content planning job {run_id} is already advancing"
+            )
+        try:
+            run = self._require_planning_run(run_id)
+            if run.project_id != project_id:
+                raise WorkflowConflictError(
+                    "Story verification resolution targets another project"
+                )
+            if run.owner_agent_run_id != owner_agent_run_id:
+                raise WorkflowConflictError(
+                    "Story verification resolution must be made by the owning AgentRun"
+                )
+            if run.status != PlanningRunStatus.NEEDS_ATTENTION:
+                raise WorkflowConflictError(
+                    "Content planning job is not awaiting a Leader verification decision"
+                )
+            source = self._pending_story_verification_source(run)
+            if source is None:
+                raise WorkflowConflictError(
+                    "Content planning job has no pending story-verifier handoff"
+                )
+            resolution = StoryVerificationResolution(
+                source=source,
+                decision=decision,
+                rationale=normalized_rationale,
+                owner_agent_run_id=owner_agent_run_id,
+                script_review_report=(
+                    run.review_report.model_copy(deep=True)
+                    if source == StoryVerificationSource.SCRIPT_VERIFIER
+                    and run.review_report is not None
+                    else None
+                ),
+                revision_verification=(
+                    run.latest_revision_verification.model_copy(deep=True)
+                    if source == StoryVerificationSource.REVISION_VERIFIER
+                    and run.latest_revision_verification is not None
+                    else None
+                ),
+                created_at=utc_now(),
+            )
+            run.story_verification_resolutions.append(resolution)
+            run.error_message = None
+            run.status = PlanningRunStatus.RUNNING
+
+            if decision == StoryVerificationResolutionDecision.ACCEPT_TRADEOFF:
+                self._accept_story_verification_tradeoff(
+                    run,
+                    source=source,
+                    rationale=normalized_rationale,
+                )
+                self._clear_revision_execution_state(run)
+                self._complete_planning_step(
+                    run,
+                    run.current_step,
+                    self._post_script_planning_step(run),
+                )
+                run.warnings.append(
+                    "AgentRun Leader 明确接受当前 Story Verifier 取舍；"
+                    "原始 rejected 或时长契约结果保持不变并已记入 issue ledger："
+                    + normalized_rationale
+                )
+            elif (
+                decision
+                == StoryVerificationResolutionDecision.RETURN_TO_STORY_ARCHITECT
+            ):
+                run.step_retry_feedback = self._story_verification_handoff_json(
+                    resolution
+                )
+                self._clear_revision_execution_state(run)
+                self._complete_planning_step(
+                    run,
+                    run.current_step,
+                    PlanningRunStep.STORY_ARCHITECT,
+                )
+                run.warnings.append(
+                    "AgentRun Leader 已阅读精确 Verifier 结果并决定返回 Story Architect："
+                    + normalized_rationale
+                )
+            else:
+                focused_review = self._focused_story_verification_review(
+                    run,
+                    source=source,
+                )
+                run.review_report = focused_review
+                run.review_disposition = ScriptReviewDisposition(
+                    action=ScriptReviewDispositionAction.REVISE_STORY,
+                    issue_routes=[
+                        ScriptReviewIssueRoute(
+                            issue_index=index,
+                            owner=(
+                                issue.owner
+                                if source
+                                == StoryVerificationSource.SCRIPT_VERIFIER
+                                else ReviewRepairOwner.STORY_ARCHITECT
+                            ),
+                            rationale=(
+                                "AgentRun Leader 选择继续聚焦处理；保留初次 "
+                                "Script Verifier 已给出的专业 owner，修订项由 "
+                                "Story Repair Leader 基于完整语义再决定范围。"
+                            ),
+                        )
+                        for index, issue in enumerate(
+                            focused_review.issues,
+                            start=1,
+                        )
+                    ],
+                    rationale=(
+                        "保留 Verifier 的精确问题证据，先交给 Story Repair Leader "
+                        "重新规划修复范围，不由 service 直接排入 Writer。"
+                    ),
+                )
+                run.issue_ledger = self._merge_story_issue_ledger(
+                    run.issue_ledger,
+                    focused_review,
+                    phase="AgentRun Leader 接管 Verifier handoff",
+                )
+                run.step_retry_feedback = self._story_verification_handoff_json(
+                    resolution
+                )
+                self._clear_revision_execution_state(run)
+                self._complete_planning_step(
+                    run,
+                    run.current_step,
+                    PlanningRunStep.STORY_REVISION,
+                )
+                run.warnings.append(
+                    "AgentRun Leader 已将 Verifier findings 转为聚焦 review/disposition；"
+                    "下一步由 Story Repair Leader 重新判断修订范围："
+                    + normalized_rationale
+                )
+
+            if (
+                source == StoryVerificationSource.SCRIPT_VERIFIER
+                and decision
+                != StoryVerificationResolutionDecision.RETURN_TO_STORY_ARCHITECT
+                and run.review_report is not None
+                and run.review_disposition is not None
+            ):
+                self.repository.save_planning_review_snapshot(
+                    run.id,
+                    PlanningReviewSnapshot(
+                        review_round=run.revision_round + 1,
+                        revision_round=run.revision_round,
+                        report=run.review_report.model_copy(deep=True),
+                        disposition=run.review_disposition.model_copy(deep=True),
+                        created_at=utc_now(),
+                    ),
+                )
+
+            run.updated_at = utc_now()
+            self._save_planning_run_state(run)
+            return self._planning_run_response(run)
+        finally:
+            lock.release()
+
     def start_script_revision(
         self,
         project_id: str,
@@ -907,6 +1087,8 @@ class ShortDramaService:
         owner_agent_run_id: str,
         instruction: str,
         base_script_version_id: str,
+        revision_origin: ScriptRevisionOrigin = ScriptRevisionOrigin.USER_FEEDBACK,
+        evidence_refs: list[ProductionDocumentArtifactRef] | None = None,
     ) -> PlanningRunResponse:
         """Start an Agent-owned screenplay revision on the current project truth."""
 
@@ -915,6 +1097,12 @@ class ShortDramaService:
             raise WorkflowConflictError("Script revision instruction cannot be empty")
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            revision_evidence_refs = self._validate_script_revision_evidence_refs(
+                document,
+                list(evidence_refs or []),
+                revision_origin=revision_origin,
+                base_script_version_id=base_script_version_id,
+            )
             current_script = self._current_script(document)
             if current_script.id != base_script_version_id:
                 raise WorkflowConflictError(
@@ -945,24 +1133,56 @@ class ShortDramaService:
                 current_script,
                 current_bible,
             )
+            rebuild_duration_envelope = outline is None
             source_contract = (
                 current_script.source_contract.model_copy(deep=True)
                 if current_script.source_contract is not None
                 else build_story_source_contract(request)
             )
-            source_contract.authoritative_user_overrides = [
-                *source_contract.authoritative_user_overrides,
-                normalized_instruction,
-            ]
-            issue_id = "user-revision-" + hashlib.sha256(
-                normalized_instruction.encode("utf-8")
+            if revision_origin == ScriptRevisionOrigin.USER_FEEDBACK:
+                source_contract.authoritative_user_overrides = [
+                    *source_contract.authoritative_user_overrides,
+                    normalized_instruction,
+                ]
+                issue_prefix = "user-revision-"
+                issue_category = "USER_REQUEST"
+                issue_summary = "用户对当前完整剧本提出了新的权威修改意见。"
+                issue_rationale = "这是用户对当前剧本的直接修改要求。"
+                semantic_cluster = "user-requested-script-revision"
+                evolution_note = "用户在当前 ScriptVersion 基础上提出新的修改意见。"
+            else:
+                issue_prefix = "duration-contract-"
+                issue_category = "DURATION_CONTRACT"
+                issue_summary = (
+                    "已版本化的制片时长契约与当前剧本的自然分镜时长冲突。"
+                )
+                issue_rationale = (
+                    "这是制片过程从精确 ProductionSpec 与 StoryboardDraft "
+                    "证据中发现的剧本约束问题，不是新的用户要求。"
+                )
+                semantic_cluster = "duration-contract-reconciliation"
+                evolution_note = (
+                    "Agent 从精确 ProductionSpec、StoryboardDraft 和 ScriptVersion "
+                    "证据中识别到时长契约冲突。"
+                )
+            issue_id = issue_prefix + hashlib.sha256(
+                (
+                    normalized_instruction
+                    + "|"
+                    + revision_origin.value
+                    + "|"
+                    + "|".join(
+                        f"{item.artifact_type}:{item.artifact_id}:{item.version}"
+                        for item in revision_evidence_refs
+                    )
+                ).encode("utf-8")
             ).hexdigest()[:16]
             review_report = ScriptReviewReport(
-                summary="用户对当前完整剧本提出了新的权威修改意见。",
+                summary=issue_summary,
                 issues=[
                     ScriptReviewIssue(
                         issue_id=issue_id,
-                        category="USER_REQUEST",
+                        category=issue_category,
                         severity=ScriptReviewSeverity.MEDIUM,
                         owner=ReviewRepairOwner.STORY_ARCHITECT,
                         scene_sequences=[],
@@ -981,7 +1201,7 @@ class ShortDramaService:
                     ScriptReviewIssueRoute(
                         issue_index=1,
                         owner=ReviewRepairOwner.STORY_ARCHITECT,
-                        rationale="这是用户对当前剧本的直接修改要求。",
+                        rationale=issue_rationale,
                     )
                 ],
                 rationale=(
@@ -999,21 +1219,33 @@ class ShortDramaService:
                 id=f"planning-run-{uuid4().hex}",
                 operation=PlanningRunOperation.SCRIPT_REVISION,
                 status=PlanningRunStatus.RUNNING,
-                current_step=PlanningRunStep.STORY_REVISION,
+                current_step=(
+                    PlanningRunStep.STORY_ARCHITECT
+                    if rebuild_duration_envelope
+                    else PlanningRunStep.STORY_REVISION
+                ),
                 request=request,
                 revision_instruction=normalized_instruction,
+                revision_origin=revision_origin,
+                revision_evidence_refs=revision_evidence_refs,
                 base_script_version_id=current_script.id,
                 base_bible_version_id=current_bible.id,
                 parent_planning_run_id=current_script.planning_run_id,
-                outline_json=outline.model_dump_json(),
-                outline_source="current versioned screenplay",
+                outline_json=(
+                    None if outline is None else outline.model_dump_json()
+                ),
+                outline_source=(
+                    None if outline is None else "current versioned screenplay"
+                ),
                 review_report=review_report,
                 review_disposition=review_disposition,
                 source_contract=source_contract,
                 story_intent=(
                     current_script.story_intent.model_copy(deep=True)
                     if current_script.story_intent is not None
-                    else outline.story_intent
+                    else (
+                        None if outline is None else outline.story_intent
+                    )
                 ),
                 selected_narrative_skill_ids=(
                     list(parent_planning_run.selected_narrative_skill_ids)
@@ -1048,15 +1280,49 @@ class ShortDramaService:
                 issue_ledger=[
                     StoryIssueLedgerEntry(
                         issue_id=issue_id,
-                        semantic_cluster="user-requested-script-revision",
+                        semantic_cluster=semantic_cluster,
                         state="OPEN",
                         observation=normalized_instruction,
-                        evolution_notes=[
-                            "用户在当前 ScriptVersion 基础上提出新的修改意见。"
-                        ],
+                        evolution_notes=[evolution_note],
                     )
                 ],
-                total_scenes=len(outline.scenes),
+                step_retry_feedback=(
+                    json.dumps(
+                        {
+                            "requested_by": "SCRIPT_REVISION_DURATION_ENVELOPE",
+                            "reason": (
+                                "The current ScriptVersion has scenes without a "
+                                "versioned duration envelope, and no parent outline "
+                                "can supply one. Rebuild the envelope semantically "
+                                "from the exact screenplay and DurationContract; do "
+                                "not divide a target evenly across scenes."
+                            ),
+                            "current_script": {
+                                "id": current_script.id,
+                                "version": current_script.version,
+                                "screenplay_text": current_script.screenplay_text,
+                                "structured_scenes": [
+                                    scene.model_dump(mode="json")
+                                    for scene in current_script.structured_scenes
+                                ],
+                                "story_intent": (
+                                    current_script.story_intent.model_dump(mode="json")
+                                    if current_script.story_intent is not None
+                                    else None
+                                ),
+                            },
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    if rebuild_duration_envelope
+                    else None
+                ),
+                total_scenes=(
+                    len(current_script.structured_scenes)
+                    if outline is None
+                    else len(outline.scenes)
+                ),
                 project_id=project_id,
                 owner_agent_run_id=owner_agent_run_id,
                 created_at=now,
@@ -1111,7 +1377,7 @@ class ShortDramaService:
         document: ProjectDocument,
         current_script: ScriptVersion,
         current_bible: ProjectBibleVersion,
-    ) -> EpisodeOutline:
+    ) -> EpisodeOutline | None:
         bible = current_bible
         parent_outline: EpisodeOutline | None = None
         if current_script.planning_run_id is not None:
@@ -1140,8 +1406,17 @@ class ShortDramaService:
         default_location = (
             bible.locations[0].name if bible.locations else "未声明场景"
         )
-        scene_count = max(1, len(current_script.structured_scenes))
-        default_duration = document.project.target_duration_seconds / scene_count
+        for index, scene in enumerate(current_script.structured_scenes, start=1):
+            parent_scene = (
+                parent_outline.scenes[index - 1]
+                if parent_outline is not None and index <= len(parent_outline.scenes)
+                else None
+            )
+            if (
+                scene.target_duration_seconds is None
+                and parent_scene is None
+            ):
+                return None
         scenes: list[PlannedSceneContract] = []
         for index, scene in enumerate(current_script.structured_scenes, start=1):
             parent_scene = (
@@ -1166,6 +1441,13 @@ class ShortDramaService:
             resolved_locations = inherited_locations or (
                 [setting] if setting in location_names else [default_location]
             )
+            resolved_duration = scene.target_duration_seconds
+            if resolved_duration is None:
+                if parent_scene is None:
+                    raise WorkflowConflictError(
+                        "Script revision duration envelope became unresolved"
+                    )
+                resolved_duration = parent_scene.target_duration_seconds
             scenes.append(
                 PlannedSceneContract(
                     sequence=index,
@@ -1185,14 +1467,7 @@ class ShortDramaService:
                         else [scene.summary]
                     ),
                     screenplay_text=scene.screenplay_text,
-                    target_duration_seconds=(
-                        scene.target_duration_seconds
-                        or (
-                            parent_scene.target_duration_seconds
-                            if parent_scene is not None
-                            else default_duration
-                        )
-                    ),
+                    target_duration_seconds=resolved_duration,
                     dialogue_line_indices=[
                         line_index_by_id[line_id]
                         for line_id in scene.line_ids
@@ -1330,6 +1605,12 @@ class ShortDramaService:
             if run.status == PlanningRunStatus.COMPLETE:
                 return self._planning_run_response(run)
             try:
+                if self._pending_story_verification_source(run) is not None:
+                    raise WorkflowConflictError(
+                        "Story verification is awaiting an explicit AgentRun Leader "
+                        "resolution; call planning.resolve_story_verification instead "
+                        "of advancing the verifier again"
+                    )
                 run.status = PlanningRunStatus.RUNNING
                 run.error_message = None
                 self._advance_planning_run_once(run)
@@ -1653,6 +1934,27 @@ class ShortDramaService:
                     critique.report,
                     phase="首次完整剧本冷读",
                 )
+                if (
+                    critique.report.requires_revision
+                    or self._duration_fit_requires_leader_resolution(
+                        run,
+                        report=critique.report,
+                    )
+                ):
+                    run.status = PlanningRunStatus.NEEDS_ATTENTION
+                    run.error_message = (
+                        "Script Verifier 已交回 requires_revision 或 "
+                        "需要 Leader 处理的 duration_fit_assessment 精确结果；"
+                        "等待所属 AgentRun Leader 通过 "
+                        "planning.resolve_story_verification 选择聚焦修订、"
+                        "返回 Story Architect 或接受明确取舍。"
+                    )
+                    run.warnings.append(
+                        "Script Verifier 的精确 review report 已持久化并交回 "
+                        "AgentRun Leader；service 没有自动路由到 Writer，"
+                        "也没有自动开启下一轮。"
+                    )
+                    return
                 next_step = self._route_current_story_review(
                     run,
                     request,
@@ -2163,6 +2465,377 @@ class ShortDramaService:
                 run.warnings.append(warning)
         return ShortDramaService._post_cold_read_step(run)
 
+    @classmethod
+    def _duration_fit_requires_leader_resolution(
+        cls,
+        run: PlanningRunRecord,
+        report: ScriptReviewReport | None = None,
+        *,
+        verification: object | None = None,
+    ) -> bool:
+        assessment = (
+            report.duration_fit_assessment
+            if report is not None
+            else getattr(verification, "duration_fit_assessment", None)
+        )
+        if assessment is None:
+            return False
+        if assessment.alignment == DurationAlignment.UNRESOLVED:
+            return True
+        if assessment.alignment != DurationAlignment.OUTSIDE_ACCEPTED_RANGE:
+            return False
+        story_intent = run.story_intent
+        contract = None if story_intent is None else story_intent.duration_contract
+        return (
+            contract is not None
+            and contract.authority == DurationAuthority.TARGET_LED
+        )
+
+    @classmethod
+    def _pending_story_verification_source(
+        cls,
+        run: PlanningRunRecord,
+    ) -> StoryVerificationSource | None:
+        if run.status != PlanningRunStatus.NEEDS_ATTENTION:
+            return None
+        if run.current_step in {
+            PlanningRunStep.SCRIPT_VERIFIER,
+            PlanningRunStep.SCRIPT_CRITIC,
+        }:
+            report = run.review_report
+            if report is not None and (
+                report.requires_revision
+                or cls._duration_fit_requires_leader_resolution(
+                    run,
+                    report=report,
+                )
+            ):
+                return StoryVerificationSource.SCRIPT_VERIFIER
+        verification = run.latest_revision_verification
+        if (
+            run.current_step == PlanningRunStep.REVISION_VERIFIER
+            and verification is not None
+            and (
+                not verification.accepted
+                or cls._duration_fit_requires_leader_resolution(
+                    run,
+                    verification=verification,
+                )
+            )
+        ):
+            return StoryVerificationSource.REVISION_VERIFIER
+        return None
+
+    @staticmethod
+    def _story_verification_handoff_json(
+        resolution: StoryVerificationResolution,
+    ) -> str:
+        return json.dumps(
+            {
+                "requested_by": "AGENT_RUN_LEADER",
+                "story_verification_resolution": resolution.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _duration_resolution_issue_id(
+        source: StoryVerificationSource,
+        payload: str,
+    ) -> str:
+        return (
+            "duration-assessment-"
+            + hashlib.sha256((source.value + "|" + payload).encode("utf-8"))
+            .hexdigest()[:16]
+        )
+
+    @classmethod
+    def _focused_story_verification_review(
+        cls,
+        run: PlanningRunRecord,
+        *,
+        source: StoryVerificationSource,
+    ) -> ScriptReviewReport:
+        issues: list[ScriptReviewIssue] = []
+        assessment = None
+        performance_timing_assessment = None
+        if source == StoryVerificationSource.SCRIPT_VERIFIER:
+            report = run.review_report
+            if report is None:
+                raise WorkflowConflictError(
+                    "Script Verifier handoff is missing its exact review report"
+                )
+            issues = [issue.model_copy(deep=True) for issue in report.issues]
+            assessment = report.duration_fit_assessment
+            performance_timing_assessment = report.performance_timing_assessment
+            source_payload = report.model_dump_json()
+            summary = (
+                "AgentRun Leader 接管 Script Verifier 的问题与时长契约判断，"
+                "交由 Story Repair Leader 重新确定最小修订范围。"
+            )
+        else:
+            verification = run.latest_revision_verification
+            if verification is None:
+                raise WorkflowConflictError(
+                    "Revision Verifier handoff is missing its exact verification"
+                )
+            issues = [
+                ScriptReviewIssue(
+                    issue_id=violation.issue_id,
+                    category=violation.category,
+                    severity=ScriptReviewSeverity.MEDIUM,
+                    owner=ReviewRepairOwner.STORY_ARCHITECT,
+                    scene_sequences=list(violation.scene_sequences),
+                    observation=violation.observation,
+                    recommendation=violation.repair_instruction,
+                )
+                for violation in verification.violations
+            ]
+            assessment = verification.duration_fit_assessment
+            source_payload = verification.model_dump_json()
+            summary = (
+                "AgentRun Leader 接管 Revision Verifier 的精确 violations，"
+                "交由 Story Repair Leader 重新判断结构、元数据或场次范围。"
+            )
+
+        duration_requires_resolution = cls._duration_fit_requires_leader_resolution(
+            run,
+            report=(
+                run.review_report
+                if source == StoryVerificationSource.SCRIPT_VERIFIER
+                else None
+            ),
+            verification=(
+                run.latest_revision_verification
+                if source == StoryVerificationSource.REVISION_VERIFIER
+                else None
+            ),
+        )
+        duration_issue_category = (
+            "DURATION_ASSESSMENT_UNRESOLVED"
+            if assessment is not None
+            and assessment.alignment == DurationAlignment.UNRESOLVED
+            else "DURATION_CONTRACT_OUTSIDE_ACCEPTED_RANGE"
+        )
+        if duration_requires_resolution and not any(
+            issue.category == duration_issue_category for issue in issues
+        ):
+            unresolved = (
+                assessment is not None
+                and assessment.alignment == DurationAlignment.UNRESOLVED
+            )
+            issues.append(
+                ScriptReviewIssue(
+                    issue_id=cls._duration_resolution_issue_id(
+                        source,
+                        source_payload,
+                    ),
+                    category=duration_issue_category,
+                    severity=ScriptReviewSeverity.MEDIUM,
+                    owner=ReviewRepairOwner.STORY_ARCHITECT,
+                    scene_sequences=[],
+                    observation=(
+                        "Verifier 没有完成当前剧本相对 DurationContract 的时长判断；"
+                        "UNRESOLVED 只表示证据不足，不表示剧情本身存在缺陷。"
+                        if unresolved
+                        else (
+                            "Verifier 判断当前剧本的自然表演时长超出 "
+                            "TARGET_LED DurationContract 的可接受范围；"
+                            "这是需要 Leader 选择修订或接受的创作取舍。"
+                        )
+                    ),
+                    recommendation=(
+                        "结合完整剧本、DurationContract、压力点与可并发表演重新判断；"
+                        "只有语义证据支持时才修改剧本，否则保留为明确取舍。"
+                        if unresolved
+                        else (
+                            "由 Leader 结合剧情承诺、节奏形状和具体压力点，"
+                            "选择聚焦修订、返回 Story Architect 或接受该时长取舍。"
+                        )
+                    ),
+                )
+            )
+        if not issues:
+            raise WorkflowConflictError(
+                "Focused story revision requires verifier findings or a duration "
+                "assessment that needs Leader resolution"
+            )
+        return ScriptReviewReport(
+            summary=summary,
+            strengths=[],
+            issues=issues,
+            performance_timing_assessment=performance_timing_assessment,
+            duration_fit_assessment=assessment,
+            requires_revision=True,
+            followup_rationale=(
+                "本报告是 AgentRun Leader 对精确 Verifier handoff 的聚焦投影；"
+                "原始 Verifier 结论保存在 resolution history 中。"
+            ),
+        )
+
+    @classmethod
+    def _accept_story_verification_tradeoff(
+        cls,
+        run: PlanningRunRecord,
+        *,
+        source: StoryVerificationSource,
+        rationale: str,
+    ) -> None:
+        issue_ids: set[str] = set()
+        duration_payload: str | None = None
+        if source == StoryVerificationSource.SCRIPT_VERIFIER:
+            report = run.review_report
+            if report is None:
+                raise WorkflowConflictError(
+                    "Script Verifier handoff is missing its exact review report"
+                )
+            issue_ids.update(
+                issue.issue_id for issue in report.issues if issue.issue_id is not None
+            )
+            if cls._duration_fit_requires_leader_resolution(run, report=report):
+                duration_payload = report.model_dump_json()
+        else:
+            verification = run.latest_revision_verification
+            if verification is None:
+                raise WorkflowConflictError(
+                    "Revision Verifier handoff is missing its exact verification"
+                )
+            issue_ids.update(
+                violation.issue_id
+                for violation in verification.violations
+                if violation.issue_id is not None
+            )
+            if cls._duration_fit_requires_leader_resolution(
+                run,
+                verification=verification,
+            ):
+                duration_payload = verification.model_dump_json()
+
+        if duration_payload is not None:
+            duration_issue_id = cls._duration_resolution_issue_id(
+                source,
+                duration_payload,
+            )
+            issue_ids.add(duration_issue_id)
+            if not any(
+                entry.issue_id == duration_issue_id for entry in run.issue_ledger
+            ):
+                assessment = (
+                    run.review_report.duration_fit_assessment
+                    if source == StoryVerificationSource.SCRIPT_VERIFIER
+                    and run.review_report is not None
+                    else (
+                        run.latest_revision_verification.duration_fit_assessment
+                        if run.latest_revision_verification is not None
+                        else None
+                    )
+                )
+                unresolved = (
+                    assessment is not None
+                    and assessment.alignment == DurationAlignment.UNRESOLVED
+                )
+                run.issue_ledger.append(
+                    StoryIssueLedgerEntry(
+                        issue_id=duration_issue_id,
+                        semantic_cluster=(
+                            "duration-assessment-unresolved"
+                            if unresolved
+                            else "duration-contract-outside-accepted-range"
+                        ),
+                        state=(
+                            "Leader 明确接受未决时长判断"
+                            if unresolved
+                            else "Leader 明确接受 TARGET_LED 时长取舍"
+                        ),
+                        observation=(
+                            "Verifier 的 duration_fit_assessment 为 UNRESOLVED；"
+                            "该记录不被伪造成 ALIGNED。"
+                            if unresolved
+                            else (
+                                "Verifier 判断当前自然表演时长为 "
+                                "OUTSIDE_ACCEPTED_RANGE；该记录保持原始结论。"
+                            )
+                        ),
+                        evolution_notes=[
+                            "AgentRun Leader 阅读精确 Verifier 结果后接受当前取舍。"
+                        ],
+                        accepted_tradeoff=rationale,
+                    )
+                )
+
+        updated_ledger: list[StoryIssueLedgerEntry] = []
+        for entry in run.issue_ledger:
+            if entry.issue_id not in issue_ids:
+                updated_ledger.append(entry.model_copy(deep=True))
+                continue
+            notes = list(entry.evolution_notes)
+            note = (
+                "AgentRun Leader 显式接受该取舍；Verifier 原始结论保持不变，"
+                "不视为已通过验收。"
+            )
+            if note not in notes:
+                notes.append(note)
+            updated_ledger.append(
+                entry.model_copy(
+                    deep=True,
+                    update={
+                        "state": "Leader 已接受明确取舍，保留 Verifier 原结论",
+                        "accepted_tradeoff": rationale,
+                        "evolution_notes": notes,
+                    },
+                )
+            )
+        run.issue_ledger = updated_ledger
+
+        report = run.review_report
+        if report is not None:
+            run.review_disposition = ScriptReviewDisposition(
+                action=(
+                    ScriptReviewDispositionAction.CONTINUE_WITH_HANDOFF
+                    if report.issues
+                    else ScriptReviewDispositionAction.CONTINUE
+                ),
+                issue_routes=[
+                    ScriptReviewIssueRoute(
+                        issue_index=index,
+                        owner=ReviewRepairOwner.USER_OPTIONAL,
+                        rationale=(
+                            "AgentRun Leader 已明确接受该取舍；保留原始 Verifier "
+                            "记录，后续仍可由用户重新开启修订。"
+                        ),
+                    )
+                    for index, _issue in enumerate(report.issues, start=1)
+                ],
+                rationale=(
+                    "AgentRun Leader 接受当前交付取舍；这不会把 rejected 或 "
+                    "UNRESOLVED Verifier 结果改写成 accepted。"
+                ),
+            )
+
+    @staticmethod
+    def _accepted_tradeoff_matches_current_verification(
+        run: PlanningRunRecord,
+    ) -> bool:
+        if not run.story_verification_resolutions:
+            return False
+        resolution = run.story_verification_resolutions[-1]
+        if (
+            resolution.decision
+            != StoryVerificationResolutionDecision.ACCEPT_TRADEOFF
+        ):
+            return False
+        if resolution.source == StoryVerificationSource.SCRIPT_VERIFIER:
+            return (
+                resolution.script_review_report is not None
+                and resolution.script_review_report == run.review_report
+            )
+        return (
+            resolution.revision_verification is not None
+            and resolution.revision_verification
+            == run.latest_revision_verification
+        )
+
     def _route_current_story_review(
         self,
         run: PlanningRunRecord,
@@ -2392,6 +3065,9 @@ class ShortDramaService:
         if (
             run.latest_revision_verification is not None
             and not run.latest_revision_verification.accepted
+            and not ShortDramaService._accepted_tradeoff_matches_current_verification(
+                run
+            )
         ):
             return True
         report = run.review_report
@@ -3209,88 +3885,24 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "Story Revision Verifier did not return an accepted result"
             )
-        if not verification.accepted:
-            structural_violations = [
-                violation
-                for violation in verification.violations
-                if not violation.scene_sequences
-                and not violation.metadata_targets
-            ]
-            if structural_violations:
-                run.step_retry_feedback = json.dumps(
-                    {
-                        "requested_by": "REVISION_VERIFIER",
-                        "reason": (
-                            "The revised screenplay still has a structural issue "
-                            "without a concrete scene repair scope."
-                        ),
-                        "verification_summary": verification.summary,
-                        "structural_violations": [
-                            violation.model_dump(mode="json")
-                            for violation in structural_violations
-                        ],
-                        "preserve": run.latest_repair_plan.invariants,
-                    },
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
-                self._clear_revision_execution_state(run)
-                run.warnings.append(
-                    "Revision Verifier 认为剩余问题无法定位到"
-                    "具体场次；已将其作为结构反馈返回 Story Architect，"
-                    "不再调用 Scope Agent 或无条件修改全局元数据。"
-                )
-                self._complete_planning_step(
-                    run,
-                    PlanningRunStep.REVISION_VERIFIER,
-                    PlanningRunStep.STORY_ARCHITECT,
-                )
-                return
-            violation_sequences = sorted(
-                {
-                    sequence
-                    for violation in verification.violations
-                    for sequence in violation.scene_sequences
-                }
-            )
-            if violation_sequences:
-                self._set_scene_revision_queue(
-                    run,
-                    outline,
-                    violation_sequences,
-                    source="Revision Verifier",
-                )
-            else:
-                run.revision_scene_sequences = []
-                run.next_revision_scene_index = 0
-                self._clear_scene_revision_retry(run)
-            metadata_targets = {
-                target
-                for violation in verification.violations
-                for target in violation.metadata_targets
-            }
-            run.revision_repair_round += 1
-            if violation_sequences and metadata_targets:
-                repair_scope = (
-                    f"先对齐全局故事元数据，再按场次 "
-                    f"{violation_sequences} 逐场执行"
-                )
-            elif metadata_targets:
-                repair_scope = "只对齐全局故事元数据"
-            else:
-                repair_scope = f"按场次 {violation_sequences} 逐场执行"
-            run.warnings.append(
-                f"Revision Verifier 已定位回归问题；第 "
-                f"{run.revision_repair_round} 次定向修复将{repair_scope}。"
-            )
-            self._complete_planning_step(
+        if (
+            not verification.accepted
+            or self._duration_fit_requires_leader_resolution(
                 run,
-                PlanningRunStep.REVISION_VERIFIER,
-                (
-                    PlanningRunStep.STORY_METADATA_REVISION
-                    if metadata_targets
-                    else PlanningRunStep.SCENE_REVISION
-                ),
+                verification=verification,
+            )
+        ):
+            run.status = PlanningRunStatus.NEEDS_ATTENTION
+            run.error_message = (
+                "Story Revision Verifier 已交回需要 Leader 语义决策的"
+                " rejected 或时长契约结果；请使用 "
+                "planning.resolve_story_verification 选择聚焦修订、"
+                "返回 Story Architect 或接受明确取舍。"
+            )
+            run.warnings.append(
+                "Story Revision Verifier 的精确结果已持久化并交回 "
+                "AgentRun Leader；service 未直接将 violation 排入 Writer，"
+                "也未自动开启下一轮。"
             )
             return
 
@@ -3605,6 +4217,18 @@ class ShortDramaService:
         current_script.freshness = Freshness.STALE
         document.script_versions.append(candidate_script)
         document.project.current_script_version_id = candidate_script.id
+        story_duration_target = (
+            None
+            if candidate_script.story_intent is None
+            or candidate_script.story_intent.duration_contract is None
+            else candidate_script.story_intent.duration_contract.target_seconds
+        )
+        if story_duration_target is not None:
+            # Publish the ScriptVersion and its authoritative story-duration
+            # projection atomically. The in-flight PlanningRun may explore a
+            # revised contract, while ProjectRecord continues to describe the
+            # current ScriptVersion until the revision is accepted here.
+            document.project.target_duration_seconds = story_duration_target
 
         current_bible_content = current_bible.model_dump(
             exclude={
@@ -4551,7 +5175,7 @@ class ShortDramaService:
                 title="Production Spec",
                 payload=production_document_payload(request.spec),
                 source_artifact_refs=self._merge_production_document_refs(
-                    self._current_story_source_refs(document),
+                    self._production_spec_source_refs(document, request.spec),
                     request.source_artifact_refs,
                 ),
                 origin=request.origin,
@@ -4601,7 +5225,7 @@ class ShortDramaService:
                 base_version_id=request.base_version_id,
                 payload=production_document_payload(request.spec),
                 source_artifact_refs=self._merge_production_document_refs(
-                    self._current_story_source_refs(document),
+                    self._production_spec_source_refs(document, request.spec),
                     request.source_artifact_refs,
                 ),
                 origin=request.origin,
@@ -4945,12 +5569,70 @@ class ShortDramaService:
                     "The storyboard outline can only be completed from "
                     "OUTLINE_BUILDING"
                 )
+            production_spec_document = self._managed_project_document(
+                document,
+                current.production_spec_document_id,
+                PRODUCTION_SPEC_DOCUMENT_KIND,
+            )
+            production_spec_version = self._production_document_version(
+                production_spec_document,
+                current.production_spec_version_id,
+            )
+            production_spec = self._parse_production_spec(production_spec_version)
+            expected_alignment, expected_difference = (
+                self._storyboard_duration_alignment(
+                    production_spec,
+                    request.timing_audit.computed_episode_duration_s,
+                )
+            )
+            if request.timing_audit.alignment != expected_alignment:
+                raise WorkflowConflictError(
+                    "Timing-audit alignment does not match the bound "
+                    "ProductionSpec DurationContract"
+                )
+            submitted_difference = request.timing_audit.difference_seconds
+            if (
+                (submitted_difference is None) != (expected_difference is None)
+                or (
+                    submitted_difference is not None
+                    and expected_difference is not None
+                    and not math.isclose(
+                        submitted_difference,
+                        expected_difference,
+                        rel_tol=0.0,
+                        abs_tol=1e-6,
+                    )
+                )
+            ):
+                raise WorkflowConflictError(
+                    "Timing-audit difference_seconds does not match the bound "
+                    "ProductionSpec DurationContract"
+                )
+            reconciled_audit = request.timing_audit.model_copy(
+                update={
+                    "target_duration_s": (
+                        production_spec.duration_contract.target_seconds
+                    ),
+                    "alignment": expected_alignment,
+                    "difference_seconds": expected_difference,
+                },
+                deep=True,
+            )
+            next_phase = (
+                StoryboardDraftPhase.DURATION_RECONCILIATION
+                if expected_alignment
+                in {
+                    DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+                    DurationAlignment.UNRESOLVED,
+                }
+                else StoryboardDraftPhase.GROUP_AUTHORING
+            )
             try:
                 revised = StoryboardDraftContent.model_validate(
                     {
                         **current.model_dump(mode="json"),
-                        "phase": StoryboardDraftPhase.GROUP_AUTHORING,
-                        "timing_audit": request.timing_audit.model_dump(mode="json"),
+                        "phase": next_phase,
+                        "timing_audit": reconciled_audit.model_dump(mode="json"),
                         "notes": [*current.notes, *request.notes],
                     }
                 )
@@ -5011,6 +5693,11 @@ class ShortDramaService:
             current_version = self._production_document_version(draft_document)
             current = self._parse_storyboard_draft(current_version)
             self._validate_storyboard_draft(document, current)
+            if current.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
+                raise WorkflowConflictError(
+                    "Detailed ClipGroups cannot be appended while the draft requires "
+                    "duration reconciliation"
+                )
             if current.phase != StoryboardDraftPhase.GROUP_AUTHORING:
                 raise WorkflowConflictError(
                     "Detailed ClipGroups can only be authored after the ledger and "
@@ -5126,6 +5813,11 @@ class ShortDramaService:
             current_version = self._production_document_version(draft_document)
             current = self._parse_storyboard_draft(current_version)
             self._validate_storyboard_draft(document, current)
+            if current.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
+                raise WorkflowConflictError(
+                    "Storyboard verification cannot be recorded while the draft "
+                    "requires duration reconciliation"
+                )
             if current.phase != StoryboardDraftPhase.GROUP_AUTHORING:
                 raise WorkflowConflictError(
                     "Storyboard groups can only be replaced during GROUP_AUTHORING"
@@ -5228,6 +5920,11 @@ class ShortDramaService:
             current_version = self._production_document_version(draft_document)
             current = self._parse_storyboard_draft(current_version)
             self._validate_storyboard_draft(document, current)
+            if current.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
+                raise WorkflowConflictError(
+                    "Storyboard verification cannot be recorded while the draft "
+                    "requires duration reconciliation"
+                )
             if current.phase != StoryboardDraftPhase.GROUP_AUTHORING:
                 raise WorkflowConflictError(
                     "Storyboard verification requires a completed ledger and outline"
@@ -5253,6 +5950,15 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "A READY storyboard verification requires every planned "
                     "ClipGroup to be committed"
+                )
+            if (
+                request.report.status == StoryboardDraftVerificationStatus.READY
+                and current.timing_audit is not None
+                and current.timing_audit.alignment
+                == DurationAlignment.OUTSIDE_ACCEPTED_RANGE
+            ):
+                raise WorkflowConflictError(
+                    "A storyboard outside its accepted duration range cannot be READY"
                 )
             committed_id_set = set(committed_ids)
             unknown_finding_ids = [
@@ -5329,6 +6035,11 @@ class ShortDramaService:
             )
             draft = self._parse_storyboard_draft(draft_version)
             self._validate_storyboard_draft(document, draft)
+            if draft.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
+                raise WorkflowConflictError(
+                    "Storyboard finalization is unavailable while the draft requires "
+                    "duration reconciliation"
+                )
 
             storyboard_document: ProductionDocument | None = None
             current_storyboard_version: ProductionDocumentVersion | None = None
@@ -5684,6 +6395,12 @@ class ShortDramaService:
                 raise WorkflowConflictError("GenerationPlan requires the current ProductionSpec version")
             storyboard = self._parse_storyboard(storyboard_version)
             spec = self._parse_production_spec(spec_version)
+            # Output-slot invalidation is a useful projection, but the versioned
+            # documents remain addressable.  Revalidate both exact inputs at the
+            # consumption boundary so a stale audio-led spec/storyboard cannot be
+            # compiled merely because its document/version is still marked current.
+            self._validate_production_spec(document, spec)
+            self._validate_storyboard(document, storyboard)
             try:
                 generation_plan = compile_generation_plan(
                     storyboard=storyboard,
@@ -6015,6 +6732,50 @@ class ShortDramaService:
             updated_at=updated_at,
         )
 
+    def _invalidate_audio_led_production_after_master_audio_change_locked(
+        self,
+        project_document: ProjectDocument,
+        *,
+        master_audio_version_id: str,
+        updated_at: str,
+    ) -> None:
+        """Invalidate only production truth whose timing authority was replaced."""
+
+        if project_document.production_spec_document_id is None:
+            return
+        production_document = self._managed_project_document(
+            project_document,
+            project_document.production_spec_document_id,
+            PRODUCTION_SPEC_DOCUMENT_KIND,
+        )
+        production_version = self._production_document_version(production_document)
+        production_spec = self._parse_production_spec(production_version)
+        if production_spec.duration_contract.authority != DurationAuthority.AUDIO_LED:
+            return
+        if production_spec.master_audio_binding_version_id == master_audio_version_id:
+            return
+        self._invalidate_output_slot_locked(
+            project_document,
+            PRODUCTION_SPEC_OUTPUT_SLOT_ID,
+            "Master Audio changed; the audio-led ProductionSpec must bind the new exact version.",
+            updated_at=updated_at,
+        )
+        self._invalidate_output_slot_locked(
+            project_document,
+            STORYBOARD_OUTPUT_SLOT_ID,
+            "Master Audio changed after the audio-led Storyboard was authored.",
+            updated_at=updated_at,
+        )
+        self._invalidate_generation_plan_locked(
+            project_document,
+            "Master Audio changed after the audio-led GenerationPlan was compiled.",
+            updated_at=updated_at,
+        )
+        self.repository.mark_takes_stale(
+            project_document.project.id,
+            [shot.id for shot in project_document.shots],
+        )
+
     def _validate_production_spec(
         self,
         project_document: ProjectDocument,
@@ -6038,6 +6799,73 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "ProductionSpec must reference the current ProjectBibleVersion"
             )
+        current_script = self._current_script(project_document)
+        story_duration_contract = (
+            None
+            if current_script.story_intent is None
+            else current_script.story_intent.duration_contract
+        )
+        if (
+            story_duration_contract is not None
+            and production_spec.duration_contract != story_duration_contract
+        ):
+            raise WorkflowConflictError(
+                "ProductionSpec DurationContract must match the current "
+                "ScriptVersion StoryIntent DurationContract"
+            )
+        if production_spec.duration_contract.authority == DurationAuthority.AUDIO_LED:
+            _master_document, master_version, binding = (
+                self._current_master_audio_binding(project_document)
+            )
+            if production_spec.master_audio_binding_version_id != master_version.id:
+                raise WorkflowConflictError(
+                    "Audio-led ProductionSpec must reference the current exact "
+                    "Master Audio binding version"
+                )
+            expected_duration = binding.time_origin_seconds + binding.duration_seconds
+            target_duration = production_spec.duration_contract.target_seconds
+            if target_duration is None or not math.isclose(
+                target_duration,
+                expected_duration,
+                rel_tol=0.0,
+                abs_tol=1e-6,
+            ):
+                raise WorkflowConflictError(
+                    "Audio-led ProductionSpec duration must match the bound Master "
+                    "Audio timeline duration"
+                )
+
+    @staticmethod
+    def _storyboard_duration_alignment(
+        production_spec: ProductionSpecContent,
+        natural_duration_seconds: float,
+    ) -> tuple[DurationAlignment, float | None]:
+        """Compare the natural storyboard runtime with its pinned duration contract."""
+
+        contract = production_spec.duration_contract
+        difference = (
+            None
+            if contract.target_seconds is None
+            else natural_duration_seconds - contract.target_seconds
+        )
+        if contract.authority != DurationAuthority.TARGET_LED:
+            return DurationAlignment.NOT_APPLICABLE, difference
+        if contract.target_seconds is None:
+            return DurationAlignment.UNRESOLVED, None
+        accepted = contract.acceptable_range_seconds
+        if accepted is None:
+            return DurationAlignment.UNRESOLVED, difference
+        aligned = (
+            accepted.minimum_seconds
+            <= natural_duration_seconds
+            <= accepted.maximum_seconds
+        )
+        return (
+            DurationAlignment.ALIGNED
+            if aligned
+            else DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+            difference,
+        )
 
     def _current_story_source_refs(
         self,
@@ -6071,6 +6899,188 @@ class ShortDramaService:
             ),
         ]
 
+    def _production_spec_source_refs(
+        self,
+        project_document: ProjectDocument,
+        production_spec: ProductionSpecContent,
+    ) -> list[ProductionDocumentArtifactRef]:
+        refs = self._current_story_source_refs(project_document)
+        if production_spec.duration_contract.authority != DurationAuthority.AUDIO_LED:
+            return refs
+        master_document, master_version, _binding = (
+            self._current_master_audio_binding(project_document)
+        )
+        return self._merge_production_document_refs(
+            refs,
+            self._master_audio_source_refs(
+                project_document.project.id,
+                master_document,
+                master_version,
+            ),
+        )
+
+    def _validate_script_revision_evidence_refs(
+        self,
+        project_document: ProjectDocument,
+        evidence_refs: list[ProductionDocumentArtifactRef],
+        *,
+        revision_origin: ScriptRevisionOrigin,
+        base_script_version_id: str,
+    ) -> list[ProductionDocumentArtifactRef]:
+        """Resolve exact revision evidence before it becomes planning provenance."""
+
+        resolved: list[ProductionDocumentArtifactRef] = []
+        seen: set[tuple[str, str, str, int | None]] = set()
+        script_refs: list[ScriptVersion] = []
+        production_spec_versions: list[
+            tuple[
+                ProductionDocument,
+                ProductionDocumentVersion,
+                ProductionSpecContent,
+            ]
+        ] = []
+        storyboard_draft_versions: list[
+            tuple[ProductionDocument, ProductionDocumentVersion, StoryboardDraftContent]
+        ] = []
+        for supplied in evidence_refs:
+            ref = supplied.model_copy(deep=True)
+            if ref.project_id != project_document.project.id:
+                raise WorkflowConflictError(
+                    "Script revision evidence must belong to the current project"
+                )
+            if ref.version is None:
+                raise WorkflowConflictError(
+                    "Script revision evidence must pin an exact artifact version"
+                )
+            key = (
+                ref.project_id,
+                ref.artifact_type,
+                ref.artifact_id,
+                ref.version,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            if ref.artifact_type in {"script", "script_version"}:
+                script = next(
+                    (
+                        item
+                        for item in project_document.script_versions
+                        if item.id == ref.artifact_id
+                        and item.version == ref.version
+                    ),
+                    None,
+                )
+                if script is None:
+                    raise WorkflowConflictError(
+                        "Script revision evidence references an unknown exact ScriptVersion"
+                    )
+                script_refs.append(script)
+            elif ref.artifact_type in {
+                "production_spec",
+                "storyboard_draft",
+                "production_document",
+                "production_document_version",
+            }:
+                production_document = next(
+                    (
+                        item
+                        for item in project_document.production_documents
+                        if (
+                            ref.artifact_type == "production_document_version"
+                            and any(
+                                version.id == ref.artifact_id
+                                for version in item.versions
+                            )
+                        )
+                        or (
+                            ref.artifact_type != "production_document_version"
+                            and item.id == ref.artifact_id
+                        )
+                    ),
+                    None,
+                )
+                if production_document is None:
+                    raise WorkflowConflictError(
+                        "Script revision evidence references an unknown production document"
+                    )
+                version = next(
+                    (
+                        item
+                        for item in production_document.versions
+                        if item.version == ref.version
+                        and (
+                            ref.artifact_type != "production_document_version"
+                            or item.id == ref.artifact_id
+                        )
+                    ),
+                    None,
+                )
+                if version is None:
+                    raise WorkflowConflictError(
+                        "Script revision evidence references an unknown exact document version"
+                )
+                if production_document.kind == PRODUCTION_SPEC_DOCUMENT_KIND:
+                    production_spec_versions.append(
+                        (
+                            production_document,
+                            version,
+                            self._parse_production_spec(version),
+                        )
+                    )
+                elif production_document.kind == STORYBOARD_DRAFT_DOCUMENT_KIND:
+                    storyboard_draft_versions.append(
+                        (
+                            production_document,
+                            version,
+                            self._parse_storyboard_draft(version),
+                        )
+                    )
+                else:
+                    raise WorkflowConflictError(
+                        "Script revision evidence may only use ScriptVersion, "
+                        "ProductionSpec, or StoryboardDraft artifacts"
+                    )
+            else:
+                raise WorkflowConflictError(
+                    "Script revision evidence contains an unsupported artifact type: "
+                    f"{ref.artifact_type}"
+                )
+            resolved.append(ref)
+
+        if revision_origin == ScriptRevisionOrigin.USER_FEEDBACK:
+            return resolved
+        if not resolved:
+            raise WorkflowConflictError(
+                "A production-constraint script revision requires exact evidence refs"
+            )
+        if not any(item.id == base_script_version_id for item in script_refs):
+            raise WorkflowConflictError(
+                "Production-constraint evidence must include the base ScriptVersion"
+            )
+        matching_pair = any(
+            draft.script_version_id == base_script_version_id
+            and draft.production_spec_document_id == spec_document.id
+            and draft.production_spec_version_id == spec_version.id
+            and draft.phase == StoryboardDraftPhase.DURATION_RECONCILIATION
+            and draft.timing_audit is not None
+            and draft.timing_audit.alignment
+            in {
+                DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+                DurationAlignment.UNRESOLVED,
+            }
+            and spec.duration_contract.authority == DurationAuthority.TARGET_LED
+            for _draft_document, _draft_version, draft in storyboard_draft_versions
+            for spec_document, spec_version, spec in production_spec_versions
+        )
+        if not matching_pair:
+            raise WorkflowConflictError(
+                "Production-constraint evidence must include a matching exact "
+                "target-led ProductionSpec and unresolved or out-of-range "
+                "StoryboardDraft reconciliation bound to the base ScriptVersion"
+            )
+        return resolved
+
     @staticmethod
     def _merge_production_document_refs(
         required: list[ProductionDocumentArtifactRef],
@@ -6097,9 +7107,9 @@ class ShortDramaService:
     ) -> None:
         project_document.project.language = production_spec.language
         project_document.project.aspect_ratio = production_spec.aspect_ratio
-        if production_spec.target_duration_seconds is not None:
+        if production_spec.duration_contract.target_seconds is not None:
             project_document.project.target_duration_seconds = (
-                production_spec.target_duration_seconds
+                production_spec.duration_contract.target_seconds
             )
 
     def _storyboard_draft_source_refs(
@@ -6699,6 +7709,16 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "Storyboard must reference the current ProductionSpec version"
             )
+        production_spec = self._parse_production_spec(production_spec_version)
+        self._validate_production_spec(project_document, production_spec)
+        if (
+            storyboard.script_version_id != production_spec.script_version_id
+            or storyboard.bible_version_id != production_spec.bible_version_id
+        ):
+            raise WorkflowConflictError(
+                "Storyboard and ProductionSpec must reference the same "
+                "ScriptVersion and ProjectBibleVersion"
+            )
 
         script = self._current_script(project_document)
         source_line_ids = [line.id for line in script.lines]
@@ -7117,6 +8137,11 @@ class ShortDramaService:
                     origin=request.origin,
                     created_at=now,
                 )
+            self._invalidate_audio_led_production_after_master_audio_change_locked(
+                project_document,
+                master_audio_version_id=result.version.id,
+                updated_at=now,
+            )
             # These documents remain in history but no longer describe the new source.
             project_document.audio_structure_document_id = None
             project_document.timed_text_document_id = None
@@ -10470,10 +11495,191 @@ class ShortDramaService:
             self.repository.save_project(document)
             return task
 
+    def _timeline_storyboard_truth(
+        self,
+        project_document: ProjectDocument,
+    ) -> tuple[list[ShotPlan], str | None, str | None]:
+        """Resolve the exact storyboard truth consumed by timeline assembly.
+
+        Versioned Storyboards are authoritative once present.  The legacy Shot
+        projection remains readable for older local projects, but only while it
+        still covers the current ScriptVersion's lines and every projected Shot
+        is current.  This prevents a compatibility projection from being stamped
+        with a newer ScriptVersion merely because its IDs are still reachable.
+        """
+
+        if project_document.storyboard_document_id is not None:
+            storyboard_document = self._managed_project_document(
+                project_document,
+                project_document.storyboard_document_id,
+                STORYBOARD_DOCUMENT_KIND,
+            )
+            storyboard_version = self._production_document_version(
+                storyboard_document
+            )
+            storyboard = self._parse_storyboard(storyboard_version)
+            self._validate_storyboard(project_document, storyboard)
+            return (
+                [item.model_copy(deep=True) for item in storyboard.shots],
+                storyboard_document.id,
+                storyboard_version.id,
+            )
+
+        shots = [item.model_copy(deep=True) for item in project_document.shots]
+        if not shots:
+            raise WorkflowConflictError(
+                "Timeline rebuild requires a current Storyboard or legacy Shot projection"
+            )
+        if any(item.freshness != Freshness.CURRENT for item in shots):
+            raise WorkflowConflictError(
+                "Legacy Shot projection contains stale entries; author a current Storyboard"
+            )
+        script = self._current_script(project_document)
+        projected_line_ids = [
+            line_id for shot in shots for line_id in shot.dialogue_line_ids
+        ]
+        if projected_line_ids != [line.id for line in script.lines]:
+            raise WorkflowConflictError(
+                "Legacy Shot projection does not cover the current ScriptVersion; "
+                "author a current Storyboard before rebuilding the timeline"
+            )
+        return shots, None, None
+
+    def _validate_timeline_take_source(
+        self,
+        project_document: ProjectDocument,
+        take: Take,
+        shot: ShotPlan,
+        *,
+        storyboard_document_id: str | None,
+        storyboard_version_id: str | None,
+    ) -> GenerationTask:
+        """Require every selected Take to prove its exact current story source."""
+
+        task = self.repository.get_task(take.task_id)
+        if task is None or task.project_id != project_document.project.id:
+            raise WorkflowConflictError(
+                f"Selected Take {take.id} has no generation task in the current project"
+            )
+        current_script = self._current_script(project_document)
+        if task.input_script_version_id != current_script.id:
+            script_by_id = {item.id: item for item in project_document.script_versions}
+            source_script = script_by_id.get(task.input_script_version_id)
+            ancestor_ids: set[str] = set()
+            cursor: ScriptVersion | None = current_script
+            while cursor is not None:
+                ancestor_ids.add(cursor.id)
+                cursor = (
+                    None
+                    if cursor.parent_version_id is None
+                    else script_by_id.get(cursor.parent_version_id)
+                )
+            source_lines = (
+                {} if source_script is None else {item.id: item for item in source_script.lines}
+            )
+            current_lines = {item.id: item for item in current_script.lines}
+            dialogue_changed = any(
+                line_id not in source_lines
+                or line_id not in current_lines
+                or source_lines[line_id] != current_lines[line_id]
+                for line_id in shot.dialogue_line_ids
+            )
+            scene_changed = False
+            if shot.scene_id is not None and source_script is not None:
+                source_scene = next(
+                    (
+                        item
+                        for item in source_script.structured_scenes
+                        if item.id == shot.scene_id
+                    ),
+                    None,
+                )
+                current_scene = next(
+                    (
+                        item
+                        for item in current_script.structured_scenes
+                        if item.id == shot.scene_id
+                    ),
+                    None,
+                )
+                scene_changed = source_scene != current_scene
+            if (
+                source_script is None
+                or source_script.id not in ancestor_ids
+                or dialogue_changed
+                or scene_changed
+            ):
+                raise WorkflowConflictError(
+                    f"Selected Take {take.id} was generated from an outdated ScriptVersion"
+                )
+        if task.input_bible_version_id != project_document.project.current_bible_version_id:
+            raise WorkflowConflictError(
+                f"Selected Take {take.id} was generated from an outdated ProjectBibleVersion"
+            )
+
+        if task.input_shot_revisions:
+            source_revision = task.input_shot_revisions.get(shot.id)
+        elif task.shot_id == shot.id:
+            source_revision = task.input_shot_revision
+        else:
+            source_revision = None
+        if source_revision != shot.revision:
+            raise WorkflowConflictError(
+                f"Selected Take {take.id} was generated from an outdated Shot revision"
+            )
+
+        if storyboard_document_id is None or storyboard_version_id is None:
+            if (
+                take.storyboard_document_id is not None
+                or take.storyboard_version_id is not None
+                or task.storyboard_document_id is not None
+                or task.storyboard_version_id is not None
+            ):
+                raise WorkflowConflictError(
+                    f"Selected Take {take.id} references a Storyboard that is no longer current"
+                )
+            return task
+
+        if (
+            task.storyboard_document_id != storyboard_document_id
+            or task.storyboard_version_id != storyboard_version_id
+        ):
+            raise WorkflowConflictError(
+                f"Selected Take {take.id} must reference the current exact Storyboard version"
+            )
+        if (
+            take.storyboard_document_id is not None
+            or take.storyboard_version_id is not None
+        ) and (
+            take.storyboard_document_id != storyboard_document_id
+            or take.storyboard_version_id != storyboard_version_id
+        ):
+            raise WorkflowConflictError(
+                f"Selected Take {take.id} carries an outdated Storyboard version"
+            )
+        return task
+
     def rebuild_manifest(self, project_id: str) -> TimelineManifest:
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
             current_script = self._current_script(document)
+            timeline_shots, storyboard_document_id, storyboard_version_id = (
+                self._timeline_storyboard_truth(document)
+            )
+            production_spec: ProductionSpecContent | None = None
+            if document.production_spec_document_id is not None:
+                production_spec_document = self._managed_project_document(
+                    document,
+                    document.production_spec_document_id,
+                    PRODUCTION_SPEC_DOCUMENT_KIND,
+                )
+                production_spec_version = self._production_document_version(
+                    production_spec_document
+                )
+                production_spec = self._parse_production_spec(
+                    production_spec_version
+                )
+                self._validate_production_spec(document, production_spec)
             master_audio: tuple[
                 ProductionDocument,
                 ProductionDocumentVersion,
@@ -10511,6 +11717,14 @@ class ShortDramaService:
                         ) from exc
                     if candidate.master_audio_version_id == master_version.id:
                         timed_text = candidate
+            master_audio_controls_duration = (
+                master_audio is not None
+                and production_spec is not None
+                and production_spec.duration_contract.authority
+                == DurationAuthority.AUDIO_LED
+                and production_spec.master_audio_binding_version_id
+                == master_audio[1].id
+            )
             selected_by_shot: dict[str, Take] = {}
             for take in self.repository.list_takes(project_id):
                 if (
@@ -10526,11 +11740,22 @@ class ShortDramaService:
                                 f"{selected_shot_id}: {existing.id}, {take.id}"
                             )
                         selected_by_shot[selected_shot_id] = take
-            missing = [shot.id for shot in document.shots if shot.id not in selected_by_shot]
+            missing = [
+                shot.id for shot in timeline_shots if shot.id not in selected_by_shot
+            ]
             if missing:
                 raise WorkflowConflictError(
                     "Every shot needs a current technically available selected Take before building the timeline: "
                     + ", ".join(missing)
+                )
+            source_task_by_shot: dict[str, GenerationTask] = {}
+            for shot in timeline_shots:
+                source_task_by_shot[shot.id] = self._validate_timeline_take_source(
+                    document,
+                    selected_by_shot[shot.id],
+                    shot,
+                    storyboard_document_id=storyboard_document_id,
+                    storyboard_version_id=storyboard_version_id,
                 )
             self._invalidate_current_manifests(document)
             version = max((manifest.version for manifest in document.manifests), default=0) + 1
@@ -10540,8 +11765,9 @@ class ShortDramaService:
             subtitle_cues: list[SubtitleCue] = []
             line_by_id = {line.id: line for line in current_script.lines}
             cursor = 0.0
-            for shot in sorted(document.shots, key=lambda item: item.sequence):
+            for shot in sorted(timeline_shots, key=lambda item: item.sequence):
                 take = selected_by_shot[shot.id]
+                source_task = source_task_by_shot[shot.id]
                 source_window = take.source_window_for_shot(shot.id)
                 if source_window is None:
                     source_in_seconds, clip_duration = _timeline_clip_window(shot, take)
@@ -10558,6 +11784,14 @@ class ShortDramaService:
                         id=f"video-{shot.id}-{take.id}",
                         shot_id=shot.id,
                         take_id=take.id,
+                        source_script_version_id=source_task.input_script_version_id,
+                        source_bible_version_id=source_task.input_bible_version_id,
+                        source_storyboard_document_id=(
+                            source_task.storyboard_document_id
+                        ),
+                        source_storyboard_version_id=(
+                            source_task.storyboard_version_id
+                        ),
                         media_path=take.media_path,
                         start_seconds=cursor,
                         source_in_seconds=source_in_seconds,
@@ -10611,13 +11845,16 @@ class ShortDramaService:
                 cursor += clip_duration
             if master_audio is not None:
                 _, master_version, binding, audio_path = master_audio
-                timeline_duration = (
-                    binding.time_origin_seconds + binding.duration_seconds
-                )
-                video_clips = _fit_video_clips_to_duration(
-                    video_clips,
-                    timeline_duration,
-                )
+                if master_audio_controls_duration:
+                    timeline_duration = (
+                        binding.time_origin_seconds + binding.duration_seconds
+                    )
+                    video_clips = _fit_video_clips_to_duration(
+                        video_clips,
+                        timeline_duration,
+                    )
+                else:
+                    timeline_duration = cursor
                 audio_clips.append(
                     TimelineAudioClip(
                         id=f"master-audio-{master_version.id}",
@@ -11031,6 +12268,29 @@ class ShortDramaService:
         now = utc_now()
         task_id = f"task-{uuid4().hex}"
         shot = self._require_shot_in_document(document, shot_id)
+        storyboard_document_id: str | None = None
+        storyboard_version_id: str | None = None
+        if document.storyboard_document_id is not None:
+            storyboard_document = self._managed_project_document(
+                document,
+                document.storyboard_document_id,
+                STORYBOARD_DOCUMENT_KIND,
+            )
+            storyboard_version = self._production_document_version(
+                storyboard_document
+            )
+            storyboard = self._parse_storyboard(storyboard_version)
+            self._validate_storyboard(document, storyboard)
+            storyboard_shot = next(
+                (item for item in storyboard.shots if item.id == shot_id),
+                None,
+            )
+            if storyboard_shot is None or storyboard_shot.revision != shot.revision:
+                raise WorkflowConflictError(
+                    "Generation requires the current exact Storyboard Shot revision"
+                )
+            storyboard_document_id = storyboard_document.id
+            storyboard_version_id = storyboard_version.id
         normalized_request = {
             "project_id": document.project.id,
             "shot_id": shot_id,
@@ -11042,6 +12302,8 @@ class ShortDramaService:
             "voice_reference_revision": document.project.voice_reference_revision,
             "requested_duration_seconds": requested_duration_seconds,
             "attempt": attempt,
+            "storyboard_document_id": storyboard_document_id,
+            "storyboard_version_id": storyboard_version_id,
         }
         fingerprint = hashlib.sha256(
             json.dumps(normalized_request, sort_keys=True, separators=(",", ":")).encode()
@@ -11060,6 +12322,8 @@ class ShortDramaService:
             input_script_version_id=document.project.current_script_version_id,
             input_bible_version_id=document.project.current_bible_version_id,
             input_shot_revision=shot.revision,
+            storyboard_document_id=storyboard_document_id,
+            storyboard_version_id=storyboard_version_id,
             input_voice_reference_revision=document.project.voice_reference_revision,
             requested_duration_seconds=requested_duration_seconds,
             attempt=attempt,

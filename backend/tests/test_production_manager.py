@@ -28,13 +28,33 @@ from short_drama.agent_runtime import (
 from short_drama.deps import get_short_drama_service
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
+    DurationAlignment,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationFitAssessment,
+    DurationMismatchResolution,
+    DurationRange,
+    DurationTargetOrigin,
+    PlanningRunStatus,
+    PlanningRunStep,
     ProductionExecutionTarget,
     CreativeInputImage,
     CreateProjectRequest,
     EnqueueRequest,
+    ProductionDocumentArtifactRef,
     ProductionProfile,
     RunMode,
+    ScriptRevisionOrigin,
+    ScriptReviewIssue,
+    ScriptReviewReport,
+    ScriptReviewSeverity,
     SourceMode,
+    ReviewRepairOwner,
+    StoryRevisionVerification,
+    StoryRevisionViolation,
+    StoryIntent,
+    StoryVerificationResolutionDecision,
     TaskStatus,
 )
 from short_drama.production_manager import (
@@ -782,6 +802,108 @@ def _service(root: Path) -> ShortDramaService:
     )
 
 
+def _persist_pending_revision_verifier(
+    service: ShortDramaService,
+    *,
+    project_id: str,
+    owner_agent_run_id: str,
+) -> str:
+    document = service.get_project(project_id).document
+    started = service.start_script_revision(
+        project_id,
+        owner_agent_run_id=owner_agent_run_id,
+        instruction="保留已成立主线，修复 Verifier 定位的局部回归。",
+        base_script_version_id=document.project.current_script_version_id,
+    ).run
+    started.status = PlanningRunStatus.NEEDS_ATTENTION
+    started.current_step = PlanningRunStep.REVISION_VERIFIER
+    started.latest_revision_verification = StoryRevisionVerification(
+        accepted=False,
+        summary="修订稿仍有一处可定位的状态回归。",
+        satisfied_issue_ids=[],
+        satisfied_issue_indices=[],
+        violations=[
+            StoryRevisionViolation(
+                issue_id="STATE-REGRESSION-1",
+                category="STATE_REGRESSION",
+                scene_sequences=[1],
+                observation="第 1 场同一道具被同时写成已移除与仍在场。",
+                repair_instruction="统一道具移除时点，保留其他剧情。",
+            )
+        ],
+        duration_fit_assessment=DurationFitAssessment(
+            estimated_range_seconds=DurationRange(
+                minimum_seconds=document.project.target_duration_seconds,
+                maximum_seconds=document.project.target_duration_seconds,
+            ),
+            alignment=DurationAlignment.ALIGNED,
+            pressure_points=[],
+            concurrent_performance=[],
+            resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            rationale="本次 handoff 只涉及可定位剧情回归。",
+        ),
+    )
+    started.error_message = "等待 AgentRun Leader 处理精确 Verifier 结果。"
+    document = service.get_project(project_id).document
+    assert document.planning is not None
+    document.planning.status = PlanningRunStatus.NEEDS_ATTENTION
+    service.repository.save_planning_run_with_project(started, document)
+    return started.id
+
+
+def _persist_pending_script_verifier(
+    service: ShortDramaService,
+    *,
+    project_id: str,
+    owner_agent_run_id: str,
+) -> str:
+    document = service.get_project(project_id).document
+    started = service.start_script_revision(
+        project_id,
+        owner_agent_run_id=owner_agent_run_id,
+        instruction="保留当前主线，让初次 Script Verifier 冷读整稿。",
+        base_script_version_id=document.project.current_script_version_id,
+    ).run
+    started.status = PlanningRunStatus.NEEDS_ATTENTION
+    started.current_step = PlanningRunStep.SCRIPT_VERIFIER
+    started.review_report = ScriptReviewReport(
+        summary="初次冷读发现一处可定位的因果缺口。",
+        strengths=["主角优势已建立"],
+        issues=[
+            ScriptReviewIssue(
+                issue_id="INITIAL-CAUSAL-GAP-1",
+                category="CAUSAL_LOGIC",
+                severity=ScriptReviewSeverity.MEDIUM,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                scene_sequences=[1],
+                observation="开场行动缺少一个可见后果。",
+                recommendation="保留其他剧情，只补齐该因果。",
+            )
+        ],
+        performance_timing_assessment="当前时长可承载局部修订。",
+        duration_fit_assessment=DurationFitAssessment(
+            estimated_range_seconds=DurationRange(
+                minimum_seconds=document.project.target_duration_seconds,
+                maximum_seconds=document.project.target_duration_seconds,
+            ),
+            alignment=DurationAlignment.ALIGNED,
+            pressure_points=[],
+            concurrent_performance=[],
+            resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            rationale="本次 handoff 只涉及可定位剧情问题。",
+        ),
+        requires_revision=True,
+    )
+    started.review_disposition = None
+    started.latest_revision_verification = None
+    started.error_message = "等待 AgentRun Leader 处理初次 Script Verifier 的精确结果。"
+    document = service.get_project(project_id).document
+    assert document.planning is not None
+    document.planning.status = PlanningRunStatus.NEEDS_ATTENTION
+    service.repository.save_planning_run_with_project(started, document)
+    return started.id
+
+
 def _single_tool_plan(
     tool_name: str,
     arguments: dict[str, JsonValue],
@@ -986,6 +1108,17 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
         client.instructions[0]
     )
     assert "不用 continuity 文本逐字相等" in client.instructions[0]
+    assert "ProductionSpec.duration_contract" in client.instructions[0]
+    assert "DURATION_RECONCILIATION" in client.instructions[0]
+    assert "OUTSIDE_ACCEPTED_RANGE 或 UNRESOLVED" in client.instructions[0]
+    assert "SOURCE_LED 或 AUDIO_LED 契约下的 OUTSIDE_ACCEPTED_RANGE" in (
+        client.instructions[0]
+    )
+    assert "本身不触发该 handoff" in client.instructions[0]
+    assert "time_origin_seconds + duration_seconds" in client.instructions[0]
+    assert "不把两者差值误判成 TARGET_LED 剧情缺陷" in client.instructions[0]
+    assert "revision_origin=PRODUCTION_CONSTRAINT" in client.instructions[0]
+    assert "每条 finding 显式给出 repair_scope" in client.instructions[0]
     assert "片段边界只是运行检查点" in client.instructions[0]
     assert "不设片段数量、大小或重试次数" in client.instructions[0]
     assert "在一次模型回答中输出全片账本" in client.instructions[0]
@@ -3705,6 +3838,17 @@ def test_restart_reconciles_persisted_script_revision_start_without_replay(
     base_script_version_id = document.project.current_script_version_id
     assert base_script_version_id is not None
     feedback = "保留原设定，只改第二场的反应和它对下一场的影响。"
+    script = next(
+        item for item in document.script_versions if item.id == base_script_version_id
+    )
+    evidence_refs = [
+        ProductionDocumentArtifactRef(
+            project_id=project_id,
+            artifact_type="script_version",
+            artifact_id=script.id,
+            version=script.version,
+        )
+    ]
     created = service.create_agent_run(
         project_id,
         AgentRunCreateRequest(
@@ -3728,6 +3872,10 @@ def test_restart_reconciles_persisted_script_revision_start_without_replay(
             "owner_agent_run_id": run_id,
             "instruction": feedback,
             "base_script_version_id": base_script_version_id,
+            "revision_origin": ScriptRevisionOrigin.USER_FEEDBACK,
+            "evidence_refs": [
+                item.model_dump(mode="json") for item in evidence_refs
+            ],
         },
     )
     plan = service.agent_runtime.replace_plan(
@@ -3750,6 +3898,8 @@ def test_restart_reconciles_persisted_script_revision_start_without_replay(
         owner_agent_run_id=run_id,
         instruction=feedback,
         base_script_version_id=base_script_version_id,
+        revision_origin=ScriptRevisionOrigin.USER_FEEDBACK,
+        evidence_refs=evidence_refs,
     ).run
 
     reopened = _service(tmp_path)
@@ -3759,6 +3909,8 @@ def test_restart_reconciles_persisted_script_revision_start_without_replay(
 
     assert current.planning is not None
     assert current.planning.run_id == persisted.id
+    assert persisted.revision_origin == ScriptRevisionOrigin.USER_FEEDBACK
+    assert persisted.revision_evidence_refs == evidence_refs
     assert recovered_action is not None
     assert recovered_action.status == ActionStatus.SUCCEEDED
     assert persisted.id in (recovered_action.output_summary or "")
@@ -3771,6 +3923,320 @@ def test_restart_reconciles_persisted_script_revision_start_without_replay(
     assert len(recovered.ready_steps) == 1
     assert recovered.ready_steps[0].tool_name == "planning.advance"
     assert recovered.ready_steps[0].arguments["run_id"] == persisted.id
+
+
+def test_pending_story_verifier_requires_resolution_plan_not_another_advance(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    agent_run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="处理精确 Story Verifier handoff。",
+            initial_plan=_single_tool_plan(
+                "project.get",
+                {"project_id": project_id},
+            ),
+        ),
+    ).snapshot.run
+    planning_run_id = _persist_pending_revision_verifier(
+        service,
+        project_id=project_id,
+        owner_agent_run_id=agent_run.id,
+    )
+    document = service.get_project(project_id).document
+
+    fallback = service.production_manager._planning_precondition_plan(
+        agent_run_id=agent_run.id,
+        document=document,
+        semantic_planning_available=False,
+    )
+    assert fallback is not None
+    assert fallback.steps[0].kind == ActionKind.USER_INPUT
+    assert "planning.resolve_story_verification" in fallback.steps[0].instructions
+    assert service.production_manager._planning_precondition_plan(
+        agent_run_id=agent_run.id,
+        document=document,
+        semantic_planning_available=True,
+    ) is None
+
+    resolve_plan = _single_tool_plan(
+        "planning.resolve_story_verification",
+        {
+            "project_id": project_id,
+            "run_id": planning_run_id,
+            "owner_agent_run_id": agent_run.id,
+            "decision": (
+                StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION.value
+            ),
+            "rationale": "问题可定位于第 1 场，由 Repair Leader 重新规划。",
+        },
+    )
+    assert service.production_manager._is_content_planning_plan(
+        resolve_plan,
+        agent_run_id=agent_run.id,
+        document=document,
+    )
+    advance_plan = _single_tool_plan(
+        "planning.advance",
+        {
+            "project_id": project_id,
+            "run_id": planning_run_id,
+            "owner_agent_run_id": agent_run.id,
+        },
+    )
+    assert not service.production_manager._is_content_planning_plan(
+        advance_plan,
+        agent_run_id=agent_run.id,
+        document=document,
+    )
+
+
+def test_initial_script_verifier_revision_requires_leader_resolution_plan(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    agent_run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="处理初次 Script Verifier 的精确 handoff。",
+            initial_plan=_single_tool_plan(
+                "project.get",
+                {"project_id": project_id},
+            ),
+        ),
+    ).snapshot.run
+    planning_run_id = _persist_pending_script_verifier(
+        service,
+        project_id=project_id,
+        owner_agent_run_id=agent_run.id,
+    )
+    document = service.get_project(project_id).document
+    planning_run = service.get_planning_run(planning_run_id).run
+
+    assert service.production_manager._planning_run_awaits_story_verification_resolution(
+        planning_run
+    )
+    resolve_plan = _single_tool_plan(
+        "planning.resolve_story_verification",
+        {
+            "project_id": project_id,
+            "run_id": planning_run_id,
+            "owner_agent_run_id": agent_run.id,
+            "decision": (
+                StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION.value
+            ),
+            "rationale": "因果缺口有精确证据，由 Repair Leader 重新判断范围。",
+        },
+    )
+    assert service.production_manager._is_content_planning_plan(
+        resolve_plan,
+        agent_run_id=agent_run.id,
+        document=document,
+    )
+    assert not service.production_manager._is_content_planning_plan(
+        _single_tool_plan(
+            "planning.advance",
+            {
+                "project_id": project_id,
+                "run_id": planning_run_id,
+                "owner_agent_run_id": agent_run.id,
+            },
+        ),
+        agent_run_id=agent_run.id,
+        document=document,
+    )
+
+
+def test_production_manager_uses_duration_authority_for_outside_verifier_result(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    agent_run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="根据 DurationContract authority 处理 Verifier 时长结果。",
+            initial_plan=_single_tool_plan(
+                "project.get",
+                {"project_id": project_id},
+            ),
+        ),
+    ).snapshot.run
+    planning_run_id = _persist_pending_script_verifier(
+        service,
+        project_id=project_id,
+        owner_agent_run_id=agent_run.id,
+    )
+    document = service.get_project(project_id).document
+    planning_run = service.get_planning_run(planning_run_id).run
+    assert planning_run.review_report is not None
+    target = document.project.target_duration_seconds
+    planning_run.story_intent = StoryIntent(
+        audience_experience="观众跟随主角完成一次紧凑回报。",
+        dramatic_engine="可见行动持续放大主角优势。",
+        progression_strategy="按触发、升级和回报推进。",
+        tone_and_plausibility="优先快节奏与可见回报。",
+        duration_contract=DurationContract(
+            target_seconds=target,
+            target_origin=DurationTargetOrigin.USER_DECLARED,
+            authority=DurationAuthority.TARGET_LED,
+            acceptable_range_seconds=DurationRange(
+                minimum_seconds=target - 10,
+                maximum_seconds=target + 10,
+            ),
+            source_fidelity_policy=DurationFidelityPolicy.REWRITABLE,
+            mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            decision_basis="用户明确了目标时长，剧本尺度可修订。",
+        ),
+    )
+    assert planning_run.story_intent.duration_contract is not None
+    outside = DurationFitAssessment(
+        estimated_range_seconds=DurationRange(
+            minimum_seconds=target + 20,
+            maximum_seconds=target + 40,
+        ),
+        alignment=DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+        pressure_points=["中段解释密度过高"],
+        concurrent_performance=[],
+        resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        rationale="自然表演时长超出目标契约的可接受范围。",
+    )
+    planning_run.review_report = planning_run.review_report.model_copy(
+        deep=True,
+        update={
+            "issues": [],
+            "requires_revision": False,
+            "duration_fit_assessment": outside,
+        },
+    )
+    service.repository.save_planning_run_with_project(planning_run, document)
+
+    assert service.production_manager._planning_run_awaits_story_verification_resolution(
+        planning_run
+    )
+    resolve_plan = _single_tool_plan(
+        "planning.resolve_story_verification",
+        {
+            "project_id": project_id,
+            "run_id": planning_run_id,
+            "owner_agent_run_id": agent_run.id,
+            "decision": StoryVerificationResolutionDecision.ACCEPT_TRADEOFF.value,
+            "rationale": "剧情回报优先，明确接受 TARGET_LED 时长取舍。",
+        },
+    )
+    assert service.production_manager._is_content_planning_plan(
+        resolve_plan,
+        agent_run_id=agent_run.id,
+        document=document,
+    )
+
+    for authority, target_origin, mismatch_resolution in (
+        (
+            DurationAuthority.SOURCE_LED,
+            DurationTargetOrigin.SOURCE_DECLARED,
+            DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+        ),
+        (
+            DurationAuthority.AUDIO_LED,
+            DurationTargetOrigin.MASTER_AUDIO,
+            DurationMismatchResolution.FOLLOW_MASTER_AUDIO,
+        ),
+    ):
+        contract = planning_run.story_intent.duration_contract.model_copy(
+            deep=True,
+            update={
+                "authority": authority,
+                "target_origin": target_origin,
+                "mismatch_resolution": mismatch_resolution,
+            },
+        )
+        non_target = planning_run.model_copy(
+            deep=True,
+            update={
+                "story_intent": planning_run.story_intent.model_copy(
+                    deep=True,
+                    update={"duration_contract": contract},
+                )
+            },
+        )
+        assert not service.production_manager._planning_run_awaits_story_verification_resolution(
+            non_target
+        )
+
+
+def test_restart_reconciles_persisted_story_verification_resolution_without_replay(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    agent_run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="显式处理 Story Verifier handoff。",
+            initial_plan=_single_tool_plan(
+                "project.get",
+                {"project_id": project_id},
+            ),
+        ),
+    ).snapshot.run
+    planning_run_id = _persist_pending_revision_verifier(
+        service,
+        project_id=project_id,
+        owner_agent_run_id=agent_run.id,
+    )
+    rationale = "当前交付允许保留该状态取舍，Verifier 原结论继续留存。"
+    step = PlanStep(
+        id="resolve-story-verification",
+        title="Resolve persisted verifier handoff",
+        kind=ActionKind.TOOL_CALL,
+        assigned_agent="production-manager",
+        tool_name="planning.resolve_story_verification",
+        instructions="Persist the Leader's explicit semantic decision.",
+        arguments={
+            "project_id": project_id,
+            "run_id": planning_run_id,
+            "owner_agent_run_id": agent_run.id,
+            "decision": StoryVerificationResolutionDecision.ACCEPT_TRADEOFF.value,
+            "rationale": rationale,
+        },
+    )
+    plan = service.agent_runtime.replace_plan(
+        agent_run.id,
+        summary="Resolve the exact verifier result.",
+        steps=[step],
+    )
+    interrupted = service.agent_runtime.begin_action(
+        agent_run.id,
+        kind=ActionKind.TOOL_CALL,
+        agent_id="production-manager",
+        input_summary=step.instructions,
+        plan_revision_id=plan.id,
+        plan_step_id=step.id,
+        tool_name=step.tool_name,
+    )
+
+    resolved = service.resolve_story_verification(
+        project_id,
+        run_id=planning_run_id,
+        owner_agent_run_id=agent_run.id,
+        decision=StoryVerificationResolutionDecision.ACCEPT_TRADEOFF,
+        rationale=rationale,
+    ).run
+    assert resolved.latest_revision_verification is not None
+    assert resolved.latest_revision_verification.accepted is False
+
+    reopened = _service(tmp_path)
+    recovered_action = reopened.agent_runtime_store.get_action(interrupted.id)
+    assert recovered_action is not None
+    assert recovered_action.status == ActionStatus.SUCCEEDED
+    assert "persisted Leader decision" in (recovered_action.output_summary or "")
+    persisted = reopened.get_planning_run(planning_run_id).run
+    assert persisted.story_verification_resolutions[-1].rationale == rationale
+    assert persisted.latest_revision_verification is not None
+    assert persisted.latest_revision_verification.accepted is False
 
 
 def test_restart_marks_delegation_without_persisted_work_order_for_replanning(

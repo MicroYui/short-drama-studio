@@ -12,6 +12,9 @@ from short_drama.deps import get_short_drama_service
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     ContentPlanningOutput,
+    DurationAlignment,
+    DurationFitAssessment,
+    DurationRange,
     ProductionExecutionTarget,
     CreateProjectRequest,
     PlanningRunStatus,
@@ -42,6 +45,7 @@ from short_drama.production_planner import (
     PlannedDialogueLine,
     ProductionMethodSelection,
     StoryOrientation,
+    _fallback_duration_contract,
     _fallback_ending_contract,
     _fallback_episode_outline,
     _story_orientation_prompt,
@@ -53,7 +57,7 @@ from short_drama.service import ShortDramaService
 from short_drama.tools import ToolCallStatus, ToolCategory
 
 
-def _test_story_intent() -> StoryIntent:
+def _test_story_intent(request: CreateProjectRequest) -> StoryIntent:
     return StoryIntent(
         audience_experience="让观众清楚理解核心命题，并看到它如何改变人物的处境。",
         dramatic_engine="围绕用户给出的异常事件持续产生可见的行动与后果。",
@@ -61,6 +65,7 @@ def _test_story_intent() -> StoryIntent:
         tone_and_plausibility="服从本剧建立的调性和世界规则，不默认改成现实主义。",
         protected_elements=["用户给出的核心命题"],
         drift_risks=["不要用通用类型套路取代具体故事"],
+        duration_contract=_fallback_duration_contract(request),
     )
 
 
@@ -102,7 +107,7 @@ class StoryArchitectClient:
         for scene in outline_payload["scenes"]:
             scene["dialogue_line_indices"] = []
         self.outline = EpisodeOutline.model_validate(outline_payload)
-        self.story_intent = _test_story_intent()
+        self.story_intent = _test_story_intent(request)
         self.selected_narrative_skills: list[NarrativeSkillSelection] = []
         self.selected_method_skills: list[ProductionMethodSelection] = []
         self.calls = 0
@@ -232,7 +237,7 @@ class ScriptOnlyLanguageClient:
         scene["dialogue_line_indices"] = []
         scene["screenplay_text"] = ""
         self.outline = EpisodeOutline.model_validate(outline_payload)
-        self.story_intent = _test_story_intent()
+        self.story_intent = _test_story_intent(request)
         self.selected_narrative_skills: list[NarrativeSkillSelection] = []
         self.selected_method_skills: list[ProductionMethodSelection] = []
         self.scene_director_calls = 0
@@ -345,6 +350,7 @@ class ScriptOnlyLanguageClient:
                 performance_timing_assessment=(
                     "自然通读对白与动作后，实际文本可由目标时长承载。"
                 ),
+                duration_fit_assessment=self._aligned_duration_assessment(),
                 requires_revision=False,
             ).model_dump_json()
         if "唯一的 Script Verifier" in instructions:
@@ -355,6 +361,7 @@ class ScriptOnlyLanguageClient:
                 performance_timing_assessment=(
                     "自然通读对白与动作后，实际文本可由目标时长承载。"
                 ),
+                duration_fit_assessment=self._aligned_duration_assessment(),
                 requires_revision=False,
             ).model_dump_json()
         if "Review Router Agent" in instructions:
@@ -367,6 +374,19 @@ class ScriptOnlyLanguageClient:
             self.scene_director_calls += 1
             raise AssertionError("SCRIPT_ONLY must not invoke the Scene Director")
         raise AssertionError(f"Unexpected language call: {instructions[:120]}")
+
+    def _aligned_duration_assessment(self) -> DurationFitAssessment:
+        target = self.story_intent.duration_contract.target_seconds
+        assert target is not None
+        return DurationFitAssessment(
+            estimated_range_seconds=DurationRange(
+                minimum_seconds=target,
+                maximum_seconds=target,
+            ),
+            alignment=DurationAlignment.ALIGNED,
+            resolution=self.story_intent.duration_contract.mismatch_resolution,
+            rationale="测试 Verifier 已语义确认当前剧本尺度与时长意图对齐。",
+        )
 
 
 def _request() -> CreateProjectRequest:
@@ -1003,6 +1023,7 @@ def test_planning_official_method_context_is_exposed_to_the_owning_agent_run(
         tone_and_plausibility="校园荒诞爽剧，允许夸张反应和戏剧化压缩。",
         protected_elements=["主角松弛、围观者失态的反差"],
         drift_risks=["不要漂移成程序审计剧"],
+        duration_contract=_fallback_duration_contract(request),
     )
     client.story_intent = intent
     client.selected_narrative_skills = []

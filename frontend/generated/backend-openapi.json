@@ -52,6 +52,16 @@
       "ActionDigest": {
         "additionalProperties": false,
         "properties": {
+          "agent_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentResultDigest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "artifact_refs": {
             "items": {
               "$ref": "#/components/schemas/ArtifactRef"
@@ -598,6 +608,13 @@
             "title": "Decisions",
             "type": "array"
           },
+          "deliverable": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Deliverable",
+            "type": "object"
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/ArtifactRef"
@@ -681,6 +698,47 @@
           "concise_summary"
         ],
         "title": "AgentResult",
+        "type": "object"
+      },
+      "AgentResultDigest": {
+        "additionalProperties": false,
+        "description": "Bounded semantic handoff from one completed delegated WorkOrder.\n\nThe full :class:`AgentResult` remains persisted in the runtime store.  This\nprojection carries only the fields the Leader needs when choosing the next\nplan, without replaying the Worker's complete conversational context.",
+        "properties": {
+          "concise_summary": {
+            "minLength": 1,
+            "title": "Concise Summary",
+            "type": "string"
+          },
+          "deliverable": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Deliverable",
+            "type": "object"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentResultStatus"
+          }
+        },
+        "required": [
+          "status",
+          "concise_summary"
+        ],
+        "title": "AgentResultDigest",
         "type": "object"
       },
       "AgentResultStatus": {
@@ -1120,6 +1178,13 @@
             "maxItems": 40,
             "title": "Decisions",
             "type": "array"
+          },
+          "deliverable": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Deliverable",
+            "type": "object"
           },
           "evidence_refs": {
             "items": {
@@ -3511,9 +3576,10 @@
             "type": "array"
           },
           "duration_seconds": {
-            "exclusiveMinimum": 0.0,
+            "maximum": 15.0,
+            "minimum": 4.0,
             "title": "Duration Seconds",
-            "type": "number"
+            "type": "integer"
           },
           "generation_intent": {
             "maxLength": 4000,
@@ -3845,6 +3911,13 @@
               }
             ]
           },
+          "story_verification_resolutions": {
+            "items": {
+              "$ref": "#/components/schemas/StoryVerificationResolution"
+            },
+            "title": "Story Verification Resolutions",
+            "type": "array"
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -3865,13 +3938,12 @@
       },
       "ContextBoundary": {
         "additionalProperties": false,
-        "description": "Named neighboring context selected by the delegating Agent.\n\nA boundary is descriptive metadata around exact canonical artifact pointers;\nit never copies or owns the underlying project content.",
+        "description": "Named neighboring context selected by the delegating Agent.\n\nA boundary records semantic entry/exit context for a WorkOrder.  It may\nanchor that guidance to exact canonical artifact pointers when such an\nartifact exists, but the first or last unit can legitimately have guidance\nwithout a neighboring artifact.  It never copies or owns project content.",
         "properties": {
           "artifact_refs": {
             "items": {
               "$ref": "#/components/schemas/ArtifactRef"
             },
-            "minItems": 1,
             "title": "Artifact Refs",
             "type": "array"
           },
@@ -3894,8 +3966,7 @@
           }
         },
         "required": [
-          "relationship",
-          "artifact_refs"
+          "relationship"
         ],
         "title": "ContextBoundary",
         "type": "object"
@@ -5482,6 +5553,241 @@
         ],
         "title": "DownloadVariant",
         "type": "object"
+      },
+      "DurationAlignment": {
+        "enum": [
+          "ALIGNED",
+          "OUTSIDE_ACCEPTED_RANGE",
+          "NOT_APPLICABLE",
+          "UNRESOLVED"
+        ],
+        "title": "DurationAlignment",
+        "type": "string"
+      },
+      "DurationAuthority": {
+        "enum": [
+          "TARGET_LED",
+          "SOURCE_LED",
+          "AUDIO_LED"
+        ],
+        "title": "DurationAuthority",
+        "type": "string"
+      },
+      "DurationContract": {
+        "additionalProperties": false,
+        "description": "Semantic runtime authority shared across story and production planning.",
+        "properties": {
+          "acceptable_range_seconds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authority": {
+            "$ref": "#/components/schemas/DurationAuthority"
+          },
+          "decision_basis": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Decision Basis",
+            "type": "string"
+          },
+          "mismatch_resolution": {
+            "$ref": "#/components/schemas/DurationMismatchResolution"
+          },
+          "rhythm_shape": {
+            "items": {
+              "$ref": "#/components/schemas/DurationRhythmSection"
+            },
+            "title": "Rhythm Shape",
+            "type": "array"
+          },
+          "source_fidelity_policy": {
+            "$ref": "#/components/schemas/DurationFidelityPolicy"
+          },
+          "target_origin": {
+            "$ref": "#/components/schemas/DurationTargetOrigin"
+          },
+          "target_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Seconds"
+          },
+          "user_overridable": {
+            "default": true,
+            "title": "User Overridable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "target_origin",
+          "authority",
+          "source_fidelity_policy",
+          "mismatch_resolution",
+          "decision_basis"
+        ],
+        "title": "DurationContract",
+        "type": "object"
+      },
+      "DurationFidelityPolicy": {
+        "enum": [
+          "PRESERVE_VERBATIM",
+          "PRESERVE_STORY_COMMITMENTS",
+          "REWRITABLE"
+        ],
+        "title": "DurationFidelityPolicy",
+        "type": "string"
+      },
+      "DurationFitAssessment": {
+        "additionalProperties": false,
+        "properties": {
+          "alignment": {
+            "$ref": "#/components/schemas/DurationAlignment"
+          },
+          "concurrent_performance": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Concurrent Performance",
+            "type": "array"
+          },
+          "estimated_range_seconds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pressure_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pressure Points",
+            "type": "array"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/DurationMismatchResolution"
+          }
+        },
+        "required": [
+          "alignment",
+          "resolution",
+          "rationale"
+        ],
+        "title": "DurationFitAssessment",
+        "type": "object"
+      },
+      "DurationMismatchResolution": {
+        "enum": [
+          "REVISE_SCRIPT",
+          "REPORT_NATURAL_RUNTIME",
+          "FOLLOW_MASTER_AUDIO",
+          "ASK_USER"
+        ],
+        "title": "DurationMismatchResolution",
+        "type": "string"
+      },
+      "DurationRange": {
+        "additionalProperties": false,
+        "properties": {
+          "maximum_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Maximum Seconds",
+            "type": "number"
+          },
+          "minimum_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Minimum Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "minimum_seconds",
+          "maximum_seconds"
+        ],
+        "title": "DurationRange",
+        "type": "object"
+      },
+      "DurationRhythmSection": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "narrative_function": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Narrative Function",
+            "type": "string"
+          },
+          "payoff_or_handoff": {
+            "anyOf": [
+              {
+                "maxLength": 1200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payoff Or Handoff"
+          },
+          "relative_density": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Relative Density",
+            "type": "string"
+          },
+          "scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Scene Sequences",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "narrative_function",
+          "relative_density"
+        ],
+        "title": "DurationRhythmSection",
+        "type": "object"
+      },
+      "DurationTargetOrigin": {
+        "enum": [
+          "USER_DECLARED",
+          "PROFILE_DEFAULT",
+          "SOURCE_DECLARED",
+          "MASTER_AUDIO",
+          "LEGACY_UNKNOWN"
+        ],
+        "title": "DurationTargetOrigin",
+        "type": "string"
       },
       "EndingContract": {
         "additionalProperties": false,
@@ -14812,7 +15118,7 @@
         "title": "ProductionSkillRole",
         "type": "string"
       },
-      "ProductionSpecContent": {
+      "ProductionSpecContent-Input": {
         "additionalProperties": false,
         "description": "Versioned production decisions shared by planning and execution Agents.",
         "properties": {
@@ -14836,6 +15142,9 @@
             "minLength": 1,
             "title": "Bible Version Id",
             "type": "string"
+          },
+          "duration_contract": {
+            "$ref": "#/components/schemas/DurationContract"
           },
           "duration_intent": {
             "anyOf": [
@@ -14861,6 +15170,18 @@
             "minLength": 1,
             "title": "Language",
             "type": "string"
+          },
+          "master_audio_binding_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Audio Binding Version Id"
           },
           "notes": {
             "items": {
@@ -14939,7 +15260,156 @@
           "production_mode",
           "genre_and_setting",
           "language",
-          "aspect_ratio"
+          "aspect_ratio",
+          "duration_contract"
+        ],
+        "title": "ProductionSpecContent",
+        "type": "object"
+      },
+      "ProductionSpecContent-Output": {
+        "additionalProperties": false,
+        "description": "Versioned production decisions shared by planning and execution Agents.",
+        "properties": {
+          "agent_decisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agent Decisions",
+            "type": "array"
+          },
+          "aspect_ratio": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Aspect Ratio",
+            "type": "string"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/ProductionAudioDirection"
+          },
+          "bible_version_id": {
+            "minLength": 1,
+            "title": "Bible Version Id",
+            "type": "string"
+          },
+          "duration_contract": {
+            "$ref": "#/components/schemas/DurationContract"
+          },
+          "duration_intent": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Intent"
+          },
+          "genre_and_setting": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Genre And Setting",
+            "type": "string"
+          },
+          "language": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Language",
+            "type": "string"
+          },
+          "master_audio_binding_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Audio Binding Version Id"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "production_mode": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Production Mode",
+            "type": "string"
+          },
+          "production_scope": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Production Scope",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider_preference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionProviderPreference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "script_version_id": {
+            "minLength": 1,
+            "title": "Script Version Id",
+            "type": "string"
+          },
+          "target_duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration Seconds"
+          },
+          "title": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "user_constraints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "User Constraints",
+            "type": "array"
+          },
+          "visual": {
+            "$ref": "#/components/schemas/ProductionVisualDirection"
+          }
+        },
+        "required": [
+          "project_id",
+          "script_version_id",
+          "bible_version_id",
+          "title",
+          "production_scope",
+          "production_mode",
+          "genre_and_setting",
+          "language",
+          "aspect_ratio",
+          "duration_contract"
         ],
         "title": "ProductionSpecContent",
         "type": "object"
@@ -14958,7 +15428,7 @@
             "type": "array"
           },
           "spec": {
-            "$ref": "#/components/schemas/ProductionSpecContent"
+            "$ref": "#/components/schemas/ProductionSpecContent-Input"
           }
         },
         "required": [
@@ -14985,7 +15455,7 @@
             ]
           },
           "spec": {
-            "$ref": "#/components/schemas/ProductionSpecContent"
+            "$ref": "#/components/schemas/ProductionSpecContent-Output"
           },
           "version": {
             "$ref": "#/components/schemas/ProductionDocumentVersion"
@@ -15016,7 +15486,7 @@
             ]
           },
           "spec": {
-            "$ref": "#/components/schemas/ProductionSpecContent"
+            "$ref": "#/components/schemas/ProductionSpecContent-Output"
           },
           "version": {
             "$ref": "#/components/schemas/ProductionDocumentVersion"
@@ -15049,7 +15519,7 @@
             "type": "array"
           },
           "spec": {
-            "$ref": "#/components/schemas/ProductionSpecContent"
+            "$ref": "#/components/schemas/ProductionSpecContent-Input"
           }
         },
         "required": [
@@ -18216,6 +18686,16 @@
       "ScriptReviewReport": {
         "additionalProperties": false,
         "properties": {
+          "duration_fit_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationFitAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "followup_rationale": {
             "anyOf": [
               {
@@ -20088,6 +20568,53 @@
         "title": "SpeakerVoiceContinuityCheck",
         "type": "object"
       },
+      "SpecialistProtocolFeedback": {
+        "additionalProperties": false,
+        "description": "Persisted feedback for correcting one malformed Worker response.\n\nThis is control-plane state, not creative review.  Keeping the rejected\nresponse beside typed validation issues lets the same specialist repair its\nhandoff without asking the Leader to decompose or rewrite the WorkOrder.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "loaded_tool_schema_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Loaded Tool Schema Ids",
+            "type": "array"
+          },
+          "rejected_response": {
+            "minLength": 1,
+            "title": "Rejected Response",
+            "type": "string"
+          },
+          "validation_issues": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Validation Issues",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "rejected_response"
+        ],
+        "title": "SpecialistProtocolFeedback",
+        "type": "object"
+      },
       "SpecialistTurnRecord": {
         "additionalProperties": false,
         "description": "Recoverable trace for one specialist decision followed by one Tool action.",
@@ -20697,6 +21224,16 @@
             "title": "Drift Risks",
             "type": "array"
           },
+          "duration_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "progression_strategy": {
             "maxLength": 2000,
             "minLength": 1,
@@ -20912,7 +21449,7 @@
       },
       "StoryMetadataRevisionPatch": {
         "additionalProperties": false,
-        "description": "Typed, sparse patch for global story metadata only.\n\nStable entity IDs are selectors, not editable values. Scene contracts, dialogue,\nand target duration are intentionally absent from this schema.",
+        "description": "Typed, sparse patch for global story metadata only.\n\nStable entity IDs are selectors, not editable values. Scene contracts, dialogue,\nand a standalone target-duration field are intentionally absent from this schema.\nWhen StoryIntent is deliberately revised, its nested DurationContract remains the\nauthoritative story-level duration decision and is projected by the workflow.",
         "properties": {
           "character_patches": {
             "items": {
@@ -20921,6 +21458,16 @@
             "maxItems": 12,
             "title": "Character Patches",
             "type": "array"
+          },
+          "ending_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndingContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "location_patches": {
             "items": {
@@ -20937,6 +21484,16 @@
             "maxItems": 20,
             "title": "Prop Patches",
             "type": "array"
+          },
+          "story_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "story_summary": {
             "anyOf": [
@@ -20977,6 +21534,18 @@
         },
         "title": "StoryMetadataRevisionPatch",
         "type": "object"
+      },
+      "StoryMetadataTarget": {
+        "description": "Global story state that a semantic repair must keep aligned.",
+        "enum": [
+          "TITLE",
+          "STORY_SUMMARY",
+          "STORY_INTENT",
+          "ENDING_CONTRACT",
+          "PROJECT_BIBLE"
+        ],
+        "title": "StoryMetadataTarget",
+        "type": "string"
       },
       "StoryPropMetadataPatch": {
         "additionalProperties": false,
@@ -21033,6 +21602,13 @@
             "minimum": 1.0,
             "title": "Issue Index",
             "type": "integer"
+          },
+          "metadata_targets": {
+            "items": {
+              "$ref": "#/components/schemas/StoryMetadataTarget"
+            },
+            "title": "Metadata Targets",
+            "type": "array"
           },
           "preserve": {
             "items": {
@@ -21095,7 +21671,8 @@
         "enum": [
           "SOURCE_CONCEPT_GAP",
           "OUTLINE_DEFECT",
-          "CRITIC_OVERREACH"
+          "CRITIC_OVERREACH",
+          "USER_REQUEST"
         ],
         "title": "StoryRepairDiagnosis",
         "type": "string"
@@ -21161,6 +21738,16 @@
           "accepted": {
             "title": "Accepted",
             "type": "boolean"
+          },
+          "duration_fit_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationFitAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "followup_rationale": {
             "anyOf": [
@@ -21242,6 +21829,13 @@
             ],
             "title": "Issue Id"
           },
+          "metadata_targets": {
+            "items": {
+              "$ref": "#/components/schemas/StoryMetadataTarget"
+            },
+            "title": "Metadata Targets",
+            "type": "array"
+          },
           "observation": {
             "maxLength": 1200,
             "minLength": 1,
@@ -21283,7 +21877,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 20,
             "title": "Authoritative User Overrides",
             "type": "array"
           },
@@ -21424,6 +22017,219 @@
         "title": "StoryStyleMetadataPatch",
         "type": "object"
       },
+      "StoryVerificationResolution": {
+        "additionalProperties": false,
+        "description": "Persisted Leader decision over one exact verifier result.\n\nThe captured verifier payload remains unchanged so accepting a tradeoff never\nrewrites a rejected or unresolved result into an accepted one.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/StoryVerificationResolutionDecision"
+          },
+          "owner_agent_run_id": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Owner Agent Run Id",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2400,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "revision_verification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryRevisionVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "script_review_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScriptReviewReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/StoryVerificationSource"
+          }
+        },
+        "required": [
+          "source",
+          "decision",
+          "rationale",
+          "owner_agent_run_id",
+          "created_at"
+        ],
+        "title": "StoryVerificationResolution",
+        "type": "object"
+      },
+      "StoryVerificationResolutionDecision": {
+        "enum": [
+          "CONTINUE_FOCUSED_REVISION",
+          "RETURN_TO_STORY_ARCHITECT",
+          "ACCEPT_TRADEOFF"
+        ],
+        "title": "StoryVerificationResolutionDecision",
+        "type": "string"
+      },
+      "StoryVerificationSource": {
+        "enum": [
+          "SCRIPT_VERIFIER",
+          "REVISION_VERIFIER"
+        ],
+        "title": "StoryVerificationSource",
+        "type": "string"
+      },
+      "StoryboardClipGroupDraft": {
+        "additionalProperties": false,
+        "description": "One bounded, incrementally persisted ClipGroup with its editorial Shots.",
+        "properties": {
+          "clip_group": {
+            "$ref": "#/components/schemas/ClipGroup"
+          },
+          "handoff_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Handoff Notes",
+            "type": "array"
+          },
+          "scene_group_sequence": {
+            "minimum": 1.0,
+            "title": "Scene Group Sequence",
+            "type": "integer"
+          },
+          "scene_node_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scene Node Id",
+            "type": "string"
+          },
+          "shots": {
+            "items": {
+              "$ref": "#/components/schemas/ShotPlan-Input"
+            },
+            "minItems": 1,
+            "title": "Shots",
+            "type": "array"
+          },
+          "source_range": {
+            "$ref": "#/components/schemas/StoryboardSourceRange"
+          },
+          "work_unit_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Work Unit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "work_unit_id",
+          "scene_node_id",
+          "scene_group_sequence",
+          "source_range",
+          "shots",
+          "clip_group"
+        ],
+        "title": "StoryboardClipGroupDraft",
+        "type": "object"
+      },
+      "StoryboardClipGroupOutline": {
+        "additionalProperties": false,
+        "description": "One immutable row in the private whole-episode ClipGroup ledger.\n\nThe Agent derives this outline from the dialogue/action timing scratch pass\nbefore any detailed Shot is authored. It is a factual authoring plan, not a\ntarget-duration allocation: each later commit must land on the exact row.",
+        "properties": {
+          "continuity_in": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity In",
+            "type": "array"
+          },
+          "continuity_out": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity Out",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "maximum": 15.0,
+            "minimum": 4.0,
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "scene_group_sequence": {
+            "minimum": 1.0,
+            "title": "Scene Group Sequence",
+            "type": "integer"
+          },
+          "scene_node_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scene Node Id",
+            "type": "string"
+          },
+          "source_range": {
+            "$ref": "#/components/schemas/StoryboardSourceRange"
+          },
+          "timing_entry_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Timing Entry Ids",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "visible_changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Visible Changes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "scene_node_id",
+          "scene_group_sequence",
+          "source_range",
+          "timing_entry_ids",
+          "duration_seconds",
+          "objective"
+        ],
+        "title": "StoryboardClipGroupOutline",
+        "type": "object"
+      },
       "StoryboardContent-Input": {
         "additionalProperties": false,
         "description": "Complete structured storyboard and its provider-independent clip groups.",
@@ -21467,6 +22273,13 @@
             "minLength": 1,
             "title": "Project Id",
             "type": "string"
+          },
+          "scene_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardSceneNode"
+            },
+            "title": "Scene Nodes",
+            "type": "array"
           },
           "script_line_ids": {
             "items": {
@@ -21560,6 +22373,13 @@
             "title": "Project Id",
             "type": "string"
           },
+          "scene_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardSceneNode"
+            },
+            "title": "Scene Nodes",
+            "type": "array"
+          },
           "script_line_ids": {
             "items": {
               "type": "string"
@@ -21631,6 +22451,903 @@
         ],
         "title": "StoryboardCreateRequest",
         "type": "object"
+      },
+      "StoryboardDraftAppendRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version_id": {
+            "minLength": 1,
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/components/schemas/StoryboardClipGroupDraft"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          },
+          "work_unit": {
+            "$ref": "#/components/schemas/StoryboardWorkUnitContract"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "base_version_id",
+          "work_unit",
+          "group",
+          "origin"
+        ],
+        "title": "StoryboardDraftAppendRequest",
+        "type": "object"
+      },
+      "StoryboardDraftBeginRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "seed": {
+            "$ref": "#/components/schemas/StoryboardDraftSeed"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "seed",
+          "origin"
+        ],
+        "title": "StoryboardDraftBeginRequest",
+        "type": "object"
+      },
+      "StoryboardDraftFinalizeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "draft_version_id": {
+            "minLength": 1,
+            "title": "Draft Version Id",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "draft_version_id",
+          "origin"
+        ],
+        "title": "StoryboardDraftFinalizeRequest",
+        "type": "object"
+      },
+      "StoryboardDraftGroupReplaceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version_id": {
+            "minLength": 1,
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/components/schemas/StoryboardClipGroupDraft"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "replaced_clip_group_id": {
+            "minLength": 1,
+            "title": "Replaced Clip Group Id",
+            "type": "string"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          },
+          "work_unit": {
+            "$ref": "#/components/schemas/StoryboardWorkUnitContract"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "base_version_id",
+          "work_unit",
+          "group",
+          "origin",
+          "replaced_clip_group_id"
+        ],
+        "title": "StoryboardDraftGroupReplaceRequest",
+        "type": "object"
+      },
+      "StoryboardDraftLedgerCompleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version_id": {
+            "minLength": 1,
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "base_version_id",
+          "origin"
+        ],
+        "title": "StoryboardDraftLedgerCompleteRequest",
+        "type": "object"
+      },
+      "StoryboardDraftLedgerSegmentAppendRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version_id": {
+            "minLength": 1,
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardTimingLedgerEntry"
+            },
+            "minItems": 1,
+            "title": "Entries",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "base_version_id",
+          "entries",
+          "origin"
+        ],
+        "title": "StoryboardDraftLedgerSegmentAppendRequest",
+        "type": "object"
+      },
+      "StoryboardDraftMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "progress": {
+            "$ref": "#/components/schemas/StoryboardDraftProgress"
+          }
+        },
+        "required": [
+          "progress"
+        ],
+        "title": "StoryboardDraftMutationResponse",
+        "type": "object"
+      },
+      "StoryboardDraftOutlineCompleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version_id": {
+            "minLength": 1,
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          },
+          "timing_audit": {
+            "$ref": "#/components/schemas/StoryboardTimingAudit"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "base_version_id",
+          "timing_audit",
+          "origin"
+        ],
+        "title": "StoryboardDraftOutlineCompleteRequest",
+        "type": "object"
+      },
+      "StoryboardDraftOutlineSegmentAppendRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version_id": {
+            "minLength": 1,
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardClipGroupOutline"
+            },
+            "minItems": 1,
+            "title": "Groups",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "base_version_id",
+          "groups",
+          "origin"
+        ],
+        "title": "StoryboardDraftOutlineSegmentAppendRequest",
+        "type": "object"
+      },
+      "StoryboardDraftPhase": {
+        "description": "Private authoring phase of one recoverable storyboard draft.",
+        "enum": [
+          "LEDGER_BUILDING",
+          "OUTLINE_BUILDING",
+          "DURATION_RECONCILIATION",
+          "GROUP_AUTHORING"
+        ],
+        "title": "StoryboardDraftPhase",
+        "type": "string"
+      },
+      "StoryboardDraftProgress": {
+        "additionalProperties": false,
+        "description": "Compact Tool result suitable for traces and long-running Agent context.",
+        "properties": {
+          "committed_clip_group_count": {
+            "minimum": 0.0,
+            "title": "Committed Clip Group Count",
+            "type": "integer"
+          },
+          "committed_duration_seconds": {
+            "minimum": 0.0,
+            "title": "Committed Duration Seconds",
+            "type": "number"
+          },
+          "committed_shot_count": {
+            "minimum": 0.0,
+            "title": "Committed Shot Count",
+            "type": "integer"
+          },
+          "covered_script_line_count": {
+            "minimum": 0.0,
+            "title": "Covered Script Line Count",
+            "type": "integer"
+          },
+          "draft_ref": {
+            "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+          },
+          "draft_version_id": {
+            "minLength": 1,
+            "title": "Draft Version Id",
+            "type": "string"
+          },
+          "latest_clip_group_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Clip Group Id"
+          },
+          "latest_continuity_out": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Latest Continuity Out",
+            "type": "array"
+          },
+          "latest_planned_continuity_out": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Latest Planned Continuity Out",
+            "type": "array"
+          },
+          "latest_scene_node_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Scene Node Id"
+          },
+          "latest_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Latest Shot Ids",
+            "type": "array"
+          },
+          "ledger_covered_script_line_count": {
+            "minimum": 0.0,
+            "title": "Ledger Covered Script Line Count",
+            "type": "integer"
+          },
+          "next_unplanned_scene_node_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Unplanned Scene Node Id"
+          },
+          "next_unplanned_script_line_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Unplanned Script Line Id"
+          },
+          "outlined_script_line_count": {
+            "minimum": 0.0,
+            "title": "Outlined Script Line Count",
+            "type": "integer"
+          },
+          "outlined_timing_entry_count": {
+            "minimum": 0.0,
+            "title": "Outlined Timing Entry Count",
+            "type": "integer"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/StoryboardDraftPhase"
+          },
+          "planned_clip_group_count": {
+            "minimum": 0.0,
+            "title": "Planned Clip Group Count",
+            "type": "integer"
+          },
+          "remaining_duration_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Duration Seconds"
+          },
+          "remaining_script_line_count": {
+            "minimum": 0.0,
+            "title": "Remaining Script Line Count",
+            "type": "integer"
+          },
+          "scene_node_count": {
+            "minimum": 1.0,
+            "title": "Scene Node Count",
+            "type": "integer"
+          },
+          "scene_progress": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardDraftSceneProgress"
+            },
+            "minItems": 1,
+            "title": "Scene Progress",
+            "type": "array"
+          },
+          "timing_ledger_entry_count": {
+            "minimum": 0.0,
+            "title": "Timing Ledger Entry Count",
+            "type": "integer"
+          },
+          "total_planned_duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Planned Duration Seconds"
+          },
+          "verification_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoryboardDraftVerificationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "draft_ref",
+          "draft_version_id",
+          "phase",
+          "scene_node_count",
+          "timing_ledger_entry_count",
+          "ledger_covered_script_line_count",
+          "outlined_timing_entry_count",
+          "outlined_script_line_count",
+          "planned_clip_group_count",
+          "committed_clip_group_count",
+          "committed_shot_count",
+          "committed_duration_seconds",
+          "covered_script_line_count",
+          "remaining_script_line_count",
+          "scene_progress"
+        ],
+        "title": "StoryboardDraftProgress",
+        "type": "object"
+      },
+      "StoryboardDraftSceneProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "committed_clip_group_count": {
+            "minimum": 0.0,
+            "title": "Committed Clip Group Count",
+            "type": "integer"
+          },
+          "committed_duration_seconds": {
+            "minimum": 0.0,
+            "title": "Committed Duration Seconds",
+            "type": "number"
+          },
+          "covered_script_line_count": {
+            "minimum": 0.0,
+            "title": "Covered Script Line Count",
+            "type": "integer"
+          },
+          "planned_clip_group_count": {
+            "minimum": 0.0,
+            "title": "Planned Clip Group Count",
+            "type": "integer"
+          },
+          "planned_duration_seconds": {
+            "minimum": 0.0,
+            "title": "Planned Duration Seconds",
+            "type": "number"
+          },
+          "planned_script_line_count": {
+            "minimum": 0.0,
+            "title": "Planned Script Line Count",
+            "type": "integer"
+          },
+          "remaining_duration_seconds": {
+            "minimum": 0.0,
+            "title": "Remaining Duration Seconds",
+            "type": "number"
+          },
+          "remaining_script_line_count": {
+            "minimum": 0.0,
+            "title": "Remaining Script Line Count",
+            "type": "integer"
+          },
+          "scene_id": {
+            "minLength": 1,
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "scene_node_id": {
+            "minLength": 1,
+            "title": "Scene Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene_node_id",
+          "scene_id",
+          "planned_clip_group_count",
+          "committed_clip_group_count",
+          "planned_duration_seconds",
+          "committed_duration_seconds",
+          "remaining_duration_seconds",
+          "planned_script_line_count",
+          "covered_script_line_count",
+          "remaining_script_line_count"
+        ],
+        "title": "StoryboardDraftSceneProgress",
+        "type": "object"
+      },
+      "StoryboardDraftSceneSeed": {
+        "additionalProperties": false,
+        "description": "Agent-selected scene identity and continuity, before source hydration.",
+        "properties": {
+          "continuity_in": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity In",
+            "type": "array"
+          },
+          "continuity_out": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity Out",
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "scene_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "scene_id",
+          "sequence"
+        ],
+        "title": "StoryboardDraftSceneSeed",
+        "type": "object"
+      },
+      "StoryboardDraftSeed": {
+        "additionalProperties": false,
+        "description": "Small source lock used to open a draft without emitting its whole plan.",
+        "properties": {
+          "base_storyboard_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Storyboard Version Id"
+          },
+          "bible_version_id": {
+            "minLength": 1,
+            "title": "Bible Version Id",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "production_spec_document_id": {
+            "minLength": 1,
+            "title": "Production Spec Document Id",
+            "type": "string"
+          },
+          "production_spec_version_id": {
+            "minLength": 1,
+            "title": "Production Spec Version Id",
+            "type": "string"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "scene_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardDraftSceneSeed"
+            },
+            "minItems": 1,
+            "title": "Scene Nodes",
+            "type": "array"
+          },
+          "script_version_id": {
+            "minLength": 1,
+            "title": "Script Version Id",
+            "type": "string"
+          },
+          "timing_notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Timing Notes",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "title",
+          "script_version_id",
+          "bible_version_id",
+          "production_spec_document_id",
+          "production_spec_version_id",
+          "scene_nodes"
+        ],
+        "title": "StoryboardDraftSeed",
+        "type": "object"
+      },
+      "StoryboardDraftVerificationFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_clip_group_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Clip Group Ids",
+            "type": "array"
+          },
+          "affected_scene_sequences": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Affected Scene Sequences",
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "repair_scope": {
+            "$ref": "#/components/schemas/StoryboardRepairScope",
+            "default": "CLIP_GROUP"
+          },
+          "suggested_revision": {
+            "anyOf": [
+              {
+                "maxLength": 3000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Revision"
+          },
+          "summary": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "summary"
+        ],
+        "title": "StoryboardDraftVerificationFinding",
+        "type": "object"
+      },
+      "StoryboardDraftVerificationReport": {
+        "additionalProperties": false,
+        "description": "Semantic Verifier output attached to one exact draft content version.\n\nThis is Agent state, not a user approval or publishing gate. Any subsequent\ngroup append/replacement clears it so stale conclusions cannot look current.",
+        "properties": {
+          "checked_clip_group_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Checked Clip Group Ids",
+            "type": "array"
+          },
+          "continuity_assessment": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity Assessment",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardDraftVerificationFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StoryboardDraftVerificationStatus"
+          },
+          "summary": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "timing_assessment": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Timing Assessment",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "checked_clip_group_ids"
+        ],
+        "title": "StoryboardDraftVerificationReport",
+        "type": "object"
+      },
+      "StoryboardDraftVerificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_version_id": {
+            "minLength": 1,
+            "title": "Base Version Id",
+            "type": "string"
+          },
+          "draft_document_id": {
+            "minLength": 1,
+            "title": "Draft Document Id",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ProductionDocumentOrigin"
+          },
+          "report": {
+            "$ref": "#/components/schemas/StoryboardDraftVerificationReport"
+          },
+          "source_artifact_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ProductionDocumentArtifactRef"
+            },
+            "title": "Source Artifact Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "draft_document_id",
+          "base_version_id",
+          "report",
+          "origin"
+        ],
+        "title": "StoryboardDraftVerificationRequest",
+        "type": "object"
+      },
+      "StoryboardDraftVerificationStatus": {
+        "enum": [
+          "READY",
+          "NEEDS_REVISION"
+        ],
+        "title": "StoryboardDraftVerificationStatus",
+        "type": "string"
       },
       "StoryboardMutationResponse": {
         "additionalProperties": false,
@@ -21783,6 +23500,16 @@
         "title": "StoryboardReadResponse",
         "type": "object"
       },
+      "StoryboardRepairScope": {
+        "enum": [
+          "CLIP_GROUP",
+          "STORYBOARD_PLAN",
+          "SCRIPT",
+          "PRODUCTION_SPEC"
+        ],
+        "title": "StoryboardRepairScope",
+        "type": "string"
+      },
       "StoryboardReplaceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -21813,6 +23540,92 @@
         "title": "StoryboardReplaceRequest",
         "type": "object"
       },
+      "StoryboardSceneNode": {
+        "additionalProperties": false,
+        "description": "Stable scene index inside the single canonical Storyboard document.\n\nThe name describes a semantic aggregation node in the content graph.  It\nis not a separate MiniMax canvas document or a ComfyUI execution node.",
+        "properties": {
+          "clip_group_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Clip Group Ids",
+            "type": "array"
+          },
+          "continuity_in": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity In",
+            "type": "array"
+          },
+          "continuity_out": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity Out",
+            "type": "array"
+          },
+          "heading": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Heading",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "scene_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shot Ids",
+            "type": "array"
+          },
+          "source_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Line Ids",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scene_id",
+          "sequence",
+          "heading",
+          "summary"
+        ],
+        "title": "StoryboardSceneNode",
+        "type": "object"
+      },
       "StoryboardShotReplacement": {
         "additionalProperties": false,
         "properties": {
@@ -21836,6 +23649,394 @@
           "replacement"
         ],
         "title": "StoryboardShotReplacement",
+        "type": "object"
+      },
+      "StoryboardSourceRange": {
+        "additionalProperties": false,
+        "description": "A semantic source span selected by the Leader, not a timed chunk.\n\nA range may cover part of one scene or cross scene boundaries.  Dialogue\nline IDs provide exact traceability where the script has spoken lines;\nnatural-language anchors retain action-only beats without inventing a\nsecond screenplay representation.",
+        "properties": {
+          "description": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "ends_before": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends Before"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "scene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Scene Ids",
+            "type": "array"
+          },
+          "script_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Script Line Ids",
+            "type": "array"
+          },
+          "starts_after": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts After"
+          }
+        },
+        "required": [
+          "id",
+          "scene_ids",
+          "description"
+        ],
+        "title": "StoryboardSourceRange",
+        "type": "object"
+      },
+      "StoryboardTimingAudit": {
+        "additionalProperties": false,
+        "description": "Persisted summary of MiniMax Design's private timing scratch pass.\n\nNeither a source declaration nor a target may be divided into synthetic\nClipGroup budgets. ``computed_episode_duration_s`` is derived from the\nnatural ledger and is then compared with the pinned DurationContract.",
+        "properties": {
+          "alignment": {
+            "$ref": "#/components/schemas/DurationAlignment",
+            "default": "NOT_APPLICABLE"
+          },
+          "assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationFitAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clip_group_count": {
+            "minimum": 1.0,
+            "title": "Clip Group Count",
+            "type": "integer"
+          },
+          "computed_episode_duration_s": {
+            "exclusiveMinimum": 0.0,
+            "title": "Computed Episode Duration S",
+            "type": "number"
+          },
+          "dialogue_units_total": {
+            "minimum": 0.0,
+            "title": "Dialogue Units Total",
+            "type": "integer"
+          },
+          "difference_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difference Seconds"
+          },
+          "minimum_spoken_duration_s": {
+            "minimum": 0.0,
+            "title": "Minimum Spoken Duration S",
+            "type": "number"
+          },
+          "non_speech_reserve_s": {
+            "minimum": 0.0,
+            "title": "Non Speech Reserve S",
+            "type": "number"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "overloaded_group_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overloaded Group Ids",
+            "type": "array"
+          },
+          "overloaded_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overloaded Shot Ids",
+            "type": "array"
+          },
+          "source_declared_duration_s": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Declared Duration S"
+          },
+          "target_duration_s": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration S"
+          },
+          "timing_audit_passed": {
+            "title": "Timing Audit Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dialogue_units_total",
+          "minimum_spoken_duration_s",
+          "non_speech_reserve_s",
+          "computed_episode_duration_s",
+          "clip_group_count",
+          "timing_audit_passed"
+        ],
+        "title": "StoryboardTimingAudit",
+        "type": "object"
+      },
+      "StoryboardTimingLedgerEntry": {
+        "additionalProperties": false,
+        "description": "One dialogue or visible-action row in the private timing ledger.",
+        "properties": {
+          "allocated_duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Allocated Duration Seconds",
+            "type": "number"
+          },
+          "completes_scene": {
+            "default": false,
+            "title": "Completes Scene",
+            "type": "boolean"
+          },
+          "continuity_in": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity In",
+            "type": "array"
+          },
+          "continuity_out": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity Out",
+            "type": "array"
+          },
+          "dialogue_units": {
+            "minimum": 0.0,
+            "title": "Dialogue Units",
+            "type": "integer"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "minimum_spoken_duration_seconds": {
+            "minimum": 0.0,
+            "title": "Minimum Spoken Duration Seconds",
+            "type": "number"
+          },
+          "natural_cut": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Natural Cut",
+            "type": "string"
+          },
+          "non_speech_reserve_seconds": {
+            "minimum": 0.0,
+            "title": "Non Speech Reserve Seconds",
+            "type": "number"
+          },
+          "planned_clip_group_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Clip Group Id"
+          },
+          "planned_shot_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Shot Id"
+          },
+          "scene_node_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scene Node Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source_range": {
+            "$ref": "#/components/schemas/StoryboardSourceRange"
+          },
+          "source_text": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Source Text",
+            "type": "string"
+          },
+          "speech_rate_units_per_second": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech Rate Units Per Second"
+          },
+          "visible_changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Visible Changes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "scene_node_id",
+          "source_range",
+          "source_text",
+          "dialogue_units",
+          "minimum_spoken_duration_seconds",
+          "non_speech_reserve_seconds",
+          "allocated_duration_seconds",
+          "natural_cut"
+        ],
+        "title": "StoryboardTimingLedgerEntry",
+        "type": "object"
+      },
+      "StoryboardWorkUnitContract": {
+        "additionalProperties": false,
+        "description": "One dynamically planned authoring scope carried by an Agent WorkOrder.\n\nThis contract deliberately does not equate a WorkOrder with a script scene,\nan editorial Shot, or a provider ClipGroup.  One unit may produce multiple\ngroups, and a later Leader revision may split or combine semantic ranges.",
+        "properties": {
+          "completion_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Completion Criteria",
+            "type": "array"
+          },
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "continuity_context": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Continuity Context",
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "ordering_guidance": {
+            "anyOf": [
+              {
+                "maxLength": 1500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordering Guidance"
+          },
+          "source_range": {
+            "$ref": "#/components/schemas/StoryboardSourceRange"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "source_range",
+          "objective",
+          "completion_criteria"
+        ],
+        "title": "StoryboardWorkUnitContract",
         "type": "object"
       },
       "StructuredScene": {
@@ -23120,9 +25321,53 @@
             "title": "Shot Id",
             "type": "string"
           },
+          "source_bible_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Bible Version Id"
+          },
           "source_in_seconds": {
             "title": "Source In Seconds",
             "type": "number"
+          },
+          "source_script_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Script Version Id"
+          },
+          "source_storyboard_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Storyboard Document Id"
+          },
+          "source_storyboard_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Storyboard Version Id"
           },
           "start_seconds": {
             "title": "Start Seconds",
@@ -23859,6 +26104,16 @@
             "minLength": 1,
             "title": "Parent Run Id",
             "type": "string"
+          },
+          "pending_protocol_feedback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpecialistProtocolFeedback"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "production_skill_role": {
             "anyOf": [
@@ -31285,6 +33540,645 @@
           }
         },
         "summary": "Create Storyboard",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts": {
+      "post": {
+        "operationId": "begin_storyboard_draft_api_short_drama_projects__project_id__storyboard_drafts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftBeginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Begin Storyboard Draft",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/finalize": {
+      "post": {
+        "operationId": "finalize_storyboard_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftFinalizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Finalize Storyboard",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/groups": {
+      "post": {
+        "operationId": "append_storyboard_group_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__groups_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftAppendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Append Storyboard Group",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/groups/{clip_group_id}/replacement": {
+      "post": {
+        "operationId": "replace_storyboard_draft_group_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__groups__clip_group_id__replacement_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "clip_group_id",
+            "required": true,
+            "schema": {
+              "title": "Clip Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftGroupReplaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Replace Storyboard Draft Group",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/ledger/complete": {
+      "post": {
+        "operationId": "complete_storyboard_ledger_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__ledger_complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftLedgerCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Complete Storyboard Ledger",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/ledger/segments": {
+      "post": {
+        "operationId": "append_storyboard_ledger_segment_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__ledger_segments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftLedgerSegmentAppendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Append Storyboard Ledger Segment",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/outline/complete": {
+      "post": {
+        "operationId": "complete_storyboard_outline_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__outline_complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftOutlineCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Complete Storyboard Outline",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/outline/segments": {
+      "post": {
+        "operationId": "append_storyboard_outline_segment_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__outline_segments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftOutlineSegmentAppendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Append Storyboard Outline Segment",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/storyboard-drafts/{draft_document_id}/verification": {
+      "post": {
+        "operationId": "record_storyboard_draft_verification_api_short_drama_projects__project_id__storyboard_drafts__draft_document_id__verification_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "draft_document_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryboardDraftVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryboardDraftMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Record Storyboard Draft Verification",
         "tags": [
           "short-drama"
         ]

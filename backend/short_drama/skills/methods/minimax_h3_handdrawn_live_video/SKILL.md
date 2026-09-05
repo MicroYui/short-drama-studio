@@ -4,6 +4,7 @@ label: MiniMax-H3：手绘实拍融合短片
 description: 适合手绘实拍融合的单场景创意短片，围绕真实接触、连续变形、逃跑路线与慢半拍追拍组织画面。
 roles: ["CONCEPT", "REVISION_VERIFIER", "DIRECTOR", "VIDEO_PROMPT_COMPILER", "EPISODE_REVIEWER"]
 shared_role_prompt: ../../shared/official_task_method_role.md
+shared_role_footer: ../../shared/official_task_method_footer.md
 role_source_sections: {"CONCEPT": ["../../official/minimax_h3/handdrawn-live-video-generator/SKILL.cn.md::Step 1：把用户意图理解为同语种约束", "../../official/minimax_h3/handdrawn-live-video-generator/SKILL.cn.md::Step 2：每次都重新发明创意内容"], "REVISION_VERIFIER": ["../../official/minimax_h3/handdrawn-live-video-generator/SKILL.cn.md::Step 5：交付"], "DIRECTOR": ["../../official/minimax_h3/handdrawn-live-video-generator/SKILL.cn.md::Step 4：Prompt 写作规则"], "VIDEO_PROMPT_COMPILER": ["../../official/minimax_h3/handdrawn-live-video-generator/SKILL.cn.md::Step 3：必需输出格式", "../../official/minimax_h3/handdrawn-live-video-generator/SKILL.cn.md::Step 4：Prompt 写作规则"], "EPISODE_REVIEWER": ["../../official/minimax_h3/handdrawn-live-video-generator/SKILL.cn.md::Step 5：交付"]}
 provenance: UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER
 upstream_sources: ["MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/handdrawn-live-video-generator/SKILL.cn.md", "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/handdrawn-live-video-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub User]"]

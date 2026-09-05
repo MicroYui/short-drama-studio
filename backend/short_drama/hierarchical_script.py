@@ -366,29 +366,12 @@ def _fallback_scene_patch(
     if existing or not outline.characters:
         return _scene_patch_from_contract(scene, existing)
     first = outline.characters[0]
-    second = outline.characters[min(1, len(outline.characters) - 1)]
-    desired = max(1, min(120, round(scene.target_duration_seconds / 8)))
-    templates = (
-        (first, f"这一步已经证明，{scene.narrative_purpose}不能再拖。"),
-        (second, "你现在看到的，只是结果，不是他们动手的原因。"),
-        (first, "那就把真正能改变结果的东西拿出来。"),
-        (second, "可以，但你做出选择以后，就没有回头路了。"),
-        (first, "我怕的不是代价，是继续按他们的规则输下去。"),
-        (second, "那就让他们亲眼看见，这个后果是怎么发生的。"),
-    )
     lines = [
         PlannedDialogueLine(
-            speaker=templates[index % len(templates)][0].name,
-            speaker_character_id=(
-                templates[index % len(templates)][0].character_id
-            ),
-            text=(
-                templates[index % len(templates)][1]
-                if index < len(templates)
-                else f"第 {scene.sequence} 场的下一个选择已经被逼到眼前。"
-            ),
+            speaker=first.name,
+            speaker_character_id=first.character_id,
+            text="先把眼前的问题解决。",
         )
-        for index in range(desired)
     ]
     return _scene_patch_from_contract(scene, lines)
 
@@ -406,6 +389,20 @@ def _scene_writer_prompt(
 ) -> tuple[str, str]:
     resolved_story_intent = (
         story_intent if story_intent is not None else blueprint.story_intent
+    )
+    duration_contract = (
+        resolved_story_intent.duration_contract
+        if resolved_story_intent is not None
+        else None
+    )
+    scene_rhythm_sections = (
+        [
+            section.model_dump(mode="json")
+            for section in duration_contract.rhythm_shape
+            if not section.scene_sequences or scene.sequence in section.scene_sequences
+        ]
+        if duration_contract is not None
+        else []
     )
     skill_prompt = compile_production_prompt(
         request.production_profile,
@@ -441,8 +438,13 @@ def _scene_writer_prompt(
         "如果本项目承诺爽感或强情绪，让本场的铺垫走向清楚释放：主角通过自己的选择、行动或能力改变局面，"
         "对立力量的受挫、改口或反噬在场内可见。夸张、荒诞、无厘头以及重复节拍都可以用来升级惊喜、压力或喜剧效果；"
         "只要观众能理解此刻的局面和结果，不需要把它补成现实世界的完整行政或证明流程。"
-        "target_duration_seconds 是创作尺度，不是逐项计时账本。只有发现当前成稿与目标时长明显冲突时，"
-        "才需要在可选的 performance_timing_assessment 中简要说明；不用给出逐句范围、顺序节拍或删改清单。"
+        "动笔前同时读取 DurationContract、当前场的 target_duration_seconds envelope 和"
+        " duration_rhythm_sections，用它们主动决定本场能承载的事件、动作链与对白往返；"
+        "rhythm section 是可合并、可省略的相对叙事功能，不是固定五段或配额。写完后"
+        "按自然语速、动作、停顿和反应通读。局部合并、删除重复或重排就能回到契约尺度时，"
+        "在当前场自行收敛；只有继续压缩会破坏用户承诺、来源保真、主要因果或结尾回报时，"
+        "才请求上游重规划。performance_timing_assessment 可记录自然演读的压力与取舍；"
+        "不用字数公式、固定容差、逐句范围或删改清单代替语义判断。"
         "延续精简上下文中的已知事实、关系位置和未结线索，不提前解决后续场景。"
         "blocks 必须是最终演出顺序，"
         "自然交错动作、反应、情绪转折、停顿与对白。playable_actions 是 Story Architect 给出的语义意图，"
@@ -505,6 +507,11 @@ def _scene_writer_prompt(
                 if blueprint.ending_contract is not None
                 else None
             ),
+            "duration_contract": (
+                duration_contract.model_dump(mode="json")
+                if duration_contract is not None
+                else None
+            ),
         },
         "current_scene_node": {
             "sequence": scene.sequence,
@@ -512,6 +519,7 @@ def _scene_writer_prompt(
             "summary": scene.summary,
             "narrative_purpose": scene.narrative_purpose,
             "target_duration_seconds": scene.target_duration_seconds,
+            "duration_rhythm_sections": scene_rhythm_sections,
             "location_names": scene.location_names,
             "props": _scene_relevant_props(blueprint, scene),
             "prop_state_context": {
@@ -862,6 +870,20 @@ def revise_story_scene(
     resolved_story_intent = (
         story_intent if story_intent is not None else outline.story_intent
     )
+    duration_contract = (
+        resolved_story_intent.duration_contract
+        if resolved_story_intent is not None
+        else None
+    )
+    scene_rhythm_sections = (
+        [
+            section.model_dump(mode="json")
+            for section in duration_contract.rhythm_shape
+            if not section.scene_sequences or scene.sequence in section.scene_sequences
+        ]
+        if duration_contract is not None
+        else []
+    )
     original = _scene_patch_from_contract(
         scene,
         _scene_lines_from_outline(outline, scene),
@@ -914,8 +936,10 @@ def revise_story_scene(
         "由你保持 lines 与 screenplay_text 的语义一致。只有 source_mode=SCRIPT_LOCKED 时，"
         "用户锁定的对白或文字必须原样保留。不要改变整集标题、全局角色/资产/风格、无关场景、"
         "镜头、媒体或时间线，也不要为了处理下游调度或生成问题而补写解释。"
-        "performance_timing_assessment 是可选修订说明；只有实际返回的 screenplay_text 与目标时长仍有"
-        "明显冲突时，才简要说明主要压力点。不必逐项计时，也不为了凑目标秒数机械改稿。"
+        "修订前读取 DurationContract、当前场的时长 envelope 和相对节奏功能，先判断本场"
+        "应保留的因果与回报，再合并、删重或重排可表演内容。写完后按自然语速、动作、停顿"
+        "和反应通读；performance_timing_assessment 记录仍存在的压力点与取舍。不用字数公式、"
+        "固定容差或逐项账本代替语义判断，也不为了凑秒数机械改稿。"
         "若提供 previous_revision_verification，只处理其中明确落在当前场次的 violation；"
         "把 violation.issue_id 当作连续语义身份，保留它已确认成立的内容，不扩大返修范围。"
         f"{skill_prompt.text}"
@@ -939,6 +963,12 @@ def revise_story_scene(
         "selected_scene_sequences": selected_scene_sequences,
         "current_scene": original.model_dump(mode="json"),
         "duration_constraint": duration_constraint.model_dump(mode="json"),
+        "duration_contract": (
+            duration_contract.model_dump(mode="json")
+            if duration_contract is not None
+            else None
+        ),
+        "duration_rhythm_sections": scene_rhythm_sections,
         "previous_revision_verification": (
             previous_verification.model_dump(mode="json")
             if previous_verification is not None

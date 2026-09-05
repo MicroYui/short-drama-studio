@@ -337,6 +337,7 @@ def _load_role_prompts(
     *,
     roles: tuple[ProductionSkillRole, ...] | None = None,
     shared_role_prompt: str | None = None,
+    shared_role_footer: str | None = None,
     role_references: dict[ProductionSkillRole, tuple[str, ...]] | None = None,
     role_source_sections: dict[ProductionSkillRole, tuple[str, ...]] | None = None,
     allow_missing_roles: bool = False,
@@ -355,6 +356,15 @@ def _load_role_prompts(
                 f"{skill_directory / 'SKILL.md'}"
             )
         _metadata, body = _read_markdown(shared_role_path)
+        footer_body: str | None = None
+        if shared_role_footer is not None:
+            shared_footer_path = skill_directory / shared_role_footer
+            if not shared_footer_path.is_file():
+                raise ValueError(
+                    f"Shared role footer '{shared_role_footer}' does not exist for "
+                    f"{skill_directory / 'SKILL.md'}"
+                )
+            _footer_metadata, footer_body = _read_markdown(shared_footer_path)
         for role in requested_roles:
             sections = [body]
             for source_reference in source_sections_by_role.get(role, ()):
@@ -382,6 +392,8 @@ def _load_role_prompts(
                         body=_read_source_document(reference_path),
                     )
                 )
+            if footer_body is not None:
+                sections.append(footer_body)
             prompts[role] = "\n\n".join(sections)
         return prompts
     for role in requested_roles:
@@ -475,6 +487,14 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
         raise ValueError(
             f"Frontmatter field 'shared_role_prompt' must be a string in {skill_path}"
         )
+    shared_role_footer_value = metadata.get("shared_role_footer")
+    if shared_role_footer_value is not None and not isinstance(
+        shared_role_footer_value,
+        str,
+    ):
+        raise ValueError(
+            f"Frontmatter field 'shared_role_footer' must be a string in {skill_path}"
+        )
     return ComposableProductionSkill(
         id=_required_string(metadata, "id", path=skill_path),
         label=_required_string(metadata, "label", path=skill_path),
@@ -484,6 +504,7 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
             skill_directory,
             roles=roles,
             shared_role_prompt=shared_role_prompt_value,
+            shared_role_footer=shared_role_footer_value,
             role_references=role_references,
             role_source_sections=role_source_sections,
         ),

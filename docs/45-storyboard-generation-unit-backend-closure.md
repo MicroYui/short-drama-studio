@@ -17,6 +17,9 @@ StoryboardDraft（可恢复的内部逐组写作工件）
   ├─ begin(source lock)
   ├─ semantic ledger segments → complete ledger
   ├─ semantic outline segments → complete outline + timing audit
+  │    └─ target-led 且超出 DurationContract 区间 → duration reconciliation
+  │         → Leader 发起带精确证据的局部/整体 ScriptVersion 修订
+  │         → 基于新剧本重新建立 draft
   └─ ordered detailed-group append → semantic verify
        ├─ 镜头组内容问题：replace group 后重新 verify
        └─ ledger/分组边界/时长问题：重新编译全集 draft
@@ -34,13 +37,13 @@ H3 RoutePlan → 一个 GenerationTask / H3ProviderRun → 一个 Take
 Take 按每个 Shot 的 source window 投影为 TimelineClip
 ```
 
-`ProjectDocument` 仍是唯一项目聚合；三个正式内容文档使用稳定 document ID 和不可变 version 保留历史。`storyboard.draft` 是同一份版本化、可恢复的私有编译工件，依次处于 `LEDGER_BUILDING`、`OUTLINE_BUILDING`、`GROUP_AUTHORING` 三个阶段。增量片段只是模型运行的持久化检查点，不会变成多份用户文档或 ComfyUI 节点。只在 finalize 后生成并绑定唯一的 `storyboard.current`，不是第二套输出真相。`ProjectDocument.shots` 是当前 Storyboard 的兼容投影。
+`ProjectDocument` 仍是唯一项目聚合；三个正式内容文档使用稳定 document ID 和不可变 version 保留历史。`storyboard.draft` 是同一份版本化、可恢复的私有编译工件，通常依次处于 `LEDGER_BUILDING`、`OUTLINE_BUILDING`、`GROUP_AUTHORING`；若目标主导的自然时长超出当前 `DurationContract` 声明区间，则在完整 outline 后进入 `DURATION_RECONCILIATION`，等待 Leader 沿现有剧本修订能力处理后，以新 ScriptVersion 重建 draft。增量片段只是模型运行的持久化检查点，不会变成多份用户文档或 ComfyUI 节点。只在 finalize 后生成并绑定唯一的 `storyboard.current`，不是第二套输出真相。`ProjectDocument.shots` 是当前 Storyboard 的兼容投影。
 
 ## 2. 三类版本化内容工件
 
 ### 2.1 ProductionSpec
 
-`kind=production.spec` 固定本项目已知的制作意图，包括语言、画幅、时长意图、类型和背景、视觉与声音方向、用户约束、Agent 决策和 Provider 偏好。Provider 字段只表示制作偏好，不等于获得远程调用授权。
+`kind=production.spec` 固定本项目已知的制作意图，包括语言、画幅、结构化 `DurationContract`、类型和背景、视觉与声音方向、用户约束、Agent 决策和 Provider 偏好。`DurationContract` 说明时长来源、由目标/来源/主音频中的哪一方主导、当前作品可接受的范围、来源保真策略、失配处理和相对节奏形状；旧 ProductionSpec 仍可按来源主导语义读取，不伪造历史上没有声明的容差区间。Provider 字段只表示制作偏好，不等于获得远程调用授权。
 
 它为后续 Agent 提供共享决策，而不把某种短剧风格硬编码进通用 Story Architect。格式和创作特化仍由当前装载的 Workflow / Skill 与 Agent 语义判断决定。
 
@@ -67,7 +70,8 @@ MiniMax Design `drama-series` 的原始 Workflow 明确把每个 episode/scope �
 - 完整覆盖且上述分区可行后，Planner 才调用 `shot.complete_storyboard_ledger` 封结账本并进入 `OUTLINE_BUILDING`。这是确定性阶段迁移，不是用户审批、QA 门或 Critic 循环；
 - 账本封结后，同一 Planner WorkOrder 必须通过 `artifact.get_production_document` 读取最新 `storyboard_draft` 精确版本，再基于其完整 ledger 规划 outline；不从进度摘要或 Leader 转述重建账本。完整 outline 的全局核对、详细镜头组创作和 Verifier 审阅也都先解析各自当前的最新精确 draft version；
 - Planner 基于完整 ledger 进行全局二次重装箱，用 `shot.append_storyboard_outline_segment` 持久化稳定的大纲前缀。每个最终 ClipGroup 为 4–15 秒整数、不跨场次，内部 Shot 可使用小数剪辑时长；所有剧本来源与 ledger 条目恰好覆盖一次，组时长等于所含 ledger 时长之和；
-- 完整 outline 稳定后，Planner 用 `shot.complete_storyboard_outline` 提交全局 timing audit 并进入 `GROUP_AUTHORING`。用户或剧本声明的总时长只用于对比，不反向平均分配到各组；
+- 完整 outline 稳定后，Planner 用 `shot.complete_storyboard_outline` 提交全局 timing audit。账本不反向平均分配到各组；服务端将自然总时长与绑定的精确 ProductionSpec `DurationContract` 对照：目标主导且超出其项目级可接受区间时进入 `DURATION_RECONCILIATION`，其他情况进入 `GROUP_AUTHORING`；
+- `DURATION_RECONCILIATION` 不是用户审批门，也不在分镜层隐藏循环。`OUTSIDE_ACCEPTED_RANGE` 与缺少足够语义证据的 `UNRESOLVED` 都由 Planner 把精确 draft 返回 Leader；Leader 可根据完整语义决定修订局部/整体 ScriptVersion、返回 Story Architect 重建结构，或明确接受当前取舍。修订通过 `planning.start_script_revision(revision_origin=PRODUCTION_CONSTRAINT)` 携带 Script、ProductionSpec 和 StoryboardDraft 的精确版本证据。约束修订不写入用户权威要求；新剧本产生后重新建立分镜草稿。来源主导项目保留并报告自然时长。音频主导的 ProductionSpec 精确绑定 MasterAudio version，完整时间线长度为 `time_origin_seconds + duration_seconds`，重绑后旧制作规格与下游失效；
 - begin、ledger 片段、ledger 完成、outline 片段和 outline 完成都由同一 Planner WorkOrder 沿最新 draft version 继续。Tool 结果会回到同一 Specialist，其中的真实 draft document/version ID 可直接作为下一次 Tool 请求的输入；不得只为拿到 begin 生成的 ID 而结束 WorkOrder 或让 Leader 重规划。如果 append-only ledger 在精确分配后仍不可行，这仍是同一编译职责：Planner 在同一 WorkOrder 内重新 `shot.begin_storyboard_draft` 开启新草稿分支，并完整重编译 ledger/outline；不得仅为重启草稿返回 Leader；
 - 后续使用 `shot.append_storyboard_group` 严格按 outline 顺序逐组落盘。一次 append 只提交一个 ClipGroup，但同一个语义 WorkOrder 可以连续完成多组，无需为每组重新拆任务。outline 不绑定未来 WorkOrder，实际提交的 group 保留它的 WorkOrder 来源；
 - 相邻 ledger 条目与 ClipGroup 使用结构化 `continuity_in / visible_changes / continuity_out` 记录可见事实，不由 Leader 摘要取代精确工件。同场次相邻组的人物、道具、站位、动作和声音需要语义可承接，但不要为字符串相等而复制措辞。跨场次时，上一场的 `continuity_out` 记录退场/结束状态，下一场的 `continuity_in` 记录入场/起始状态，并明确时间或空间转换；两者不应被错误要求为同一文本；
@@ -111,6 +115,7 @@ MiniMax Design `drama-series` 的原始 Workflow 明确把每个 episode/scope �
 | 建立增量分镜草稿 | `shot.begin_storyboard_draft` | 锁定源版本和场次连续性意图，进入 `LEDGER_BUILDING` |
 | 持久化/完成时长账本 | `shot.append_storyboard_ledger_segment` / `shot.complete_storyboard_ledger` | 按源顺序追加语义片段；完整覆盖且已前瞻证明每场可分为 4–15 秒整数组后进入 `OUTLINE_BUILDING` |
 | 持久化/完成 ClipGroup 大纲 | `shot.append_storyboard_outline_segment` / `shot.complete_storyboard_outline` | 按 ledger 前缀追加稳定分组；全局 timing audit 通过后进入 `GROUP_AUTHORING` |
+| 解决目标时长失配 | `planning.start_script_revision` | Leader 以 `PRODUCTION_CONSTRAINT` 和精确工件引用返回既有局部/整体剧本修订链路；不是分镜压缩或固定重试 |
 | 持久化一个生成镜头组 | `shot.append_storyboard_group` | 严格提交下一个已规划的 4–15 秒整数 ClipGroup 及其 Shots，同一 WorkOrder 可连续调用 |
 | 替换已提交镜头组 | `shot.replace_storyboard_draft_group` | 保留规划的 group ID、来源、时长和连续性边界，只替换组内详细镜头 |
 | 记录完整草稿核对 | `shot.record_storyboard_draft_verification` | 将一个语义 Verifier 对当前精确 draft version 的结论和定位到 group 的 findings 落盘 |
@@ -159,6 +164,7 @@ H3 Route Planner 同时保留旧的单 Shot 路线和新的 GenerationPlan 路�
 | 长内容可恢复 | begin、ledger append/complete、outline append/complete 之间每次都产生新 draft version；没有固定片段数或大小，也无需一次模型输出全片计划 JSON |
 | 计划到完整分镜 | Agent 按 outline 顺序逐组落盘，同一 WorkOrder 可提交多组；全部 group 完整覆盖剧本行，由 Verifier 语义核对同场承接与跨场时空转换，最后 finalize 为一份 Storyboard |
 | 语义核对和修改 | Verifier 对当前完整 draft 记录结论；组内问题可局部替换，ledger、分组边界或时长问题使用全剧重新编译的 draft |
+| 时长权威与失配回流 | ProductionSpec 保存结构化 DurationContract；目标主导且自然时长超出其声明区间时，draft 停在 DURATION_RECONCILIATION，Leader 以生产约束和精确版本证据修订剧本；来源/音频主导不被偷偷压缩 |
 | 局部修改可追溯 | patch 产生新 Storyboard version，更改 Shot revision，旧 ArtifactRef 仍可解析 |
 | 生成边界与编辑边界分离 | 一个多 Shot ClipGroup 编译为一个 GenerationUnit，并建立一个 H3 task/take |
 | 时间线保留 Shot 边界 | 同一 Take 被多个 TimelineClip 引用，每个 clip 使用对应 source window |

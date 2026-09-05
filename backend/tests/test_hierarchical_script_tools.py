@@ -21,16 +21,20 @@ from short_drama.hierarchical_script import (
 )
 from short_drama.models import (
     CreateProjectRequest,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationMismatchResolution,
+    DurationRhythmSection,
+    DurationTargetOrigin,
     RunMode,
     SourceMode,
     StoryIntent,
-    StructuredScene,
 )
 from short_drama.production_planner import (
     EpisodeOutline,
     PlannedDialogueLine,
     PlannedProp,
-    _validate_duration_reallocation_feasibility,
     create_story_architecture,
 )
 from short_drama.repository import ShortDramaRepository
@@ -218,29 +222,21 @@ def test_sub_four_second_scenes_through_sixty_minutes_share_scene_node_tools() -
     assert brief_first.scene_sequence == 1
     assert len(brief_first.lines) == 1
     assert long_first.scene_sequence == 1
-    assert long_first.lines
+    assert len(long_first.lines) == 1
+    assert all(len(patch.lines) == 1 for patch in short_patches)
 
 
-def test_duration_reallocation_uses_positive_total_not_a_per_scene_floor() -> None:
+def test_scene_duration_envelopes_do_not_require_exact_episode_arithmetic() -> None:
     outline = _explicit_multi_scene_blueprint(_request(180), scene_count=3)
     payload = outline.model_dump(mode="python")
-    for scene, duration in zip(payload["scenes"], [175.0, 2.0, 3.0], strict=True):
+    for scene, duration in zip(payload["scenes"], [200.0, 0.5, 3.0], strict=True):
         scene["target_duration_seconds"] = duration
-    compact_outline = EpisodeOutline.model_validate(payload)
+    drifted_outline = EpisodeOutline.model_validate(payload)
 
-    _validate_duration_reallocation_feasibility(
-        compact_outline,
-        {2, 3},
-        owner="test",
-    )
-
-    assert StructuredScene(
-        id="scene-compact",
-        heading="瞬时反应",
-        summary="一个短促但完整的反应镜头。",
-        line_ids=[],
-        target_duration_seconds=0.5,
-    ).target_duration_seconds == 0.5
+    assert drifted_outline.target_duration_seconds == 180
+    assert sum(
+        scene.target_duration_seconds for scene in drifted_outline.scenes
+    ) == pytest.approx(203.5)
 
 
 def test_scene_writer_keeps_fast_pacing_out_of_telegraphic_dialogue() -> None:
@@ -262,8 +258,9 @@ def test_scene_writer_keeps_fast_pacing_out_of_telegraphic_dialogue() -> None:
     assert "本场的铺垫走向清楚释放" in instructions
     assert "对立力量的受挫、改口或反噬" in instructions
     assert "完整行政或证明流程" in instructions
-    assert "可选的 performance_timing_assessment" in instructions
-    assert "逐项计时账本" in instructions
+    assert "performance_timing_assessment 可记录自然演读" in instructions
+    assert "不用字数公式、固定容差" in instructions
+    assert "继续压缩会破坏用户承诺" in instructions
 
 
 def test_scene_writer_treats_playable_actions_as_semantic_intent() -> None:
@@ -311,6 +308,26 @@ def test_scene_writer_receives_story_intent_and_selected_skill_context() -> None
         dramatic_engine="主角的普通能力在失常世界中不断触发地位反转。",
         progression_strategy="每次展示都扩大围观层级和现实回报。",
         tone_and_plausibility="允许夸张和荒诞，以情绪兑现优先。",
+        duration_contract=DurationContract(
+            target_seconds=180,
+            target_origin=DurationTargetOrigin.USER_DECLARED,
+            authority=DurationAuthority.TARGET_LED,
+            acceptable_range_seconds=None,
+            source_fidelity_policy=(
+                DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+            ),
+            mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            decision_basis="用户明确要求三分钟原创短剧。",
+            rhythm_shape=[
+                DurationRhythmSection(
+                    label="首次稀缺性兑现",
+                    narrative_function="让日常心算立即改变主角处境。",
+                    relative_density="比前序更密，但留出全场反应的停顿。",
+                    scene_sequences=[1],
+                    payoff_or_handoff="将惊讶交给下一级人物。",
+                )
+            ],
+        ),
         protected_elements=["主角能力没有倒退"],
         drift_risks=["写成严肃科普"],
     )
@@ -324,8 +341,16 @@ def test_scene_writer_receives_story_intent_and_selected_skill_context() -> None
         selected_skill_prompt="优先使用可见的身份反转来兑现情绪。",
     )
     payload = json.loads(input_text)
+    duration_contract = story_intent.duration_contract
+    assert duration_contract is not None
 
     assert payload["story_intent"] == story_intent.model_dump(mode="json")
+    assert payload["episode_context"]["duration_contract"] == (
+        duration_contract.model_dump(mode="json")
+    )
+    assert payload["current_scene_node"]["duration_rhythm_sections"] == [
+        duration_contract.rhythm_shape[0].model_dump(mode="json")
+    ]
     assert "优先使用可见的身份反转来兑现情绪。" in instructions
     assert "不要把它改写成固定模板" in instructions
 
@@ -419,6 +444,12 @@ def test_scene_writers_receive_only_explicitly_related_props_with_state() -> Non
             ),
         ),
         client,
+    )
+    assert client.inputs[0]["duration_contract"] == (
+        outline.story_intent.duration_contract.model_dump(mode="json")
+        if outline.story_intent is not None
+        and outline.story_intent.duration_contract is not None
+        else None
     )
     assert result.retry_required is False
     revision_payload = client.inputs[0]

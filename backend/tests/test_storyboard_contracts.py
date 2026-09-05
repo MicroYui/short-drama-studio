@@ -4,8 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from short_drama.agent_runtime.models import WorkOrder
 from short_drama.models import (
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationMismatchResolution,
+    DurationRange,
+    DurationRhythmSection,
+    DurationTargetOrigin,
     ProductionDocumentArtifactRef,
     ProductionDocumentOrigin,
     ProjectDocument,
@@ -168,6 +178,84 @@ def test_complete_spec_and_storyboard_compile_two_shots_into_contiguous_windows(
     assert unit.requested_duration_seconds == storyboard.computed_duration_seconds
     assert unit.provider == "minimax"
     assert unit.model == "MiniMax-H3"
+
+
+def test_duration_contract_is_structured_without_inventing_a_fixed_tolerance() -> None:
+    contract = DurationContract(
+        target_seconds=120.0,
+        target_origin=DurationTargetOrigin.USER_DECLARED,
+        authority=DurationAuthority.TARGET_LED,
+        acceptable_range_seconds=DurationRange(
+            minimum_seconds=110.0,
+            maximum_seconds=130.0,
+        ),
+        source_fidelity_policy=(
+            DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+        ),
+        mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        decision_basis="用户要求约两分钟，允许 Agent 依据自然表演解释可接受范围。",
+        rhythm_shape=[
+            DurationRhythmSection(
+                label="第一次震惊",
+                narrative_function="让观众立即理解主角优势。",
+                relative_density="快，但保留饭勺落地的反应拍。",
+                scene_sequences=[1],
+                payoff_or_handoff="引出校长赶来。",
+            )
+        ],
+    )
+
+    restored = DurationContract.model_validate(contract.model_dump(mode="json"))
+
+    assert restored == contract
+    with pytest.raises(ValidationError, match="minimum cannot exceed maximum"):
+        DurationRange(minimum_seconds=130.0, maximum_seconds=110.0)
+    with pytest.raises(ValidationError, match="inside its acceptable range"):
+        DurationContract.model_validate(
+            {
+                **contract.model_dump(mode="json"),
+                "target_seconds": 150.0,
+            }
+        )
+
+
+def test_production_spec_upgrades_legacy_duration_without_losing_intent(
+    tmp_path: Path,
+) -> None:
+    spec, _ = _spec_and_storyboard(_fixture_document(tmp_path))
+    legacy = spec.model_dump(mode="json")
+    legacy.pop("duration_contract")
+
+    restored = ProductionSpecContent.model_validate(legacy)
+
+    assert restored.duration_contract.target_seconds == spec.target_duration_seconds
+    assert (
+        restored.duration_contract.target_origin
+        == DurationTargetOrigin.LEGACY_UNKNOWN
+    )
+    assert restored.duration_contract.authority == DurationAuthority.SOURCE_LED
+    assert restored.duration_contract.acceptable_range_seconds is None
+    assert (
+        restored.duration_contract.source_fidelity_policy
+        == DurationFidelityPolicy.PRESERVE_VERBATIM
+    )
+    assert (
+        restored.duration_contract.mismatch_resolution
+        == DurationMismatchResolution.REPORT_NATURAL_RUNTIME
+    )
+    assert restored.duration_contract.decision_basis == spec.duration_intent
+
+    assert restored.target_duration_seconds is not None
+    mismatched_contract = restored.duration_contract.model_copy(
+        update={"target_seconds": restored.target_duration_seconds + 1.0}
+    )
+    with pytest.raises(ValidationError, match="duration targets must match"):
+        ProductionSpecContent.model_validate(
+            {
+                **restored.model_dump(mode="json"),
+                "duration_contract": mismatched_contract.model_dump(mode="json"),
+            }
+        )
 
 
 def test_storyboard_patch_only_revises_the_target_and_preserves_history(

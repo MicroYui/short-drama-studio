@@ -13,15 +13,22 @@ from short_drama.models import (
     ContentPlanningOutput,
     ContinuationPreference,
     CreateProjectRequest,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationMismatchResolution,
+    DurationTargetOrigin,
     EndingContract,
     Freshness,
     PlanningRunOperation,
     PlanningRunResponse,
+    PlanningRunStatus,
     PlanningRunStep,
     ResolvedEndingMode,
     ReviseScriptLinesRequest,
     ScriptLine,
     ScriptLineRevision,
+    ScriptRevisionOrigin,
     SourceMode,
     StoryCharacterMetadataPatch,
     StoryIntent,
@@ -33,6 +40,7 @@ from short_drama.models import (
     StoryRepairPlan,
     StoryRevisionVerification,
     StoryRevisionViolation,
+    StoryVerificationResolutionDecision,
     StructuredScene,
 )
 from short_drama.hierarchical_script import compose_scene_screenplay
@@ -41,13 +49,117 @@ from short_drama.script_documents import EpisodeScenePatch
 from short_drama.script_text import synchronize_script_line_text
 from short_drama.tools import ToolCallStatus
 from tests.test_planning_runs import (
-    CriticRecommendedFinalColdReadClient,
-    StagedLanguageClient,
+    CriticRecommendedFinalColdReadClient as _BaseCriticRecommendedFinalColdReadClient,
+    StagedLanguageClient as _BaseStagedLanguageClient,
     _finish,
+    _aligned_duration_fit_assessment,
     _request,
     _service,
     _start_owned_planning,
 )
+
+
+def _test_duration_contract(request: CreateProjectRequest) -> DurationContract:
+    """Mirror the production fallback for legacy staged test responses."""
+
+    target_origin = (
+        DurationTargetOrigin.USER_DECLARED
+        if request.target_duration_seconds is not None
+        else DurationTargetOrigin.PROFILE_DEFAULT
+    )
+    if request.source_mode == SourceMode.SCRIPT_LOCKED:
+        return DurationContract(
+            target_seconds=request.resolved_target_duration_seconds(),
+            target_origin=target_origin,
+            authority=DurationAuthority.SOURCE_LED,
+            acceptable_range_seconds=None,
+            source_fidelity_policy=DurationFidelityPolicy.PRESERVE_VERBATIM,
+            mismatch_resolution=DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+            decision_basis=(
+                "测试客户端保留 SCRIPT_LOCKED 来源内容，"
+                "并将请求时长作为对照。"
+            ),
+            rhythm_shape=[],
+        )
+    return DurationContract(
+        target_seconds=request.resolved_target_duration_seconds(),
+        target_origin=target_origin,
+        authority=DurationAuthority.TARGET_LED,
+        acceptable_range_seconds=None,
+        source_fidelity_policy=(
+            DurationFidelityPolicy.REWRITABLE
+            if request.source_mode == SourceMode.AUTO_ORIGINAL
+            else DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+        ),
+        mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        decision_basis="测试客户端沿用请求中的原创规模，不虚构可接受容差。",
+        rhythm_shape=[],
+    )
+
+
+def _inject_duration_contract(
+    output: str,
+    request: CreateProjectRequest,
+) -> str:
+    """Upgrade only the old Story Orientation fixture payload."""
+
+    try:
+        payload = json.loads(output)
+    except (json.JSONDecodeError, TypeError):
+        return output
+    if not isinstance(payload, dict):
+        return output
+    story_intent = payload.get("story_intent")
+    if not isinstance(story_intent, dict):
+        return output
+    if story_intent.get("duration_contract") is not None:
+        return output
+    story_intent["duration_contract"] = _test_duration_contract(request).model_dump(
+        mode="json"
+    )
+    return json.dumps(payload, ensure_ascii=False)
+
+
+class StagedLanguageClient(_BaseStagedLanguageClient):
+    """Keep this regression file compatible with the current orientation schema."""
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        output = super().generate_text(
+            instructions=instructions,
+            input_text=input_text,
+            image_urls=image_urls,
+            max_output_tokens=max_output_tokens,
+        )
+        return _inject_duration_contract(output, self.request)
+
+
+class CriticRecommendedFinalColdReadClient(
+    _BaseCriticRecommendedFinalColdReadClient
+):
+    """Apply the same Story Orientation compatibility to this specialized fake."""
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        output = super().generate_text(
+            instructions=instructions,
+            input_text=input_text,
+            image_urls=image_urls,
+            max_output_tokens=max_output_tokens,
+        )
+        return _inject_duration_contract(output, self.request)
 
 
 class AgentSelectedLocalRevisionClient(StagedLanguageClient):
@@ -358,6 +470,58 @@ class MetadataAwareRevisionClient(StagedLanguageClient):
         )
 
 
+class DurationContractMetadataRevisionClient(MetadataAwareRevisionClient):
+    """Revise only StoryIntent while changing its authoritative target."""
+
+    revised_target_seconds = 90.0
+
+    def __init__(self, request: CreateProjectRequest) -> None:
+        super().__init__(request, selected_scene_sequences=[])
+        self.revised_story_intent = self.revised_story_intent.model_copy(
+            deep=True,
+            update={
+                "duration_contract": DurationContract(
+                    target_seconds=self.revised_target_seconds,
+                    target_origin=DurationTargetOrigin.USER_DECLARED,
+                    authority=DurationAuthority.TARGET_LED,
+                    acceptable_range_seconds=None,
+                    source_fidelity_policy=(
+                        DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+                    ),
+                    mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+                    decision_basis=(
+                        "The user explicitly revised the episode to 90 seconds."
+                    ),
+                )
+            },
+        )
+
+    @property
+    def metadata_targets(self) -> list[StoryMetadataTarget]:
+        return [StoryMetadataTarget.STORY_INTENT]
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        if "story-metadata revision Agent" in instructions:
+            self.metadata_revision_calls += 1
+            self.metadata_revision_inputs.append(json.loads(input_text))
+            return StoryMetadataRevisionPatch(
+                story_intent=self.revised_story_intent,
+            ).model_dump_json()
+        return super().generate_text(
+            instructions=instructions,
+            input_text=input_text,
+            image_urls=image_urls,
+            max_output_tokens=max_output_tokens,
+        )
+
+
 class MetadataOnlyVerifierRetryClient(MetadataAwareRevisionClient):
     """Return one typed metadata-only verifier violation before acceptance."""
 
@@ -424,6 +588,9 @@ class MetadataOnlyVerifierRetryClient(MetadataAwareRevisionClient):
                             ),
                         )
                     ],
+                    duration_fit_assessment=_aligned_duration_fit_assessment(
+                        self.request
+                    ),
                 ).model_dump_json()
             return StoryRevisionVerification(
                 accepted=True,
@@ -431,6 +598,9 @@ class MetadataOnlyVerifierRetryClient(MetadataAwareRevisionClient):
                 satisfied_issue_ids=[str(action["issue_id"])],
                 satisfied_issue_indices=[int(action["issue_index"])],
                 violations=[],
+                duration_fit_assessment=_aligned_duration_fit_assessment(
+                    self.request
+                ),
             ).model_dump_json()
         return super().generate_text(
             instructions=instructions,
@@ -602,6 +772,8 @@ def test_planning_start_script_revision_inherits_current_project_truth(
     assert run.operation == PlanningRunOperation.SCRIPT_REVISION
     assert run.request.input_text == original_brief
     assert run.revision_instruction == feedback
+    assert run.revision_origin == ScriptRevisionOrigin.USER_FEEDBACK
+    assert run.revision_evidence_refs == []
     assert run.base_script_version_id == current.id
     assert run.parent_planning_run_id == current.planning_run_id
     assert run.source_contract is not None
@@ -622,6 +794,65 @@ def test_planning_start_script_revision_inherits_current_project_truth(
     assert response.project is not None
     assert response.project.document.planning is not None
     assert response.project.document.planning.run_id == run.id
+
+
+def test_script_revision_without_scene_duration_envelope_returns_to_architect(
+    tmp_path: Path,
+) -> None:
+    request = _request(120).model_copy(
+        update={"content_planning_output": ContentPlanningOutput.SCRIPT_ONLY}
+    )
+    language = StagedLanguageClient(request)
+    service = _service(tmp_path, language)
+    completed = _finish(
+        service,
+        _start_owned_planning(service, request).run.id,
+    )
+    assert completed.project is not None
+    persisted = service.repository.get_project(
+        completed.project.document.project.id
+    )
+    assert persisted is not None
+    current = next(
+        item
+        for item in persisted.script_versions
+        if item.id == persisted.project.current_script_version_id
+    )
+    original_screenplay = current.screenplay_text
+    current.planning_run_id = None
+    current.structured_scenes = [
+        scene.model_copy(
+            deep=True,
+            update={"target_duration_seconds": None},
+        )
+        for scene in current.structured_scenes
+    ]
+    service.repository.save_project(persisted)
+
+    started = service.start_script_revision(
+        current.project_id,
+        owner_agent_run_id="agent-run-rebuild-duration-envelope",
+        instruction="保留当前剧情，按完整表演语义重建场次时长包络。",
+        base_script_version_id=current.id,
+    )
+
+    assert started.run.current_step == PlanningRunStep.STORY_ARCHITECT
+    assert started.run.outline_json is None
+    assert started.run.step_retry_feedback is not None
+    handoff = json.loads(started.run.step_retry_feedback)
+    assert handoff["requested_by"] == "SCRIPT_REVISION_DURATION_ENVELOPE"
+    assert handoff["current_script"]["screenplay_text"] == original_screenplay
+    assert all(
+        scene["target_duration_seconds"] is None
+        for scene in handoff["current_script"]["structured_scenes"]
+    )
+    assert "do not divide a target evenly across scenes" in handoff["reason"]
+
+    rearchitected = service.advance_planning_run(started.run.id)
+    assert rearchitected.run.current_step == PlanningRunStep.SCENE_WRITER
+    assert rearchitected.run.outline_json is not None
+    rebuilt = EpisodeOutline.model_validate_json(rearchitected.run.outline_json)
+    assert all(scene.target_duration_seconds > 0 for scene in rebuilt.scenes)
 
 
 def test_agent_selected_local_revision_only_changes_one_scene_and_appends_version(
@@ -945,6 +1176,95 @@ def test_metadata_only_revision_skips_story_architect_and_scene_writer(
     assert len(language.script_scene_calls) == initial_scene_writer_calls
 
 
+def test_story_intent_duration_revision_updates_project_truth_and_survives_followup(
+    tmp_path: Path,
+) -> None:
+    request = _request(120).model_copy(
+        update={
+            "content_planning_output": ContentPlanningOutput.SCRIPT_ONLY,
+            "input_text": "写一个完整的高中生纯爽短剧。",
+        }
+    )
+    language = DurationContractMetadataRevisionClient(request)
+    service = _service(tmp_path, language)
+    initial = _finish(
+        service,
+        _start_owned_planning(service, request).run.id,
+    )
+
+    assert initial.project is not None
+    original = initial.project.document.script_versions[-1]
+    assert original.story_intent is not None
+    assert original.story_intent.duration_contract is not None
+    assert original.story_intent.duration_contract.target_seconds == 120.0
+    assert initial.project.document.project.target_duration_seconds == 120.0
+
+    started = service.start_script_revision(
+        original.project_id,
+        owner_agent_run_id="agent-run-duration-contract-revision",
+        instruction="把本集改成约90秒，保留当前场次文字，更新全局时长契约。",
+        base_script_version_id=original.id,
+    )
+    routed = service.advance_planning_run(started.run.id)
+    assert routed.run.current_step == PlanningRunStep.STORY_METADATA_REVISION
+
+    aligned = service.advance_planning_run(started.run.id)
+    assert aligned.run.current_step == PlanningRunStep.REVISION_VERIFIER
+    assert aligned.run.outline_json is not None
+    in_flight_outline = EpisodeOutline.model_validate_json(
+        aligned.run.outline_json
+    )
+    assert in_flight_outline.target_duration_seconds == 90.0
+    assert in_flight_outline.story_intent is not None
+    assert in_flight_outline.story_intent.duration_contract is not None
+    assert in_flight_outline.story_intent.duration_contract.target_seconds == 90.0
+
+    # The ProjectDocument still describes the current (old) ScriptVersion until
+    # the accepted revision is atomically published.
+    before_publish = service.repository.get_project(original.project_id)
+    assert before_publish is not None
+    assert before_publish.project.current_script_version_id == original.id
+    assert before_publish.project.target_duration_seconds == 120.0
+
+    completed = _finish(service, started.run.id, max_steps=5)
+    assert completed.project is not None
+    revised_document = completed.project.document
+    revised_script = next(
+        item
+        for item in revised_document.script_versions
+        if item.id == revised_document.project.current_script_version_id
+    )
+    assert revised_script.story_intent is not None
+    assert revised_script.story_intent.duration_contract is not None
+    assert revised_script.story_intent.duration_contract.target_seconds == 90.0
+    assert revised_document.project.target_duration_seconds == 90.0
+    assert revised_script.structured_scenes == original.structured_scenes
+
+    selected_line = revised_script.lines[0]
+    followup = service.revise_script_lines(
+        revised_document.project.id,
+        ReviseScriptLinesRequest(
+            revisions=[
+                ScriptLineRevision(
+                    line_id=selected_line.id,
+                    spoken_text=f"{selected_line.spoken_text}。",
+                    subtitle_text=f"{selected_line.subtitle_text}。",
+                )
+            ],
+            change_reason="后续只修改一句台词",
+        ),
+    )
+    followup_script = next(
+        item
+        for item in followup.document.script_versions
+        if item.id == followup.document.project.current_script_version_id
+    )
+    assert followup_script.story_intent is not None
+    assert followup_script.story_intent.duration_contract is not None
+    assert followup_script.story_intent.duration_contract.target_seconds == 90.0
+    assert followup.document.project.target_duration_seconds == 90.0
+
+
 def test_verifier_metadata_only_violation_returns_to_metadata_agent(
     tmp_path: Path,
 ) -> None:
@@ -984,9 +1304,9 @@ def test_verifier_metadata_only_violation_returns_to_metadata_agent(
 
     rejected = service.advance_planning_run(started.run.id)
 
-    assert rejected.run.current_step == PlanningRunStep.STORY_METADATA_REVISION
+    assert rejected.run.status == PlanningRunStatus.NEEDS_ATTENTION
+    assert rejected.run.current_step == PlanningRunStep.REVISION_VERIFIER
     assert rejected.run.revision_scene_sequences == []
-    assert rejected.run.revision_repair_round == 1
     assert rejected.run.latest_revision_verification is not None
     assert rejected.run.latest_revision_verification.accepted is False
     assert rejected.run.latest_revision_verification.violations[0].metadata_targets == [
@@ -998,6 +1318,20 @@ def test_verifier_metadata_only_violation_returns_to_metadata_agent(
     assert len(language.story_architect_instructions) == initial_architect_calls
     assert len(language.script_scene_calls) == initial_scene_writer_calls
 
+    resolved = service.resolve_story_verification(
+        rejected.run.project_id,
+        run_id=started.run.id,
+        owner_agent_run_id=started.run.owner_agent_run_id,
+        decision=(
+            StoryVerificationResolutionDecision.CONTINUE_FOCUSED_REVISION
+        ),
+        rationale="Verifier 定位的是 EndingContract 元数据越界，交回 Repair Leader 决定范围。",
+    )
+    assert resolved.run.current_step == PlanningRunStep.STORY_REVISION
+
+    repair_planned = service.advance_planning_run(started.run.id)
+    assert repair_planned.run.current_step == PlanningRunStep.STORY_METADATA_REVISION
+
     second_metadata = service.advance_planning_run(started.run.id)
 
     assert second_metadata.run.current_step == PlanningRunStep.REVISION_VERIFIER
@@ -1008,8 +1342,13 @@ def test_verifier_metadata_only_violation_returns_to_metadata_agent(
     previous_verification = language.metadata_revision_inputs[1][
         "revision_verification"
     ]
-    assert previous_verification["violations"][0]["issue_id"] == violation_id
-    assert previous_verification["violations"][0]["scene_sequences"] == []
+    assert previous_verification is None
+    leader_handoff = json.loads(
+        language.repair_plan_inputs[-1]["previous_structural_feedback"]
+    )
+    assert leader_handoff["story_verification_resolution"][
+        "revision_verification"
+    ]["violations"][0]["issue_id"] == violation_id
 
     accepted = service.advance_planning_run(started.run.id)
 
@@ -1017,7 +1356,7 @@ def test_verifier_metadata_only_violation_returns_to_metadata_agent(
     assert language.revision_verifier_calls == 2
     assert language.revision_verifier_inputs[1][
         "previous_revision_verification"
-    ]["violations"][0]["issue_id"] == violation_id
+    ] is None
     completed = _finish(service, started.run.id, max_steps=3)
 
     assert completed.project is not None

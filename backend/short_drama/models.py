@@ -64,6 +64,22 @@ class PlanningRunOperation(StrEnum):
     SCRIPT_REVISION = "SCRIPT_REVISION"
 
 
+class ScriptRevisionOrigin(StrEnum):
+    USER_FEEDBACK = "USER_FEEDBACK"
+    PRODUCTION_CONSTRAINT = "PRODUCTION_CONSTRAINT"
+
+
+class StoryVerificationSource(StrEnum):
+    SCRIPT_VERIFIER = "SCRIPT_VERIFIER"
+    REVISION_VERIFIER = "REVISION_VERIFIER"
+
+
+class StoryVerificationResolutionDecision(StrEnum):
+    CONTINUE_FOCUSED_REVISION = "CONTINUE_FOCUSED_REVISION"
+    RETURN_TO_STORY_ARCHITECT = "RETURN_TO_STORY_ARCHITECT"
+    ACCEPT_TRADEOFF = "ACCEPT_TRADEOFF"
+
+
 class PlanningRunStep(StrEnum):
     STORY_ORIENTATION = "STORY_ORIENTATION"
     STORY_ARCHITECT = "STORY_ARCHITECT"
@@ -173,6 +189,120 @@ class ScriptReviewDispositionAction(StrEnum):
     REVISE_STORY = "REVISE_STORY"
     CONTINUE_WITH_HANDOFF = "CONTINUE_WITH_HANDOFF"
     CONTINUE = "CONTINUE"
+
+
+class DurationTargetOrigin(StrEnum):
+    USER_DECLARED = "USER_DECLARED"
+    PROFILE_DEFAULT = "PROFILE_DEFAULT"
+    SOURCE_DECLARED = "SOURCE_DECLARED"
+    MASTER_AUDIO = "MASTER_AUDIO"
+    LEGACY_UNKNOWN = "LEGACY_UNKNOWN"
+
+
+class DurationAuthority(StrEnum):
+    TARGET_LED = "TARGET_LED"
+    SOURCE_LED = "SOURCE_LED"
+    AUDIO_LED = "AUDIO_LED"
+
+
+class DurationFidelityPolicy(StrEnum):
+    PRESERVE_VERBATIM = "PRESERVE_VERBATIM"
+    PRESERVE_STORY_COMMITMENTS = "PRESERVE_STORY_COMMITMENTS"
+    REWRITABLE = "REWRITABLE"
+
+
+class DurationMismatchResolution(StrEnum):
+    REVISE_SCRIPT = "REVISE_SCRIPT"
+    REPORT_NATURAL_RUNTIME = "REPORT_NATURAL_RUNTIME"
+    FOLLOW_MASTER_AUDIO = "FOLLOW_MASTER_AUDIO"
+    ASK_USER = "ASK_USER"
+
+
+class DurationAlignment(StrEnum):
+    ALIGNED = "ALIGNED"
+    OUTSIDE_ACCEPTED_RANGE = "OUTSIDE_ACCEPTED_RANGE"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    UNRESOLVED = "UNRESOLVED"
+
+
+class DurationRange(DomainModel):
+    minimum_seconds: float = Field(gt=0.0)
+    maximum_seconds: float = Field(gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> DurationRange:
+        if self.minimum_seconds > self.maximum_seconds:
+            raise ValueError("Duration range minimum cannot exceed maximum")
+        return self
+
+
+class DurationRhythmSection(DomainModel):
+    label: str = Field(min_length=1, max_length=120)
+    narrative_function: str = Field(min_length=1, max_length=1200)
+    relative_density: str = Field(min_length=1, max_length=500)
+    scene_sequences: list[int] = Field(default_factory=list[int])
+    payoff_or_handoff: str | None = Field(default=None, min_length=1, max_length=1200)
+
+    @model_validator(mode="after")
+    def validate_scene_sequences(self) -> DurationRhythmSection:
+        if any(sequence < 1 for sequence in self.scene_sequences):
+            raise ValueError("Duration rhythm scene sequences must be positive")
+        if len(self.scene_sequences) != len(set(self.scene_sequences)):
+            raise ValueError("Duration rhythm scene sequences must be unique")
+        return self
+
+
+class DurationContract(DomainModel):
+    """Semantic runtime authority shared across story and production planning."""
+
+    target_seconds: float | None = Field(default=None, gt=0.0)
+    target_origin: DurationTargetOrigin
+    authority: DurationAuthority
+    acceptable_range_seconds: DurationRange | None = None
+    source_fidelity_policy: DurationFidelityPolicy
+    mismatch_resolution: DurationMismatchResolution
+    decision_basis: str = Field(min_length=1, max_length=2000)
+    rhythm_shape: list[DurationRhythmSection] = Field(
+        default_factory=list[DurationRhythmSection]
+    )
+    user_overridable: bool = True
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> DurationContract:
+        accepted = self.acceptable_range_seconds
+        if (
+            self.target_seconds is not None
+            and accepted is not None
+            and not (
+                accepted.minimum_seconds
+                <= self.target_seconds
+                <= accepted.maximum_seconds
+            )
+        ):
+            raise ValueError("Duration target must fall inside its acceptable range")
+        if not self.user_overridable:
+            raise ValueError("Duration decisions must remain user-overridable")
+        if self.authority == DurationAuthority.AUDIO_LED:
+            if self.target_origin != DurationTargetOrigin.MASTER_AUDIO:
+                raise ValueError(
+                    "Audio-led duration must identify Master Audio as its target origin"
+                )
+            if self.target_seconds is None:
+                raise ValueError("Audio-led duration requires an exact Master Audio target")
+            if self.mismatch_resolution != DurationMismatchResolution.FOLLOW_MASTER_AUDIO:
+                raise ValueError(
+                    "Audio-led duration mismatches must follow the bound Master Audio"
+                )
+        return self
+
+
+class DurationFitAssessment(DomainModel):
+    estimated_range_seconds: DurationRange | None = None
+    alignment: DurationAlignment
+    pressure_points: list[str] = Field(default_factory=list[str])
+    concurrent_performance: list[str] = Field(default_factory=list[str])
+    resolution: DurationMismatchResolution
+    rationale: str = Field(min_length=1, max_length=2000)
 
 
 class StoryReviewFollowup(StrEnum):
@@ -525,6 +655,7 @@ class ScriptReviewReport(DomainModel):
         min_length=1,
         max_length=2000,
     )
+    duration_fit_assessment: DurationFitAssessment | None = None
     requires_revision: bool
     recommended_followup: StoryReviewFollowup = StoryReviewFollowup.FINALIZE
     followup_rationale: str | None = Field(default=None, max_length=1200)
@@ -617,6 +748,7 @@ class StoryIntent(DomainModel):
     dramatic_engine: str = Field(min_length=1, max_length=2000)
     progression_strategy: str = Field(min_length=1, max_length=2000)
     tone_and_plausibility: str = Field(min_length=1, max_length=2000)
+    duration_contract: DurationContract | None = None
     protected_elements: list[str] = Field(default_factory=list[str], max_length=20)
     drift_risks: list[str] = Field(default_factory=list[str], max_length=20)
 
@@ -860,7 +992,9 @@ class StoryMetadataRevisionPatch(DomainModel):
     """Typed, sparse patch for global story metadata only.
 
     Stable entity IDs are selectors, not editable values. Scene contracts, dialogue,
-    and target duration are intentionally absent from this schema.
+    and a standalone target-duration field are intentionally absent from this schema.
+    When StoryIntent is deliberately revised, its nested DurationContract remains the
+    authoritative story-level duration decision and is projected by the workflow.
     """
 
     title: str | None = Field(default=None, min_length=1, max_length=120)
@@ -934,6 +1068,7 @@ class StoryRevisionVerification(DomainModel):
         default_factory=list[StoryRevisionViolation],
         max_length=20,
     )
+    duration_fit_assessment: DurationFitAssessment | None = None
     recommended_followup: StoryReviewFollowup = StoryReviewFollowup.FINALIZE
     followup_rationale: str | None = Field(default=None, max_length=1200)
     user_overridable: bool = True
@@ -950,6 +1085,38 @@ class StoryRevisionVerification(DomainModel):
             raise ValueError("Satisfied repair issue IDs must be unique")
         if not self.user_overridable:
             raise ValueError("Story revision verification must remain user-overridable")
+        return self
+
+
+class StoryVerificationResolution(DomainModel):
+    """Persisted Leader decision over one exact verifier result.
+
+    The captured verifier payload remains unchanged so accepting a tradeoff never
+    rewrites a rejected or unresolved result into an accepted one.
+    """
+
+    source: StoryVerificationSource
+    decision: StoryVerificationResolutionDecision
+    rationale: str = Field(min_length=1, max_length=2400)
+    owner_agent_run_id: str = Field(min_length=1, max_length=240)
+    script_review_report: ScriptReviewReport | None = None
+    revision_verification: StoryRevisionVerification | None = None
+    created_at: str
+
+    @model_validator(mode="after")
+    def validate_exact_source_payload(self) -> StoryVerificationResolution:
+        if self.source == StoryVerificationSource.SCRIPT_VERIFIER:
+            if self.script_review_report is None or self.revision_verification is not None:
+                raise ValueError(
+                    "Script-verifier resolution must capture only its exact review report"
+                )
+        elif (
+            self.revision_verification is None
+            or self.script_review_report is not None
+        ):
+            raise ValueError(
+                "Revision-verifier resolution must capture only its exact verification"
+            )
         return self
 
 
@@ -1469,12 +1636,27 @@ class TimelineVideoClip(DomainModel):
     id: str
     shot_id: str
     take_id: str
+    source_script_version_id: str | None = None
+    source_bible_version_id: str | None = None
+    source_storyboard_document_id: str | None = None
+    source_storyboard_version_id: str | None = None
     media_path: str
     start_seconds: float
     source_in_seconds: float
     duration_seconds: float
     transition_in: str
     transition_out: str
+
+    @model_validator(mode="after")
+    def validate_storyboard_source(self) -> TimelineVideoClip:
+        if (self.source_storyboard_document_id is None) != (
+            self.source_storyboard_version_id is None
+        ):
+            raise ValueError(
+                "Timeline video source Storyboard document and version IDs "
+                "must be supplied together"
+            )
+        return self
 
 
 class TimelineAudioClip(DomainModel):
@@ -2684,6 +2866,10 @@ class PlanningRunRecord(DomainModel):
     )
     request: CreateProjectRequest
     revision_instruction: str | None = Field(default=None, max_length=50000)
+    revision_origin: ScriptRevisionOrigin = ScriptRevisionOrigin.USER_FEEDBACK
+    revision_evidence_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
     base_script_version_id: str | None = Field(default=None, max_length=240)
     base_bible_version_id: str | None = Field(default=None, max_length=240)
     parent_planning_run_id: str | None = Field(default=None, max_length=240)
@@ -2717,6 +2903,9 @@ class PlanningRunRecord(DomainModel):
     latest_repair_plan: StoryRepairPlan | None = None
     latest_story_metadata_patch: StoryMetadataRevisionPatch | None = None
     latest_revision_verification: StoryRevisionVerification | None = None
+    story_verification_resolutions: list[StoryVerificationResolution] = Field(
+        default_factory=list[StoryVerificationResolution]
+    )
     revision_judge: RevisionJudgeRecommendation | None = None
     revision_base_outline_json: str | None = None
     revision_scene_sequences: list[int] = Field(

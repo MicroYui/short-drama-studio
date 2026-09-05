@@ -8,6 +8,10 @@ from pydantic import ValidationError
 from short_drama.models import (
     ApprovalStatus,
     ContinuityState,
+    DurationAlignment,
+    DurationFitAssessment,
+    DurationMismatchResolution,
+    DurationRange,
     Freshness,
     ProductionDocumentArtifactRef,
     ProductionDocumentOrigin,
@@ -23,6 +27,8 @@ from short_drama.production_contracts import (
     StoryboardDraftPhase,
     StoryboardDraftSceneSeed,
     StoryboardDraftSeed,
+    StoryboardDraftVerificationFinding,
+    StoryboardRepairScope,
     StoryboardSceneNode,
     StoryboardSourceRange,
     StoryboardTimingAudit,
@@ -399,6 +405,129 @@ def test_staged_draft_accepts_prefixes_and_legacy_full_payload() -> None:
     assert all(item.completes_scene for item in staged_restored.timing_ledger)
 
 
+def test_legacy_timing_audit_defaults_to_not_applicable_alignment() -> None:
+    complete = _draft()
+    assert complete.timing_audit is not None
+    legacy = complete.timing_audit.model_dump(mode="json")
+    legacy.pop("alignment")
+    legacy.pop("difference_seconds")
+    legacy.pop("assessment")
+
+    restored = StoryboardTimingAudit.model_validate(legacy)
+
+    assert restored.alignment == DurationAlignment.NOT_APPLICABLE
+    assert restored.difference_seconds is None
+    assert restored.assessment is None
+
+
+def test_outside_duration_outline_pauses_for_semantic_reconciliation() -> None:
+    complete = _draft()
+    assert complete.timing_audit is not None
+    outside_audit = StoryboardTimingAudit.model_validate(
+        {
+            **complete.timing_audit.model_dump(mode="json"),
+            "alignment": DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+            "difference_seconds": -109.0,
+            "assessment": DurationFitAssessment(
+                estimated_range_seconds=DurationRange(
+                    minimum_seconds=10.0,
+                    maximum_seconds=12.0,
+                ),
+                alignment=DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+                pressure_points=["原剧本对白与动作只支撑约十一秒"],
+                concurrent_performance=["对白时可同步保留饭勺反应"],
+                resolution=DurationMismatchResolution.REVISE_SCRIPT,
+                rationale="原创故事由目标时长主导，应先回到事实源扩展剧本。",
+            ).model_dump(mode="json"),
+        }
+    )
+    reconciling = StoryboardDraftContent.model_validate(
+        {
+            **complete.model_dump(mode="json"),
+            "phase": StoryboardDraftPhase.DURATION_RECONCILIATION,
+            "timing_audit": outside_audit.model_dump(mode="json"),
+            "committed_groups": [],
+            "verification": None,
+        }
+    )
+
+    assert reconciling.phase == StoryboardDraftPhase.DURATION_RECONCILIATION
+    assert (
+        reconciling.timing_audit is not None
+        and reconciling.timing_audit.alignment
+        == DurationAlignment.OUTSIDE_ACCEPTED_RANGE
+    )
+
+    unresolved_audit = outside_audit.model_copy(
+        update={
+            "alignment": DurationAlignment.UNRESOLVED,
+            "assessment": outside_audit.assessment.model_copy(
+                update={
+                    "alignment": DurationAlignment.UNRESOLVED,
+                    "rationale": "当前契约没有声明可接受范围，交回 Leader 补足语义判断。",
+                }
+            )
+            if outside_audit.assessment is not None
+            else None,
+        },
+        deep=True,
+    )
+    unresolved = StoryboardDraftContent.model_validate(
+        {
+            **complete.model_dump(mode="json"),
+            "phase": StoryboardDraftPhase.DURATION_RECONCILIATION,
+            "timing_audit": unresolved_audit.model_dump(mode="json"),
+            "committed_groups": [],
+            "verification": None,
+        }
+    )
+    assert unresolved.timing_audit is not None
+    assert unresolved.timing_audit.alignment == DurationAlignment.UNRESOLVED
+
+    with pytest.raises(ValidationError, match="duration reconciliation"):
+        StoryboardDraftContent.model_validate(
+            {
+                **complete.model_dump(mode="json"),
+                "timing_audit": outside_audit.model_dump(mode="json"),
+            }
+        )
+
+    first_group = _group(
+        work_unit_id="work-unit-1",
+        scene_node_id="scene-node-1",
+        scene_id="scene-1",
+        scene_group_sequence=1,
+        line_id="line-1",
+        duration=5.0,
+    )
+    with pytest.raises(ValidationError, match="cannot contain authored groups"):
+        StoryboardDraftContent.model_validate(
+            {
+                **reconciling.model_dump(mode="json"),
+                "committed_groups": [first_group.model_dump(mode="json")],
+            }
+        )
+
+
+def test_verification_findings_can_route_repairs_above_clip_groups() -> None:
+    legacy = StoryboardDraftVerificationFinding(
+        id="legacy-finding",
+        summary="原记录没有显式修复层级。",
+    )
+    script_repair = StoryboardDraftVerificationFinding(
+        id="script-duration-mismatch",
+        summary="自然表演时长无法达到用户的原创故事目标。",
+        repair_scope=StoryboardRepairScope.SCRIPT,
+        affected_scene_sequences=[1, 2],
+        suggested_revision="扩展剧本事件链，再重新生成时长台账。",
+    )
+
+    assert legacy.repair_scope == StoryboardRepairScope.CLIP_GROUP
+    assert legacy.affected_clip_group_ids == []
+    assert script_repair.affected_clip_group_ids == []
+    assert script_repair.affected_scene_sequences == [1, 2]
+
+
 def test_staged_draft_rejects_skipped_source_and_early_phase_transition() -> None:
     complete = _draft()
     with pytest.raises(ValidationError, match="advance through scene nodes in order"):
@@ -563,6 +692,16 @@ def test_spoken_duration_is_a_lower_bound_and_allows_natural_rounding() -> None:
         completes_scene=True,
     )
     assert rounded.minimum_spoken_duration_seconds == 1.8
+
+    fast_delivery = StoryboardTimingLedgerEntry.model_validate(
+        {
+            **rounded.model_dump(mode="json"),
+            "id": "timing-fast-dialogue",
+            "speech_rate_units_per_second": 5.25,
+            "minimum_spoken_duration_seconds": 1.2,
+        }
+    )
+    assert fast_delivery.speech_rate_units_per_second == 5.25
 
     with pytest.raises(ValidationError, match="cannot be shorter"):
         StoryboardTimingLedgerEntry.model_validate(

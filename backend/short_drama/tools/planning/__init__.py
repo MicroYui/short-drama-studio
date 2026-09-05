@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from short_drama.models import PlanningRunResponse
+from pydantic import Field
+
+from short_drama.models import (
+    PlanningRunResponse,
+    ProductionDocumentArtifactRef,
+    ScriptRevisionOrigin,
+    StoryVerificationResolutionDecision,
+)
 from short_drama.tools.contracts import (
     ArtifactRef,
     ToolCategory,
@@ -33,6 +40,18 @@ class PlanningToolService(Protocol):
         owner_agent_run_id: str,
         instruction: str,
         base_script_version_id: str,
+        revision_origin: ScriptRevisionOrigin = ScriptRevisionOrigin.USER_FEEDBACK,
+        evidence_refs: list[ProductionDocumentArtifactRef] | None = None,
+    ) -> PlanningRunResponse: ...
+
+    def resolve_story_verification(
+        self,
+        project_id: str,
+        *,
+        run_id: str,
+        owner_agent_run_id: str,
+        decision: StoryVerificationResolutionDecision,
+        rationale: str,
     ) -> PlanningRunResponse: ...
 
 
@@ -47,6 +66,18 @@ class PlanningStartScriptRevisionInput(ToolModel):
     owner_agent_run_id: str
     instruction: str
     base_script_version_id: str
+    revision_origin: ScriptRevisionOrigin = ScriptRevisionOrigin.USER_FEEDBACK
+    evidence_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+
+
+class PlanningResolveStoryVerificationInput(ToolModel):
+    project_id: str
+    run_id: str
+    owner_agent_run_id: str
+    decision: StoryVerificationResolutionDecision
+    rationale: str = Field(min_length=1, max_length=2400)
 
 
 def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None:
@@ -58,6 +89,8 @@ def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None
             owner_agent_run_id=request.owner_agent_run_id,
             instruction=request.instruction,
             base_script_version_id=request.base_script_version_id,
+            revision_origin=request.revision_origin,
+            evidence_refs=request.evidence_refs,
         )
         return ToolExecution(
             output=response,
@@ -79,13 +112,15 @@ def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None
     registry.register(
         ToolSpec(
             id="planning.start_script_revision",
-            version=1,
+            version=2,
             category=ToolCategory.PLANNING,
             description=(
-                "Start a resumable screenplay revision for the current project. "
-                "It preserves the original brief and current Script/Bible, then lets "
-                "the Leader decide scene patches, all-scene rewriting, or structural "
-                "re-architecture from the full user instruction."
+                "从当前精确 ScriptVersion 启动可恢复的剧本修订。"
+                "USER_FEEDBACK 表示用户的权威修改意见；"
+                "PRODUCTION_CONSTRAINT 表示分镜时长等制片契约与当前"
+                "剧本冲突，必须携带可精确解析的版本化证据。"
+                "Leader 仍基于完整语义决定少数场修订、全场逐场修订"
+                "或结构重构。"
             ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
@@ -96,6 +131,62 @@ def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None
                 {
                     "planning",
                     "script-revision",
+                    "agent-runtime",
+                    "resumable",
+                }
+            ),
+        )
+    )
+
+    def resolve_story_verification(
+        request: PlanningResolveStoryVerificationInput,
+    ) -> ToolExecution[PlanningRunResponse]:
+        response = service.resolve_story_verification(
+            request.project_id,
+            run_id=request.run_id,
+            owner_agent_run_id=request.owner_agent_run_id,
+            decision=request.decision,
+            rationale=request.rationale,
+        )
+        return ToolExecution(
+            output=response,
+            artifact_refs=(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="content_planning_job",
+                    artifact_id=request.run_id,
+                ),
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="project",
+                    artifact_id=request.project_id,
+                ),
+            ),
+            warnings=tuple(dict.fromkeys(response.run.warnings)),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="planning.resolve_story_verification",
+            version=1,
+            category=ToolCategory.PLANNING,
+            description=(
+                "由所属 AgentRun Leader 处理已持久化的 Script/Revision "
+                "Verifier handoff。Leader 需阅读精确 report/verification，"
+                "再语义选择继续聚焦修订、返回 Story Architect，"
+                "或接受明确取舍并说明 rationale。该 Tool 不会将"
+                " rejected/UNRESOLVED 结果伪造为 accepted，也不会自动排 Writer。"
+            ),
+            effect=ToolEffect.EXTERNAL,
+            idempotent=False,
+            input_model=PlanningResolveStoryVerificationInput,
+            output_model=PlanningRunResponse,
+            handler=resolve_story_verification,
+            tags=frozenset(
+                {
+                    "planning",
+                    "story-verification",
+                    "leader-resolution",
                     "agent-runtime",
                     "resumable",
                 }
@@ -169,6 +260,7 @@ def register_tools(registry: ToolRegistry, service: PlanningToolService) -> None
 
 __all__ = [
     "PlanningAdvanceInput",
+    "PlanningResolveStoryVerificationInput",
     "PlanningStartScriptRevisionInput",
     "register_tools",
 ]

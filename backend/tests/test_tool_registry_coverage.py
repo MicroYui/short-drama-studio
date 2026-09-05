@@ -54,7 +54,11 @@ REQUIRED_PRODUCTION_TOOLS = {
         "image.resolve_not_submitted",
         "image.retry",
     },
-    "planning": {"planning.advance", "planning.start_script_revision"},
+    "planning": {
+        "planning.advance",
+        "planning.resolve_story_verification",
+        "planning.start_script_revision",
+    },
     "shot": {
         "shot.apply_director_repair",
         "shot.append_storyboard_group",

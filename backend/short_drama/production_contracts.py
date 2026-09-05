@@ -17,6 +17,13 @@ from pydantic import Field, JsonValue, model_validator
 
 from short_drama.models import (
     DomainModel,
+    DurationAlignment,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationFitAssessment,
+    DurationMismatchResolution,
+    DurationTargetOrigin,
     GenerationUnitShotWindow,
     ProductionDocument,
     ProductionDocumentArtifactRef,
@@ -85,6 +92,11 @@ class ProductionSpecContent(DomainModel):
     aspect_ratio: str = Field(min_length=1, max_length=40)
     target_duration_seconds: float | None = Field(default=None, gt=0.0)
     duration_intent: str | None = Field(default=None, min_length=1, max_length=1000)
+    duration_contract: DurationContract
+    master_audio_binding_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+    )
     visual: ProductionVisualDirection = Field(
         default_factory=ProductionVisualDirection
     )
@@ -93,6 +105,61 @@ class ProductionSpecContent(DomainModel):
     user_constraints: list[str] = Field(default_factory=list[str])
     agent_decisions: list[str] = Field(default_factory=list[str])
     notes: list[str] = Field(default_factory=list[str])
+
+    @model_validator(mode="before")
+    @classmethod
+    def upgrade_legacy_duration_contract(cls, value: object) -> object:
+        """Keep legacy production specs readable without losing their wording."""
+
+        if not isinstance(value, dict):
+            return value
+        payload = cast(dict[str, object], value)
+        if payload.get("duration_contract") is not None:
+            return payload
+        duration_intent = payload.get("duration_intent")
+        decision_basis = (
+            duration_intent
+            if isinstance(duration_intent, str) and duration_intent
+            else "兼容旧 ProductionSpec：原记录未提供结构化时长决策。"
+        )
+        return {
+            **payload,
+            "duration_contract": {
+                "target_seconds": payload.get("target_duration_seconds"),
+                "target_origin": DurationTargetOrigin.LEGACY_UNKNOWN,
+                "authority": DurationAuthority.SOURCE_LED,
+                "acceptable_range_seconds": None,
+                "source_fidelity_policy": (
+                    DurationFidelityPolicy.PRESERVE_VERBATIM
+                ),
+                "mismatch_resolution": (
+                    DurationMismatchResolution.REPORT_NATURAL_RUNTIME
+                ),
+                "decision_basis": decision_basis,
+                "rhythm_shape": [],
+                "user_overridable": True,
+            },
+        }
+
+    @model_validator(mode="after")
+    def validate_duration_projection(self) -> ProductionSpecContent:
+        if (
+            self.target_duration_seconds is not None
+            and self.duration_contract.target_seconds is not None
+            and Decimal(str(self.target_duration_seconds))
+            != Decimal(str(self.duration_contract.target_seconds))
+        ):
+            raise ValueError(
+                "ProductionSpec legacy and structured duration targets must match"
+            )
+        if (
+            self.duration_contract.authority == DurationAuthority.AUDIO_LED
+            and self.master_audio_binding_version_id is None
+        ):
+            raise ValueError(
+                "Audio-led ProductionSpec requires an exact Master Audio binding version"
+            )
+        return self
 
 
 class ClipGroup(DomainModel):
@@ -255,7 +322,6 @@ class StoryboardTimingLedgerEntry(DomainModel):
     speech_rate_units_per_second: float | None = Field(
         default=None,
         gt=0.0,
-        le=4.5,
     )
     minimum_spoken_duration_seconds: float = Field(ge=0.0)
     non_speech_reserve_seconds: float = Field(ge=0.0)
@@ -342,9 +408,9 @@ class StoryboardClipGroupOutline(DomainModel):
 class StoryboardTimingAudit(DomainModel):
     """Persisted summary of MiniMax Design's private timing scratch pass.
 
-    ``source_declared_duration_s`` and ``target_duration_s`` are comparison-only
-    context. Neither value may be used as a budget from which ClipGroup seconds
-    are divided; ``computed_episode_duration_s`` is derived from the outline.
+    Neither a source declaration nor a target may be divided into synthetic
+    ClipGroup budgets. ``computed_episode_duration_s`` is derived from the
+    natural ledger and is then compared with the pinned DurationContract.
     """
 
     source_declared_duration_s: float | None = Field(default=None, gt=0.0)
@@ -354,6 +420,9 @@ class StoryboardTimingAudit(DomainModel):
     non_speech_reserve_s: float = Field(ge=0.0)
     computed_episode_duration_s: float = Field(gt=0.0)
     clip_group_count: int = Field(ge=1)
+    alignment: DurationAlignment = DurationAlignment.NOT_APPLICABLE
+    difference_seconds: float | None = None
+    assessment: DurationFitAssessment | None = None
     overloaded_shot_ids: list[str] = Field(default_factory=list[str])
     overloaded_group_ids: list[str] = Field(default_factory=list[str])
     timing_audit_passed: bool
@@ -379,6 +448,13 @@ class StoryboardTimingAudit(DomainModel):
                 "Computed episode duration cannot be shorter than spoken duration "
                 "plus non-speech reserve"
             )
+        if (
+            self.assessment is not None
+            and self.assessment.alignment != self.alignment
+        ):
+            raise ValueError(
+                "Timing-audit assessment alignment must match the audit alignment"
+            )
         return self
 
 
@@ -387,10 +463,19 @@ class StoryboardDraftVerificationStatus(StrEnum):
     NEEDS_REVISION = "NEEDS_REVISION"
 
 
+class StoryboardRepairScope(StrEnum):
+    CLIP_GROUP = "CLIP_GROUP"
+    STORYBOARD_PLAN = "STORYBOARD_PLAN"
+    SCRIPT = "SCRIPT"
+    PRODUCTION_SPEC = "PRODUCTION_SPEC"
+
+
 class StoryboardDraftVerificationFinding(DomainModel):
     id: str = Field(min_length=1, max_length=200)
     summary: str = Field(min_length=1, max_length=3000)
+    repair_scope: StoryboardRepairScope = StoryboardRepairScope.CLIP_GROUP
     affected_clip_group_ids: list[str] = Field(default_factory=list[str])
+    affected_scene_sequences: list[int] = Field(default_factory=list[int])
     suggested_revision: str | None = Field(default=None, min_length=1, max_length=3000)
 
     @model_validator(mode="after")
@@ -399,6 +484,12 @@ class StoryboardDraftVerificationFinding(DomainModel):
             set(self.affected_clip_group_ids)
         ):
             raise ValueError("Verification finding ClipGroup IDs must be unique")
+        if any(sequence < 1 for sequence in self.affected_scene_sequences):
+            raise ValueError("Verification finding scene sequences must be positive")
+        if len(self.affected_scene_sequences) != len(
+            set(self.affected_scene_sequences)
+        ):
+            raise ValueError("Verification finding scene sequences must be unique")
         return self
 
 
@@ -441,6 +532,7 @@ class StoryboardDraftPhase(StrEnum):
 
     LEDGER_BUILDING = "LEDGER_BUILDING"
     OUTLINE_BUILDING = "OUTLINE_BUILDING"
+    DURATION_RECONCILIATION = "DURATION_RECONCILIATION"
     GROUP_AUTHORING = "GROUP_AUTHORING"
 
 
@@ -870,14 +962,6 @@ class StoryboardDraftContent(DomainModel):
             )
         if self.timing_audit is None:
             raise ValueError("Group-authoring drafts require a sealed timing audit")
-        if (
-            not self.timing_audit.timing_audit_passed
-            or self.timing_audit.overloaded_group_ids
-            or self.timing_audit.overloaded_shot_ids
-        ):
-            raise ValueError(
-                "Group authoring requires a clean timing audit without overloads"
-            )
         planned_duration = sum(item.duration_seconds for item in ordered_plans)
         if abs(
             planned_duration - self.timing_audit.computed_episode_duration_s
@@ -911,6 +995,34 @@ class StoryboardDraftContent(DomainModel):
                 "Timing-audit non-speech reserve must equal the timing ledger"
             )
 
+        if (
+            not self.timing_audit.timing_audit_passed
+            or self.timing_audit.overloaded_group_ids
+            or self.timing_audit.overloaded_shot_ids
+        ):
+            raise ValueError(
+                "A sealed storyboard outline requires a clean timing audit without "
+                "overloads"
+            )
+        if self.timing_audit.alignment in {
+            DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+            DurationAlignment.UNRESOLVED,
+        }:
+            if self.phase != StoryboardDraftPhase.DURATION_RECONCILIATION:
+                raise ValueError(
+                    "An outline with an unresolved or out-of-range duration decision "
+                    "must return to duration reconciliation before group authoring"
+                )
+            if self.committed_groups or self.verification is not None:
+                raise ValueError(
+                    "Duration-reconciliation drafts cannot contain authored groups "
+                    "or verification"
+                )
+            return self
+        if self.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
+            raise ValueError(
+                "Duration reconciliation requires an unresolved or out-of-range audit"
+            )
         group_ids: list[str] = []
         shot_ids: list[str] = []
         for commit in self.committed_groups:

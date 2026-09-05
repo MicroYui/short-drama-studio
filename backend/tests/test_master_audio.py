@@ -27,6 +27,11 @@ from short_drama.models import (
     AssetKind,
     AudioInspectionRequest,
     AudioStructureMap,
+    DurationAuthority,
+    DurationContract,
+    DurationFidelityPolicy,
+    DurationMismatchResolution,
+    DurationTargetOrigin,
     EnqueueRequest,
     Freshness,
     MasterAudioBinding,
@@ -36,12 +41,24 @@ from short_drama.models import (
     MusicAnalysisResponse,
     OutputSpec,
     ProductionDocumentOrigin,
+    StoryIntent,
     TimedTextLock,
     TimedTextLockResponse,
     TimedTextLockUpdateRequest,
     TimelineAudioClip,
     TimelineManifest,
     TimelineVideoClip,
+)
+from short_drama.production_contracts import (
+    ClipGroup,
+    GenerationPlanCompileRequest,
+    PRODUCTION_SPEC_OUTPUT_SLOT_ID,
+    ProductionSpecContent,
+    ProductionSpecCreateRequest,
+    ProductionSpecReplaceRequest,
+    StoryboardContent,
+    StoryboardCreateRequest,
+    StoryboardReplaceRequest,
 )
 from short_drama.music_analysis import LocalMusicAnalysisService
 from short_drama.service import ShortDramaService, WorkflowConflictError
@@ -265,6 +282,212 @@ def test_master_audio_tools_version_documents_and_survive_restart(
     assert MasterAudioBinding.model_validate(persisted.version.payload) == second.binding
 
 
+def test_audio_led_production_spec_pins_master_audio_and_rebind_invalidates_it(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    document = service.initialize_fixture().document
+    project_id = document.project.id
+    audio_path = tmp_path / "audio-led.wav"
+    _write_wav(audio_path)
+    _asset_id, asset_version_id = _approved_audio_version(
+        service,
+        project_id,
+        audio_path,
+    )
+    first_binding = service.bind_master_audio(
+        project_id,
+        MasterAudioBindRequest(
+            asset_version_id=asset_version_id,
+            source_in_seconds=0.5,
+            source_out_seconds=4.5,
+            time_origin_seconds=1.0,
+            origin=ProductionDocumentOrigin.USER,
+        ),
+    )
+    target_seconds = 5.0
+    duration_contract = DurationContract(
+        target_seconds=target_seconds,
+        target_origin=DurationTargetOrigin.MASTER_AUDIO,
+        authority=DurationAuthority.AUDIO_LED,
+        acceptable_range_seconds=None,
+        source_fidelity_policy=DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS,
+        mismatch_resolution=DurationMismatchResolution.FOLLOW_MASTER_AUDIO,
+        decision_basis="已批准的主音频窗口和时间原点共同定义完整时间线。",
+    )
+    document = service.get_project(project_id).document
+    current_script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    current_script.story_intent = StoryIntent(
+        audience_experience="画面动作紧贴已经批准的主音频推进。",
+        dramatic_engine="声音结构驱动画面变化。",
+        progression_strategy="依据主音频段落组织可见行动。",
+        tone_and_plausibility="允许类型化表达，但不改动主音频时间权威。",
+        duration_contract=duration_contract,
+    )
+    service.repository.save_project(document)
+    spec = ProductionSpecContent(
+        project_id=project_id,
+        script_version_id=document.project.current_script_version_id,
+        bible_version_id=document.project.current_bible_version_id,
+        title="主音频驱动制片规格",
+        production_scope="依据主音频生成分镜、画面和时间线。",
+        production_mode="AUDIO_LED",
+        genre_and_setting="测试场景",
+        language="zh-CN",
+        aspect_ratio="9:16",
+        target_duration_seconds=target_seconds,
+        duration_intent="主音频定义完整时间线长度。",
+        duration_contract=duration_contract,
+        master_audio_binding_version_id=first_binding.version.id,
+    )
+    created = service.create_production_spec(
+        project_id,
+        ProductionSpecCreateRequest(
+            spec=spec,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    assert any(
+        ref.artifact_type == "production_document_version"
+        and ref.artifact_id == first_binding.version.id
+        for ref in created.version.source_artifact_refs
+    )
+    document = service.get_project(project_id).document
+    script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    storyboard = service.create_storyboard(
+        project_id,
+        StoryboardCreateRequest(
+            storyboard=StoryboardContent(
+                project_id=project_id,
+                title="主音频驱动分镜",
+                script_version_id=document.project.current_script_version_id,
+                bible_version_id=document.project.current_bible_version_id,
+                production_spec_document_id=created.document.id,
+                production_spec_version_id=created.version.id,
+                script_line_ids=[line.id for line in script.lines],
+                shots=[shot.model_copy(deep=True) for shot in document.shots],
+                clip_groups=[
+                    ClipGroup(
+                        id=f"audio-led-group-{shot.sequence}",
+                        title=f"主音频生成段 {shot.sequence}",
+                        shot_ids=[shot.id],
+                        duration_seconds=shot.duration_seconds,
+                        generation_intent=shot.narrative_purpose,
+                    )
+                    for shot in document.shots
+                ],
+                computed_duration_seconds=sum(
+                    shot.duration_seconds for shot in document.shots
+                ),
+            ),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+
+    second_binding = service.bind_master_audio(
+        project_id,
+        MasterAudioBindRequest(
+            asset_version_id=asset_version_id,
+            source_in_seconds=0.75,
+            source_out_seconds=4.75,
+            time_origin_seconds=1.0,
+            base_version_id=first_binding.version.id,
+            origin=ProductionDocumentOrigin.USER,
+        ),
+    )
+    invalidated = service.get_project(project_id).document
+    spec_slot = next(
+        item
+        for item in invalidated.output_slots
+        if item.id == PRODUCTION_SPEC_OUTPUT_SLOT_ID
+    )
+    assert spec_slot.current_artifact_ref is None
+    assert spec_slot.invalidation_reason is not None
+    assert "Master Audio changed" in spec_slot.invalidation_reason
+    with pytest.raises(WorkflowConflictError, match="current exact Master Audio"):
+        service.replace_production_spec(
+            project_id,
+            ProductionSpecReplaceRequest(
+                spec=spec,
+                base_version_id=created.version.id,
+                origin=ProductionDocumentOrigin.AGENT,
+            ),
+        )
+    with pytest.raises(WorkflowConflictError, match="current exact Master Audio"):
+        service.replace_storyboard(
+            project_id,
+            StoryboardReplaceRequest(
+                storyboard=storyboard.storyboard,
+                base_version_id=storyboard.version.id,
+                origin=ProductionDocumentOrigin.AGENT,
+            ),
+        )
+    with pytest.raises(WorkflowConflictError, match="current exact Master Audio"):
+        service.compile_generation_plan(
+            project_id,
+            GenerationPlanCompileRequest(
+                storyboard_document_id=storyboard.document.id,
+                storyboard_version_id=storyboard.version.id,
+                production_spec_document_id=created.document.id,
+                production_spec_version_id=created.version.id,
+                origin=ProductionDocumentOrigin.AGENT,
+            ),
+        )
+
+    rebound = service.replace_production_spec(
+        project_id,
+        ProductionSpecReplaceRequest(
+            spec=spec.model_copy(
+                update={
+                    "master_audio_binding_version_id": second_binding.version.id,
+                },
+                deep=True,
+            ),
+            base_version_id=created.version.id,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    assert rebound.output_slot.current_artifact_ref is not None
+    assert rebound.spec.master_audio_binding_version_id == second_binding.version.id
+    assert any(
+        ref.artifact_type == "production_document_version"
+        and ref.artifact_id == second_binding.version.id
+        for ref in rebound.version.source_artifact_refs
+    )
+    rebuilt_storyboard = service.replace_storyboard(
+        project_id,
+        StoryboardReplaceRequest(
+            storyboard=storyboard.storyboard.model_copy(
+                deep=True,
+                update={
+                    "production_spec_version_id": rebound.version.id,
+                },
+            ),
+            base_version_id=storyboard.version.id,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    compiled = service.compile_generation_plan(
+        project_id,
+        GenerationPlanCompileRequest(
+            storyboard_document_id=rebuilt_storyboard.document.id,
+            storyboard_version_id=rebuilt_storyboard.version.id,
+            production_spec_document_id=rebound.document.id,
+            production_spec_version_id=rebound.version.id,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    assert compiled.generation_plan.production_spec_version_id == rebound.version.id
+
+
 def test_master_audio_api_projects_timed_text_and_replaces_native_timeline_audio(
     tmp_path: Path,
 ) -> None:
@@ -298,6 +521,53 @@ def test_master_audio_api_projects_timed_text_and_replaces_native_timeline_audio
     )
     assert bound_response.status_code == 200, bound_response.text
     bound = MasterAudioBindingResponse.model_validate(bound_response.json())
+
+    duration_contract = DurationContract(
+        target_seconds=5.0,
+        target_origin=DurationTargetOrigin.MASTER_AUDIO,
+        authority=DurationAuthority.AUDIO_LED,
+        acceptable_range_seconds=None,
+        source_fidelity_policy=(
+            DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+        ),
+        mismatch_resolution=DurationMismatchResolution.FOLLOW_MASTER_AUDIO,
+        decision_basis="已批准的主音频窗口与时间原点定义完整时间线。",
+    )
+    document = service.get_project(project_id).document
+    current_script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    current_script.story_intent = StoryIntent(
+        audience_experience="视听节奏紧贴已批准主音频。",
+        dramatic_engine="声音结构驱动画面变化。",
+        progression_strategy="依据主音频段落组织时间线。",
+        tone_and_plausibility="主音频是该版本的时间权威。",
+        duration_contract=duration_contract,
+    )
+    service.repository.save_project(document)
+    service.create_production_spec(
+        project_id,
+        ProductionSpecCreateRequest(
+            spec=ProductionSpecContent(
+                project_id=project_id,
+                script_version_id=document.project.current_script_version_id,
+                bible_version_id=document.project.current_bible_version_id,
+                title="主音频驱动时间线",
+                production_scope="使用已批准主音频组织视频和字幕。",
+                production_mode="AUDIO_LED",
+                genre_and_setting="主音频集成测试",
+                language="zh-CN",
+                aspect_ratio="9:16",
+                target_duration_seconds=5.0,
+                duration_intent="主音频定义五秒成片时钟。",
+                duration_contract=duration_contract,
+                master_audio_binding_version_id=bound.version.id,
+            ),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
 
     timed_response = client.post(
         f"/api/short-drama/projects/{project_id}/audio/timed-text-lock",
@@ -371,6 +641,105 @@ def test_master_audio_api_projects_timed_text_and_replaces_native_timeline_audio
             },
         )
     assert failure.value.status_code == 409
+
+
+@pytest.mark.parametrize(
+    ("authority", "target_origin", "mismatch_resolution"),
+    [
+        (
+            DurationAuthority.TARGET_LED,
+            DurationTargetOrigin.USER_DECLARED,
+            DurationMismatchResolution.REVISE_SCRIPT,
+        ),
+        (
+            DurationAuthority.SOURCE_LED,
+            DurationTargetOrigin.SOURCE_DECLARED,
+            DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+        ),
+    ],
+)
+def test_bound_master_audio_does_not_take_over_non_audio_led_timeline(
+    tmp_path: Path,
+    authority: DurationAuthority,
+    target_origin: DurationTargetOrigin,
+    mismatch_resolution: DurationMismatchResolution,
+) -> None:
+    service = _service(tmp_path)
+    document = service.initialize_fixture().document
+    project_id = document.project.id
+    service.enqueue(project_id, EnqueueRequest(candidate_count=1))
+    assert service.drain(project_id, 500).remaining_runnable == 0
+    ordinary = service.rebuild_manifest(project_id)
+    duration_contract = DurationContract(
+        target_seconds=ordinary.duration_seconds,
+        target_origin=target_origin,
+        authority=authority,
+        acceptable_range_seconds=None,
+        source_fidelity_policy=(
+            DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+        ),
+        mismatch_resolution=mismatch_resolution,
+        decision_basis="此制片版本的时长权威不是主音频。",
+    )
+    current_script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    current_script.story_intent = StoryIntent(
+        audience_experience="保持剧本的自然演出时长。",
+        dramatic_engine="画面叙事驱动时间线。",
+        progression_strategy="主音频作为素材使用而非总时钟。",
+        tone_and_plausibility="不改变已确定的剧情节奏。",
+        duration_contract=duration_contract,
+    )
+    service.repository.save_project(document)
+    service.create_production_spec(
+        project_id,
+        ProductionSpecCreateRequest(
+            spec=ProductionSpecContent(
+                project_id=project_id,
+                script_version_id=document.project.current_script_version_id,
+                bible_version_id=document.project.current_bible_version_id,
+                title="非音频时长权威测试",
+                production_scope="将主音频作为已批准的时间线音频素材。",
+                production_mode=authority.value,
+                genre_and_setting="时长权威回归测试",
+                language="zh-CN",
+                aspect_ratio="9:16",
+                target_duration_seconds=ordinary.duration_seconds,
+                duration_intent="成片不应被后续绑定的音频自动改长。",
+                duration_contract=duration_contract,
+            ),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+
+    audio_path = tmp_path / f"{authority.value.lower()}.wav"
+    _write_wav(audio_path, duration_seconds=5.0)
+    _, asset_version_id = _approved_audio_version(
+        service,
+        project_id,
+        audio_path,
+    )
+    service.bind_master_audio(
+        project_id,
+        MasterAudioBindRequest(
+            asset_version_id=asset_version_id,
+            source_in_seconds=0.5,
+            source_out_seconds=4.5,
+            time_origin_seconds=1.0,
+            origin=ProductionDocumentOrigin.USER,
+        ),
+    )
+
+    manifest = service.rebuild_manifest(project_id)
+
+    assert manifest.duration_seconds == ordinary.duration_seconds
+    assert sum(clip.duration_seconds for clip in manifest.video_clips) == (
+        ordinary.duration_seconds
+    )
+    assert [clip.role for clip in manifest.audio_clips] == ["MASTER_AUDIO"]
 
 
 def test_local_music_analysis_reports_measured_metadata_without_inventing_fields(

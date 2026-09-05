@@ -10,6 +10,11 @@ from short_drama.hierarchical_script import compose_scene_screenplay
 from short_drama.models import (
     AudioKind,
     CreateProjectRequest,
+    DurationAlignment,
+    DurationAuthority,
+    DurationFidelityPolicy,
+    DurationMismatchResolution,
+    DurationTargetOrigin,
     ProductionProfile,
     ProjectDocument,
     ReferenceRequirement,
@@ -31,6 +36,7 @@ from short_drama.models import (
     StoryRevisionVerification,
 )
 from short_drama.production_planner import (
+    EpisodeOutline,
     PlannedCharacter,
     PlannedLocation,
     PlannedProp,
@@ -46,21 +52,26 @@ from short_drama.production_planner import (
     _canonical_scene_screenplay,
     _outline_prompt,
     _normalize_review_report,
-    _retime_shots,
     _scene_director_prompt,
+    _select_fallback_shots,
     _story_critic_prompt,
+    _story_orientation_prompt,
     _story_repair_plan_prompt,
     _story_revision_verifier_prompt,
     _validate_directed_scene_plan,
+    _validate_story_repair_plan,
     _validate_story_revision_verification,
     build_project_document_from_plan,
+    build_story_source_contract,
     create_production_plan,
     direct_story_scene,
     normalize_story_repair_plan_issue_ids,
     normalize_story_revision_verification_issue_ids,
     orient_story,
     refresh_lightweight_reference_plans,
+    review_story_outline,
     story_revision_review,
+    verify_story_revision,
 )
 from short_drama.production_profiles import (
     ProductionSkillRole,
@@ -295,6 +306,137 @@ def test_review_report_accepts_missing_optional_timing_assessment() -> None:
     normalized = _normalize_review_report(missing_timing_evidence)
 
     assert normalized.performance_timing_assessment is None
+    assert normalized.duration_fit_assessment is None
+
+
+class StaticLanguageClient:
+    def __init__(self, output: str) -> None:
+        self.output = output
+        self.calls = 0
+
+    def validate_credentials(self) -> None:
+        pass
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        del instructions, input_text, image_urls, max_output_tokens
+        self.calls += 1
+        return self.output
+
+
+def test_fresh_script_verifier_missing_duration_assessment_hands_back_unresolved() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=120,
+    )
+    outline = _fallback_episode_outline(request)
+    client = StaticLanguageClient(
+        json.dumps(
+            {
+                "summary": "剧情成立，本次响应漏了时长演读。",
+                "strengths": ["主线清晰"],
+                "issues": [],
+                "requires_revision": False,
+                "recommended_followup": "FINALIZE",
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    result = review_story_outline(request, outline, client)
+
+    assert result.used is True
+    assert client.calls == 1
+    assert result.report is not None
+    assessment = result.report.duration_fit_assessment
+    assert assessment is not None
+    assert assessment.alignment == DurationAlignment.UNRESOLVED
+    assert assessment.estimated_range_seconds is None
+    assert assessment.pressure_points == []
+    assert assessment.resolution == DurationMismatchResolution.REVISE_SCRIPT
+    assert "显式交回 Leader" in assessment.rationale
+    assert len(result.warnings) == 1
+    assert "不自动重试" in result.warnings[0]
+
+
+def test_fresh_revision_verifier_missing_duration_assessment_preserves_story_judgment() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.IDEA_EXPANSION,
+        input_text="主角用一次选择化解冲突。",
+        target_duration_seconds=120,
+    )
+    outline = _fallback_episode_outline(request)
+    review = ScriptReviewReport(
+        summary="需要回收开场冲突。",
+        issues=[
+            ScriptReviewIssue(
+                issue_id="CAUSAL-1",
+                category="CAUSAL_LOGIC",
+                severity=ScriptReviewSeverity.HIGH,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                scene_sequences=[1],
+                observation="开场冲突还没有结果。",
+                recommendation="用主角选择回收冲突。",
+            )
+        ],
+        requires_revision=True,
+    )
+    repair_plan = StoryRepairPlan(
+        summary="聚焦修复开场冲突。",
+        source_promise="保留主角主动选择。",
+        actions=[
+            StoryRepairAction(
+                issue_index=1,
+                issue_id="CAUSAL-1",
+                diagnosis=StoryRepairDiagnosis.OUTLINE_DEFECT,
+                should_revise=True,
+                rationale="剧本尚未回收该问题。",
+                affected_scene_sequences=[1],
+                recommended_change="让主角用可见选择完成回收。",
+            )
+        ],
+    )
+    client = StaticLanguageClient(
+        json.dumps(
+            {
+                "accepted": True,
+                "summary": "剧情修复已成立，本次响应漏了时长演读。",
+                "satisfied_issue_ids": ["CAUSAL-1"],
+                "satisfied_issue_indices": [1],
+                "violations": [],
+                "recommended_followup": "FINALIZE",
+            },
+            ensure_ascii=False,
+        )
+    )
+
+    result = verify_story_revision(
+        request,
+        outline,
+        outline,
+        review,
+        repair_plan,
+        build_story_source_contract(request),
+        client,
+    )
+
+    assert result.used is True
+    assert client.calls == 1
+    assert result.verification is not None
+    assert result.verification.accepted is True
+    assessment = result.verification.duration_fit_assessment
+    assert assessment is not None
+    assert assessment.alignment == DurationAlignment.UNRESOLVED
+    assert assessment.resolution == DurationMismatchResolution.REVISE_SCRIPT
+    assert "显式交回 Leader" in assessment.rationale
+    assert len(result.warnings) == 1
+    assert "不改写其剧情验收结论" in result.warnings[0]
 
 
 class RepairingLanguageClient:
@@ -633,6 +775,11 @@ class StoryOrientationClient:
         del image_urls, max_output_tokens
         self.instructions = instructions
         self.input_text = input_text
+        prompt_payload = json.loads(input_text)
+        user_declared_target = prompt_payload[
+            "user_declared_target_duration_seconds"
+        ]
+        working_target = prompt_payload["working_target_duration_seconds"]
         return json.dumps(
             {
                 "source_contract": {
@@ -648,6 +795,21 @@ class StoryOrientationClient:
                     "dramatic_engine": "常识能力在新世界里变成稀缺天赋，并逐级放大公开反应。",
                     "progression_strategy": "从日常小事推进到更高影响，但每段都先给可见兑现。",
                     "tone_and_plausibility": "接受类型化夸张和无厘头反应，不要求现实制度解释。",
+                    "duration_contract": {
+                        "target_seconds": working_target,
+                        "target_origin": (
+                            "USER_DECLARED"
+                            if user_declared_target is not None
+                            else "PROFILE_DEFAULT"
+                        ),
+                        "authority": "TARGET_LED",
+                        "acceptable_range_seconds": None,
+                        "source_fidelity_policy": "PRESERVE_STORY_COMMITMENTS",
+                        "mismatch_resolution": "REVISE_SCRIPT",
+                        "decision_basis": "按用户目标或格式工作值规划原创规模。",
+                        "rhythm_shape": [],
+                        "user_overridable": True,
+                    },
                     "protected_elements": ["主角数学水平不变"],
                     "drift_risks": ["不要写成严肃制度推演"],
                 },
@@ -685,6 +847,33 @@ class StoryOrientationClient:
         )
 
 
+class LegacyStoryOrientationClient(StoryOrientationClient):
+    def __init__(self, *, invalidate_another_field: bool = False) -> None:
+        super().__init__()
+        self.invalidate_another_field = invalidate_another_field
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        payload = json.loads(
+            super().generate_text(
+                instructions=instructions,
+                input_text=input_text,
+                image_urls=image_urls,
+                max_output_tokens=max_output_tokens,
+            )
+        )
+        del payload["story_intent"]["duration_contract"]
+        if self.invalidate_another_field:
+            payload["story_intent"]["audience_experience"] = ""
+        return json.dumps(payload, ensure_ascii=False)
+
+
 class LockedStoryOrientationClient:
     def validate_credentials(self) -> None:
         pass
@@ -697,7 +886,8 @@ class LockedStoryOrientationClient:
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
-        del instructions, input_text, image_urls, max_output_tokens
+        del instructions, image_urls, max_output_tokens
+        prompt_payload = json.loads(input_text)
         return json.dumps(
             {
                 "source_contract": {
@@ -716,6 +906,19 @@ class LockedStoryOrientationClient:
                     "dramatic_engine": "录音内容与人物当下选择形成信息差。",
                     "progression_strategy": "线索和不信任逐步加深。",
                     "tone_and_plausibility": "保持现实行为逻辑。",
+                    "duration_contract": {
+                        "target_seconds": prompt_payload[
+                            "working_target_duration_seconds"
+                        ],
+                        "target_origin": "USER_DECLARED",
+                        "authority": "SOURCE_LED",
+                        "acceptable_range_seconds": None,
+                        "source_fidelity_policy": "PRESERVE_VERBATIM",
+                        "mismatch_resolution": "REPORT_NATURAL_RUNTIME",
+                        "decision_basis": "用户要求锁定原文，自然演读时长优先。",
+                        "rhythm_shape": [],
+                        "user_overridable": True,
+                    },
                     "protected_elements": ["五句原始台词"],
                     "drift_risks": ["不要解释过度"],
                 },
@@ -756,10 +959,113 @@ def test_story_orientation_exposes_only_source_verifiable_skill_catalogs() -> No
     assert "MiniMax-H3 方法提供可组合的任务级表达方法" in client.instructions
     assert "没有通用真人短剧" not in client.instructions
     payload = json.loads(client.input_text)
+    assert payload["user_declared_target_duration_seconds"] == 180
+    assert payload["working_target_duration_seconds"] == 180
     assert payload["available_narrative_skills"] == []
     assert {
         item["id"] for item in payload["available_production_methods"]
     } == {descriptor.id for descriptor in production_method_skill_catalog()}
+
+
+def test_story_orientation_upgrades_only_a_missing_duration_contract() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.IDEA_EXPANSION,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
+        input_text="一个可自由扩写的原创故事。",
+        target_duration_seconds=120,
+    )
+
+    result = orient_story(request, LegacyStoryOrientationClient())
+
+    assert result.used is True
+    assert result.orientation is not None
+    contract = result.orientation.story_intent.duration_contract
+    assert contract is not None
+    assert contract.target_seconds == 120
+    assert contract.target_origin == DurationTargetOrigin.USER_DECLARED
+    assert contract.authority == DurationAuthority.TARGET_LED
+    assert contract.acceptable_range_seconds is None
+    assert len(result.warnings) == 1
+    assert "旧版合法结构" in result.warnings[0]
+
+
+def test_story_orientation_does_not_hide_other_invalid_legacy_fields() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.IDEA_EXPANSION,
+        input_text="一个可自由扩写的原创故事。",
+        target_duration_seconds=120,
+    )
+
+    result = orient_story(
+        request,
+        LegacyStoryOrientationClient(invalidate_another_field=True),
+    )
+
+    assert result.used is False
+    assert result.orientation is None
+    assert "audience_experience" in result.warnings[0]
+
+
+def test_story_orientation_distinguishes_declared_and_working_duration() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.AI_SHORT_DRAMA,
+    )
+    instructions, input_text = _story_orientation_prompt(
+        request,
+        build_story_source_contract(request),
+    )
+    payload = json.loads(input_text)
+
+    assert payload["user_declared_target_duration_seconds"] is None
+    assert payload["working_target_duration_seconds"] == 300
+    assert "duration_contract" in payload["output_schema"]["$defs"][
+        "StoryIntent"
+    ]["required"]
+    assert "acceptable_range_seconds" in instructions
+    assert "根据内容不确定性、媒介用途、来源保真与当前 Method" in instructions
+    assert "不按固定百分比或全局默认自动造容差" in instructions
+    assert "可根据题材合并、省略或改名" in instructions
+
+
+def test_fallback_duration_contract_respects_target_origin_and_locked_source() -> None:
+    explicit = CreateProjectRequest(
+        source_mode=SourceMode.IDEA_EXPANSION,
+        input_text="一个可自由改写的原创故事。",
+        target_duration_seconds=120,
+    )
+    explicit_contract = _fallback_episode_outline(explicit).story_intent
+    assert explicit_contract is not None
+    assert explicit_contract.duration_contract is not None
+    assert (
+        explicit_contract.duration_contract.target_origin
+        == DurationTargetOrigin.USER_DECLARED
+    )
+    assert explicit_contract.duration_contract.authority == DurationAuthority.TARGET_LED
+    assert explicit_contract.duration_contract.acceptable_range_seconds is None
+
+    profile_default = CreateProjectRequest(source_mode=SourceMode.AUTO_ORIGINAL)
+    default_intent = _fallback_episode_outline(profile_default).story_intent
+    assert default_intent is not None
+    assert default_intent.duration_contract is not None
+    assert (
+        default_intent.duration_contract.target_origin
+        == DurationTargetOrigin.PROFILE_DEFAULT
+    )
+
+    locked = _fallback_episode_outline(_request()).story_intent
+    assert locked is not None
+    assert locked.duration_contract is not None
+    assert locked.duration_contract.authority == DurationAuthority.SOURCE_LED
+    assert (
+        locked.duration_contract.source_fidelity_policy
+        == DurationFidelityPolicy.PRESERVE_VERBATIM
+    )
+    assert (
+        locked.duration_contract.mismatch_resolution
+        == DurationMismatchResolution.REPORT_NATURAL_RUNTIME
+    )
+    assert locked.duration_contract.acceptable_range_seconds is None
 
 
 def test_story_orientation_structures_plain_locked_dialogue_semantically() -> None:
@@ -893,7 +1199,10 @@ def test_douyin_long_form_prompts_leave_pacing_to_semantic_reading() -> None:
 
     assert "AI 短剧（本地格式适配）" in architect_instructions
     assert "不再自建一套爆款、爽剧、喜剧" in architect_instructions
-    assert "时长算术本身不代表内容成立" in architect_instructions
+    assert "时长算术本身不代表可表演内容成立" in architect_instructions
+    assert "TARGET_LED 项目" in architect_instructions
+    assert "SOURCE_LED 项目" in architect_instructions
+    assert "AUDIO_LED 项目" in architect_instructions
     assert "主导类型、主角行动路线与核心情绪" in architect_instructions
     assert "爽点、情感释放或反转都应从前面的铺垫" in architect_instructions
     assert "[grounded-institutional-causality]" not in architect_instructions
@@ -903,11 +1212,15 @@ def test_douyin_long_form_prompts_leave_pacing_to_semantic_reading() -> None:
     assert "对立力量的反应、受挫或反噬" in critic_instructions
     assert "结尾要看实际可读剧本" in critic_instructions
     assert "第一判断依据是 StoryIntent" in critic_instructions
-    assert "performance_timing_assessment 中简要说明主要压力点" in critic_instructions
-    assert "不要逐场建立语速、动作和停顿账本" in critic_instructions
-    assert "performance_timing_assessment" not in critic_payload["output_schema"][
-        "required"
-    ]
+    assert "duration_fit_assessment" in critic_instructions
+    assert "不用字数公式、固定容差或逐句账本" in critic_instructions
+    assert "duration_fit_assessment" in critic_payload["output_schema"]["required"]
+    assert critic_payload["duration_contract"] == (
+        outline.story_intent.duration_contract.model_dump(mode="json")
+        if outline.story_intent is not None
+        and outline.story_intent.duration_contract is not None
+        else None
+    )
     assert "pacing_evidence" not in critic_payload
     assert "各场可信范围、全剧范围" in final_read_instructions
     assert "本场究竟改变了什么" in final_read_instructions
@@ -1016,7 +1329,8 @@ def test_story_revision_prompts_treat_script_review_as_separate_delivery() -> No
     assert "铺垫是否释放成爽点" in verifier_instructions
     assert "对立力量的受挫、反应或反噬" in verifier_instructions
     assert "才以逻辑理由否决" in verifier_instructions
-    assert "不逐场建立表演时长账本" in verifier_instructions
+    assert "duration_fit_assessment" in verifier_instructions
+    assert "不用字数公式、固定容差或逐句账本" in verifier_instructions
     assert "recommended_followup=FINALIZE" in verifier_instructions
     assert "不再把稿件转交给另一个独立审校角色" in verifier_instructions
     assert "旧运行记录" not in verifier_instructions
@@ -1046,6 +1360,12 @@ def test_story_revision_prompts_treat_script_review_as_separate_delivery() -> No
             if outline.ending_contract is not None
             else None
         ),
+        "duration_contract": (
+            outline.story_intent.duration_contract.model_dump(mode="json")
+            if outline.story_intent is not None
+            and outline.story_intent.duration_contract is not None
+            else None
+        ),
         "readable_final_screenplay": [
             {
                 "scene_sequence": outline.scenes[0].sequence,
@@ -1062,6 +1382,7 @@ def test_story_revision_prompts_treat_script_review_as_separate_delivery() -> No
     assert "issue_id" in repair_schema["$defs"]["StoryRepairAction"]["required"]
     verifier_schema = json.loads(verifier_input)["output_schema"]
     assert "satisfied_issue_ids" in verifier_schema["required"]
+    assert "duration_fit_assessment" in verifier_schema["required"]
     assert (
         "issue_id"
         in verifier_schema["$defs"]["StoryRevisionViolation"]["required"]
@@ -1175,8 +1496,83 @@ def test_story_revision_verifier_rejects_an_unscoped_scene_violation() -> None:
         )
 
 
+def test_duration_reallocation_scope_is_semantic_not_an_arithmetic_gate() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=120,
+    )
+    outline_payload = _fallback_episode_outline(request).model_dump(mode="python")
+    template = outline_payload["scenes"][0]
+    outline_payload["scenes"] = [
+        {
+            **template,
+            "sequence": 1,
+            "heading": "时长尚未重分配的第一场",
+            "target_duration_seconds": 160.0,
+        },
+        {
+            **template,
+            "sequence": 2,
+            "heading": "待 Agent 重新判断的第二场",
+            "target_duration_seconds": 20.0,
+        },
+    ]
+    outline = EpisodeOutline.model_validate(outline_payload)
+    review = ScriptReviewReport(
+        summary="第二场需要重新判断自然时长。",
+        issues=[
+            ScriptReviewIssue(
+                issue_id="DURATION-1",
+                category="DURATION_FIT",
+                severity=ScriptReviewSeverity.HIGH,
+                owner=ReviewRepairOwner.STORY_ARCHITECT,
+                scene_sequences=[2],
+                observation="自然演读显示第二场尺度需重新判断。",
+                recommendation="由 Agent 结合剧情重新分配场次时长。",
+            )
+        ],
+        requires_revision=True,
+    )
+    repair_plan = StoryRepairPlan(
+        summary="将时长重新判断交给负责剧情修订的 Agent。",
+        source_promise="保留原始剧情承诺。",
+        actions=[
+            StoryRepairAction(
+                issue_index=1,
+                issue_id="DURATION-1",
+                diagnosis=StoryRepairDiagnosis.OUTLINE_DEFECT,
+                should_revise=True,
+                rationale="当前只能确定需重新判断第二场。",
+                affected_scene_sequences=[2],
+                target_duration_change_required=True,
+                recommended_change="根据修订后内容重新确定时长。",
+            )
+        ],
+    )
+
+    _validate_story_repair_plan(review, outline, repair_plan)
+
+    verification = StoryRevisionVerification(
+        accepted=False,
+        summary="重新演读后仍需调整第二场。",
+        satisfied_issue_ids=["DURATION-1"],
+        violations=[
+            StoryRevisionViolation(
+                issue_id="DURATION-2",
+                category="DURATION_FIT",
+                scene_sequences=[2],
+                target_duration_change_required=True,
+                observation="修订后自然时长仍与新的内容规模不符。",
+                repair_instruction="继续由 Agent 根据剧情证据调整。",
+            )
+        ],
+    )
+
+    _validate_story_revision_verification(outline, repair_plan, verification)
+
+
 @pytest.mark.parametrize("target_seconds", [180, 300, 430, 600, 900])
-def test_ai_short_drama_scaffold_preserves_multi_minute_duration_contract(
+def test_ai_short_drama_scaffold_preserves_target_without_synthetic_shot_runtime(
     target_seconds: int,
 ) -> None:
     request = CreateProjectRequest(
@@ -1185,16 +1581,31 @@ def test_ai_short_drama_scaffold_preserves_multi_minute_duration_contract(
     )
 
     plan = _fallback_plan(request)
+    baseline = _fallback_plan(
+        CreateProjectRequest(
+            source_mode=SourceMode.AUTO_ORIGINAL,
+            target_duration_seconds=180,
+        )
+    )
 
     assert plan.target_duration_seconds == target_seconds
     assert sum(scene.target_duration_seconds for scene in plan.scenes) == pytest.approx(
         target_seconds
     )
-    assert sum(shot.duration_seconds for shot in plan.shots) == pytest.approx(target_seconds)
+    assert sum(shot.duration_seconds for shot in plan.shots) != pytest.approx(
+        target_seconds
+    )
+    assert [shot.duration_seconds for shot in plan.shots] == [
+        shot.duration_seconds for shot in baseline.shots
+    ]
     assert [scene.sequence for scene in plan.scenes] == list(
         range(1, len(plan.scenes) + 1)
     )
     assert all(shot.duration_seconds > 0 for shot in plan.shots)
+    assert all(
+        "自然时长尚未由 Agent 判定" in shot.local_rework_risk
+        for shot in plan.shots
+    )
     assert {shot.scene_sequence for shot in plan.shots} == {
         scene.sequence for scene in plan.scenes
     }
@@ -1342,6 +1753,42 @@ def test_general_profile_accepts_silent_long_take_plan_without_density_gate() ->
     assert plan.lines == []
 
 
+def test_production_plan_does_not_apply_a_global_duration_tolerance() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        production_profile=ProductionProfile.GENERAL_VIDEO,
+        target_duration_seconds=120,
+    )
+    payload = _fallback_plan(request).model_dump(mode="json")
+    payload["shots"][0]["duration_seconds"] = 4.0
+
+    plan = ProductionPlan.model_validate(payload)
+
+    assert plan.target_duration_seconds == 120
+    assert sum(shot.duration_seconds for shot in plan.shots) == 4.0
+
+
+def test_scene_director_duration_mismatch_remains_a_semantic_handoff() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.AUTO_ORIGINAL,
+        target_duration_seconds=120,
+    )
+    outline = _fallback_episode_outline(request)
+    scene = outline.scenes[0]
+    plan = _fallback_directed_scene_plan(
+        request,
+        outline,
+        scene,
+        scene.continuity_in,
+    )
+    plan.shots[0].duration_seconds = 4.0
+
+    _validate_directed_scene_plan(outline, scene, plan)
+
+    assert scene.target_duration_seconds == 120
+    assert sum(shot.duration_seconds for shot in plan.shots) == 4.0
+
+
 def test_production_subject_names_are_unique_across_asset_kinds() -> None:
     payload = _fallback_plan(_request()).model_dump(mode="json")
     payload["locations"][0]["name"] = payload["characters"][0]["name"]
@@ -1379,21 +1826,34 @@ def test_local_scaffold_does_not_choose_style_or_profile_specific_rhythm() -> No
         assert hardcoded_choice not in serialized
 
 
-def test_editorial_retiming_does_not_split_at_h3_request_boundary() -> None:
+def test_fallback_shot_selection_does_not_allocate_the_scene_target() -> None:
     request = CreateProjectRequest(
         source_mode=SourceMode.AUTO_ORIGINAL,
         production_profile=ProductionProfile.GENERAL_VIDEO,
     )
-    templates = _fallback_plan(request).shots[:3]
+    template = _fallback_plan(request).shots[0]
+    template_durations = [5.0, 7.0, 11.0]
+    templates = [
+        template.model_copy(deep=True, update={"duration_seconds": duration})
+        for duration in template_durations
+    ]
 
-    shots = _retime_shots(
+    shots = _select_fallback_shots(
         templates,
-        target_duration_seconds=75.0,
-        scene_sequence=1,
+        scene_sequence=3,
         preferred_count=3,
     )
 
-    assert [shot.duration_seconds for shot in shots] == [25.0, 25.0, 25.0]
+    assert [shot.duration_seconds for shot in shots] == template_durations
+    assert all(shot.scene_sequence == 3 for shot in shots)
+    assert all(
+        shot is not source
+        for shot, source in zip(shots, templates, strict=True)
+    )
+    assert all(
+        "自然时长尚未由 Agent 判定" in shot.local_rework_risk
+        for shot in shots
+    )
 
 
 def test_empty_reference_needs_remain_explicitly_empty() -> None:

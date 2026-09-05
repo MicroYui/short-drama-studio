@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 import json
 from typing import Protocol, cast
 
@@ -13,18 +14,24 @@ from short_drama.models import (
     GenerationTask,
     PlanningRunRecord,
     PlanningRunStep,
+    ProductionDocument,
+    ProductionDocumentVersion,
     ProjectDocument,
     Take,
 )
 from short_drama.production_contracts import (
     GENERATION_PLAN_DOCUMENT_KIND,
+    GENERATION_PLAN_OUTPUT_SLOT_ID,
     PRODUCTION_SPEC_DOCUMENT_KIND,
+    PRODUCTION_SPEC_OUTPUT_SLOT_ID,
     STORYBOARD_DOCUMENT_KIND,
     STORYBOARD_DRAFT_DOCUMENT_KIND,
+    STORYBOARD_OUTPUT_SLOT_ID,
     GenerationPlanContent,
     ProductionSpecContent,
     StoryboardContent,
     StoryboardDraftContent,
+    StoryboardDraftPhase,
 )
 
 
@@ -103,6 +110,180 @@ def _current_bible(document: ProjectDocument):
     )
 
 
+@dataclass(frozen=True)
+class _CurrentProductionChain:
+    """The valid current Spec -> Storyboard -> GenerationPlan dependency chain."""
+
+    spec_document: ProductionDocument | None = None
+    spec_version: ProductionDocumentVersion | None = None
+    spec: ProductionSpecContent | None = None
+    storyboard_document: ProductionDocument | None = None
+    storyboard_version: ProductionDocumentVersion | None = None
+    storyboard: StoryboardContent | None = None
+    generation_plan_document: ProductionDocument | None = None
+    generation_plan_version: ProductionDocumentVersion | None = None
+    generation_plan: GenerationPlanContent | None = None
+
+
+def _bound_current_production_version(
+    document: ProjectDocument,
+    *,
+    slot_id: str,
+    document_id: str | None,
+    document_kind: str,
+    artifact_type: str,
+) -> tuple[ProductionDocument, ProductionDocumentVersion] | None:
+    """Resolve one managed output only when its slot and document agree exactly."""
+
+    if document_id is None:
+        return None
+    output_slot = next(
+        (item for item in document.output_slots if item.id == slot_id),
+        None,
+    )
+    artifact_ref = None if output_slot is None else output_slot.current_artifact_ref
+    if (
+        artifact_ref is None
+        or artifact_ref.project_id != document.project.id
+        or artifact_ref.artifact_type != artifact_type
+        or artifact_ref.artifact_id != document_id
+        or artifact_ref.version is None
+    ):
+        return None
+    production_document = next(
+        (
+            item
+            for item in document.production_documents
+            if item.id == document_id and item.kind == document_kind
+        ),
+        None,
+    )
+    if production_document is None:
+        return None
+    version = next(
+        (
+            item
+            for item in production_document.versions
+            if item.id == production_document.current_version_id
+        ),
+        None,
+    )
+    if version is None or version.version != artifact_ref.version:
+        return None
+    return production_document, version
+
+
+def _current_production_chain(document: ProjectDocument) -> _CurrentProductionChain:
+    """Return only outputs that still pin the project's current upstream truth."""
+
+    script = _current_script(document)
+    bible = _current_bible(document)
+    if script is None or bible is None:
+        return _CurrentProductionChain()
+
+    spec_binding = _bound_current_production_version(
+        document,
+        slot_id=PRODUCTION_SPEC_OUTPUT_SLOT_ID,
+        document_id=document.production_spec_document_id,
+        document_kind=PRODUCTION_SPEC_DOCUMENT_KIND,
+        artifact_type="production_spec",
+    )
+    if spec_binding is None:
+        return _CurrentProductionChain()
+    spec_document, spec_version = spec_binding
+    try:
+        spec = ProductionSpecContent.model_validate(spec_version.payload)
+    except ValueError:
+        return _CurrentProductionChain()
+    story_duration_contract = (
+        None if script.story_intent is None else script.story_intent.duration_contract
+    )
+    if (
+        spec.project_id != document.project.id
+        or spec.script_version_id != script.id
+        or spec.bible_version_id != bible.id
+        or (
+            story_duration_contract is not None
+            and spec.duration_contract != story_duration_contract
+        )
+    ):
+        return _CurrentProductionChain()
+    chain = _CurrentProductionChain(
+        spec_document=spec_document,
+        spec_version=spec_version,
+        spec=spec,
+    )
+
+    storyboard_binding = _bound_current_production_version(
+        document,
+        slot_id=STORYBOARD_OUTPUT_SLOT_ID,
+        document_id=document.storyboard_document_id,
+        document_kind=STORYBOARD_DOCUMENT_KIND,
+        artifact_type="storyboard",
+    )
+    if storyboard_binding is None:
+        return chain
+    storyboard_document, storyboard_version = storyboard_binding
+    try:
+        storyboard = StoryboardContent.model_validate(storyboard_version.payload)
+    except ValueError:
+        return chain
+    if (
+        storyboard.project_id != document.project.id
+        or storyboard.script_version_id != script.id
+        or storyboard.bible_version_id != bible.id
+        or storyboard.production_spec_document_id != spec_document.id
+        or storyboard.production_spec_version_id != spec_version.id
+    ):
+        return chain
+    chain = _CurrentProductionChain(
+        spec_document=spec_document,
+        spec_version=spec_version,
+        spec=spec,
+        storyboard_document=storyboard_document,
+        storyboard_version=storyboard_version,
+        storyboard=storyboard,
+    )
+
+    generation_plan_binding = _bound_current_production_version(
+        document,
+        slot_id=GENERATION_PLAN_OUTPUT_SLOT_ID,
+        document_id=document.generation_plan_document_id,
+        document_kind=GENERATION_PLAN_DOCUMENT_KIND,
+        artifact_type="generation_plan",
+    )
+    if generation_plan_binding is None:
+        return chain
+    generation_plan_document, generation_plan_version = generation_plan_binding
+    try:
+        generation_plan = GenerationPlanContent.model_validate(
+            generation_plan_version.payload
+        )
+    except ValueError:
+        return chain
+    if (
+        generation_plan.project_id != document.project.id
+        or generation_plan.script_version_id != script.id
+        or generation_plan.bible_version_id != bible.id
+        or generation_plan.production_spec_document_id != spec_document.id
+        or generation_plan.production_spec_version_id != spec_version.id
+        or generation_plan.storyboard_document_id != storyboard_document.id
+        or generation_plan.storyboard_version_id != storyboard_version.id
+    ):
+        return chain
+    return _CurrentProductionChain(
+        spec_document=spec_document,
+        spec_version=spec_version,
+        spec=spec,
+        storyboard_document=storyboard_document,
+        storyboard_version=storyboard_version,
+        storyboard=storyboard,
+        generation_plan_document=generation_plan_document,
+        generation_plan_version=generation_plan_version,
+        generation_plan=generation_plan,
+    )
+
+
 def _typed_production_version(
     document: ProjectDocument,
     *,
@@ -155,6 +336,37 @@ def _generation_plan_versions(document: ProjectDocument):
             except ValueError:
                 continue
             yield production_document, version, generation_plan
+
+
+def _production_spec_summary(
+    production_document_id: str,
+    version_id: str,
+    version_number: int,
+    spec: ProductionSpecContent,
+) -> str:
+    """Keep the pinned duration contract ahead of verbose production direction."""
+
+    payload = spec.model_dump(mode="json")
+    priority_keys = (
+        "project_id",
+        "script_version_id",
+        "bible_version_id",
+        "duration_contract",
+        "target_duration_seconds",
+        "duration_intent",
+    )
+    priority = {key: payload.pop(key) for key in priority_keys}
+    return json.dumps(
+        {
+            "production_spec_document_id": production_document_id,
+            "production_spec_version_id": version_id,
+            "production_spec_version": version_number,
+            **priority,
+            **payload,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _storyboard_draft_summary(
@@ -241,6 +453,7 @@ def _storyboard_draft_summary(
     timing_audit = draft.timing_audit
     timing_audit_summary: dict[str, object] | None = None
     if timing_audit is not None:
+        assessment = timing_audit.assessment
         timing_audit_summary = {
             "source_declared_duration_s": timing_audit.source_declared_duration_s,
             "target_duration_s": timing_audit.target_duration_s,
@@ -251,11 +464,37 @@ def _storyboard_draft_summary(
                 timing_audit.computed_episode_duration_s
             ),
             "clip_group_count": timing_audit.clip_group_count,
+            "alignment": timing_audit.alignment.value,
+            "difference_seconds": timing_audit.difference_seconds,
+            "assessment": (
+                None
+                if assessment is None
+                else {
+                    "estimated_range_seconds": (
+                        None
+                        if assessment.estimated_range_seconds is None
+                        else assessment.estimated_range_seconds.model_dump(
+                            mode="json"
+                        )
+                    ),
+                    "alignment": assessment.alignment.value,
+                    "pressure_points": [
+                        bounded_text(item, limit=200)
+                        for item in assessment.pressure_points[:3]
+                    ],
+                    "concurrent_performance": [
+                        bounded_text(item, limit=200)
+                        for item in assessment.concurrent_performance[:3]
+                    ],
+                    "resolution": assessment.resolution.value,
+                    "rationale": bounded_text(assessment.rationale, limit=500),
+                }
+            ),
             "overloaded_shot_ids": timing_audit.overloaded_shot_ids,
             "overloaded_group_ids": timing_audit.overloaded_group_ids,
             "timing_audit_passed": timing_audit.timing_audit_passed,
             "notes": [
-                bounded_text(item, limit=300) for item in timing_audit.notes[:8]
+                bounded_text(item, limit=240) for item in timing_audit.notes[:4]
             ],
         }
 
@@ -280,6 +519,9 @@ def _storyboard_draft_summary(
             "production_spec_document_id": draft.production_spec_document_id,
             "production_spec_version_id": draft.production_spec_version_id,
             "base_storyboard_version_id": draft.base_storyboard_version_id,
+            # Duration reconciliation is a Leader decision, so its exact pinned
+            # inputs and mismatch evidence must survive ContextPack truncation.
+            "timing_audit": timing_audit_summary,
             "scene_nodes": [
                 {
                     "id": node.id,
@@ -339,7 +581,6 @@ def _storyboard_draft_summary(
                 }
                 for item in ordered_plans
             ],
-            "timing_audit": timing_audit_summary,
             "next_unplanned_source": {
                 "scene_node_id": next_scene_node_id,
                 "script_line_id": next_script_line_id,
@@ -424,8 +665,12 @@ def _storyboard_draft_summary(
                         {
                             "id": finding.id,
                             "summary": bounded_text(finding.summary),
+                            "repair_scope": finding.repair_scope.value,
                             "affected_clip_group_ids": (
                                 finding.affected_clip_group_ids
+                            ),
+                            "affected_scene_sequences": (
+                                finding.affected_scene_sequences
                             ),
                             "suggested_revision": bounded_text(
                                 finding.suggested_revision
@@ -561,6 +806,21 @@ class ProjectArtifactResolver:
                         "screenplay_text": script.screenplay_text,
                         "spoken_text": script.spoken_text,
                         "subtitle_text": script.subtitle_text,
+                        "story_intent": (
+                            None
+                            if script.story_intent is None
+                            else script.story_intent.model_dump(mode="json")
+                        ),
+                        "ending_contract": (
+                            None
+                            if script.ending_contract is None
+                            else script.ending_contract.model_dump(mode="json")
+                        ),
+                        "source_contract": (
+                            None
+                            if script.source_contract is None
+                            else script.source_contract.model_dump(mode="json")
+                        ),
                         "lines": [
                             item.model_dump(mode="json") for item in script.lines
                         ],
@@ -914,7 +1174,12 @@ class ProjectArtifactResolver:
             return ArtifactSummary(
                 ref=ref,
                 title=f"ProductionSpec v{version.version}",
-                summary=spec.model_dump_json(),
+                summary=_production_spec_summary(
+                    ref.artifact_id,
+                    version.id,
+                    version.version,
+                    spec,
+                ),
             )
         if ref.artifact_type == "storyboard":
             version = _typed_production_version(
@@ -1217,12 +1482,44 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
                 version=bible.version,
             )
         )
+    current_chain = _current_production_chain(document)
+    managed_current_versions: dict[str, tuple[str, str]] = {}
+    if (
+        current_chain.spec_document is not None
+        and current_chain.spec_version is not None
+    ):
+        managed_current_versions[PRODUCTION_SPEC_DOCUMENT_KIND] = (
+            current_chain.spec_document.id,
+            current_chain.spec_version.id,
+        )
+    if (
+        current_chain.storyboard_document is not None
+        and current_chain.storyboard_version is not None
+    ):
+        managed_current_versions[STORYBOARD_DOCUMENT_KIND] = (
+            current_chain.storyboard_document.id,
+            current_chain.storyboard_version.id,
+        )
+    if (
+        current_chain.generation_plan_document is not None
+        and current_chain.generation_plan_version is not None
+    ):
+        managed_current_versions[GENERATION_PLAN_DOCUMENT_KIND] = (
+            current_chain.generation_plan_document.id,
+            current_chain.generation_plan_version.id,
+        )
     current_production_document_ids = [
         document_id
         for document_id in (
-            document.production_spec_document_id,
-            document.storyboard_document_id,
-            document.generation_plan_document_id,
+            None
+            if current_chain.spec_document is None
+            else current_chain.spec_document.id,
+            None
+            if current_chain.storyboard_document is None
+            else current_chain.storyboard_document.id,
+            None
+            if current_chain.generation_plan_document is None
+            else current_chain.generation_plan_document.id,
             document.master_audio_document_id,
             document.audio_structure_document_id,
             document.timed_text_document_id,
@@ -1246,7 +1543,20 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
     current_typed_refs: list[ArtifactRef] = []
     current_generic_refs: list[ArtifactRef] = []
     other_production_refs: list[ArtifactRef] = []
+    duration_reconciliation_candidates: list[tuple[str, list[ArtifactRef]]] = []
     production_child_refs: list[ArtifactRef] = []
+
+    def remove_default_refs(items: Sequence[ArtifactRef]) -> None:
+        identities = {item.identity() for item in items}
+        for bucket in (
+            current_typed_refs,
+            current_generic_refs,
+            other_production_refs,
+        ):
+            bucket[:] = [
+                item for item in bucket if item.identity() not in identities
+            ]
+
     for production_document in ordered_production_documents:
         current = next(
             (
@@ -1258,6 +1568,20 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
         )
         if current is None:
             continue
+        expected_managed_version = managed_current_versions.get(
+            production_document.kind
+        )
+        if production_document.kind in {
+            PRODUCTION_SPEC_DOCUMENT_KIND,
+            STORYBOARD_DOCUMENT_KIND,
+            GENERATION_PLAN_DOCUMENT_KIND,
+        } and expected_managed_version != (
+            production_document.id,
+            current.id,
+        ):
+            # Managed historical outputs remain resolvable by exact requested
+            # refs, but never enter the project's implicit current context.
+            continue
         generic_refs = (
             current_generic_refs
             if production_document.id in current_document_id_set
@@ -1268,22 +1592,21 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
             if production_document.id in current_document_id_set
             else other_production_refs
         )
-        generic_refs.extend(
-            [
-                ArtifactRef(
-                    project_id=document.project.id,
-                    artifact_type="production_document",
-                    artifact_id=production_document.id,
-                    version=current.version,
-                ),
-                ArtifactRef(
-                    project_id=document.project.id,
-                    artifact_type="production_document_version",
-                    artifact_id=current.id,
-                    version=current.version,
-                ),
-            ]
-        )
+        default_document_refs = [
+            ArtifactRef(
+                project_id=document.project.id,
+                artifact_type="production_document",
+                artifact_id=production_document.id,
+                version=current.version,
+            ),
+            ArtifactRef(
+                project_id=document.project.id,
+                artifact_type="production_document_version",
+                artifact_id=current.id,
+                version=current.version,
+            ),
+        ]
+        generic_refs.extend(default_document_refs)
         if production_document.kind == PRODUCTION_SPEC_DOCUMENT_KIND:
             typed_refs.append(
                 ArtifactRef(
@@ -1295,17 +1618,74 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
             )
         elif production_document.kind == STORYBOARD_DRAFT_DOCUMENT_KIND:
             try:
-                StoryboardDraftContent.model_validate(current.payload)
+                draft = StoryboardDraftContent.model_validate(current.payload)
             except ValueError:
                 continue
-            typed_refs.append(
-                ArtifactRef(
-                    project_id=document.project.id,
-                    artifact_type="storyboard_draft",
-                    artifact_id=production_document.id,
-                    version=current.version,
-                )
+            draft_ref = ArtifactRef(
+                project_id=document.project.id,
+                artifact_type="storyboard_draft",
+                artifact_id=production_document.id,
+                version=current.version,
             )
+            typed_refs.append(draft_ref)
+            if draft.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
+                # Project-level context describes active truth, not every
+                # historical reconciliation branch. Historical exact refs are
+                # still resolvable when a WorkOrder explicitly requests them.
+                if (
+                    script is None
+                    or bible is None
+                    or draft.script_version_id != script.id
+                    or draft.bible_version_id != bible.id
+                    or current_chain.spec_document is None
+                    or current_chain.spec_version is None
+                    or current_chain.spec is None
+                    or current_chain.spec_document.id
+                    != draft.production_spec_document_id
+                    or current_chain.spec_version.id
+                    != draft.production_spec_version_id
+                ):
+                    remove_default_refs([*default_document_refs, draft_ref])
+                    continue
+                reconciliation_refs: list[ArtifactRef] = []
+                reconciliation_refs.append(
+                    ArtifactRef(
+                        project_id=document.project.id,
+                        artifact_type="script_version",
+                        artifact_id=script.id,
+                        version=script.version,
+                    )
+                )
+                pinned_spec_version = current_chain.spec_version
+                pinned_spec = current_chain.spec
+                story_duration_contract = (
+                    None
+                    if script.story_intent is None
+                    else script.story_intent.duration_contract
+                )
+                if (
+                    pinned_spec.script_version_id != script.id
+                    or pinned_spec.bible_version_id != bible.id
+                    or (
+                        story_duration_contract is not None
+                        and pinned_spec.duration_contract
+                        != story_duration_contract
+                    )
+                ):
+                    remove_default_refs([*default_document_refs, draft_ref])
+                    continue
+                reconciliation_refs.append(
+                    ArtifactRef(
+                        project_id=document.project.id,
+                        artifact_type="production_spec",
+                        artifact_id=draft.production_spec_document_id,
+                        version=pinned_spec_version.version,
+                    )
+                )
+                reconciliation_refs.append(draft_ref)
+                duration_reconciliation_candidates.append(
+                    (current.created_at, reconciliation_refs)
+                )
         elif production_document.kind == STORYBOARD_DOCUMENT_KIND:
             try:
                 storyboard = StoryboardContent.model_validate(current.payload)
@@ -1350,6 +1730,15 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
                 )
                 for unit in generation_plan.units
             )
+    # A Leader replan compiles at most 16 artifact summaries. Prioritize only
+    # the latest active reconciliation branch and its exact immutable inputs;
+    # stale branches never displace the current ScriptVersion.
+    duration_reconciliation_refs = (
+        max(duration_reconciliation_candidates, key=lambda item: item[0])[1]
+        if duration_reconciliation_candidates
+        else []
+    )
+    refs[1:1] = duration_reconciliation_refs
     refs.extend(current_typed_refs)
     refs.extend(
         ArtifactRef(
@@ -1390,6 +1779,7 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
 def project_summary(document: ProjectDocument) -> str:
     script = _current_script(document)
     bible = _current_bible(document)
+    current_chain = _current_production_chain(document)
     scene_summaries = [] if script is None else [
         f"{scene.id}:{scene.heading}:{scene.summary}" for scene in script.structured_scenes
     ]
@@ -1406,10 +1796,29 @@ def project_summary(document: ProjectDocument) -> str:
     production_documents_by_id = {
         item.id: item for item in document.production_documents
     }
+    for label, production_document, version in (
+        (
+            "production_spec",
+            current_chain.spec_document,
+            current_chain.spec_version,
+        ),
+        (
+            "storyboard",
+            current_chain.storyboard_document,
+            current_chain.storyboard_version,
+        ),
+        (
+            "generation_plan",
+            current_chain.generation_plan_document,
+            current_chain.generation_plan_version,
+        ),
+    ):
+        if production_document is None or version is None:
+            continue
+        current_document_summaries.append(
+            f"{label}={production_document.id}@v{version.version}({version.id})"
+        )
     for label, document_id in (
-        ("production_spec", document.production_spec_document_id),
-        ("storyboard", document.storyboard_document_id),
-        ("generation_plan", document.generation_plan_document_id),
         ("master_audio", document.master_audio_document_id),
         ("audio_structure", document.audio_structure_document_id),
         ("timed_text", document.timed_text_document_id),

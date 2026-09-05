@@ -249,6 +249,118 @@ def test_project_context_prioritizes_canonical_documents_and_compacts_shots(
     assert "summary-shot-11#12" in summary
 
 
+def test_project_context_excludes_outputs_bound_to_stale_story_inputs(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    spec = service.create_production_spec(
+        project_id,
+        ProductionSpecCreateRequest(
+            spec=_production_spec(service, project_id),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    storyboard = service.create_storyboard(
+        project_id,
+        StoryboardCreateRequest(
+            storyboard=_storyboard(
+                service,
+                project_id,
+                production_spec_document_id=spec.document.id,
+                production_spec_version_id=spec.version.id,
+            ),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    generation_plan = service.compile_generation_plan(
+        project_id,
+        GenerationPlanCompileRequest(
+            storyboard_document_id=storyboard.document.id,
+            storyboard_version_id=storyboard.version.id,
+            production_spec_document_id=spec.document.id,
+            production_spec_version_id=spec.version.id,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    document = service.get_project(project_id).document
+    previous_script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    new_script = previous_script.model_copy(
+        deep=True,
+        update={
+            "id": f"{previous_script.id}-new-story",
+            "version": previous_script.version + 1,
+            "parent_version_id": previous_script.id,
+            "change_reason": "The screenplay changed before managed slots refreshed.",
+        },
+    )
+    document.script_versions.append(new_script)
+    document.project.current_script_version_id = new_script.id
+
+    refs = project_artifact_refs(document)
+    assert not {
+        "production_spec",
+        "storyboard",
+        "generation_plan",
+        "clip_group",
+        "generation_unit",
+    } & {item.artifact_type for item in refs}
+    managed_document_ids = {
+        spec.document.id,
+        storyboard.document.id,
+        generation_plan.document.id,
+    }
+    managed_version_ids = {
+        spec.version.id,
+        storyboard.version.id,
+        generation_plan.version.id,
+    }
+    assert not any(
+        (
+            item.artifact_type == "production_document"
+            and item.artifact_id in managed_document_ids
+        )
+        or (
+            item.artifact_type == "production_document_version"
+            and item.artifact_id in managed_version_ids
+        )
+        for item in refs
+    )
+    current_documents_line = next(
+        line
+        for line in project_summary(document).splitlines()
+        if line.startswith("Current production documents:")
+    )
+    assert current_documents_line == "Current production documents: none"
+
+    resolver = ProjectArtifactResolver(service.repository)
+    for exact_ref in (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="production_spec",
+            artifact_id=spec.document.id,
+            version=spec.version.version,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="storyboard",
+            artifact_id=storyboard.document.id,
+            version=storyboard.version.version,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="generation_plan",
+            artifact_id=generation_plan.document.id,
+            version=generation_plan.version.version,
+        ),
+    ):
+        assert resolver.summarize_artifact(exact_ref) is not None
+
+
 def test_agent_tools_handoff_exact_storyboard_and_generation_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -505,7 +617,7 @@ def test_replacing_production_spec_invalidates_exact_downstream_versions(
             origin=ProductionDocumentOrigin.AGENT,
         ),
     )
-    service.compile_generation_plan(
+    generation_plan = service.compile_generation_plan(
         project_id,
         GenerationPlanCompileRequest(
             storyboard_document_id=storyboard.document.id,
@@ -531,9 +643,67 @@ def test_replacing_production_spec_invalidates_exact_downstream_versions(
     assert slots[STORYBOARD_OUTPUT_SLOT_ID].current_artifact_ref is None
     assert slots[GENERATION_PLAN_OUTPUT_SLOT_ID].current_artifact_ref is None
 
+    document = service.get_project(project_id).document
+    refs = project_artifact_refs(document)
+    assert ArtifactRef(
+        project_id=project_id,
+        artifact_type="production_spec",
+        artifact_id=replaced.document.id,
+        version=replaced.version.version,
+    ) in refs
+    assert not any(
+        item.artifact_type in {"storyboard", "generation_plan"}
+        for item in refs
+    )
+    stale_document_ids = {
+        storyboard.document.id,
+        generation_plan.document.id,
+    }
+    stale_version_ids = {
+        storyboard.version.id,
+        generation_plan.version.id,
+    }
+    assert not any(
+        (
+            item.artifact_type == "production_document"
+            and item.artifact_id in stale_document_ids
+        )
+        or (
+            item.artifact_type == "production_document_version"
+            and item.artifact_id in stale_version_ids
+        )
+        for item in refs
+    )
+    current_documents_line = next(
+        line
+        for line in project_summary(document).splitlines()
+        if line.startswith("Current production documents:")
+    )
+    assert f"production_spec={replaced.document.id}" in current_documents_line
+    assert "storyboard=" not in current_documents_line
+    assert "generation_plan=" not in current_documents_line
+
+    resolver = ProjectArtifactResolver(service.repository)
+    assert resolver.summarize_artifact(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="storyboard",
+            artifact_id=storyboard.document.id,
+            version=storyboard.version.version,
+        )
+    ) is not None
+    assert resolver.summarize_artifact(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="generation_plan",
+            artifact_id=generation_plan.document.id,
+            version=generation_plan.version.version,
+        )
+    ) is not None
+
     with pytest.raises(
         WorkflowConflictError,
-        match="different production spec version",
+        match="current ProductionSpec version",
     ):
         service.compile_generation_plan(
             project_id,
