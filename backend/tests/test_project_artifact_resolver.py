@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic import JsonValue
+
 from short_drama.agent_runtime import ArtifactRef
 from short_drama.agent_runtime.artifact_resolver import (
     ProjectArtifactResolver as RuntimeProjectArtifactResolver,
@@ -32,7 +34,13 @@ from short_drama.models import (
     ProductionDocumentVersion,
     ProjectPlanningMetadata,
     ProjectOutputSlot,
+    ReviewRepairOwner,
+    ScriptReviewIssue,
+    ScriptReviewReport,
+    ScriptReviewSeverity,
     StoryIntent,
+    StoryRevisionVerification,
+    StoryRevisionViolation,
 )
 from short_drama.production_contracts import (
     ClipGroup,
@@ -52,7 +60,10 @@ from short_drama.production_contracts import (
     StoryboardTimingAudit,
     StoryboardTimingLedgerEntry,
 )
-from short_drama.production_manager import ProjectArtifactResolver
+from short_drama.production_manager import (
+    ProjectArtifactResolver,
+    _compact_specialist_tool_result,
+)
 from short_drama.repository import ShortDramaRepository
 
 
@@ -84,6 +95,7 @@ def test_production_manager_reexports_extracted_resolver(tmp_path: Path) -> None
     assert summary.title == document.project.name
     assert summary.summary == project_summary(document)
     assert f"Project {document.project.name} ({document.project.id})" in summary.summary
+    assert "Current script DurationContract: none" in summary.summary
 
 
 def test_resolver_preserves_focused_document_summaries(tmp_path: Path) -> None:
@@ -129,6 +141,155 @@ def test_resolver_preserves_focused_document_summaries(tmp_path: Path) -> None:
     assert shot_summary is not None
     assert shot_summary.title == f"Shot {shot.sequence}"
     assert json.loads(shot_summary.summary)["id"] == shot.id
+
+
+def test_long_script_context_prioritizes_duration_contract_with_null_or_range(
+    tmp_path: Path,
+) -> None:
+    repository = ShortDramaRepository(tmp_path / "duration-contract-context.sqlite3")
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    script = next(
+        item
+        for item in document.script_versions
+        if item.id == document.project.current_script_version_id
+    )
+    script.original_text = "原始长正文" * 2000
+    script.screenplay_text = "分镜长正文" * 2000
+    script.spoken_text = "口播长正文" * 2000
+    script.subtitle_text = "字幕长正文" * 2000
+
+    accepted_ranges = (
+        None,
+        DurationRange(minimum_seconds=108.0, maximum_seconds=132.0),
+    )
+    for accepted_range in accepted_ranges:
+        contract = DurationContract(
+            target_seconds=120.0,
+            target_origin=DurationTargetOrigin.USER_DECLARED,
+            authority=DurationAuthority.TARGET_LED,
+            acceptable_range_seconds=accepted_range,
+            source_fidelity_policy=(
+                DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+            ),
+            mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            decision_basis="用户明确要求约两分钟的完整故事。",
+        )
+        script.story_intent = StoryIntent(
+            audience_experience="观众体验" * 400,
+            dramatic_engine="戏剧引擎" * 400,
+            progression_strategy="推进策略" * 400,
+            tone_and_plausibility="调性可信" * 400,
+            duration_contract=contract,
+        )
+        repository.save_project(document)
+        resolver = RuntimeProjectArtifactResolver(repository)
+
+        summary = resolver.summarize_artifact(
+            ArtifactRef(
+                project_id=document.project.id,
+                artifact_type="script_version",
+                artifact_id=script.id,
+                version=script.version,
+            )
+        )
+
+        assert summary is not None
+        prefix = summary.summary[:3000]
+        assert '"story_intent":' in prefix
+        assert '"duration_contract":' in prefix
+        assert summary.summary.index('"duration_contract":') < summary.summary.index(
+            '"audience_experience":'
+        )
+        assert summary.summary.index('"story_intent":') < summary.summary.index(
+            '"original_text":'
+        )
+        expected_contract = contract.model_dump(mode="json")
+        assert json.loads(summary.summary)["story_intent"]["duration_contract"] == (
+            expected_contract
+        )
+        if accepted_range is None:
+            assert '"acceptable_range_seconds":null' in prefix
+        else:
+            assert (
+                '"acceptable_range_seconds":{"minimum_seconds":108.0,'
+                '"maximum_seconds":132.0}'
+            ) in prefix
+
+        compact_contract = json.dumps(
+            expected_contract,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        project_context = project_summary(document)
+        assert f"Current script DurationContract: {compact_contract}" in project_context
+        assert project_context.index("Current script DurationContract:") < (
+            project_context.index("Original user brief:")
+        )
+
+
+def test_project_get_compact_keeps_exact_current_duration_contract() -> None:
+    accepted_ranges = (
+        None,
+        DurationRange(minimum_seconds=108.0, maximum_seconds=132.0),
+    )
+    for accepted_range in accepted_ranges:
+        contract = DurationContract(
+            target_seconds=120.0,
+            target_origin=DurationTargetOrigin.USER_DECLARED,
+            authority=DurationAuthority.TARGET_LED,
+            acceptable_range_seconds=accepted_range,
+            source_fidelity_policy=(
+                DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+            ),
+            mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            decision_basis="用户明确要求约两分钟的完整故事。",
+        )
+        expected_contract = contract.model_dump(mode="json")
+        result: dict[str, JsonValue] = {
+            "tool_id": "project.get",
+            "status": "SUCCEEDED",
+            "output": {
+                "document": {
+                    "project": {
+                        "id": "project-duration-context",
+                        "current_script_version_id": "script-current",
+                        "current_bible_version_id": "bible-current",
+                    },
+                    "script_versions": [
+                        {
+                            "id": "script-old",
+                            "story_intent": {"duration_contract": None},
+                        },
+                        {
+                            "id": "script-current",
+                            "story_intent": {
+                                "duration_contract": expected_contract,
+                            },
+                        },
+                    ],
+                    "bible_versions": [{"id": "bible-current"}],
+                    "production_documents": [],
+                    "output_slots": [],
+                }
+            },
+            "artifact_refs": [],
+            "warnings": [],
+            "error": None,
+        }
+
+        compact = _compact_specialist_tool_result("project.get", result)
+        output = compact["output"]
+        assert isinstance(output, dict)
+        compact_document = output["document"]
+        assert isinstance(compact_document, dict)
+        scripts = compact_document["script_versions"]
+        assert isinstance(scripts, list)
+        assert len(scripts) == 1
+        current_script = scripts[0]
+        assert isinstance(current_script, dict)
+        story_intent = current_script["story_intent"]
+        assert isinstance(story_intent, dict)
+        assert story_intent["duration_contract"] == expected_contract
 
 
 def test_storyboard_draft_summary_exposes_resume_ledger_without_shot_prose() -> None:
@@ -914,6 +1075,142 @@ def test_content_planning_job_resolver_accepts_legacy_artifact_ref(
     assert canonical.title == legacy.title == "Content planning job STORY_ARCHITECT"
     assert "canonical script, Bible, shots, and assets remain in ProjectDocument" in (
         canonical.summary
+    )
+
+
+def test_content_planning_job_frontloads_pending_story_verifier_handoffs(
+    tmp_path: Path,
+) -> None:
+    repository = ShortDramaRepository(tmp_path / "short-drama.sqlite3")
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    duration_contract = DurationContract(
+        target_seconds=120.0,
+        target_origin=DurationTargetOrigin.USER_DECLARED,
+        authority=DurationAuthority.TARGET_LED,
+        acceptable_range_seconds=DurationRange(
+            minimum_seconds=108.0,
+            maximum_seconds=132.0,
+        ),
+        source_fidelity_policy=DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS,
+        mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+        decision_basis="用户明确要求约两分钟，保持完整故事但压缩表演密度。",
+    )
+    run = PlanningRunRecord(
+        id="planning-run-long-verifier-handoff",
+        status=PlanningRunStatus.NEEDS_ATTENTION,
+        current_step=PlanningRunStep.SCRIPT_VERIFIER,
+        request=CreateProjectRequest(
+            name=document.project.name,
+            source_mode=document.project.source_mode,
+            target_duration_seconds=document.project.target_duration_seconds,
+            input_text=document.project.input_text,
+            run_mode=document.project.run_mode,
+        ),
+        outline_json="LONG_OUTLINE_BEFORE_VERIFIER_PAYLOAD" * 1000,
+        story_intent=StoryIntent(
+            audience_experience="纯爽、快速升级。",
+            dramatic_engine="主角的普通能力成为全场奇迹。",
+            progression_strategy="从食堂震惊升级到校长挽留。",
+            tone_and_plausibility="接受夸张逻辑，优先爽点。",
+            duration_contract=duration_contract,
+        ),
+        review_report=ScriptReviewReport(
+            summary="初次冷读要求围绕时长做一次聚焦修订。",
+            issues=[
+                ScriptReviewIssue(
+                    issue_id="DURATION-1",
+                    category="DURATION_FIT",
+                    severity=ScriptReviewSeverity.HIGH,
+                    owner=ReviewRepairOwner.STORY_ARCHITECT,
+                    scene_sequences=[1],
+                    observation="自然表演超出用户声明的两分钟目标。",
+                    recommendation="保留事件，只压缩重复反应。",
+                )
+            ],
+            duration_fit_assessment=DurationFitAssessment(
+                estimated_range_seconds=DurationRange(
+                    minimum_seconds=190.0,
+                    maximum_seconds=210.0,
+                ),
+                alignment=DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+                resolution=DurationMismatchResolution.REVISE_SCRIPT,
+                rationale="SCRIPT_DURATION_RATIONALE_SENTINEL",
+            ),
+            requires_revision=True,
+        ),
+        project_id=document.project.id,
+        owner_agent_run_id="agent-run-long-verifier-handoff",
+        created_at="2026-09-02T00:00:00+00:00",
+        updated_at="2026-09-02T00:00:00+00:00",
+    )
+    document.planning = ProjectPlanningMetadata(
+        run_id=run.id,
+        status=run.status,
+        owner_agent_run_id=run.owner_agent_run_id,
+        planning_job_kind=run.job_kind,
+    )
+    assert repository.insert_project_with_planning_run(document, run)
+    resolver = RuntimeProjectArtifactResolver(repository)
+    ref = ArtifactRef(
+        project_id=document.project.id,
+        artifact_type="content_planning_job",
+        artifact_id=run.id,
+    )
+
+    script_verifier = resolver.summarize_artifact(ref)
+
+    assert script_verifier is not None
+    script_prefix = script_verifier.summary[:3000]
+    assert '"source":"SCRIPT_VERIFIER"' in script_prefix
+    assert '"requires_revision":true' in script_prefix
+    assert '"alignment":"OUTSIDE_ACCEPTED_RANGE"' in script_prefix
+    assert '"target_seconds":120.0' in script_prefix
+    assert "SCRIPT_DURATION_RATIONALE_SENTINEL" in script_prefix
+    assert script_verifier.summary.index("SCRIPT_DURATION_RATIONALE_SENTINEL") < (
+        script_verifier.summary.index("LONG_OUTLINE_BEFORE_VERIFIER_PAYLOAD")
+    )
+
+    run.current_step = PlanningRunStep.REVISION_VERIFIER
+    run.latest_revision_verification = StoryRevisionVerification(
+        accepted=False,
+        summary="修订稿仍未解决时长偏差。",
+        violations=[
+            StoryRevisionViolation(
+                issue_id="DURATION-1",
+                category="DURATION_FIT",
+                scene_sequences=[1],
+                observation="重复震惊反应仍然过长。",
+                repair_instruction=(
+                    "REVISION_REPAIR_INSTRUCTION_SENTINEL：只压缩重复反应，"
+                    "不改变事件链。"
+                ),
+            )
+        ],
+        duration_fit_assessment=DurationFitAssessment(
+            estimated_range_seconds=DurationRange(
+                minimum_seconds=175.0,
+                maximum_seconds=190.0,
+            ),
+            alignment=DurationAlignment.UNRESOLVED,
+            resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            rationale="REVISION_DURATION_RATIONALE_SENTINEL",
+        ),
+    )
+    run.updated_at = "2026-09-02T00:00:01+00:00"
+    repository.save_planning_run_with_project(run, document)
+
+    revision_verifier = resolver.summarize_artifact(ref)
+
+    assert revision_verifier is not None
+    revision_prefix = revision_verifier.summary[:3000]
+    assert '"source":"REVISION_VERIFIER"' in revision_prefix
+    assert '"accepted":false' in revision_prefix
+    assert '"alignment":"UNRESOLVED"' in revision_prefix
+    assert '"target_seconds":120.0' in revision_prefix
+    assert "REVISION_DURATION_RATIONALE_SENTINEL" in revision_prefix
+    assert "REVISION_REPAIR_INSTRUCTION_SENTINEL" in revision_prefix
+    assert revision_verifier.summary.index("REVISION_DURATION_RATIONALE_SENTINEL") < (
+        revision_verifier.summary.index("LONG_OUTLINE_BEFORE_VERIFIER_PAYLOAD")
     )
 
 

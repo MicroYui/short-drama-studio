@@ -244,6 +244,15 @@ class StoryboardSceneNode(DomainModel):
     sequence: int = Field(ge=1)
     heading: str = Field(min_length=1, max_length=500)
     summary: str = Field(min_length=1, max_length=2000)
+    source_target_duration_seconds: float | None = Field(
+        default=None,
+        gt=0.0,
+        description=(
+            "The current Script scene's upstream pacing reference. It informs "
+            "semantic redistribution across scenes but is not a hard scene cap; "
+            "the episode DurationContract remains authoritative."
+        ),
+    )
     source_line_ids: list[str] = Field(default_factory=list[str])
     clip_group_ids: list[str] = Field(default_factory=list[str])
     shot_ids: list[str] = Field(default_factory=list[str])
@@ -324,7 +333,14 @@ class StoryboardTimingLedgerEntry(DomainModel):
         gt=0.0,
     )
     minimum_spoken_duration_seconds: float = Field(ge=0.0)
-    non_speech_reserve_seconds: float = Field(ge=0.0)
+    non_speech_reserve_seconds: float = Field(
+        ge=0.0,
+        description=(
+            "This row's incremental non-speech time after dialogue, action, reaction, "
+            "and camera beats that can play concurrently have been collapsed. It is "
+            "not a per-row copy of the ClipGroup's shared performance reserve."
+        ),
+    )
     allocated_duration_seconds: float = Field(gt=0.0)
     natural_cut: str = Field(min_length=1, max_length=1000)
     continuity_in: list[str] = Field(default_factory=list[str])
@@ -1198,6 +1214,49 @@ class StoryboardDraftAppendRequest(DomainModel):
         return self
 
 
+class StoryboardDraftGroupsAppendRequest(DomainModel):
+    """Append one coherent adjacent prefix while retaining per-group versions."""
+
+    draft_document_id: str = Field(min_length=1)
+    base_version_id: str = Field(min_length=1)
+    work_unit: StoryboardWorkUnitContract
+    groups: list[StoryboardClipGroupDraft] = Field(min_length=1)
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+
+    @model_validator(mode="after")
+    def validate_work_unit_handoff(self) -> StoryboardDraftGroupsAppendRequest:
+        group_ids = [item.clip_group.id for item in self.groups]
+        if len(group_ids) != len(set(group_ids)):
+            raise ValueError(
+                "Storyboard draft group segment cannot repeat a ClipGroup ID"
+            )
+        work_scenes = set(self.work_unit.source_range.scene_ids)
+        work_lines = set(self.work_unit.source_range.script_line_ids)
+        for group in self.groups:
+            if group.work_unit_id != self.work_unit.id:
+                raise ValueError(
+                    "Every storyboard draft group must identify the WorkOrder "
+                    "semantic unit"
+                )
+            if not set(group.source_range.scene_ids) <= work_scenes:
+                raise ValueError(
+                    "Every storyboard draft group must stay inside its WorkOrder "
+                    "source scenes"
+                )
+            if any(
+                line_id not in work_lines
+                for line_id in group.source_range.script_line_ids
+            ):
+                raise ValueError(
+                    "Every storyboard draft group must stay inside its WorkOrder "
+                    "source lines"
+                )
+        return self
+
+
 class StoryboardDraftGroupReplaceRequest(StoryboardDraftAppendRequest):
     replaced_clip_group_id: str = Field(min_length=1)
 
@@ -1231,6 +1290,24 @@ class StoryboardDraftFinalizeRequest(DomainModel):
 
 class StoryboardDraftMutationResponse(DomainModel):
     progress: StoryboardDraftProgress
+
+
+class StoryboardDraftGroupAppendCheckpoint(DomainModel):
+    """Compact handoff for one group version created inside a segment append."""
+
+    draft_ref: ProductionDocumentArtifactRef
+    draft_version_id: str = Field(min_length=1)
+    scene_node_id: str = Field(min_length=1)
+    clip_group_id: str = Field(min_length=1)
+    shot_ids: list[str] = Field(min_length=1)
+    continuity_out: list[str] = Field(default_factory=list[str])
+
+
+class StoryboardDraftGroupsMutationResponse(DomainModel):
+    """Final progress plus every immutable checkpoint created by one segment."""
+
+    progress: StoryboardDraftProgress
+    checkpoints: list[StoryboardDraftGroupAppendCheckpoint] = Field(min_length=1)
 
 
 def populate_storyboard_scene_nodes(

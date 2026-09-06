@@ -45,7 +45,7 @@ MiniMax Design 最值得学的不是“用 ComfyUI 代替产品”，而是两�
 3. 截图中的八个“创作领域”不是八条互斥工作流。当前客户端只把选择保存到 `global.selectedInterests` 并上报分析事件，未发现 Router、Planner、Agent Profile 或 Skill Loader 消费它。当前项目将真正的制作方法落在可组合 `Production Method Catalog`，而不是领域关键词路由。
 4. `Production Method Catalog` 已以两层文件化 Skill 落地：MiniMax Design 3.0.11 的 `drama-series`、`ad-tvc`、`mv` 是项目级 Workflow，MiniMax-H3 的 8 个公开 Skill 是任务/表达方法。`Story Orientation` 和 `PlanRevision` 依据完整语义选择、保留、替换或移除方法，不用正则、关键词或固定类型路由。
 5. Root Planner 与 Specialist 已共用紧凑 Tool Catalog，并由 Agent 显式请求所需 Tool schema 再继续规划或执行；不再一次性向模型展开全部合同。
-6. 多 Agent 不默认启动 copy/image/video/audio 四个 Worker。`LocalTeamExecutor` 只并行推进当前可独立产出与独立验收的 WorkOrders；同一项目的 `WRITE/EXTERNAL` Tool 调用共用一条串行写通道。WorkOrder 以 `next_owner` 明确下一责任方，统一 `advance` 每次只推进一个 Worker batch 或一个 Leader 单元；Worker 返回不在同次调用内隐式触发 Leader 收尾，批次失败可见并停止。
+6. 多 Agent 不默认启动 copy/image/video/audio 四个 Worker。`LocalTeamExecutor` 只并行推进当前可独立产出与独立验收的 WorkOrders；同一项目的 `WRITE/EXTERNAL` Tool 调用共用一条串行写通道。WorkOrder 以 `next_owner` 明确下一责任方，统一 `advance` 每次只推进一个 Worker batch 或一个 Leader 单元；同一 Worker 可在该 batch 内沿已持久化的模型/Tool 回合续跑，但 Worker 返回不在同次调用内隐式触发 Leader 收尾，批次失败可见并停止。
 7. `ContextManifest + 精确 ArtifactRef`、派生的 `ProductionBoardView`、append-only `WorkOrderProgressEntry` 以及 `carried_work_order_ids/stale_handoff` 已组成当前的上下文隔离、进度投影和重规划交接语义，不另建第二份项目真相。
 8. H3 路由已支持 `DIRECT`、`FRAME_FIRST`、`FRAME_LAST`、`FRAME_FIRST_LAST`、`REFERENCE` 五类候选，并以资产准备交接、完整 freshness 检查和 `state_revision` 保持精确可解析的状态版本。
 9. 商业 Skill 中真正跨 Agent 复用的中间成果不再只存在 Prompt：当前已用版本化 `ProductionDocument` 统一结构化承载；音乐主轴方法还已接通 Master Audio、实测 AudioStructureMap、精确 TimedText 与最终时间线换轨。

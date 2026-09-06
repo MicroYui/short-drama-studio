@@ -462,6 +462,46 @@ def test_context_compiler_uses_artifact_refs_and_bounded_summaries(tmp_path: Pat
     assert context.experiences[0].applicability == "局部剧本修改"
 
 
+def test_unresolved_artifact_refs_require_exact_canonical_identity(
+    tmp_path: Path,
+) -> None:
+    canonical_ref = ArtifactRef(
+        project_id="project-exact-artifact-ref",
+        artifact_type="bible_version",
+        artifact_id="project-exact-artifact-ref-bible-v2",
+        version=2,
+    )
+    invented_alias = ArtifactRef(
+        project_id=canonical_ref.project_id,
+        artifact_type="project_bible_version",
+        artifact_id=canonical_ref.artifact_id,
+        version=canonical_ref.version,
+    )
+    resolver = FakeArtifactResolver(
+        [
+            ArtifactSummary(
+                ref=canonical_ref,
+                title="Project Bible v2",
+                summary="Canonical project bible.",
+            )
+        ]
+    )
+    _store, runtime, _compiler = _runtime(tmp_path / "runtime.sqlite3", resolver)
+    run = runtime.create_run(
+        project_id=canonical_ref.project_id,
+        objective="Validate exact artifact references",
+        root_agent="production-manager",
+    )
+
+    unresolved = runtime.unresolved_artifact_refs(
+        run.id,
+        [canonical_ref, invented_alias, canonical_ref],
+    )
+
+    assert unresolved == [invented_alias]
+    assert resolver.requested == [canonical_ref, invented_alias]
+
+
 def test_context_recalls_project_decisions_with_current_run_first(
     tmp_path: Path,
 ) -> None:

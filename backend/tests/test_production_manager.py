@@ -28,6 +28,7 @@ from short_drama.agent_runtime import (
 from short_drama.deps import get_short_drama_service
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
+    ContentPlanningOutput,
     DurationAlignment,
     DurationAuthority,
     DurationContract,
@@ -44,6 +45,8 @@ from short_drama.models import (
     EnqueueRequest,
     ProductionDocumentArtifactRef,
     ProductionProfile,
+    ProjectPlanningMetadata,
+    ProjectStage,
     RunMode,
     ScriptRevisionOrigin,
     ScriptReviewIssue,
@@ -179,6 +182,7 @@ class SequencedLanguageClient(FakePlanningLanguageClient):
         "shot.append_storyboard_outline_segment",
         "shot.complete_storyboard_outline",
         "shot.append_storyboard_group",
+        "shot.append_storyboard_groups",
     ],
 )
 def test_storyboard_draft_tool_results_keep_only_resumable_progress(
@@ -1073,6 +1077,18 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
     assert planner_context["render_export"] is False
     assert "你可以选择、跳过、重排、并行或替换步骤" in client.instructions[0]
     assert "用户已明确给出的值、事实和选择直接采用" in client.instructions[0]
+    assert "AgentRun objective 是本次运行的最新用户目标" in (
+        client.instructions[0]
+    )
+    assert "不得仅因历史 brief 已完成就声称本次目标完成" in (
+        client.instructions[0]
+    )
+    assert "该运行的任务范围就不包含剧本修订" in client.instructions[0]
+    assert "应在 STORYBOARD_PLAN 范围内重编新草稿" in (
+        client.instructions[0]
+    )
+    assert "OUTSIDE_ACCEPTED_RANGE 只是诊断" in client.instructions[0]
+    assert "mismatch_resolution 也不能覆盖" in client.instructions[0]
     assert "context.unattended=true" in client.instructions[0]
     assert "用户明确要求在某个工件或内容节点确认、审阅或选择时" in (
         client.instructions[0]
@@ -1118,6 +1134,9 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
     assert "time_origin_seconds + duration_seconds" in client.instructions[0]
     assert "不把两者差值误判成 TARGET_LED 剧情缺陷" in client.instructions[0]
     assert "revision_origin=PRODUCTION_CONSTRAINT" in client.instructions[0]
+    assert "不得把 bible_version 塞入不支持的 evidence_refs" in (
+        client.instructions[0]
+    )
     assert "每条 finding 显式给出 repair_scope" in client.instructions[0]
     assert "片段边界只是运行检查点" in client.instructions[0]
     assert "不设片段数量、大小或重试次数" in client.instructions[0]
@@ -1207,6 +1226,189 @@ def test_language_planner_semantically_selects_and_persists_method_skills(
         for item in planner_payload["available_production_methods"]
     )
     assert "不得用关键词匹配代替语义判断" in client.instructions[0]
+
+
+def test_language_planner_repairs_unresolved_plan_artifact_refs_before_persisting(
+    tmp_path: Path,
+) -> None:
+    client = SequencedLanguageClient([])
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    aggregate = service.initialize_fixture()
+    project_id = aggregate.document.project.id
+    bible = next(
+        item
+        for item in aggregate.document.bible_versions
+        if item.id == aggregate.document.project.current_bible_version_id
+    )
+    canonical_ref = {
+        "project_id": project_id,
+        "artifact_type": "bible_version",
+        "artifact_id": bible.id,
+        "version": bible.version,
+    }
+    invented_ref = {
+        **canonical_ref,
+        "artifact_type": "project_bible_version",
+    }
+
+    def director_plan(ref: dict[str, JsonValue]) -> str:
+        return json.dumps(
+            {
+                "summary": "Delegate one bounded storyboard decision.",
+                "steps": [
+                    {
+                        "id": "direct-storyboard-range",
+                        "title": "Direct storyboard range",
+                        "kind": "DELEGATION",
+                        "production_skill_role": "DIRECTOR",
+                        "assigned_agent": "storyboard-director",
+                        "instructions": "Read the exact Bible version and direct the range.",
+                        "arguments": {
+                            "why_now": "The source versions are confirmed.",
+                            "adjacent_boundaries": [
+                                {
+                                    "relationship": "incoming-story-state",
+                                    "artifact_refs": [ref],
+                                    "guidance": "Preserve the confirmed story world.",
+                                }
+                            ],
+                        },
+                        "depends_on": [],
+                        "artifact_refs": [ref],
+                    }
+                ],
+                "goal_complete": False,
+            }
+        )
+
+    client.responses.extend(
+        [
+            director_plan(invented_ref),
+            director_plan(canonical_ref),
+        ]
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+
+    run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="Use the confirmed sources to direct the next storyboard range."
+        ),
+    )
+
+    assert len(client.inputs) == 2
+    first_payload, corrected_payload = [
+        json.loads(value) for value in client.inputs
+    ]
+    assert "plan_validation_feedback" not in first_payload
+    feedback = corrected_payload["plan_validation_feedback"]
+    assert feedback["kind"] == "UNAVAILABLE_ARTIFACT_REF"
+    assert {
+        issue["path"] for issue in feedback["issues"]
+    } == {
+        "steps[0].artifact_refs[0]",
+        "steps[0].arguments.adjacent_boundaries[0].artifact_refs[0]",
+    }
+    assert all(
+        issue["received"]["artifact_type"] == "project_bible_version"
+        for issue in feedback["issues"]
+    )
+    assert canonical_ref in feedback["available_artifact_refs"]
+    assert "ContextPack" in feedback["instruction"]
+
+    current_plan = run.snapshot.current_plan
+    assert current_plan is not None
+    assert current_plan.revision == 1
+    assert (
+        len(service.agent_runtime.store.list_plan_revisions(run.snapshot.run.id))
+        == 1
+    )
+    step = current_plan.steps[0]
+    assert [ref.model_dump(mode="json") for ref in step.artifact_refs] == [
+        canonical_ref
+    ]
+    adjacent = step.arguments["adjacent_boundaries"]
+    assert isinstance(adjacent, list)
+    boundary = adjacent[0]
+    assert isinstance(boundary, dict)
+    assert boundary["artifact_refs"] == [canonical_ref]
+
+
+def test_language_planner_repairs_invalid_plan_contract_before_persisting(
+    tmp_path: Path,
+) -> None:
+    invalid_plan = {
+        "summary": "Delegate one bounded storyboard decision.",
+        "steps": [
+            {
+                "id": "direct-storyboard-range",
+                "title": "Direct storyboard range",
+                "kind": "DELEGATION",
+                "production_skill_role": "DIRECTOR",
+                "instructions": "Direct the next storyboard range.",
+                "arguments": {},
+                "depends_on": [],
+                "artifact_refs": [],
+            }
+        ],
+        "goal_complete": False,
+    }
+    corrected_plan = {
+        **invalid_plan,
+        "steps": [
+            {
+                **invalid_plan["steps"][0],
+                "assigned_agent": "storyboard-director",
+            }
+        ],
+    }
+    client = SequencedLanguageClient(
+        [
+            json.dumps(invalid_plan),
+            json.dumps(corrected_plan),
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project_id = service.initialize_fixture().document.project.id
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+
+    run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(objective="Direct the next storyboard range."),
+    )
+
+    assert len(client.inputs) == 2
+    first_payload, corrected_payload = [
+        json.loads(value) for value in client.inputs
+    ]
+    assert "plan_validation_feedback" not in first_payload
+    feedback = corrected_payload["plan_validation_feedback"]
+    assert feedback["kind"] == "INVALID_PLAN_CONTRACT"
+    assert any(
+        issue["loc"] == ["steps", 0, "assigned_agent"]
+        for issue in feedback["issues"]
+    )
+
+    current_plan = run.snapshot.current_plan
+    assert current_plan is not None
+    assert current_plan.revision == 1
+    stored_revisions = service.agent_runtime.store.list_plan_revisions(
+        run.snapshot.run.id
+    )
+    assert len(stored_revisions) == 1
+    assert current_plan.steps[0].assigned_agent == "storyboard-director"
 
 
 def test_language_planner_loads_only_explicitly_requested_tool_schema(
@@ -1537,6 +1739,10 @@ def test_configured_specialist_agent_completes_work_order_round_trip(
     assert "tool_name、reason、arguments" in client.instructions[0]
     assert "context.unattended=true" in client.instructions[0]
     assert "只有确实需要暂停时才返回 PARTIAL" in client.instructions[0]
+    assert "你不得建议 SCRIPT repair" in client.instructions[0]
+    assert "将其仅视为可制作性证据" in client.instructions[0]
+    assert "本 WorkOrder 不得返回 SCRIPT repair" in client.instructions[0]
+    assert "不得执行或暗示 SCRIPT revision" in client.instructions[0]
     assert "begin、ledger 增量、ledger 完成、outline 增量" in (
         client.instructions[0]
     )
@@ -1648,7 +1854,7 @@ def test_language_specialist_receives_append_only_work_order_progress(
         "ArtifactRef"
     ]
     assert artifact_ref_schema["additionalProperties"] is False
-    assert client.max_output_token_requests == [10000, 10000]
+    assert client.max_output_token_requests == [20000, 20000]
     assert all(
         "input_schema" not in descriptor
         and "output_schema" not in descriptor
@@ -1867,6 +2073,144 @@ def test_plan_can_be_replaced_with_a_new_parallel_graph(tmp_path: Path) -> None:
         "story-check",
         "staging-check",
     }
+
+
+def test_external_replan_rejects_unresolved_artifact_ref_before_persisting(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    aggregate = service.initialize_fixture()
+    project_id = aggregate.document.project.id
+    bible = next(
+        item
+        for item in aggregate.document.bible_versions
+        if item.id == aggregate.document.project.current_bible_version_id
+    )
+    run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="Keep only plans backed by exact project artifacts.",
+            initial_plan=AgentPlanProposal(
+                summary="The current valid plan remains the rollback point.",
+                steps=[
+                    PlanStep(
+                        id="valid-checkpoint",
+                        title="Valid checkpoint",
+                        kind=ActionKind.CHECKPOINT,
+                        assigned_agent="production-manager",
+                        instructions="Keep the current plan intact.",
+                    )
+                ],
+            ),
+        ),
+    )
+    original_plan = run.snapshot.current_plan
+    assert original_plan is not None
+
+    invented_ref = ArtifactRef(
+        project_id=project_id,
+        artifact_type="project_bible_version",
+        artifact_id=bible.id,
+        version=bible.version,
+    )
+    with pytest.raises(
+        ProductionManagerError,
+        match=r"(?i)unresolved exact artifactrefs",
+    ):
+        service.replan_agent_run(
+            run.snapshot.run.id,
+            AgentRunReplanRequest(
+                reason="An external caller proposed an invented artifact type.",
+                proposed_plan=AgentPlanProposal(
+                    summary="This invalid plan must never become current.",
+                    steps=[
+                        PlanStep(
+                            id="invalid-delegation",
+                            title="Invalid delegation",
+                            kind=ActionKind.DELEGATION,
+                            production_skill_role=ProductionSkillRole.DIRECTOR,
+                            assigned_agent="storyboard-director",
+                            instructions="This invented reference must be rejected.",
+                            arguments={
+                                "adjacent_boundaries": [
+                                    {
+                                        "relationship": "incoming-story-state",
+                                        "artifact_refs": [
+                                            invented_ref.model_dump(mode="json")
+                                        ],
+                                    }
+                                ]
+                            },
+                            artifact_refs=[invented_ref],
+                        )
+                    ],
+                ),
+            ),
+        )
+
+    persisted = service.get_agent_run(run.snapshot.run.id)
+    assert persisted.snapshot.current_plan is not None
+    assert persisted.snapshot.current_plan.id == original_plan.id
+    assert persisted.snapshot.current_plan.revision == 1
+    assert (
+        len(service.agent_runtime.store.list_plan_revisions(run.snapshot.run.id))
+        == 1
+    )
+    assert service.agent_runtime.store.list_actions(run.snapshot.run.id) == []
+    assert service.agent_runtime.store.list_work_orders(run.snapshot.run.id) == []
+
+
+def test_completed_script_only_child_job_returns_to_the_agent_run_objective(
+    tmp_path: Path,
+) -> None:
+    client = FakePlanningLanguageClient()
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project_id = service.initialize_fixture().document.project.id
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    created = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective=(
+                "Use the confirmed screenplay to produce the canonical storyboard."
+            ),
+            initial_plan=_single_tool_plan(
+                "project.get",
+                {"project_id": project_id},
+            ),
+        ),
+    )
+    run_id = created.snapshot.run.id
+    document = service.get_project(project_id).document
+    document.project.content_planning_output = ContentPlanningOutput.SCRIPT_ONLY
+    document.project.stage = ProjectStage.SCRIPT_READY
+    document.planning = ProjectPlanningMetadata(
+        run_id="completed-script-revision",
+        status=PlanningRunStatus.COMPLETE,
+        owner_agent_run_id=run_id,
+    )
+    service.repository.save_project(document)
+
+    replanned = service.replan_agent_run(
+        run_id,
+        AgentRunReplanRequest(
+            reason=(
+                "The bounded screenplay repair is complete; continue the parent run."
+            )
+        ),
+    )
+
+    assert client.inputs
+    assert replanned.snapshot.current_plan is not None
+    assert replanned.snapshot.current_plan.goal_complete is False
+    assert [step.tool_name for step in replanned.snapshot.current_plan.steps] == [
+        "project.get"
+    ]
 
 
 def test_replan_cancels_uncarried_work_and_keeps_late_result_as_stale_handoff(
@@ -2786,17 +3130,14 @@ def test_failed_actions_can_replan_beyond_the_legacy_fixed_count(
 def test_completed_plan_waits_when_replan_has_no_actionable_or_terminal_path(
     tmp_path: Path,
 ) -> None:
-    client = SequencedLanguageClient(
-        [
-            json.dumps(
-                {
-                    "summary": "No justified next action is available yet.",
-                    "goal_complete": False,
-                    "steps": [],
-                }
-            )
-        ]
+    invalid_replan = json.dumps(
+        {
+            "summary": "No justified next action is available yet.",
+            "goal_complete": False,
+            "steps": [],
+        }
     )
+    client = SequencedLanguageClient([invalid_replan, invalid_replan])
     service = ShortDramaService(
         database_path=tmp_path / "app-data" / "short-drama.sqlite3",
         workspace_root=tmp_path / "workspace",
@@ -2832,27 +3173,35 @@ def test_completed_plan_waits_when_replan_has_no_actionable_or_terminal_path(
 
     assert advanced.run.snapshot.run.status == AgentRunStatus.WAITING
     assert len(advanced.executed_action_ids) == 1
-    assert len(client.inputs) == 1
+    assert len(client.inputs) == 2
+    second_payload = json.loads(client.inputs[1])
+    assert second_payload["plan_validation_feedback"]["kind"] == (
+        "INVALID_PLAN_CONTRACT"
+    )
     assert advanced.run.snapshot.current_plan is not None
     assert advanced.run.snapshot.current_plan.revision == 1
     assert advanced.run.ready_steps == []
-    assert any("invalid plan payload" in note for note in advanced.notes)
+    assert any(
+        "repeated the same invalid plan contract" in note
+        for note in advanced.notes
+    )
+    assert any(
+        "repeated the same invalid plan contract" in blocker
+        for blocker in advanced.run.context.blockers
+    )
 
 
-def test_external_action_settlement_waits_after_one_invalid_replan(
+def test_external_action_settlement_waits_after_repeated_invalid_contract(
     tmp_path: Path,
 ) -> None:
-    client = SequencedLanguageClient(
-        [
-            json.dumps(
-                {
-                    "summary": "No justified next action is available yet.",
-                    "goal_complete": False,
-                    "steps": [],
-                }
-            )
-        ]
+    invalid_replan = json.dumps(
+        {
+            "summary": "No justified next action is available yet.",
+            "goal_complete": False,
+            "steps": [],
+        }
     )
+    client = SequencedLanguageClient([invalid_replan, invalid_replan])
     service = ShortDramaService(
         database_path=tmp_path / "app-data" / "short-drama.sqlite3",
         workspace_root=tmp_path / "workspace",
@@ -2902,10 +3251,22 @@ def test_external_action_settlement_waits_after_one_invalid_replan(
         AgentRunAdvanceRequest(),
     )
     assert settled.run.snapshot.run.status == AgentRunStatus.WAITING
-    assert len(client.inputs) == 1
+    assert len(client.inputs) == 2
+    second_payload = json.loads(client.inputs[1])
+    assert second_payload["plan_validation_feedback"]["kind"] == (
+        "INVALID_PLAN_CONTRACT"
+    )
     assert settled.run.snapshot.current_plan is not None
     assert settled.run.snapshot.current_plan.revision == 1
     assert settled.run.ready_steps == []
+    assert any(
+        "repeated the same invalid plan contract" in note
+        for note in settled.notes
+    )
+    assert any(
+        "repeated the same invalid plan contract" in blocker
+        for blocker in settled.run.context.blockers
+    )
 
 
 def test_tool_failure_can_replan_and_continue_within_the_same_advance(
@@ -3960,6 +4321,21 @@ def test_pending_story_verifier_requires_resolution_plan_not_another_advance(
         document=document,
         semantic_planning_available=True,
     ) is None
+    assert (
+        service.production_manager._semantic_planning_current_plan(
+            agent_run_id=agent_run.id,
+            document=document,
+            current=_single_tool_plan(
+                "planning.advance",
+                {
+                    "project_id": project_id,
+                    "run_id": planning_run_id,
+                    "owner_agent_run_id": agent_run.id,
+                },
+            ),
+        )
+        is None
+    )
 
     resolve_plan = _single_tool_plan(
         "planning.resolve_story_verification",
@@ -3991,6 +4367,107 @@ def test_pending_story_verifier_requires_resolution_plan_not_another_advance(
         agent_run_id=agent_run.id,
         document=document,
     )
+
+
+def test_semantic_replan_receives_pending_verifier_evidence_before_context_cutoff(
+    tmp_path: Path,
+) -> None:
+    client = FakePlanningLanguageClient()
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project_id = service.initialize_fixture().document.project.id
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    agent_run = service.create_agent_run(
+        project_id,
+        AgentRunCreateRequest(
+            objective="依据精确 Revision Verifier handoff 决定下一步。",
+            initial_plan=_single_tool_plan(
+                "project.get",
+                {"project_id": project_id},
+            ),
+        ),
+    ).snapshot.run
+    planning_run_id = _persist_pending_revision_verifier(
+        service,
+        project_id=project_id,
+        owner_agent_run_id=agent_run.id,
+    )
+    planning_run = service.get_planning_run(planning_run_id).run
+    document = service.get_project(project_id).document
+    target_seconds = document.project.target_duration_seconds
+    planning_run.outline_json = "LONG_OUTLINE_BEFORE_VERIFIER_PAYLOAD" * 1000
+    planning_run.story_intent = StoryIntent(
+        audience_experience="快速、直接的爽感。",
+        dramatic_engine="普通计算能力成为全场奇迹。",
+        progression_strategy="食堂震惊后立即升级到校长挽留。",
+        tone_and_plausibility="优先节奏和爆点。",
+        duration_contract=DurationContract(
+            target_seconds=target_seconds,
+            target_origin=DurationTargetOrigin.USER_DECLARED,
+            authority=DurationAuthority.TARGET_LED,
+            source_fidelity_policy=(
+                DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS
+            ),
+            mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
+            decision_basis="用户明确声明本片目标时长。",
+        ),
+    )
+    assert planning_run.latest_revision_verification is not None
+    planning_run.latest_revision_verification = (
+        planning_run.latest_revision_verification.model_copy(
+            update={
+                "duration_fit_assessment": DurationFitAssessment(
+                    estimated_range_seconds=DurationRange(
+                        minimum_seconds=target_seconds + 40.0,
+                        maximum_seconds=target_seconds + 55.0,
+                    ),
+                    alignment=DurationAlignment.UNRESOLVED,
+                    resolution=DurationMismatchResolution.REVISE_SCRIPT,
+                    rationale="LEADER_DURATION_EVIDENCE_SENTINEL",
+                )
+            }
+        )
+    )
+    service.repository.save_planning_run_with_project(planning_run, document)
+    planning_ref = ArtifactRef(
+        project_id=project_id,
+        artifact_type="content_planning_job",
+        artifact_id=planning_run_id,
+    )
+    service.agent_runtime.checkpoint(
+        agent_run.id,
+        current_focus="处理 Revision Verifier handoff。",
+        artifact_refs=[planning_ref],
+    )
+
+    service.replan_agent_run(
+        agent_run.id,
+        AgentRunReplanRequest(reason="读取精确 handoff 后决定修订范围。"),
+    )
+
+    assert client.inputs
+    planner_payload = json.loads(client.inputs[-1])
+    planning_artifact = next(
+        item
+        for item in planner_payload["context"]["artifacts"]
+        if item["ref"]["artifact_type"] == "content_planning_job"
+    )
+    summary = planning_artifact["summary"]
+    assert len(summary) <= 3000
+    assert '"source":"REVISION_VERIFIER"' in summary
+    assert '"accepted":false' in summary
+    assert '"alignment":"UNRESOLVED"' in summary
+    assert f'"target_seconds":{target_seconds}' in summary
+    assert "LEADER_DURATION_EVIDENCE_SENTINEL" in summary
+    if "LONG_OUTLINE_BEFORE_VERIFIER_PAYLOAD" in summary:
+        assert summary.index("LEADER_DURATION_EVIDENCE_SENTINEL") < summary.index(
+            "LONG_OUTLINE_BEFORE_VERIFIER_PAYLOAD"
+        )
 
 
 def test_initial_script_verifier_revision_requires_leader_resolution_plan(

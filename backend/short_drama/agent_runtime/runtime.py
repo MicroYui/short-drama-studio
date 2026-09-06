@@ -901,6 +901,17 @@ class AgentRuntime:
             max_characters=max_characters,
         )
 
+    def unresolved_artifact_refs(
+        self,
+        run_id: str,
+        refs: Sequence[ArtifactRef],
+    ) -> list[ArtifactRef]:
+        """Return unresolved exact references without compiling prompt context."""
+
+        if self._context_compiler is None:
+            raise RuntimeError("AgentRuntime was created without a ContextCompiler")
+        return self._context_compiler.unresolved_artifact_refs(run_id, refs)
+
     def work_order_context(
         self,
         work_order_id: str,

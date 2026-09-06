@@ -6,6 +6,8 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from short_drama.agent_runtime import (
     AgentResultStatus,
     AgentRuntime,
@@ -15,6 +17,7 @@ from short_drama.agent_runtime import (
     ContextCompiler,
     DelegationStatus,
     SpecialistTurnRecord,
+    SpecialistTurnStatus,
     WorkOrderNextOwner,
 )
 from short_drama.fixture import build_dont_trust_me_fixture
@@ -132,6 +135,67 @@ class DelayedClaimManager:
             work_order_id,
             status=AgentResultStatus.COMPLETED,
             concise_summary=f"Advanced {work_order_id}",
+        )
+        return object()
+
+
+class DrainingManager:
+    """Small persisted decision -> Tool -> decision state machine."""
+
+    def __init__(
+        self,
+        runtime: AgentRuntime,
+        tools: ToolRegistry,
+        *,
+        final_owner: WorkOrderNextOwner | None = None,
+    ) -> None:
+        self.runtime = runtime
+        self.tools = tools
+        self.final_owner = final_owner
+        self.calls: list[str] = []
+
+    def execute_work_order(self, work_order_id: str) -> object:
+        self.calls.append(work_order_id)
+        current = self.runtime.store.get_work_order(work_order_id)
+        assert current is not None
+        if len(self.calls) == 1:
+            current.specialist_turns.append(
+                SpecialistTurnRecord(
+                    id="turn-drain-write",
+                    sequence=1,
+                    tool_name="project.write-for-team",
+                    reason="Persist the Worker-owned change.",
+                )
+            )
+            current.status = DelegationStatus.NEEDS_ATTENTION
+            current.next_owner = WorkOrderNextOwner.WORKER_TOOL
+            self.runtime.store.save_work_order(current)
+            return object()
+        if len(self.calls) == 2:
+            turn = current.specialist_turns[-1]
+            turn.status = SpecialistTurnStatus.COMPLETED
+            turn.result = {
+                "tool_id": turn.tool_name,
+                "status": "SUCCEEDED",
+                "output": {"ok": True},
+                "artifact_refs": [],
+                "warnings": [],
+                "error": None,
+            }
+            current.status = DelegationStatus.NEEDS_ATTENTION
+            current.next_owner = WorkOrderNextOwner.WORKER_DECISION
+            self.runtime.store.save_work_order(current)
+            return object()
+        if self.final_owner is not None:
+            current.status = DelegationStatus.NEEDS_ATTENTION
+            current.next_owner = self.final_owner
+            self.runtime.store.save_work_order(current)
+            return object()
+        self.runtime.begin_work_order(work_order_id)
+        self.runtime.record_agent_result(
+            work_order_id,
+            status=AgentResultStatus.COMPLETED,
+            concise_summary="Worker completed after its persisted Tool result.",
         )
         return object()
 
@@ -260,6 +324,56 @@ def test_executor_runs_independent_specialist_decisions_in_parallel(
         runtime.store.get_work_order(work_order_id).status == DelegationStatus.COMPLETED
         for work_order_id in work_order_ids
     )
+
+
+def test_drain_continues_model_tool_model_until_worker_handoff(
+    tmp_path: Path,
+) -> None:
+    runtime, run_id = _runtime(tmp_path)
+    work_order_id = _work_order(runtime, run_id, "drain")
+    manager = DrainingManager(runtime, _registry())
+
+    batch = LocalTeamExecutor(manager, max_workers=1).drain_ready_work_until_handoff(
+        run_id
+    )
+
+    assert batch.selected_work_order_ids == [work_order_id]
+    assert manager.calls == [work_order_id, work_order_id, work_order_id]
+    assert batch.advances[0].advance_count == 3
+    assert batch.advances[0].serialized_project_write is True
+    assert batch.advances[0].work_order_status == DelegationStatus.COMPLETED
+    assert batch.advances[0].result_status == AgentResultStatus.COMPLETED
+
+
+@pytest.mark.parametrize(
+    "next_owner",
+    [WorkOrderNextOwner.LEADER_REPLAN, WorkOrderNextOwner.USER_INPUT],
+)
+def test_drain_stops_at_non_worker_owner(
+    tmp_path: Path,
+    next_owner: WorkOrderNextOwner,
+) -> None:
+    runtime, run_id = _runtime(tmp_path)
+    work_order_id = _work_order(runtime, run_id, next_owner.value.lower())
+
+    class HandoffManager(DrainingManager):
+        def execute_work_order(self, work_order_id: str) -> object:
+            self.calls.append(work_order_id)
+            current = self.runtime.store.get_work_order(work_order_id)
+            assert current is not None
+            current.status = DelegationStatus.NEEDS_ATTENTION
+            current.next_owner = next_owner
+            self.runtime.store.save_work_order(current)
+            return object()
+
+    manager = HandoffManager(runtime, _registry())
+    batch = LocalTeamExecutor(manager, max_workers=1).drain_ready_work_until_handoff(
+        run_id
+    )
+
+    assert manager.calls == [work_order_id]
+    assert batch.advances[0].advance_count == 1
+    assert batch.advances[0].work_order_status == DelegationStatus.NEEDS_ATTENTION
 
 
 def test_executor_allows_read_only_tool_turns_to_overlap(tmp_path: Path) -> None:

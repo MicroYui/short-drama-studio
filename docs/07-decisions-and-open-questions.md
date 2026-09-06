@@ -282,7 +282,7 @@ MiniMax Design 3.0.11 的“短剧/漫剧、影视/混剪、带货/电商、广�
 
 `AgentRun + ProductionManager` 继续持有用户总目标和 PlanGraph；Agent-owned `PlanningRun` 仍是顺序、可恢复的 Content Planning Job，不与 AgentRun 合并。剧本批准后的资产、镜头、声音、调研和审查等可独立产出且可独立验收的工作，才拆为带依赖的 WorkOrders；不固定启动 copy/image/video/audio 四个 Agent。每份进入权威项目状态的交付物都必须能追溯到 `Leader → Worker → Verifier` 责任拓扑；这三者是责任而非强制的三个进程或三份 WorkOrder。当独立通读、视觉观察、来源核对或跨工件验收能增加价值时，Verifier 可以是独立 WorkOrder；其余情况也不得省略验收责任和结论。
 
-本地 `TeamExecutor` 已实现锁内认领当前 PlanRevision 的就绪 WorkOrder、锁外并行执行无共享写入的工作、锁内提交结果。ProjectDocument 的 `WRITE/EXTERNAL` Tool 统一经过项目级串行写通道，`READ` Tool 可并行。WorkOrder 以 `next_owner` 明确下一责任方；统一 `advance` 每次只推进一个 Worker batch 或一个 Leader 单元，Worker 返回不会在同次调用里隐式触发 Leader 收尾，批次失败可见并停止。新 PlanRevision 必须显式声明继续携带的未完成 WorkOrder；未携带任务转为 `CANCELLED`，迟到结果保留为 `stale_handoff` 历史证据但不再合并 Action、Decision、Experience 或权威工件。首版不引入 Redis、Celery、租约、分布式协调或 Agent 微服务集群。
+本地 `TeamExecutor` 已实现锁内认领当前 PlanRevision 的就绪 WorkOrder、锁外并行执行无共享写入的工作、锁内提交结果。ProjectDocument 的 `WRITE/EXTERNAL` Tool 统一经过项目级串行写通道，`READ` Tool 可并行。WorkOrder 以 `next_owner` 明确下一责任方；统一 `advance` 每次只推进一个 Worker batch 或一个 Leader 单元，同一 Worker 所有权内的模型决策和 Tool 回合可在 batch 内自动续跑且每轮落盘；Worker 返回不会在同次调用里隐式触发 Leader 收尾，批次失败可见并停止。新 PlanRevision 必须显式声明继续携带的未完成 WorkOrder；未携带任务转为 `CANCELLED`，迟到结果保留为 `stale_handoff` 历史证据但不再合并 Action、Decision、Experience 或权威工件。首版不引入 Redis、Celery、租约、分布式协调或 Agent 微服务集群。
 
 ### D66. Shared Board、上下文隔离和画布都是权威工件的投影
 

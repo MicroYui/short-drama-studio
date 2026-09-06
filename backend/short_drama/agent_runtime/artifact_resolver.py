@@ -17,6 +17,7 @@ from short_drama.models import (
     ProductionDocument,
     ProductionDocumentVersion,
     ProjectDocument,
+    ScriptVersion,
     Take,
 )
 from short_drama.production_contracts import (
@@ -366,6 +367,262 @@ def _production_spec_summary(
         },
         ensure_ascii=False,
         separators=(",", ":"),
+    )
+
+
+def _script_version_summary(script: ScriptVersion) -> str:
+    """Keep story authority ahead of screenplay prose in bounded context."""
+
+    story_intent = (
+        None
+        if script.story_intent is None
+        else script.story_intent.model_dump(mode="json")
+    )
+    if story_intent is not None:
+        duration_contract = story_intent.pop("duration_contract")
+        story_intent = {
+            "duration_contract": duration_contract,
+            **story_intent,
+        }
+    return json.dumps(
+        {
+            "id": script.id,
+            "version": script.version,
+            "source_mode": script.source_mode,
+            "story_intent": story_intent,
+            "ending_contract": (
+                None
+                if script.ending_contract is None
+                else script.ending_contract.model_dump(mode="json")
+            ),
+            "source_contract": (
+                None
+                if script.source_contract is None
+                else script.source_contract.model_dump(mode="json")
+            ),
+            "original_text": script.original_text,
+            "screenplay_text": script.screenplay_text,
+            "spoken_text": script.spoken_text,
+            "subtitle_text": script.subtitle_text,
+            "lines": [item.model_dump(mode="json") for item in script.lines],
+            "structured_scenes": [
+                item.model_dump(mode="json") for item in script.structured_scenes
+            ],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _content_planning_job_summary(planning_run: PlanningRunRecord) -> str:
+    """Put a pending story-verifier handoff before the long execution cursor."""
+
+    def compact_text(value: str | None, *, limit: int) -> str | None:
+        if value is None or len(value) <= limit:
+            return value
+        return value[: limit - 1].rstrip() + "…"
+
+    def compact_decision_items(items: list[dict[str, object]]) -> dict[str, object]:
+        """Keep as many concrete findings as fit in the bounded handoff prefix."""
+
+        selected: list[dict[str, object]] = []
+        for item in items:
+            candidate = [*selected, item]
+            if selected and len(
+                json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))
+            ) > 1400:
+                break
+            selected = candidate
+        return {
+            "items": selected,
+            "total_count": len(items),
+            "included_count": len(selected),
+        }
+
+    report = planning_run.review_report
+    verification = planning_run.latest_revision_verification
+    handoff_core: dict[str, object] | None = None
+    handoff_details: dict[str, object] | None = None
+    duration_fit = None
+    if (
+        planning_run.current_step
+        in {PlanningRunStep.SCRIPT_VERIFIER, PlanningRunStep.SCRIPT_CRITIC}
+        and report is not None
+    ):
+        duration_fit = report.duration_fit_assessment
+        handoff_core = {
+            "source": "SCRIPT_VERIFIER",
+            "requires_revision": report.requires_revision,
+            "recommended_followup": report.recommended_followup.value,
+            "duration_fit_assessment": (
+                None
+                if duration_fit is None
+                else {
+                    "alignment": duration_fit.alignment.value,
+                    "estimated_range_seconds": (
+                        None
+                        if duration_fit.estimated_range_seconds is None
+                        else duration_fit.estimated_range_seconds.model_dump(mode="json")
+                    ),
+                    "resolution": duration_fit.resolution.value,
+                }
+            ),
+            "decision_items": compact_decision_items(
+                [
+                    {
+                        "issue_id": item.issue_id,
+                        "category": item.category,
+                        "severity": item.severity.value,
+                        "owner": item.owner.value,
+                        "scene_sequences": item.scene_sequences,
+                        "observation": compact_text(item.observation, limit=360),
+                        "recommendation": compact_text(
+                            item.recommendation,
+                            limit=420,
+                        ),
+                    }
+                    for item in report.issues
+                ]
+            ),
+            "summary": compact_text(report.summary, limit=600),
+            "followup_rationale": compact_text(
+                report.followup_rationale,
+                limit=500,
+            ),
+        }
+        handoff_details = {
+            "summary": report.summary,
+            "followup_rationale": report.followup_rationale,
+            "performance_timing_assessment": report.performance_timing_assessment,
+            "strengths": report.strengths,
+            "issues": [item.model_dump(mode="json") for item in report.issues],
+            "review_disposition": (
+                None
+                if planning_run.review_disposition is None
+                else planning_run.review_disposition.model_dump(mode="json")
+            ),
+        }
+    elif (
+        planning_run.current_step == PlanningRunStep.REVISION_VERIFIER
+        and verification is not None
+    ):
+        duration_fit = verification.duration_fit_assessment
+        handoff_core = {
+            "source": "REVISION_VERIFIER",
+            "accepted": verification.accepted,
+            "recommended_followup": verification.recommended_followup.value,
+            "duration_fit_assessment": (
+                None
+                if duration_fit is None
+                else {
+                    "alignment": duration_fit.alignment.value,
+                    "estimated_range_seconds": (
+                        None
+                        if duration_fit.estimated_range_seconds is None
+                        else duration_fit.estimated_range_seconds.model_dump(mode="json")
+                    ),
+                    "resolution": duration_fit.resolution.value,
+                }
+            ),
+            "decision_items": compact_decision_items(
+                [
+                    {
+                        "issue_id": item.issue_id,
+                        "category": item.category,
+                        "scene_sequences": item.scene_sequences,
+                        "metadata_targets": item.metadata_targets,
+                        "target_duration_change_required": (
+                            item.target_duration_change_required
+                        ),
+                        "observation": compact_text(item.observation, limit=360),
+                        "repair_instruction": compact_text(
+                            item.repair_instruction,
+                            limit=520,
+                        ),
+                    }
+                    for item in verification.violations
+                ]
+            ),
+            "summary": compact_text(verification.summary, limit=600),
+            "followup_rationale": compact_text(
+                verification.followup_rationale,
+                limit=500,
+            ),
+        }
+        handoff_details = {
+            "summary": verification.summary,
+            "followup_rationale": verification.followup_rationale,
+            "satisfied_issue_ids": verification.satisfied_issue_ids,
+            "violations": [
+                item.model_dump(mode="json") for item in verification.violations
+            ],
+            "latest_repair_plan": (
+                None
+                if planning_run.latest_repair_plan is None
+                else planning_run.latest_repair_plan.model_dump(mode="json")
+            ),
+        }
+
+    duration_contract_source = (
+        None
+        if planning_run.story_intent is None
+        or planning_run.story_intent.duration_contract is None
+        else planning_run.story_intent.duration_contract
+    )
+    duration_contract = (
+        None
+        if duration_contract_source is None
+        else {
+            "target_seconds": duration_contract_source.target_seconds,
+            "target_origin": duration_contract_source.target_origin.value,
+            "authority": duration_contract_source.authority.value,
+            "acceptable_range_seconds": (
+                None
+                if duration_contract_source.acceptable_range_seconds is None
+                else duration_contract_source.acceptable_range_seconds.model_dump(
+                    mode="json"
+                )
+            ),
+            "source_fidelity_policy": (
+                duration_contract_source.source_fidelity_policy.value
+            ),
+            "mismatch_resolution": duration_contract_source.mismatch_resolution.value,
+        }
+    )
+    summary = {
+        # These fields must remain ahead of outline_json and other potentially long
+        # cursor state because ContextCompiler bounds one artifact to 3,000 chars.
+        "pending_story_verification_handoff": handoff_core,
+        "duration_fit_rationale": (
+            None
+            if duration_fit is None
+            else compact_text(duration_fit.rationale, limit=900)
+        ),
+        "story_intent_duration_contract": duration_contract,
+        "run": {
+            "id": planning_run.id,
+            "job_kind": planning_run.job_kind,
+            "operation": planning_run.operation.value,
+            "status": planning_run.status.value,
+            "current_step": planning_run.current_step.value,
+            "base_script_version_id": planning_run.base_script_version_id,
+            "base_bible_version_id": planning_run.base_bible_version_id,
+            "revision_origin": planning_run.revision_origin.value,
+            "revision_evidence_refs": [
+                item.model_dump(mode="json")
+                for item in planning_run.revision_evidence_refs
+            ],
+            "owner_agent_run_id": planning_run.owner_agent_run_id,
+        },
+        "pending_story_verification_details": handoff_details,
+        # Preserve the complete compatibility record for callers that are not
+        # subject to ContextPack truncation, but keep it after the semantic handoff.
+        "execution_cursor": planning_run.model_dump(mode="json"),
+    }
+    return (
+        "Execution cursor only; canonical script, Bible, shots, and assets remain "
+        "in ProjectDocument. "
+        + json.dumps(summary, ensure_ascii=False, separators=(",", ":"))
     )
 
 
@@ -773,11 +1030,7 @@ class ProjectArtifactResolver:
             return ArtifactSummary(
                 ref=ref,
                 title=f"Content planning job {step_title}",
-                summary=(
-                    "Execution cursor only; canonical script, Bible, shots, and assets "
-                    "remain in ProjectDocument. "
-                    + planning_run.model_dump_json()
-                ),
+                summary=_content_planning_job_summary(planning_run),
             )
         if ref.artifact_type in {"script", "script_version"}:
             script = next(
@@ -796,41 +1049,10 @@ class ProjectArtifactResolver:
                 title=f"Script v{script.version}",
                 # Storyboard planning needs the exact visible actions as well as
                 # dialogue. Keep only the selected immutable version, but retain
-                # both episode- and scene-level screenplay text verbatim.
-                summary=json.dumps(
-                    {
-                        "id": script.id,
-                        "version": script.version,
-                        "source_mode": script.source_mode,
-                        "original_text": script.original_text,
-                        "screenplay_text": script.screenplay_text,
-                        "spoken_text": script.spoken_text,
-                        "subtitle_text": script.subtitle_text,
-                        "story_intent": (
-                            None
-                            if script.story_intent is None
-                            else script.story_intent.model_dump(mode="json")
-                        ),
-                        "ending_contract": (
-                            None
-                            if script.ending_contract is None
-                            else script.ending_contract.model_dump(mode="json")
-                        ),
-                        "source_contract": (
-                            None
-                            if script.source_contract is None
-                            else script.source_contract.model_dump(mode="json")
-                        ),
-                        "lines": [
-                            item.model_dump(mode="json") for item in script.lines
-                        ],
-                        "structured_scenes": [
-                            item.model_dump(mode="json")
-                            for item in script.structured_scenes
-                        ],
-                    },
-                    ensure_ascii=False,
-                ),
+                # both episode- and scene-level screenplay text verbatim. Story
+                # authority is serialized first so a bounded ContextPack cannot
+                # hide it behind a long screenplay.
+                summary=_script_version_summary(script),
             )
         if ref.artifact_type in {"bible", "bible_version"}:
             bible = next(
@@ -1779,6 +2001,20 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
 def project_summary(document: ProjectDocument) -> str:
     script = _current_script(document)
     bible = _current_bible(document)
+    duration_contract = (
+        None
+        if script is None or script.story_intent is None
+        else script.story_intent.duration_contract
+    )
+    duration_contract_summary = (
+        "none"
+        if duration_contract is None
+        else json.dumps(
+            duration_contract.model_dump(mode="json"),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
     current_chain = _current_production_chain(document)
     scene_summaries = [] if script is None else [
         f"{scene.id}:{scene.heading}:{scene.summary}" for scene in script.structured_scenes
@@ -1883,6 +2119,7 @@ def project_summary(document: ProjectDocument) -> str:
             f"{len(document.output_slots)}",
             f"Current script {document.project.current_script_version_id}; "
             f"current bible {document.project.current_bible_version_id}",
+            f"Current script DurationContract: {duration_contract_summary}",
             "Original user brief: " + document.project.input_text[:4000],
             "Characters: " + " | ".join(characters),
             "Scenes: " + " | ".join(scene_summaries),

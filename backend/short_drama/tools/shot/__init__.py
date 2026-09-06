@@ -10,6 +10,8 @@ from short_drama.production_contracts import (
     StoryboardDraftBeginRequest,
     StoryboardDraftFinalizeRequest,
     StoryboardDraftGroupReplaceRequest,
+    StoryboardDraftGroupsAppendRequest,
+    StoryboardDraftGroupsMutationResponse,
     StoryboardDraftLedgerCompleteRequest,
     StoryboardDraftLedgerSegmentAppendRequest,
     StoryboardDraftMutationResponse,
@@ -56,6 +58,12 @@ class ShotToolService(Protocol):
         project_id: str,
         request: StoryboardDraftAppendRequest,
     ) -> StoryboardDraftMutationResponse: ...
+
+    def append_storyboard_groups(
+        self,
+        project_id: str,
+        request: StoryboardDraftGroupsAppendRequest,
+    ) -> StoryboardDraftGroupsMutationResponse: ...
 
     def append_storyboard_ledger_segment(
         self,
@@ -212,6 +220,11 @@ class StoryboardDraftAppendInput(ToolModel):
     request: StoryboardDraftAppendRequest
 
 
+class StoryboardDraftGroupsAppendInput(ToolModel):
+    project_id: str
+    request: StoryboardDraftGroupsAppendRequest
+
+
 class StoryboardDraftLedgerSegmentAppendInput(ToolModel):
     project_id: str
     request: StoryboardDraftLedgerSegmentAppendRequest
@@ -314,6 +327,21 @@ def _storyboard_draft_refs(
     )
 
 
+def _storyboard_draft_group_segment_refs(
+    project_id: str,
+    result: StoryboardDraftGroupsMutationResponse,
+) -> tuple[ArtifactRef, ...]:
+    return tuple(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="storyboard_draft",
+            artifact_id=item.draft_ref.artifact_id,
+            version=item.draft_ref.version,
+        )
+        for item in result.checkpoints
+    )
+
+
 def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
     def begin_storyboard_draft(
         request: StoryboardDraftBeginInput,
@@ -374,6 +402,13 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
                 "运行检查点，不是 Scene、ClipGroup、Shot 或 ComfyUI 节点边界。"
                 "completes_scene 默认为 false；只有一个场次最后的 timing entry "
                 "显式设为 true，才表示该场次完整并把游标推进到下一场。"
+                "non_speech_reserve_seconds 只记录该条在组内并发表演后仍"
+                "不可重叠的增量时间，不是把 ClipGroup 的共享动作、反应、"
+                "停顿或换镜预留重复计入每条 entry。分组前要前瞻回算组级"
+                "的完整口播时间与共享表演预留；可并发的听者反应、道具动作、"
+                "镜头运动和环境变化只计一次。timing entry 是一段表演关键路径，"
+                "不是 Shot 或一句原文；allocated_duration_seconds 可以为小数，"
+                "只有完成后的 ClipGroup 总时长必须为 4–15 秒整数。"
                 "在封账前，Agent 还要从全场连续性检查 allocations 能否无遗漏、"
                 "不重叠地完整分区为各自精确 4–15 秒整数的 ClipGroup。如果不能，"
                 "可基于真实镜头需要调整可分割的动作、反应或停顿预留，但不得修改"
@@ -531,6 +566,53 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             handler=append_storyboard_group,
             tags=frozenset(
                 {"storyboard", "draft", "shot", "clip-group", "incremental"}
+            ),
+        )
+    )
+
+    def append_storyboard_groups(
+        request: StoryboardDraftGroupsAppendInput,
+    ) -> ToolExecution[StoryboardDraftGroupsMutationResponse]:
+        result = service.append_storyboard_groups(
+            request.project_id,
+            request.request,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_storyboard_draft_group_segment_refs(
+                request.project_id,
+                result,
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="shot.append_storyboard_groups",
+            version=1,
+            category=ToolCategory.SHOT,
+            description=(
+                "把同一语义 WorkOrder 中已经完整设计好的相邻 ClipGroup 前缀一次交给"
+                "服务端。Agent 根据自然动作链、连续性和单次响应能否完整表达，自主选择"
+                "本段范围；不设固定组数，也不要为了批量而让内容截断或降质。服务端先"
+                "整体校验它们恰好对应已封存 outline 的下一个连续前缀，再按组逐个创建"
+                "不可变 storyboard_draft 版本和 checkpoint，因此一次模型创作可减少"
+                "往返，但每个 4–15 秒整数 H3 ClipGroup 仍独立可恢复、可追踪。只有一个"
+                "组或当前只能可靠完成一个组时，继续使用 shot.append_storyboard_group。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=StoryboardDraftGroupsAppendInput,
+            output_model=StoryboardDraftGroupsMutationResponse,
+            handler=append_storyboard_groups,
+            tags=frozenset(
+                {
+                    "storyboard",
+                    "draft",
+                    "shot",
+                    "clip-group",
+                    "incremental",
+                    "segment",
+                }
             ),
         )
     )
@@ -937,6 +1019,7 @@ __all__ = [
     "StoryboardDraftBeginInput",
     "StoryboardDraftFinalizeInput",
     "StoryboardDraftGroupReplaceInput",
+    "StoryboardDraftGroupsAppendInput",
     "StoryboardDraftLedgerCompleteInput",
     "StoryboardDraftLedgerSegmentAppendInput",
     "StoryboardDraftOutlineCompleteInput",

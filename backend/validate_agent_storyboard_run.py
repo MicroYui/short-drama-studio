@@ -38,8 +38,39 @@ DEFAULT_OBJECTIVE = """
 以当前 ProjectDocument 中的 ScriptVersion 和 ProjectBibleVersion 为已确认内容，由
 Agent 独立完成一份可交给后续制片的完整结构化分镜。不改写剧本事实、台词、
 人物设定或场次顺序。
+当前精确 ScriptVersion 是本次 AgentRun 已确认且锁定的内容源；一旦确认其
+DurationContract 完整并开始新分镜草稿，本运行不得启动任何剧本内容修订。
+若新草稿的账本超出接受区间，但同一 ScriptVersion 的当前 canonical Storyboard
+已在契约区间内，这证明剧本具有可制作性：Leader 必须选择 STORYBOARD_PLAN，
+从 canonical 基版再建一个全新草稿，重新检查可并发反应、停顿、道具动作、
+运镜和组边界是否重复计时。旧 canonical 分镜只能作为时长可行性证据，
+不得复制其镜头内容；不得调用 planning.start_script_revision 改写台词或剧情。
 
-请先形成必要的 ProductionSpec，并采用 MiniMax Design 的唯一编译路径：先通读
+本次是对已确认剧本的全新分镜创作，不是把历史分镜草稿重新发布。
+项目中任何旧 storyboard_draft，无论未完成还是已经 READY，都只能作为
+历史参照：不得继续 append、不得再次 verify，也不得直接 finalize。
+Planner 必须从当前 ScriptVersion、Bible 和可复用的 ProductionSpec 调用
+shot.begin_storyboard_draft 创建新 document，并把当前 canonical Storyboard 的精确
+version ID 写入 base_storyboard_version_id，使新草稿通过正常版本修订发布。
+
+这是历史项目的重新分镜。若当前精确 ScriptVersion.story_intent.duration_contract
+缺失，或 TARGET_LED 契约仍缺少使语义 alignment 可判定的
+acceptable_range_seconds，不得将旧 ProductionSpec 的兼容默认值当成新的时长真相。用户原始需求已
+明确要求约 120 秒，且现在再次确认剧本正文正常。Leader 应先通过
+planning.start_script_revision 启动一次仅 STORY_INTENT 时长元数据的修订：剧本正文、
+台词、结构化场次、故事承诺和 Bible 保持逐项不变，只建立来自用户明确时长的
+TARGET_LED DurationContract。该元数据修订经单一 Verifier 接受后，再以新的精确
+ScriptVersion 替换 ProductionSpec 和 Storyboard；不得续作历史未完成分镜草稿。
+“约 120 秒”不是无限宽松，也不是必须精确到一帧；Agent 应根据这一集的快节奏类型、
+完整台词和可演动作，在本次 StoryIntent 中明确一个具体、可解释的接受区间；
+它是该项目的语义决定，不是全局固定容差或门禁。
+这个例外只适用于新分镜草稿开始前，当前精确 ScriptVersion 确实缺失或未完整表达
+DurationContract 时的 metadata-only 迁移。如果当前版本已有完整的 TARGET_LED target 和
+acceptable range，后续 ledger、Verifier 或 mismatch_resolution 的结论都不得再触发 Script revision。
+
+请先确认当前精确 ProductionSpec 是否已逐字投影当前 ScriptVersion 的
+DurationContract 并满足本次分镜；若已满足就直接复用，不为重新生成分镜
+无意义地创建新 Spec 版本。然后采用 MiniMax Design 的唯一编译路径：先通读
 完整剧本和 Bible；若 Planner 当前 Tool history 没有两者的当前精确正文，
 先用 project.get 取得，不以摘要或 ArtifactRef 代替原文。然后在同一 Planner
 WorkOrder 内建立可恢复的源锁定草稿，按剧情语义
@@ -49,8 +80,21 @@ WorkOrder 内建立可恢复的源锁定草稿，按剧情语义
 或对白后仍有动作时，由最后的可见动作条目完成该场。分段边界不代表场次完成。
 在首次封结 ledger 前，Planner 必须基于精确 allocations 前瞻确认：每个场次
 都存在连续、完整、不跨场的分区，每组分配时长之和精确为 4–15 秒整数。
+时长账本必须落实 drama-series Workflow 的组级语义：台词、听者反应、道具
+动作、运镜和环境变化可在同一 ClipGroup 并发。每条
+non_speech_reserve_seconds 只表示并发后仍不可重叠的增量时间，不得把
+组级的共享动作、反应、停顿或换镜预留复制给组内每条 entry。已选的
+快节奏爽剧应逐句选择依然清晰自然的紧凑语速，不把整稿统一按慢速估算。
+timing entry 是时间轴上的表演关键路径片段，不是一个 Shot 或一句原文。可并发的
+台词、听者反应、道具动作和运镜必须共用同一时间片段；allocated_duration_seconds
+可以是小数，只有最终 ClipGroup 总时长必须为 4–15 秒整数。
 如果当前条目不可分，先拆分或调整确实可分的动作、反应和停顿预留，但不改台词、
-事件或自然表演总意图，不从 120 秒等用户目标总时长倒推分配。不得先封存账本，
+事件或自然表演总意图，也不把 120 秒机械均摊到各场或各镜。但 TARGET_LED
+必须对完整剧本的可演视听密度负责：若自然演读显示内容在契约尺度内可实现，应通过
+紧凑动作、反应共时、对白与镜头并行等真实表演设计收敛；若精确账本证明无法实现，
+必须带证据交回 Leader 在 STORYBOARD_PLAN 范围重编；若仍证明不可兼得，则报告约束冲突并停止，
+不修改锁定的 ScriptVersion，也不能带着 OUTSIDE_ACCEPTED_RANGE 继续发布。
+不得先封存账本，
 再在 outline 阶段才发现无法装箱。账本完整覆盖剧本且分区可行后再完成该阶段；
 基于完整账本二次重装箱，逐段持久化
 planned ClipGroup outline，全局覆盖和连续性稳定后再写入 timing audit 完成大纲。
@@ -60,11 +104,15 @@ planned ClipGroup outline，全局覆盖和连续性稳定后再写入 timing au
 Leader 重建计划。如果 Planner 仍发现当前草稿不可行，这仍属于同一编译职责：
 可在同一 WorkOrder 内重新 begin 一个草稿分支并完整重编译，不得仅为重启草稿返回 Leader。
 不能边看一句台词
-边临时发明最终镜头组。用户目标时长只作对比，不用于平均分配或静默删改剧本。
+边临时发明最终镜头组。用户目标时长是 TARGET_LED 的作品尺度，但不用于平均分配、
+伪造账本或静默删改剧本。
 
 随后按完整剧情语义自主规划 WorkOrder。一个 WorkOrder 可以覆盖同一自然动作链
-中的多个 planned ClipGroup；Worker 每次完成一个组就立即调用 Tool 持久化，并在
-同一 WorkOrder 内沿账本继续下一组，不因“还需写下一组”而返回 Leader。长场次不
+中的多个 planned ClipGroup；Worker 优先使用 shot.append_storyboard_groups
+把一次响应能够完整、清晰设计的相邻组前缀交给服务端，由服务端先整体
+校验再按组逐版本持久化。当前只能可靠完成一个组时使用
+shot.append_storyboard_group。批次范围由自然动作链、连续性和响应容量决定，
+不为每组返回 Leader，也不为批量而截断 JSON 或降低镜头细节。长场次不
 要求塞进一次模型响应，语义范围真正变化时才重规划。不使用固定镜头数、固定调用
 次数或关键词路由替代 Agent 判断；相邻组必须从版本化草稿读取精确末态，状态变化
 需要观众可见的过渡动作。
@@ -400,9 +448,25 @@ def _waiting_blocker(run_view: JsonObject, board: JsonObject) -> str | None:
     """
 
     snapshot = _run_snapshot(run_view)
+    plan_value = snapshot.get("current_plan")
+    current_plan_id = (
+        _as_object(plan_value, "run.snapshot.current_plan").get("id")
+        if plan_value is not None
+        else None
+    )
     for value in _as_list(snapshot.get("actions"), "run.snapshot.actions"):
         action = _as_object(value, "run action")
         if action.get("kind") == "USER_INPUT" and action.get("status") == "RUNNING":
+            action_plan_id = action.get("plan_revision_id")
+            if (
+                isinstance(current_plan_id, str)
+                and isinstance(action_plan_id, str)
+                and action_plan_id != current_plan_id
+            ):
+                # Replanning supersedes the old semantic stop. The action remains
+                # in history for traceability but no longer represents the active
+                # plan's ownership boundary.
+                continue
             return (
                 "AgentRun requested user input during an unattended storyboard run: "
                 + str(action.get("input_summary") or action.get("id") or "unknown input")
@@ -421,7 +485,7 @@ def _waiting_blocker(run_view: JsonObject, board: JsonObject) -> str | None:
         for order in active_orders
         if order.get("next_owner") == "USER_INPUT"
     ]
-    if open_questions or user_owned:
+    if user_owned:
         detail = "; ".join(open_questions) or ", ".join(
             str(order.get("id") or "unknown work order") for order in user_owned
         )
@@ -439,6 +503,11 @@ def _waiting_blocker(run_view: JsonObject, board: JsonObject) -> str | None:
     )
     if ready_step or resumable_order:
         return None
+    if open_questions:
+        return (
+            "AgentRun requested user input during an unattended run: "
+            + "; ".join(open_questions)
+        )
 
     blockers = [
         str(value)
@@ -558,6 +627,40 @@ def _current_script(project: JsonObject) -> JsonObject:
         if version.get("id") == current_id:
             return version
     raise ProbeFailure(f"Current script version {current_id!r} was not returned")
+
+
+def _script_story_content(script: JsonObject) -> JsonObject:
+    """Project the authored story while excluding version and duration metadata."""
+
+    story_intent_value = script.get("story_intent")
+    story_intent = (
+        {
+            key: value
+            for key, value in story_intent_value.items()
+            if key != "duration_contract"
+        }
+        if isinstance(story_intent_value, dict)
+        else story_intent_value
+    )
+    return {
+        "source_mode": script.get("source_mode"),
+        "original_text": script.get("original_text"),
+        "screenplay_text": script.get("screenplay_text"),
+        "spoken_text": script.get("spoken_text"),
+        "subtitle_text": script.get("subtitle_text"),
+        "lines": script.get("lines"),
+        "structured_scenes": script.get("structured_scenes"),
+        "ending_contract": script.get("ending_contract"),
+        "story_intent_without_duration_contract": story_intent,
+    }
+
+
+def _script_duration_contract(script: JsonObject) -> JsonObject | None:
+    story_intent = script.get("story_intent")
+    if not isinstance(story_intent, dict):
+        return None
+    contract = story_intent.get("duration_contract")
+    return contract if isinstance(contract, dict) else None
 
 
 def _identity_list(value: JsonValue | None, label: str) -> list[str]:
@@ -710,6 +813,22 @@ def _completed_specialist_tool_events(
                 "specialist result artifact_refs",
             )
         )
+        output_value = None if result is None else result.get("output")
+        output = output_value if isinstance(output_value, dict) else {}
+        checkpoint_values = output.get("checkpoints")
+        checkpoints = checkpoint_values if isinstance(checkpoint_values, list) else []
+        committed_group_ids = [
+            checkpoint.get("clip_group_id")
+            for checkpoint in checkpoints
+            if isinstance(checkpoint, dict)
+            and isinstance(checkpoint.get("clip_group_id"), str)
+        ]
+        checkpoint_version_ids = [
+            checkpoint.get("draft_version_id")
+            for checkpoint in checkpoints
+            if isinstance(checkpoint, dict)
+            and isinstance(checkpoint.get("draft_version_id"), str)
+        ]
         events.append(
             {
                 "turn_id": turn_id,
@@ -719,6 +838,8 @@ def _completed_specialist_tool_events(
                 "turn_status": turn.get("status"),
                 "tool_status": None if result is None else result.get("status"),
                 "artifact_refs": artifact_refs,
+                "committed_group_ids": committed_group_ids,
+                "checkpoint_version_ids": checkpoint_version_ids,
                 "completed_at": turn.get("updated_at"),
             }
         )
@@ -1079,6 +1200,10 @@ def _write_trace_markdown(trace: JsonObject, output_path: Path) -> None:
             lines.append("- Specialist Tool 事件：")
             for event_value in specialist_events:
                 event = _as_object(event_value, "specialist tool event")
+                committed_group_ids = _as_list(
+                    event.get("committed_group_ids"),
+                    "specialist committed_group_ids",
+                )
                 lines.append(
                     "  - `"
                     + str(event.get("tool_name") or "tool")
@@ -1088,6 +1213,11 @@ def _write_trace_markdown(trace: JsonObject, output_path: Path) -> None:
                     + str(event.get("work_order_id") or "-")
                     + "` · turn "
                     + str(event.get("sequence") or "?")
+                    + (
+                        " · groups " + "、".join(str(item) for item in committed_group_ids)
+                        if committed_group_ids
+                        else ""
+                    )
                 )
         updates = _as_list(
             phase.get("work_order_updates"),
@@ -1518,13 +1648,48 @@ def _validate_storyboard_only_result(
     baseline = _baseline(before)
     after_record = _project_record(after)
     after_document = _project_document(after)
+    before_script = _current_script(before)
+    after_script = _current_script(after)
     script_version_id = _string(
         after_record.get("current_script_version_id"),
         "after current_script_version_id",
     )
-    if script_version_id != baseline.get("current_script_version_id"):
-        errors.append("Storyboard run changed the current ScriptVersion")
-    if (
+    script_version_changed = script_version_id != baseline.get(
+        "current_script_version_id"
+    )
+    if script_version_changed:
+        before_contract = _script_duration_contract(before_script)
+        after_contract = _script_duration_contract(after_script)
+        legacy_contract_needs_refinement = (
+            before_contract is None
+            or (
+                before_contract.get("authority") == "TARGET_LED"
+                and (
+                    before_contract.get("target_seconds") is None
+                    or before_contract.get("acceptable_range_seconds") is None
+                )
+            )
+        )
+        if not legacy_contract_needs_refinement:
+            errors.append(
+                "Storyboard run changed a ScriptVersion whose DurationContract "
+                "was already complete"
+            )
+        if _script_story_content(before_script) != _script_story_content(after_script):
+            errors.append(
+                "Legacy duration migration changed confirmed screenplay content"
+            )
+        if (
+            after_contract is None
+            or after_contract.get("authority") != "TARGET_LED"
+            or after_contract.get("target_origin") != "USER_DECLARED"
+            or after_contract.get("acceptable_range_seconds") is None
+        ):
+            errors.append(
+                "Legacy duration migration did not establish a user-declared "
+                "TARGET_LED DurationContract with a semantic accepted range"
+            )
+    elif (
         expected_script_version_id is not None
         and script_version_id != expected_script_version_id
     ):
@@ -1583,7 +1748,7 @@ def _validate_storyboard_only_result(
     if storyboard.get("computed_duration_seconds") in (None, 0, 0.0):
         errors.append("Canonical Storyboard has no positive computed duration")
 
-    script = _current_script(after)
+    script = after_script
     expected_line_ids = [
         _string(_as_object(value, "script line").get("id"), "script line id")
         for value in _as_list(script.get("lines"), "script lines")
@@ -1637,6 +1802,23 @@ def _validate_storyboard_only_result(
         errors.append("Storyboard draft has no timing audit")
     if verification_value is None:
         errors.append("Storyboard draft has no semantic verification report")
+    timing_audit = (
+        _as_object(timing_audit_value, "timing_audit")
+        if timing_audit_value is not None
+        else None
+    )
+    duration_contract = _script_duration_contract(script)
+    if (
+        duration_contract is not None
+        and duration_contract.get("authority") == "TARGET_LED"
+        and (
+            timing_audit is None
+            or timing_audit.get("alignment") != "ALIGNED"
+        )
+    ):
+        errors.append(
+            "TARGET_LED storyboard did not finish with ALIGNED timing"
+        )
 
     ledger_ids = [
         _string(item.get("id"), "timing ledger entry id") for item in timing_ledger
@@ -1933,6 +2115,18 @@ def _validate_storyboard_only_result(
         "shot.record_storyboard_draft_verification",
         "shot.finalize_storyboard",
     )
+    detailed_group_tools = {
+        "shot.append_storyboard_group",
+        "shot.append_storyboard_groups",
+    }
+
+    def normalized_group_tool(name: str) -> str:
+        return (
+            "shot.append_storyboard_group"
+            if name in detailed_group_tools
+            else name
+        )
+
     planning_tool_names: set[str] = set(planning_tool_stages)
     successful_events = _successful_trace_tool_events(trace)
     final_planning_branch = _final_successful_planning_branch(
@@ -1940,7 +2134,9 @@ def _validate_storyboard_only_result(
         planning_tool_names,
     )
     if final_planning_branch is None:
-        successful_tool_names = [name for name, _owner in successful_events]
+        successful_tool_names = [
+            normalized_group_tool(name) for name, _owner in successful_events
+        ]
         missing_tools = _missing_ordered_tool_stages(
             successful_tool_names,
             planning_tool_stages + post_planning_tool_stages,
@@ -1955,7 +2151,7 @@ def _validate_storyboard_only_result(
             planning_tool_stages,
         )
         post_planning_names = [
-            name
+            normalized_group_tool(name)
             for name, _owner in successful_events[
                 final_planning_branch.completion_index + 1 :
             ]

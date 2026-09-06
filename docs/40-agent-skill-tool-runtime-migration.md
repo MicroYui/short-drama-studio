@@ -131,7 +131,7 @@ Plan 是 Agent 可修订的工作假设，不是业务真相源。每次重新�
 → 基于最新 ContextPack 继续重规划，直到 goal_complete=true
 ```
 
-用户在已有项目上点击新的 Agent 制作任务时，直接调用 `POST /projects/{project_id}/agent-runs`。桌面端只为本次从默认入口启动的 `AUTO_DRAFT` Run 保持自动续跑，并统一调用 `POST /agent-runs/{run_id}/advance`：后端根据 WorkOrder 的 `next_owner`，优先推进一个可由 Worker 继续的独立 Team batch，否则推进一个 Leader Action/重规划单元。一次调用不隐藏 drain、固定创作重试或 Worker 返回后的 Leader 重规划；批次失败直接可见并停止。真实 H3 仍根据项目阶段、MiniMax 任务状态、Take、Manifest 与 Export 的实际变化决定退避等待。续跑持续到完成、失败、明确 `USER_INPUT` 或进入确需人工处理状态；GUIDED 与 Agent 面板手动 Run 保持停靠式交互。
+用户在已有项目上点击新的 Agent 制作任务时，直接调用 `POST /projects/{project_id}/agent-runs`。桌面端只为本次从默认入口启动的 `AUTO_DRAFT` Run 保持自动续跑，并统一调用 `POST /agent-runs/{run_id}/advance`：后端根据 WorkOrder 的 `next_owner`，优先推进一个可由 Worker 继续的独立 Team batch，否则推进一个 Leader Action/重规划单元。同一 Worker 持有责任时，一次无人值守调用可连续执行已持久化的“模型决策 → Tool → 原 Worker”回合；每个回合仍独立落盘和可观察，不跨越 `LEADER_REPLAN` 或 `USER_INPUT`，也不隐藏固定创作重试或 Worker 返回后的 Leader 重规划；批次失败直接可见并停止。真实 H3 仍根据项目阶段、MiniMax 任务状态、Take、Manifest 与 Export 的实际变化决定退避等待。续跑持续到完成、失败、明确 `USER_INPUT` 或进入确需人工处理状态；GUIDED 与 Agent 面板手动 Run 保持停靠式交互。
 
 同一项目无人值守推进期间，桌面端保留项目切换、刷新、Agent Run/WorkOrder 只读查看，但不挂载会主动写入的 Script、Assets、Shots、H3、Takes、Timeline 与 QA 面板，并在父级写处理器再次校验运行状态；这样 H3 面板的内部轮询也不会与 Agent 同时修改 `ProjectDocument`。当前桌面窗口一次只启动一个无人值守续跑，新建项目或启动另一个 `AUTO_DRAFT` 会等当前 Run 完成或暂停。进程重启后只恢复最新项目未结束且显式标记为 `unattended` 的 AgentRun；`WORKER_DECISION/WORKER_TOOL` 会由统一 `advance` 续跑，只有 `USER_INPUT` 或真正无法自主推进的状态才暂停并在 Agent 控制面展示。桌面端不查询、展示或推进独立 PlanningRun；Agent-owned Content Planning Job（当前 `PlanningRun`）只由所属 AgentRun 通过 `planning.advance` 推进。
 
@@ -263,7 +263,7 @@ Skill 不负责：
 1. **渐进式上下文**：Root Planner 和 Specialist 先读紧凑 Role/Method/Tool Catalog；Agent 显式选择 Method/Role/Tool ID 后，再加载该角色需要的官方原文/忠实中译精确 section、Tool Schema 与工件内容。Loader 只校验 ID 和角色支持，不用关键词或正则路由。
 2. **`ContextManifest`**：Leader 为每个 WorkOrder 选择当前目标、精确 ArtifactRef 版本、相邻边界、必须继承的决定、经验标签和预期输出，代替对子 Agent 广播全项目记忆。
 3. **派生 Shared Board**：`ProductionBoardView` 从 ProjectDocument、AgentRun、Actions、WorkOrders、Decisions、AgentResults 和 Issue Ledger 投影当前目标、任务、工件、阻塞和下一步，不建立第二份可写真相。子 Agent 的中间进度可以简单 append-only `WorkOrderProgressEntry` 保留，无需事件溯源。
-4. **轻量本地 TeamExecutor**：已支持认领当前计划中 `next_owner=WORKER_DECISION/WORKER_TOOL` 的多个独立 WorkOrders，并行运行语言/只读工作，并通过 Production Manager 统一项目写通道串行化 WRITE/EXTERNAL Tool。`LEADER_REPLAN` 交回统一 advance 的 Leader 路径，`USER_INPUT` 明确暂停；Worker batch 失败可见且不自动重放。PlanRevision 使用显式 `carried_work_order_ids` 决定保留的后台工作，旧计划迟到结果只做历史交接。单用户桌面端不需要 Redis、Celery、租约或分布式 Agent 服务。
+4. **轻量本地 TeamExecutor**：已支持认领当前计划中 `next_owner=WORKER_DECISION/WORKER_TOOL` 的多个独立 WorkOrders，并行运行语言/只读工作，并通过 Production Manager 统一项目写通道串行化 WRITE/EXTERNAL Tool。无人值守入口会在同一 Worker 所有权内自动续跑已落盘的模型/Tool 回合，减少空的客户端轮询；`LEADER_REPLAN` 交回统一 advance 的 Leader 路径，`USER_INPUT` 明确暂停；Worker batch 失败可见且不自动重放。PlanRevision 使用显式 `carried_work_order_ids` 决定保留的后台工作，旧计划迟到结果只做历史交接。单用户桌面端不需要 Redis、Celery、租约或分布式 Agent 服务。
 5. **统一 Method 工件**：版本化 `ProductionDocument` 为品牌事实、文案锁、教学结构、参考拆解、音乐结构等中间成果提供稳定 identity、不可变 snapshot、当前项目内可解析的精确来源 ArtifactRef 和通用 Artifact Tools/API，不把它们继续只留在 Prompt 或另建方法状态岛；具有领域不变量的音频文档只能由专用操作写入。
 6. **音乐主轴后端闭环**：Master Audio、AudioStructureMap、TimedTextLock、音频 Tools/API、TimelineManifest 投影和导出换轨已经接通；`time_origin + duration` 定义成片长度，画面按需尾帧保持或裁切，导出统一规范声画长度；本机不能测量的节拍维度明确留空，不由 Agent 臆造。
 7. **H3 五模式精确交接**：`DIRECT/FRAME_FIRST/FRAME_LAST/FRAME_FIRST_LAST/REFERENCE` 共享完整 freshness、current-approved 资产检查、可恢复 asset preparation 和独立 `state_revision`，旧计划或旧关键帧不能被误用于新提交。

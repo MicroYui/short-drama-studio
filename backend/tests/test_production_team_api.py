@@ -18,6 +18,7 @@ from short_drama.agent_runtime import (
     AgentRunStatus,
     DelegationStatus,
     PlanStep,
+    SpecialistTurnStatus,
     WorkOrderNextOwner,
 )
 from short_drama.deps import get_short_drama_service
@@ -202,6 +203,49 @@ class ProtocolCorrectingSpecialistLanguageClient:
         return result
 
 
+class ProtocolRepeatingSpecialistLanguageClient:
+    def __init__(self) -> None:
+        self.specialist_calls = 0
+        self.inputs: list[str] = []
+
+    def validate_credentials(self) -> None:
+        return None
+
+    def generate_text(
+        self,
+        *,
+        instructions: str,
+        input_text: str,
+        image_urls: list[str] | None = None,
+        max_output_tokens: int = 2200,
+    ) -> str:
+        del instructions, image_urls, max_output_tokens
+        self.inputs.append(input_text)
+        payload = cast(dict[str, object], json.loads(input_text))
+        if "work_order" not in payload:
+            raise AssertionError("Protocol no-progress must return control to the Leader")
+        self.specialist_calls += 1
+        if self.specialist_calls > 2:
+            raise AssertionError(
+                "The same semantic protocol failure must not be replayed indefinitely"
+            )
+        result = json.dumps(
+            {
+                "status": "COMPLETED",
+                "concise_summary": "The same Worker completed the bounded review.",
+                "created_artifacts": [],
+                "updated_artifacts": [],
+                "findings": ["The staging remains readable."],
+                "decisions": [],
+                "assumptions": [],
+                "unresolved_questions": [],
+                "evidence_refs": [],
+                "recommended_next_actions": [],
+            }
+        )
+        return result + "\n" + json.dumps({"extra": True})
+
+
 def test_board_and_team_advance_are_available_through_the_http_api(
     tmp_path: Path,
 ) -> None:
@@ -335,14 +379,20 @@ def test_unattended_advance_owns_worker_tool_restart_and_leader_completion(
     delegated_order = service.get_agent_work_order(work_order_id).work_order
     assert delegated_order.next_owner == WorkOrderNextOwner.WORKER_DECISION
 
-    requested_tool = service.advance_agent_run(
+    completed_worker = service.advance_agent_run(
         run_id,
         AgentRunAdvanceRequest(max_actions=8),
     )
-    assert requested_tool.advanced_work_order_ids == [work_order_id]
-    tool_order = service.get_agent_work_order(work_order_id).work_order
-    assert tool_order.status == DelegationStatus.NEEDS_ATTENTION
-    assert tool_order.next_owner == WorkOrderNextOwner.WORKER_TOOL
+    assert completed_worker.advanced_work_order_ids == [work_order_id]
+    completed_order = service.get_agent_work_order(work_order_id).work_order
+    assert completed_order.status == DelegationStatus.COMPLETED
+    assert completed_order.next_owner is None
+    assert len(completed_order.specialist_turns) == 1
+    completed_turn = completed_order.specialist_turns[0]
+    assert completed_turn.status == SpecialistTurnStatus.COMPLETED
+    assert completed_turn.result is not None
+    assert completed_turn.result["status"] == "SUCCEEDED"
+    assert completed_worker.run.snapshot.run.status == AgentRunStatus.RUNNING
 
     restarted = ShortDramaService(
         database_path=database_path,
@@ -350,31 +400,19 @@ def test_unattended_advance_owns_worker_tool_restart_and_leader_completion(
         language_provider_factory=lambda _key, _url: language_client,
     )
     restored_order = restarted.get_agent_work_order(work_order_id).work_order
-    assert restored_order.next_owner == WorkOrderNextOwner.WORKER_TOOL
-
-    executed_tool = restarted.advance_agent_run(
-        run_id,
-        AgentRunAdvanceRequest(max_actions=8),
-    )
-    assert executed_tool.advanced_work_order_ids == [work_order_id]
-    decision_order = restarted.get_agent_work_order(work_order_id).work_order
-    assert decision_order.next_owner == WorkOrderNextOwner.WORKER_DECISION
-
-    completed_worker = restarted.advance_agent_run(
-        run_id,
-        AgentRunAdvanceRequest(max_actions=8),
-    )
-    assert completed_worker.advanced_work_order_ids == [work_order_id]
-    completed_order = restarted.get_agent_work_order(work_order_id).work_order
-    assert completed_order.status == DelegationStatus.COMPLETED
-    assert completed_order.next_owner is None
-    assert completed_worker.run.snapshot.run.status.value == "RUNNING"
+    assert restored_order.id == work_order_id
+    assert restored_order.status == DelegationStatus.COMPLETED
+    assert restored_order.next_owner is None
+    assert len(restored_order.specialist_turns) == 1
+    restored_turn = restored_order.specialist_turns[0]
+    assert restored_turn.status == SpecialistTurnStatus.COMPLETED
+    assert restored_turn.result == completed_turn.result
 
     completed_leader = restarted.advance_agent_run(
         run_id,
         AgentRunAdvanceRequest(max_actions=8),
     )
-    assert completed_leader.run.snapshot.run.status.value == "COMPLETED"
+    assert completed_leader.run.snapshot.run.status == AgentRunStatus.COMPLETED
 
 
 def test_partial_worker_result_returns_control_to_leader_on_next_advance(
@@ -529,19 +567,10 @@ def test_unattended_protocol_correction_keeps_same_work_order_and_plan(
     delegated = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
     work_order_id = delegated.created_work_order_ids[0]
 
-    protocol_feedback = service.advance_agent_run(
+    corrected = service.advance_agent_run(
         run_id,
         AgentRunAdvanceRequest(),
     )
-
-    assert protocol_feedback.advanced_work_order_ids == [work_order_id]
-    pending = service.get_agent_work_order(work_order_id).work_order
-    assert pending.next_owner == WorkOrderNextOwner.WORKER_DECISION
-    assert pending.pending_protocol_feedback is not None
-    assert protocol_feedback.run.snapshot.actions[0].status == ActionStatus.RUNNING
-    assert protocol_feedback.run.snapshot.run.current_plan_revision_id == original_plan_id
-
-    corrected = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
 
     assert corrected.advanced_work_order_ids == [work_order_id]
     completed_order = service.get_agent_work_order(work_order_id).work_order
@@ -549,6 +578,7 @@ def test_unattended_protocol_correction_keeps_same_work_order_and_plan(
     assert completed_order.pending_protocol_feedback is None
     assert corrected.run.snapshot.actions[0].status == ActionStatus.SUCCEEDED
     assert corrected.run.snapshot.run.current_plan_revision_id == original_plan_id
+    assert corrected.run.snapshot.run.status == AgentRunStatus.RUNNING
     assert language_client.specialist_calls == 2
     second_payload = cast(dict[str, object], json.loads(language_client.inputs[1]))
     assert second_payload["response_protocol_feedback"] is not None
@@ -556,6 +586,61 @@ def test_unattended_protocol_correction_keeps_same_work_order_and_plan(
     finished = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
 
     assert finished.run.snapshot.run.status == AgentRunStatus.COMPLETED
+
+
+def test_unattended_repeated_equivalent_protocol_failure_returns_to_leader(
+    tmp_path: Path,
+) -> None:
+    language_client = ProtocolRepeatingSpecialistLanguageClient()
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: language_client,
+    )
+    project = service.initialize_fixture().document.project
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    created = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Return repeated protocol no-progress to the Leader.",
+            unattended=True,
+            execution_target=ProductionExecutionTarget.MOCK,
+            initial_plan=AgentPlanProposal(
+                summary="Delegate one bounded review.",
+                goal_complete=True,
+                steps=[
+                    PlanStep(
+                        id="repeated-protocol-review",
+                        title="Review staging",
+                        kind=ActionKind.DELEGATION,
+                        assigned_agent="story-reviewer",
+                        production_skill_role=ProductionSkillRole.WRITER,
+                        instructions="Return one bounded staging review.",
+                    )
+                ],
+            ),
+        ),
+    )
+    run_id = created.snapshot.run.id
+    original_plan_id = created.snapshot.run.current_plan_revision_id
+    delegated = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
+    work_order_id = delegated.created_work_order_ids[0]
+
+    stopped = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
+
+    assert stopped.advanced_work_order_ids == [work_order_id]
+    assert language_client.specialist_calls == 2
+    second_payload = cast(dict[str, object], json.loads(language_client.inputs[1]))
+    assert second_payload["response_protocol_feedback"] is not None
+    work_order = service.get_agent_work_order(work_order_id).work_order
+    assert work_order.status == DelegationStatus.NEEDS_ATTENTION
+    assert work_order.next_owner == WorkOrderNextOwner.LEADER_REPLAN
+    assert work_order.pending_protocol_feedback is not None
+    assert stopped.run.snapshot.actions[0].status == ActionStatus.FAILED
+    assert stopped.run.snapshot.run.status == AgentRunStatus.RUNNING
+    assert stopped.run.snapshot.run.current_plan_revision_id == original_plan_id
 
 
 def test_team_advance_rejects_an_unknown_run(tmp_path: Path) -> None:

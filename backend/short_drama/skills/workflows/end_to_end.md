@@ -406,7 +406,7 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 
 WorkOrder 中接收者身份与专业职责分开表达：`assigned_agent`/接收者只说明任务交给谁，`production_skill_role` 才决定装载概念策划、编剧、导演、审校等哪一组职责。该角色由 Production Manager 依据完整目标显式选择，不能从名字中推断。
 
-专业 Agent 需要 Tool 时也不在一次外部 `execute` 中隐藏循环：一次调用只完成一次模型决策，或者执行一个此前已经持久化的 Tool 请求。请求参数、理由、状态与结果按顺序写入 `WorkOrder.specialist_turns`，下一次调用再把这段历史交给专业 Agent 决定继续调用 Tool 还是返回 AgentResult。进程重启后，尚处于 `IN_PROGRESS` 的 turn 标记为 `INTERRUPTED`，WorkOrder 回到 `NEEDS_ATTENTION`；Agent 查看规范项目状态和中断证据后决定对账、重试或换路线，Harness 不自动重放。这个边界用于暴露进度与正确恢复，不是 Tool 次数上限。
+专业 Agent 需要 Tool 时也不在一次外部 `execute` 中隐藏不可观察的状态：每一步只完成一次模型决策，或者执行一个此前已经持久化的 Tool 请求。请求参数、理由、状态与结果按顺序写入 `WorkOrder.specialist_turns`；无人值守推进可在同一 Worker 仍持有责任时自然连续执行“模型决策 → Tool → 原 Worker”，不要求外层为每一步重新轮询。进程重启后，尚处于 `IN_PROGRESS` 的 turn 标记为 `INTERRUPTED`，WorkOrder 回到 `NEEDS_ATTENTION`；Agent 查看规范项目状态和中断证据后决定对账、重试或换路线，Harness 不自动重放。这个边界用于暴露进度与正确恢复，不是 Tool 次数上限。若 Worker 在收到类型化协议反馈后再次返回语义等价的非法结构，Harness 不猜测或执行畸形 JSON，也不按固定次数重试，而是保留已落盘工件并把语义无进展证据交回 Leader；Leader 需要缩小、重组或改写剩余任务，不能原样重发。
 
 专业 Agent 返回的 AgentResult 至少说明：
 
@@ -422,7 +422,9 @@ Shared Whiteboard 不建立第二份可写状态。当前 `ProductionBoardView` 
 
 MiniMax Design 中用 Canvas 展示的剧本、生产计划、资产、storyboard、clip 和后期节点，在本地都是上述权威工件与任务状态的投影；不为接入 Workflow 复制 Stage Plan 引擎，也不要求用户手工连接整条制片图。Hub 中的选项卡和“确认后继续”只是上游交互表达，是否停下仍服从本文开头的交互优先级。
 
-本地 `TeamExecutor` 可同时认领多个当前 PlanRevision 中没有依赖冲突的 WorkOrders，在运行锁外并行执行专业判断与只读 Tool。每个 WorkOrder 持久化 `next_owner`：`WORKER_DECISION`、`WORKER_TOOL`、`LEADER_REPLAN` 或 `USER_INPUT`。无人值守统一 `advance` 每次只选择一个独立 Worker 批次；没有 Worker 批次时才推进一个 Leader Action/重规划单元，不在 Worker 返回中隐藏 drain 或 Leader 重规划。Worker 批次失败会以可见错误停止，下一次是否由 Leader 改计划由显式状态决定，不自动重放。写入和外部副作用无论来自 Leader 还是 Worker，都共用同一项目写通道串行进入唯一 ProjectDocument。计划被替换时，只有 Leader 显式写入 `carried_work_order_ids` 的未完成委派继续执行；其他委派停止自动执行，迟到结果仅作历史交接，不得合并到新计划。单用户桌面产品不需要 Redis、Celery、租约或分布式协调。
+本地 `TeamExecutor` 可同时认领多个当前 PlanRevision 中没有依赖冲突的 WorkOrders，在运行锁外并行执行专业判断与只读 Tool。每个 WorkOrder 持久化 `next_owner`：`WORKER_DECISION`、`WORKER_TOOL`、`LEADER_REPLAN` 或 `USER_INPUT`。无人值守统一 `advance` 每次只选择一个独立 Worker 批次；没有 Worker 批次时才推进一个 Leader Action/重规划单元。在同一 Worker 仍持有责任时，该批次可连续执行“模型决策 → Tool → 原 Worker”，但每个 turn 仍独立持久化且可被 Board/心跳读取；不跨越 Leader 重规划或用户输入边界。Worker 批次失败会以可见错误停止，下一次是否由 Leader 改计划由显式状态决定，不自动重放。写入和外部副作用无论来自 Leader 还是 Worker，都共用同一项目写通道串行进入唯一 ProjectDocument。计划被替换时，只有 Leader 显式写入 `carried_work_order_ids` 的未完成委派继续执行；其他委派停止自动执行，迟到结果仅作历史交接，不得合并到新计划。单用户桌面产品不需要 Redis、Celery、租约或分布式协调。
+
+当 Verifier 的多个 finding 只影响部分 ClipGroup 时，Leader 先按共同自然动作链、相邻连续性与道具状态、问题因果和单个任务的可清晰处理范围进行语义聚类。相同 finding 类型或抽象根因不自动等于一个 WorkOrder；跨场、非相邻、证据链不同或完整 Group 替换会令上下文过重时，应拆成带顺序依赖的多个 repair WorkOrder。每个 WorkOrder 携带冻结的 Verifier 证据，执行时读取前一项完成后的当前 draft，只处理所分配的 cluster 并返回最新 ArtifactRef、已处理范围与剩余问题。一个 cluster 可以包含一组或多组，不设置固定数量、关键词路由或程序化 splitter。
 
 ## 已实现与待真实样本验证
 

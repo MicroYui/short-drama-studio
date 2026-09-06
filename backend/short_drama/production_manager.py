@@ -50,7 +50,6 @@ from short_drama.agent_runtime.artifact_resolver import (
 from short_drama.agent_runtime.models import utc_now
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
-    ContentPlanningOutput,
     DurationAlignment,
     DurationAuthority,
     DurationFitAssessment,
@@ -711,6 +710,53 @@ def _validation_issues(error: ValueError) -> list[dict[str, JsonValue]]:
     return cast(list[dict[str, JsonValue]], normalized)
 
 
+def _specialist_protocol_feedback_signature(
+    feedback: SpecialistProtocolFeedback,
+) -> str:
+    """Identify whether a Worker made semantic protocol progress.
+
+    Feedback IDs, timestamps, parser column numbers, and trailing invalid
+    serialization are excluded.  A leading JSON value is canonicalized only
+    for comparison; the malformed response remains rejected and is never run.
+    """
+
+    rejected = _json_block(feedback.rejected_response).strip()
+    semantic_response: JsonValue
+    try:
+        decoded, _end = json.JSONDecoder().raw_decode(rejected)
+    except json.JSONDecodeError:
+        semantic_response = rejected
+    else:
+        semantic_response = cast(JsonValue, decoded)
+
+    issue_projection: dict[str, JsonValue] = {}
+    for contract_name, issues in sorted(feedback.validation_issues.items()):
+        issue_projection[contract_name] = cast(
+            JsonValue,
+            [
+                {
+                    "type": issue.get("type"),
+                    "loc": issue.get("loc", []),
+                }
+                for issue in issues
+            ],
+        )
+    signature_payload: dict[str, JsonValue] = {
+        "semantic_response": semantic_response,
+        "validation_issues": cast(JsonValue, issue_projection),
+        "loaded_tool_schema_ids": cast(
+            JsonValue,
+            sorted(feedback.loaded_tool_schema_ids),
+        ),
+    }
+    return json.dumps(
+        signature_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _unique_artifact_refs(refs: Sequence[ArtifactRef]) -> list[ArtifactRef]:
     result: list[ArtifactRef] = []
     seen: set[tuple[str, str, str, int | None]] = set()
@@ -721,6 +767,84 @@ def _unique_artifact_refs(refs: Sequence[ArtifactRef]) -> list[ArtifactRef]:
         seen.add(identity)
         result.append(ref)
     return result
+
+
+def _visible_context_artifact_refs(context: ContextPack) -> list[ArtifactRef]:
+    """Collect exact artifact identities that the Leader can actually see."""
+
+    refs: list[ArtifactRef] = [artifact.ref for artifact in context.artifacts]
+    for decision in context.decisions:
+        refs.extend(decision.artifact_refs)
+    for experience in context.experiences:
+        refs.extend(experience.artifact_refs)
+    for action in context.recent_actions:
+        refs.extend(action.artifact_refs)
+        if action.agent_result is not None:
+            refs.extend(action.agent_result.evidence_refs)
+    return _unique_artifact_refs(refs)
+
+
+def _plan_artifact_ref_entries(
+    proposal: AgentPlanProposal,
+) -> list[tuple[str, ArtifactRef]]:
+    """Return all context-manifest refs authored by a proposed plan."""
+
+    entries: list[tuple[str, ArtifactRef]] = []
+    for step_index, step in enumerate(proposal.steps):
+        for ref_index, ref in enumerate(step.artifact_refs):
+            entries.append(
+                (f"steps[{step_index}].artifact_refs[{ref_index}]", ref)
+            )
+        if step.kind != ActionKind.DELEGATION:
+            continue
+        for boundary_index, boundary in enumerate(
+            _context_boundaries_argument(step.arguments)
+        ):
+            for ref_index, ref in enumerate(boundary.artifact_refs):
+                entries.append(
+                    (
+                        "steps["
+                        f"{step_index}].arguments.adjacent_boundaries["
+                        f"{boundary_index}].artifact_refs[{ref_index}]",
+                        ref,
+                    )
+                )
+    return entries
+
+
+def _unavailable_plan_artifact_ref_feedback(
+    proposal: AgentPlanProposal,
+    context: ContextPack,
+) -> dict[str, JsonValue] | None:
+    """Describe invented context refs so the same Leader can correct its plan."""
+
+    available_refs = _visible_context_artifact_refs(context)
+    available_identities = {ref.identity() for ref in available_refs}
+    issues: list[JsonValue] = []
+    for path, ref in _plan_artifact_ref_entries(proposal):
+        if ref.identity() in available_identities:
+            continue
+        issues.append(
+            {
+                "path": path,
+                "received": ref.model_dump(mode="json"),
+            }
+        )
+    if not issues:
+        return None
+    return {
+        "kind": "UNAVAILABLE_ARTIFACT_REF",
+        "issues": issues,
+        "available_artifact_refs": [
+            ref.model_dump(mode="json") for ref in available_refs
+        ],
+        "instruction": (
+            "Copy the complete ArtifactRef exactly from the current ContextPack. "
+            "Do not invent, rename, alias, or infer artifact_type, artifact_id, or "
+            "version. If no exact current reference is available, end this plan before "
+            "the dependent step and obtain the artifact in a later replan."
+        ),
+    }
 
 
 class LanguageProductionPlanner:
@@ -759,8 +883,25 @@ class LanguageProductionPlanner:
             "你是以 Agent 为核心的视频创作系统中的 Production Manager。请依据给定上下文，"
             "为当前目标提出最小且有用的下一版计划。你可以选择、跳过、重排、并行或替换步骤，"
             "不要照抄固定工作流。TOOL_CALL 或 ARTIFACT_PATCH 只能使用可用的 Tool id；"
+            "ContextPack 中的 AgentRun objective 是本次运行的最新用户目标；"
+            "Project original user brief 是创建项目时的历史要求。两者的停止范围不一致时，"
+            "以当前 AgentRun objective 为准，不得仅因历史 brief 已完成就声称本次目标完成。"
+            "当当前 objective 已将某个精确 ScriptVersion 声明为已确认、锁定或不可改写的来源时，"
+            "该运行的任务范围就不包含剧本修订；不得因新分镜草稿的时长账本与目标不一致而启动 "
+            "planning.start_script_revision。先语义区分是分镜计划重复计时、并发表演未落实或组边界不合理，"
+            "还是剧本确实过载。若同一精确 ScriptVersion 已有落在契约区间内的 canonical Storyboard，"
+            "它可作为「该剧本可在此尺度制作」的证据，但不作为复制旧分镜的内容来源；"
+            "应在 STORYBOARD_PLAN 范围内重编新草稿。只有 objective 明确授权修改剧本，"
+            "或 Agent 携精确证据返回用户并获得新的修订目标后，SCRIPT 才是可用的 repair scope。"
+            "goal_complete 必须与当前 objective 所要求的最终版本化工件一致。"
             "当专业 Agent 应依据当前 Production Skill 完成任务时使用 DELEGATION；"
             f"{_AGENT_INTERACTION_PRIORITY} USER_INPUT 必须符合这一优先级。"
+            "若一个 WorkOrder 因同一 Worker 在收到类型化协议反馈后仍返回"
+            "语义等价的非法结构而交回 LEADER_REPLAN，这表示当前交接方式"
+            "没有产生实质进展。Leader 不得原样重发该 WorkOrder；应保留已"
+            "持久化的工件和已完成范围，再根据现有证据将剩余任务收缩、"
+            "重组为一个自然且连贯的修复单元，或简化预期交付结构与上下文。"
+            "范围大小由剩余问题的语义边界决定，不设固定组数、轮次或重试上限。"
             "若当前存在属于本 AgentRun 且尚未完成的 content_planning_job，"
             "本轮只能编排该 Script Stage 的 planning.advance、"
             "planning.resolve_story_verification 和必要的 USER_INPUT 停靠点。"
@@ -783,6 +924,9 @@ class LanguageProductionPlanner:
             "该 Tool 会继承原始要求和当前版本，并由剧本 Leader 自主决定局部逐场修改、"
             "全场逐场修改或结构重构。不要用关键词判断范围，也不要用 script.revise_lines "
             "承担场景、人物、节奏或因果层面的改写。"
+            "planning.start_script_revision 的 production-constraint evidence_refs 只放该 Tool "
+            "明确支持的当前 script_version、production_spec 或 storyboard_draft 证据；"
+            "Bible 仍需通读并保持，但不得把 bible_version 塞入不支持的 evidence_refs。"
             "当目标是从已确认剧本制作分镜时，对外最终结果仍是一份绑定到 "
             "storyboard.current 的完整 Storyboard，不按场次创建多份正式分镜文档。"
             "为当前剧本创建或替换 ProductionSpec 时，duration_contract 必须逐字段复制"
@@ -806,6 +950,18 @@ class LanguageProductionPlanner:
             "每个场次只有最后一个 timing entry 显式设置 completes_scene=true，"
             "其他场内条目为 false。纯动作场次或对白后仍有可见动作时，由最后的"
             "动作条目标记场次完成；不把分段持久化边界当成场次结束。"
+            "按 MiniMax drama-series 的组级时长算法记账：同一个预计 "
+            "ClipGroup 中，对白、听者反应、道具动作、镜头运动与环境变化"
+            "可以并发表演。每条 non_speech_reserve_seconds 只记录在并发后仍"
+            "不可重叠的增量时间，不得把同一个组的共享动作、反应、停顿"
+            "或换镜预留重复加到每条 ledger entry。速度必须逐句服务当前"
+            "表演；已选快节奏短剧时，可在依然清晰自然的句子上使用更紧凑"
+            "的语速，不把所有台词统一按慢速估算。这是消除重复计时和落实"
+            "项目节奏，不是从目标总时长机械倒推每条。"
+            "timing entry 是一段时间轴表演关键路径，不是一个 Shot，也不必"
+            "与一句原文一对一。能同时发生的对白、反应、道具动作和运镜应"
+            "纳入同一关键路径片段；allocated_duration_seconds 可以是小数，"
+            "只有最终 ClipGroup 总时长必须为 4–15 秒整数。"
             "在首次封结 ledger 之前，Planner 必须基于已精确分配的时长前瞻确认："
             "每个场次的有序 timing entries 都存在一个连续、完整、不跨场的分区，"
             "且每组 allocated_duration_seconds 之和精确为 4–15 秒整数。"
@@ -831,6 +987,12 @@ class LanguageProductionPlanner:
             "ScriptVersion、ProductionSpec 和 storyboard_draft 证据；不得继续委派 Director。"
             "Planner 应根据契约、剧情承诺与实算差异说明建议的修复范围："
             "SCRIPT、STORYBOARD_PLAN 或 PRODUCTION_SPEC，而不是自动循环修订。"
+            "其中 SCRIPT 只在当前 AgentRun objective 明确授权修改上游剧本时可选。"
+            "若 objective 锁定了精确 ScriptVersion，OUTSIDE_ACCEPTED_RANGE 只是诊断，"
+            "不构成剧本修订授权；先在 STORYBOARD_PLAN 中消除重复计时、落实并发表演并重编组边界。"
+            "PRODUCTION_SPEC 只用于修正对上游契约的错误投影。若精确证据表明锁定正文与契约确实不可兼得，"
+            "应返回约束冲突并按交互优先级处理，不得调用 planning.start_script_revision；"
+            "DurationContract.mismatch_resolution 也不能覆盖本次 objective 的更窄范围。"
             "Planner 在 begin、多次 ledger append、ledger complete、多次 "
             "outline append 与 outline complete 之间持续使用同一 WorkOrder；每个 Tool "
             "结果会回到同一 Specialist，它可直接取得真实 draft document/version ID 并继续请求"
@@ -839,16 +1001,19 @@ class LanguageProductionPlanner:
             "无法形成合法分区，这仍属于同一编译职责：可在同一 WorkOrder 内重新 "
             "begin 一个草稿分支并完整重编译，不得仅为重启草稿返回 Leader。"
             "完整 outline 锁定后，再由一个或多个按剧情语义划分的有序 WorkOrder "
-            "通过 shot.append_storyboard_group 逐组持久化，最后使用 "
+            "创作详细镜头组，最后使用 "
             "shot.finalize_storyboard 确定性装配；shot.create_storyboard 只用于导入已完整存在的旧分镜。"
             "WorkOrder 的范围由完整剧情、自然动作链、对白与连续性判断，可小于一个场次、"
             "覆盖一个场次，也可在必要时覆盖相邻场次；不要把场次、一次模型调用、一个 Shot "
             "和一个 ClipGroup 强行等同。多个 WorkOrder 写同一草稿时必须通过依赖保持有序，"
-            "并把最新 storyboard_draft 明确交给后续工作。每次 append 只提交一个完整 "
-            "ClipGroup；ClipGroup 是未来一次 H3 生成的 4–15 秒整数执行边界，内部可以包含多个 "
-            "可编辑 Shot，Shot 的剪辑时长可以为小数。一个语义范围内有多个 planned ClipGroup 时，默认交给同一个"
-            "Worker 在同一 WorkOrder 中逐组 append；工具调用仍一次一组，但不为每组重建"
-            "Leader 计划。只有语义范围真的需要变化时才返回 Leader 重规划。下一组必须"
+            "并把最新 storyboard_draft 明确交给后续工作。ClipGroup 是未来一次 H3 "
+            "生成的 4–15 秒整数执行边界，内部可以包含多个可编辑 Shot，Shot 的剪辑时长"
+            "可以为小数。一个语义范围内存在多个相邻 planned ClipGroup 时，默认交给同一个"
+            "Worker，并优先用 shot.append_storyboard_groups 提交一次响应中能够完整、清晰"
+            "设计好的连续前缀；Agent 依据自然动作链、连续性和响应容量自主决定范围，不设"
+            "固定组数，也不要为了批量而截断或降低镜头细节。服务端仍按组逐版本持久化。"
+            "当前只能可靠完成一个组时使用 shot.append_storyboard_group。两种方式都不为"
+            "每组重建 Leader 计划；只有语义范围真的需要变化时才返回 Leader 重规划。下一组必须"
             "从草稿中读取上一组真实 continuity_out 作为事实基础，不由 Leader "
             "凭摘要重写，也不为了字符串相等而复制措辞。同场次边界要在人物、"
             "道具、站位、动作和声音上语义可承接；跨场次边界要分别写清上一场的"
@@ -861,10 +1026,19 @@ class LanguageProductionPlanner:
             "同场次核对可见状态与动作是否自然承接，跨场次核对上一场退场、下一场入场和"
             "时空转换是否清楚。不用 continuity 文本逐字相等代替内容判断。结论写入"
             "shot.record_storyboard_draft_verification，每条 finding 显式给出 repair_scope。"
-            "CLIP_GROUP 由 Leader 定向安排 shot.replace_storyboard_draft_group 修复受影响组；"
+            "CLIP_GROUP 由 Leader 定向安排 shot.replace_storyboard_draft_group 修复受影响组。"
+            "多条 finding 同为 CLIP_GROUP 不代表必须装进同一 WorkOrder；Leader "
+            "要按共享根因、相邻关系、连续性与道具状态，以及单个 Worker "
+            "能否清晰完成交付来划分自然 repair cluster。跨场、不相邻、证据链"
+            "不同或上下文显著过重时应拆开；一个 cluster 也可同时修复多个"
+            "连续组，不设每组一单或固定组数。多个修复 WorkOrder 在同一计划中按"
+            "草稿写入顺序串行依赖；后续 Worker 先读取 current draft，并保留原验证"
+            "版本作为冻结 finding 证据，不在交接结果中复述完整镜头正文。"
             "STORYBOARD_PLAN 从同一 ScriptVersion 重新编译 ledger/outline 并 begin 新草稿；"
             "SCRIPT 由 Leader 调用 planning.start_script_revision，传 revision_origin=PRODUCTION_CONSTRAINT "
             "以及当前精确 ScriptVersion、ProductionSpec、storyboard_draft evidence_refs；"
+            "该 SCRIPT 映射同样受当前 objective 授权范围约束；锁定运行中 Verifier 可报告根因证据，"
+            "但不得把它转化为可执行的剧本修订。"
             "PRODUCTION_SPEC 只修复对上游 DurationContract 的逐字段投影或精确 MasterAudio "
             "绑定；若契约本身要变，仍先修订上游 StoryIntent/ScriptVersion，再重编分镜。"
             "AUDIO_LED 的 ProductionSpec 必须绑定当前精确 MasterAudio version，目标时长等于 "
@@ -917,6 +1091,10 @@ class LanguageProductionPlanner:
             "边界可以引用已在必读列表中的同一精确工件，用于表达其入场或出场语义；"
             "当开场或收尾没有可引用的相邻工件时，也可以只提供 guidance。"
             "不要为了避免工件引用重复而删除有价值的连续性边界。"
+            "artifact_refs 必须逐字段复制当前 ContextPack 里可见的完整引用；"
+            "不得改名 artifact_type、猜测 id 或补写 version。如果返回后收到 "
+            "plan_validation_feedback，请根据其 available_artifact_refs 在同一规划任务中"
+            "修正引用后重新返回完整计划；不要忽略、别名兼容或带着错误继续。"
             "对 script、bible、character、scene、shot、asset_version、production_spec、"
             "storyboard、storyboard_draft、generation_plan、clip_group、output_slot 与 timeline 等版本化"
             "工件必须提供明确 version。这些选择由你根据完整语义显式"
@@ -925,6 +1103,8 @@ class LanguageProductionPlanner:
             + skill_prompt
         )
         loaded_schema_ids: list[str] = []
+        plan_validation_feedback: dict[str, JsonValue] | None = None
+        invalid_plan_signatures: set[str] = set()
         while True:
             payload = {
                 "reason": reason,
@@ -953,6 +1133,8 @@ class LanguageProductionPlanner:
                 if current_plan is None
                 else current_plan.model_dump(mode="json"),
             }
+            if plan_validation_feedback is not None:
+                payload["plan_validation_feedback"] = plan_validation_feedback
             try:
                 raw = self._client.generate_text(
                     instructions=instructions,
@@ -965,17 +1147,41 @@ class LanguageProductionPlanner:
                 ) from exc
             serialized = _json_block(raw)
             try:
-                return AgentPlanProposal.model_validate_json(serialized)
+                proposal = AgentPlanProposal.model_validate_json(serialized)
             except ValueError as plan_error:
                 try:
                     schema_request = AgentToolSchemaRequest.model_validate_json(
                         serialized
                     )
                 except ValueError as schema_error:
-                    raise ProductionManagerError(
-                        "Production Manager returned an invalid plan payload and not a "
-                        "Tool schema request"
-                    ) from schema_error
+                    issues = _validation_issues(plan_error)
+                    contract_feedback = cast(
+                        dict[str, JsonValue],
+                        {
+                            "kind": "INVALID_PLAN_CONTRACT",
+                            "issues": issues,
+                            "instruction": (
+                                "Return one complete JSON object matching "
+                                "AgentPlanProposal. Correct the listed schema or JSON "
+                                "issues; do not add prose, markdown, a second object, or "
+                                "an invented top-level field."
+                            ),
+                        },
+                    )
+                    signature = json.dumps(
+                        issues,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    if signature in invalid_plan_signatures:
+                        raise ProductionManagerError(
+                            "Production Manager repeated the same invalid plan contract "
+                            "after receiving typed validation feedback"
+                        ) from schema_error
+                    invalid_plan_signatures.add(signature)
+                    plan_validation_feedback = contract_feedback
+                    continue
                 unknown_ids = [
                     tool_id
                     for tool_id in schema_request.requested_tool_schema_ids
@@ -997,6 +1203,43 @@ class LanguageProductionPlanner:
                         "selecting any new Tool"
                     ) from plan_error
                 loaded_schema_ids.extend(new_ids)
+                continue
+
+            try:
+                feedback = _unavailable_plan_artifact_ref_feedback(
+                    proposal,
+                    context,
+                )
+            except ProductionManagerError as exc:
+                issues = _validation_issues(exc)
+                feedback = cast(
+                    dict[str, JsonValue],
+                    {
+                        "kind": "INVALID_DELEGATION_CONTEXT",
+                        "issues": issues,
+                        "instruction": (
+                            "Return a corrected complete AgentPlanProposal. Each "
+                            "adjacent_boundaries entry must match ContextBoundary and "
+                            "use only exact ArtifactRefs visible in the current "
+                            "ContextPack."
+                        ),
+                    },
+                )
+            if feedback is None:
+                return proposal
+            signature = json.dumps(
+                feedback["issues"],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if signature in invalid_plan_signatures:
+                raise ProductionManagerError(
+                    "Production Manager repeated unresolved ArtifactRefs after receiving "
+                    "typed plan validation feedback"
+                )
+            invalid_plan_signatures.add(signature)
+            plan_validation_feedback = feedback
 
 
 def default_production_planner_factory(
@@ -1117,6 +1360,7 @@ def _compact_specialist_tool_arguments(
         "shot.append_storyboard_outline_segment",
         "shot.complete_storyboard_outline",
         "shot.append_storyboard_group",
+        "shot.append_storyboard_groups",
         "shot.replace_storyboard_draft_group",
         "shot.record_storyboard_draft_verification",
         "shot.finalize_storyboard",
@@ -1314,6 +1558,80 @@ def _compact_specialist_tool_arguments(
             "draft_document_id": request.get("draft_document_id"),
             "base_version_id": request.get("base_version_id"),
             "report": request.get("report"),
+            "origin": request.get("origin"),
+        }
+        return compact
+
+    if tool_name == "shot.append_storyboard_groups":
+        work_unit_value = request.get("work_unit")
+        work_unit = (
+            cast(dict[str, JsonValue], work_unit_value)
+            if isinstance(work_unit_value, dict)
+            else {}
+        )
+        groups_value = request.get("groups")
+        groups = (
+            [
+                cast(dict[str, JsonValue], item)
+                for item in groups_value
+                if isinstance(item, dict)
+            ]
+            if isinstance(groups_value, list)
+            else []
+        )
+        compact_groups: list[JsonValue] = []
+        for group in groups:
+            clip_value = group.get("clip_group")
+            clip_group = (
+                cast(dict[str, JsonValue], clip_value)
+                if isinstance(clip_value, dict)
+                else {}
+            )
+            shots_value = group.get("shots")
+            shots = (
+                [
+                    {
+                        "id": shot.get("id"),
+                        "sequence": shot.get("sequence"),
+                        "scene_id": shot.get("scene_id"),
+                        "duration_seconds": shot.get("duration_seconds"),
+                        "dialogue_line_ids": shot.get("dialogue_line_ids"),
+                        "narrative_purpose": shot.get("narrative_purpose"),
+                    }
+                    for item in shots_value
+                    if isinstance(item, dict)
+                    for shot in [cast(dict[str, JsonValue], item)]
+                ]
+                if isinstance(shots_value, list)
+                else []
+            )
+            compact_groups.append(
+                {
+                    "work_unit_id": group.get("work_unit_id"),
+                    "scene_node_id": group.get("scene_node_id"),
+                    "scene_group_sequence": group.get("scene_group_sequence"),
+                    "source_range": group.get("source_range"),
+                    "shots": shots,
+                    "clip_group": {
+                        "id": clip_group.get("id"),
+                        "title": clip_group.get("title"),
+                        "shot_ids": clip_group.get("shot_ids"),
+                        "duration_seconds": clip_group.get("duration_seconds"),
+                        "continuity_out": clip_group.get("continuity_out"),
+                    },
+                    "handoff_notes": group.get("handoff_notes"),
+                }
+            )
+        compact["request"] = {
+            "draft_document_id": request.get("draft_document_id"),
+            "base_version_id": request.get("base_version_id"),
+            "work_unit": {
+                "id": work_unit.get("id"),
+                "title": work_unit.get("title"),
+                "source_range": work_unit.get("source_range"),
+                "objective": work_unit.get("objective"),
+            },
+            "groups": compact_groups,
             "origin": request.get("origin"),
         }
         return compact
@@ -1599,6 +1917,7 @@ def _compact_specialist_tool_result(
         "shot.append_storyboard_outline_segment",
         "shot.complete_storyboard_outline",
         "shot.append_storyboard_group",
+        "shot.append_storyboard_groups",
         "shot.replace_storyboard_draft_group",
         "shot.record_storyboard_draft_verification",
         "shot.finalize_storyboard",
@@ -1628,6 +1947,7 @@ def _compact_specialist_tool_result(
         "shot.append_storyboard_outline_segment",
         "shot.complete_storyboard_outline",
         "shot.append_storyboard_group",
+        "shot.append_storyboard_groups",
         "shot.replace_storyboard_draft_group",
         "shot.record_storyboard_draft_verification",
     }:
@@ -1695,6 +2015,9 @@ def _compact_specialist_tool_result(
                 "verification_status": progress.get("verification_status"),
             }
         }
+        if tool_name == "shot.append_storyboard_groups":
+            compact_output = cast(dict[str, JsonValue], compact["output"])
+            compact_output["checkpoints"] = output.get("checkpoints")
         return compact
 
     storyboard_value = output.get("storyboard")
@@ -1878,6 +2201,11 @@ class LanguageSpecialistAgent:
                 else "当前没有可用 Tool，请直接返回最终结果。"
             )
             + "如果 WorkOrder 要编写分镜，对外最终仍是一份完整 Storyboard。"
+            "当 AgentRun objective 或 WorkOrder 已将当前精确 ScriptVersion 声明为已确认、"
+            "锁定或不可改写的来源时，你不得建议 SCRIPT repair，也不得为迎合时长而改台词、"
+            "事件或剧本结构。先检查账本是否重复累加可并发反应、停顿、道具动作或运镜；"
+            "若同一 ScriptVersion 已有契约区间内的 canonical Storyboard，将其仅视为可制作性证据，"
+            "并建议在 STORYBOARD_PLAN 范围内从新草稿重编，不复制旧镜头内容。"
             "为当前剧本创建或替换 ProductionSpec 时，duration_contract 必须逐字段复制"
             "当前精确 ScriptVersion.story_intent.duration_contract；如果契约本身需要变化，"
             "先交回 Leader 修订上游 StoryIntent/ScriptVersion，不能只改 ProductionSpec。"
@@ -1895,6 +2223,18 @@ class LanguageSpecialistAgent:
             "场内其他条目必须为 false。即使该场没有台词或台词已结束，也要以最后的"
             "可见动作条目标记完成，让游标基于场次完成事实推进；不要因为一次片段"
             "边界就标记场次完成。"
+            "按已读取的 MiniMax drama-series 分镜方法以预计 ClipGroup 为单位"
+            "前瞻表演时长：组内台词、听者反应、道具动作、镜头运动与环境"
+            "变化可并发。non_speech_reserve_seconds 是每条在这些并发表演之后"
+            "仍不可重叠的增量时间，不是对组级共享预留的逐条复制。"
+            "同一反应或停顿若已被另一条的 allocated duration 覆盖，不得再计一次。"
+            "语速按每句的情绪、可读性与当前项目节奏分别判断；快节奏短剧"
+            "允许对可清楚表达的日常句子使用紧凑表演，不把整稿统一当成"
+            "慢速对白。仍需如实记录，不从目标总时长机械均摊。"
+            "timing entry 是时间轴上的表演关键路径片段，不是 Shot 或原文句子的"
+            "别名。可并发的台词、反应、道具动作和运镜必须共用同一时间"
+            "片段，不得拆成多条再求和；allocated_duration_seconds 可以为小数，"
+            "只有 ClipGroup 总时长必须为 4–15 秒整数。"
             "在首次封结 ledger 前，必须用账本中的精确 allocations 前瞻确认："
             "每个场次的有序 timing entries 都能分成连续、完整、不跨场的组，"
             "且每组 allocated_duration_seconds 之和精确为 4–15 秒整数。"
@@ -1919,6 +2259,10 @@ class LanguageSpecialistAgent:
             "next_owner=LEADER_REPLAN 交回精确 ScriptVersion、ProductionSpec 和 "
             "storyboard_draft 证据，并根据契约和剧情承诺说明建议范围 "
             "SCRIPT、STORYBOARD_PLAN 或 PRODUCTION_SPEC。不自动递归修订。"
+            "若 context.objective、WorkOrder constraints 或 confirmed decisions 锁定当前 ScriptVersion，"
+            "本 WorkOrder 不得返回 SCRIPT repair；可纠正账本时建议 STORYBOARD_PLAN，"
+            "只有 ProductionSpec 投影错误时建议 PRODUCTION_SPEC。若范围内无法满足，"
+            "携精确冲突证据交回 Leader，不暗含扩大授权。"
             "begin、ledger 增量、ledger 完成、outline 增量和 outline 完成是同一 Planner "
             "WorkOrder 的连续工作。每次 Tool 结果会回到你手上，其中的真实 draft "
             "document/version ID 可直接用于下一次请求；不要仅因为 begin 产生了新 ID "
@@ -1930,11 +2274,14 @@ class LanguageSpecialistAgent:
             "artifact.get_production_document 读取 storyboard_draft 最新精确版本中已完成的全片 "
             "planned_clip_groups、timing_audit 和最新持久化进度，严格沿计划范围"
             "逐组创作，不临时增加填充反应、摄影装饰或未规划镜头组来扩张时长。"
-            "每次只用 shot.append_storyboard_group 提交一个已经完整设计好的 "
-            "ClipGroup；一个 ClipGroup 是 4–15 秒整数的未来 H3 生成单元，可以包含多个 "
-            "Shot，Shot 保留景别、机位、动作、逐字台词、表演、情绪、声音和衔接，其剪辑时长可为小数。"
-            "同一 WorkOrder 覆盖多个 planned ClipGroup 时，append 成功后读取新的 "
-            "draft_version_id 并在本 WorkOrder 内继续下一组；不要仅因为需要下一组就"
+            "一个 ClipGroup 是 4–15 秒整数的未来 H3 生成单元，可以包含多个 Shot；Shot "
+            "保留景别、机位、动作、逐字台词、表演、情绪、声音和衔接，其剪辑时长可为小数。"
+            "同一 WorkOrder 覆盖多个相邻 planned ClipGroup 时，优先用 "
+            "shot.append_storyboard_groups 提交当前一次响应能够完整、清晰设计好的连续前缀。"
+            "批次范围由自然动作链、连续性和响应容量决定，不设固定组数，也不要为了批量"
+            "让 JSON 截断或镜头细节降质；服务端会先整体校验，再为每组建立独立版本和"
+            "checkpoint。当前只能可靠完成一个组时使用 shot.append_storyboard_group。"
+            "成功后读取新的 draft_version_id 并在本 WorkOrder 内继续下一段；不要仅因为需要下一组就"
             "返回 LEADER_REPLAN，也不要重写已完成组。只有语义范围确实需要改变时"
             "才交回 Leader。下一组必须以草稿最新 ClipGroup 的真实 continuity_out "
             "为事实基础，但无需逐字复制。同场次要语义承接人物、道具、站位、动作和声音；"
@@ -1942,11 +2289,20 @@ class LanguageSpecialistAgent:
             "人物、道具或站位发生变化时，本组必须包含观众可见的过渡动作，不能让 Leader "
             "摘要替代工件末态。需要返修时明确给出 repair_scope：CLIP_GROUP "
             "使用 shot.replace_storyboard_draft_group 且保持计划组的 ID、范围、顺序和时长；"
+            "若本 WorkOrder 是 Leader 划分的 CLIP_GROUP repair cluster，只修复其明确"
+            "列出的 finding 和组，但要对该 cluster 内的连续性做整体判断。完成后"
+            "交付 current draft 精确引用、已处理的 finding/group ID 与仍剩范围即可，"
+            "不在 AgentResult 中重复整段镜头 JSON；后续 cluster 由依赖 WorkOrder 重读"
+            "最新草稿继续。"
             "STORYBOARD_PLAN 交回 Leader 从同一 ScriptVersion 重编整份账本并 begin 新草稿；"
             "SCRIPT 交回 Leader 调用 planning.start_script_revision，revision_origin 为 "
             "PRODUCTION_CONSTRAINT，并提供当前精确 ScriptVersion、ProductionSpec 与 "
             "storyboard_draft evidence_refs；PRODUCTION_SPEC 只修复对上游契约的逐字段投影或"
             "精确 MasterAudio 绑定，契约本身变化仍通过 SCRIPT 修订 StoryIntent。"
+            "上述 SCRIPT 修复只在当前 objective 明确授权修改上游剧本时成立。"
+            "若 context.objective、WorkOrder constraints 或 confirmed decisions 锁定当前 ScriptVersion，"
+            "必须选择范围内的 STORYBOARD_PLAN、错误投影的 PRODUCTION_SPEC，或携精确冲突证据交回 Leader；"
+            "不得执行或暗示 SCRIPT revision。"
             "AUDIO_LED 的 ProductionSpec 必须绑定当前精确 MasterAudio version，目标时长等于"
             " time_origin_seconds + duration_seconds；重绑会使旧制片下游失效，最终时间线"
             "遵循主音频，不能把自然表演差值当成 TARGET_LED 剧情缺陷。"
@@ -2038,10 +2394,10 @@ class LanguageSpecialistAgent:
                     },
                     ensure_ascii=False,
                 ),
-                # A bounded ClipGroup Tool request can still exceed 5k tokens once
-                # detailed shots and the model's reasoning share the completion
-                # budget. This is transport headroom, not a creative length target.
-                max_output_tokens=10000,
+                # A semantic segment may contain several adjacent detailed groups.
+                # This is transport headroom so the Agent can finish valid JSON,
+                # not a creative length target or a fixed batching requirement.
+                max_output_tokens=20000,
             )
             payload = _normalize_specialist_response_payload(raw)
             try:
@@ -2439,13 +2795,11 @@ class ProductionManager:
                 )
             )
             if semantic_planning_available:
-                planning_stage = self._planning_precondition_plan(
+                current = self._semantic_planning_current_plan(
                     agent_run_id=run_id,
                     document=document,
-                    semantic_planning_available=False,
+                    current=current,
                 )
-                if planning_stage is not None:
-                    current = planning_stage
             profile = document.project.production_profile
             current_method_ids = (
                 [] if current is None else current.selected_method_skill_ids
@@ -2524,6 +2878,34 @@ class ProductionManager:
         )
         return self.get_run(run_id)
 
+    def _semantic_planning_current_plan(
+        self,
+        *,
+        agent_run_id: str,
+        document: ProjectDocument,
+        current: AgentPlanProposal | None,
+    ) -> AgentPlanProposal | None:
+        """Give the Leader context without anchoring it to an internal wait step."""
+
+        planning = document.planning
+        planning_run = (
+            None
+            if planning is None or planning.run_id is None
+            else self.projects.get_planning_run(planning.run_id)
+        )
+        if self._planning_run_awaits_story_verification_resolution(planning_run):
+            # The exact Verifier payload is already present in ContextPack.  A
+            # deterministic USER_INPUT placeholder here biases the semantic Leader
+            # toward asking the user to perform its own planning duty.  Let the
+            # Leader form the resolve_story_verification Tool call from that evidence.
+            return None
+        planning_stage = self._planning_precondition_plan(
+            agent_run_id=agent_run_id,
+            document=document,
+            semantic_planning_available=False,
+        )
+        return planning_stage if planning_stage is not None else current
+
     def _planning_precondition_plan(
         self,
         *,
@@ -2540,24 +2922,6 @@ class ProductionManager:
                 document=document,
             )
         )
-        if (
-            document.project.content_planning_output
-            == ContentPlanningOutput.SCRIPT_ONLY
-            and document.project.stage == ProjectStage.SCRIPT_READY
-            and planning is not None
-            and planning.status == PlanningRunStatus.COMPLETE
-            and planning.owner_agent_run_id == agent_run_id
-        ):
-            return AgentPlanProposal(
-                summary=(
-                    "The requested screenplay is complete; stop before shot, asset, image, "
-                    "video, or timeline production."
-                ),
-                steps=[],
-                selected_method_skill_ids=selected_method_skill_ids,
-                method_selection_rationale=method_selection_rationale,
-                goal_complete=True,
-            )
         if planning is None or planning.status == PlanningRunStatus.COMPLETE:
             return None
 
@@ -3033,6 +3397,7 @@ class ProductionManager:
                 for action in view.snapshot.actions
                 if action.kind == ActionKind.USER_INPUT
                 and action.status == ActionStatus.RUNNING
+                and action.plan_revision_id == active_plan_id
             ],
             next_actions=next_actions,
             artifact_refs=[
@@ -3642,26 +4007,50 @@ class ProductionManager:
                 )
             decision = agent.execute(view)
         except SpecialistResponseProtocolError as exc:
-            self._return_specialist_protocol_failure_to_worker(
+            next_owner = self._return_specialist_protocol_failure_to_worker(
                 work_order_id,
                 exc,
+            )
+            repeated_without_progress = (
+                next_owner == WorkOrderNextOwner.LEADER_REPLAN
             )
             return self.submit_work_order_result(
                 work_order_id,
                 AgentWorkOrderResultRequest(
                     status=AgentResultStatus.PARTIAL,
                     concise_summary=(
-                        "专业 Agent 的响应结构未通过协议校验，"
-                        "已保留同一 WorkOrder 和已完成内容，由原 Worker "
-                        "依据类型化反馈修正交接结构。"
+                        "专业 Agent 在收到类型化协议反馈后仍返回"
+                        "语义等价的非法结构；已保留所有落盘内容并"
+                        "交回 Leader 重新划分剩余修复范围。"
+                        if repeated_without_progress
+                        else (
+                            "专业 Agent 的响应结构未通过协议校验，"
+                            "已保留同一 WorkOrder 和已完成内容，由原 "
+                            "Worker 依据类型化反馈修正交接结构。"
+                        )
                     ),
                     findings=[
-                        "这是响应协议问题，不需要改变剧情范围或调度计划。"
+                        (
+                            "同一 Worker 未对已给出的协议问题产生实质修正；"
+                            "当前交付形式或语义范围需要由 Leader 重组。"
+                            if repeated_without_progress
+                            else (
+                                "这是首次响应协议问题，不改变创意范围或"
+                                "调度计划。"
+                            )
+                        )
                     ],
                     recommended_next_actions=[
-                        "让同一专业 Agent 修正已持久化的结构化响应。"
+                        (
+                            "Leader 保留已持久化工件，按自然语义边界收缩"
+                            "或重组剩余 WorkOrder，不要原样重发。"
+                            if repeated_without_progress
+                            else (
+                                "让同一专业 Agent 修正已持久化的结构化响应。"
+                            )
+                        )
                     ],
-                    next_owner=WorkOrderNextOwner.WORKER_DECISION,
+                    next_owner=next_owner,
                 ),
             )
         except Exception as exc:
@@ -3768,12 +4157,12 @@ class ProductionManager:
         self,
         work_order_id: str,
         error: SpecialistResponseProtocolError,
-    ) -> None:
-        """Persist typed response feedback without turning it into a Leader replan."""
+    ) -> WorkOrderNextOwner:
+        """Persist feedback and return stalled protocol work to the Leader."""
 
         current = self.runtime.store.get_work_order(work_order_id)
         if current is None:
-            return
+            return WorkOrderNextOwner.LEADER_REPLAN
         with self._run_lock(current.parent_run_id):
             failed = self.runtime.store.get_work_order(work_order_id)
             if failed is None or failed.status in {
@@ -3781,19 +4170,37 @@ class ProductionManager:
                 DelegationStatus.FAILED,
                 DelegationStatus.CANCELLED,
             }:
-                return
+                return WorkOrderNextOwner.LEADER_REPLAN
+            prior_feedback = failed.pending_protocol_feedback
+            repeated_without_progress = (
+                prior_feedback is not None
+                and _specialist_protocol_feedback_signature(prior_feedback)
+                == _specialist_protocol_feedback_signature(error.feedback)
+            )
+            next_owner = (
+                WorkOrderNextOwner.LEADER_REPLAN
+                if repeated_without_progress
+                else WorkOrderNextOwner.WORKER_DECISION
+            )
             failed.pending_protocol_feedback = error.feedback
             failed.status = DelegationStatus.NEEDS_ATTENTION
-            failed.next_owner = WorkOrderNextOwner.WORKER_DECISION
+            failed.next_owner = next_owner
             failed.updated_at = utc_now()
             self.runtime.store.save_work_order(failed)
             self.runtime.append_work_order_progress(
                 failed.id,
                 author="specialist-response-validator",
                 summary=(
-                    "The Worker response did not match a supported JSON contract. "
-                    "Typed validation feedback was persisted for correction by the "
-                    "same Worker; no creative scope or plan revision changed."
+                    "The same Worker repeated a semantically equivalent invalid "
+                    "response after typed protocol feedback. Persisted artifacts "
+                    "were preserved and the remaining work returned to the Leader "
+                    "for a smaller or simpler semantic handoff."
+                    if repeated_without_progress
+                    else (
+                        "The Worker response did not match a supported JSON contract. "
+                        "Typed validation feedback was persisted for correction by the "
+                        "same Worker; no creative scope or plan revision changed."
+                    )
                 ),
             )
             self.runtime.set_run_status(
@@ -3803,14 +4210,22 @@ class ProductionManager:
             self.runtime.checkpoint(
                 failed.parent_run_id,
                 current_focus=(
-                    "The same specialist must correct its persisted response "
-                    "protocol feedback."
+                    "The Worker made no semantic protocol progress; the Leader must "
+                    "preserve landed artifacts and reshape the remaining WorkOrder."
+                    if repeated_without_progress
+                    else (
+                        "The same specialist must correct its persisted response "
+                        "protocol feedback."
+                    )
                 ),
                 blockers=[],
                 next_actions=[
-                    "Let the same specialist correct the structured response."
+                    "Let the Leader shrink or simplify the remaining semantic repair."
+                    if repeated_without_progress
+                    else "Let the same specialist correct the structured response."
                 ],
             )
+            return next_owner
 
     def _return_specialist_failure_to_leader(
         self,
@@ -4139,11 +4554,41 @@ class ProductionManager:
                 "Agent plan selected unknown Production Method Skills: "
                 + ", ".join(unknown_method_ids)
             )
-        for step in proposal.steps:
-            if any(ref.project_id != run.project_id for ref in step.artifact_refs):
-                raise ProductionManagerError(
-                    f"Plan step {step.id!r} contains an artifact outside the run project"
+        try:
+            plan_ref_entries = _plan_artifact_ref_entries(proposal)
+        except ProductionManagerError as exc:
+            raise ProductionManagerError(
+                "Agent plan contains invalid delegation context boundaries"
+            ) from exc
+        outside_project = [
+            (path, ref)
+            for path, ref in plan_ref_entries
+            if ref.project_id != run.project_id
+        ]
+        if outside_project:
+            path, _ref = outside_project[0]
+            raise ProductionManagerError(
+                f"Agent plan artifact at {path} belongs outside the run project"
+            )
+        # Bootstrap plans intentionally reference the preallocated project before
+        # project.create has persisted it. Once the canonical project exists, every
+        # context-manifest ref must resolve by its full identity before any plan,
+        # Action, or WorkOrder is stored.
+        if self.projects.get_project(run.project_id) is not None:
+            unresolved_refs = self.runtime.unresolved_artifact_refs(
+                run_id,
+                [ref for _path, ref in plan_ref_entries],
+            )
+            if unresolved_refs:
+                unresolved_identities = ", ".join(
+                    f"{ref.artifact_type}:{ref.artifact_id}@{ref.version}"
+                    for ref in unresolved_refs
                 )
+                raise ProductionManagerError(
+                    "Agent plan contains unresolved exact ArtifactRefs: "
+                    + unresolved_identities
+                )
+        for step in proposal.steps:
             if step.kind in {ActionKind.TOOL_CALL, ActionKind.ARTIFACT_PATCH}:
                 if not step.tool_name:
                     raise ProductionManagerError(

@@ -62,6 +62,7 @@ REQUIRED_PRODUCTION_TOOLS = {
     "shot": {
         "shot.apply_director_repair",
         "shot.append_storyboard_group",
+        "shot.append_storyboard_groups",
         "shot.append_storyboard_ledger_segment",
         "shot.append_storyboard_outline_segment",
         "shot.begin_storyboard_draft",
@@ -239,6 +240,12 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert "不要为通过字符串逐字相等而复制措辞" in descriptors[
         "shot.append_storyboard_group"
     ].description
+    assert "服务端先整体校验" in descriptors[
+        "shot.append_storyboard_groups"
+    ].description
+    assert "按组逐个创建" in descriptors[
+        "shot.append_storyboard_groups"
+    ].description
     group_schema = descriptors["shot.append_storyboard_group"].input_schema
     assert group_schema["$defs"]["ClipGroup"]["properties"][
         "duration_seconds"
@@ -246,6 +253,13 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert group_schema["$defs"]["ShotPlan"]["properties"][
         "duration_seconds"
     ]["type"] == "number"
+    segment_schema = descriptors["shot.append_storyboard_groups"].input_schema
+    assert segment_schema["$defs"]["StoryboardDraftGroupsAppendRequest"][
+        "properties"
+    ]["groups"]["minItems"] == 1
+    assert "maxItems" not in segment_schema["$defs"][
+        "StoryboardDraftGroupsAppendRequest"
+    ]["properties"]["groups"]
     assert "旧 Verifier 结论会自动失效" in descriptors[
         "shot.replace_storyboard_draft_group"
     ].description

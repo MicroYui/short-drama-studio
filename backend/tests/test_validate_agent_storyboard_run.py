@@ -7,6 +7,7 @@ import pytest
 from validate_agent_storyboard_run import (
     ApiHttpError,
     DEFAULT_EXPECTED_SCRIPT_VERSION_ID,
+    DEFAULT_OBJECTIVE,
     DEFAULT_PROJECT_ID,
     ProbeFailure,
     _completed_specialist_tool_events,
@@ -27,6 +28,15 @@ from validate_agent_storyboard_run import (
     _work_order_update_key,
     _write_storyboard_markdown,
 )
+
+
+def test_default_objective_locks_confirmed_script_during_restoryboarding() -> None:
+    assert "Leader 必须选择 STORYBOARD_PLAN" in DEFAULT_OBJECTIVE
+    assert "不得调用 planning.start_script_revision 改写台词或剧情" in (
+        DEFAULT_OBJECTIVE
+    )
+    assert "后续 ledger、Verifier 或 mismatch_resolution" in DEFAULT_OBJECTIVE
+    assert "不修改锁定的 ScriptVersion" in DEFAULT_OBJECTIVE
 
 
 def _run_view() -> dict[str, object]:
@@ -487,7 +497,11 @@ def _storyboard_draft_response() -> dict[str, object]:
     }
 
 
-def _storyboard_trace(*, extra_tool_names: list[str] | None = None) -> dict[str, object]:
+def _storyboard_trace(
+    *,
+    extra_tool_names: list[str] | None = None,
+    detailed_group_tool: str = "shot.append_storyboard_group",
+) -> dict[str, object]:
     names = [
         "shot.begin_storyboard_draft",
         "shot.append_storyboard_ledger_segment",
@@ -495,7 +509,7 @@ def _storyboard_trace(*, extra_tool_names: list[str] | None = None) -> dict[str,
         "shot.complete_storyboard_ledger",
         "shot.append_storyboard_outline_segment",
         "shot.complete_storyboard_outline",
-        "shot.append_storyboard_group",
+        detailed_group_tool,
         "shot.record_storyboard_draft_verification",
         "shot.finalize_storyboard",
         *(extra_tool_names or []),
@@ -552,6 +566,8 @@ def test_parser_defaults_to_current_accepted_script_v4(tmp_path: Path) -> None:
     assert "不得先封存账本" in args.objective
     assert "同一 WorkOrder 内重新 begin 一个草稿分支" in args.objective
     assert "不得仅为重启草稿返回 Leader" in args.objective
+    assert "任何旧 storyboard_draft" in args.objective
+    assert "不得直接 finalize" in args.objective
 
 
 def test_argument_validation_keeps_heartbeat_separate_from_deadline(
@@ -617,6 +633,34 @@ def test_waiting_user_input_is_a_real_unattended_blocker() -> None:
     assert "requested user input" in str(
         _waiting_blocker(run_view, _waiting_board())
     )
+
+
+def test_superseded_user_input_does_not_block_the_current_plan() -> None:
+    run_view = _waiting_run_view(
+        actions=[
+            {
+                "id": "action-old-input",
+                "kind": "USER_INPUT",
+                "status": "RUNNING",
+                "plan_revision_id": "plan-superseded",
+                "input_summary": "读取旧 Verifier 证据",
+            }
+        ]
+    )
+
+    assert _waiting_blocker(
+        run_view,
+        _waiting_board(
+            work_orders=[
+                {
+                    "id": "work-current",
+                    "status": "PENDING",
+                    "next_owner": "WORKER_DECISION",
+                }
+            ],
+            open_questions=["读取旧 Verifier 证据"],
+        ),
+    ) is None
 
 
 def test_waiting_without_ready_owner_is_a_real_stall() -> None:
@@ -876,6 +920,44 @@ def test_completed_specialist_turns_are_structured_deduplicated_events() -> None
     ]
     assert seen == {"turn-1", "turn-2"}
     assert _completed_specialist_tool_events(work_order_view, seen) == []
+
+
+def test_group_segment_trace_exposes_committed_groups_and_checkpoints() -> None:
+    work_order_view = {
+        "work_order": {
+            "id": "work-order-director",
+            "specialist_turns": [
+                {
+                    "id": "turn-groups",
+                    "sequence": 1,
+                    "tool_name": "shot.append_storyboard_groups",
+                    "status": "COMPLETED",
+                    "result": {
+                        "tool_id": "shot.append_storyboard_groups",
+                        "status": "SUCCEEDED",
+                        "artifact_refs": [],
+                        "output": {
+                            "checkpoints": [
+                                {
+                                    "clip_group_id": "clip-1",
+                                    "draft_version_id": "draft-v6",
+                                },
+                                {
+                                    "clip_group_id": "clip-2",
+                                    "draft_version_id": "draft-v7",
+                                },
+                            ]
+                        },
+                    },
+                }
+            ],
+        }
+    }
+
+    events = _completed_specialist_tool_events(work_order_view, set())
+
+    assert events[0]["committed_group_ids"] == ["clip-1", "clip-2"]
+    assert events[0]["checkpoint_version_ids"] == ["draft-v6", "draft-v7"]
 
 
 def test_structured_specialist_events_merge_with_leader_tool_trace() -> None:
@@ -1176,6 +1258,23 @@ def test_storyboard_only_validation_accepts_scene_group_shot_hierarchy() -> None
         storyboard_draft_response=_storyboard_draft_response(),
         storyboard_draft_ref=_storyboard_draft_ref(),
         trace=_storyboard_trace(),
+        expected_script_version_id="script-4",
+    )
+
+    assert errors == []
+
+
+def test_storyboard_only_validation_accepts_group_segment_tool() -> None:
+    errors = _validate_storyboard_only_result(
+        run_view=_run_view(),
+        before=_project(with_storyboard=False),
+        after=_project(with_storyboard=True),
+        storyboard_response=_storyboard_response(),
+        storyboard_draft_response=_storyboard_draft_response(),
+        storyboard_draft_ref=_storyboard_draft_ref(),
+        trace=_storyboard_trace(
+            detailed_group_tool="shot.append_storyboard_groups"
+        ),
         expected_script_version_id="script-4",
     )
 

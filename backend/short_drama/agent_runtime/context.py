@@ -266,6 +266,26 @@ class ContextCompiler:
         self._store = store
         self._artifact_resolver = artifact_resolver
 
+    def unresolved_artifact_refs(
+        self,
+        run_id: str,
+        refs: Sequence[ArtifactRef],
+    ) -> list[ArtifactRef]:
+        """Resolve exact artifact identities without applying a prompt budget."""
+
+        run = self._store.get_run(run_id)
+        if run is None:
+            raise KeyError(f"Unknown agent run: {run_id}")
+
+        unresolved: list[ArtifactRef] = []
+        for ref in _unique_artifact_refs(refs):
+            if ref.project_id != run.project_id:
+                raise ValueError("Requested artifacts must belong to the run's project")
+            summary = self._artifact_resolver.summarize_artifact(ref)
+            if summary is None or summary.ref.identity() != ref.identity():
+                unresolved.append(ref)
+        return unresolved
+
     def compile(
         self,
         run_id: str,

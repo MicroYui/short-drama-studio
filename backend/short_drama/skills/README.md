@@ -93,7 +93,7 @@ Design 文档中的 Hub/Canvas/Stage Plan 是产品与交接语义，在本系�
 这里的 Markdown 描述创作方法，不取代三类为了正确恢复而保留的内部状态机：
 
 - 首次剧本规划作为 **Content Planning Job** 运行，由 AgentRun/Production Manager 这个 Leader 总调度。Leader 将当前写作或修订目标交给 Writer Worker，再由一个 Verifier 对照用户要求、来源承诺和当前完整稿验收。未通过时，Leader 将具体问题退回原 Worker 聚焦修订。底层仍使用 `PlanningRun` 的持久化游标和 Issue Ledger 保证恢复；`SCRIPT_CRITIC`、`STORY_REPAIR`、`REVIEW_ROUTER`、`FINAL_COLD_READ` 等名称只为历史数据或状态兼容保留，不再对应新计划中的独立 Agent/Skill。任何修订仍按场持久化，不设固定轮数、问题数、严重度或总超时门槛。
-- 专业 Agent 的 WorkOrder 以 `specialist_turns` 保存每次 Tool 请求、理由、状态和结果。一次外部 `execute` 只进行模型决策或一个 Tool 执行；下次调用再从已保存历史继续。重启时尚未落盘结果的 `IN_PROGRESS` turn 变为 `INTERRUPTED`，WorkOrder 回到 `NEEDS_ATTENTION`，由 Agent 根据规范项目状态决定对账、重试或改变路线，不自动重放。单步边界用于可观察、可恢复，不是固定 Tool 次数上限。
+- 专业 Agent 的 WorkOrder 以 `specialist_turns` 保存每次 Tool 请求、理由、状态和结果。一次底层 `execute_work_order` 只进行模型决策或一个 Tool 执行；无人值守统一 `advance` 可在同一 Worker 所有权内连续调用这些已持久化的单步，直到交回 Leader、用户或进入终态。重启时尚未落盘结果的 `IN_PROGRESS` turn 变为 `INTERRUPTED`，WorkOrder 回到 `NEEDS_ATTENTION`，由 Agent 根据规范项目状态决定对账、重试或改变路线，不自动重放。单步边界用于可观察、可恢复，不是固定 Tool 次数上限。
 - 图像、视频、语音等 Provider Task 仍按提交、轮询、下载、成功/失败等真实外部状态推进。
 
 `ProjectDocument` 及其版本化领域工件始终是项目内容真相；Content Planning Job 的中间状态不能成为第二份可独立编辑的剧本或项目控制面。AgentRun 负责目标、计划、何时推进作业以及作业结束后的下一步，Content Planning Job 只负责其内部内容规划游标。

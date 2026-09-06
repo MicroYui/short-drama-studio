@@ -27,6 +27,8 @@ from pydantic import Field
 
 from short_drama.agent_runtime.models import (
     AgentResultStatus,
+    AgentRun,
+    AgentRunStatus,
     DelegationStatus,
     RuntimeModel,
     SpecialistTurnStatus,
@@ -60,6 +62,7 @@ class TeamWorkAdvance(RuntimeModel):
     work_order_status: DelegationStatus | None = None
     result_status: AgentResultStatus | None = None
     serialized_project_write: bool = False
+    advance_count: int = Field(default=0, ge=0)
     error_kind: str | None = None
     error_message: str | None = None
 
@@ -91,6 +94,26 @@ class LocalTeamExecutor:
     def run_ready_work(self, run_id: str) -> TeamExecutionBatch:
         """Advance each currently ready WorkOrder once, without hidden retries."""
 
+        return self._run_ready_work(run_id, drain_worker_ownership=False)
+
+    def drain_ready_work_until_handoff(self, run_id: str) -> TeamExecutionBatch:
+        """Continue each ready WorkOrder while ownership remains with its Worker.
+
+        Every model decision and Tool turn is still persisted by
+        ``ProductionManager.execute_work_order``.  This only removes redundant
+        outer HTTP advances between those persisted turns; it never crosses into
+        Leader replanning or user input and never replays a failed call.
+        """
+
+        return self._run_ready_work(run_id, drain_worker_ownership=True)
+
+    def _run_ready_work(
+        self,
+        run_id: str,
+        *,
+        drain_worker_ownership: bool,
+    ) -> TeamExecutionBatch:
+
         if self._manager.runtime.store.get_run(run_id) is None:
             raise KeyError(f"Unknown agent run: {run_id}")
         selected = self._select_and_reserve(run_id)
@@ -100,7 +123,11 @@ class LocalTeamExecutor:
         advances_by_id: dict[str, TeamWorkAdvance] = {}
         with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
             futures: dict[Future[TeamWorkAdvance], str] = {
-                pool.submit(self._advance_reserved, work_order): work_order.id
+                pool.submit(
+                    self._advance_reserved,
+                    work_order,
+                    drain_worker_ownership=drain_worker_ownership,
+                ): work_order.id
                 for work_order in selected
             }
             for future in as_completed(futures):
@@ -151,17 +178,42 @@ class LocalTeamExecutor:
             self._claimed_work_order_ids.update(work_order.id for work_order in selected)
         return selected
 
-    def _advance_reserved(self, work_order: WorkOrder) -> TeamWorkAdvance:
-        serialized_project_write = self._needs_project_write_lane(work_order)
+    def _advance_reserved(
+        self,
+        work_order: WorkOrder,
+        *,
+        drain_worker_ownership: bool,
+    ) -> TeamWorkAdvance:
+        serialized_project_write = False
+        advance_count = 0
         try:
-            run = self._manager.runtime.store.get_run(work_order.parent_run_id)
-            if run is None:
-                raise KeyError(f"Unknown agent run: {work_order.parent_run_id}")
-            if serialized_project_write:
-                with self._project_lock(run.project_id):
+            while True:
+                current = self._manager.runtime.store.get_work_order(work_order.id)
+                if current is None:
+                    raise KeyError(f"Unknown work order: {work_order.id}")
+                run = self._manager.runtime.store.get_run(current.parent_run_id)
+                if run is None:
+                    raise KeyError(f"Unknown agent run: {current.parent_run_id}")
+                if not self._worker_still_owns(current, run):
+                    break
+
+                # A long specialist model call should be visible as active work,
+                # rather than leaving the Board at the preceding WAITING handoff.
+                if run.status == AgentRunStatus.WAITING:
+                    self._manager.runtime.set_run_status(run.id, AgentRunStatus.RUNNING)
+
+                needs_project_write = self._needs_project_write_lane(current)
+                serialized_project_write = (
+                    serialized_project_write or needs_project_write
+                )
+                if needs_project_write:
+                    with self._project_lock(run.project_id):
+                        self._manager.execute_work_order(current.id)
+                else:
                     self._manager.execute_work_order(work_order.id)
-            else:
-                self._manager.execute_work_order(work_order.id)
+                advance_count += 1
+                if not drain_worker_ownership:
+                    break
 
             current = self._manager.runtime.store.get_work_order(work_order.id)
             result = self._manager.runtime.store.get_agent_result(work_order.id)
@@ -171,6 +223,7 @@ class LocalTeamExecutor:
                 work_order_status=None if current is None else current.status,
                 result_status=None if result is None else result.status,
                 serialized_project_write=serialized_project_write,
+                advance_count=advance_count,
             )
         except Exception as exc:
             current = self._manager.runtime.store.get_work_order(work_order.id)
@@ -181,12 +234,36 @@ class LocalTeamExecutor:
                 work_order_status=None if current is None else current.status,
                 result_status=None if result is None else result.status,
                 serialized_project_write=serialized_project_write,
+                advance_count=advance_count,
                 error_kind=type(exc).__name__,
                 error_message=str(exc),
             )
         finally:
             with self._claims_lock:
                 self._claimed_work_order_ids.discard(work_order.id)
+
+    @staticmethod
+    def _worker_still_owns(work_order: WorkOrder, run: AgentRun) -> bool:
+        if run.status in {
+            AgentRunStatus.COMPLETED,
+            AgentRunStatus.FAILED,
+            AgentRunStatus.CANCELLED,
+        }:
+            return False
+        return (
+            work_order.status
+            in {DelegationStatus.PENDING, DelegationStatus.NEEDS_ATTENTION}
+            and work_order.next_owner
+            in {
+                WorkOrderNextOwner.WORKER_DECISION,
+                WorkOrderNextOwner.WORKER_TOOL,
+            }
+            and (
+                work_order.source_plan_revision_id is None
+                or work_order.active_plan_revision_id
+                == run.current_plan_revision_id
+            )
+        )
 
     def _needs_project_write_lane(self, work_order: WorkOrder) -> bool:
         pending_tool_name = next(

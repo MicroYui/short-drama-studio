@@ -35,6 +35,7 @@ from short_drama.production_contracts import (
     StoryboardDraftContent,
     StoryboardDraftFinalizeRequest,
     StoryboardDraftGroupReplaceRequest,
+    StoryboardDraftGroupsAppendRequest,
     StoryboardDraftLedgerCompleteRequest,
     StoryboardDraftLedgerSegmentAppendRequest,
     StoryboardDraftOutlineCompleteRequest,
@@ -385,6 +386,226 @@ def _append_all_groups(
         current_version_id = response.progress.draft_version_id
     assert last_progress is not None
     return last_progress
+
+
+def _adjacent_prefix_batch(
+    *,
+    script,
+    dialogue_shots,
+    draft: StoryboardDraftContent,
+    source_ranges: list[StoryboardSourceRange] | None = None,
+) -> tuple[StoryboardWorkUnitContract, list[StoryboardClipGroupDraft]]:
+    scene = script.structured_scenes[0]
+    selected = list(zip(script.lines[:2], dialogue_shots[:2], strict=True))
+    work_unit = StoryboardWorkUnitContract(
+        id="work-adjacent-prefix",
+        title="Author one adjacent action chain",
+        source_range=StoryboardSourceRange(
+            id="range-adjacent-prefix",
+            scene_ids=[scene.id],
+            script_line_ids=[line.id for line, _shot in selected],
+            description="Two adjacent planned groups in one semantic WorkOrder.",
+        ),
+        objective="Design the adjacent groups without losing per-group recovery.",
+        completion_criteria=["Both planned groups are complete and continuous."],
+    )
+    groups: list[StoryboardClipGroupDraft] = []
+    for sequence, (line, source_shot) in enumerate(selected, start=1):
+        outline = draft.planned_clip_groups[sequence - 1]
+        source_range = (
+            source_ranges[sequence - 1]
+            if source_ranges is not None
+            else outline.source_range
+        ).model_copy(deep=True)
+        shot = source_shot.model_copy(
+            update={
+                "id": f"incremental-{line.id}",
+                "sequence": sequence,
+                "scene_id": scene.id,
+            },
+            deep=True,
+        )
+        groups.append(
+            StoryboardClipGroupDraft(
+                work_unit_id=work_unit.id,
+                scene_node_id=outline.scene_node_id,
+                scene_group_sequence=outline.scene_group_sequence,
+                source_range=source_range,
+                shots=[shot],
+                clip_group=ClipGroup(
+                    id=outline.id,
+                    title=outline.title,
+                    shot_ids=[shot.id],
+                    duration_seconds=outline.duration_seconds,
+                    generation_intent="Render this adjacent dialogue beat.",
+                    continuity_in=list(outline.continuity_in),
+                    visible_changes=list(outline.visible_changes),
+                    continuity_out=list(outline.continuity_out),
+                ),
+            )
+        )
+    return work_unit, groups
+
+
+def test_group_segment_prevalidates_then_persists_one_version_per_group(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    document, script, spec, dialogue_shots = _prepare_script_only_project(service)
+    draft = _draft(document, script, spec, dialogue_shots=dialogue_shots)
+    planned = _begin_and_plan_draft(
+        service,
+        project_id=document.project.id,
+        draft=draft,
+    )
+    work_unit, groups = _adjacent_prefix_batch(
+        script=script,
+        dialogue_shots=dialogue_shots,
+        draft=draft,
+    )
+
+    wrong_second = groups[1].model_copy(
+        update={
+            "clip_group": groups[1].clip_group.model_copy(
+                update={"id": "clip-out-of-order"}
+            )
+        },
+        deep=True,
+    )
+    with pytest.raises(WorkflowConflictError, match="next planned ClipGroup"):
+        service.append_storyboard_groups(
+            document.project.id,
+            StoryboardDraftGroupsAppendRequest(
+                draft_document_id=planned.draft_ref.artifact_id,
+                base_version_id=planned.draft_version_id,
+                work_unit=work_unit,
+                groups=[groups[0], wrong_second],
+                origin=ProductionDocumentOrigin.AGENT,
+            ),
+        )
+    after_rejection = service.get_production_document(
+        document.project.id,
+        planned.draft_ref.artifact_id,
+    )
+    assert after_rejection.document.current_version_id == planned.draft_version_id
+
+    response = service.append_storyboard_groups(
+        document.project.id,
+        StoryboardDraftGroupsAppendRequest(
+            draft_document_id=planned.draft_ref.artifact_id,
+            base_version_id=planned.draft_version_id,
+            work_unit=work_unit,
+            groups=groups,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+
+    assert planned.draft_ref.version is not None
+    assert [item.clip_group_id for item in response.checkpoints] == [
+        group.clip_group.id for group in groups
+    ]
+    assert [item.draft_ref.version for item in response.checkpoints] == [
+        planned.draft_ref.version + 1,
+        planned.draft_ref.version + 2,
+    ]
+    assert response.progress.committed_clip_group_count == 2
+    committed_counts = []
+    for checkpoint in response.checkpoints:
+        persisted = service.get_production_document(
+            document.project.id,
+            checkpoint.draft_ref.artifact_id,
+            version_id=checkpoint.draft_version_id,
+        )
+        content = StoryboardDraftContent.model_validate(persisted.version.payload)
+        committed_counts.append(len(content.committed_groups))
+    assert committed_counts == [1, 2]
+
+
+def test_group_segment_canonicalizes_source_range_prose_to_sealed_outline(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    document, script, spec, dialogue_shots = _prepare_script_only_project(service)
+    draft = _draft(document, script, spec, dialogue_shots=dialogue_shots)
+
+    canonical_outlines = [
+        outline.model_copy(
+            update={
+                "source_range": outline.source_range.model_copy(
+                    update={
+                        "description": f"{outline.source_range.description[:-1]}。",
+                        "starts_after": f"{outline.id} 的前一拍动作结束。",
+                        "ends_before": f"{outline.id} 的后一拍反应开始。",
+                    },
+                    deep=True,
+                )
+            },
+            deep=True,
+        )
+        for outline in draft.planned_clip_groups[:2]
+    ]
+    draft = draft.model_copy(
+        update={
+            "planned_clip_groups": [
+                *canonical_outlines,
+                *draft.planned_clip_groups[2:],
+            ]
+        },
+        deep=True,
+    )
+    planned = _begin_and_plan_draft(
+        service,
+        project_id=document.project.id,
+        draft=draft,
+    )
+
+    prose_variants = [
+        outline.source_range.model_copy(
+            update={
+                "description": f"{outline.source_range.description[:-1]}！",
+                "starts_after": f"{outline.id} 的前一拍动作结束！",
+                "ends_before": f"{outline.id} 的后一拍反应开始；",
+            },
+            deep=True,
+        )
+        for outline in canonical_outlines
+    ]
+    for canonical, variant in zip(
+        (item.source_range for item in canonical_outlines),
+        prose_variants,
+        strict=True,
+    ):
+        assert variant.id == canonical.id
+        assert variant.scene_ids == canonical.scene_ids
+        assert variant.script_line_ids == canonical.script_line_ids
+        assert variant != canonical
+
+    work_unit, groups = _adjacent_prefix_batch(
+        script=script,
+        dialogue_shots=dialogue_shots,
+        draft=draft,
+        source_ranges=prose_variants,
+    )
+    response = service.append_storyboard_groups(
+        document.project.id,
+        StoryboardDraftGroupsAppendRequest(
+            draft_document_id=planned.draft_ref.artifact_id,
+            base_version_id=planned.draft_version_id,
+            work_unit=work_unit,
+            groups=groups,
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+
+    persisted = service.get_production_document(
+        document.project.id,
+        planned.draft_ref.artifact_id,
+        version_id=response.progress.draft_version_id,
+    )
+    content = StoryboardDraftContent.model_validate(persisted.version.payload)
+    assert [item.source_range for item in content.committed_groups] == [
+        item.source_range for item in canonical_outlines
+    ]
 
 
 def test_target_led_duration_conflict_returns_to_script_revision_with_exact_evidence(
@@ -893,6 +1114,9 @@ def test_begin_draft_resolves_scene_display_metadata_from_current_script(
     assert [node.summary for node in content.scene_nodes] == [
         scene.summary for scene in script.structured_scenes
     ]
+    assert [node.source_target_duration_seconds for node in content.scene_nodes] == [
+        scene.target_duration_seconds for scene in script.structured_scenes
+    ]
     assert content.script_line_ids == [line.id for line in script.lines]
     assert [node.source_line_ids for node in content.scene_nodes] == [
         scene.line_ids for scene in script.structured_scenes
@@ -1154,6 +1378,14 @@ def test_verification_persists_and_targeted_replacement_invalidates_it(
         script_line_ids=[line.id],
         description=f"Complete the action and reaction around {line.id}.",
     )
+    replacement_source_range = source_range.model_copy(
+        update={
+            "description": f"Complete the action and reaction around {line.id}！",
+            "starts_after": "The preceding beat has just ended!",
+            "ends_before": "The next reaction begins;",
+        },
+        deep=True,
+    )
     repair_work = StoryboardWorkUnitContract(
         id=f"repair-{line.id}",
         title="Repair only the ending eyeline",
@@ -1184,7 +1416,7 @@ def test_verification_persists_and_targeted_replacement_invalidates_it(
                 work_unit_id=repair_work.id,
                 scene_node_id=f"scene-node-{scene.id}",
                 scene_group_sequence=len(script.lines),
-                source_range=source_range,
+                source_range=replacement_source_range,
                 shots=[replacement_shot],
                 clip_group=ClipGroup(
                     id=clip_group_ids[-1],
@@ -1208,6 +1440,15 @@ def test_verification_persists_and_targeted_replacement_invalidates_it(
     assert replaced.latest_continuity_out == [
         f"after-{line.id}"
     ]
+    persisted_replacement = service.get_production_document(
+        project_id,
+        begun.draft_ref.artifact_id,
+        version_id=replaced.draft_version_id,
+    )
+    replaced_content = StoryboardDraftContent.model_validate(
+        persisted_replacement.version.payload
+    )
+    assert replaced_content.committed_groups[-1].source_range == source_range
 
     ready = service.record_storyboard_draft_verification(
         project_id,

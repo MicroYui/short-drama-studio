@@ -284,13 +284,18 @@ from short_drama.production_contracts import (
     ProductionSpecMutationResponse,
     ProductionSpecReadResponse,
     ProductionSpecReplaceRequest,
+    StoryboardClipGroupDraft,
+    StoryboardClipGroupOutline,
     StoryboardContent,
     StoryboardCreateRequest,
     StoryboardDraftAppendRequest,
     StoryboardDraftBeginRequest,
     StoryboardDraftContent,
     StoryboardDraftFinalizeRequest,
+    StoryboardDraftGroupAppendCheckpoint,
     StoryboardDraftGroupReplaceRequest,
+    StoryboardDraftGroupsAppendRequest,
+    StoryboardDraftGroupsMutationResponse,
     StoryboardDraftLedgerCompleteRequest,
     StoryboardDraftLedgerSegmentAppendRequest,
     StoryboardDraftMutationResponse,
@@ -782,7 +787,7 @@ class ShortDramaService:
         if run is None:
             raise KeyError(f"Unknown agent run: {run_id}")
         if run.unattended:
-            team_batch = self.team_executor.run_ready_work(run_id)
+            team_batch = self.team_executor.drain_ready_work_until_handoff(run_id)
             if team_batch.selected_work_order_ids:
                 failed = [
                     item
@@ -805,8 +810,9 @@ class ShortDramaService:
                     created_work_order_ids=[],
                     advanced_work_order_ids=team_batch.selected_work_order_ids,
                     notes=[
-                        "Advanced one persisted local Agent Team batch; the next "
-                        "unattended call will choose the next semantic owner."
+                        "Advanced the ready local Agent Team WorkOrders through all "
+                        "persisted model/Tool turns still owned by their Workers; "
+                        "Leader and user handoffs remain explicit."
                     ],
                 )
             request = request.model_copy(update={"max_actions": 1})
@@ -5693,66 +5699,12 @@ class ShortDramaService:
             current_version = self._production_document_version(draft_document)
             current = self._parse_storyboard_draft(current_version)
             self._validate_storyboard_draft(document, current)
-            if current.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
-                raise WorkflowConflictError(
-                    "Detailed ClipGroups cannot be appended while the draft requires "
-                    "duration reconciliation"
-                )
-            if current.phase != StoryboardDraftPhase.GROUP_AUTHORING:
-                raise WorkflowConflictError(
-                    "Detailed ClipGroups can only be authored after the ledger and "
-                    "outline are complete"
-                )
-            scene_order = {
-                item.id: item.sequence for item in current.scene_nodes
-            }
-            ordered_plans = sorted(
-                current.planned_clip_groups,
-                key=lambda item: (
-                    scene_order[item.scene_node_id],
-                    item.scene_group_sequence,
-                ),
-            )
-            if len(current.committed_groups) >= len(ordered_plans):
-                raise WorkflowConflictError(
-                    "Storyboard draft already contains every planned ClipGroup"
-                )
-            next_planned = ordered_plans[len(current.committed_groups)]
-            if request.group.clip_group.id != next_planned.id:
-                raise WorkflowConflictError(
-                    "Single-user storyboard authoring must append the next planned "
-                    f"ClipGroup {next_planned.id}; received "
-                    f"{request.group.clip_group.id}"
-                )
-            self._validate_storyboard_work_unit(document, current, request.work_unit)
-            self._validate_storyboard_source_range(
+            revised = self._validated_storyboard_group_append(
+                project_id,
                 document,
                 current,
-                request.group.source_range,
+                request,
             )
-            if any(
-                shot.project_id != project_id for shot in request.group.shots
-            ):
-                raise WorkflowConflictError(
-                    "Storyboard draft group Shots must belong to the current project"
-                )
-            try:
-                revised = StoryboardDraftContent.model_validate(
-                    {
-                        **current.model_dump(mode="json"),
-                        "committed_groups": [
-                            *[
-                                item.model_dump(mode="json")
-                                for item in current.committed_groups
-                            ],
-                            request.group.model_dump(mode="json"),
-                        ],
-                        "verification": None,
-                    }
-                )
-            except ValueError as exc:
-                raise WorkflowConflictError(str(exc)) from exc
-            self._validate_storyboard_draft(document, revised)
             now = utc_now()
             result = self._revise_production_document_locked(
                 document,
@@ -5783,6 +5735,80 @@ class ShortDramaService:
                         request.group.clip_group.continuity_out
                     ),
                 )
+            )
+
+    def append_storyboard_groups(
+        self,
+        project_id: str,
+        request: StoryboardDraftGroupsAppendRequest,
+    ) -> StoryboardDraftGroupsMutationResponse:
+        """Persist a validated adjacent group segment as per-group versions."""
+
+        with self._lock:
+            document = self._require_project_mutation_allowed(project_id)
+            _draft_document, _current_version, current = (
+                self._storyboard_draft_mutation_state(
+                    document,
+                    request.draft_document_id,
+                    request.base_version_id,
+                    operation="group segment append",
+                )
+            )
+
+            # Validate the whole requested prefix against an in-memory draft first.
+            # A malformed later group therefore cannot leave a surprising partial
+            # segment, while successful persistence still creates one immutable
+            # ProductionDocumentVersion per ClipGroup below.
+            simulated = current
+            for group in request.groups:
+                simulated = self._validated_storyboard_group_append(
+                    project_id,
+                    document,
+                    simulated,
+                    StoryboardDraftAppendRequest(
+                        draft_document_id=request.draft_document_id,
+                        base_version_id=request.base_version_id,
+                        work_unit=request.work_unit,
+                        group=group,
+                        source_artifact_refs=request.source_artifact_refs,
+                        origin=request.origin,
+                    ),
+                )
+
+            base_version_id = request.base_version_id
+            checkpoints: list[StoryboardDraftGroupAppendCheckpoint] = []
+            final_progress: StoryboardDraftProgress | None = None
+            for group in request.groups:
+                response = self.append_storyboard_group(
+                    project_id,
+                    StoryboardDraftAppendRequest(
+                        draft_document_id=request.draft_document_id,
+                        base_version_id=base_version_id,
+                        work_unit=request.work_unit,
+                        group=group,
+                        source_artifact_refs=request.source_artifact_refs,
+                        origin=request.origin,
+                    ),
+                )
+                final_progress = response.progress
+                base_version_id = final_progress.draft_version_id
+                checkpoints.append(
+                    StoryboardDraftGroupAppendCheckpoint(
+                        draft_ref=final_progress.draft_ref,
+                        draft_version_id=final_progress.draft_version_id,
+                        scene_node_id=group.scene_node_id,
+                        clip_group_id=group.clip_group.id,
+                        shot_ids=[shot.id for shot in group.shots],
+                        continuity_out=list(group.clip_group.continuity_out),
+                    )
+                )
+            if final_progress is None:  # guarded by the request model
+                raise WorkflowConflictError(
+                    "Storyboard group segment must contain at least one ClipGroup"
+                )
+            return StoryboardDraftGroupsMutationResponse(
+                progress=final_progress,
+                checkpoints=checkpoints,
             )
 
     def replace_storyboard_draft_group(
@@ -5838,6 +5864,23 @@ class ShortDramaService:
                     "Storyboard draft replacement requires an already committed "
                     f"ClipGroup {request.replaced_clip_group_id}"
                 )
+            planned = next(
+                (
+                    item
+                    for item in current.planned_clip_groups
+                    if item.id == request.replaced_clip_group_id
+                ),
+                None,
+            )
+            if planned is None:
+                raise WorkflowConflictError(
+                    "Storyboard draft replacement has no sealed planned ClipGroup "
+                    f"{request.replaced_clip_group_id}"
+                )
+            canonical_group = self._canonical_storyboard_group_for_planned_slot(
+                request.group,
+                planned,
+            )
             if any(shot.project_id != project_id for shot in request.group.shots):
                 raise WorkflowConflictError(
                     "Storyboard draft replacement Shots must belong to the "
@@ -5846,7 +5889,7 @@ class ShortDramaService:
             revised_groups = [
                 item.model_copy(deep=True) for item in current.committed_groups
             ]
-            revised_groups[replaced_indexes[0]] = request.group.model_copy(deep=True)
+            revised_groups[replaced_indexes[0]] = canonical_group
             try:
                 revised = StoryboardDraftContent.model_validate(
                     {
@@ -7169,6 +7212,109 @@ class ShortDramaService:
         self._validate_storyboard_draft(project_document, current)
         return draft_document, current_version, current
 
+    def _validated_storyboard_group_append(
+        self,
+        project_id: str,
+        project_document: ProjectDocument,
+        current: StoryboardDraftContent,
+        request: StoryboardDraftAppendRequest,
+    ) -> StoryboardDraftContent:
+        """Validate one next planned group and return the simulated new draft."""
+
+        if current.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
+            raise WorkflowConflictError(
+                "Detailed ClipGroups cannot be appended while the draft requires "
+                "duration reconciliation"
+            )
+        if current.phase != StoryboardDraftPhase.GROUP_AUTHORING:
+            raise WorkflowConflictError(
+                "Detailed ClipGroups can only be authored after the ledger and "
+                "outline are complete"
+            )
+        scene_order = {item.id: item.sequence for item in current.scene_nodes}
+        ordered_plans = sorted(
+            current.planned_clip_groups,
+            key=lambda item: (
+                scene_order[item.scene_node_id],
+                item.scene_group_sequence,
+            ),
+        )
+        if len(current.committed_groups) >= len(ordered_plans):
+            raise WorkflowConflictError(
+                "Storyboard draft already contains every planned ClipGroup"
+            )
+        next_planned = ordered_plans[len(current.committed_groups)]
+        if request.group.clip_group.id != next_planned.id:
+            raise WorkflowConflictError(
+                "Single-user storyboard authoring must append the next planned "
+                f"ClipGroup {next_planned.id}; received "
+                f"{request.group.clip_group.id}"
+            )
+        canonical_group = self._canonical_storyboard_group_for_planned_slot(
+            request.group,
+            next_planned,
+        )
+        self._validate_storyboard_work_unit(
+            project_document,
+            current,
+            request.work_unit,
+        )
+        self._validate_storyboard_source_range(
+            project_document,
+            current,
+            request.group.source_range,
+        )
+        if any(shot.project_id != project_id for shot in request.group.shots):
+            raise WorkflowConflictError(
+                "Storyboard draft group Shots must belong to the current project"
+            )
+        try:
+            revised = StoryboardDraftContent.model_validate(
+                {
+                    **current.model_dump(mode="json"),
+                    "committed_groups": [
+                        *[
+                            item.model_dump(mode="json")
+                            for item in current.committed_groups
+                        ],
+                        canonical_group.model_dump(mode="json"),
+                    ],
+                    "verification": None,
+                }
+            )
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+        self._validate_storyboard_draft(project_document, revised)
+        return revised
+
+    @staticmethod
+    def _canonical_storyboard_group_for_planned_slot(
+        group: StoryboardClipGroupDraft,
+        planned: StoryboardClipGroupOutline,
+    ) -> StoryboardClipGroupDraft:
+        """Match stable slot identity, then restore sealed explanatory prose."""
+
+        if (
+            group.clip_group.id != planned.id
+            or group.scene_node_id != planned.scene_node_id
+            or group.scene_group_sequence != planned.scene_group_sequence
+            or group.source_range.id != planned.source_range.id
+            or group.source_range.scene_ids != planned.source_range.scene_ids
+            or group.source_range.script_line_ids
+            != planned.source_range.script_line_ids
+            or group.clip_group.duration_seconds != planned.duration_seconds
+        ):
+            raise WorkflowConflictError(
+                "Storyboard draft group must match its planned ClipGroup slot's "
+                "stable identity, source span, and duration"
+            )
+        return group.model_copy(
+            update={
+                "source_range": planned.source_range.model_copy(deep=True),
+            },
+            deep=True,
+        )
+
     @staticmethod
     def _storyboard_draft_progress(
         production_document: ProductionDocument,
@@ -7625,6 +7771,7 @@ class ShortDramaService:
                 sequence=node.sequence,
                 heading=scene.heading,
                 summary=scene.summary,
+                source_target_duration_seconds=scene.target_duration_seconds,
                 source_line_ids=list(scene.line_ids),
                 continuity_in=list(node.continuity_in),
                 continuity_out=list(node.continuity_out),
