@@ -17,7 +17,7 @@
   → 根据证据继续、局部返工或重新规划
 ```
 
-`ProjectDocument + versioned Artifacts` 是项目内容真相。ProductionSpec、Storyboard 和 GenerationPlan 使用有稳定 document ID 与不可变 version 的 ProductionDocument；Asset/AssetVersion、ReferencePlan、GenerationTask、Take、TimelineManifest 和 ExportRecord 继续保存各自领域事实并通过 ArtifactRef 交接。`ProjectDocument.shots` 是当前 Storyboard 的兼容投影，不是第二份分镜真相。`AgentRun` 是总调度，只记录当前目标、计划、进度和下一步，不复制第二份项目内容。
+`ProjectDocument + versioned Artifacts` 是项目内容真相。ProductionSpec、Storyboard、AssetPlan 和 GenerationPlan 使用有稳定 document ID 与不可变 version 的 ProductionDocument；Asset/AssetVersion、ReferencePlan、GenerationTask、Take、TimelineManifest 和 ExportRecord 继续保存各自领域事实并通过 ArtifactRef 交接。`ProjectDocument.shots` 是当前 Storyboard 的兼容投影，不是第二份分镜真相。`AgentRun` 是总调度，只记录当前目标、计划、进度和下一步，不复制第二份项目内容。
 
 当前后端验收边界是：不启用、不集成、不分发 LTX 模型，LTX 只作为后续桌面编辑与导出底座；本轮不调用真实付费 Provider，用 Fake Provider 和本地媒体验证状态、工件与时间线交接。`REAL_H3` Tool 的存在表示系统有这条执行路线，不等于 Agent 已获得本轮真实提交授权。
 
@@ -73,7 +73,7 @@ AgentRun 的一次 advance HTTP 最多成功执行一个 `planning.advance`。�
 ## 每次规划前先回答的六个问题
 
 1. 用户这次真正要改变或完成什么，哪些内容明确不能动？
-2. 当前项目处于什么状态，当前 ProductionSpec、Storyboard、GenerationPlan 输出槽位分别指向哪个精确版本，最新且已批准的资产、Take 和时间线又分别是哪一版？
+2. 当前项目处于什么状态，当前 ProductionSpec、Storyboard、AssetPlan、GenerationPlan 输出槽位分别指向哪个精确版本，最新且已批准的资产、Take 和时间线又分别是哪一版？
 3. 缺的是创作判断、可执行工件、Provider 结果，还是对已有结果的检查？
 4. 哪些下游确实依赖本次变化，哪些已完成内容可以原样复用？
 5. 下一步需要的是 Tool 的确定性能力，还是专业 Agent 的内容判断？
@@ -153,46 +153,7 @@ AgentRun 的一次 advance HTTP 最多成功执行一个 `planning.advance`。�
 - 内容问题与制作问题已分开；镜位、资产或 Provider 问题没有被错误地塞回对白中解决。
 - 若本轮目标继续制作而不是只交付剧本，`production.spec.current` 指向当前 ProductionSpec 的精确版本；若用户要求在剧本处停止，不为“走流程”擅自创建后续工件。
 
-## 阶段三：准备制作资产，建立 Bible、资产清单与连续性锚点
-
-### 要解决的问题
-
-把跨镜头需要保持的内容从散落 Prompt 中提取为可复用工件。Bible 说明角色、场景、道具和风格是什么；AssetVersion 保存实际媒体版本；ReferencePack 说明哪些批准版本可以怎样被引用。
-
-### 读取与判断
-
-- 从剧本提取角色的叙事身份、人设、气质/行为基调、外观与服装，场景的叙事用途、氛围、空间布局、光线与色彩，道具外观与状态变化，以及整体媒介和风格。
-- 为核心资产建立结构化 brief：区分叙事事实、稳定视觉锚点、服装/材质、背景与质感约束、连续性锚点、允许变化项以及当前覆盖策略。不要只保留一串形容词。
-- 区分跨项目/跨镜复用的 canonical asset 与只服务一个镜头的关键帧。
-- 根据角色/场景的剧情重要度、预计复用范围、跨镜连续性风险、空间/动作复杂度和已有素材覆盖，由 Agent 选择轻量单图、标准多视图、场景 coverage 或镜头专用关键帧。
-- 反复出现且外观必须稳定的主角可使用正面、侧面、背面、服饰/细节等标准视图，并把显式选定且相互一致的源图确定性组成参考板；次要群像、一次性路人或远景人物可使用轻量覆盖。
-- 长时间复用的场景可准备俯视/布局图、全景 master 和反复出现的功能区局部，例如“食堂全景”与“打饭窗口”；单镜幕布或抽象背景无需强行建立真实空间套图。
-- Design 默认可以在一次图像任务中直接生成带面部、正/侧/背视图的角色卡，或者 2×2 场景 coverage。本地同时保留“先生成相互一致的单视图，再确定性拼板”的路线；Asset Worker 根据已有素材、资产重要度和连续性风险决定，不固定为其中一种。
-- 优先检索和复用已批准版本；不存在合适版本时才生成或导入新版本。
-- 资产工作的责任分层是“Method/Asset Worker 决定何时建锚点与资产形态 → WorkOrder 传递稳定 ID、最终 prompt、有序引用与依赖 → 通用图像 Tool 执行”。角色卡、场景卡或参考板是可选的 Artifact 形态，不应各自发明一套不可组合的专用生成后端。
-- 状态变体、换装、伤势、昼夜和关键道具按 base-first 系谱派生；生成新角度或状态时优先使用已稳定主图做有序参考，不用无参考的重新生成破坏身份与空间一致性。
-
-### 可用能力
-
-- `artifact.create_asset`：在确实需要稳定 ID 和版本系谱时创建角色、场景、道具或通用参考资产；它只建档和初始文本版本，不生图。Style 始终以 `ProjectBible.style` 为真相源。
-- `artifact.search_catalog`、`artifact.import_catalog`：检索并导入已批准的复用资产。
-- `artifact.search_stock`、`artifact.import_stock`：在配置的素材源中查找并导入候选。
-- `artifact.import_local_version`、`artifact.import_url_version`：把用户文件或远程媒体作为 AssetVersion 导入。
-- `artifact.update_brief`：为已有核心资产保存结构化身份、气质/材质、连续性锚点、覆盖策略和所需视图。
-- `artifact.inspect_coverage`：检查 Shot ReferencePlan 推导的跨镜复用视图缺口；它不代替 Agent 直接核对 `CoreAssetBrief.requested_views`。
-- `image.enqueue` 与图像任务生命周期 Tools：在精确视图/状态已决定后生成或编辑一个新版本。新 base 通常用 `GENERATE`；从已稳定 base 派生角度、换装、状态或同源空间视图通常用带父版本和有序参考的 `EDIT`。`enqueue` 只入队，`advance` 才推进一次外部状态。
-- `qa.inspect_asset_version`：在生成或导入实际图片后，对照 brief、可选 Shot 和已批准 canonical references 做多模态语义检查；结果是 Agent 判断输入，不自动改变批准状态。
-- `image.compose_reference_sheet`：把 2–9 份显式源 AssetVersion 确定性排成标准多视图或场景 coverage 参考板；可要求仅使用已批准输入，也可为迭代比较显式选择非拒绝版本。它不生成新人物/场景，输出仍为 DRAFT，并保留每个格子的源 AssetVersion 和视图标记。下游仅需整体身份锁时可优先传递经批准的拼板，不同时冗余绑定拼板与全部源图；单图只在额外承担特定角度、状态或构图职责时继续传递。
-- `artifact.review_version`、`artifact.add_reference_entry`：前者只在 Agent 已看过媒体并形成结论后记录批准/拒绝，后者把承担明确职责的当前已批准正式图片加入参考包。
-
-### 产物与完成信号
-
-- ProjectBibleVersion 与当前剧本一致，关键人物、场景、道具和风格有明确描述。
-- 核心资产的 brief 同时说清“这是谁/什么”、“叙事中如何给人感受”、“哪些可见特征要保持”与“为什么需要当前覆盖”。
-- 本轮会用到的媒体有可追溯的 AssetVersion，已批准版本与普通候选被区分。
-- 每份参考的职责清楚：身份、造型、空间、道具状态、声音、构图或运动，不是“把所有图都塞进去”。
-
-## 阶段四：设计场次与分镜，明确镜头和连续性状态
+## 阶段三：设计场次与分镜，明确镜头和连续性状态
 
 ### 要解决的问题
 
@@ -231,6 +192,38 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 - 相邻镜头的开场/终态可以对接；复杂动作和接触关系已经显式化。
 - 镜头粒度服务于可生成性和剪辑，而不是机械追求镜头数量。
 - `storyboard.current` 输出槽位指向这份完整 Storyboard 的精确当前版本，旧版本仍可通过 ArtifactRef 追溯。
+
+## 阶段四：形成 AssetPlan 并准备核心资产
+
+### 要解决的问题
+
+以当前精确 ScriptVersion、ProjectBibleVersion、ProductionSpec 和完整 Storyboard 为共同事实，把跨镜需要保持的内容从散落 Prompt 中提取为版本化 AssetPlan 和可复用工件。Bible 说明角色、场景、道具和风格是什么；AssetPlan 记录建锚点、仅文字或复用的取舍与执行依赖；AssetVersion 保存实际媒体版本；ReferencePack 说明哪些批准版本可以承担什么职责。
+
+### 读取、计划与执行
+
+- 在任何新的资产生成、编辑、导入或拼板之前，先读取 `asset.plan.current`。没有当前计划时用 `artifact.create_asset_plan`；分镜、设定或资产取舍变化时用 `artifact.replace_asset_plan` 建立新版本，只修订真正受影响的 item/work item。
+- 每个 AssetPlan item 显式选择 `ANCHOR`、`TEXT_ONLY` 或 `REUSE_EXISTING`，记录服务的 Shot/ClipGroup、理由与完成工件。执行型 work item 使用稳定 ID，写入 operation、output role/view、最终 prompt、尺寸、有序 references 和 dependency IDs；工具不在执行时重新发明创意。
+- 根据剧情重要度、复用范围、跨镜连续性风险、空间/动作复杂度、已有素材和已选 Method，由 Agent 选择轻量单图、MiniMax 短剧双区角色卡、六视图卡、场景四向 coverage、道具 master 或不建卡。不用题材关键词、固定出场次数或“所有角色必须四视图”代替判断。
+- MiniMax Design `drama-series` 适用时，持续角色可用一张 16:9 双区卡，左侧大幅正脸，右侧正/侧/背全身三列；复用场景可用一张 16:9 的 2×2 正/反/左/右空场景卡；关键道具先稳定单物、单角度、中性背景 master。这些形态可直接生成，也可由已选定且相互一致的单图确定性拼板；拼板不是必经路径。
+- 状态变体、换装、伤势、昼夜和关键道具按 base-first 系谱派生。互不依赖的 base 可并行，派生项只在它的真实依赖已有精确 AssetVersion 后执行。
+- 优先检索、复用或导入已有素材；需要新图时由 Asset Worker 编译 work item 的最终 prompt 和带 purpose/alias 的有序参考，通用 Image Tool 只执行该请求。实际媒体由 Agent 观察后再记录批准/拒绝。
+- ReferencePack 可保留同一语义资产的多张有效参考；面向一个具体 Shot/ClipGroup 时，只选择对当前身份、状态、空间和道具职责最少且充分的子集。身份/场景/服饰/道具一致性是 Subject reference；图片本身定义开场、结束或构图时才是 Picture/keyframe。
+
+### 可用能力
+
+- `artifact.create_asset_plan`、`artifact.replace_asset_plan`、`artifact.get_asset_plan`：创建、局部修订或读取版本化 AssetPlan；当前版本通过 `asset.plan.current` 交接。
+- `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.search_stock` 与各类 import Tool：建档、保存结构化 brief、复用或导入真实素材。Style 仍以 `ProjectBible.style` 为真相源。
+- `image.enqueue` 与图像任务生命周期 Tools：在精确视图/状态和参考职责已决定后生成或编辑新版本；`enqueue` 只入队，`advance` 才推进一次外部状态。
+- `qa.inspect_asset_version`、`artifact.review_version`：前者对照 brief、Shot 和已批准 references 生成语义建议，后者由 Agent 在看过媒体后记录结论；检查结果不是代码门禁。
+- `image.compose_reference_sheet`：把精确源 AssetVersion 按显式 `layout_profile` 确定性排成参考卡，不生成缺失视图，输出仍需观察与决策。
+- `artifact.add_reference_entry`、`artifact.inspect_coverage`：前者把已批准精确版本以明确职责加入 ReferencePack，后者只展示 Shot ReferencePlan 推导的覆盖缺口，不代替 Agent 核对 brief。
+
+### 产物与完成信号
+
+- `asset.plan.current` 指向与当前 Script/Bible/ProductionSpec/Storyboard 精确一致的 AssetPlan，其 anchor/text-only/reuse 取舍、工作项依赖、最终 prompt、有序 references 与完成 AssetVersion 可追溯。
+- 核心资产的 brief 同时说清“这是谁/什么”、“叙事中如何给人感受”、“哪些可见特征要保持”与“为什么需要当前覆盖”。
+- 本轮会用到的媒体有可追溯的 AssetVersion，已批准版本与普通候选被区分；同一资产可保留多份职责不同的有效参考。
+- 每份参考的职责清楚：身份、造型、空间、道具状态、声音、构图或运动，不是“把所有图都塞进去”。
 
 ## 阶段五：编译生成计划，选择路线并组装参考包
 

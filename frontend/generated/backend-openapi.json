@@ -1637,6 +1637,50 @@
         "title": "Asset",
         "type": "object"
       },
+      "AssetCanonicalNeed": {
+        "additionalProperties": false,
+        "description": "A requested subject that needs a base before derived views can exist.",
+        "properties": {
+          "purposes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Purposes",
+            "type": "array"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shot Ids",
+            "type": "array"
+          },
+          "subject_asset_id": {
+            "title": "Subject Asset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_asset_id",
+          "requirement_ids",
+          "shot_ids",
+          "purposes",
+          "required"
+        ],
+        "title": "AssetCanonicalNeed",
+        "type": "object"
+      },
       "AssetCatalogCandidate": {
         "additionalProperties": false,
         "properties": {
@@ -1708,6 +1752,10 @@
             "title": "Score",
             "type": "integer"
           },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          },
           "source_project_id": {
             "title": "Source Project Id",
             "type": "string"
@@ -1735,6 +1783,7 @@
         "required": [
           "source_project_id",
           "source_project_name",
+          "source_asset_id",
           "subject_asset_id",
           "subject_asset_name",
           "asset_kind",
@@ -1899,6 +1948,13 @@
       "AssetCoverageResponse": {
         "additionalProperties": false,
         "properties": {
+          "missing_canonical_assets": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCanonicalNeed"
+            },
+            "title": "Missing Canonical Assets",
+            "type": "array"
+          },
           "missing_views": {
             "items": {
               "$ref": "#/components/schemas/ReferenceViewNeed"
@@ -2041,6 +2097,18 @@
         "title": "AssetKind",
         "type": "string"
       },
+      "AssetLayoutProfile": {
+        "description": "Explicit machine-reference layout selected by the Asset Agent.",
+        "enum": [
+          "LIGHTWEIGHT_SINGLE",
+          "DRAMA_CHARACTER_DUAL_ZONE_16_9",
+          "CHARACTER_SIX_VIEW_3X2",
+          "SCENE_FOUR_DIRECTION_2X2",
+          "PROP_MASTER_SINGLE"
+        ],
+        "title": "AssetLayoutProfile",
+        "type": "string"
+      },
       "AssetMediaType": {
         "enum": [
           "TEXT_REFERENCE",
@@ -2084,12 +2152,19 @@
       "AssetReferenceSheet": {
         "additionalProperties": false,
         "properties": {
+          "background_color": {
+            "default": "#FFFFFF",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Background Color",
+            "type": "string"
+          },
           "cells": {
             "items": {
               "$ref": "#/components/schemas/AssetReferenceSheetCell"
             },
             "maxItems": 9,
-            "minItems": 2,
+            "minItems": 1,
             "title": "Cells",
             "type": "array"
           },
@@ -2102,8 +2177,34 @@
           "input_policy": {
             "$ref": "#/components/schemas/AssetSheetInputPolicy"
           },
+          "layout_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetLayoutProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "show_labels": {
+            "default": true,
+            "title": "Show Labels",
+            "type": "boolean"
+          },
           "strategy": {
             "$ref": "#/components/schemas/AssetReferenceStrategy"
+          },
+          "target_size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Size"
           }
         },
         "required": [
@@ -2167,6 +2268,15 @@
         "title": "AssetReviewDecision",
         "type": "string"
       },
+      "AssetReviewPurpose": {
+        "description": "How an approved image version participates in the asset contract.",
+        "enum": [
+          "CANONICAL_MASTER",
+          "SUPPLEMENTAL_REFERENCE"
+        ],
+        "title": "AssetReviewPurpose",
+        "type": "string"
+      },
       "AssetReviewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2178,10 +2288,14 @@
             "minLength": 1,
             "title": "Notes",
             "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/AssetReviewPurpose"
           }
         },
         "required": [
           "decision",
+          "purpose",
           "notes"
         ],
         "title": "AssetReviewRequest",
@@ -4336,6 +4450,10 @@
             "minLength": 1,
             "title": "Identity Anchor",
             "type": "string"
+          },
+          "layout_profile": {
+            "$ref": "#/components/schemas/AssetLayoutProfile",
+            "default": "LIGHTWEIGHT_SINGLE"
           },
           "named_views_or_zones": {
             "items": {
@@ -11599,6 +11717,14 @@
             "$ref": "#/components/schemas/ImageQuality",
             "default": "high"
           },
+          "reference_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ImageReferenceInput"
+            },
+            "maxItems": 16,
+            "title": "Reference Inputs",
+            "type": "array"
+          },
           "size": {
             "default": "768x1344",
             "title": "Size",
@@ -11620,6 +11746,43 @@
         ],
         "title": "ImageQuality",
         "type": "string"
+      },
+      "ImageReferenceInput": {
+        "additionalProperties": false,
+        "description": "One ordered image input and the semantic job it performs.",
+        "properties": {
+          "asset_version_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "purpose": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "subject_alias": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Alias"
+          }
+        },
+        "required": [
+          "asset_version_id",
+          "purpose"
+        ],
+        "title": "ImageReferenceInput",
+        "type": "object"
       },
       "ImageTaskCreateRequest": {
         "additionalProperties": false,
@@ -11699,6 +11862,14 @@
           "quality": {
             "$ref": "#/components/schemas/ImageQuality",
             "default": "high"
+          },
+          "reference_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ImageReferenceInput"
+            },
+            "maxItems": 16,
+            "title": "Reference Inputs",
+            "type": "array"
           },
           "size": {
             "default": "768x1344",
@@ -15799,6 +15970,17 @@
       "ProjectDocument": {
         "additionalProperties": false,
         "properties": {
+          "asset_plan_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Plan Document Id"
+          },
           "assets": {
             "items": {
               "$ref": "#/components/schemas/Asset"
@@ -16604,6 +16786,9 @@
             "type": "boolean"
           },
           "target_id": {
+            "description": "Exact AssetVersion.id used by this provider-neutral binding.",
+            "maxLength": 200,
+            "minLength": 1,
             "title": "Target Id",
             "type": "string"
           }
@@ -17187,19 +17372,48 @@
       "ReferenceViewNeed": {
         "additionalProperties": false,
         "properties": {
-          "angle": {
-            "$ref": "#/components/schemas/ReferenceAngle"
-          },
-          "framing": {
-            "$ref": "#/components/schemas/ReferenceFraming"
+          "acceptable_roles": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRole"
+            },
+            "title": "Acceptable Roles",
+            "type": "array"
           },
           "lineage_root_version_id": {
             "title": "Lineage Root Version Id",
             "type": "string"
           },
-          "purpose": {
-            "title": "Purpose",
-            "type": "string"
+          "preferred_angles": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceAngle"
+            },
+            "title": "Preferred Angles",
+            "type": "array"
+          },
+          "preferred_framings": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceFraming"
+            },
+            "title": "Preferred Framings",
+            "type": "array"
+          },
+          "purposes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Purposes",
+            "type": "array"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "required_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Tags",
+            "type": "array"
           },
           "requirement_ids": {
             "items": {
@@ -17207,9 +17421,6 @@
             },
             "title": "Requirement Ids",
             "type": "array"
-          },
-          "role": {
-            "$ref": "#/components/schemas/ReferenceRole"
           },
           "shot_ids": {
             "items": {
@@ -17221,24 +17432,18 @@
           "subject_asset_id": {
             "title": "Subject Asset Id",
             "type": "string"
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Tags",
-            "type": "array"
           }
         },
         "required": [
           "subject_asset_id",
           "requirement_ids",
           "shot_ids",
-          "role",
-          "angle",
-          "framing",
-          "tags",
-          "purpose",
+          "acceptable_roles",
+          "preferred_angles",
+          "preferred_framings",
+          "required_tags",
+          "purposes",
+          "required",
           "lineage_root_version_id"
         ],
         "title": "ReferenceViewNeed",
@@ -23609,6 +23814,19 @@
             "title": "Source Line Ids",
             "type": "array"
           },
+          "source_target_duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The current Script scene's upstream pacing reference. It informs semantic redistribution across scenes but is not a hard scene cap; the episode DurationContract remains authoritative.",
+            "title": "Source Target Duration Seconds"
+          },
           "summary": {
             "maxLength": 2000,
             "minLength": 1,
@@ -23883,6 +24101,7 @@
             "type": "string"
           },
           "non_speech_reserve_seconds": {
+            "description": "This row's incremental non-speech time after dialogue, action, reaction, and camera beats that can play concurrently have been collapsed. It is not a per-row copy of the ClipGroup's shared performance reserve.",
             "minimum": 0.0,
             "title": "Non Speech Reserve Seconds",
             "type": "number"
@@ -24842,6 +25061,12 @@
       "TeamWorkAdvance": {
         "additionalProperties": false,
         "properties": {
+          "advance_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Advance Count",
+            "type": "integer"
+          },
           "error_kind": {
             "anyOf": [
               {

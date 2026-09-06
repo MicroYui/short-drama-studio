@@ -16,8 +16,8 @@ def test_shared_end_to_end_workflow_is_loaded_into_planner_prompts() -> None:
     workflow = production_workflow()
 
     assert "形成内容方案" in workflow
-    assert "准备制作资产" in workflow
     assert "设计场次与分镜" in workflow
+    assert "形成 AssetPlan 并准备核心资产" in workflow
     assert "完成成片验收与导出" in workflow
 
     planner = compile_production_prompt(
@@ -56,7 +56,15 @@ def test_shared_workflow_extracts_general_patterns_without_freezing_one_example(
 
     assert "可复用的视频生成范式" in workflow
     assert "默认先形成一份可完整阅读和批准的 ScriptVersion" in workflow
-    assert "剧情重要度、预计复用范围、跨镜连续性风险" in workflow
+    assert "剧情重要度、复用范围、跨镜连续性风险" in workflow
+    assert workflow.index("设计场次与分镜") < workflow.index(
+        "形成 AssetPlan 并准备核心资产"
+    )
+    assert "asset.plan.current" in workflow
+    assert "artifact.create_asset_plan" in workflow
+    assert "anchor/text-only/reuse 取舍" in workflow
+    assert "Subject reference" in workflow
+    assert "Picture/keyframe" in workflow
     assert "artifact.update_brief" in workflow
     assert "image.compose_reference_sheet" in workflow
     assert "默认在完整 ScriptVersion 可审阅后" in workflow

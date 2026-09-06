@@ -8,6 +8,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from short_drama.asset_reference_truth import (
+    AssetReferenceTruthError,
+    resolve_current_asset_media,
+)
 from short_drama.h3_models import (
     H3DeleteResponse,
     H3MediaInput,
@@ -18,7 +22,6 @@ from short_drama.h3_models import (
 )
 from short_drama.media import H3MediaIngestor, MediaGenerationError
 from short_drama.models import (
-    ApprovalStatus,
     EvidenceStatus,
     Freshness,
     GenerationTask,
@@ -337,31 +340,17 @@ class PersistentH3Worker:
         for media in provider_run.media_inputs:
             version_id = media.asset_version_id
             if version_id is None:
+                if media.subject_asset_id is not None:
+                    return "A subject-linked H3 media input requires an AssetVersion"
                 continue
-            asset = next(
-                (
-                    item
-                    for item in document.assets
-                    if any(version.id == version_id for version in item.versions)
-                ),
-                None,
-            )
-            if asset is None:
-                return f"Media asset version {version_id} no longer exists"
-            version = next(
-                (item for item in asset.versions if item.id == version_id),
-                None,
-            )
-            if (
-                asset.approved_version_id != version_id
-                or version is None
-                or version.approval_status != ApprovalStatus.APPROVED
-                or version.freshness != Freshness.CURRENT
-            ):
-                return (
-                    f"Media asset version {version_id} is no longer the current "
-                    "approved version"
+            try:
+                resolve_current_asset_media(
+                    document,
+                    asset_version_id=version_id,
+                    subject_asset_id=media.subject_asset_id,
                 )
+            except AssetReferenceTruthError as exc:
+                return str(exc)
         return None
 
     @staticmethod

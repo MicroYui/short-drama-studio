@@ -20,6 +20,7 @@ from short_drama.models import (
     DirectorRepairRecord,
     DirectorRepairStrategy,
     DomainModel,
+    Freshness,
     ProjectAggregate,
     ProjectDocument,
     QaIssue,
@@ -653,10 +654,15 @@ def _binding_selections(
             warnings.append(f"{binding_id}: referenced AssetVersion is unavailable")
             continue
         asset, version = resolved
+        if asset.kind != binding.kind:
+            raise ValueError(
+                f"{binding_id}: ReferenceBinding kind {binding.kind.value} does not "
+                f"match AssetVersion {version.id}'s asset kind {asset.kind.value}"
+            )
         if (
             version.id in seen
-            or asset.approved_version_id != version.id
             or version.approval_status != ApprovalStatus.APPROVED
+            or version.freshness != Freshness.CURRENT
             or version.media_type != AssetMediaType.IMAGE
             or (version.local_path is None and version.external_url is None)
         ):
@@ -950,8 +956,9 @@ def _valid_pack_entries(
     for asset in document.assets:
         for version in asset.versions:
             if (
-                asset.approved_version_id == version.id
-                and version.approval_status == ApprovalStatus.APPROVED
+                version.approval_status == ApprovalStatus.APPROVED
+                and version.freshness == Freshness.CURRENT
+                and version.media_type == AssetMediaType.IMAGE
                 and (version.local_path is not None or version.external_url is not None)
             ):
                 approved_versions[version.id] = version

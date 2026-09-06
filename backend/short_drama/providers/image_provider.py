@@ -30,6 +30,8 @@ class ImageProviderSubmissionUnknown(ImageProviderError):
 class ImageProviderInput(DomainModel):
     asset_version_id: str
     image_url: str
+    purpose: str | None = None
+    subject_alias: str | None = None
 
 
 class ImageProviderResult(DomainModel):
@@ -48,4 +50,3 @@ class ImageProvider(Protocol):
         request: ImageProviderRequest,
         inputs: list[ImageProviderInput],
     ) -> ImageProviderResult: ...
-

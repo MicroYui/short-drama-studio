@@ -27,10 +27,12 @@ REQUIRED_PRODUCTION_TOOLS = {
     "artifact": {
         "artifact.add_reference_entry",
         "artifact.create_asset",
+        "artifact.create_asset_plan",
         "artifact.create_production_document",
         "artifact.create_production_spec",
         "artifact.get_production_document",
         "artifact.get_production_spec",
+        "artifact.get_asset_plan",
         "artifact.import_catalog",
         "artifact.import_local_version",
         "artifact.import_stock",
@@ -39,6 +41,7 @@ REQUIRED_PRODUCTION_TOOLS = {
         "artifact.list_production_documents",
         "artifact.review_version",
         "artifact.replace_production_spec",
+        "artifact.replace_asset_plan",
         "artifact.revise_production_document",
         "artifact.search_catalog",
         "artifact.search_stock",
@@ -162,6 +165,17 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert reconciliation.input_schema["required"] == ["project_id", "task_id"]
 
     assert "ProjectBible.style" in descriptors["artifact.create_asset"].description
+    assert "需要锚点" in descriptors["artifact.create_asset_plan"].description
+    assert "仅保留文字" in descriptors["artifact.create_asset_plan"].description
+    assert "调整少数资产或整体计划" in descriptors[
+        "artifact.replace_asset_plan"
+    ].description
+    assert "四视图、轻量参考等创意路由" in descriptors[
+        "artifact.replace_asset_plan"
+    ].description
+    assert "后续镜头输入编排" in descriptors[
+        "artifact.get_asset_plan"
+    ].description
     assert "不会自动看图" in descriptors["artifact.review_version"].description
     assert "artifact.review_version" in descriptors["qa.inspect_asset_version"].description
     assert "再调用 route.plan_h3" in descriptors[

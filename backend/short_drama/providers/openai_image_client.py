@@ -97,10 +97,49 @@ class OpenAIImageClient:
             raise ValueError("Image generation does not accept edit inputs")
         if request.operation == ImageOperation.EDIT and not inputs:
             raise ValueError("Image editing requires at least one input image")
+        visual_input_ids = [
+            item.asset_version_id
+            for item in inputs
+            if item.asset_version_id != request.mask_version_id
+        ]
+        expected_input_ids = request.ordered_input_version_ids()
+        if (
+            request.primary_input_version_id is not None
+            and not request.reference_inputs
+        ):
+            expected_input_ids = [
+                request.primary_input_version_id,
+                *(
+                    item
+                    for item in expected_input_ids
+                    if item != request.primary_input_version_id
+                ),
+            ]
+        if visual_input_ids != expected_input_ids:
+            raise ValueError(
+                "Provider image inputs must preserve the declared reference order"
+            )
+
+        provider_prompt = request.prompt
+        if request.operation == ImageOperation.EDIT and request.reference_inputs:
+            reference_lines: list[str] = []
+            for index, reference in enumerate(request.reference_inputs, start=1):
+                alias = (
+                    f"（主体别名：{reference.subject_alias}）"
+                    if reference.subject_alias is not None
+                    else ""
+                )
+                reference_lines.append(
+                    f"参考图{index}{alias}：{reference.purpose}"
+                )
+            provider_prompt = (
+                f"{request.prompt}\n\n有序参考图职责（按上传顺序）：\n"
+                + "\n".join(reference_lines)
+            )
 
         payload: dict[str, object] = {
             "model": "gpt-image-2",
-            "prompt": request.prompt,
+            "prompt": provider_prompt,
             "n": 1,
             "size": request.size,
             "quality": request.quality.value,

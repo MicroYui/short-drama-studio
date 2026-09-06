@@ -33,8 +33,15 @@ from short_drama.asset_catalog import (
     AssetCatalogSearchRequest,
     AssetCatalogSearchResponse,
     AssetCoverageResponse,
-    recommended_reusable_reference_views,
+    asset_coverage_ready,
+    catalog_semantic_asset_kinds,
+    missing_canonical_assets,
+    missing_reference_views,
     search_asset_catalog,
+)
+from short_drama.asset_reference_truth import (
+    AssetReferenceTruthError,
+    resolve_current_asset_media,
 )
 from short_drama.agent_runtime import (
     AgentRuntime,
@@ -111,6 +118,7 @@ from short_drama.image_models import (
     AssetMutationResponse,
     AssetReferenceSheetComposeRequest,
     AssetReviewDecision,
+    AssetReviewPurpose,
     AssetReviewRequest,
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
@@ -215,6 +223,7 @@ from short_drama.models import (
     ReferencePackEntry,
     ReferenceBinding,
     ReferencePlanEntry,
+    ReferenceRole,
     ReviewRepairOwner,
     RouteEvidence,
     RunMode,
@@ -263,6 +272,8 @@ from short_drama.models import (
     WorkerDrainResponse,
 )
 from short_drama.production_contracts import (
+    ASSET_PLAN_DOCUMENT_KIND,
+    ASSET_PLAN_OUTPUT_SLOT_ID,
     GENERATION_PLAN_DOCUMENT_KIND,
     GENERATION_PLAN_OUTPUT_SLOT_ID,
     PRODUCTION_SPEC_DOCUMENT_KIND,
@@ -270,6 +281,13 @@ from short_drama.production_contracts import (
     STORYBOARD_DOCUMENT_KIND,
     STORYBOARD_DRAFT_DOCUMENT_KIND,
     STORYBOARD_OUTPUT_SLOT_ID,
+    AssetPlanContent,
+    AssetPlanCreateRequest,
+    AssetPlanDisposition,
+    AssetPlanMutationResponse,
+    AssetPlanOperation,
+    AssetPlanReadResponse,
+    AssetPlanReplaceRequest,
     GenerationPlanCompileRequest,
     GenerationPlanContent,
     GenerationPlanMutationResponse,
@@ -4285,6 +4303,11 @@ class ShortDramaService:
             "Script changed after the Storyboard was authored.",
             updated_at=now,
         )
+        self._invalidate_asset_plan_locked(
+            document,
+            "Script changed after the AssetPlan was authored.",
+            updated_at=now,
+        )
         self._invalidate_generation_plan_locked(
             document,
             "Script changed after the GenerationPlan was compiled.",
@@ -4346,10 +4369,12 @@ class ShortDramaService:
 
     def inspect_asset_coverage(self, project_id: str) -> AssetCoverageResponse:
         document = self._require_project_document(project_id)
-        missing = recommended_reusable_reference_views(document)
+        missing_canonical = missing_canonical_assets(document)
+        missing = missing_reference_views(document)
         return AssetCoverageResponse(
             project_id=project_id,
-            ready=not missing,
+            ready=asset_coverage_ready(document),
+            missing_canonical_assets=missing_canonical,
             missing_views=missing,
         )
 
@@ -4375,12 +4400,16 @@ class ShortDramaService:
         if source_version is None:
             raise ArtifactNotFoundError(request.source_version_id)
         if (
-            source_asset.approved_version_id != source_version.id
-            or source_version.approval_status != ApprovalStatus.APPROVED
+            source_version.approval_status != ApprovalStatus.APPROVED
+            or source_version.freshness != Freshness.CURRENT
             or source_version.media_type != AssetMediaType.IMAGE
+            or (
+                source_version.local_path is None
+                and source_version.external_url is None
+            )
         ):
             raise WorkflowConflictError(
-                "Only a current approved catalog image can be imported"
+                "Only a usable current approved catalog image can be imported"
             )
         target_asset: Asset
         if request.target_asset_id is None:
@@ -4403,12 +4432,19 @@ class ShortDramaService:
                 target_document,
                 request.target_asset_id,
             )
+            compatible_kinds = {
+                source_asset.kind,
+                *catalog_semantic_asset_kinds(
+                    source_document,
+                    source_version.id,
+                ),
+            }
             if (
                 target_asset.kind != AssetKind.REFERENCE
-                and target_asset.kind != source_asset.kind
+                and target_asset.kind not in compatible_kinds
             ):
                 raise WorkflowConflictError(
-                    "Catalog source kind does not match the target asset"
+                    "Catalog source is not advertised for the target asset kind"
                 )
         version = self.asset_workbench.clone_catalog_image(
             project_id,
@@ -4797,6 +4833,7 @@ class ShortDramaService:
                 imported.version.id,
                 AssetReviewRequest(
                     decision=AssetReviewDecision.APPROVED,
+                    purpose=AssetReviewPurpose.CANONICAL_MASTER,
                     notes="用户直接提供的输入图片，自动草稿可作为视觉种子使用。",
                 ),
             )
@@ -4885,15 +4922,14 @@ class ShortDramaService:
         version_id: str,
         role: H3MediaRole,
     ) -> H3MediaInput:
-        asset, version = self._find_asset_version(document, version_id)
+        _asset, version = self._find_asset_version(document, version_id)
         if (
-            asset.approved_version_id != version.id
-            or version.approval_status != ApprovalStatus.APPROVED
+            version.approval_status != ApprovalStatus.APPROVED
             or version.freshness != Freshness.CURRENT
             or version.media_type != AssetMediaType.IMAGE
         ):
             raise WorkflowConflictError(
-                f"AssetVersion {version.id} is not its asset's current approved image"
+                f"AssetVersion {version.id} is not a current approved image"
             )
         if version.local_path is not None:
             path = Path(version.local_path).expanduser().resolve()
@@ -4973,9 +5009,12 @@ class ShortDramaService:
                 return False
             asset, version = resolved
             if (
-                asset.approved_version_id != version.id
-                or version.approval_status != ApprovalStatus.APPROVED
+                version.approval_status != ApprovalStatus.APPROVED
                 or version.freshness != Freshness.CURRENT
+                or (
+                    version.media_type != AssetMediaType.IMAGE
+                    and asset.approved_version_id != version.id
+                )
             ):
                 return False
         return True
@@ -5258,6 +5297,11 @@ class ShortDramaService:
                 document,
                 STORYBOARD_OUTPUT_SLOT_ID,
                 "ProductionSpec was replaced; the Storyboard must confirm the new production decisions.",
+                updated_at=now,
+            )
+            self._invalidate_asset_plan_locked(
+                document,
+                "ProductionSpec was replaced after the AssetPlan was authored.",
                 updated_at=now,
             )
             self._invalidate_generation_plan_locked(
@@ -6235,6 +6279,11 @@ class ShortDramaService:
                 ),
                 updated_at=now,
             )
+            self._invalidate_asset_plan_locked(
+                document,
+                "A Storyboard was created after the previous AssetPlan context.",
+                updated_at=now,
+            )
             self._invalidate_generation_plan_locked(
                 document,
                 "A Storyboard was created after the previous GenerationPlan context.",
@@ -6371,6 +6420,129 @@ class ShortDramaService:
             self.repository.save_project(document)
             return StoryboardMutationResponse(
                 storyboard=storyboard,
+                document=result.document,
+                version=result.version,
+                output_slot=slot,
+            )
+
+    def get_asset_plan(
+        self,
+        project_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> AssetPlanReadResponse:
+        with self._lock:
+            document = self._require_project_document(project_id)
+            production_document = self._managed_project_document(
+                document,
+                document.asset_plan_document_id,
+                ASSET_PLAN_DOCUMENT_KIND,
+            )
+            version = self._production_document_version(
+                production_document,
+                version_id,
+            )
+            return AssetPlanReadResponse(
+                asset_plan=self._parse_asset_plan(version),
+                document=production_document,
+                version=version,
+                output_slot=self._project_output_slot(
+                    document,
+                    ASSET_PLAN_OUTPUT_SLOT_ID,
+                ),
+            )
+
+    def create_asset_plan(
+        self,
+        project_id: str,
+        request: AssetPlanCreateRequest,
+    ) -> AssetPlanMutationResponse:
+        with self._lock:
+            document = self._require_project_mutation_allowed(project_id)
+            if document.asset_plan_document_id is not None:
+                raise WorkflowConflictError(
+                    "The project already has an AssetPlan; replace its current version"
+                )
+            self._validate_asset_plan(document, request.asset_plan)
+            now = utc_now()
+            result = self._create_production_document_locked(
+                document,
+                kind=ASSET_PLAN_DOCUMENT_KIND,
+                title="Asset Plan",
+                payload=production_document_payload(request.asset_plan),
+                source_artifact_refs=self._merge_production_document_refs(
+                    self._asset_plan_source_refs(document, request.asset_plan),
+                    request.source_artifact_refs,
+                ),
+                origin=request.origin,
+                created_at=now,
+            )
+            document.asset_plan_document_id = result.document.id
+            slot = self._bind_output_slot_locked(
+                document,
+                OutputSlotBindRequest(
+                    slot_id=ASSET_PLAN_OUTPUT_SLOT_ID,
+                    artifact_ref=ProductionDocumentArtifactRef(
+                        project_id=project_id,
+                        artifact_type="asset_plan",
+                        artifact_id=result.document.id,
+                        version=result.version.version,
+                    ),
+                ),
+                updated_at=now,
+            )
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            return AssetPlanMutationResponse(
+                asset_plan=request.asset_plan,
+                document=result.document,
+                version=result.version,
+                output_slot=slot,
+            )
+
+    def replace_asset_plan(
+        self,
+        project_id: str,
+        request: AssetPlanReplaceRequest,
+    ) -> AssetPlanMutationResponse:
+        with self._lock:
+            document = self._require_project_mutation_allowed(project_id)
+            production_document = self._managed_project_document(
+                document,
+                document.asset_plan_document_id,
+                ASSET_PLAN_DOCUMENT_KIND,
+            )
+            self._validate_asset_plan(document, request.asset_plan)
+            now = utc_now()
+            result = self._revise_production_document_locked(
+                document,
+                production_document_id=production_document.id,
+                base_version_id=request.base_version_id,
+                payload=production_document_payload(request.asset_plan),
+                source_artifact_refs=self._merge_production_document_refs(
+                    self._asset_plan_source_refs(document, request.asset_plan),
+                    request.source_artifact_refs,
+                ),
+                origin=request.origin,
+                created_at=now,
+            )
+            slot = self._bind_output_slot_locked(
+                document,
+                OutputSlotBindRequest(
+                    slot_id=ASSET_PLAN_OUTPUT_SLOT_ID,
+                    artifact_ref=ProductionDocumentArtifactRef(
+                        project_id=project_id,
+                        artifact_type="asset_plan",
+                        artifact_id=production_document.id,
+                        version=result.version.version,
+                    ),
+                ),
+                updated_at=now,
+            )
+            document.project.updated_at = now
+            self.repository.save_project(document)
+            return AssetPlanMutationResponse(
+                asset_plan=request.asset_plan,
                 document=result.document,
                 version=result.version,
                 output_slot=slot,
@@ -6659,6 +6831,17 @@ class ShortDramaService:
             ) from exc
 
     @staticmethod
+    def _parse_asset_plan(
+        version: ProductionDocumentVersion,
+    ) -> AssetPlanContent:
+        try:
+            return AssetPlanContent.model_validate(version.payload)
+        except ValueError as exc:
+            raise WorkflowConflictError(
+                f"AssetPlan version {version.id} is structurally invalid: {exc}"
+            ) from exc
+
+    @staticmethod
     def _parse_generation_plan(
         version: ProductionDocumentVersion,
     ) -> GenerationPlanContent:
@@ -6775,6 +6958,74 @@ class ShortDramaService:
             updated_at=updated_at,
         )
 
+    def _invalidate_asset_plan_locked(
+        self,
+        project_document: ProjectDocument,
+        reason: str,
+        *,
+        updated_at: str,
+    ) -> None:
+        self._invalidate_output_slot_locked(
+            project_document,
+            ASSET_PLAN_OUTPUT_SLOT_ID,
+            reason,
+            updated_at=updated_at,
+        )
+
+    def _invalidate_asset_plan_if_completion_became_unusable_locked(
+        self,
+        project_document: ProjectDocument,
+        *,
+        reason: str,
+        updated_at: str,
+    ) -> bool:
+        """Clear only the live AssetPlan binding when its completion truth breaks."""
+
+        slot = self._project_output_slot(
+            project_document,
+            ASSET_PLAN_OUTPUT_SLOT_ID,
+        )
+        current_ref = None if slot is None else slot.current_artifact_ref
+        if (
+            current_ref is None
+            or current_ref.artifact_type != "asset_plan"
+            or current_ref.version is None
+        ):
+            return False
+        production_document = self._managed_project_document(
+            project_document,
+            current_ref.artifact_id,
+            ASSET_PLAN_DOCUMENT_KIND,
+        )
+        version = next(
+            (
+                item
+                for item in production_document.versions
+                if item.version == current_ref.version
+            ),
+            None,
+        )
+        if version is None:
+            self._invalidate_asset_plan_locked(
+                project_document,
+                reason,
+                updated_at=updated_at,
+            )
+            return True
+        try:
+            self._validate_asset_plan(
+                project_document,
+                self._parse_asset_plan(version),
+            )
+        except WorkflowConflictError:
+            self._invalidate_asset_plan_locked(
+                project_document,
+                reason,
+                updated_at=updated_at,
+            )
+            return True
+        return False
+
     def _invalidate_audio_led_production_after_master_audio_change_locked(
         self,
         project_document: ProjectDocument,
@@ -6807,6 +7058,11 @@ class ShortDramaService:
             project_document,
             STORYBOARD_OUTPUT_SLOT_ID,
             "Master Audio changed after the audio-led Storyboard was authored.",
+            updated_at=updated_at,
+        )
+        self._invalidate_asset_plan_locked(
+            project_document,
+            "Master Audio changed after the audio-led AssetPlan was authored.",
             updated_at=updated_at,
         )
         self._invalidate_generation_plan_locked(
@@ -7902,6 +8158,467 @@ class ShortDramaService:
                 + ", ".join(unknown_asset_ids)
             )
 
+    def _asset_plan_source_refs(
+        self,
+        project_document: ProjectDocument,
+        asset_plan: AssetPlanContent,
+    ) -> list[ProductionDocumentArtifactRef]:
+        production_spec_document = self._managed_project_document(
+            project_document,
+            asset_plan.production_spec_document_id,
+            PRODUCTION_SPEC_DOCUMENT_KIND,
+        )
+        production_spec_version = self._production_document_version(
+            production_spec_document,
+            asset_plan.production_spec_version_id,
+        )
+        storyboard_document = self._managed_project_document(
+            project_document,
+            asset_plan.storyboard_document_id,
+            STORYBOARD_DOCUMENT_KIND,
+        )
+        storyboard_version = self._production_document_version(
+            storyboard_document,
+            asset_plan.storyboard_version_id,
+        )
+        return [
+            *self._current_story_source_refs(project_document),
+            ProductionDocumentArtifactRef(
+                project_id=project_document.project.id,
+                artifact_type="production_spec",
+                artifact_id=production_spec_document.id,
+                version=production_spec_version.version,
+            ),
+            ProductionDocumentArtifactRef(
+                project_id=project_document.project.id,
+                artifact_type="storyboard",
+                artifact_id=storyboard_document.id,
+                version=storyboard_version.version,
+            ),
+        ]
+
+    def _validate_asset_plan(
+        self,
+        project_document: ProjectDocument,
+        asset_plan: AssetPlanContent,
+    ) -> None:
+        if asset_plan.project_id != project_document.project.id:
+            raise WorkflowConflictError("AssetPlan must belong to the current project")
+        if asset_plan.script_version_id != project_document.project.current_script_version_id:
+            raise WorkflowConflictError(
+                "AssetPlan must reference the current ScriptVersion"
+            )
+        if asset_plan.bible_version_id != project_document.project.current_bible_version_id:
+            raise WorkflowConflictError(
+                "AssetPlan must reference the current ProjectBibleVersion"
+            )
+
+        production_spec_document = self._managed_project_document(
+            project_document,
+            asset_plan.production_spec_document_id,
+            PRODUCTION_SPEC_DOCUMENT_KIND,
+        )
+        production_spec_version = self._production_document_version(
+            production_spec_document,
+            asset_plan.production_spec_version_id,
+        )
+        if production_spec_document.id != project_document.production_spec_document_id:
+            raise WorkflowConflictError(
+                "AssetPlan must reference the project's ProductionSpec"
+            )
+        if production_spec_version.id != production_spec_document.current_version_id:
+            raise WorkflowConflictError(
+                "AssetPlan must reference the current ProductionSpec version"
+            )
+        production_spec = self._parse_production_spec(production_spec_version)
+        self._validate_production_spec(project_document, production_spec)
+
+        storyboard_document = self._managed_project_document(
+            project_document,
+            asset_plan.storyboard_document_id,
+            STORYBOARD_DOCUMENT_KIND,
+        )
+        storyboard_version = self._production_document_version(
+            storyboard_document,
+            asset_plan.storyboard_version_id,
+        )
+        if storyboard_document.id != project_document.storyboard_document_id:
+            raise WorkflowConflictError(
+                "AssetPlan must reference the project's Storyboard"
+            )
+        if storyboard_version.id != storyboard_document.current_version_id:
+            raise WorkflowConflictError(
+                "AssetPlan must reference the current Storyboard version"
+            )
+        storyboard = self._parse_storyboard(storyboard_version)
+        self._validate_storyboard(project_document, storyboard)
+
+        if (
+            asset_plan.script_version_id != production_spec.script_version_id
+            or asset_plan.bible_version_id != production_spec.bible_version_id
+            or asset_plan.script_version_id != storyboard.script_version_id
+            or asset_plan.bible_version_id != storyboard.bible_version_id
+            or storyboard.production_spec_document_id != production_spec_document.id
+            or storyboard.production_spec_version_id != production_spec_version.id
+        ):
+            raise WorkflowConflictError(
+                "AssetPlan, Storyboard, and ProductionSpec must reference the same "
+                "ScriptVersion and ProjectBibleVersion"
+            )
+
+        known_shot_ids = {item.id for item in storyboard.shots}
+        known_clip_group_ids = {item.id for item in storyboard.clip_groups}
+        unknown_shot_ids = sorted(
+            {
+                shot_id
+                for item in asset_plan.items
+                for shot_id in item.serves_shot_ids
+                if shot_id not in known_shot_ids
+            }
+        )
+        if unknown_shot_ids:
+            raise WorkflowConflictError(
+                "AssetPlan references unknown Storyboard shots: "
+                + ", ".join(unknown_shot_ids)
+            )
+        unknown_clip_group_ids = sorted(
+            {
+                clip_group_id
+                for item in asset_plan.items
+                for clip_group_id in item.serves_clip_group_ids
+                if clip_group_id not in known_clip_group_ids
+            }
+        )
+        if unknown_clip_group_ids:
+            raise WorkflowConflictError(
+                "AssetPlan references unknown Storyboard ClipGroups: "
+                + ", ".join(unknown_clip_group_ids)
+            )
+
+        bible = next(
+            item
+            for item in project_document.bible_versions
+            if item.id == asset_plan.bible_version_id
+        )
+        bible_entity_ids: dict[AssetKind, set[str]] = {
+            AssetKind.CHARACTER: {item.id for item in bible.characters},
+            AssetKind.LOCATION: {item.id for item in bible.locations},
+            AssetKind.PROP: {item.id for item in bible.props},
+            AssetKind.REFERENCE: set(),
+        }
+        assets_by_id = {item.id: item for item in project_document.assets}
+
+        def validate_asset_version(
+            asset_id: str | None,
+            asset_version_id: str | None,
+            *,
+            expected_kind: AssetKind | None,
+            require_completed_media: bool = False,
+            require_usable_image: bool = False,
+            source_project_id: str | None = None,
+        ) -> tuple[Asset, AssetVersion] | None:
+            if asset_id is None or asset_version_id is None:
+                return None
+            source_document = project_document
+            if source_project_id not in {None, project_document.project.id}:
+                assert source_project_id is not None
+                external_document = self.repository.get_project(source_project_id)
+                if external_document is None:
+                    raise WorkflowConflictError(
+                        f"AssetPlan references unknown source project {source_project_id}"
+                    )
+                source_document = external_document
+            source_assets_by_id = (
+                assets_by_id
+                if source_document is project_document
+                else {item.id: item for item in source_document.assets}
+            )
+            asset = source_assets_by_id.get(asset_id)
+            if asset is None:
+                raise WorkflowConflictError(
+                    f"AssetPlan references unknown Asset {asset_id} in project "
+                    f"{source_document.project.id}"
+                )
+            if expected_kind is not None and asset.kind != expected_kind:
+                raise WorkflowConflictError(
+                    f"AssetPlan item kind {expected_kind.value} does not match Asset "
+                    f"{asset_id} kind {asset.kind.value}"
+                )
+            version = next(
+                (item for item in asset.versions if item.id == asset_version_id),
+                None,
+            )
+            if version is None:
+                raise WorkflowConflictError(
+                    f"AssetPlan references unknown AssetVersion {asset_version_id} "
+                    f"for Asset {asset_id}"
+                )
+            if require_completed_media:
+                if (
+                    version.approval_status != ApprovalStatus.APPROVED
+                    or version.freshness != Freshness.CURRENT
+                ):
+                    raise WorkflowConflictError(
+                        f"Completed AssetPlan version {version.id} must be current and approved"
+                    )
+                if version.local_path is None and version.external_url is None:
+                    raise WorkflowConflictError(
+                        f"Completed AssetPlan version {version.id} has no usable media"
+                    )
+                if (
+                    asset.kind
+                    in {AssetKind.CHARACTER, AssetKind.LOCATION, AssetKind.PROP}
+                    and version.media_type != AssetMediaType.IMAGE
+                ):
+                    raise WorkflowConflictError(
+                        f"Completed visual AssetPlan version {version.id} must be an image"
+                    )
+            if require_usable_image and (
+                version.media_type != AssetMediaType.IMAGE
+                or (version.local_path is None and version.external_url is None)
+            ):
+                raise WorkflowConflictError(
+                    f"AssetPlan image source {version.id} must have usable image media"
+                )
+            return asset, version
+
+        work_items_by_id = {
+            work_item.id: work_item
+            for item in asset_plan.items
+            for work_item in item.work_items
+        }
+        items_by_id = {item.id: item for item in asset_plan.items}
+
+        for item in asset_plan.items:
+            if item.disposition == AssetPlanDisposition.TEXT_ONLY and (
+                item.work_items or item.completed_asset_id is not None
+            ):
+                raise WorkflowConflictError(
+                    f"Text-only AssetPlan item {item.id} cannot contain media work or completion"
+                )
+            if (
+                item.disposition == AssetPlanDisposition.REUSE_EXISTING
+                and item.completed_asset_id is None
+            ):
+                raise WorkflowConflictError(
+                    f"Reuse-existing AssetPlan item {item.id} requires an exact "
+                    "completed asset version"
+                )
+            if (
+                item.bible_entity_id is not None
+                and item.asset_kind != AssetKind.REFERENCE
+                and item.bible_entity_id not in bible_entity_ids[item.asset_kind]
+            ):
+                raise WorkflowConflictError(
+                    f"AssetPlan item {item.id} references unknown "
+                    f"{item.asset_kind.value} Bible entity {item.bible_entity_id}"
+                )
+            item_completed = validate_asset_version(
+                item.completed_asset_id,
+                item.completed_asset_version_id,
+                expected_kind=item.asset_kind,
+                require_completed_media=True,
+            )
+            if (
+                item.disposition == AssetPlanDisposition.ANCHOR
+                and item_completed is not None
+                and not any(
+                    work_item.completed_asset_id == item.completed_asset_id
+                    and work_item.completed_asset_version_id
+                    == item.completed_asset_version_id
+                    for work_item in item.work_items
+                )
+            ):
+                raise WorkflowConflictError(
+                    f"Completed anchor item {item.id} must match one completed work item"
+                )
+            for work_item in item.work_items:
+                if work_item.operation == AssetPlanOperation.IMPORT:
+                    if work_item.import_intent is None or work_item.compose_intent is not None:
+                        raise WorkflowConflictError(
+                            f"IMPORT AssetPlan work item {work_item.id} lacks an exact import payload"
+                        )
+                    imported_source = validate_asset_version(
+                        work_item.import_intent.source_asset_id,
+                        work_item.import_intent.source_asset_version_id,
+                        expected_kind=None,
+                        require_completed_media=True,
+                        require_usable_image=True,
+                        source_project_id=work_item.import_intent.source_project_id,
+                    )
+                    assert imported_source is not None
+                    source_document = self.repository.get_project(
+                        work_item.import_intent.source_project_id
+                    )
+                    assert source_document is not None
+                    compatible_kinds = {
+                        imported_source[0].kind,
+                        *catalog_semantic_asset_kinds(
+                            source_document,
+                            imported_source[1].id,
+                        ),
+                    }
+                    if item.asset_kind not in compatible_kinds:
+                        raise WorkflowConflictError(
+                            f"IMPORT AssetPlan work item {work_item.id} source is not "
+                            f"advertised for {item.asset_kind.value}"
+                        )
+                elif work_item.operation == AssetPlanOperation.COMPOSE:
+                    if work_item.compose_intent is None or work_item.import_intent is not None:
+                        raise WorkflowConflictError(
+                            f"COMPOSE AssetPlan work item {work_item.id} lacks a compose payload"
+                        )
+                elif (
+                    work_item.import_intent is not None
+                    or work_item.compose_intent is not None
+                ):
+                    raise WorkflowConflictError(
+                        f"AssetPlan work item {work_item.id} has a payload for another operation"
+                    )
+                completed = validate_asset_version(
+                    work_item.completed_asset_id,
+                    work_item.completed_asset_version_id,
+                    expected_kind=item.asset_kind,
+                    require_completed_media=True,
+                )
+                if (
+                    completed is not None
+                    and work_item.review_purpose
+                    == AssetReviewPurpose.CANONICAL_MASTER
+                    and completed[0].approved_version_id != completed[1].id
+                ):
+                    raise WorkflowConflictError(
+                        f"Completed AssetPlan work item {work_item.id} declares a canonical "
+                        "review purpose but does not reference the asset's canonical version"
+                    )
+                for reference in work_item.ordered_references:
+                    validate_asset_version(
+                        reference.asset_id,
+                        reference.asset_version_id,
+                        expected_kind=None,
+                    )
+                if work_item.compose_intent is not None:
+                    for cell in work_item.compose_intent.cells:
+                        source = cell.source
+                        validate_asset_version(
+                            source.asset_id,
+                            source.asset_version_id,
+                            expected_kind=None,
+                            require_usable_image=True,
+                        )
+                        if completed is None or source.source_work_item_id is None:
+                            continue
+                        source_work_item = work_items_by_id[
+                            source.source_work_item_id
+                        ]
+                        if (
+                            source_work_item.completed_asset_id is None
+                            or source_work_item.completed_asset_version_id is None
+                        ):
+                            raise WorkflowConflictError(
+                                f"Completed COMPOSE work item {work_item.id} requires "
+                                f"completed cell source {source_work_item.id}"
+                            )
+                        validate_asset_version(
+                            source_work_item.completed_asset_id,
+                            source_work_item.completed_asset_version_id,
+                            expected_kind=None,
+                            require_completed_media=True,
+                            require_usable_image=True,
+                        )
+                pack_intent = work_item.reference_pack_intent
+                if pack_intent is None:
+                    continue
+                if (
+                    work_item.review_purpose == AssetReviewPurpose.CANONICAL_MASTER
+                    and pack_intent.role != ReferenceRole.CANONICAL_MASTER
+                ) or (
+                    work_item.review_purpose
+                    == AssetReviewPurpose.SUPPLEMENTAL_REFERENCE
+                    and pack_intent.role == ReferenceRole.CANONICAL_MASTER
+                ):
+                    raise WorkflowConflictError(
+                        f"AssetPlan work item {work_item.id} review purpose conflicts "
+                        "with its ReferencePack role"
+                    )
+                subject_item = items_by_id.get(pack_intent.subject_item_id)
+                if subject_item is None:
+                    raise WorkflowConflictError(
+                        f"AssetPlan work item {work_item.id} references unknown "
+                        f"ReferencePack subject item {pack_intent.subject_item_id}"
+                    )
+                if not role_is_compatible(subject_item.asset_kind, pack_intent.role):
+                    raise WorkflowConflictError(
+                        f"ReferencePack role {pack_intent.role.value} is incompatible "
+                        f"with subject item {subject_item.id} kind "
+                        f"{subject_item.asset_kind.value}"
+                    )
+                subject_completed = validate_asset_version(
+                    subject_item.completed_asset_id,
+                    subject_item.completed_asset_version_id,
+                    expected_kind=subject_item.asset_kind,
+                    require_completed_media=(completed is not None),
+                )
+                if completed is not None and subject_completed is None:
+                    raise WorkflowConflictError(
+                        f"Completed AssetPlan work item {work_item.id} requires completed "
+                        f"ReferencePack subject item {subject_item.id}"
+                    )
+                if (
+                    completed is not None
+                    and pack_intent.role == ReferenceRole.CANONICAL_MASTER
+                    and completed != subject_completed
+                ):
+                    raise WorkflowConflictError(
+                        f"Canonical ReferencePack work item {work_item.id} must complete "
+                        "the subject item's canonical AssetVersion"
+                    )
+                if pack_intent.lineage_root is None:
+                    continue
+                lineage_root = pack_intent.lineage_root
+                lineage_completed = validate_asset_version(
+                    lineage_root.asset_id,
+                    lineage_root.asset_version_id,
+                    expected_kind=subject_item.asset_kind,
+                    require_completed_media=(completed is not None),
+                )
+                if (
+                    completed is not None
+                    and lineage_completed is not None
+                    and subject_completed is not None
+                    and lineage_completed[0].id != subject_completed[0].id
+                ):
+                    raise WorkflowConflictError(
+                        f"AssetPlan work item {work_item.id} lineage root must belong "
+                        "to its ReferencePack subject asset"
+                    )
+                if completed is None or lineage_root.source_work_item_id is None:
+                    continue
+                source_work_item = work_items_by_id[lineage_root.source_work_item_id]
+                if (
+                    source_work_item.completed_asset_id is None
+                    or source_work_item.completed_asset_version_id is None
+                ):
+                    raise WorkflowConflictError(
+                        f"Completed AssetPlan work item {work_item.id} requires its lineage-root "
+                        f"work item {source_work_item.id} to be completed"
+                    )
+                source_completed = validate_asset_version(
+                    source_work_item.completed_asset_id,
+                    source_work_item.completed_asset_version_id,
+                    expected_kind=subject_item.asset_kind,
+                    require_completed_media=True,
+                )
+                if (
+                    source_completed is not None
+                    and subject_completed is not None
+                    and source_completed[0].id != subject_completed[0].id
+                ):
+                    raise WorkflowConflictError(
+                        f"AssetPlan work item {work_item.id} lineage-root work item must "
+                        "complete the ReferencePack subject asset"
+                    )
+
     @staticmethod
     def _normalize_storyboard_revisions(
         storyboard: StoryboardContent,
@@ -8050,6 +8767,11 @@ class ShortDramaService:
                 changed_shot_ids,
             )
             self._invalidate_current_manifests(project_document)
+        self._invalidate_asset_plan_locked(
+            project_document,
+            "Storyboard changed after the AssetPlan was authored.",
+            updated_at=updated_at,
+        )
         self._invalidate_generation_plan_locked(
             project_document,
             "Storyboard changed after the GenerationPlan was compiled.",
@@ -8691,33 +9413,58 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     f"Reference role {request.role.value} is incompatible with {subject.kind.value}"
                 )
-            _source_asset, source_version = self._find_asset_version(
+            source_asset, source_version = self._find_asset_version(
                 document,
                 request.asset_version_id,
             )
             if (
-                _source_asset.approved_version_id != source_version.id
-                or source_version.approval_status != ApprovalStatus.APPROVED
+                source_version.approval_status != ApprovalStatus.APPROVED
+                or source_version.freshness != Freshness.CURRENT
             ):
                 raise WorkflowConflictError(
-                    "Only an asset's current approved formal version can enter a reference pack"
+                    "Only a current approved formal version or supplemental image "
+                    "can enter a reference pack"
                 )
             if source_version.media_type != AssetMediaType.IMAGE:
                 raise WorkflowConflictError("Reference pack entries currently require image media")
-            if request.lineage_root_version_id is not None:
-                _root_asset, root_version = self._find_asset_version(
+            if source_version.local_path is None and source_version.external_url is None:
+                raise WorkflowConflictError(
+                    "Reference pack entries require usable image media"
+                )
+            lineage_root_version_id = request.lineage_root_version_id
+            if request.role == ReferenceRole.CANONICAL_MASTER:
+                if (
+                    source_asset.id != subject.id
+                    or subject.approved_version_id != source_version.id
+                ):
+                    raise WorkflowConflictError(
+                        "A CANONICAL_MASTER entry must use the subject asset's current "
+                        "approved canonical image"
+                    )
+                if lineage_root_version_id not in {None, source_version.id}:
+                    raise WorkflowConflictError(
+                        "A CANONICAL_MASTER entry cannot declare another lineage root"
+                    )
+                lineage_root_version_id = source_version.id
+            if lineage_root_version_id is not None:
+                root_asset, root_version = self._find_asset_version(
                     document,
-                    request.lineage_root_version_id,
+                    lineage_root_version_id,
                 )
                 if (
-                    root_version.media_type != AssetMediaType.IMAGE
+                    root_asset.id != subject.id
+                    or subject.approved_version_id != root_version.id
+                    or root_version.approval_status != ApprovalStatus.APPROVED
+                    or root_version.freshness != Freshness.CURRENT
+                    or root_version.media_type != AssetMediaType.IMAGE
                     or (
                         root_version.local_path is None
                         and root_version.external_url is None
                     )
                 ):
                     raise WorkflowConflictError(
-                        "Reference-pack lineage root must be a usable image"
+                        "Reference-pack lineage root must be the subject's current "
+                        "approved canonical image"
                     )
 
             now = utc_now()
@@ -8755,7 +9502,7 @@ class ShortDramaService:
                 entry = ReferencePackEntry(
                     id=f"reference-entry-{uuid4().hex[:12]}",
                     asset_version_id=source_version.id,
-                    lineage_root_version_id=request.lineage_root_version_id,
+                    lineage_root_version_id=lineage_root_version_id,
                     role=request.role,
                     angle=request.angle,
                     framing=request.framing,
@@ -8765,7 +9512,7 @@ class ShortDramaService:
                 )
                 pack.entries.append(entry)
             else:
-                existing.lineage_root_version_id = request.lineage_root_version_id
+                existing.lineage_root_version_id = lineage_root_version_id
                 existing.tags = normalized_tags
                 existing.description = request.description.strip()
                 existing.priority = request.priority
@@ -9517,8 +10264,7 @@ class ShortDramaService:
                         f"AssetVersion {version.id} does not belong to asset {asset.id}"
                     )
                 if (
-                    asset.approved_version_id != version.id
-                    or version.approval_status != ApprovalStatus.APPROVED
+                    version.approval_status != ApprovalStatus.APPROVED
                     or version.freshness != Freshness.CURRENT
                     or version.media_type != AssetMediaType.IMAGE
                     or (
@@ -9527,7 +10273,7 @@ class ShortDramaService:
                     )
                 ):
                     raise WorkflowConflictError(
-                        f"AssetVersion {version.id} is not its asset's current approved image"
+                        f"AssetVersion {version.id} is not a current approved image"
                     )
                 if version.local_path is not None and not Path(
                     version.local_path
@@ -10326,6 +11072,19 @@ class ShortDramaService:
                 version_id,
                 request,
             )
+            with self._lock:
+                document = self._require_project_document(project_id)
+                now = utc_now()
+                if self._invalidate_asset_plan_if_completion_became_unusable_locked(
+                    document,
+                    reason=(
+                        f"AssetVersion {version.id} review changed the truth of a "
+                        "completed AssetPlan output."
+                    ),
+                    updated_at=now,
+                ):
+                    document.project.updated_at = now
+                    self.repository.save_project(document)
             return self._asset_mutation_response(project_id, version.id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
@@ -11593,6 +12352,11 @@ class ShortDramaService:
                 "Script changed after the Storyboard was authored.",
                 updated_at=now,
             )
+            self._invalidate_asset_plan_locked(
+                document,
+                "Script changed after the AssetPlan was authored.",
+                updated_at=now,
+            )
             self._invalidate_generation_plan_locked(
                 document,
                 "Script changed after the GenerationPlan was compiled.",
@@ -12154,18 +12918,6 @@ class ShortDramaService:
         document: ProjectDocument,
         media_inputs: list[H3MediaInput],
     ) -> list[H3MediaInput]:
-        approved_versions: dict[str, AssetVersion] = {}
-        for asset in document.assets:
-            approved_id = asset.approved_version_id
-            if approved_id is None:
-                continue
-            approved = next(
-                (version for version in asset.versions if version.id == approved_id),
-                None,
-            )
-            if approved is not None and approved.approval_status == ApprovalStatus.APPROVED:
-                approved_versions[approved.id] = approved
-
         expected_kinds = {
             AssetMediaType.IMAGE: H3MediaKind.IMAGE,
             AssetMediaType.VIDEO: H3MediaKind.VIDEO,
@@ -12174,13 +12926,22 @@ class ShortDramaService:
         resolved: list[H3MediaInput] = []
         for media in media_inputs:
             if media.asset_version_id is None:
+                if media.subject_asset_id is not None:
+                    raise WorkflowConflictError(
+                        "A subject-linked H3 media input requires an AssetVersion"
+                    )
                 resolved.append(media)
                 continue
-            version = approved_versions.get(media.asset_version_id)
-            if version is None:
-                raise WorkflowConflictError(
-                    f"Asset version {media.asset_version_id} is not the asset's approved formal version"
+            try:
+                _asset, version = resolve_current_asset_media(
+                    document,
+                    asset_version_id=media.asset_version_id,
+                    subject_asset_id=media.subject_asset_id,
                 )
+            except AssetReferenceTruthError as exc:
+                raise WorkflowConflictError(
+                    str(exc)
+                ) from exc
             expected_kind = expected_kinds.get(version.media_type)
             if expected_kind is None or expected_kind != media.kind:
                 raise WorkflowConflictError(

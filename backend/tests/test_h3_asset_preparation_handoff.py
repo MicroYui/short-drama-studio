@@ -113,6 +113,7 @@ def _approved_image(
         imported.version.id,
         AssetReviewRequest(
             decision=AssetReviewDecision.APPROVED,
+            purpose="CANONICAL_MASTER",
             notes="构图与角色连续性可用",
         ),
     )
@@ -507,6 +508,7 @@ def test_superseded_ready_image_is_not_reused_by_next_route_plan(tmp_path: Path)
         replacement.version.id,
         AssetReviewRequest(
             decision=AssetReviewDecision.APPROVED,
+            purpose="CANONICAL_MASTER",
             notes="新版本取代原关键帧",
         ),
     )
@@ -640,6 +642,7 @@ def test_ready_rejects_superseded_preparation_source_versions(tmp_path: Path) ->
         replacement.version.id,
         AssetReviewRequest(
             decision=AssetReviewDecision.APPROVED,
+            purpose="CANONICAL_MASTER",
             notes="新参考已取代旧版本",
         ),
     )

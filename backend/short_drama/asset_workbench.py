@@ -12,7 +12,15 @@ from pathlib import Path
 from uuid import uuid4
 
 import imageio_ffmpeg
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps, UnidentifiedImageError
+from PIL import (
+    Image,
+    ImageChops,
+    ImageColor,
+    ImageDraw,
+    ImageFilter,
+    ImageOps,
+    UnidentifiedImageError,
+)
 
 from short_drama.image_models import (
     AssetBriefUpdateRequest,
@@ -21,6 +29,7 @@ from short_drama.image_models import (
     AssetReferenceSheetComposeRequest,
     AssetImportUrlRequest,
     AssetReviewDecision,
+    AssetReviewPurpose,
     AssetReviewRequest,
     ImageBackground,
     ImageCostRecord,
@@ -30,6 +39,7 @@ from short_drama.image_models import (
     ImageProviderConfigResponse,
     ImageProviderConfigUpdate,
     ImageProviderRequest,
+    ImageReferenceInput,
     ImageTaskCreateRequest,
     ImageTaskStatus,
     ImageUsage,
@@ -38,7 +48,9 @@ from short_drama.models import (
     ApprovalStatus,
     Asset,
     AssetKind,
+    AssetLayoutProfile,
     AssetMediaType,
+    AssetPresentationMode,
     AssetReferenceSheet,
     AssetReferenceSheetCell,
     AssetReferenceStrategy,
@@ -102,6 +114,7 @@ _REFERENCE_SHEET_CELL_WIDTH = 512
 _REFERENCE_SHEET_IMAGE_HEIGHT = 512
 _REFERENCE_SHEET_LABEL_HEIGHT = 40
 _REFERENCE_SHEET_PADDING = 16
+_REFERENCE_SHEET_WIDE_SIZE = (1536, 864)
 _CHARACTER_STANDARD_VIEWS = frozenset(
     {
         AssetStandardView.CANONICAL_MASTER,
@@ -160,6 +173,11 @@ class AssetWorkbench:
             request.brief.reference_strategy if request.brief is not None else None,
         )
         if request.brief is not None:
+            self._validate_asset_layout(
+                request.kind,
+                request.brief.layout_profile,
+                request.brief.presentation_mode,
+            )
             self._validate_standard_views(
                 request.brief.reference_strategy,
                 request.brief.requested_views,
@@ -211,6 +229,11 @@ class AssetWorkbench:
             document = self._require_project(project_id)
             asset = self._require_asset(document, asset_id)
             self._validate_asset_strategy(asset.kind, request.brief.reference_strategy)
+            self._validate_asset_layout(
+                asset.kind,
+                request.brief.layout_profile,
+                request.brief.presentation_mode,
+            )
             self._validate_standard_views(
                 request.brief.reference_strategy,
                 request.brief.requested_views,
@@ -323,6 +346,7 @@ class AssetWorkbench:
             document = self._require_project(project_id)
             target = self._require_asset(document, asset_id)
             self._validate_asset_strategy(target.kind, request.strategy)
+            self._validate_asset_layout(target.kind, request.layout_profile, None)
             self._validate_sheet_views(request)
             parent_id = self._resolve_parent(target, request.parent_version_id)
             expected_current_version_id = target.current_version_id
@@ -378,6 +402,14 @@ class AssetWorkbench:
                     )
                 )
 
+        try:
+            ImageColor.getrgb(request.background_color.strip())
+        except ValueError as exc:
+            raise AssetWorkbenchConflict(
+                "Reference sheet background_color is not a recognized image color"
+            ) from exc
+        render_columns = self._reference_sheet_columns(request)
+
         output_directory = self._asset_directory(project_id, asset_id)
         output_directory.mkdir(parents=True, exist_ok=True)
         temporary_path = output_directory / f".{output_version_id}-reference-sheet.png"
@@ -387,7 +419,11 @@ class AssetWorkbench:
         try:
             width, height = self._render_reference_sheet(
                 source_rows,
-                columns=request.columns,
+                columns=render_columns,
+                layout_profile=request.layout_profile,
+                show_labels=request.show_labels,
+                background_color=request.background_color.strip(),
+                target_size=request.target_size,
                 destination=temporary_path,
             )
             with self._lock:
@@ -451,7 +487,15 @@ class AssetWorkbench:
                     reference_sheet=AssetReferenceSheet(
                         strategy=request.strategy,
                         input_policy=request.input_policy,
-                        columns=request.columns,
+                        columns=render_columns,
+                        layout_profile=request.layout_profile,
+                        show_labels=request.show_labels,
+                        background_color=request.background_color.strip(),
+                        target_size=(
+                            f"{width}x{height}"
+                            if request.layout_profile is not None
+                            else request.target_size
+                        ),
                         cells=[cell for _source_path, cell in source_rows],
                     ),
                     source=AssetSourceRecord(
@@ -778,16 +822,24 @@ class AssetWorkbench:
                     raise AssetWorkbenchConflict(
                         "Only an AssetVersion with usable media can be approved"
                     )
-                for existing in asset.versions:
-                    if (
-                        existing.id != version.id
-                        and existing.approval_status == ApprovalStatus.APPROVED
-                    ):
-                        existing.approval_status = ApprovalStatus.SUPERSEDED
-                        existing.freshness = Freshness.STALE
+                if request.purpose == AssetReviewPurpose.SUPPLEMENTAL_REFERENCE:
+                    if version.media_type != AssetMediaType.IMAGE:
+                        raise AssetWorkbenchConflict(
+                            "A supplemental reference must be an image AssetVersion"
+                        )
+                else:
+                    previous_canonical_id = asset.approved_version_id
+                    if previous_canonical_id is not None and previous_canonical_id != version.id:
+                        previous_canonical = self._require_asset_version(
+                            asset,
+                            previous_canonical_id,
+                        )
+                        previous_canonical.approval_status = ApprovalStatus.SUPERSEDED
+                        previous_canonical.freshness = Freshness.STALE
                 version.approval_status = ApprovalStatus.APPROVED
                 version.freshness = Freshness.CURRENT
-                asset.approved_version_id = version.id
+                if request.purpose == AssetReviewPurpose.CANONICAL_MASTER:
+                    asset.approved_version_id = version.id
                 asset.current_version_id = version.id
             else:
                 version.approval_status = ApprovalStatus.REJECTED
@@ -819,6 +871,7 @@ class AssetWorkbench:
             background=request.background,
             output_format=request.output_format,
             input_version_ids=request.input_version_ids,
+            reference_inputs=request.reference_inputs,
             primary_input_version_id=request.primary_input_version_id,
             mask_version_id=request.mask_version_id,
             mask_feather_pixels=request.mask_feather_pixels,
@@ -839,6 +892,7 @@ class AssetWorkbench:
         with self._lock:
             document = self._require_project(project_id)
             asset = self._require_asset(document, asset_id)
+            self._validate_asset_output_size(asset, provider_request.size)
             parent_id = (
                 self._resolve_parent(asset, request.parent_version_id)
                 if request.operation == ImageOperation.EDIT
@@ -921,6 +975,7 @@ class AssetWorkbench:
             descriptor=task.descriptor,
             parent_version_id=task.parent_version_id,
             input_version_ids=task.request.input_version_ids,
+            reference_inputs=task.request.reference_inputs,
             primary_input_version_id=task.request.primary_input_version_id,
             mask_version_id=task.request.mask_version_id,
             mask_feather_pixels=task.request.mask_feather_pixels,
@@ -1055,7 +1110,10 @@ class AssetWorkbench:
         height: int,
     ) -> None:
         document = self._require_project(task.project_id)
-        primary_id = task.request.primary_input_version_id or task.request.input_version_ids[0]
+        primary_id = (
+            task.request.primary_input_version_id
+            or task.request.ordered_input_version_ids()[0]
+        )
         _primary_asset, primary = self._find_version(document, primary_id)
         _mask_asset, mask = self._find_version(document, task.request.mask_version_id or "")
         if primary.local_path is None or mask.local_path is None:
@@ -1155,16 +1213,30 @@ class AssetWorkbench:
     ) -> list[ImageProviderInput]:
         document = self._require_project(task.project_id)
         result: list[ImageProviderInput] = []
-        ordered_version_ids = list(task.request.input_version_ids)
+        ordered_references = task.request.ordered_reference_inputs()
         primary_id = task.request.primary_input_version_id
-        if primary_id is not None:
-            ordered_version_ids = [
-                primary_id,
-                *(item for item in ordered_version_ids if item != primary_id),
+        if primary_id is not None and not task.request.reference_inputs:
+            ordered_references = [
+                next(
+                    item
+                    for item in ordered_references
+                    if item.asset_version_id == primary_id
+                ),
+                *(
+                    item
+                    for item in ordered_references
+                    if item.asset_version_id != primary_id
+                ),
             ]
         if task.request.mask_version_id is not None:
-            ordered_version_ids.append(task.request.mask_version_id)
-        for version_id in ordered_version_ids:
+            ordered_references.append(
+                ImageReferenceInput(
+                    asset_version_id=task.request.mask_version_id,
+                    purpose="Edit mask",
+                )
+            )
+        for reference in ordered_references:
+            version_id = reference.asset_version_id
             _asset, version = self._find_version(document, version_id)
             if version.external_url is not None:
                 image_url = version.external_url
@@ -1190,7 +1262,12 @@ class AssetWorkbench:
                     f"Input AssetVersion has no usable media: {version.id}"
                 )
             result.append(
-                ImageProviderInput(asset_version_id=version.id, image_url=image_url)
+                ImageProviderInput(
+                    asset_version_id=version.id,
+                    image_url=image_url,
+                    purpose=reference.purpose,
+                    subject_alias=reference.subject_alias,
+                )
             )
         return result
 
@@ -1201,15 +1278,16 @@ class AssetWorkbench:
         request: ImageProviderRequest,
         parent_version_id: str | None,
     ) -> None:
+        input_version_ids = request.ordered_input_version_ids()
         if request.operation == ImageOperation.GENERATE:
-            if request.input_version_ids:
+            if input_version_ids:
                 raise AssetWorkbenchConflict("Generate does not accept input AssetVersions")
             if parent_version_id is not None:
                 raise AssetWorkbenchConflict("Use EDIT to derive from an existing AssetVersion")
             return
-        if not request.input_version_ids:
+        if not input_version_ids:
             raise AssetWorkbenchConflict("Edit requires at least one input AssetVersion")
-        for version_id in request.input_version_ids:
+        for version_id in input_version_ids:
             _asset, version = self._find_version(document, version_id)
             if version.media_type != AssetMediaType.IMAGE:
                 raise AssetWorkbenchConflict("GPT Image edit inputs must be images")
@@ -1229,7 +1307,7 @@ class AssetWorkbench:
                 raise AssetWorkbenchConflict("Edit mask must be a PNG image")
             if mask_path.stat().st_size >= _MAX_EDIT_MASK_BYTES:
                 raise AssetWorkbenchConflict("Edit mask must be smaller than 4 MB")
-            primary_id = request.primary_input_version_id or request.input_version_ids[0]
+            primary_id = request.primary_input_version_id or input_version_ids[0]
             _primary_asset, primary = self._find_version(document, primary_id)
             if primary.local_path is None:
                 raise AssetWorkbenchConflict(
@@ -1239,7 +1317,7 @@ class AssetWorkbench:
                 raise AssetWorkbenchConflict(
                     "Edit mask dimensions must match the primary input image"
                 )
-            for version_id in request.input_version_ids:
+            for version_id in input_version_ids:
                 _input_asset, input_version = self._find_version(document, version_id)
                 if input_version.local_path is None:
                     raise AssetWorkbenchConflict(
@@ -1283,6 +1361,62 @@ class AssetWorkbench:
             )
 
     @staticmethod
+    def _validate_asset_layout(
+        kind: AssetKind,
+        layout_profile: AssetLayoutProfile | None,
+        presentation_mode: AssetPresentationMode | None,
+    ) -> None:
+        if layout_profile is None:
+            return
+        if layout_profile == AssetLayoutProfile.LIGHTWEIGHT_SINGLE:
+            return
+        if layout_profile in {
+            AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+        } and kind != AssetKind.CHARACTER:
+            raise AssetWorkbenchConflict(
+                f"{layout_profile.value} can only be used for a character asset"
+            )
+        if (
+            layout_profile == AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2
+            and kind != AssetKind.LOCATION
+        ):
+            raise AssetWorkbenchConflict(
+                "SCENE_FOUR_DIRECTION_2X2 can only be used for a location asset"
+            )
+        if layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE:
+            if kind != AssetKind.PROP:
+                raise AssetWorkbenchConflict(
+                    "PROP_MASTER_SINGLE can only be used for a prop asset"
+                )
+            if presentation_mode == AssetPresentationMode.SCREEN_CONTENT_PLATE:
+                raise AssetWorkbenchConflict(
+                    "PROP_MASTER_SINGLE is incompatible with SCREEN_CONTENT_PLATE"
+                )
+
+    @staticmethod
+    def _validate_asset_output_size(asset: Asset, size: str) -> None:
+        if asset.brief is None:
+            return
+        raw_width, raw_height = size.split("x", maxsplit=1)
+        width, height = int(raw_width), int(raw_height)
+        layout_profile = asset.brief.layout_profile
+        if layout_profile in {
+            AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
+        } and width * 9 != height * 16:
+            raise AssetWorkbenchConflict(
+                f"{layout_profile.value} image tasks require a 16:9 size"
+            )
+        if (
+            layout_profile == AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2
+            and width * 2 != height * 3
+        ):
+            raise AssetWorkbenchConflict(
+                "CHARACTER_SIX_VIEW_3X2 image tasks require a 3:2 size"
+            )
+
+    @staticmethod
     def _validate_standard_views(
         strategy: AssetReferenceStrategy,
         views: list[AssetStandardView],
@@ -1308,55 +1442,93 @@ class AssetWorkbench:
         )
 
     @staticmethod
+    def _reference_sheet_columns(request: AssetReferenceSheetComposeRequest) -> int:
+        if request.layout_profile is None:
+            return request.columns
+        columns_by_profile: dict[AssetLayoutProfile, int] = {
+            AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9: 2,
+            AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2: 3,
+            AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2: 2,
+            AssetLayoutProfile.PROP_MASTER_SINGLE: 1,
+        }
+        return columns_by_profile.get(request.layout_profile, request.columns)
+
+    @staticmethod
     def _render_reference_sheet(
         source_rows: list[tuple[Path, AssetReferenceSheetCell]],
         *,
         columns: int,
+        layout_profile: AssetLayoutProfile | None,
+        show_labels: bool,
+        background_color: str,
+        target_size: str | None,
         destination: Path,
     ) -> tuple[int, int]:
         rows = (len(source_rows) + columns - 1) // columns
-        cell_height = _REFERENCE_SHEET_IMAGE_HEIGHT + _REFERENCE_SHEET_LABEL_HEIGHT
-        width = (
-            columns * _REFERENCE_SHEET_CELL_WIDTH
-            + (columns + 1) * _REFERENCE_SHEET_PADDING
-        )
-        height = rows * cell_height + (rows + 1) * _REFERENCE_SHEET_PADDING
-        sheet = Image.new("RGB", (width, height), "white")
+        label_height = _REFERENCE_SHEET_LABEL_HEIGHT if show_labels else 0
+        if target_size is not None:
+            raw_width, raw_height = target_size.split("x", maxsplit=1)
+            width, height = int(raw_width), int(raw_height)
+        elif layout_profile in {
+            AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
+        }:
+            width, height = _REFERENCE_SHEET_WIDE_SIZE
+        elif layout_profile == AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2:
+            width, height = (1536, 1024)
+        elif layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE:
+            width, height = (768, 768)
+        else:
+            cell_height = _REFERENCE_SHEET_IMAGE_HEIGHT + label_height
+            width = (
+                columns * _REFERENCE_SHEET_CELL_WIDTH
+                + (columns + 1) * _REFERENCE_SHEET_PADDING
+            )
+            height = rows * cell_height + (rows + 1) * _REFERENCE_SHEET_PADDING
+        sheet = Image.new("RGB", (width, height), background_color)
         draw = ImageDraw.Draw(sheet)
         try:
-            for index, (source_path, cell) in enumerate(source_rows):
-                row, column = divmod(index, columns)
-                left = _REFERENCE_SHEET_PADDING + column * (
-                    _REFERENCE_SHEET_CELL_WIDTH + _REFERENCE_SHEET_PADDING
-                )
-                top = _REFERENCE_SHEET_PADDING + row * (
-                    cell_height + _REFERENCE_SHEET_PADDING
-                )
+            regions = AssetWorkbench._reference_sheet_regions(
+                count=len(source_rows),
+                columns=columns,
+                width=width,
+                height=height,
+                label_height=label_height,
+                layout_profile=layout_profile,
+            )
+            for (source_path, cell), region in zip(
+                source_rows,
+                regions,
+                strict=True,
+            ):
+                left, top, right, bottom = region
+                image_bottom = bottom - label_height
                 with Image.open(source_path) as source_image:
                     normalized = ImageOps.exif_transpose(source_image).convert("RGB")
                     fitted = ImageOps.contain(
                         normalized,
-                        (_REFERENCE_SHEET_CELL_WIDTH, _REFERENCE_SHEET_IMAGE_HEIGHT),
+                        (max(1, right - left), max(1, image_bottom - top)),
                         Image.Resampling.LANCZOS,
                     )
-                image_left = left + (_REFERENCE_SHEET_CELL_WIDTH - fitted.width) // 2
-                image_top = top + (_REFERENCE_SHEET_IMAGE_HEIGHT - fitted.height) // 2
+                image_left = left + (right - left - fitted.width) // 2
+                image_top = top + (image_bottom - top - fitted.height) // 2
                 sheet.paste(fitted, (image_left, image_top))
                 draw.rectangle(
                     (
                         left,
                         top,
-                        left + _REFERENCE_SHEET_CELL_WIDTH - 1,
-                        top + _REFERENCE_SHEET_IMAGE_HEIGHT - 1,
+                        right - 1,
+                        image_bottom - 1,
                     ),
                     outline="#C7CBD1",
                     width=2,
                 )
-                draw.text(
-                    (left + 8, top + _REFERENCE_SHEET_IMAGE_HEIGHT + 12),
-                    cell.label,
-                    fill="#20242A",
-                )
+                if show_labels:
+                    draw.text(
+                        (left + 8, image_bottom + 12),
+                        cell.label,
+                        fill="#20242A",
+                    )
             sheet.save(destination, format="PNG", optimize=False, compress_level=9)
         except (OSError, UnidentifiedImageError) as exc:
             destination.unlink(missing_ok=True)
@@ -1366,6 +1538,55 @@ class AssetWorkbench:
         finally:
             sheet.close()
         return width, height
+
+    @staticmethod
+    def _reference_sheet_regions(
+        *,
+        count: int,
+        columns: int,
+        width: int,
+        height: int,
+        label_height: int,
+        layout_profile: AssetLayoutProfile | None,
+    ) -> list[tuple[int, int, int, int]]:
+        padding = _REFERENCE_SHEET_PADDING
+        if layout_profile == AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9:
+            split = width // 2
+            regions = [(padding, padding, split - padding, height - padding)]
+            right_left = split + padding
+            available = width - right_left - padding
+            cell_width = (available - 2 * padding) // 3
+            for index in range(3):
+                left = right_left + index * (cell_width + padding)
+                right = width - padding if index == 2 else left + cell_width
+                regions.append((left, padding, right, height - padding))
+            return regions
+
+        if layout_profile == AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2:
+            columns = 2
+        elif layout_profile == AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2:
+            columns = 3
+        elif layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE:
+            columns = 1
+
+        rows = (count + columns - 1) // columns
+        available_width = width - (columns + 1) * padding
+        available_height = height - (rows + 1) * padding
+        cell_width = available_width // columns
+        cell_height = available_height // rows
+        regions: list[tuple[int, int, int, int]] = []
+        for index in range(count):
+            row, column = divmod(index, columns)
+            left = padding + column * (cell_width + padding)
+            top = padding + row * (cell_height + padding)
+            right = width - padding if column == columns - 1 else left + cell_width
+            bottom = height - padding if row == rows - 1 else top + cell_height
+            if bottom - top <= label_height:
+                raise AssetWorkbenchConflict(
+                    "Reference sheet target_size is too small for its labels"
+                )
+            regions.append((left, top, right, bottom))
+        return regions
 
     def _resolve_parent(self, asset: Asset, requested: str | None) -> str | None:
         if requested is not None:

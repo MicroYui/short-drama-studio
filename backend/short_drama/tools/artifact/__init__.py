@@ -28,6 +28,10 @@ from short_drama.models import (
     ProductionDocumentVersion,
 )
 from short_drama.production_contracts import (
+    AssetPlanCreateRequest,
+    AssetPlanMutationResponse,
+    AssetPlanReadResponse,
+    AssetPlanReplaceRequest,
     ProductionSpecCreateRequest,
     ProductionSpecMutationResponse,
     ProductionSpecReadResponse,
@@ -54,6 +58,25 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class ArtifactToolService(Protocol):
+    def create_asset_plan(
+        self,
+        project_id: str,
+        request: AssetPlanCreateRequest,
+    ) -> AssetPlanMutationResponse: ...
+
+    def replace_asset_plan(
+        self,
+        project_id: str,
+        request: AssetPlanReplaceRequest,
+    ) -> AssetPlanMutationResponse: ...
+
+    def get_asset_plan(
+        self,
+        project_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> AssetPlanReadResponse: ...
+
     def create_production_spec(
         self,
         project_id: str,
@@ -261,6 +284,21 @@ class ProductionSpecGetInput(ToolModel):
     version_id: str | None = None
 
 
+class AssetPlanCreateInput(ToolModel):
+    project_id: str
+    request: AssetPlanCreateRequest
+
+
+class AssetPlanReplaceInput(ToolModel):
+    project_id: str
+    request: AssetPlanReplaceRequest
+
+
+class AssetPlanGetInput(ToolModel):
+    project_id: str
+    version_id: str | None = None
+
+
 def _production_document_refs(
     project_id: str,
     document: ProductionDocument,
@@ -290,6 +328,21 @@ def _production_spec_refs(
         ArtifactRef(
             project_id=project_id,
             artifact_type="production_spec",
+            artifact_id=result.document.id,
+            version=result.version.version,
+        ),
+        *_production_document_refs(project_id, result.document, result.version),
+    )
+
+
+def _asset_plan_refs(
+    project_id: str,
+    result: AssetPlanReadResponse,
+) -> tuple[ArtifactRef, ...]:
+    return (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan",
             artifact_id=result.document.id,
             version=result.version.version,
         ),
@@ -402,6 +455,93 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             output_model=ProductionSpecReadResponse,
             handler=get_production_spec,
             tags=frozenset({"production-spec", "read", "handoff"}),
+        )
+    )
+
+    def create_asset_plan(
+        request: AssetPlanCreateInput,
+    ) -> ToolExecution[AssetPlanMutationResponse]:
+        result = service.create_asset_plan(request.project_id, request.request)
+        return ToolExecution(
+            output=result,
+            artifact_refs=_asset_plan_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.create_asset_plan",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "基于当前精确 Script、ProjectBible、ProductionSpec 与 Storyboard，"
+                "创建版本化 AssetPlan。计划显式记录哪些主体需要锚点、仅保留文字"
+                "或复用既有资产，并携带稳定工作项、依赖、最终提示词和有序引用；"
+                "不会调用图片 Provider。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=AssetPlanCreateInput,
+            output_model=AssetPlanMutationResponse,
+            handler=create_asset_plan,
+            tags=frozenset({"asset-plan", "planning", "handoff"}),
+        )
+    )
+
+    def replace_asset_plan(
+        request: AssetPlanReplaceInput,
+    ) -> ToolExecution[AssetPlanMutationResponse]:
+        result = service.replace_asset_plan(request.project_id, request.request)
+        return ToolExecution(
+            output=result,
+            artifact_refs=_asset_plan_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.replace_asset_plan",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "基于当前版本修订 AssetPlan，保留稳定计划身份和历史版本。"
+                "Agent 可按完整语义调整少数资产或整体计划；Tool 不替 Agent 做"
+                "四视图、轻量参考等创意路由，也不会调用 Provider。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=AssetPlanReplaceInput,
+            output_model=AssetPlanMutationResponse,
+            handler=replace_asset_plan,
+            tags=frozenset({"asset-plan", "revision", "handoff"}),
+        )
+    )
+
+    def get_asset_plan(
+        request: AssetPlanGetInput,
+    ) -> ToolExecution[AssetPlanReadResponse]:
+        result = service.get_asset_plan(
+            request.project_id,
+            version_id=request.version_id,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_asset_plan_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.get_asset_plan",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "读取当前或指定历史版本的 AssetPlan，供资产 Worker、图片 Worker "
+                "和后续镜头输入编排共享同一份资产决策与依赖。"
+            ),
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=AssetPlanGetInput,
+            output_model=AssetPlanReadResponse,
+            handler=get_asset_plan,
+            tags=frozenset({"asset-plan", "read", "handoff"}),
         )
     )
 
@@ -621,9 +761,12 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             version=1,
             category=ToolCategory.ARTIFACT,
             description=(
-                "当 Shot ReferencePlan 已说明跨镜复用需求时，检查当前"
-                " ReferencePack 缺失的角色身份/侧背面或场景反打/"
-                "交互区视图。它是镜头计划推导的复用建议，不等于"
+                "当 Shot ReferencePlan 已说明参考需求时，如实返回缺失的"
+                " canonical 母版和未被当前 ReferencePack 满足的视图。"
+                "每个缺口保留全部可接受职责、偏好角度、景别与 required 标记；"
+                "只有必需缺口使 ready=false，可选缺口是建议。Tool 不替 Agent"
+                "挑选候选集的第一项；Agent 根据完整语义和 Method Skill 取舍。"
+                "这也不等于"
                 " CoreAssetBrief.requested_views 已全部完成。"
             ),
             effect=ToolEffect.READ,
@@ -659,7 +802,8 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             category=ToolCategory.ARTIFACT,
             description=(
                 "当 artifact.search_catalog 返回与当前 brief 匹配的已批准"
-                "候选时，将其导入当前项目作为新资产版本；导入后仍需"
+                "候选时，使用候选的 source_asset_id 定位实际拥有该版本的"
+                "资产，将 canonical 或 supplemental 图像导入为新资产版本；导入后仍需"
                 "按本项目用途检查并记录结论。"
             ),
             effect=ToolEffect.WRITE,
@@ -800,6 +944,8 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 "在 Agent 已观察实际媒体并完成语义判断后，记录对某个"
                 " AssetVersion 的批准或拒绝及理由。它只写入决策，不会自动看图；"
                 "图片候选通常先调用 qa.inspect_asset_version。"
+                "CANONICAL_MASTER 更换资产母版；SUPPLEMENTAL_REFERENCE "
+                "保留额外图像而不顶替母版，不适用于音频或视频。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=True,
@@ -843,7 +989,10 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             description=(
                 "当某个已批准图片版本将在后续镜头中承担明确的身份、"
                 "角度、空间或道具职责时，把该精确版本加入主体 ReferencePack。"
-                "只接受资产当前已批准正式图片，不会为草稿自动背书。"
+                "接受当前已批准的 canonical 或 supplemental 图像，不会为"
+                "草稿自动背书。从 canonical 派生的条目应显式指定当前"
+                " lineage_root_version_id；独立来源可留空。CANONICAL_MASTER 不能伪装："
+                "必须是主体资产自身当前的已批准母版。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
@@ -856,6 +1005,9 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
 
 __all__ = [
+    "AssetPlanCreateInput",
+    "AssetPlanGetInput",
+    "AssetPlanReplaceInput",
     "AssetBriefUpdateInput",
     "AssetCatalogImportInput",
     "AssetCatalogSearchInput",

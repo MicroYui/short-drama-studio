@@ -375,7 +375,7 @@ def build_reference_visual_candidates(
                         f"Reference entry {entry.id} points to an unknown AssetVersion"
                     )
                 continue
-            asset, version = resolved
+            _asset, version = resolved
             subject = asset_index.get(pack.subject_asset_id)
             lineage_is_current = (
                 entry.lineage_root_version_id is None
@@ -388,10 +388,10 @@ def build_reference_visual_candidates(
                         f"Reference entry {entry.id} belongs to a superseded subject lineage"
                     )
                 continue
-            if not _is_current_approved_image(asset, version):
+            if not _is_usable_approved_image(version):
                 if explicitly_requested:
                     raise VisualInputContractError(
-                        f"Reference entry {entry.id} is not a current approved image"
+                        f"Reference entry {entry.id} is not a usable approved image"
                     )
                 continue
             score, reasons = _candidate_score(entry, matches)
@@ -969,10 +969,10 @@ def _resolve_image_versions(
     return result
 
 
-def _is_current_approved_image(asset: Asset, version: AssetVersion) -> bool:
+def _is_usable_approved_image(version: AssetVersion) -> bool:
     return (
-        asset.approved_version_id == version.id
-        and version.approval_status == ApprovalStatus.APPROVED
+        version.approval_status == ApprovalStatus.APPROVED
+        and version.freshness == Freshness.CURRENT
         and version.media_type == AssetMediaType.IMAGE
         and (version.local_path is not None or version.external_url is not None)
     )

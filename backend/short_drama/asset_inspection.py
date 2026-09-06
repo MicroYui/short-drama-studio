@@ -13,6 +13,7 @@ from short_drama.h3_models import H3RouteAssetPreparation
 from short_drama.models import (
     Asset,
     AssetKind,
+    AssetLayoutProfile,
     AssetPresentationMode,
     AssetVersion,
     DomainModel,
@@ -73,6 +74,11 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
     presentation_mode = (
         asset.brief.presentation_mode if asset.brief is not None else None
     )
+    layout_profile = (
+        asset.brief.layout_profile
+        if asset.brief is not None
+        else AssetLayoutProfile.LIGHTWEIGHT_SINGLE
+    )
     is_screen_content = presentation_mode == AssetPresentationMode.SCREEN_CONTENT_PLATE
     if is_screen_content and required_labels:
         label_list = "、".join(f"“{item}”" for item in required_labels)
@@ -112,10 +118,19 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         if style_fields
         else "当前项目尚未声明具体视觉 Style。"
     )
+    output_shape = (
+        "输出严格的 16:9 横向机器参考卡，"
+        if layout_profile
+        in {
+            AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
+        }
+        else "输出单幅纯视觉内容，"
+    )
     shared = (
         f"{skill.medium}制片参考资产。{style_instruction}"
-        f"不要擅自追加当前 Style 未声明的视觉媒介、审美、材质或表现规则。输出适合竖屏制作的"
-        f"单幅纯视觉内容，{text_policy}"
+        "不要擅自追加当前 Style 未声明的视觉媒介、审美、材质或表现规则。"
+        f"{output_shape}{text_policy}"
     )
     if is_screen_content:
         layout = (
@@ -123,6 +138,49 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
             "信息层级与区域只服从结构化资产简报，不复制任何真实平台的 logo "
             "或完整视觉识别。不要手、手机外壳、透视变形、反光、多个页面、"
             "宫格或拼贴。"
+        )
+    elif layout_profile == AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9:
+        if asset.kind != AssetKind.CHARACTER:
+            raise ValueError(
+                "DRAMA_CHARACTER_DUAL_ZONE_16_9 requires a character asset"
+            )
+        layout = (
+            "按短剧角色标准卡生成一张严格 16:9 横图。画面只分左右两个区域："
+            "左侧占整幅约 50%，展示角色正面大尺寸脸部近景；右侧占整幅约 50%，"
+            "再等分为三列，依次展示同一角色、同一身份、同一发型、同一服饰的"
+            "全身正面、全身侧面、全身背面。各视图身材比例、五官、发型、服装、"
+            "配饰和颜色必须一致，不增加动作、表情变化或剧情状态。统一使用"
+            "中性灰 #7c7c7c 背景和柔和影棚光；不要文字、视图名称、分隔说明、"
+            "logo、水印、额外人物或场景道具。"
+        )
+    elif layout_profile == AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2:
+        if asset.kind != AssetKind.CHARACTER:
+            raise ValueError("CHARACTER_SIX_VIEW_3X2 requires a character asset")
+        layout = (
+            "按角色六视图标准卡生成一张 3×2 规则网格：同一角色的正面全身、"
+            "左侧全身、右侧全身、背面全身、正面脸部近景和服饰细节。六格必须"
+            "保持同一身份、五官、体型、发型、服装、配饰、颜色与材质；使用统一"
+            "中性背景和柔和影棚光。不要文字、标签、logo、水印、剧情动作、"
+            "额外人物或场景。"
+        )
+    elif layout_profile == AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2:
+        if asset.kind != AssetKind.LOCATION:
+            raise ValueError("SCENE_FOUR_DIRECTION_2X2 requires a location asset")
+        layout = (
+            "按场景标准卡生成一张严格 16:9 横图，以 2×2 网格展示同一空间的"
+            "正向、反向、左向、右向四个观察方向。四格必须是同一地点、同一时点、"
+            "同一平面布局、家具位置、材质、照明、天气和时代设定，门窗、通道、"
+            "柜台及关键空间地标能够互相对应。只展示空场环境，不出现人物、动作"
+            "或互相矛盾的空间结构；不要文字、方向标签、logo 或水印。"
+        )
+    elif layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE:
+        if asset.kind != AssetKind.PROP:
+            raise ValueError("PROP_MASTER_SINGLE requires a prop asset")
+        layout = (
+            "生成单个实体道具的单角度产品母版。完整呈现其真实轮廓、尺度感、"
+            "颜色、材质、磨损和剧情所需结构，置于干净中性背景和柔和影棚光下。"
+            "只出现一个道具，不出现手、人物、房间、柜台、商品陈列、剧情动作、"
+            "多视图、宫格或拼贴；不凭空增加按钮、接口、附件、文字、logo 或水印。"
         )
     elif asset.kind == AssetKind.CHARACTER:
         layout = (
@@ -171,7 +229,8 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
     )
     return (
         f"{shared}\n{layout}\n{asset_identity}\n资产描述：{descriptor}。"
-        f"{presentation_context}{style_context}\n制作类型策略：{skill_prompt.text}"
+        f"{presentation_context}\n结构化参考卡形态：{layout_profile.value}"
+        f"{style_context}\n制作类型策略：{skill_prompt.text}"
     )
 
 

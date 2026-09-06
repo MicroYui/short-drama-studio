@@ -18,8 +18,10 @@ from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     ApprovalStatus,
     AssetKind,
+    AssetLayoutProfile,
     AssetMediaType,
     AssetPresentationMode,
+    AssetReferenceStrategy,
     CoreAssetBrief,
     ProductionProfile,
     ReferenceBinding,
@@ -75,6 +77,41 @@ def _brief(
         presentation_mode=presentation_mode,
         required_visible_text=list(required_visible_text or []),
     )
+
+
+def test_base_asset_prompt_compiles_explicit_mature_layout_profiles() -> None:
+    document = build_dont_trust_me_fixture("2026-08-17T00:00:00Z")
+    character = next(item for item in document.assets if item.kind == AssetKind.CHARACTER)
+    character.brief = CoreAssetBrief(
+        identity_anchor="18 岁男高中生，黑色碎发，白色运动校服",
+        visual_attributes=["五官清秀", "身形修长"],
+        reference_strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+        layout_profile=AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+    )
+
+    character_prompt = build_base_asset_prompt(document, character)
+
+    assert "严格 16:9 横图" in character_prompt
+    assert "左侧占整幅约 50%" in character_prompt
+    assert "全身正面、全身侧面、全身背面" in character_prompt
+    assert "#7c7c7c" in character_prompt
+    assert "不要文字、视图名称" in character_prompt
+    assert "DRAMA_CHARACTER_DUAL_ZONE_16_9" in character_prompt
+
+    location = next(item for item in document.assets if item.kind == AssetKind.LOCATION)
+    location.brief = CoreAssetBrief(
+        identity_anchor="高中食堂",
+        visual_attributes=["打饭窗口、用餐区和通道关系稳定"],
+        reference_strategy=AssetReferenceStrategy.SCENE_COVERAGE,
+        layout_profile=AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
+    )
+
+    location_prompt = build_base_asset_prompt(document, location)
+
+    assert "2×2 网格" in location_prompt
+    assert "正向、反向、左向、右向" in location_prompt
+    assert "只展示空场环境" in location_prompt
+    assert "SCENE_FOUR_DIRECTION_2X2" in location_prompt
 
 
 def test_prop_reference_prompt_excludes_full_people_and_story_context(tmp_path) -> None:

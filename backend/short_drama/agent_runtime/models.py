@@ -132,6 +132,7 @@ _VERSIONED_CONTEXT_ARTIFACT_TYPES = frozenset(
         "production_spec",
         "storyboard",
         "storyboard_draft",
+        "asset_plan",
         "generation_plan",
         "generation_unit",
         "clip_group",

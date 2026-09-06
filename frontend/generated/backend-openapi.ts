@@ -3113,6 +3113,22 @@ export interface components {
             /** Versions */
             versions: components["schemas"]["AssetVersion"][];
         };
+        /**
+         * AssetCanonicalNeed
+         * @description A requested subject that needs a base before derived views can exist.
+         */
+        AssetCanonicalNeed: {
+            /** Purposes */
+            purposes: string[];
+            /** Required */
+            required: boolean;
+            /** Requirement Ids */
+            requirement_ids: string[];
+            /** Shot Ids */
+            shot_ids: string[];
+            /** Subject Asset Id */
+            subject_asset_id: string;
+        };
         /** AssetCatalogCandidate */
         AssetCatalogCandidate: {
             angle: components["schemas"]["ReferenceAngle"];
@@ -3135,6 +3151,8 @@ export interface components {
             same_project: boolean;
             /** Score */
             score: number;
+            /** Source Asset Id */
+            source_asset_id: string;
             /** Source Project Id */
             source_project_id: string;
             /** Source Project Name */
@@ -3201,6 +3219,8 @@ export interface components {
         };
         /** AssetCoverageResponse */
         AssetCoverageResponse: {
+            /** Missing Canonical Assets */
+            missing_canonical_assets?: components["schemas"]["AssetCanonicalNeed"][];
             /** Missing Views */
             missing_views: components["schemas"]["ReferenceViewNeed"][];
             /** Project Id */
@@ -3243,6 +3263,12 @@ export interface components {
          */
         AssetKind: "CHARACTER" | "LOCATION" | "PROP" | "REFERENCE";
         /**
+         * AssetLayoutProfile
+         * @description Explicit machine-reference layout selected by the Asset Agent.
+         * @enum {string}
+         */
+        AssetLayoutProfile: "LIGHTWEIGHT_SINGLE" | "DRAMA_CHARACTER_DUAL_ZONE_16_9" | "CHARACTER_SIX_VIEW_3X2" | "SCENE_FOUR_DIRECTION_2X2" | "PROP_MASTER_SINGLE";
+        /**
          * AssetMediaType
          * @enum {string}
          */
@@ -3261,12 +3287,25 @@ export interface components {
         AssetPresentationMode: "PHYSICAL_MASTER" | "SCREEN_CONTENT_PLATE";
         /** AssetReferenceSheet */
         AssetReferenceSheet: {
+            /**
+             * Background Color
+             * @default #FFFFFF
+             */
+            background_color: string;
             /** Cells */
             cells: components["schemas"]["AssetReferenceSheetCell"][];
             /** Columns */
             columns: number;
             input_policy: components["schemas"]["AssetSheetInputPolicy"];
+            layout_profile?: components["schemas"]["AssetLayoutProfile"] | null;
+            /**
+             * Show Labels
+             * @default true
+             */
+            show_labels: boolean;
             strategy: components["schemas"]["AssetReferenceStrategy"];
+            /** Target Size */
+            target_size?: string | null;
         };
         /** AssetReferenceSheetCell */
         AssetReferenceSheetCell: {
@@ -3289,11 +3328,18 @@ export interface components {
          * @enum {string}
          */
         AssetReviewDecision: "APPROVED" | "REJECTED";
+        /**
+         * AssetReviewPurpose
+         * @description How an approved image version participates in the asset contract.
+         * @enum {string}
+         */
+        AssetReviewPurpose: "CANONICAL_MASTER" | "SUPPLEMENTAL_REFERENCE";
         /** AssetReviewRequest */
         AssetReviewRequest: {
             decision: components["schemas"]["AssetReviewDecision"];
             /** Notes */
             notes: string;
+            purpose: components["schemas"]["AssetReviewPurpose"];
         };
         /**
          * AssetSheetInputPolicy
@@ -3983,6 +4029,8 @@ export interface components {
             continuity_anchors?: string[];
             /** Identity Anchor */
             identity_anchor: string;
+            /** @default LIGHTWEIGHT_SINGLE */
+            layout_profile: components["schemas"]["AssetLayoutProfile"];
             /** Named Views Or Zones */
             named_views_or_zones?: string[];
             presentation_mode?: components["schemas"]["AssetPresentationMode"] | null;
@@ -6475,6 +6523,8 @@ export interface components {
             prompt: string;
             /** @default high */
             quality: components["schemas"]["ImageQuality"];
+            /** Reference Inputs */
+            reference_inputs?: components["schemas"]["ImageReferenceInput"][];
             /**
              * Size
              * @default 768x1344
@@ -6486,6 +6536,18 @@ export interface components {
          * @enum {string}
          */
         ImageQuality: "low" | "medium" | "high";
+        /**
+         * ImageReferenceInput
+         * @description One ordered image input and the semantic job it performs.
+         */
+        ImageReferenceInput: {
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Purpose */
+            purpose: string;
+            /** Subject Alias */
+            subject_alias?: string | null;
+        };
         /** ImageTaskCreateRequest */
         ImageTaskCreateRequest: {
             /** @default opaque */
@@ -6513,6 +6575,8 @@ export interface components {
             prompt: string;
             /** @default high */
             quality: components["schemas"]["ImageQuality"];
+            /** Reference Inputs */
+            reference_inputs?: components["schemas"]["ImageReferenceInput"][];
             /**
              * Size
              * @default 768x1344
@@ -7933,6 +7997,8 @@ export interface components {
         };
         /** ProjectDocument */
         ProjectDocument: {
+            /** Asset Plan Document Id */
+            asset_plan_document_id?: string | null;
             /** Assets */
             assets: components["schemas"]["Asset"][];
             /** Audio Structure Document Id */
@@ -8194,7 +8260,10 @@ export interface components {
              * @default true
              */
             required: boolean;
-            /** Target Id */
+            /**
+             * Target Id
+             * @description Exact AssetVersion.id used by this provider-neutral binding.
+             */
             target_id: string;
         };
         /** ReferenceComplexityAssessment */
@@ -8394,21 +8463,26 @@ export interface components {
         };
         /** ReferenceViewNeed */
         ReferenceViewNeed: {
-            angle: components["schemas"]["ReferenceAngle"];
-            framing: components["schemas"]["ReferenceFraming"];
+            /** Acceptable Roles */
+            acceptable_roles: components["schemas"]["ReferenceRole"][];
             /** Lineage Root Version Id */
             lineage_root_version_id: string;
-            /** Purpose */
-            purpose: string;
+            /** Preferred Angles */
+            preferred_angles: components["schemas"]["ReferenceAngle"][];
+            /** Preferred Framings */
+            preferred_framings: components["schemas"]["ReferenceFraming"][];
+            /** Purposes */
+            purposes: string[];
+            /** Required */
+            required: boolean;
+            /** Required Tags */
+            required_tags: string[];
             /** Requirement Ids */
             requirement_ids: string[];
-            role: components["schemas"]["ReferenceRole"];
             /** Shot Ids */
             shot_ids: string[];
             /** Subject Asset Id */
             subject_asset_id: string;
-            /** Tags */
-            tags: string[];
         };
         /** ReferenceVisualCandidate */
         ReferenceVisualCandidate: {
@@ -10512,6 +10586,11 @@ export interface components {
             shot_ids?: string[];
             /** Source Line Ids */
             source_line_ids?: string[];
+            /**
+             * Source Target Duration Seconds
+             * @description The current Script scene's upstream pacing reference. It informs semantic redistribution across scenes but is not a hard scene cap; the episode DurationContract remains authoritative.
+             */
+            source_target_duration_seconds?: number | null;
             /** Summary */
             summary: string;
         };
@@ -10607,7 +10686,10 @@ export interface components {
             minimum_spoken_duration_seconds: number;
             /** Natural Cut */
             natural_cut: string;
-            /** Non Speech Reserve Seconds */
+            /**
+             * Non Speech Reserve Seconds
+             * @description This row's incremental non-speech time after dialogue, action, reaction, and camera beats that can play concurrently have been collapsed. It is not a per-row copy of the ClipGroup's shared performance reserve.
+             */
             non_speech_reserve_seconds: number;
             /** Planned Clip Group Id */
             planned_clip_group_id?: string | null;
@@ -10933,6 +11015,11 @@ export interface components {
         };
         /** TeamWorkAdvance */
         TeamWorkAdvance: {
+            /**
+             * Advance Count
+             * @default 0
+             */
+            advance_count: number;
             /** Error Kind */
             error_kind?: string | null;
             /** Error Message */

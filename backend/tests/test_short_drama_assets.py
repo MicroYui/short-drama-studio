@@ -14,12 +14,14 @@ from PIL import Image
 from _routes.short_drama import router as short_drama_router
 from short_drama.deps import get_short_drama_service
 from short_drama.image_models import (
+    AssetBriefUpdateRequest,
     AssetImportLocalRequest,
     AssetImportUrlRequest,
     AssetReviewRequest,
     ImageBackground,
     ImageOperation,
     ImageProviderConfigUpdate,
+    ImageReferenceInput,
     ImageNotSubmittedResolutionRequest,
     ImageTaskCreateRequest,
     ImageTaskStatus,
@@ -29,7 +31,10 @@ from short_drama.image_models import (
 from short_drama.h3_models import H3MediaInput, H3MediaSource, H3ProbeRequest
 from short_drama.models import (
     ApprovalStatus,
+    AssetLayoutProfile,
     AssetMediaType,
+    AssetReferenceStrategy,
+    CoreAssetBrief,
     OriginType,
     VideoGenerationRoute,
 )
@@ -135,7 +140,11 @@ def test_local_url_import_version_lineage_and_approval(tmp_path: Path) -> None:
         asset.project_id,
         asset.id,
         imported.version.id,
-        AssetReviewRequest(decision="APPROVED", notes="外形正确，不像对讲机"),
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose="CANONICAL_MASTER",
+            notes="外形正确，不像对讲机",
+        ),
     )
     assert reviewed.version.approval_status == ApprovalStatus.APPROVED
     assert reviewed.asset.approved_version_id == imported.version.id
@@ -144,7 +153,11 @@ def test_local_url_import_version_lineage_and_approval(tmp_path: Path) -> None:
         asset.project_id,
         asset.id,
         imported.version.id,
-        AssetReviewRequest(decision="REJECTED", notes="复审发现不再适合作为正式版本"),
+        AssetReviewRequest(
+            decision="REJECTED",
+            purpose="CANONICAL_MASTER",
+            notes="复审发现不再适合作为正式版本",
+        ),
     )
     assert rejected.version.approval_status == ApprovalStatus.REJECTED
     assert rejected.asset.approved_version_id is None
@@ -236,6 +249,170 @@ def test_generate_edit_cost_and_candidate_gate(tmp_path: Path) -> None:
         assert composite.getpixel((300, 300)) == (21, 128, 61)
 
 
+def test_typed_image_references_preserve_order_purpose_and_alias(tmp_path: Path) -> None:
+    fake = FakeImageProvider()
+    service = _service(tmp_path, fake)
+    asset = _fixture_asset(service, "asset-linxia")
+    generated_task = service.enqueue_image_task(
+        asset.project_id,
+        asset.id,
+        ImageTaskCreateRequest(
+            prompt="男高中生角色正面母版",
+            descriptor="角色基础母版",
+        ),
+    ).task
+    service.advance_image_task(generated_task.id)
+    generated = service.advance_image_task(generated_task.id).task
+    support_path = tmp_path / "typed-canteen.png"
+    Image.new("RGB", (768, 1344), "#d6c7a1").save(support_path)
+    support = service.import_local_asset_version(
+        asset.project_id,
+        asset.id,
+        AssetImportLocalRequest(
+            local_path=str(support_path),
+            descriptor="食堂空间参考",
+            parent_version_id=generated.output_version_id,
+        ),
+    ).version
+    request = ImageTaskCreateRequest(
+        operation=ImageOperation.EDIT,
+        prompt="保持角色身份，将其放入食堂",
+        descriptor="带有序语义参考的编辑",
+        parent_version_id=generated.output_version_id,
+        reference_inputs=[
+            ImageReferenceInput(
+                asset_version_id=generated.output_version_id,
+                purpose="锁定男主脸部、发型和校服",
+                subject_alias="hero",
+            ),
+            ImageReferenceInput(
+                asset_version_id=support.id,
+                purpose="锁定食堂布局和暖黄灯光",
+                subject_alias="canteen",
+            ),
+        ],
+        primary_input_version_id=generated.output_version_id,
+    )
+
+    queued = service.enqueue_image_task(asset.project_id, asset.id, request).task
+    serialized = queued.request.model_dump(mode="json")
+    assert serialized["input_version_ids"] == []
+    assert serialized["reference_inputs"] == [
+        {
+            "asset_version_id": generated.output_version_id,
+            "purpose": "锁定男主脸部、发型和校服",
+            "subject_alias": "hero",
+        },
+        {
+            "asset_version_id": support.id,
+            "purpose": "锁定食堂布局和暖黄灯光",
+            "subject_alias": "canteen",
+        },
+    ]
+    service.advance_image_task(queued.id)
+    service.advance_image_task(queued.id)
+
+    provider_inputs = fake.calls[-1][1]
+    assert [item.asset_version_id for item in provider_inputs] == [
+        generated.output_version_id,
+        support.id,
+    ]
+    assert [item.purpose for item in provider_inputs] == [
+        "锁定男主脸部、发型和校服",
+        "锁定食堂布局和暖黄灯光",
+    ]
+    assert [item.subject_alias for item in provider_inputs] == ["hero", "canteen"]
+
+    with pytest.raises(ValueError, match="not both"):
+        ImageTaskCreateRequest(
+            operation=ImageOperation.EDIT,
+            prompt="conflicting input forms",
+            descriptor="conflict",
+            input_version_ids=[generated.output_version_id],
+            reference_inputs=[
+                ImageReferenceInput(
+                    asset_version_id=generated.output_version_id,
+                    purpose="duplicate representation",
+                )
+            ],
+            primary_input_version_id=generated.output_version_id,
+        )
+
+
+def test_image_task_size_follows_explicit_asset_layout_contract(tmp_path: Path) -> None:
+    fake = FakeImageProvider()
+    service = _service(tmp_path, fake)
+    asset = _fixture_asset(service, "asset-linxia")
+    service.update_asset_brief(
+        asset.project_id,
+        asset.id,
+        AssetBriefUpdateRequest(
+            brief=CoreAssetBrief(
+                identity_anchor="男高中生主角",
+                visual_attributes=["黑色碎发", "白色运动校服"],
+                reference_strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+                layout_profile=(
+                    AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9
+                ),
+            )
+        ),
+    )
+
+    with pytest.raises(WorkflowConflictError, match="16:9"):
+        service.enqueue_image_task(
+            asset.project_id,
+            asset.id,
+            ImageTaskCreateRequest(
+                prompt="角色双区标准卡",
+                descriptor="wrong portrait size",
+            ),
+        )
+    wide = service.enqueue_image_task(
+        asset.project_id,
+        asset.id,
+        ImageTaskCreateRequest(
+            prompt="角色双区标准卡",
+            descriptor="correct wide size",
+            size="1536x864",
+        ),
+    )
+    assert wide.task.request.size == "1536x864"
+
+    service.update_asset_brief(
+        asset.project_id,
+        asset.id,
+        AssetBriefUpdateRequest(
+            brief=CoreAssetBrief(
+                identity_anchor="男高中生主角",
+                visual_attributes=["黑色碎发", "白色运动校服"],
+                reference_strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+                layout_profile=AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+            )
+        ),
+    )
+    with pytest.raises(WorkflowConflictError, match="3:2"):
+        service.enqueue_image_task(
+            asset.project_id,
+            asset.id,
+            ImageTaskCreateRequest(
+                prompt="角色六视图",
+                descriptor="wrong wide size",
+                size="1344x768",
+            ),
+        )
+    six_view = service.enqueue_image_task(
+        asset.project_id,
+        asset.id,
+        ImageTaskCreateRequest(
+            prompt="角色六视图",
+            descriptor="correct 3:2 size",
+            size="1536x1024",
+        ),
+    )
+    assert six_view.task.request.size == "1536x1024"
+    assert fake.calls == []
+
+
 def test_azure_transparent_background_is_rejected_before_provider_call(
     tmp_path: Path,
 ) -> None:
@@ -289,7 +466,7 @@ def test_h3_resolves_only_the_current_approved_asset_version(tmp_path: Path) -> 
         asset_version_id=imported.version.id,
     )
 
-    with pytest.raises(WorkflowConflictError, match="not the asset's approved formal version"):
+    with pytest.raises(WorkflowConflictError, match="is not approved"):
         service.preview_h3_probe(
             project.document.project.id,
             H3ProbeRequest(
@@ -303,7 +480,11 @@ def test_h3_resolves_only_the_current_approved_asset_version(tmp_path: Path) -> 
         asset.project_id,
         asset.id,
         imported.version.id,
-        AssetReviewRequest(decision="APPROVED", notes="身份和服装可作为正式首帧"),
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose="CANONICAL_MASTER",
+            notes="身份和服装可作为正式首帧",
+        ),
     )
     preview = service.preview_h3_probe(
         project.document.project.id,

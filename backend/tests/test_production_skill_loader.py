@@ -399,6 +399,15 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
     assert skill.video_prompt_compiler == ""
     assert "共享端到端制片流程" in planner.text
     assert "资产审核的通用职责" in asset_reviewer.text
+    assert "artifact.create_asset_plan" in asset_reviewer.text
+    assert "asset.plan.current" in asset_reviewer.text
+    assert "DRAMA_CHARACTER_DUAL_ZONE_16_9" in asset_reviewer.text
+    assert "SCENE_FOUR_DIRECTION_2X2" in asset_reviewer.text
+    assert "ReferencePack 可保留多张职责不同的有效参考" in (
+        asset_reviewer.text
+    )
+    assert "Subject reference" in asset_reviewer.text
+    assert "Picture/keyframe" in asset_reviewer.text
     assert "artifact.update_brief" in asset_reviewer.text
     assert "image.enqueue" in asset_reviewer.text
     assert "qa.inspect_asset_version" in asset_reviewer.text

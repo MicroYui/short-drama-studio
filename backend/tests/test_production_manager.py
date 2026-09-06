@@ -1137,6 +1137,17 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
     assert "不得把 bible_version 塞入不支持的 evidence_refs" in (
         client.instructions[0]
     )
+    assert "ASSET_REVIEWER 职责的 Worker" in client.instructions[0]
+    assert "asset.plan.current" in client.instructions[0]
+    assert "artifact.create_asset_plan 或 artifact.replace_asset_plan" in (
+        client.instructions[0]
+    )
+    assert "anchor/text-only/reuse 取舍" in client.instructions[0]
+    assert "Provider 调用只选当前 Shot/ClipGroup 的最少充分子集" in (
+        client.instructions[0]
+    )
+    assert "Subject reference" in client.instructions[0]
+    assert "Picture/keyframe" in client.instructions[0]
     assert "每条 finding 显式给出 repair_scope" in client.instructions[0]
     assert "片段边界只是运行检查点" in client.instructions[0]
     assert "不设片段数量、大小或重试次数" in client.instructions[0]

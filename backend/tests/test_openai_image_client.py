@@ -14,6 +14,7 @@ from short_drama.image_models import (
     ImageOperation,
     ImageProviderConfigUpdate,
     ImageProviderRequest,
+    ImageReferenceInput,
 )
 from short_drama.providers.image_config import ImageProviderConfigStore
 from short_drama.providers.image_provider import (
@@ -144,6 +145,58 @@ def test_edit_uses_high_fidelity_multi_image_inputs() -> None:
     ]
     assert payload["input_fidelity"] == "high"
     assert session.calls[0][1] == "https://image.example.test/v1/images/edits"
+
+
+def test_edit_projects_typed_reference_inputs_to_provider_images_in_order() -> None:
+    session = FakeSession()
+    session.responses.append(FakeResponse(200, _success_payload()))
+    request = ImageProviderRequest(
+        operation=ImageOperation.EDIT,
+        prompt="keep the hero identity and use the canteen layout",
+        reference_inputs=[
+            ImageReferenceInput(
+                asset_version_id="hero-version",
+                purpose="identity lock",
+                subject_alias="hero",
+            ),
+            ImageReferenceInput(
+                asset_version_id="canteen-version",
+                purpose="location topology",
+                subject_alias="canteen",
+            ),
+        ],
+        primary_input_version_id="hero-version",
+    )
+    inputs = [
+        ImageProviderInput(
+            asset_version_id="hero-version",
+            image_url="data:image/png;base64,AA==",
+            purpose="identity lock",
+            subject_alias="hero",
+        ),
+        ImageProviderInput(
+            asset_version_id="canteen-version",
+            image_url="https://example.com/canteen.png",
+            purpose="location topology",
+            subject_alias="canteen",
+        ),
+    ]
+
+    _client(session).create(request, inputs)
+
+    payload = session.calls[0][2]["json"]
+    assert payload["images"] == [
+        {"image_url": "data:image/png;base64,AA=="},
+        {"image_url": "https://example.com/canteen.png"},
+    ]
+    assert payload["prompt"] == (
+        "keep the hero identity and use the canteen layout\n\n"
+        "有序参考图职责（按上传顺序）：\n"
+        "参考图1（主体别名：hero）：identity lock\n"
+        "参考图2（主体别名：canteen）：location topology"
+    )
+    assert payload["prompt"].count("有序参考图职责") == 1
+    assert request.prompt == "keep the hero identity and use the canteen layout"
 
 
 def test_azure_masked_edit_uses_multipart_and_applies_mask_to_primary() -> None:

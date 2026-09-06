@@ -50,6 +50,7 @@ from short_drama.agent_runtime.artifact_resolver import (
 from short_drama.agent_runtime.models import utc_now
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
+    ContentPlanningOutput,
     DurationAlignment,
     DurationAuthority,
     DurationFitAssessment,
@@ -933,6 +934,20 @@ class LanguageProductionPlanner:
             "当前精确 ScriptVersion.story_intent.duration_contract；如果判断契约本身需要"
             "变化，先修订上游 StoryIntent/ScriptVersion，不能只在 ProductionSpec 中制造"
             "第二份时长真相。"
+            "当当前目标进入核心资产准备时，Leader 必须先让选择 "
+            "ASSET_REVIEWER 职责的 Worker 通读当前精确 ScriptVersion、"
+            "ProjectBibleVersion、ProductionSpec 和完整 Storyboard。若已有"
+            " `asset.plan.current` 精确覆盖当前目标就继续执行；否则先用 "
+            "artifact.create_asset_plan 或 artifact.replace_asset_plan 写入版本化"
+            " anchor/text-only/reuse 取舍、稳定 work item ID、最终 prompt、"
+            "有序 references、真实依赖与预期工件，再派发已就绪的执行项。"
+            "独立 base 可并行，状态变体和道具生命周期遵循计划中的 "
+            "base-first 依赖。资产形态由 Worker 结合已选 Method、复用和连续性"
+            "语义决定，不用题材关键词、固定视图、出场次数、重试次数或 Critic "
+            "循环路由。ReferencePack 可保留多张职责不同的有效参考，但单次 "
+            "Provider 调用只选当前 Shot/ClipGroup 的最少充分子集；身份、场景、"
+            "服饰和道具一致性属于 Subject reference，图片本身定义开场、结束或构图"
+            "时才属于 Picture/keyframe。"
             "这是 MiniMax Design「剧本 → 时长账本 → 完整分镜」的本地执行适配："
             "Leader 应先委派一个负责全片编译计划的 Planner WorkOrder。该 "
             "WorkOrder 先检查当前 Tool history；若其中没有当前精确 "
@@ -1841,6 +1856,9 @@ def _compact_specialist_tool_result(
             ),
             "storyboard_document_id": document.get(
                 "storyboard_document_id"
+            ),
+            "asset_plan_document_id": document.get(
+                "asset_plan_document_id"
             ),
             "generation_plan_document_id": document.get(
                 "generation_plan_document_id"
@@ -2916,12 +2934,36 @@ class ProductionManager:
         """Keep persisted long-form planning ahead of downstream production work."""
 
         planning = document.planning
+        planning_run = (
+            None
+            if planning is None or planning.run_id is None
+            else self.projects.get_planning_run(planning.run_id)
+        )
         selected_method_skill_ids, method_selection_rationale = (
             self._planning_precondition_method_selection(
                 agent_run_id=agent_run_id,
                 document=document,
             )
         )
+        if (
+            planning is not None
+            and planning.status == PlanningRunStatus.COMPLETE
+            and planning.owner_agent_run_id == agent_run_id
+            and planning_run is not None
+            and planning_run.operation == PlanningRunOperation.INITIAL
+            and document.project.content_planning_output
+            == ContentPlanningOutput.SCRIPT_ONLY
+            and document.project.stage == ProjectStage.SCRIPT_READY
+        ):
+            return AgentPlanProposal(
+                summary=(
+                    "The owned content-planning job completed the requested "
+                    "script-only deliverable."
+                ),
+                selected_method_skill_ids=selected_method_skill_ids,
+                method_selection_rationale=method_selection_rationale,
+                goal_complete=True,
+            )
         if planning is None or planning.status == PlanningRunStatus.COMPLETE:
             return None
 

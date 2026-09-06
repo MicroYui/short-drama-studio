@@ -215,7 +215,11 @@ def _create_approved_image(
         project_id,
         created.asset.id,
         imported.version.id,
-        AssetReviewRequest(decision="APPROVED", notes="test visual candidate"),
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose="CANONICAL_MASTER",
+            notes="test visual candidate",
+        ),
     )
     return created.asset.id, approved.version.id
 

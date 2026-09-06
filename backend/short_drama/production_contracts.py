@@ -1,4 +1,4 @@
-"""Typed production-spec, storyboard, generation-plan, and output-slot contracts.
+"""Typed production-spec, storyboard, asset-plan, generation-plan, and output-slot contracts.
 
 These models keep the durable content in versioned ``ProductionDocument``
 artifacts.  ``ProjectDocument.shots`` and downstream provider tasks are
@@ -15,7 +15,14 @@ from typing import cast
 
 from pydantic import Field, JsonValue, model_validator
 
+from short_drama.image_models import AssetReviewPurpose
 from short_drama.models import (
+    AssetKind,
+    AssetLayoutProfile,
+    AssetReferenceStrategy,
+    AssetSheetInputPolicy,
+    AssetStandardView,
+    CoreAssetBrief,
     DomainModel,
     DurationAlignment,
     DurationAuthority,
@@ -31,6 +38,9 @@ from short_drama.models import (
     ProductionDocumentVersion,
     ProjectOutputSlot,
     ProjectOutputSlotRevision,
+    ReferenceAngle,
+    ReferenceFraming,
+    ReferenceRole,
     ShotPlan,
 )
 
@@ -38,10 +48,12 @@ from short_drama.models import (
 PRODUCTION_SPEC_DOCUMENT_KIND = "production.spec"
 STORYBOARD_DOCUMENT_KIND = "storyboard"
 STORYBOARD_DRAFT_DOCUMENT_KIND = "storyboard.draft"
+ASSET_PLAN_DOCUMENT_KIND = "asset.plan"
 GENERATION_PLAN_DOCUMENT_KIND = "video.generation-plan"
 
 PRODUCTION_SPEC_OUTPUT_SLOT_ID = "production.spec.current"
 STORYBOARD_OUTPUT_SLOT_ID = "storyboard.current"
+ASSET_PLAN_OUTPUT_SLOT_ID = "asset.plan.current"
 GENERATION_PLAN_OUTPUT_SLOT_ID = "video.generation-plan.current"
 
 
@@ -1634,6 +1646,388 @@ class StoryboardContent(DomainModel):
         return self
 
 
+class AssetPlanDisposition(StrEnum):
+    """The Agent's explicit decision for one potential reusable asset."""
+
+    ANCHOR = "ANCHOR"
+    TEXT_ONLY = "TEXT_ONLY"
+    REUSE_EXISTING = "REUSE_EXISTING"
+
+
+class AssetPlanOperation(StrEnum):
+    """Provider-neutral work that may realize one asset-plan output."""
+
+    GENERATE = "GENERATE"
+    EDIT = "EDIT"
+    COMPOSE = "COMPOSE"
+    IMPORT = "IMPORT"
+
+
+class AssetPlanReference(DomainModel):
+    """One ordered input pinned to prior work or an exact asset version."""
+
+    role: str = Field(min_length=1, max_length=200)
+    purpose: str = Field(min_length=1, max_length=1000)
+    source_work_item_id: str | None = Field(default=None, min_length=1, max_length=200)
+    asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    asset_version_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_reference_source(self) -> AssetPlanReference:
+        from_work_item = self.source_work_item_id is not None
+        from_asset_version = self.asset_id is not None or self.asset_version_id is not None
+        if from_work_item == from_asset_version:
+            raise ValueError(
+                "Asset-plan reference must select exactly one work item or asset version"
+            )
+        if (self.asset_id is None) != (self.asset_version_id is None):
+            raise ValueError(
+                "Asset-plan reference asset and version IDs must be supplied together"
+            )
+        return self
+
+
+class AssetPlanReferencePackIntent(DomainModel):
+    """How one completed image should enter the subject's ReferencePack."""
+
+    subject_item_id: str = Field(min_length=1, max_length=200)
+    role: ReferenceRole
+    angle: ReferenceAngle
+    framing: ReferenceFraming
+    tags: list[str] = Field(max_length=32)
+    lineage_root: AssetPlanReference | None = None
+
+    @model_validator(mode="after")
+    def validate_tags(self) -> AssetPlanReferencePackIntent:
+        normalized = [item.strip() for item in self.tags if item.strip()]
+        if normalized != self.tags or len(normalized) != len(set(normalized)):
+            raise ValueError(
+                "Asset-plan ReferencePack tags must be trimmed, non-empty, and unique"
+            )
+        return self
+
+
+class AssetPlanImportIntent(DomainModel):
+    """Exact existing AssetVersion to import, including its owning project."""
+
+    source_project_id: str = Field(min_length=1, max_length=200)
+    source_asset_id: str = Field(min_length=1, max_length=200)
+    source_asset_version_id: str = Field(min_length=1, max_length=200)
+
+
+class AssetPlanComposeCell(DomainModel):
+    """One exact or dependency-produced image cell in a deterministic sheet."""
+
+    source: AssetPlanReference
+    view: AssetStandardView
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class AssetPlanComposeIntent(DomainModel):
+    """Complete provider-neutral payload for image.compose_reference_sheet."""
+
+    strategy: AssetReferenceStrategy
+    cells: list[AssetPlanComposeCell] = Field(min_length=1, max_length=9)
+    input_policy: AssetSheetInputPolicy = AssetSheetInputPolicy.EXPLICIT_VERSIONS
+    columns: int = Field(ge=1, le=3)
+    layout_profile: AssetLayoutProfile | None = None
+    show_labels: bool
+    background_color: str = Field(min_length=1, max_length=64)
+    target_size: str | None = Field(default=None, min_length=1, max_length=80)
+    parent_version_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_layout(self) -> AssetPlanComposeIntent:
+        if self.columns > len(self.cells):
+            raise ValueError("AssetPlan compose columns cannot exceed its cell count")
+        expected_cells = (
+            None
+            if self.layout_profile is None
+            else {
+                AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9: 4,
+                AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2: 6,
+                AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2: 4,
+                AssetLayoutProfile.PROP_MASTER_SINGLE: 1,
+            }.get(self.layout_profile)
+        )
+        if expected_cells is not None and len(self.cells) != expected_cells:
+            assert self.layout_profile is not None
+            raise ValueError(
+                f"{self.layout_profile.value} requires exactly {expected_cells} cells"
+            )
+        return self
+
+
+class AssetPlanWorkItem(DomainModel):
+    """A stable, dependency-aware execution instruction authored by the Agent."""
+
+    id: str = Field(min_length=1, max_length=200)
+    operation: AssetPlanOperation
+    output_role: str = Field(min_length=1, max_length=200)
+    output_view: AssetStandardView | None = None
+    final_prompt: str = Field(min_length=1, max_length=12000)
+    size: str = Field(min_length=1, max_length=80)
+    review_purpose: AssetReviewPurpose
+    reference_pack_intent: AssetPlanReferencePackIntent | None = None
+    import_intent: AssetPlanImportIntent | None = None
+    compose_intent: AssetPlanComposeIntent | None = None
+    ordered_references: list[AssetPlanReference] = Field(
+        default_factory=list[AssetPlanReference]
+    )
+    dependency_ids: list[str] = Field(default_factory=list[str])
+    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    completed_asset_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+
+    @model_validator(mode="after")
+    def validate_work_item(self) -> AssetPlanWorkItem:
+        if len(self.dependency_ids) != len(set(self.dependency_ids)):
+            raise ValueError("Asset-plan work-item dependencies must be unique")
+        if (self.completed_asset_id is None) != (
+            self.completed_asset_version_id is None
+        ):
+            raise ValueError(
+                "Completed asset-plan work-item asset and version IDs must be supplied together"
+            )
+        if (
+            self.review_purpose == AssetReviewPurpose.SUPPLEMENTAL_REFERENCE
+            and self.reference_pack_intent is None
+        ):
+            raise ValueError(
+                "A supplemental AssetPlan work item requires explicit ReferencePack intent"
+            )
+        if self.reference_pack_intent is not None:
+            role = self.reference_pack_intent.role
+            if (
+                self.review_purpose == AssetReviewPurpose.CANONICAL_MASTER
+                and role != ReferenceRole.CANONICAL_MASTER
+            ):
+                raise ValueError(
+                    "A canonical AssetPlan work item can only declare the canonical "
+                    "ReferencePack role"
+                )
+            if (
+                self.review_purpose == AssetReviewPurpose.SUPPLEMENTAL_REFERENCE
+                and role == ReferenceRole.CANONICAL_MASTER
+            ):
+                raise ValueError(
+                    "A supplemental AssetPlan work item cannot declare the canonical "
+                    "ReferencePack role"
+                )
+        if self.operation == AssetPlanOperation.IMPORT:
+            if self.import_intent is None or self.compose_intent is not None:
+                raise ValueError(
+                    "An IMPORT AssetPlan work item requires only import_intent"
+                )
+        elif self.operation == AssetPlanOperation.COMPOSE:
+            if self.compose_intent is None or self.import_intent is not None:
+                raise ValueError(
+                    "A COMPOSE AssetPlan work item requires only compose_intent"
+                )
+        elif self.import_intent is not None or self.compose_intent is not None:
+            raise ValueError(
+                "Only IMPORT or COMPOSE AssetPlan work items accept operation payloads"
+            )
+        return self
+
+
+class AssetPlanItem(DomainModel):
+    """One explicit anchor, text-only, or reuse decision in an AssetPlan."""
+
+    id: str = Field(min_length=1, max_length=200)
+    disposition: AssetPlanDisposition
+    asset_kind: AssetKind
+    name: str = Field(min_length=1, max_length=240)
+    bible_entity_id: str | None = Field(default=None, min_length=1, max_length=200)
+    serves_shot_ids: list[str] = Field(default_factory=list[str])
+    serves_clip_group_ids: list[str] = Field(default_factory=list[str])
+    brief: CoreAssetBrief | None = None
+    rationale: str = Field(min_length=1, max_length=4000)
+    work_items: list[AssetPlanWorkItem] = Field(
+        default_factory=list[AssetPlanWorkItem]
+    )
+    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    completed_asset_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+
+    @model_validator(mode="after")
+    def validate_item(self) -> AssetPlanItem:
+        for field_name in ("serves_shot_ids", "serves_clip_group_ids"):
+            values = getattr(self, field_name)
+            if len(values) != len(set(values)):
+                raise ValueError(f"Asset-plan {field_name} must be unique")
+        work_item_ids = [item.id for item in self.work_items]
+        if len(work_item_ids) != len(set(work_item_ids)):
+            raise ValueError("Asset-plan work-item IDs must be unique")
+        if (self.completed_asset_id is None) != (
+            self.completed_asset_version_id is None
+        ):
+            raise ValueError(
+                "Completed asset-plan item asset and version IDs must be supplied together"
+            )
+        if self.disposition == AssetPlanDisposition.TEXT_ONLY:
+            if self.work_items:
+                raise ValueError("A text-only AssetPlan item cannot contain work items")
+            if self.completed_asset_id is not None:
+                raise ValueError("A text-only AssetPlan item cannot declare completed media")
+        if (
+            self.disposition == AssetPlanDisposition.REUSE_EXISTING
+            and self.completed_asset_id is None
+        ):
+            raise ValueError(
+                "A reuse-existing AssetPlan item requires an exact completed asset version"
+            )
+        return self
+
+
+class AssetPlanContent(DomainModel):
+    """Versioned Agent-authored inventory and executable core-asset plan."""
+
+    project_id: str = Field(min_length=1)
+    script_version_id: str = Field(min_length=1)
+    bible_version_id: str = Field(min_length=1)
+    production_spec_document_id: str = Field(min_length=1)
+    production_spec_version_id: str = Field(min_length=1)
+    storyboard_document_id: str = Field(min_length=1)
+    storyboard_version_id: str = Field(min_length=1)
+    items: list[AssetPlanItem] = Field(default_factory=list[AssetPlanItem])
+    notes: list[str] = Field(default_factory=list[str])
+
+    @model_validator(mode="after")
+    def validate_plan_structure(self) -> AssetPlanContent:
+        item_ids = [item.id for item in self.items]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("Asset-plan item IDs must be unique")
+
+        work_items = [work for item in self.items for work in item.work_items]
+        work_item_ids = [item.id for item in work_items]
+        if len(work_item_ids) != len(set(work_item_ids)):
+            raise ValueError("Asset-plan work-item IDs must be globally unique")
+        known_work_item_ids = set(work_item_ids)
+        item_by_id = {item.id: item for item in self.items}
+        role_kinds: dict[ReferenceRole, set[AssetKind]] = {
+            ReferenceRole.CANONICAL_MASTER: {
+                AssetKind.CHARACTER,
+                AssetKind.LOCATION,
+                AssetKind.PROP,
+            },
+            ReferenceRole.CHARACTER_FACE: {AssetKind.CHARACTER},
+            ReferenceRole.CHARACTER_BODY: {AssetKind.CHARACTER},
+            ReferenceRole.CHARACTER_PROFILE: {AssetKind.CHARACTER},
+            ReferenceRole.CHARACTER_BACK: {AssetKind.CHARACTER},
+            ReferenceRole.LOCATION_MASTER: {AssetKind.LOCATION},
+            ReferenceRole.LOCATION_REVERSE: {AssetKind.LOCATION},
+            ReferenceRole.LOCATION_INTERACTION: {AssetKind.LOCATION},
+            ReferenceRole.PROP_PRODUCT: {AssetKind.PROP},
+            ReferenceRole.PROP_IN_HAND: {AssetKind.PROP},
+            ReferenceRole.PROP_STATE: {AssetKind.PROP},
+        }
+        preceding_work_item_ids: set[str] = set()
+        for work_item in work_items:
+            for dependency_id in work_item.dependency_ids:
+                if dependency_id not in known_work_item_ids:
+                    raise ValueError(
+                        f"Asset-plan work item {work_item.id} references unknown dependency "
+                        f"{dependency_id}"
+                    )
+                if dependency_id not in preceding_work_item_ids:
+                    raise ValueError(
+                        f"Asset-plan work item {work_item.id} dependencies must precede it"
+                    )
+            for reference in work_item.ordered_references:
+                source_work_item_id = reference.source_work_item_id
+                if source_work_item_id is None:
+                    continue
+                if source_work_item_id not in known_work_item_ids:
+                    raise ValueError(
+                        f"Asset-plan work item {work_item.id} references unknown work item "
+                        f"{source_work_item_id}"
+                    )
+                if source_work_item_id not in preceding_work_item_ids:
+                    raise ValueError(
+                        f"Asset-plan work item {work_item.id} references must precede it"
+                    )
+                if source_work_item_id not in work_item.dependency_ids:
+                    raise ValueError(
+                        f"Asset-plan work item {work_item.id} must declare referenced work "
+                        f"item {source_work_item_id} as a dependency"
+                    )
+            if work_item.compose_intent is not None:
+                for cell in work_item.compose_intent.cells:
+                    source_work_item_id = cell.source.source_work_item_id
+                    if source_work_item_id is None:
+                        continue
+                    if source_work_item_id not in known_work_item_ids:
+                        raise ValueError(
+                            f"Asset-plan compose work item {work_item.id} references "
+                            f"unknown work item {source_work_item_id}"
+                        )
+                    if source_work_item_id not in preceding_work_item_ids:
+                        raise ValueError(
+                            f"Asset-plan compose work item {work_item.id} source work "
+                            "items must precede it"
+                        )
+                    if source_work_item_id not in work_item.dependency_ids:
+                        raise ValueError(
+                            f"Asset-plan compose work item {work_item.id} must declare "
+                            f"cell source {source_work_item_id} as a dependency"
+                        )
+            pack_intent = work_item.reference_pack_intent
+            if pack_intent is not None:
+                subject_item = item_by_id.get(pack_intent.subject_item_id)
+                if subject_item is None:
+                    raise ValueError(
+                        f"Asset-plan work item {work_item.id} ReferencePack intent "
+                        f"references unknown subject item {pack_intent.subject_item_id}"
+                    )
+                if subject_item.asset_kind not in role_kinds[pack_intent.role]:
+                    raise ValueError(
+                        f"ReferencePack role {pack_intent.role.value} is incompatible "
+                        f"with subject item kind {subject_item.asset_kind.value}"
+                    )
+            if pack_intent is not None and pack_intent.lineage_root is not None:
+                source_work_item_id = pack_intent.lineage_root.source_work_item_id
+                if source_work_item_id is not None:
+                    if source_work_item_id not in known_work_item_ids:
+                        raise ValueError(
+                            f"Asset-plan work item {work_item.id} lineage root references "
+                            f"unknown work item {source_work_item_id}"
+                        )
+                    if source_work_item_id not in preceding_work_item_ids:
+                        raise ValueError(
+                            f"Asset-plan work item {work_item.id} lineage-root work item "
+                            "must precede it"
+                        )
+                    if source_work_item_id not in work_item.dependency_ids:
+                        raise ValueError(
+                            f"Asset-plan work item {work_item.id} must declare lineage-root "
+                            f"work item {source_work_item_id} as a dependency"
+                        )
+            preceding_work_item_ids.add(work_item.id)
+
+        for item in self.items:
+            if (
+                item.disposition == AssetPlanDisposition.ANCHOR
+                and item.completed_asset_id is not None
+                and not any(
+                    work_item.completed_asset_id == item.completed_asset_id
+                    and work_item.completed_asset_version_id
+                    == item.completed_asset_version_id
+                    for work_item in item.work_items
+                )
+            ):
+                raise ValueError(
+                    f"Completed anchor item {item.id} must match one completed work item"
+                )
+        return self
+
+
 class GenerationUnit(DomainModel):
     """Provider-independent execution unit compiled from one ClipGroup."""
 
@@ -1747,6 +2141,18 @@ class StoryboardReplaceRequest(StoryboardCreateRequest):
     base_version_id: str = Field(min_length=1)
 
 
+class AssetPlanCreateRequest(DomainModel):
+    asset_plan: AssetPlanContent
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+
+
+class AssetPlanReplaceRequest(AssetPlanCreateRequest):
+    base_version_id: str = Field(min_length=1)
+
+
 class StoryboardShotReplacement(DomainModel):
     shot_id: str = Field(min_length=1)
     expected_revision: int = Field(ge=1)
@@ -1840,6 +2246,17 @@ class StoryboardReadResponse(DomainModel):
 
 
 class StoryboardMutationResponse(StoryboardReadResponse):
+    pass
+
+
+class AssetPlanReadResponse(DomainModel):
+    asset_plan: AssetPlanContent
+    document: ProductionDocument
+    version: ProductionDocumentVersion
+    output_slot: ProjectOutputSlot | None = None
+
+
+class AssetPlanMutationResponse(AssetPlanReadResponse):
     pass
 
 

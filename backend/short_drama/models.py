@@ -443,6 +443,16 @@ class AssetReferenceStrategy(StrEnum):
     SCENE_COVERAGE = "SCENE_COVERAGE"
 
 
+class AssetLayoutProfile(StrEnum):
+    """Explicit machine-reference layout selected by the Asset Agent."""
+
+    LIGHTWEIGHT_SINGLE = "LIGHTWEIGHT_SINGLE"
+    DRAMA_CHARACTER_DUAL_ZONE_16_9 = "DRAMA_CHARACTER_DUAL_ZONE_16_9"
+    CHARACTER_SIX_VIEW_3X2 = "CHARACTER_SIX_VIEW_3X2"
+    SCENE_FOUR_DIRECTION_2X2 = "SCENE_FOUR_DIRECTION_2X2"
+    PROP_MASTER_SINGLE = "PROP_MASTER_SINGLE"
+
+
 class AssetStandardView(StrEnum):
     """Reusable view labels for canonical character, location, and prop images."""
 
@@ -1269,6 +1279,7 @@ class CoreAssetBrief(DomainModel):
     presentation_mode: AssetPresentationMode | None = None
     required_visible_text: list[str] = Field(default_factory=list[str])
     reference_strategy: AssetReferenceStrategy = AssetReferenceStrategy.LIGHTWEIGHT
+    layout_profile: AssetLayoutProfile = AssetLayoutProfile.LIGHTWEIGHT_SINGLE
     requested_views: list[AssetStandardView] = Field(
         default_factory=list[AssetStandardView],
         max_length=12,
@@ -1296,6 +1307,23 @@ class CoreAssetBrief(DomainModel):
                 )
         if len(self.requested_views) != len(set(self.requested_views)):
             raise ValueError("Core asset requested views must be unique")
+        if self.layout_profile in {
+            AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+        } and self.reference_strategy != AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS:
+            raise ValueError(
+                "Character multi-view layouts require CHARACTER_STANDARD_VIEWS"
+            )
+        if (
+            self.layout_profile == AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2
+            and self.reference_strategy != AssetReferenceStrategy.SCENE_COVERAGE
+        ):
+            raise ValueError("Scene four-direction layout requires SCENE_COVERAGE")
+        if (
+            self.layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE
+            and self.reference_strategy != AssetReferenceStrategy.LIGHTWEIGHT
+        ):
+            raise ValueError("Prop master layout requires LIGHTWEIGHT strategy")
         return self
 
 
@@ -1310,8 +1338,12 @@ class AssetReferenceSheet(DomainModel):
     strategy: AssetReferenceStrategy
     input_policy: AssetSheetInputPolicy
     columns: int = Field(ge=1, le=3)
+    layout_profile: AssetLayoutProfile | None = None
+    show_labels: bool = True
+    background_color: str = Field(default="#FFFFFF", min_length=1, max_length=64)
+    target_size: str | None = None
     cells: list[AssetReferenceSheetCell] = Field(
-        min_length=2,
+        min_length=1,
         max_length=9,
     )
 
@@ -1560,9 +1592,19 @@ class ExecutionPlanEntry(DomainModel):
 
 class ReferenceBinding(DomainModel):
     kind: AssetKind
-    target_id: str
+    target_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Exact AssetVersion.id used by this provider-neutral binding.",
+    )
     purpose: str
     required: bool = True
+
+    @property
+    def asset_version_id(self) -> str:
+        """Compatibility-friendly explicit name for the persisted target_id field."""
+
+        return self.target_id
 
 
 class ReferenceRequirement(DomainModel):
@@ -2153,6 +2195,7 @@ class ProjectDocument(DomainModel):
     timed_text_document_id: str | None = None
     production_spec_document_id: str | None = None
     storyboard_document_id: str | None = None
+    asset_plan_document_id: str | None = None
     generation_plan_document_id: str | None = None
     output_slots: list[ProjectOutputSlot] = Field(
         default_factory=list[ProjectOutputSlot]
@@ -2173,6 +2216,7 @@ class ProjectDocument(DomainModel):
             "timed_text_document_id",
             "production_spec_document_id",
             "storyboard_document_id",
+            "asset_plan_document_id",
             "generation_plan_document_id",
         ):
             value = getattr(self, field_name)

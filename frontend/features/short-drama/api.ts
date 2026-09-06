@@ -536,9 +536,10 @@ export const ShortDramaApi = {
     assetId: string,
     versionId: string,
     decision: components['schemas']['AssetReviewDecision'],
+    purpose: components['schemas']['AssetReviewPurpose'],
     notes: string,
   ) => reviewAssetVersion(
-    { decision, notes },
+    { decision, purpose, notes },
     undefined,
     assetPath(projectId, assetId, `/versions/${encodeURIComponent(versionId)}/review`),
   ),

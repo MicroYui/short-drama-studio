@@ -13,6 +13,7 @@ from short_drama.models import (
     AssetMediaType,
     AssetVersion,
     DomainModel,
+    Freshness,
     ProjectDocument,
     ReferenceAngle,
     ReferenceFraming,
@@ -48,6 +49,7 @@ class AssetCatalogSearchRequest(DomainModel):
 class AssetCatalogCandidate(DomainModel):
     source_project_id: str
     source_project_name: str
+    source_asset_id: str
     subject_asset_id: str
     subject_asset_name: str
     asset_kind: AssetKind
@@ -83,17 +85,31 @@ class ReferenceViewNeed(DomainModel):
     subject_asset_id: str
     requirement_ids: list[str]
     shot_ids: list[str]
-    role: ReferenceRole
-    angle: ReferenceAngle
-    framing: ReferenceFraming
-    tags: list[str]
-    purpose: str
+    acceptable_roles: list[ReferenceRole]
+    preferred_angles: list[ReferenceAngle]
+    preferred_framings: list[ReferenceFraming]
+    required_tags: list[str]
+    purposes: list[str]
+    required: bool
     lineage_root_version_id: str
+
+
+class AssetCanonicalNeed(DomainModel):
+    """A requested subject that needs a base before derived views can exist."""
+
+    subject_asset_id: str
+    requirement_ids: list[str]
+    shot_ids: list[str]
+    purposes: list[str]
+    required: bool
 
 
 class AssetCoverageResponse(DomainModel):
     project_id: str
     ready: bool
+    missing_canonical_assets: list[AssetCanonicalNeed] = Field(
+        default_factory=list[AssetCanonicalNeed]
+    )
     missing_views: list[ReferenceViewNeed]
 
 
@@ -198,7 +214,14 @@ def missing_reference_views(
     valid_entries = _valid_pack_entries(document)
     assets = {item.id: item for item in document.assets}
     pending: dict[
-        tuple[str, ReferenceRole, ReferenceAngle, ReferenceFraming, tuple[str, ...]],
+        tuple[
+            str,
+            tuple[ReferenceRole, ...],
+            tuple[ReferenceAngle, ...],
+            tuple[ReferenceFraming, ...],
+            tuple[str, ...],
+            bool,
+        ],
         ReferenceViewNeed,
     ] = {}
     for plan in document.reference_plan:
@@ -211,50 +234,104 @@ def missing_reference_views(
             root = _approved_image(subject)
             if root is None:
                 continue
-            role = requirement.acceptable_roles[0]
-            angle = (
-                requirement.preferred_angles[0]
-                if requirement.preferred_angles
-                else ReferenceAngle.NOT_APPLICABLE
-            )
-            framing = (
-                requirement.preferred_framings[0]
-                if requirement.preferred_framings
-                else ReferenceFraming.NOT_APPLICABLE
-            )
+            acceptable_roles = tuple(requirement.acceptable_roles)
+            preferred_angles = tuple(requirement.preferred_angles)
+            preferred_framings = tuple(requirement.preferred_framings)
             tags = tuple(
                 dict.fromkeys(
                     item.strip() for item in requirement.required_tags if item.strip()
                 )
             )
-            key = (subject.id, role, angle, framing, tags)
+            key = (
+                subject.id,
+                acceptable_roles,
+                preferred_angles,
+                preferred_framings,
+                tags,
+                requirement.required,
+            )
             existing = pending.get(key)
             if existing is None:
                 pending[key] = ReferenceViewNeed(
                     subject_asset_id=subject.id,
                     requirement_ids=[requirement.id],
                     shot_ids=[plan.shot_id],
-                    role=role,
-                    angle=angle,
-                    framing=framing,
-                    tags=list(tags),
-                    purpose=requirement.purpose,
+                    acceptable_roles=list(acceptable_roles),
+                    preferred_angles=list(preferred_angles),
+                    preferred_framings=list(preferred_framings),
+                    required_tags=list(tags),
+                    purposes=[requirement.purpose],
+                    required=requirement.required,
                     lineage_root_version_id=root.id,
                 )
             else:
-                existing.requirement_ids.append(requirement.id)
+                if requirement.id not in existing.requirement_ids:
+                    existing.requirement_ids.append(requirement.id)
                 if plan.shot_id not in existing.shot_ids:
                     existing.shot_ids.append(plan.shot_id)
+                if requirement.purpose not in existing.purposes:
+                    existing.purposes.append(requirement.purpose)
     return list(pending.values())[:limit]
 
 
-_AUTONOMOUS_REUSABLE_REFERENCE_ROLES = {
-    ReferenceRole.CHARACTER_FACE,
-    ReferenceRole.CHARACTER_PROFILE,
-    ReferenceRole.CHARACTER_BACK,
-    ReferenceRole.LOCATION_REVERSE,
-    ReferenceRole.LOCATION_INTERACTION,
-}
+def asset_coverage_ready(document: ProjectDocument) -> bool:
+    """Return readiness from every required requirement, without display truncation."""
+
+    valid_entries = _valid_pack_entries(document)
+    assets = {item.id: item for item in document.assets}
+    for plan in document.reference_plan:
+        for requirement in plan.requirements:
+            if not requirement.required:
+                continue
+            subject = assets.get(requirement.subject_asset_id)
+            if subject is None or subject.kind not in _DEFAULT_PACK_ROLE:
+                continue
+            if not _requirement_has_match(requirement, valid_entries):
+                return False
+    return True
+
+
+def missing_canonical_assets(
+    document: ProjectDocument,
+    *,
+    limit: int = 500,
+) -> list[AssetCanonicalNeed]:
+    """Report requested subjects whose current canonical image is unavailable.
+
+    This is a factual dependency report.  It does not decide whether the Agent
+    should generate, import, reuse, or intentionally keep a subject text-only.
+    """
+
+    valid_entries = _valid_pack_entries(document)
+    assets = {item.id: item for item in document.assets}
+    pending: dict[str, AssetCanonicalNeed] = {}
+    for plan in document.reference_plan:
+        for requirement in plan.requirements:
+            if _requirement_has_match(requirement, valid_entries):
+                continue
+            subject = assets.get(requirement.subject_asset_id)
+            if subject is None or subject.kind not in _DEFAULT_PACK_ROLE:
+                continue
+            if _approved_image(subject) is not None:
+                continue
+            existing = pending.get(subject.id)
+            if existing is None:
+                pending[subject.id] = AssetCanonicalNeed(
+                    subject_asset_id=subject.id,
+                    requirement_ids=[requirement.id],
+                    shot_ids=[plan.shot_id],
+                    purposes=[requirement.purpose],
+                    required=requirement.required,
+                )
+                continue
+            existing.required = existing.required or requirement.required
+            if requirement.id not in existing.requirement_ids:
+                existing.requirement_ids.append(requirement.id)
+            if plan.shot_id not in existing.shot_ids:
+                existing.shot_ids.append(plan.shot_id)
+            if requirement.purpose not in existing.purposes:
+                existing.purposes.append(requirement.purpose)
+    return list(pending.values())[:limit]
 
 
 def recommended_reusable_reference_views(
@@ -262,80 +339,13 @@ def recommended_reusable_reference_views(
     *,
     limit: int = 24,
 ) -> list[ReferenceViewNeed]:
-    """Choose a small reusable subset from shot-level reference preferences.
+    """Compatibility name for the factual unresolved-view report.
 
-    Shot plans may carry temporary performance, damage, contact, and action tags. Those
-    remain useful retrieval hints, but generating a separate reusable asset for every tag
-    duplicates the later keyframe layer. Autonomous preparation therefore fills only
-    identity-angle and location-topology role gaps; prop use/state and temporary shot state
-    remain keyframe work. The full preference list stays available through
-    ``missing_reference_views`` for an Agent or user to request explicitly.
+    Reusable-view selection is now a semantic Agent decision informed by the
+    loaded Method Skill, not a fixed role allowlist inside this Tool.
     """
 
-    valid_entries = _valid_pack_entries(document)
-    covered_roles = {
-        (pack.subject_asset_id, entry.role) for pack, entry in valid_entries
-    }
-    grouped: dict[tuple[str, ReferenceRole], ReferenceViewNeed] = {}
-    for need in missing_reference_views(document):
-        if need.role not in _AUTONOMOUS_REUSABLE_REFERENCE_ROLES:
-            continue
-        key = (need.subject_asset_id, need.role)
-        if key in covered_roles:
-            continue
-        existing = grouped.get(key)
-        if existing is not None:
-            existing.requirement_ids.extend(
-                item for item in need.requirement_ids if item not in existing.requirement_ids
-            )
-            existing.shot_ids.extend(
-                item for item in need.shot_ids if item not in existing.shot_ids
-            )
-            continue
-        if need.role == ReferenceRole.CHARACTER_FACE:
-            angle = ReferenceAngle.FRONT
-            framing = ReferenceFraming.FACE_CLOSE_UP
-            tags = ["identity", "face"]
-            purpose = "建立可跨镜复用的正面面部身份锦点，不携带当前镜头表演。"
-        elif need.role == ReferenceRole.CHARACTER_PROFILE:
-            angle = (
-                need.angle
-                if need.angle
-                in {ReferenceAngle.LEFT_PROFILE, ReferenceAngle.RIGHT_PROFILE}
-                else ReferenceAngle.LEFT_PROFILE
-            )
-            framing = ReferenceFraming.MEDIUM
-            tags = ["identity", "profile"]
-            purpose = "建立可跨镜复用的角色侧面身份锦点，不携带当前镜头动作。"
-        elif need.role == ReferenceRole.CHARACTER_BACK:
-            angle = ReferenceAngle.BACK
-            framing = ReferenceFraming.FULL_BODY
-            tags = ["identity", "back"]
-            purpose = "建立可跨镜复用的角色背面轮廓与服装锦点。"
-        else:
-            angle = need.angle
-            framing = ReferenceFraming.WIDE
-            tags = [
-                "topology",
-                "reverse" if need.role == ReferenceRole.LOCATION_REVERSE else "interaction",
-            ]
-            purpose = (
-                "建立可跨镜复用的同源空间反打关系与出入口方位。"
-                if need.role == ReferenceRole.LOCATION_REVERSE
-                else "建立可跨镜复用的交互区、通道和固定物空间关系。"
-            )
-        grouped[key] = ReferenceViewNeed(
-            subject_asset_id=need.subject_asset_id,
-            requirement_ids=list(need.requirement_ids),
-            shot_ids=list(need.shot_ids),
-            role=need.role,
-            angle=angle,
-            framing=framing,
-            tags=tags,
-            purpose=purpose,
-            lineage_root_version_id=need.lineage_root_version_id,
-        )
-    return list(grouped.values())[:limit]
+    return missing_reference_views(document, limit=limit)
 
 
 def build_reference_view_prompt(
@@ -348,7 +358,20 @@ def build_reference_view_prompt(
         for item in document.bible_versions
         if item.id == document.project.current_bible_version_id
     )
-    tags = "、".join(need.tags) if need.tags else "无额外标签"
+    tags = "、".join(need.required_tags) if need.required_tags else "无额外标签"
+    roles = "、".join(item.value for item in need.acceptable_roles)
+    angles = (
+        "、".join(item.value for item in need.preferred_angles)
+        if need.preferred_angles
+        else "未指定，由 Agent 依用途判断"
+    )
+    framings = (
+        "、".join(item.value for item in need.preferred_framings)
+        if need.preferred_framings
+        else "未指定，由 Agent 依用途判断"
+    )
+    purposes = "；".join(need.purposes)
+    requirement_level = "必需" if need.required else "可选建议"
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
@@ -365,18 +388,21 @@ def build_reference_view_prompt(
     )
     if subject.kind == AssetKind.CHARACTER:
         task = (
-            f"输出同一角色的{need.angle.value}、{need.framing.value}视图；背景服从参考职责。"
+            f"可接受职责：{roles}；偏好角度：{angles}；偏好景别：{framings}。"
+            "Agent 依镜头用途选择实际要制作的角色视图；背景服从参考职责。"
             "保持项目为该角色声明的身份与造型锚点，不自行补充或替换未声明特征。"
         )
     elif subject.kind == AssetKind.LOCATION:
         task = (
-            f"输出{need.role.value}、{need.framing.value}视图，重点区域标签：{tags}。"
+            f"可接受职责：{roles}；偏好角度：{angles}；偏好景别：{framings}；"
+            f"重点区域标签：{tags}。Agent 依镜头用途选择实际视图。"
             "这是同一个空间的新机位或局部覆盖，不是重新设计场景；入口、出口、通道、"
             "门窗、桌椅和主要光源必须与母版属于同一套可解释布局。不要人物。"
         )
     else:
         task = (
-            f"输出同一道具的{need.role.value}、{need.framing.value}状态，状态标签：{tags}。"
+            f"可接受职责：{roles}；偏好角度：{angles}；偏好景别：{framings}；"
+            f"状态标签：{tags}。Agent 依镜头用途选择实际状态视图。"
             "保持形状、颜色、尺度、部件数量和材质；若需要手持比例，只出现匿名裁切手部。"
         )
     style_fields = [
@@ -399,7 +425,8 @@ def build_reference_view_prompt(
         "不另加默认审美。"
     )
     return (
-        f"{shared}\n{task}\n资产：{subject.name}\n用途：{need.purpose}\n"
+        f"{shared}\n{task}\n资产：{subject.name}\n要求级别：{requirement_level}\n"
+        f"用途：{purposes}\n"
         f"{style_context}\n制作类型策略：{skill_prompt.text}"
     )
 
@@ -434,7 +461,7 @@ def search_asset_catalog(
             for asset in document.assets
             for version in asset.versions
         }
-        rows: list[tuple[Asset, AssetVersion, ReferencePackEntry]] = []
+        rows: list[tuple[Asset, Asset, AssetVersion, ReferencePackEntry]] = []
         seen: set[tuple[str, ReferenceRole]] = set()
         for pack in document.reference_packs:
             subject = assets.get(pack.subject_asset_id)
@@ -452,7 +479,7 @@ def search_asset_catalog(
                     and subject.approved_version_id != entry.lineage_root_version_id
                 ):
                     continue
-                rows.append((subject, version, entry))
+                rows.append((subject, source_asset, version, entry))
                 seen.add((entry.asset_version_id, entry.role))
         for subject in document.assets:
             metadata = _DEFAULT_PACK_ROLE.get(subject.kind)
@@ -464,6 +491,7 @@ def search_asset_catalog(
                 continue
             rows.append(
                 (
+                    subject,
                     subject,
                     version,
                     ReferencePackEntry(
@@ -479,7 +507,7 @@ def search_asset_catalog(
                     ),
                 )
             )
-        for subject, version, entry in rows:
+        for subject, source_asset, version, entry in rows:
             if request.kinds and subject.kind not in request.kinds:
                 continue
             if request.roles and entry.role not in request.roles:
@@ -530,6 +558,7 @@ def search_asset_catalog(
                 AssetCatalogCandidate(
                     source_project_id=document.project.id,
                     source_project_name=document.project.name,
+                    source_asset_id=source_asset.id,
                     subject_asset_id=subject.id,
                     subject_asset_name=subject.name,
                     asset_kind=subject.kind,
@@ -554,6 +583,28 @@ def search_asset_catalog(
         query=request.query,
         candidates=candidates[: request.limit],
     )
+
+
+def catalog_semantic_asset_kinds(
+    document: ProjectDocument,
+    asset_version_id: str,
+) -> set[AssetKind]:
+    """Return target kinds under which a usable catalog version is advertised.
+
+    A supplemental image may physically live on a REFERENCE or another asset while
+    serving a character, location, or prop pack. Import validation follows that
+    explicit pack relationship instead of pretending the pack subject owns the file.
+    """
+
+    assets = {asset.id: asset for asset in document.assets}
+    result: set[AssetKind] = set()
+    for pack, entry in _valid_pack_entries(document):
+        if entry.asset_version_id != asset_version_id:
+            continue
+        subject = assets.get(pack.subject_asset_id)
+        if subject is not None:
+            result.add(subject.kind)
+    return result
 
 
 def _pack_for_subject(
@@ -635,14 +686,21 @@ def _approved_image(asset: Asset) -> AssetVersion | None:
         (item for item in asset.versions if item.id == asset.approved_version_id),
         None,
     )
-    return version if _usable_approved_image(asset, version) else None
+    return (
+        version
+        if version is not None
+        and asset.approved_version_id == version.id
+        and _usable_approved_image(asset, version)
+        else None
+    )
 
 
 def _usable_approved_image(asset: Asset, version: AssetVersion | None) -> bool:
+    del asset
     return bool(
         version is not None
-        and asset.approved_version_id == version.id
         and version.approval_status == ApprovalStatus.APPROVED
+        and version.freshness == Freshness.CURRENT
         and version.media_type == AssetMediaType.IMAGE
         and (version.local_path is not None or version.external_url is not None)
     )

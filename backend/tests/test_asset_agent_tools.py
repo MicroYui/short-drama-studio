@@ -12,12 +12,14 @@ from _routes.short_drama import router as short_drama_router
 from short_drama.asset_catalog import (
     build_reference_view_prompt,
     ensure_base_reference_pack_entries,
+    missing_canonical_assets,
     missing_reference_views,
     recommended_reusable_reference_views,
 )
 from short_drama.deps import get_short_drama_service
 from short_drama.image_models import (
     AssetImportLocalRequest,
+    AssetReviewPurpose,
     AssetReviewRequest,
 )
 from short_drama.models import (
@@ -177,22 +179,7 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
 
     assert missing
     assert recommended
-    assert len(recommended) <= len(missing)
-    assert len({(item.subject_asset_id, item.role) for item in recommended}) == len(
-        recommended
-    )
-    assert all(
-        item.role
-        in {
-            ReferenceRole.CHARACTER_FACE,
-            ReferenceRole.CHARACTER_PROFILE,
-            ReferenceRole.CHARACTER_BACK,
-            ReferenceRole.LOCATION_REVERSE,
-            ReferenceRole.LOCATION_INTERACTION,
-        }
-        for item in recommended
-    )
-    assert all("current shot" not in item.purpose.lower() for item in recommended)
+    assert recommended == missing
     assets_by_id = {item.id: item for item in document.assets}
     character_need = next(
         item
@@ -235,7 +222,10 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
         )
         for need in missing
     )
-    assert any(need.role.value == "LOCATION_INTERACTION" for need in missing)
+    assert any(
+        ReferenceRole.LOCATION_INTERACTION in need.acceptable_roles
+        for need in missing
+    )
     canonical_entries = [
         entry
         for pack in document.reference_packs
@@ -250,6 +240,38 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
     assert all(entry.role == ReferenceRole.CANONICAL_MASTER for entry in canonical_entries)
     assert all(entry.angle == ReferenceAngle.NOT_APPLICABLE for entry in canonical_entries)
     assert all(entry.framing == ReferenceFraming.NOT_APPLICABLE for entry in canonical_entries)
+
+
+def test_coverage_reports_missing_canonical_instead_of_false_ready(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    document = project.document
+    character = next(
+        asset for asset in document.assets if asset.kind == AssetKind.CHARACTER
+    )
+    document.reference_plan[0].requirements = [
+        ReferenceRequirement(
+            id="needs-face-before-master",
+            subject_asset_id=character.id,
+            acceptable_roles=[ReferenceRole.CHARACTER_FACE],
+            preferred_angles=[ReferenceAngle.FRONT],
+            preferred_framings=[ReferenceFraming.FACE_CLOSE_UP],
+            required_tags=["identity"],
+            purpose="镜头需要稳定的主角面部身份。",
+        )
+    ]
+    service.repository.save_project(document)
+
+    missing_base = missing_canonical_assets(document)
+    assert [item.subject_asset_id for item in missing_base] == [character.id]
+    coverage = service.inspect_asset_coverage(document.project.id)
+    assert coverage.ready is False
+    assert [item.subject_asset_id for item in coverage.missing_canonical_assets] == [
+        character.id
+    ]
+    assert coverage.missing_views == []
 
 
 def test_catalog_tools_search_and_import_an_approved_asset(
@@ -274,7 +296,11 @@ def test_catalog_tools_search_and_import_an_approved_asset(
         source.document.project.id,
         source_asset.id,
         imported.version.id,
-        AssetReviewRequest(decision="APPROVED", notes="可用的身份母版"),
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose=AssetReviewPurpose.CANONICAL_MASTER,
+            notes="可用的身份母版",
+        ),
     )
     target = service.create_project(
         CreateProjectRequest(
@@ -323,7 +349,7 @@ def test_catalog_tools_search_and_import_an_approved_asset(
         f"/api/short-drama/projects/{target.document.project.id}/asset-agent/tools/import-asset",
         json={
             "source_project_id": candidate["source_project_id"],
-            "source_asset_id": candidate["subject_asset_id"],
+            "source_asset_id": candidate["source_asset_id"],
             "source_version_id": candidate["asset_version_id"],
             "target_asset_id": target_character.id,
             "descriptor": "资产 Agent 选中的跨项目母版候选",

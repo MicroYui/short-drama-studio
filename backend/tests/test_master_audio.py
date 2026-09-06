@@ -159,7 +159,11 @@ def _approved_audio_version(
         project_id,
         created.asset.id,
         imported.version.id,
-        AssetReviewRequest(decision="APPROVED", notes="音频内容与项目一致"),
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose="CANONICAL_MASTER",
+            notes="音频内容与项目一致",
+        ),
     )
     return approved.asset.id, approved.version.id
 

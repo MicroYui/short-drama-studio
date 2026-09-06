@@ -113,7 +113,7 @@ LTX 时间线、多轨编辑、定向修改与 FFmpeg 导出
 - `PlanningRun`：由 AgentRun 拥有的顺序内容规划游标；
 - `PlanRevision + WorkOrder + AgentResult`：任务分解、委派和工件交接；
 - `ContextManifest + ArtifactRef`：为 Worker 提供最小且精确的上下文；
-- `ProductionSpec + Storyboard + GenerationPlan`：使用版本化 ProductionDocument 承载制作决策、完整分镜和 Provider 无关的生成单元；
+- `ProductionSpec + Storyboard + AssetPlan + GenerationPlan`：使用版本化 ProductionDocument 承载制作决策、完整分镜、核心资产计划和 Provider 无关的生成单元；
 - `DurationContract + DurationFitAssessment`：在故事、剧本审阅、制作规格和分镜账本之间传递同一时长权威与自然表演判断；
 - `ProjectOutputSlot`：用稳定逻辑名称交接当前产物，换绑时保留历史 ArtifactRef；
 - `ProductionBoardView`：从权威状态派生的用户可见进度和工件视图；
@@ -260,7 +260,7 @@ Skill 描述成熟制作方法，Tool 提供可执行能力，Agent 根据当前
 | 产品形态与复用边界 | 本轮完成 | PRD、AGENTS 北极星、MiniMax/LTX/自研边界统一 |
 | Agent 内容制片 | 版本化后端合同已补齐，待 Agent 完整 PoC | 一句话或已有素材形成完整剧本、ProductionSpec、Storyboard/ClipGroup、GenerationPlan 和可修改工件 |
 | 分镜到生成单元 | 本轮后端主链已实现 | ClipGroup 编译为 GenerationUnit，一个 H3 task/take 可覆盖多个 Shot，并按 source window 进入时间线 |
-| 核心资产与媒体准备 | 后端能力已存在，待真实项目验证 | Agent 生成或接收角色、场景、道具、声音和参考板，并精确绑定到镜头 |
+| 核心资产与媒体准备 | 版本化 AssetPlan 与媒体合同已补齐，待 Agent 完整 PoC | Agent 自主决定 anchor / text-only / reuse，生成或接收角色、场景、道具参考，并精确绑定到镜头 |
 | 几分钟完整视频 PoC | 下一项主工作 | Agent 独立完成剧本、分镜、资产、视频、音频、时间线和可播放导出 |
 | ComfyUI 本地执行层 | PoC 后 | 移植开源插件，Agent 可选择、绑定、编辑和运行 WorkflowArtifact，结果回写项目 |
 | 语义节点画布 | ComfyUI 桥接后 | 用户查看剧本、资产、镜头、任务和派生关系，并可从任一节点继续对话或局部重做 |
@@ -269,8 +269,8 @@ Skill 描述成熟制作方法，Tool 提供可执行能力，Agent 根据当前
 
 ## 11. 下一步实施顺序
 
-1. 用 Fake Provider 和本地媒体回归验证 ProductionSpec → Storyboard → GenerationPlan → H3 Route/Task/Take → Timeline 的后端闭环；
-2. 让 Agent 在不人工代调 Tool 的情况下独立产生和修改分镜、核心资产和音频工件，并观察真实 Trace；
+1. 用 Fake Provider 和本地媒体回归验证 ProductionSpec → Storyboard → AssetPlan → GenerationPlan → H3 Route/Task/Take → Timeline 的后端闭环；
+2. 让 Agent 在不人工代调 Tool 的情况下独立产生和修改核心资产计划与媒体，并观察真实 Trace；
 3. 用户明确授权后，运行一次几分钟完整视频 PoC；遇到代码 Bug 就修复，效果问题记录到对应 Workflow、Artifact 或 Provider 输入层；
 4. PoC 跑通后，引入 MiniMax Design ComfyUI Plugin 开源代码，先完成独立进程、WorkflowArtifact、输入绑定、运行和结果回写；
 5. 再实现语义节点画布，直接消费现有 ProjectDocument、ProductionBoardView 和 Artifact 派生关系；

@@ -16,6 +16,7 @@ from short_drama.image_models import (
 from short_drama.models import (
     ApprovalStatus,
     AssetKind,
+    AssetLayoutProfile,
     AssetReferenceStrategy,
     AssetSheetInputPolicy,
     AssetStandardView,
@@ -221,6 +222,73 @@ def test_compose_reference_sheet_creates_traceable_draft_without_provider(
     )
     assert persisted_version.reference_sheet is not None
     assert persisted_version.reference_sheet.columns == 2
+
+
+def test_compose_dual_zone_machine_reference_card_is_16_9_without_labels(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    target = _fixture_character(service)
+    views = [
+        (AssetStandardView.CANONICAL_MASTER, "red", "正脸近景"),
+        (AssetStandardView.CHARACTER_FRONT, "green", "正面全身"),
+        (AssetStandardView.CHARACTER_LEFT_PROFILE, "blue", "侧面全身"),
+        (AssetStandardView.CHARACTER_BACK, "yellow", "背面全身"),
+    ]
+    versions = [
+        _import_solid_image(
+            service,
+            project_id=target.project_id,
+            asset_id=target.id,
+            path=tmp_path / f"machine-view-{index}.png",
+            color=color,
+            descriptor=label,
+        )
+        for index, (_view, color, label) in enumerate(views)
+    ]
+
+    result = service.compose_asset_reference_sheet(
+        target.project_id,
+        target.id,
+        AssetReferenceSheetComposeRequest(
+            strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+            layout_profile=AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            show_labels=False,
+            background_color="#7c7c7c",
+            cells=[
+                AssetReferenceSheetCellRequest(
+                    asset_version_id=version.id,
+                    view=view,
+                    label=label,
+                )
+                for (view, _color, label), version in zip(
+                    views,
+                    versions,
+                    strict=True,
+                )
+            ],
+            descriptor="无字机器角色参考卡",
+        ),
+    )
+
+    sheet_meta = result.version.reference_sheet
+    assert sheet_meta is not None
+    assert sheet_meta.layout_profile == (
+        AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9
+    )
+    assert sheet_meta.show_labels is False
+    assert sheet_meta.background_color == "#7c7c7c"
+    assert sheet_meta.target_size == "1536x864"
+    assert result.version.local_path is not None
+    with Image.open(result.version.local_path).convert("RGB") as sheet:
+        assert sheet.size == (1536, 864)
+        assert sheet.getpixel((384, 432)) == (255, 0, 0)
+        assert sheet.getpixel((897, 432)) == (0, 128, 0)
+        assert sheet.getpixel((1153, 432)) == (0, 0, 255)
+        assert sheet.getpixel((1409, 432)) == (255, 255, 0)
+        colors = sheet.getcolors(maxcolors=sheet.width * sheet.height)
+        assert colors is not None
+        assert (32, 36, 42) not in {color for _count, color in colors}
 
 
 def test_reference_sheet_policy_and_strategy_reject_mismatched_inputs(

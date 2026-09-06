@@ -20,7 +20,7 @@ Tool 表示“现在可以执行的一项能力”，不是“所有项目都必
 每次行动前先判断：
 
 1. 当前用户目标是创建、读取、修改、生成、检查还是导出？
-2. `ProjectDocument` 中最新有效的剧本、Bible、ProductionSpec、Storyboard、GenerationPlan、资产版本、Take 和时间线分别是什么？对于跨 Agent 交付，先解析稳定 output slot，再读取其精确 ArtifactRef。
+2. `ProjectDocument` 中最新有效的剧本、Bible、ProductionSpec、Storyboard、AssetPlan、GenerationPlan、资产版本、Take 和时间线分别是什么？对于跨 Agent 交付，先解析稳定 output slot，再读取其精确 ArtifactRef。
 3. 下一步缺的是专业内容判断，还是已有明确输入的确定性执行？前者可委派专业 Agent，后者调用 Tool。
 4. 调用会产生 `READ`、`WRITE` 还是 `EXTERNAL` 效果？外部任务状态不确定时应先对账，不重复提交。
 
@@ -34,9 +34,9 @@ Tool 的 Pydantic Schema 是参数真相；Skill 中的建议不能覆盖 Schema
 | --- | --- | --- | --- | --- |
 | 1. 读取目标与项目上下文 | 先确认是新项目、已有项目续作还是局部修改；已有项目优先读取完整聚合和相关逻辑输出，不凭旧对话猜状态 | `project.list`、`project.get`、`project.create`、`project.list_output_slots`、`project.get_output_slot`、`project.bind_output_slot` | 输入项目 ID、创建请求或 slot ID；产出唯一 ProjectDocument，以及逻辑输出的当前/历史 ArtifactRef | 项目不存在时重新发现或澄清目标；换绑前解析实际工件；创建中断时先读取项目状态，避免重复创建 |
 | 2. 内容方案、剧本与制作规格 | 长内容或从零创作使用可恢复规划；已有完整剧本收到创意修改时启动同项目修订任务，由 Leader 结合原始要求、当前剧本和新意见语义决定修少数场、逐场修全稿或重构故事；只改已明确选定的台词时使用局部剧本 Tool | `planning.start_script_revision`、`planning.advance`、`script.revise_lines`、`change.preview`、`change.apply`、`artifact.create_production_spec`、`artifact.replace_production_spec`、`artifact.get_production_spec` | 输入完整用户修改意见、当前 ScriptVersion、Content Planning Job 游标、选定台词或语义补丁；产出新 ScriptVersion、ProductionSpec 版本和受影响分支 | 修订启动中断时先对账项目中已持久化的修订 Job，不重复创建；不要为一句话修改重写整部剧本；ProductionSpec 的 Provider 偏好不等于允许调用远程 Provider |
-| 3. Bible 风格、角色、场景、道具与参考资产 | 先判断是否真需要跨镜锚点，再检索和复用已批准版本；用户已有素材时直接导入 | `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.search_stock`、`artifact.import_stock`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage` | 输入结构化 brief、检索条件或媒体位置；产出 Asset、AssetVersion、候选和镜头推导的覆盖缺口 | `artifact.create_asset` 只建档不生图；Style 属于 `ProjectBible.style`；`inspect_coverage` 不等于 brief 全部视图的完成门禁 |
-| 4. 图像生成、语义检查与参考包 | 只为确实缺失的身份、空间、构图或状态生成图像；候选先看图再记录批准 | `image.enqueue`、`image.list`、`image.advance`、`image.cancel`、`image.retry`、`image.resolve_not_submitted`、`image.recover_output`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry` | 输入精确视图职责、最终 prompt、有序参考和语义判断；产出 ImageTask、AssetVersion、检查建议、批准状态和 ReferencePack 条目 | `review_version` 只写决策，不会自动看图；拼板只组合已有视图且输出仍为 DRAFT；外部状态未知时先对账，不盲目重提 |
-| 5. 完整分镜、生成组与连续性 | 根据剧本作用、相邻镜头状态和可生成性建立 Storyboard；Shot 保留编辑边界，Agent 自主判断哪些连续 Shot 组成 ClipGroup | `shot.create_storyboard`、`shot.replace_storyboard`、`shot.patch_storyboard`、`shot.get_storyboard`、`shot.preview_reference_plan`、`shot.update_reference_plan`、`shot.compile_keyframe_brief`、`shot.director_advice` | 输入完整分镜或指定 Shot revision 的局部替换；产出版本化 Storyboard、Shot/ClipGroup refs、ReferencePlan 和连续性决策 | 结构性重拆使用 replace，只改指定镜头使用 patch；不靠增加随机候选掩盖错误镜头设计 |
+| 3. 完整分镜、生成组与连续性 | 根据剧本作用、相邻镜头状态和可生成性建立 Storyboard；Shot 保留编辑边界，Agent 自主判断哪些连续 Shot 组成 ClipGroup | `shot.create_storyboard`、`shot.replace_storyboard`、`shot.patch_storyboard`、`shot.get_storyboard`、`shot.preview_reference_plan`、`shot.update_reference_plan`、`shot.compile_keyframe_brief`、`shot.director_advice` | 输入完整分镜或指定 Shot revision 的局部替换；产出版本化 Storyboard、Shot/ClipGroup refs、ReferencePlan 和连续性决策 | 结构性重拆使用 replace，只改指定镜头使用 patch；不靠增加随机候选掩盖错误镜头设计 |
+| 4. AssetPlan 与资产取舍 | 通读精确 Script/Bible/ProductionSpec/Storyboard，由 Asset Worker 判断哪些对象建锚点、只留文字或复用既有媒体；局部变化只修订受影响项 | `artifact.create_asset_plan`、`artifact.replace_asset_plan`、`artifact.get_asset_plan` | 输入精确上游版本与 anchor/text-only/reuse 取舍；产出绑定 `asset.plan.current` 的版本化 AssetPlan，其 work item 含稳定 ID、最终 prompt、有序参考、依赖和完成工件 | 计划不调用 Provider；当前计划已足够时直接执行，不为“走流程”重建；上游精确版本变化后修订计划 |
+| 5. 资产建档、图像执行、语义检查与参考包 | 按 AssetPlan 执行；先复用或导入，只为确实缺失的身份、空间、构图或状态生成图像；候选先看图再记录批准 | `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.search_stock`、`artifact.import_stock`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`image.enqueue`、`image.list`、`image.advance`、`image.cancel`、`image.retry`、`image.resolve_not_submitted`、`image.recover_output`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry` | 输入结构化 brief、显式 `layout_profile`、最终 prompt 和带 purpose/alias 的有序参考；产出 Asset、AssetVersion、ImageTask、检查结论与 ReferencePack 条目 | `artifact.create_asset` 只建档不生图；`review_version` 只写决策；拼板只组合已有视图且输出仍为 DRAFT；外部状态未知时先对账 |
 | 6. 生成计划、路线与输入检查 | 先将 ClipGroup 确定性编译为带 Shot source windows 的 GenerationUnit，再按该单元的风险选择纯文本、关键帧或全参考路线 | `route.compile_generation_plan`、`route.get_generation_plan`、`qa.rerank_reference_visuals`、`qa.compare_keyframes`、`qa.check_input_compatibility`、`route.h3_capability_profile`、`route.plan_h3`、`route.list_h3_plans`、`route.update_h3_asset_preparation` | 输入当前 Storyboard/ProductionSpec 版本、候选参考和关键帧；产出 GenerationPlan/GenerationUnit refs、视觉比较报告、H3 RoutePlan 与可恢复的媒体准备状态 | 上游版本变化时重新编译；缺关键帧时由图像 Worker 产出并审核 AssetVersion；输入冲突时修资产、换关键帧、拆组或换路线 |
 | 7. Prompt 编译与视频任务提交 | 镜头事实和路线已经确定后，才翻译成 Provider 请求；单 Shot 和多 Shot GenerationUnit 均由同一 H3 路线层消费 | REAL_H3：`route.compile_h3_prompt`、`route.preview_h3_probe`、`route.enqueue_h3_probe`、`route.execute_h3_plan`；MOCK：`video.enqueue` | 输入 Shot/ReferencePlan 或 GenerationUnit、媒体绑定、时长和 Agent 本次明确决定的候选数；产出最终 Prompt、Provider 请求、GenerationTask 或 H3 run，并保留组内 Shot source windows | 请求不合法时改路线或输入；提交结果不确定时进入对账，不重复 POST；内容事实错误应回上游工件修正 |
 | 8. 外部任务推进与恢复 | REAL_H3 用 `task.advance` 单步推进，MOCK 可用有步数上限的 `task.drain`；取消、失败、提交未知和下载中断使用各自恢复动作 | 共用：`task.advance`、`task.cancel`、`task.retry`、`task.recover_output`；MOCK：`task.drain`、`task.reconcile`；H3 专属：`route.list_h3_runs`、`route.list_h3_reconciliation`、`route.resolve_h3_submission`、`route.resolve_h3_not_submitted` | 输入 task/run ID；产出持久化任务状态、Provider 对账结果和 Take | 先区分“明确失败”“明确未提交”“已提交但本地未知”“输出已生成但未落盘”；重试前必须确认原输入仍是当前版本 |
@@ -50,13 +50,14 @@ Tool 的 Pydantic Schema 是参数真相；Skill 中的建议不能覆盖 Schema
 
 ## 核心资产的 Agent 调用语义
 
-MiniMax-H3 公开内容提供的是角色卡、场景卡和 H3 参考语义，不是一套可直接替换的核心资产 Tool 源码。当前后端因此保持三层：
+MiniMax-H3 公开内容提供的是角色卡、场景卡和 H3 参考语义，不是一套可直接替换的核心资产 Tool 源码。当前后端因此保持四层：
 
-1. Asset Worker 基于复用、连续性风险和下游职责，自主决定轻量图、角色标准视图、场景 coverage 或镜头专用关键帧。
-2. WorkOrder 传递稳定 Asset ID、最终 prompt、有序 AssetVersion refs、依赖与期望输出；状态、换装、伤势、昼夜和关键道具从已批准 base 派生。
-3. 通用 Image Tool 执行生成/编辑，`qa.inspect_asset_version` 观察实际图片，`artifact.review_version` 记录 Agent 决策，只有当前已批准正式版本进入 ReferencePack。
+1. Asset Worker 通读当前精确 Script/Bible/ProductionSpec/Storyboard，基于复用、连续性风险、现有素材、已选 Method 和下游职责，将 anchor/text-only/reuse 取舍写入版本化 AssetPlan。
+2. `asset.plan.current` 将稳定 work item ID、最终 prompt、有序 AssetVersion refs、真实依赖与期望输出交给执行 Worker；状态、换装、伤势、昼夜和关键道具从已批准 base/master 派生。
+3. 通用 Image Tool 执行生成/编辑/拼板，`qa.inspect_asset_version` 观察实际图片，`artifact.review_version` 记录 Agent 决策。母版审核使用 `CANONICAL_MASTER`；正脸、侧面、服饰或空间局部等额外图使用 `SUPPLEMENTAL_REFERENCE`，不替换当前母版。从 canonical 派生的 ReferencePack 条目显式记录 `lineage_root_version_id`；独立来源可不属于该系谱。
+4. ReferencePack 可保留同一语义资产的多个有效视图/状态；单次 Provider 调用只选择当前 Shot/ClipGroup 的最少充分子集，并用 purpose/alias 说明每张图的职责。
 
-同一角色或场景的多视图可在各自检查后拼成一份紧凑参考卡，供需要整体身份锁的下游使用。若已传递拼板，不再无差别重复绑定全部源图；只在某张单图另外承担精确角度、状态或构图职责时保留它。
+同一角色或场景的多视图可在各自检查后拼成一份紧凑参考卡，供需要整体身份锁的下游使用；也可按已选 Method 直接生成指定卡片布局。拼板不是必经路径。若已传递拼板，不再无差别重复绑定全部源图；只在某张单图另外承担精确角度、状态或构图职责时保留它。
 
 角色/场景/风格参考用于定义身份和环境时，应作为 H3 Subject/reference media；只有某张图本身确实定义镜头开场、结束或构图时，才把它用作首帧、尾帧或关键帧。不把角色卡自动当首帧，也不把真正的开场构图只当普通角色参考。
 

@@ -36,6 +36,11 @@ from short_drama.h3_models import (
     H3VideoRequest,
     derive_h3_reference_alias,
 )
+from short_drama.image_models import (
+    AssetImportLocalRequest,
+    AssetReviewPurpose,
+    AssetReviewRequest,
+)
 from short_drama.models import (
     ActionBeat,
     AssetKind,
@@ -66,6 +71,7 @@ from short_drama.production_planner import (
 )
 from short_drama.reference_planner import (
     DirectorRepairDecisionRequest,
+    ReferencePackEntryCreateRequest,
     ShotPlanPatch,
 )
 from short_drama.providers.minimax_h3_client import H3SubmissionUnknown
@@ -1432,6 +1438,94 @@ def test_h3_prepare_submit_and_retry_reject_stale_inputs(tmp_path: Path) -> None
         with pytest.raises(WorkflowConflictError, match="compile a new H3"):
             service.retry_task(blocked.id)
         assert len(service.repository.list_tasks(project_id)) == task_count
+
+
+def test_h3_worker_prepares_current_subject_supplemental_reference(
+    tmp_path: Path,
+) -> None:
+    fake = FakeH3Client()
+    service = _service(tmp_path, fake)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    subject = next(
+        asset for asset in project.document.assets if asset.kind == AssetKind.CHARACTER
+    )
+
+    def import_image(name: str, color: str) -> str:
+        path = tmp_path / f"{name}.png"
+        Image.new("RGB", (768, 1344), color).save(path)
+        return service.import_local_asset_version(
+            project_id,
+            subject.id,
+            AssetImportLocalRequest(local_path=str(path), descriptor=name),
+        ).version.id
+
+    canonical_id = import_image("worker-canonical", "#d6d3d1")
+    service.review_asset_version(
+        project_id,
+        subject.id,
+        canonical_id,
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose=AssetReviewPurpose.CANONICAL_MASTER,
+            notes="worker canonical",
+        ),
+    )
+    supplemental_id = import_image("worker-profile", "#bfdbfe")
+    service.review_asset_version(
+        project_id,
+        subject.id,
+        supplemental_id,
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose=AssetReviewPurpose.SUPPLEMENTAL_REFERENCE,
+            notes="worker profile reference",
+        ),
+    )
+    service.add_reference_pack_entry(
+        project_id,
+        ReferencePackEntryCreateRequest(
+            subject_asset_id=subject.id,
+            asset_version_id=supplemental_id,
+            lineage_root_version_id=canonical_id,
+            role=ReferenceRole.CHARACTER_PROFILE,
+            description="current character profile",
+        ),
+    )
+    document = service.get_project(project_id).document
+    shot = document.shots[0]
+    media = H3MediaInput(
+        kind=H3MediaKind.IMAGE,
+        role=H3MediaRole.REFERENCE_IMAGE,
+        source=H3MediaSource(external_url="https://ignored.example/profile.png"),
+        asset_version_id=supplemental_id,
+        subject_asset_id=subject.id,
+        reference_alias="主角侧脸",
+        binding_purpose="锁定主角侧脸身份",
+    )
+    prompt = build_h3_prompt(
+        document,
+        shot,
+        route=VideoGenerationRoute.REFERENCE,
+        duration_seconds=5,
+        media_inputs=[media],
+    )
+    probe = service.enqueue_h3_probe(
+        project_id,
+        H3ProbeRequest(
+            shot_id=shot.id,
+            route=VideoGenerationRoute.REFERENCE,
+            duration_seconds=5,
+            prompt_override=prompt,
+            media_inputs=[media],
+        ),
+    )
+
+    prepared = service.advance_task(probe.task.id)
+
+    assert prepared.status == TaskStatus.SUBMITTING
+    assert prepared.error_code is None
+    assert len(fake.upload_calls) == 1
 
 
 def test_h3_submit_unknown_never_blindly_reposts(tmp_path: Path) -> None:

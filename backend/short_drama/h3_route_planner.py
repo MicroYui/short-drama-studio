@@ -10,6 +10,10 @@ from uuid import uuid4
 
 from pydantic import Field
 
+from short_drama.asset_reference_truth import (
+    AssetReferenceTruthError,
+    resolve_current_asset_media,
+)
 from short_drama.h3_models import (
     H3InspectionPolicy,
     H3MediaInput,
@@ -1000,17 +1004,22 @@ def _build_candidates(
         duration_seconds=duration,
     )
     candidates: list[_RouteCandidate] = []
-    reusable = [
-        take
-        for take in takes
-        if take.shot_id == shot.id
-        and _take_is_available_for_reuse(
+    approved_inputs = _approved_media_inputs(document)
+    reusable: list[Take] = []
+    for take in takes:
+        if take.shot_id != shot.id or not _take_is_available_for_reuse(
             document=document,
             shot=shot,
             take=take,
             task=task_by_id.get(take.task_id),
-        )
-    ]
+        ):
+            continue
+        run = run_by_task.get(take.task_id)
+        if run is not None and len(
+            _refresh_media_inputs(document, run.media_inputs, approved_inputs)
+        ) != len(run.media_inputs):
+            continue
+        reusable.append(take)
     for take in sorted(
         reusable,
         key=lambda item: (item.candidate_index, item.created_at, item.id),
@@ -1043,7 +1052,6 @@ def _build_candidates(
             )
         )
 
-    approved_inputs = _approved_media_inputs(document)
     templates: list[tuple[RouteEvidence, H3ProviderRun]] = []
     for item in evidence:
         if (
@@ -1065,6 +1073,7 @@ def _build_candidates(
     if supported:
         for template_evidence, template_run in templates:
             template_inputs = _refresh_media_inputs(
+                document,
                 template_run.media_inputs,
                 approved_inputs,
             )
@@ -1665,6 +1674,16 @@ def _reference_selection_media_input(
     approved_inputs: dict[str, tuple[AssetMediaType, H3MediaSource]],
     used_aliases: set[str],
 ) -> H3MediaInput:
+    try:
+        resolve_current_asset_media(
+            document,
+            asset_version_id=selected.asset_version_id,
+            subject_asset_id=selected.subject_asset_id,
+        )
+    except AssetReferenceTruthError as exc:
+        raise ValueError(
+            f"Reference candidate {selected.candidate_id} no longer matches subject truth: {exc}"
+        ) from exc
     approved = approved_inputs.get(selected.asset_version_id)
     if approved is None:
         raise ValueError(
@@ -2045,36 +2064,46 @@ def _approved_media_inputs(
 ) -> dict[str, tuple[AssetMediaType, H3MediaSource]]:
     result: dict[str, tuple[AssetMediaType, H3MediaSource]] = {}
     for asset in document.assets:
-        if asset.approved_version_id is None:
-            continue
-        version = next(
-            (item for item in asset.versions if item.id == asset.approved_version_id),
-            None,
-        )
-        if (
-            version is None
-            or version.approval_status != ApprovalStatus.APPROVED
-            or version.media_type == AssetMediaType.TEXT_REFERENCE
-        ):
-            continue
-        if version.local_path is not None:
-            source = H3MediaSource(local_path=version.local_path)
-        elif version.external_url is not None:
-            source = H3MediaSource(external_url=version.external_url)
-        else:
-            continue
-        result[version.id] = (version.media_type, source)
+        for version in asset.versions:
+            if (
+                version.approval_status != ApprovalStatus.APPROVED
+                or version.media_type == AssetMediaType.TEXT_REFERENCE
+            ):
+                continue
+            if version.media_type == AssetMediaType.IMAGE:
+                if version.freshness != Freshness.CURRENT:
+                    continue
+            elif asset.approved_version_id != version.id:
+                continue
+            if version.local_path is not None:
+                source = H3MediaSource(local_path=version.local_path)
+            elif version.external_url is not None:
+                source = H3MediaSource(external_url=version.external_url)
+            else:
+                continue
+            result[version.id] = (version.media_type, source)
     return result
 
 
 def _refresh_media_inputs(
+    document: ProjectDocument,
     inputs: list[H3MediaInput],
     approved: dict[str, tuple[AssetMediaType, H3MediaSource]],
 ) -> list[H3MediaInput]:
     refreshed: list[H3MediaInput] = []
     for item in inputs:
         if item.asset_version_id is None:
+            if item.subject_asset_id is not None:
+                continue
             refreshed.append(item.model_copy(deep=True))
+            continue
+        try:
+            resolve_current_asset_media(
+                document,
+                asset_version_id=item.asset_version_id,
+                subject_asset_id=item.subject_asset_id,
+            )
+        except AssetReferenceTruthError:
             continue
         approved_item = approved.get(item.asset_version_id)
         if approved_item is None:

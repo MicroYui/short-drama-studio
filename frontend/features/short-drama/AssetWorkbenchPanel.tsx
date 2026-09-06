@@ -440,7 +440,14 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
   const review = (decision: 'APPROVED' | 'REJECTED') => {
     if (!asset || !version) return
     void perform(decision === 'APPROVED' ? '批准 AssetVersion' : '拒绝 AssetVersion', () => (
-      ShortDramaApi.reviewAssetVersion(projectId, asset.id, version.id, decision, reviewNotes)
+      ShortDramaApi.reviewAssetVersion(
+        projectId,
+        asset.id,
+        version.id,
+        decision,
+        'CANONICAL_MASTER',
+        reviewNotes,
+      )
     ), (value) => {
       onProjectChange(value.project)
       onNotice(decision === 'APPROVED' ? '该版本已成为正式批准资产' : '该候选已记录为拒绝')
@@ -504,13 +511,15 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">资产包</p><p className="mt-1 text-lg font-semibold text-white">{referencePacks.length}</p></div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">已登记视图</p><p className="mt-1 text-lg font-semibold text-white">{referenceEntryCount}</p></div>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">待补覆盖</p><p className={`mt-1 text-lg font-semibold ${coverage?.ready ? 'text-emerald-300' : 'text-amber-300'}`}>{coverage ? coverage.missing_views.length : '—'}</p></div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">待补覆盖</p><p className={`mt-1 text-lg font-semibold ${coverage?.ready ? 'text-emerald-300' : 'text-amber-300'}`}>{coverage ? coverage.missing_views.length + (coverage.missing_canonical_assets?.length ?? 0) : '—'}</p></div>
         </div>
         {coverage && coverage.missing_views.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {coverage.missing_views.slice(0, 6).map((need) => {
               const subject = project.document.assets.find((item) => item.id === need.subject_asset_id)
-              return <Badge key={`${need.subject_asset_id}-${need.role}-${need.angle}-${need.framing}`} tone="amber">{subject?.name ?? need.subject_asset_id} · {need.role} · {need.framing}</Badge>
+              const roles = need.acceptable_roles.join('/')
+              const framings = need.preferred_framings.join('/')
+              return <Badge key={`${need.subject_asset_id}-${need.requirement_ids.join('-')}`} tone="amber">{subject?.name ?? need.subject_asset_id} · {roles || '任意职责'} · {framings || '任意景别'}{need.required ? '' : ' · 可选'}</Badge>
             })}
           </div>
         )}

@@ -4,13 +4,13 @@
 
 本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12–21 建立跨剧本资产、Production Skills、多分钟 PlanningRun、H3 长篇衔接、整集 Reviewer、Critic 路由、来源诊断与语义修改控制面；Phase 22–28 补齐分层 Tools、视频生成前质量工具和分层 Production Skill 注入。Phase 29 将最终控制面收敛为 `Production Manager + Markdown Skills + Typed Tool Registry + Dynamic AgentRuntime`。General、AI 短剧、数字人与动漫共享同一业务核心和 Tool 合同；类型 Skill 只描述目标、创作维度与角色判断，具体视觉和节奏由 Agent 写入项目 Bible Style，不由 Profile 或 Tool 硬编码。中文共享生产方法位于 `backend/short_drama/skills/workflows/end_to_end.md`。桌面端默认新建 GUIDED/AUTO_DRAFT 已转为 AgentRun bootstrap；已配置语言模型的长篇 `AUTO_DRAFT` 会由 `project.create` 建立同一项目 ID 的 `INPUT` scaffold 和 AgentRun 拥有的 Content Planning Job，再由 `planning.advance` 每个 Action 推进一步，完成后回到动态 Agent 制片。当前代码与 SQLite 继续使用兼容名 `PlanningRun`；独立 PlanningRun 与旧 AutonomousRun 的公开控制面已删除，只保留内容规划游标和恢复所需中间工件。ProjectDocument 是唯一项目内容真相，当前不抽象通用 `ChildJob`；Provider 对账由各自任务状态机负责。
 
-当前方法层已分为 MiniMax Design 3.0.11 的 3 个项目 Workflow（`drama-series`、`ad-tvc`、`mv`）与 MiniMax-H3 的 8 个任务 Method。`AI_SHORT_DRAMA` 仍只是 schema/profile adapter，通用短剧/漫剧方法主骨架由 `drama-series` 提供。Design 的 Canvas/Hub/Stage Plan 只映射到现有 ProjectDocument/ProductionDocument、AgentRun/PlanRevision/WorkOrder 和派生 ProductionBoardView，不替换本地 Harness。
+当前方法层已分为 MiniMax Design 3.0.11 的 3 个项目 Workflow（`drama-series`、`ad-tvc`、`mv`）与 MiniMax-H3 的 8 个任务 Method。`AI_SHORT_DRAMA` 仍只是 schema/profile adapter，通用短剧/漫剧方法主骨架由 `drama-series` 提供。Design 的 Canvas/Hub/Stage Plan 只映射到现有 ProjectDocument/ProductionDocument、AgentRun/PlanRevision/WorkOrder 和派生 ProductionBoardView，不替换本地 Harness。Phase 30 进一步将分镜后的核心资产决策收敛为版本化 `AssetPlan`，并补齐 canonical master、补充参考与 H3 有序引用语义。
 
 ## 结论先行
 
 用户体验可以是“什么都不给、只给几张图、一句话或一份剧本，点一次就得到完整短剧”；但系统内部不应把它建模为一次长视频抽卡，而应自动运行一条可回溯的制片流水线：
 
-`创意/剧本 → 剧本与风格约束 → 角色/场景/道具资产 → 分镜与连续性计划 → 单镜头多候选生成 → 质量复核与定向重试 → 时间线合成 → 字幕/声音/成片验收`
+`创意/剧本 → 剧本与风格约束 → 完整分镜与 ClipGroup → AssetPlan → 角色/场景/道具资产 → H3 生成单元 → 候选 Take 与定向修改 → 时间线合成 → 字幕/声音/成片检查`
 
 GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上的必选清单**。系统不以“用上哪些模型”为成功标准，而以最终成片质量、跨镜连续性和可控性为标准。某项能力只要能提高质量，或至少不降低质量并提高一致性、可控性或稳定性，就可以进入默认链路；不要求先看到失败才启用。成本只做运营记录，不主导路线选择。
 
@@ -77,6 +77,8 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 43. [制片 Skill 研究、深化与 Provider 分层](41-production-skill-research-and-enrichment.md)
 44. [AI 原生短剧的创作形态、观众行为与 Skill 落地](42-ai-short-drama-forms-behavior-and-rhythm.md)
 45. [Agent Tool / Artifact 就绪度核对](44-agent-tool-artifact-readiness-audit.md)
+46. [从完整分镜到 H3 生成单元的后端闭环](45-storyboard-generation-unit-backend-closure.md)
+47. [Phase 30：核心资产计划与多参考闭环](46-phase30-core-asset-plan-and-reference-pipeline.md)
 
 ## 当前边界
 

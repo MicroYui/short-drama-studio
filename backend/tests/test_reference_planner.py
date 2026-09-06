@@ -109,7 +109,11 @@ def _approve_image(
         project_id,
         asset_id,
         imported.version.id,
-        AssetReviewRequest(decision="APPROVED", notes="usable reference"),
+        AssetReviewRequest(
+            decision="APPROVED",
+            purpose="CANONICAL_MASTER",
+            notes="usable reference",
+        ),
     )
     return reviewed.version.id
 

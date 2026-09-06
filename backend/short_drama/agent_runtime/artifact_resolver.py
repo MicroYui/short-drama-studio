@@ -21,6 +21,8 @@ from short_drama.models import (
     Take,
 )
 from short_drama.production_contracts import (
+    ASSET_PLAN_DOCUMENT_KIND,
+    ASSET_PLAN_OUTPUT_SLOT_ID,
     GENERATION_PLAN_DOCUMENT_KIND,
     GENERATION_PLAN_OUTPUT_SLOT_ID,
     PRODUCTION_SPEC_DOCUMENT_KIND,
@@ -28,6 +30,7 @@ from short_drama.production_contracts import (
     STORYBOARD_DOCUMENT_KIND,
     STORYBOARD_DRAFT_DOCUMENT_KIND,
     STORYBOARD_OUTPUT_SLOT_ID,
+    AssetPlanContent,
     GenerationPlanContent,
     ProductionSpecContent,
     StoryboardContent,
@@ -121,6 +124,9 @@ class _CurrentProductionChain:
     storyboard_document: ProductionDocument | None = None
     storyboard_version: ProductionDocumentVersion | None = None
     storyboard: StoryboardContent | None = None
+    asset_plan_document: ProductionDocument | None = None
+    asset_plan_version: ProductionDocumentVersion | None = None
+    asset_plan: AssetPlanContent | None = None
     generation_plan_document: ProductionDocument | None = None
     generation_plan_version: ProductionDocumentVersion | None = None
     generation_plan: GenerationPlanContent | None = None
@@ -246,6 +252,46 @@ def _current_production_chain(document: ProjectDocument) -> _CurrentProductionCh
         storyboard=storyboard,
     )
 
+    asset_plan_document: ProductionDocument | None = None
+    asset_plan_version: ProductionDocumentVersion | None = None
+    asset_plan: AssetPlanContent | None = None
+    asset_plan_binding = _bound_current_production_version(
+        document,
+        slot_id=ASSET_PLAN_OUTPUT_SLOT_ID,
+        document_id=document.asset_plan_document_id,
+        document_kind=ASSET_PLAN_DOCUMENT_KIND,
+        artifact_type="asset_plan",
+    )
+    if asset_plan_binding is not None:
+        candidate_document, candidate_version = asset_plan_binding
+        try:
+            candidate = AssetPlanContent.model_validate(candidate_version.payload)
+        except ValueError:
+            candidate = None
+        if candidate is not None and (
+            candidate.project_id == document.project.id
+            and candidate.script_version_id == script.id
+            and candidate.bible_version_id == bible.id
+            and candidate.production_spec_document_id == spec_document.id
+            and candidate.production_spec_version_id == spec_version.id
+            and candidate.storyboard_document_id == storyboard_document.id
+            and candidate.storyboard_version_id == storyboard_version.id
+        ):
+            asset_plan_document = candidate_document
+            asset_plan_version = candidate_version
+            asset_plan = candidate
+            chain = _CurrentProductionChain(
+                spec_document=spec_document,
+                spec_version=spec_version,
+                spec=spec,
+                storyboard_document=storyboard_document,
+                storyboard_version=storyboard_version,
+                storyboard=storyboard,
+                asset_plan_document=asset_plan_document,
+                asset_plan_version=asset_plan_version,
+                asset_plan=asset_plan,
+            )
+
     generation_plan_binding = _bound_current_production_version(
         document,
         slot_id=GENERATION_PLAN_OUTPUT_SLOT_ID,
@@ -279,6 +325,9 @@ def _current_production_chain(document: ProjectDocument) -> _CurrentProductionCh
         storyboard_document=storyboard_document,
         storyboard_version=storyboard_version,
         storyboard=storyboard,
+        asset_plan_document=asset_plan_document,
+        asset_plan_version=asset_plan_version,
+        asset_plan=asset_plan,
         generation_plan_document=generation_plan_document,
         generation_plan_version=generation_plan_version,
         generation_plan=generation_plan,
@@ -1421,6 +1470,24 @@ class ProjectArtifactResolver:
                 title=f"Storyboard v{version.version}",
                 summary=storyboard.model_dump_json(),
             )
+        if ref.artifact_type == "asset_plan":
+            version = _typed_production_version(
+                document,
+                document_id=ref.artifact_id,
+                kind=ASSET_PLAN_DOCUMENT_KIND,
+                version=ref.version,
+            )
+            if version is None:
+                return None
+            try:
+                asset_plan = AssetPlanContent.model_validate(version.payload)
+            except ValueError:
+                return None
+            return ArtifactSummary(
+                ref=ref,
+                title=f"AssetPlan v{version.version}",
+                summary=asset_plan.model_dump_json(),
+            )
         if ref.artifact_type == "clip_group":
             match = next(
                 (
@@ -1723,6 +1790,14 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
             current_chain.storyboard_version.id,
         )
     if (
+        current_chain.asset_plan_document is not None
+        and current_chain.asset_plan_version is not None
+    ):
+        managed_current_versions[ASSET_PLAN_DOCUMENT_KIND] = (
+            current_chain.asset_plan_document.id,
+            current_chain.asset_plan_version.id,
+        )
+    if (
         current_chain.generation_plan_document is not None
         and current_chain.generation_plan_version is not None
     ):
@@ -1739,6 +1814,9 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
             None
             if current_chain.storyboard_document is None
             else current_chain.storyboard_document.id,
+            None
+            if current_chain.asset_plan_document is None
+            else current_chain.asset_plan_document.id,
             None
             if current_chain.generation_plan_document is None
             else current_chain.generation_plan_document.id,
@@ -1796,6 +1874,7 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
         if production_document.kind in {
             PRODUCTION_SPEC_DOCUMENT_KIND,
             STORYBOARD_DOCUMENT_KIND,
+            ASSET_PLAN_DOCUMENT_KIND,
             GENERATION_PLAN_DOCUMENT_KIND,
         } and expected_managed_version != (
             production_document.id,
@@ -1930,6 +2009,19 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
                 )
                 for group in storyboard.clip_groups
             )
+        elif production_document.kind == ASSET_PLAN_DOCUMENT_KIND:
+            try:
+                AssetPlanContent.model_validate(current.payload)
+            except ValueError:
+                continue
+            typed_refs.append(
+                ArtifactRef(
+                    project_id=document.project.id,
+                    artifact_type="asset_plan",
+                    artifact_id=production_document.id,
+                    version=current.version,
+                )
+            )
         elif production_document.kind == GENERATION_PLAN_DOCUMENT_KIND:
             try:
                 generation_plan = GenerationPlanContent.model_validate(current.payload)
@@ -2042,6 +2134,11 @@ def project_summary(document: ProjectDocument) -> str:
             "storyboard",
             current_chain.storyboard_document,
             current_chain.storyboard_version,
+        ),
+        (
+            "asset_plan",
+            current_chain.asset_plan_document,
+            current_chain.asset_plan_version,
         ),
         (
             "generation_plan",
