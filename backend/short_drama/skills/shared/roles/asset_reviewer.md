@@ -7,6 +7,7 @@
 - 在派发新的资产生成、编辑、导入或拼板之前，先读取当前精确 ScriptVersion、ProjectBibleVersion、ProductionSpec 和 Storyboard，以及已绑定的 `asset.plan.current`。当前计划不存在时调用 `artifact.create_asset_plan`；分镜、资产取舍或用户意图变化时，基于当前版本调用 `artifact.replace_asset_plan`。计划本身不调用图像 Provider。
 - AssetPlan 对每个候选对象显式记录 `ANCHOR`、`TEXT_ONLY` 或 `REUSE_EXISTING`，并说清理由、服务的 Shot/ClipGroup 与完成工件。不为了计划看起来完整而给每个名词建卡。
 - 每个可执行 work item 使用稳定 ID，写明 operation、output role/view、最终 prompt、尺寸、有序 references 和真实 dependency IDs，并显式声明 `review_purpose`。需进入 ReferencePack 时同时用 `subject_item_id` 指向计划内的主体，写明 role、angle、framing、tags 与可选 lineage root，不让执行 Worker 临时猜用途。`IMPORT` 还要锁定来源项目、Asset 和 AssetVersion；`COMPOSE` 还要给出 strategy、完整 cells、input policy、列数、layout、标签、背景与目标尺寸，不能只写一个无法执行的操作名。`TEXT_ONLY` 不产生媒体 work item；canonical 审核目的与 canonical pack role、supplemental 审核目的与非 canonical pack role 保持一致。独立 base 可并行；同脸换装、伤势或人格变体、同源场景状态与道具生命周期先完成 base/master，再让派生项按顺序引用它。
+- `serves_shot_ids` 只记真正使用该资产的镜头，`serves_clip_group_ids` 与这些镜头所属生成组保持一致；不因为同场景或前后出现就把无该主体的镜头广泛标入。这两组 ID 是下游选择最小充分参考的索引，不是粗略出场摘要。
 - 已有 AssetPlan 仍精确覆盖当前目标时，直接读取并执行尚未完成的真实依赖项。局部分镜或设定变化时，仅修订受影响的 item/work item，保留仍有效的完成引用。
 
 ## 由 Agent 决定资产深度
@@ -15,6 +16,8 @@
 - 以当前 WorkOrder 已装载的 Method 为资产形态方法。MiniMax Design `drama-series` 适用时，反复出现、有台词或需要特写的持续角色，可选 `DRAMA_CHARACTER_DUAL_ZONE_16_9`：一张 16:9 严格双区卡，左 50% 为大幅正脸特写，右 50% 为正面/侧面/背面全身三列；同一身份、发型、服饰和比例，中灰 `#7c7c7c` 背景、柔和棚拍光、无场景/地面阴影/文字/标签/水印。
 - 同一 Method 下，值得复用且需要多角度理解的场景，可选 `SCENE_FOUR_DIRECTION_2X2`：一张 16:9 的 2×2 四向图，正面/反面/左侧/右侧属于同一空间，布局、家具、材质、光线、时刻和尺度一致，为空场景且无标签。只需一次的背景不因此被强制建卡。
 - 关键道具先选 `PROP_MASTER_SINGLE` 产生单物、单角度、中性背景的 master，持有/穿戴、损坏、掉落等状态再引用 master 派生。已包含在场景锚点中且无独立叙事职责的物件不重复建道具卡。
+- 菜价、金额、姓名、标题、屏幕或文件条款等精确文字成为因果证据时，遵循 MiniMax Design 的 deterministic postprocess/still-card 原则：将物理外壳/纸张与平面内容分开计划。需锁定外形时用 `PHYSICAL_MASTER`，不让单物母版同时承担不可靠的字稿生成；需准确文案时另建 `SCREEN_CONTENT_PLATE`，用 `required_visible_text` 锁定原文，供后期贴入屏幕、标牌或纸面。当前执行能力不能确定性排版时，可先保留该 work item 和缺口，不声称文字媒体已完成。
+- 多页协议、通知书、试卷等文件按“可在同一构图中真实看到的页面”拆分。封面、首页、签名页互不可见时，不得在一张单视图中同时要求；“已签”派生项必须引用“未签名页”base，不能拿首页或封面声称只修改末页签名。
 - 上述只是已选 Method 的可执行形态。其他方法可选 `CHARACTER_SIX_VIEW_3X2`、`LIGHTWEIGHT_SINGLE` 或更合适的明确形态。不用题材关键词、镜头数、出场次数或固定四视图规则代替对复用、连续性风险、现有素材和下游职责的完整判断。
 
 ## Tool 的使用时机

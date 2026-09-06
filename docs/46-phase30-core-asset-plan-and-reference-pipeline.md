@@ -1,6 +1,6 @@
 # Phase 30：核心资产计划与多参考闭环
 
-> 状态：调研结论与后端合同已落地，离线契约回归已补齐，待 AgentRun 真实语义规划验证。本阶段不接入 LTX 模型，不移植 ComfyUI 前端，不调用付费图像或视频 Provider。
+> 状态：调研结论、后端合同与离线契约回归已落地；真实 AgentRun 语义规划已通过 `PASSED_PLAN_ONLY` 验证。由于本轮明确未配置图像 Provider，真实图片生成、审看、ReferencePack 与镜头绑定的媒体闭环仍待后续验证。本阶段不接入 LTX 模型，不移植 ComfyUI 前端，不调用未经用户授权的付费图像或视频 Provider。
 
 ## 1. 结论
 
@@ -66,6 +66,26 @@ ScriptVersion + ProjectBibleVersion + ProductionSpec + Storyboard
 5. 短剧角色卡和场景卡的结构、画幅和无标签设定有确定性测试；拼板不是必经路径。
 6. 每个 Shot 只选择当前镜头需要的参考，角色/场景/道具 Subject 与首尾帧 Picture 不混淆，不超过当前 Provider 能力。
 7. 最终 trace 能显示方法 Skill、AssetPlan 版本、WorkOrder 依赖、Tool 调用、AssetVersion、审看决定与镜头绑定；不增加 Critic 循环、固定重试次数、审批门或关键词路由。
+
+### 4.1 AgentRun 真实语义规划结果
+
+2026-09-06 使用已经验收的 2 分钟剧本与 canonical Storyboard，在全新运行数据目录、尚无 AssetPlan 和资产的项目状态下启动 AgentRun，结果为 `PASSED_PLAN_ONLY`：
+
+- 总耗时 370.423 秒，约 6 分 10 秒；Agent 只装载 `method.minimax_design.drama_series`，先读取精确 Script、Bible、ProductionSpec 与 Storyboard，再创建并绑定版本化 `AssetPlan`。
+- Agent 自主选择 9 个 `ANCHOR`、6 个 `TEXT_ONLY`、0 个 `REUSE_EXISTING`，形成 11 个带稳定 ID 和最终 Prompt 的媒体工作项：9 个独立 base 可并行，2 个 base-first 派生项同时具有有序参考、dependency 和 lineage root。
+- 角色、食堂场景及关键证据道具采用锚点；群像、一次性考场与普通物件等保留为文本；协议签字态和录取通知书展开态采用 base-first 补充状态，证明了轻重资产与状态依赖由 Agent 根据完整语义判断，而非固定路由。
+- 本次运行未取得或验证可用的图像执行能力，因此 Agent 如实停止在计划闭环，没有伪造图片、审看结论、ReferencePack 或 Shot 绑定。媒体闭环尚未通过，后续须在用户明确选择并授权图像执行方式后单独验证。
+- Trace 保留了一次 `artifact.get_production_spec -> INVALID_ARGUMENTS` 及随后的成功自我修正，该过程未被美化或从记录中删除。
+- 验证产物保存在 `output/agent-asset-validation/math-2min-plan-20260906-002/run/`，其中 `trace.md`、`asset_plan.md` 与对应 JSON 可复现本次结论。
+
+首轮运行还暴露并修复了两处真实 Harness/合同问题：
+
+1. Specialist 在完整 Tool request 后多输出一个尾随 `}`。运行时现在只对字段形状严格匹配 `SpecialistToolRequest` 的这一种冗余尾括号做窄恢复，不将宽松 JSON 修补扩展成通用猜测。
+2. 复杂 AssetPlan schema 原先没有把 `review_purpose=CANONICAL_MASTER` 与 `reference_pack_intent.role=CANONICAL_MASTER` 的跨字段关系充分呈现给 Agent。合同描述已补齐，Specialist 在首次调用复杂、嵌套或批量版本化写 Tool 前也会先加载精确 schema；这属于提高工具可理解性，不是新增门禁或关键词路由。
+
+内容复核还发现当前 AssetPlan v1 在进入媒体执行前需要一次局部修订：留校协议母版同时要求首页条款与末页未签栏，而已签派生项又用首页母版声称只修改末页，单张单视图无法稳定执行。计算器、价牌与食堂附属物的服务 Shot/ClipGroup 索引也有少量过宽和不一致。这些不否定版本化计划、依赖和 Agent 停止语义的闭环，但必须在图片生成前由 Agent 产生 AssetPlan v2，不应直接执行 v1。
+
+对应的通用能力已补进 Asset Worker 与 end-to-end 方法：遵循 MiniMax Design 已有的 deterministic postprocess/still-card 原则，将实体外形与带 `required_visible_text` 的 `SCREEN_CONTENT_PLATE` 分开；多页文件按真实可见页面拆分；服务 Shot 与 ClipGroup 只记真正使用范围。当前后端已有 `SCREEN_CONTENT_PLATE` 的结构化简报、Prompt 与审看语义，但确定性文字排版/合成执行器仍是媒体闭环前的实现缺口。
 
 ## 5. 后续 ComfyUI 衔接边界
 

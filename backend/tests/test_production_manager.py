@@ -2021,6 +2021,8 @@ def test_specialist_accepts_top_level_json_field_continuation(
         ),
         '{"tool_name":"project.get","arguments":{}} trailing prose',
         '{"tool_name":"project.get","arguments":{}},"unknown":true}',
+        '{"tool_name":"project.get","arguments":{},"unknown":true}}',
+        '{"tool_name":"project.get","arguments":{}}}}',
         '{"tool_name":"project.get","arguments":{"project_id":',
     ],
 )
@@ -2028,6 +2030,41 @@ def test_specialist_json_continuation_recovery_stays_narrow(
     payload: str,
 ) -> None:
     assert _normalize_specialist_response_payload(payload) == payload
+
+
+def test_specialist_redundant_final_closing_brace_is_recovered() -> None:
+    payload = (
+        '{"tool_name":"artifact.create_asset_plan","arguments":'
+        '{"project_id":"project-1","request":{"asset_plan":{"items":[]}}}}}'
+    )
+
+    normalized = _normalize_specialist_response_payload(payload)
+
+    assert json.loads(normalized) == {
+        "tool_name": "artifact.create_asset_plan",
+        "arguments": {
+            "project_id": "project-1",
+            "request": {"asset_plan": {"items": []}},
+        },
+    }
+
+
+def test_specialist_redundant_final_closing_brace_with_reason_is_recovered() -> None:
+    payload = (
+        '{"tool_name":"artifact.create_asset_plan","reason":"创建资产计划",'
+        '"arguments":{"project_id":"project-1","request":{"asset_plan":{}}}}}'
+    )
+
+    normalized = _normalize_specialist_response_payload(payload)
+
+    assert json.loads(normalized) == {
+        "tool_name": "artifact.create_asset_plan",
+        "reason": "创建资产计划",
+        "arguments": {
+            "project_id": "project-1",
+            "request": {"asset_plan": {}},
+        },
+    }
 
 
 def test_plan_can_be_replaced_with_a_new_parallel_graph(tmp_path: Path) -> None:

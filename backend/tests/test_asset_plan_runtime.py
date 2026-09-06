@@ -76,6 +76,22 @@ def _service(tmp_path: Path, name: str = "asset-plan") -> ShortDramaService:
     )
 
 
+def test_asset_plan_tool_schema_exposes_canonical_reference_role_contract(
+    tmp_path: Path,
+) -> None:
+    schema_text = str(
+        _service(tmp_path)
+        .tool_registry.describe("artifact.create_asset_plan")
+        .input_schema
+    )
+
+    assert "若同时提供 reference_pack_intent" in schema_text
+    assert "可以不提供，但若提供则 role 必须为 CANONICAL_MASTER" in schema_text
+    assert "LOCATION_MASTER、PROP_PRODUCT" in schema_text
+    assert "真正使用该资产的 Storyboard Shot ID" in schema_text
+    assert "至少包含每个 serves_shot_ids 所属的生成组" in schema_text
+
+
 def _production_spec(
     service: ShortDramaService,
     project_id: str,
@@ -814,6 +830,24 @@ def test_asset_plan_service_rejects_bypassed_disposition_and_pack_subject_confli
             document,
             plan.model_copy(
                 update={"items": [incompatible_character, *plan.items[1:]]}
+            ),
+        )
+
+
+def test_asset_plan_requires_served_shot_clip_groups(tmp_path: Path) -> None:
+    service = _service(tmp_path, "served-shot-groups")
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    first_item = plan.items[0].model_copy(update={"serves_clip_group_ids": []})
+
+    with pytest.raises(WorkflowConflictError, match="omits ClipGroups for its served Shots"):
+        service.create_asset_plan(
+            project_id,
+            AssetPlanCreateRequest(
+                asset_plan=plan.model_copy(
+                    update={"items": [first_item, *plan.items[1:]]}
+                ),
+                origin=ProductionDocumentOrigin.AGENT,
             ),
         )
 

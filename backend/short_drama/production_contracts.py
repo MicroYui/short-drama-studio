@@ -1691,7 +1691,14 @@ class AssetPlanReferencePackIntent(DomainModel):
     """How one completed image should enter the subject's ReferencePack."""
 
     subject_item_id: str = Field(min_length=1, max_length=200)
-    role: ReferenceRole
+    role: ReferenceRole = Field(
+        description=(
+            "完成图像进入 ReferencePack 时承担的角色。当所属工作项使用 "
+            "review_purpose=CANONICAL_MASTER 且提供本意图时，这里必须是 "
+            "CANONICAL_MASTER；LOCATION_MASTER、PROP_PRODUCT 等语义角色"
+            "用于 SUPPLEMENTAL_REFERENCE 工作项。"
+        )
+    )
     angle: ReferenceAngle
     framing: ReferenceFraming
     tags: list[str] = Field(max_length=32)
@@ -1767,8 +1774,22 @@ class AssetPlanWorkItem(DomainModel):
     output_view: AssetStandardView | None = None
     final_prompt: str = Field(min_length=1, max_length=12000)
     size: str = Field(min_length=1, max_length=80)
-    review_purpose: AssetReviewPurpose
-    reference_pack_intent: AssetPlanReferencePackIntent | None = None
+    review_purpose: AssetReviewPurpose = Field(
+        description=(
+            "CANONICAL_MASTER 会把完成图像审核为主体资产的 canonical "
+            "母版；若同时提供 reference_pack_intent，其 role 必须为 "
+            "CANONICAL_MASTER。SUPPLEMENTAL_REFERENCE 必须提供非 canonical "
+            "的 ReferencePack 角色。"
+        )
+    )
+    reference_pack_intent: AssetPlanReferencePackIntent | None = Field(
+        default=None,
+        description=(
+            "完成图像如何进入所属主体的 ReferencePack。"
+            "SUPPLEMENTAL_REFERENCE 必须提供本意图；CANONICAL_MASTER "
+            "可以不提供，但若提供则 role 必须为 CANONICAL_MASTER。"
+        ),
+    )
     import_intent: AssetPlanImportIntent | None = None
     compose_intent: AssetPlanComposeIntent | None = None
     ordered_references: list[AssetPlanReference] = Field(
@@ -1842,8 +1863,17 @@ class AssetPlanItem(DomainModel):
     asset_kind: AssetKind
     name: str = Field(min_length=1, max_length=240)
     bible_entity_id: str | None = Field(default=None, min_length=1, max_length=200)
-    serves_shot_ids: list[str] = Field(default_factory=list[str])
-    serves_clip_group_ids: list[str] = Field(default_factory=list[str])
+    serves_shot_ids: list[str] = Field(
+        default_factory=list[str],
+        description="真正使用该资产的 Storyboard Shot ID，不广泛标记同场景镜头。",
+    )
+    serves_clip_group_ids: list[str] = Field(
+        default_factory=list[str],
+        description=(
+            "该资产服务的 Storyboard ClipGroup ID；至少包含每个 "
+            "serves_shot_ids 所属的生成组。"
+        ),
+    )
     brief: CoreAssetBrief | None = None
     rationale: str = Field(min_length=1, max_length=4000)
     work_items: list[AssetPlanWorkItem] = Field(

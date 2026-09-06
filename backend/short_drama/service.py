@@ -8294,6 +8294,24 @@ class ShortDramaService:
                 "AssetPlan references unknown Storyboard ClipGroups: "
                 + ", ".join(unknown_clip_group_ids)
             )
+        clip_group_id_by_shot_id = {
+            shot_id: clip_group.id
+            for clip_group in storyboard.clip_groups
+            for shot_id in clip_group.shot_ids
+        }
+        for item in asset_plan.items:
+            missing_clip_group_ids = sorted(
+                {
+                    clip_group_id_by_shot_id[shot_id]
+                    for shot_id in item.serves_shot_ids
+                }
+                - set(item.serves_clip_group_ids)
+            )
+            if missing_clip_group_ids:
+                raise WorkflowConflictError(
+                    f"AssetPlan item {item.id} omits ClipGroups for its served Shots: "
+                    + ", ".join(missing_clip_group_ids)
+                )
 
         bible = next(
             item

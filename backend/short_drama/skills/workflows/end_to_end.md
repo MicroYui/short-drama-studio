@@ -206,6 +206,7 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 - 根据剧情重要度、复用范围、跨镜连续性风险、空间/动作复杂度、已有素材和已选 Method，由 Agent 选择轻量单图、MiniMax 短剧双区角色卡、六视图卡、场景四向 coverage、道具 master 或不建卡。不用题材关键词、固定出场次数或“所有角色必须四视图”代替判断。
 - MiniMax Design `drama-series` 适用时，持续角色可用一张 16:9 双区卡，左侧大幅正脸，右侧正/侧/背全身三列；复用场景可用一张 16:9 的 2×2 正/反/左/右空场景卡；关键道具先稳定单物、单角度、中性背景 master。这些形态可直接生成，也可由已选定且相互一致的单图确定性拼板；拼板不是必经路径。
 - 状态变体、换装、伤势、昼夜和关键道具按 base-first 系谱派生。互不依赖的 base 可并行，派生项只在它的真实依赖已有精确 AssetVersion 后执行。
+- 精确上屏文字不交给视频或实体道具图随机生成；屏幕、价牌与文件内容拆为带 `required_visible_text` 的 `SCREEN_CONTENT_PLATE`，再与物理外壳或镜头合成。多页文件按封面/内页/签名页的真实可见状态分项，派生状态引用对应页面的 base，不在单视图中同时要求不可兼容页面。
 - 优先检索、复用或导入已有素材；需要新图时由 Asset Worker 编译 work item 的最终 prompt 和带 purpose/alias 的有序参考，通用 Image Tool 只执行该请求。实际媒体由 Agent 观察后再记录批准/拒绝。
 - ReferencePack 可保留同一语义资产的多张有效参考；面向一个具体 Shot/ClipGroup 时，只选择对当前身份、状态、空间和道具职责最少且充分的子集。身份/场景/服饰/道具一致性是 Subject reference；图片本身定义开场、结束或构图时才是 Picture/keyframe。
 

@@ -646,15 +646,16 @@ def _json_block(text: str) -> str:
 
 
 def _normalize_specialist_response_payload(text: str) -> str:
-    """Recover only a dangling ``reason`` field on a Tool request.
+    """Recover two observed, content-preserving Tool-request serialization slips.
 
     Some language providers occasionally emit a structurally complete object,
     close it one brace too early after the large ``arguments`` value, and then
-    continue with the non-executing ``reason`` field.  This is a transport-level
-    serialization slip, not a second response.  Accept only that observed
-    SpecialistToolRequest shape.  Separate JSON objects, prose, truncated
-    payloads, unknown suffixes, and field conflicts remain invalid and continue
-    through typed protocol feedback.
+    continue with the non-executing ``reason`` field.  Large nested Tool calls
+    may also contain one redundant final closing brace after an otherwise complete
+    JSON object.  These are transport-level serialization slips, not second
+    responses.  Accept only those exact observed shapes.  Separate JSON objects,
+    prose, truncated payloads, unknown suffixes, and field conflicts remain invalid
+    and continue through typed protocol feedback.
     """
 
     payload = _json_block(text)
@@ -672,10 +673,16 @@ def _normalize_specialist_response_payload(text: str) -> str:
     if not isinstance(decoded, dict):
         return payload
     decoded_object = cast(dict[str, JsonValue], decoded)
+    remainder = payload[end:].strip()
+    tool_request_keys = frozenset(decoded_object)
+    if remainder == "}" and tool_request_keys in {
+        frozenset({"tool_name", "arguments"}),
+        frozenset({"tool_name", "reason", "arguments"}),
+    }:
+        return json.dumps(decoded_object, ensure_ascii=False)
     if set(decoded_object) != {"tool_name", "arguments"}:
         return payload
 
-    remainder = payload[end:].strip()
     if not remainder.startswith(","):
         return payload
     try:
@@ -2212,6 +2219,9 @@ class LanguageSpecialistAgent:
                 "available_tools 只是紧凑目录。如果判断确实需要某些 Tool 的精确"
                 "合同，先只返回 requested_tool_schema_ids 和 rationale 的 JSON；"
                 "运行时会仅补充这些 schema 到 tool_schemas，不得重复请求已加载 ID。"
+                "首次使用 arguments 包含嵌套版本化工件或批量数组的写入 Tool 时，"
+                "如果 tool_schemas 尚未包含它，必须先请求该 Tool 的精确 schema，"
+                "不得根据目录描述猜测复杂参数。"
                 "如果还需要补充证据或执行范围内的修改，返回包含 tool_name、reason、"
                 "arguments 的 JSON，只提出一个当前 Tool 请求。请求会先持久化，由后续独立"
                 "推进执行；否则直接返回最终结果。"
