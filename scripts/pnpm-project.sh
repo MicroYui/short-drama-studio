@@ -20,18 +20,23 @@ package_manager="$({
 }
 
 # npm obeys the managed registry; Corepack does not inherit .npmrc. Prefer the
-# already-populated npm exec cache so normal commands stay fully offline. A
-# cache miss may fetch only the pinned pnpm package from the managed feed.
+# already-populated npm exec cache without invoking npm at all, so normal
+# commands stay fully offline. A cache miss may fetch only the pinned pnpm
+# package from the managed feed.
 export npm_config_registry="${managed_registry}"
 export npm_config_replace_registry_host="always"
 
-cached_pnpm="$({
-  npm exec --offline --yes --package="${package_manager}" -- \
-    sh -c 'command -v pnpm'
-} 2>/dev/null)" || true
+cached_pnpm="$(
+  node "${script_dir}/find-cached-pnpm.mjs" "${package_manager}" 2>/dev/null
+)" || true
 
-if [ -n "${cached_pnpm}" ] && [ -x "${cached_pnpm}" ]; then
-  exec "${cached_pnpm}" "$@"
+if [ -n "${cached_pnpm}" ] && [ -f "${cached_pnpm}" ]; then
+  exec node "${cached_pnpm}" "$@"
 fi
 
-exec npm exec --yes --package="${package_manager}" -- pnpm "$@"
+exec npm exec \
+  --registry="${managed_registry}" \
+  --replace-registry-host=always \
+  --yes \
+  --package="${package_manager}" \
+  -- pnpm "$@"

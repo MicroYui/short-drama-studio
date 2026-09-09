@@ -411,6 +411,8 @@ function sameFrameRenderState(a: FrameRenderState, b: FrameRenderState): boolean
 }
 
 export interface ProgramMonitorProps {
+  compositionAspectRatio?: number
+  scaleSubtitles?: boolean
   playbackTimeRef: React.MutableRefObject<number>
   setDraggingMarker: React.Dispatch<React.SetStateAction<'timelineIn' | 'timelineOut' | null>>
   kbLayout: KeyboardLayout
@@ -424,6 +426,8 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
   playbackTimeRef,
   setDraggingMarker,
   kbLayout,
+  compositionAspectRatio = 16 / 9,
+  scaleSubtitles = false,
 }: ProgramMonitorProps, ref) {
   const {
     clearClipSelection,
@@ -1106,7 +1110,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
   React.useEffect(() => {
     const el = previewContainerRef.current
     if (!el) return
-    const PROJECT_RATIO = 16 / 9
+    const PROJECT_RATIO = compositionAspectRatio
     const compute = () => {
       const { width, height } = el.getBoundingClientRect()
       if (width === 0 || height === 0) return
@@ -1125,7 +1129,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
     const observer = new ResizeObserver(compute)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [compositionAspectRatio])
 
   // Compositing stack video sync is handled inside renderFrame.
 
@@ -1186,7 +1190,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
               {/* Video frame wrapper — black bg with exact 16:9 dimensions */}
               <div
                 className="relative bg-black overflow-hidden"
-                style={videoFrameSize.width > 0 ? { width: videoFrameSize.width, height: videoFrameSize.height } : { width: '100%', aspectRatio: '16/9' }}
+                style={videoFrameSize.width > 0 ? { width: videoFrameSize.width, height: videoFrameSize.height } : { width: '100%', aspectRatio: String(compositionAspectRatio) }}
                 onClick={() => {
                   if (clickedTextOverlayRef.current) {
                     return
@@ -1463,12 +1467,13 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
                         className={`w-full flex ${
                           style.position === 'top' ? 'self-start' : style.position === 'center' ? 'self-center absolute inset-0 items-center justify-center' : 'self-end'
                         }`}
-                        style={style.position !== 'center' ? { padding: style.position === 'top' ? '12px 16px 0' : '0 16px 12px' } : undefined}
+                        style={scaleSubtitles ? { position: 'absolute', top: style.position === 'top' ? videoFrameSize.height / 36 : style.position === 'center' ? 0 : undefined, bottom: style.position === 'bottom' ? videoFrameSize.height / 36 : style.position === 'center' ? 0 : undefined, padding: 0 } : style.position !== 'center' ? { padding: style.position === 'top' ? '12px 16px 0' : '0 16px 12px' } : undefined}
                       >
                         <span
                           className="inline-block max-w-[90%] text-center mx-auto rounded px-3 py-1.5 leading-snug whitespace-pre-wrap"
                           style={{
-                            fontSize: `${style.fontSize}px`,
+                            fontSize: `${style.fontSize * (scaleSubtitles ? videoFrameSize.height / 1080 : 1)}px`,
+                            padding: scaleSubtitles ? '0 0.3em' : undefined,
                             fontFamily: style.fontFamily,
                             fontWeight: style.fontWeight,
                             fontStyle: style.italic ? 'italic' : 'normal',
@@ -1750,6 +1755,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
             <Tooltip content={isPlaying ? tooltipLabel('Pause', getShortcutLabel(kbLayout, 'transport.playPause')) : tooltipLabel('Play', getShortcutLabel(kbLayout, 'transport.playPause'))} side="top">
               <Button
                 variant="ghost" size="icon"
+                aria-label={isPlaying ? '暂停预览' : '播放预览'}
                 onClick={() => {
                   stopShuttle()
                   if (isPlaying) pause()

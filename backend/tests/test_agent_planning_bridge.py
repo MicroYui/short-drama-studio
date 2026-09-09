@@ -1032,7 +1032,7 @@ def test_planning_official_method_context_is_exposed_to_the_owning_agent_run(
     )
     client.selected_method_skills = [
         ProductionMethodSelection(
-            skill_id="method.minimax_h3.3d_animation_short",
+            skill_id="method.animation_short",
             rationale="用户明确选择官方 3D 动画短片方法。",
         )
     ]
@@ -1051,7 +1051,7 @@ def test_planning_official_method_context_is_exposed_to_the_owning_agent_run(
     assert planning.story_intent == intent
     assert advanced.run.snapshot.run.active_skill_ids == [
         production_skill_id(request.production_profile),
-        "method.minimax_h3.3d_animation_short",
+        "method.animation_short",
     ]
     assert advanced.run.snapshot.current_plan is not None
     # The immutable Stage plan predates Story Orientation. Method selection is
@@ -1060,7 +1060,7 @@ def test_planning_official_method_context_is_exposed_to_the_owning_agent_run(
     assert advanced.run.snapshot.current_plan.selected_method_skill_ids == []
     assert advanced.run.content_planning_trace is not None
     assert advanced.run.content_planning_trace.selected_method_skill_ids == [
-        "method.minimax_h3.3d_animation_short"
+        "method.animation_short"
     ]
     run_decisions = [
         decision
@@ -1081,7 +1081,7 @@ def test_planning_official_method_context_is_exposed_to_the_owning_agent_run(
         for statement in statements
     )
     assert (
-        "当前项目选用制片方法 method.minimax_h3.3d_animation_short；"
+        "当前项目选用制片方法 method.animation_short；"
         "选择理由：用户明确选择官方 3D 动画短片方法。"
     ) in statements
     assert all(

@@ -12,6 +12,8 @@ files:
   - package.json
   - LICENSE.txt
   - NOTICES.md
+  - resources/studio-icon.png
+  - resources/studio-icon.ico
   - "!**/*.map"
 
 asarUnpack:
@@ -25,6 +27,10 @@ extraResources:
       - "short_drama/skills/**/*.md"
       - "short_drama/skills/**/*.txt"
       - "short_drama/skills/**/*.yaml"
+      - "short_drama/skills/**/*.json"
+      - "short_drama/prompts/**/*.md"
+      - "short_drama/runtime/*.cjs"
+      - "short_drama/agent_runtime/tokenizer/*"
       - pyproject.toml
       - runtime_config/lora_catalog.json
       - "!**/__pycache__/**"
@@ -41,22 +47,16 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: resources/icon.ico
+  icon: resources/studio-icon.ico
   artifactName: ${productName}-Setup.${ext}
-  azureSignOptions:
-    publisherName: Lightricks US Inc
-    endpoint: https://eus.codesigning.azure.net/
-    certificateProfileName: ltx-desktop-trusted
-    codeSigningAccountName: ltx-trusted
-    excludeEnvironmentCredential: true
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   include: resources/installer.nsh
-  installerIcon: resources/icon.ico
-  uninstallerIcon: resources/icon.ico
-  installerHeaderIcon: resources/icon.ico
+  installerIcon: resources/studio-icon.ico
+  uninstallerIcon: resources/studio-icon.ico
+  installerHeaderIcon: resources/studio-icon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Short Drama Studio
@@ -94,7 +94,7 @@ mac:
     - target: zip
       arch:
         - arm64
-  icon: resources/icon.icns
+  icon: resources/studio-icon.icns
   category: public.app-category.video
   artifactName: ${productName}-${arch}.${ext}
 
@@ -127,7 +127,4 @@ deb:
     - libuuid1
     - libsecret-1-0
 
-publish:
-  provider: github
-  owner: Lightricks
-  repo: ltx-desktop
+publish: null

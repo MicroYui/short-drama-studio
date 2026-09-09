@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from short_drama.language_defaults import LANGUAGE_MODEL
+
 import json
 from enum import StrEnum
 from typing import Literal, cast
@@ -36,6 +38,7 @@ from short_drama.models import (
     SpatialInteractionConstraint,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
 )
@@ -283,7 +286,7 @@ class DirectorAdvicePayload(DomainModel):
 
 class DirectorAdviceResponse(DirectorAdvicePayload):
     provider: str = "openai-compatible"
-    model: str = "gpt-5.6-sol"
+    model: str = LANGUAGE_MODEL
     shot_id: str
     capability_profile_version: str
     qa_issue_codes: list[str] = Field(default_factory=list[str])
@@ -345,6 +348,7 @@ _ROLES_BY_ASSET_KIND: dict[AssetKind, set[ReferenceRole]] = {
         ReferenceRole.CHARACTER_BODY,
         ReferenceRole.CHARACTER_PROFILE,
         ReferenceRole.CHARACTER_BACK,
+        ReferenceRole.CHARACTER_REFERENCE_SHEET,
     },
     AssetKind.LOCATION: {
         ReferenceRole.CANONICAL_MASTER,
@@ -374,7 +378,7 @@ def preview_reference_plan(
 ) -> ReferencePlanPreviewResponse:
     requirements = _filtered_requirements(plan, request.requirement_ids)
     max_images = request.max_images or plan.max_reference_images
-    valid_entries = _valid_pack_entries(document)
+    valid_entries = usable_reference_pack_entries(document)
     selected: list[ReferenceSelection] = []
     missing: list[str] = []
     warnings: list[str] = []
@@ -948,9 +952,11 @@ def _resolve_primary_canvas(
     raise ValueError(f"Unknown primary edit canvas AssetVersion: {version_id}")
 
 
-def _valid_pack_entries(
+def usable_reference_pack_entries(
     document: ProjectDocument,
 ) -> list[tuple[ReferencePack, ReferencePackEntry]]:
+    """Current approved entries shared by scoped reads and shot selection."""
+
     subjects = {asset.id: asset for asset in document.assets}
     approved_versions: dict[str, AssetVersion] = {}
     for asset in document.assets:
@@ -1074,6 +1080,7 @@ def _has_competing_scene_geometry(selected: list[ReferenceSelection]) -> bool:
         ReferenceRole.CHARACTER_BODY,
         ReferenceRole.CHARACTER_PROFILE,
         ReferenceRole.CHARACTER_BACK,
+        ReferenceRole.CHARACTER_REFERENCE_SHEET,
     }
     location_roles = {
         ReferenceRole.LOCATION_MASTER,
@@ -1103,6 +1110,8 @@ def build_director_advice_input(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.DIRECTOR,),
+        include_constitution=False,
+        stage=ProductionPromptStage.STORYBOARD,
     )
     instructions = (
         "你是当前视频制作流程中的导演 Agent，负责基于真实制作上下文向用户提出建议。"

@@ -33,6 +33,7 @@ from short_drama.h3_models import (
     H3TakeReviewRequest,
     H3TaskContent,
     H3TaskUsage,
+    H3UploadedInput,
     H3VideoRequest,
     derive_h3_reference_alias,
 )
@@ -1173,7 +1174,9 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     fake.set_status("remote-1", H3RemoteStatus.RUNNING)
     assert service.advance_task(probe.task.id).status == TaskStatus.RUNNING
     fake.set_status("remote-1", H3RemoteStatus.SUCCEEDED)
-    assert service.advance_task(probe.task.id).status == TaskStatus.SUCCEEDED
+    completed = service.tool_registry.invoke("task.advance", {"task_id": probe.task.id})
+    assert completed.status == ToolCallStatus.SUCCEEDED
+    assert completed.output is not None and completed.output["status"] == TaskStatus.SUCCEEDED.value
 
     aggregate = service.get_project(project_id)
     assert next(task for task in aggregate.tasks if task.id == pending.task.id).status == (
@@ -1183,6 +1186,13 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     take = next(item for item in aggregate.takes if item.task_id == probe.task.id)
     assert take.qa_status == QaStatus.PENDING
     assert take.is_selected is False
+    assert any(ref.artifact_type == "take" and ref.artifact_id == take.id for ref in completed.artifact_refs)
+    persisted_output = service.tool_registry.invoke("task.get", {"task_id": probe.task.id})
+    assert persisted_output.status == ToolCallStatus.SUCCEEDED
+    assert persisted_output.output is not None
+    assert persisted_output.output["takes"] == [take.model_dump(mode="json")]
+    assert any(ref.artifact_id == take.id for ref in persisted_output.artifact_refs)
+    assert len(fake.submitted_requests) == 1
     assert take.width == 768
     assert take.height == 1366
     evidence = next(item for item in aggregate.route_evidence if item.task_id == probe.task.id)
@@ -1813,6 +1823,24 @@ def test_interrupted_prepare_can_be_explicitly_resolved_as_not_submitted(
     assert retry.status == TaskStatus.QUEUED
 
 
+def test_h3_run_read_tool_returns_exact_saved_run_without_provider_io(tmp_path: Path) -> None:
+    fake = FakeH3Client()
+    service = _service(tmp_path, fake)
+    project = service.initialize_fixture()
+    probe = service.enqueue_h3_probe(
+        project.document.project.id, H3ProbeRequest(shot_id=project.document.shots[0].id),
+    )
+    before = probe.provider_run.model_dump(mode="json")
+    result = service.tool_registry.invoke("route.get_h3_run", {"task_id": probe.task.id})
+    assert result.status.value == "SUCCEEDED"
+    assert result.output == before
+    assert {ref.artifact_id for ref in result.artifact_refs} == {probe.provider_run.id, probe.task.id}
+    persisted = service.repository.get_provider_run(probe.task.id)
+    assert persisted is not None and persisted.model_dump(mode="json") == before
+    assert fake.submitted_requests == []
+    assert service.tool_registry.describe("route.get_h3_run").effect.value == "READ"
+
+
 def test_h3_restart_reconciles_interrupted_submit_and_recovers_output(tmp_path: Path) -> None:
     fake = FakeH3Client()
     fake.output_source = tmp_path / "provider" / "h3-5s.mp4"
@@ -1894,6 +1922,21 @@ def test_h3_cancel_semantics_and_local_upload_cache(tmp_path: Path) -> None:
         kind=H3MediaKind.IMAGE,
         role=H3MediaRole.FIRST_FRAME,
         source=H3MediaSource(local_path=str(image_path)),
+    )
+    stat = image_path.stat()
+    legacy_cache_key = hashlib.sha256(
+        f"{image_path.resolve()}:{stat.st_size}:{stat.st_mtime_ns}".encode()
+    ).hexdigest()
+    service.repository.save_provider_upload(
+        cache_key=legacy_cache_key,
+        provider="minimax",
+        record=H3UploadedInput(
+            local_path=str(image_path.resolve()),
+            provider_file_id="mm_file://obsolete-unadapted-input",
+            media_kind=H3MediaKind.IMAGE,
+            role=H3MediaRole.FIRST_FRAME,
+            expires_at="2099-01-01T00:00:00+00:00",
+        ),
     )
     for _index in range(2):
         probe = service.enqueue_h3_probe(

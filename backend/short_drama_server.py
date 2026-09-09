@@ -8,7 +8,8 @@ import logging
 import os
 import socket
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -76,7 +77,16 @@ init_short_drama_service(SERVICE)
 
 
 def create_short_drama_app(auth_token: str) -> FastAPI:
-    app = FastAPI(title="Short Drama Studio Product API")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        from short_drama.studio_export import recover_interrupted_exports
+        from short_drama.studio_comfy import recover_interrupted_workflows
+        recover_interrupted_exports(SERVICE)
+        recover_interrupted_workflows(SERVICE)
+        SERVICE.studio_runtime.resume_after_restart()
+        yield
+
+    app = FastAPI(title="Short Drama Studio Product API", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[],
@@ -146,6 +156,7 @@ def main() -> None:
         port=port,
         log_level="info",
         access_log=False,
+        timeout_graceful_shutdown=5,
     )
     _running_server = uvicorn.Server(config)
     print(f"Server running on http://127.0.0.1:{port}", flush=True)

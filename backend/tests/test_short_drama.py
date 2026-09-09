@@ -18,6 +18,7 @@ from short_drama.models import (
     EpisodeReviewStatus,
     Freshness,
     OutputSpec,
+    SubtitleCue,
     TaskStatus,
     TimelineAudioClip,
     TimelineManifest,
@@ -322,6 +323,48 @@ def test_timeline_export_normalizes_heterogeneous_take_media(tmp_path: Path) -> 
     assert Path(export.subtitled_video_path).is_file()
 
 
+def test_exported_long_chinese_caption_wraps_inside_frame(tmp_path: Path) -> None:
+    source = tmp_path / "source.mp4"
+    _render_export_source(source, size="432x768", fps=24, audio_sample_rate=48000, duration_seconds=1)
+    text = "我不要挤占同学的名额。给我安静备考的条件，也保证所有人公平应考。能做到，我就留下。"
+    manifest = TimelineManifest(
+        id="caption-manifest-v1", project_id="caption-project", version=1,
+        script_version_id="script-v1", bible_version_id="bible-v1",
+        video_clips=[TimelineVideoClip(
+            id="video-1", shot_id="shot-1", take_id="take-1", media_path=str(source),
+            start_seconds=0, source_in_seconds=0, duration_seconds=1,
+            transition_in="none", transition_out="none",
+        )],
+        audio_clips=[TimelineAudioClip(
+            id="audio-1", shot_id="shot-1", take_id="take-1", media_path=str(source),
+            start_seconds=0, source_in_seconds=0, duration_seconds=1, gain_db=0, role="native",
+        )],
+        subtitle_cues=[SubtitleCue(id="cue-1", script_line_id="line-1", text=text,
+                                  start_seconds=0.1, end_seconds=0.9)],
+        output_spec=OutputSpec(), duration_seconds=1, approval_status=ApprovalStatus.DRAFT,
+        freshness=Freshness.CURRENT, created_at="2026-09-08T00:00:00Z",
+    )
+    exported = TimelineExporter(tmp_path / "workspace").render(manifest, "2026-09-08T00:00:01Z")
+    assert all(check.passed for check in exported.checks)
+    ass = Path(exported.ass_path).read_text()
+    event = next(line for line in ass.splitlines() if line.startswith("Dialogue:"))
+    assert event.count(r"\N") >= 2
+    assert event.split(",", 9)[-1].replace(r"\N", "") == text
+    assert manifest.subtitle_cues[0].text == text
+    assert text in Path(exported.srt_path).read_text()
+    frame = tmp_path / "caption.png"
+    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y",
+                    "-ss", "0.5", "-i", exported.subtitled_video_path,
+                    "-frames:v", "1", str(frame)], check=True)
+    with Image.open(frame) as image:
+        # White caption ink is isolated from the dark, otherwise empty source.
+        ink = image.convert("L").point(lambda value: 255 if value > 205 else 0)
+        bounds = ink.getbbox()
+        assert bounds is not None
+        assert bounds[0] >= 90 and bounds[2] <= 1080 - 170
+        assert bounds[3] - bounds[1] > 70  # Several visible rows, not one clipped line.
+
+
 def test_timeline_export_chunks_long_multi_shot_manifest(tmp_path: Path) -> None:
     source_path = tmp_path / "short-source.mp4"
     _render_export_source(
@@ -536,12 +579,10 @@ def test_empty_and_image_inputs_share_the_same_planning_contract(
     assert version["media_type"] == "IMAGE"
     assert version["approval_status"] == "APPROVED"
     assert Path(version["local_path"]).is_file()
+    assert version["review_notes"] is not None
+    assert "source intake" in version["review_notes"]
     assert all(
-        any(
-            binding["target_id"] == version["id"]
-            and binding["required"] is True
-            for binding in plan["bindings"]
-        )
+        all(binding["target_id"] != version["id"] for binding in plan["bindings"])
         for plan in body["document"]["reference_plan"]
     )
 

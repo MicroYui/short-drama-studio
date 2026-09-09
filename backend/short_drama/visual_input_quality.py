@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from short_drama.language_defaults import LANGUAGE_MODEL
+
 import base64
 import json
 import mimetypes
@@ -185,7 +187,7 @@ class ReferenceVisualRerankReport(DomainModel):
     summary: str = Field(min_length=1, max_length=3000)
     warnings: list[str] = Field(default_factory=list[str], max_length=32)
     semantic_status: SemanticReviewStatus = SemanticReviewStatus.COMPLETE
-    semantic_model: str = "gpt-5.6-sol"
+    semantic_model: str = LANGUAGE_MODEL
     advisory_only: Literal[True] = True
     proceed_allowed: Literal[True] = True
     created_at: str
@@ -250,7 +252,7 @@ class KeyframeComparisonReport(DomainModel):
     summary: str = Field(min_length=1, max_length=3000)
     warnings: list[str] = Field(default_factory=list[str], max_length=24)
     semantic_status: SemanticReviewStatus = SemanticReviewStatus.COMPLETE
-    semantic_model: str = "gpt-5.6-sol"
+    semantic_model: str = LANGUAGE_MODEL
     advisory_only: Literal[True] = True
     proceed_allowed: Literal[True] = True
     created_at: str
@@ -313,7 +315,7 @@ class InputCompatibilityReport(DomainModel):
     summary: str = Field(min_length=1, max_length=3000)
     technical_warnings: list[str] = Field(default_factory=list[str], max_length=16)
     semantic_status: SemanticReviewStatus = SemanticReviewStatus.COMPLETE
-    semantic_model: str = "gpt-5.6-sol"
+    semantic_model: str = LANGUAGE_MODEL
     advisory_only: Literal[True] = True
     proceed_allowed: Literal[True] = True
     created_at: str

@@ -2366,6 +2366,384 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/studio/comfyui": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Comfy Config */
+        get: operations["read_comfy_config_api_short_drama_studio_comfyui_get"];
+        /** Update Comfy Config */
+        put: operations["update_comfy_config_api_short_drama_studio_comfyui_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/jobs/{job_id}/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Control Job */
+        post: operations["control_job_api_short_drama_studio_jobs__job_id__control_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Media */
+        get: operations["media_api_short_drama_studio_media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Project */
+        post: operations["create_project_api_short_drama_studio_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current Project */
+        get: operations["current_project_api_short_drama_studio_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity */
+        get: operations["activity_api_short_drama_studio_projects__project_id__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/editorial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Editorial */
+        get: operations["read_editorial_api_short_drama_studio_projects__project_id__editorial_get"];
+        /** Save Timeline */
+        put: operations["save_timeline_api_short_drama_studio_projects__project_id__editorial_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/episodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Episodes */
+        get: operations["list_episodes_api_short_drama_studio_projects__project_id__episodes_get"];
+        put?: never;
+        /** Create Episode */
+        post: operations["create_episode_api_short_drama_studio_projects__project_id__episodes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events */
+        get: operations["events_api_short_drama_studio_projects__project_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Editorial */
+        post: operations["export_editorial_api_short_drama_studio_projects__project_id__exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/exports/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Export */
+        get: operations["read_export_api_short_drama_studio_projects__project_id__exports__export_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Media */
+        post: operations["upload_media_api_short_drama_studio_projects__project_id__media_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send Message */
+        post: operations["send_message_api_short_drama_studio_projects__project_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Rename Project */
+        patch: operations["rename_project_api_short_drama_studio_projects__project_id__name_patch"];
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Preferences */
+        put: operations["preferences_api_short_drama_studio_projects__project_id__preferences_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/scene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Scene */
+        put: operations["save_scene_api_short_drama_studio_projects__project_id__scene_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/shots/{shot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Shot */
+        put: operations["save_shot_api_short_drama_studio_projects__project_id__shots__shot_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/shots/{shot_id}/editorial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Shot Editorial */
+        get: operations["read_shot_editorial_api_short_drama_studio_projects__project_id__shots__shot_id__editorial_get"];
+        /** Save Shot Editorial */
+        put: operations["save_shot_editorial_api_short_drama_studio_projects__project_id__shots__shot_id__editorial_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/shots/{shot_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select Shot Media */
+        post: operations["select_shot_media_api_short_drama_studio_projects__project_id__shots__shot_id__media_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trace Export */
+        get: operations["trace_export_api_short_drama_studio_projects__project_id__trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Comfy Workflow */
+        post: operations["start_comfy_workflow_api_short_drama_studio_projects__project_id__workflows_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/workflows/{workflow_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Comfy Workflow */
+        get: operations["read_comfy_workflow_api_short_drama_studio_projects__project_id__workflows__workflow_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/takes/{take_id}/h3/review": {
         parameters: {
             query?: never;
@@ -2632,6 +3010,8 @@ export interface components {
             status: components["schemas"]["ActionStatus"];
             /** Summary */
             summary: string;
+            /** Work Order Id */
+            work_order_id?: string | null;
         };
         /**
          * ActionKind
@@ -2731,6 +3111,11 @@ export interface components {
              * @default false
              */
             goal_complete: boolean;
+            /**
+             * Goal Summary
+             * @description 结合原始目标和用户最新要求维护的当前交付目标与停止条件，不是阶段进度。
+             */
+            goal_summary?: string | null;
             /** Method Selection Rationale */
             method_selection_rationale?: string | null;
             /** Selected Method Skill Ids */
@@ -2868,8 +3253,12 @@ export interface components {
             /** Current Plan Revision Id */
             current_plan_revision_id?: string | null;
             execution_target?: components["schemas"]["ProductionExecutionTarget"] | null;
+            /** Goal Summary */
+            goal_summary?: string | null;
             /** Id */
             id: string;
+            /** Latest User Instructions */
+            latest_user_instructions?: string[];
             /** Objective */
             objective: string;
             /** Parent Run Id */
@@ -2930,24 +3319,29 @@ export interface components {
             /** Runs */
             runs: components["schemas"]["AgentRunView"][];
         };
-        /** AgentRunReplanRequest */
-        AgentRunReplanRequest: {
-            proposed_plan?: components["schemas"]["AgentPlanProposal"] | null;
-            /** Reason */
-            reason: string;
-        };
         /**
-         * AgentRunSnapshot
-         * @description Minimum recoverable state needed to continue an interrupted run.
+         * AgentRunPublicSnapshot
+         * @description API projection of AgentRunSnapshot used by normal polling responses.
          */
-        AgentRunSnapshot: {
+        AgentRunPublicSnapshot: {
             /** Actions */
             actions?: components["schemas"]["ActionRecord"][];
             current_plan: components["schemas"]["PlanRevision"] | null;
             memory: components["schemas"]["RunMemory"];
             /** Pending Work Orders */
-            pending_work_orders?: components["schemas"]["WorkOrder"][];
+            pending_work_orders?: components["schemas"]["AgentWorkOrderSummary"][];
             run: components["schemas"]["AgentRun"];
+        };
+        /** AgentRunReplanRequest */
+        AgentRunReplanRequest: {
+            /**
+             * Confirmed Decisions
+             * @description 明确的用户补充决定；保存为本 Run 的 DecisionMemory，供后续重规划继承。reason 只解释本次重规划，不会自动转为长期决定。
+             */
+            confirmed_decisions?: string[];
+            proposed_plan?: components["schemas"]["AgentPlanProposal"] | null;
+            /** Reason */
+            reason: string;
         };
         /**
          * AgentRunStatus
@@ -2960,13 +3354,16 @@ export interface components {
             context: components["schemas"]["ContextPack"];
             /** Ready Steps */
             ready_steps: components["schemas"]["PlanStep"][];
-            snapshot: components["schemas"]["AgentRunSnapshot"];
+            snapshot: components["schemas"]["AgentRunPublicSnapshot"];
         };
         /** AgentUserInputRequest */
         AgentUserInputRequest: {
             /** Action Id */
             action_id: string;
-            /** Answer */
+            /**
+             * Answer
+             * @description 完整回答，可合并多条已接收消息及各自范围；由完整请求的上下文预算控制模型输入。
+             */
             answer: string;
             /**
              * Remember As Decision
@@ -3019,6 +3416,67 @@ export interface components {
         AgentWorkOrderResultResponse: {
             result: components["schemas"]["AgentResult"];
             run: components["schemas"]["AgentRunView"];
+        };
+        /**
+         * AgentWorkOrderSummary
+         * @description Public pending-WorkOrder state without its append-only execution trace.
+         */
+        AgentWorkOrderSummary: {
+            /** Acceptance Criteria */
+            acceptance_criteria?: string[];
+            /** Active Plan Revision Id */
+            active_plan_revision_id?: string | null;
+            /** Confirmed Decisions */
+            confirmed_decisions?: string[];
+            /** Constraints */
+            constraints?: string[];
+            /** Context Manifest Id */
+            context_manifest_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expected Output Slot Ids */
+            expected_output_slot_ids?: string[];
+            /** Id */
+            id: string;
+            /** Latest Specialist Tool Name */
+            latest_specialist_tool_name?: string | null;
+            latest_specialist_turn_status?: components["schemas"]["SpecialistTurnStatus"] | null;
+            next_owner?: components["schemas"]["WorkOrderNextOwner"] | null;
+            /** Objective */
+            objective: string;
+            /** Open Questions */
+            open_questions?: string[];
+            /** Parent Run Id */
+            parent_run_id: string;
+            /** Pending Protocol Feedback Id */
+            pending_protocol_feedback_id?: string | null;
+            production_prompt_stage?: components["schemas"]["ProductionPromptStage"] | null;
+            production_skill_role?: components["schemas"]["ProductionSkillRole"] | null;
+            /** Recipient Role */
+            recipient_role: string;
+            /** Scope */
+            scope?: components["schemas"]["ArtifactRef"][];
+            /** Sender */
+            sender: string;
+            /** Source Action Id */
+            source_action_id?: string | null;
+            /** Source Plan Revision Id */
+            source_plan_revision_id?: string | null;
+            /** Specialist Turn Count */
+            specialist_turn_count: number;
+            status: components["schemas"]["DelegationStatus"];
+            /** Superseded By Plan Revision Id */
+            superseded_by_plan_revision_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Why Now */
+            why_now: string;
         };
         /** AgentWorkOrderView */
         AgentWorkOrderView: {
@@ -3237,6 +3695,24 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * AssetDerivationReference
+         * @description Exact ordered visual evidence used to derive an AssetVersion.
+         */
+        AssetDerivationReference: {
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Purpose */
+            purpose: string;
+            /** @default SUPPORTING */
+            reference_authority: components["schemas"]["ImageReferenceAuthority"];
+            /** @default SUPPORTING_VISUAL */
+            reference_role: components["schemas"]["ImageReferenceRole"];
+            /** Source Project Id */
+            source_project_id?: string | null;
+            /** Subject Alias */
+            subject_alias?: string | null;
+        };
         /** AssetImportLocalRequest */
         AssetImportLocalRequest: {
             /** Descriptor */
@@ -3384,12 +3860,34 @@ export interface components {
          * @description Reusable view labels for canonical character, location, and prop images.
          * @enum {string}
          */
-        AssetStandardView: "CANONICAL_MASTER" | "CHARACTER_FRONT" | "CHARACTER_LEFT_PROFILE" | "CHARACTER_RIGHT_PROFILE" | "CHARACTER_BACK" | "CHARACTER_WARDROBE_DETAIL" | "SCENE_MASTER" | "SCENE_OVERHEAD" | "SCENE_REVERSE" | "SCENE_INTERACTION_ZONE" | "PROP_PRODUCT" | "PROP_IN_HAND" | "PROP_STATE";
+        AssetStandardView: "CANONICAL_MASTER" | "CHARACTER_FRONT" | "CHARACTER_LEFT_PROFILE" | "CHARACTER_RIGHT_PROFILE" | "CHARACTER_BACK" | "CHARACTER_WARDROBE_DETAIL" | "CHARACTER_SHEET" | "SCENE_MASTER" | "SCENE_FRONT" | "SCENE_OVERHEAD" | "SCENE_REVERSE" | "SCENE_LEFT" | "SCENE_RIGHT" | "SCENE_INTERACTION_ZONE" | "PROP_PRODUCT" | "PROP_IN_HAND" | "PROP_STATE";
+        /**
+         * AssetTextPlate
+         * @description Exact text and deterministic layout metadata for a local text plate.
+         */
+        AssetTextPlate: {
+            /** Background Color */
+            background_color: string;
+            /** Exact Lines */
+            exact_lines?: string[];
+            /** Font Family */
+            font_family: string;
+            /** Foreground Color */
+            foreground_color: string;
+            /** Layout Description */
+            layout_description: string;
+            /** Size */
+            size: string;
+            /** Title */
+            title?: string | null;
+        };
         /** AssetVersion */
         AssetVersion: {
             approval_status: components["schemas"]["ApprovalStatus"];
             /** Created At */
             created_at: string;
+            /** Derivation References */
+            derivation_references?: components["schemas"]["AssetDerivationReference"][];
             /** Descriptor */
             descriptor: string;
             /** Duration Seconds */
@@ -3418,6 +3916,7 @@ export interface components {
             /** Review Notes */
             review_notes?: string | null;
             source?: components["schemas"]["AssetSourceRecord"] | null;
+            text_plate?: components["schemas"]["AssetTextPlate"] | null;
             /** Version */
             version: number;
             /** Width */
@@ -3641,6 +4140,25 @@ export interface components {
              */
             file: string;
         };
+        /** Body_upload_media_api_short_drama_studio_projects__project_id__media_post */
+        Body_upload_media_api_short_drama_studio_projects__project_id__media_post: {
+            /** Asset Id */
+            asset_id?: string | null;
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** @default REFERENCE */
+            kind: components["schemas"]["AssetKind"];
+            /**
+             * Name
+             * @default 导入素材
+             */
+            name: string;
+            /** Replace Version Id */
+            replace_version_id?: string | null;
+        };
         /** CancelCancellingResponse */
         CancelCancellingResponse: {
             /** Id */
@@ -3798,6 +4316,69 @@ export interface components {
             /** Visible Changes */
             visible_changes?: string[];
         };
+        /** ComfyConfig */
+        ComfyConfig: {
+            /** Base Url */
+            base_url: string;
+            /** Connected */
+            connected: boolean;
+            /** Message */
+            message: string;
+        };
+        /** ComfyConfigUpdate */
+        ComfyConfigUpdate: {
+            /**
+             * Base Url
+             * @default http://127.0.0.1:8188
+             */
+            base_url: string;
+        };
+        /** ComfyInputBinding */
+        ComfyInputBinding: {
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Input Name */
+            input_name: string;
+            /** Node Id */
+            node_id: string;
+        };
+        /** ComfyRun */
+        ComfyRun: {
+            /** Base Url */
+            base_url: string;
+            /** Created At */
+            created_at: string;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Input Path */
+            input_path?: string | null;
+            /** Name */
+            name: string;
+            /** Output Asset Ids */
+            output_asset_ids?: string[];
+            /** Project Id */
+            project_id: string;
+            /** Prompt Id */
+            prompt_id?: string | null;
+            /**
+             * Status
+             * @default queued
+             */
+            status: string;
+        };
+        /** ComfyRunRequest */
+        ComfyRunRequest: {
+            /** Bindings */
+            bindings?: components["schemas"]["ComfyInputBinding"][];
+            /** Name */
+            name: string;
+            /** Workflow */
+            workflow: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
         /**
          * ContentPlanningOutput
          * @enum {string}
@@ -3935,10 +4516,13 @@ export interface components {
             objective: string;
             /** Open Questions */
             open_questions?: string[];
+            production_prompt_stage?: components["schemas"]["ProductionPromptStage"] | null;
             /** Required Artifacts */
             required_artifacts?: components["schemas"]["ArtifactRef"][];
             /** Selected Skill Ids */
             selected_skill_ids?: string[];
+            /** Tool Attempt Refs */
+            tool_attempt_refs?: components["schemas"]["ToolAttemptRef"][];
             /** Why Now */
             why_now: string;
             /** Work Order Id */
@@ -3947,6 +4531,12 @@ export interface components {
         /**
          * ContextPack
          * @description Bounded context assembled for one agent call.
+         *
+         *     Runtime callers keep the complete typed memories so local validation can
+         *     still work with exact :class:`ArtifactRef` objects.  The model-facing JSON
+         *     projection serializes each unique reference once in ``artifact_index``;
+         *     memories and action digests point to the compact index ids instead of
+         *     replaying the same four-field object dozens of times.
          */
         ContextPack: {
             /** Active Skill Ids */
@@ -3987,6 +4577,8 @@ export interface components {
             run_focus?: string | null;
             /** Run Id */
             run_id: string;
+            /** Tool Attempt Refs */
+            tool_attempt_refs?: components["schemas"]["ToolAttemptRef"][];
             /**
              * Unattended
              * @default false
@@ -4029,7 +4621,10 @@ export interface components {
             continuity_anchors?: string[];
             /** Identity Anchor */
             identity_anchor: string;
-            /** @default LIGHTWEIGHT_SINGLE */
+            /**
+             * @description 该核心资产最终呈现或参考卡的总体布局；它不是每个 AssetPlan work-item 的默认输出布局。单个视图由 work-item 和 image.enqueue 自身声明布局。
+             * @default LIGHTWEIGHT_SINGLE
+             */
             layout_profile: components["schemas"]["AssetLayoutProfile"];
             /** Named Views Or Zones */
             named_views_or_zones?: string[];
@@ -4190,7 +4785,7 @@ export interface components {
             capability_profile_version: string;
             /**
              * Model
-             * @default gpt-5.6-sol
+             * @default gpt-6-astra
              */
             model: string;
             /**
@@ -5738,6 +6333,10 @@ export interface components {
             candidate_id?: string | null;
             /** Generation Unit Id */
             generation_unit_id?: string | null;
+            /** Media Inputs */
+            media_inputs?: components["schemas"]["H3MediaInput"][] | null;
+            /** Prompt Override */
+            prompt_override?: string | null;
             /** Reference Selection Candidate Ids */
             reference_selection_candidate_ids?: string[] | null;
             /** Reuse Take Id */
@@ -6406,6 +7005,7 @@ export interface components {
             /** Provider Request Id */
             provider_request_id?: string | null;
             request: components["schemas"]["ImageProviderRequest"];
+            retry_disposition?: components["schemas"]["ImageRetryDisposition"] | null;
             /** Retry Of Task Id */
             retry_of_task_id?: string | null;
             /** Revised Prompt */
@@ -6428,7 +7028,7 @@ export interface components {
          * ImageOperation
          * @enum {string}
          */
-        ImageOperation: "GENERATE" | "EDIT";
+        ImageOperation: "GENERATE" | "REFERENCE_GENERATE" | "EDIT";
         /**
          * ImageOutputFormat
          * @enum {string}
@@ -6508,6 +7108,11 @@ export interface components {
             /** Input Version Ids */
             input_version_ids?: string[];
             /**
+             * @description 当前这一张输出的布局，不从所属 Asset.brief 的总体参考卡布局继承。
+             * @default LIGHTWEIGHT_SINGLE
+             */
+            layout_profile: components["schemas"]["AssetLayoutProfile"];
+            /**
              * Mask Feather Pixels
              * @default 8
              */
@@ -6537,6 +7142,12 @@ export interface components {
          */
         ImageQuality: "low" | "medium" | "high";
         /**
+         * ImageReferenceAuthority
+         * @description How strictly a provider must obey one declared image reference.
+         * @enum {string}
+         */
+        ImageReferenceAuthority: "SUPPORTING" | "AUTHORITATIVE" | "GUIDE_ONLY";
+        /**
          * ImageReferenceInput
          * @description One ordered image input and the semantic job it performs.
          */
@@ -6545,9 +7156,25 @@ export interface components {
             asset_version_id: string;
             /** Purpose */
             purpose: string;
+            /** @default SUPPORTING */
+            reference_authority: components["schemas"]["ImageReferenceAuthority"];
+            /** @default SUPPORTING_VISUAL */
+            reference_role: components["schemas"]["ImageReferenceRole"];
             /** Subject Alias */
             subject_alias?: string | null;
         };
+        /**
+         * ImageReferenceRole
+         * @description The visual fact an image input is allowed to contribute.
+         * @enum {string}
+         */
+        ImageReferenceRole: "SUPPORTING_VISUAL" | "SUBJECT_IDENTITY" | "WARDROBE" | "STYLE" | "LAYOUT_GUIDE" | "SCENE_IDENTITY" | "PROP_IDENTITY" | "COMPOSITION";
+        /**
+         * ImageRetryDisposition
+         * @description The structurally valid next action after an image task did not succeed.
+         * @enum {string}
+         */
+        ImageRetryDisposition: "RETRY_SAME_REQUEST" | "REVISE_AND_ENQUEUE" | "RECONCILE_SUBMISSION" | "RECOVER_OUTPUT" | "NEW_ENQUEUE";
         /** ImageTaskCreateRequest */
         ImageTaskCreateRequest: {
             /** @default opaque */
@@ -6556,6 +7183,11 @@ export interface components {
             descriptor: string;
             /** Input Version Ids */
             input_version_ids?: string[];
+            /**
+             * @description 本次生成输出的布局。普通脸部、正面、侧面或背面素材使用 LIGHTWEIGHT_SINGLE；只有直接生成一张多视图卡时才显式指定多区布局。该字段不从 Asset.brief.layout_profile 继承。
+             * @default LIGHTWEIGHT_SINGLE
+             */
+            layout_profile: components["schemas"]["AssetLayoutProfile"];
             /**
              * Mask Feather Pixels
              * @default 8
@@ -6681,7 +7313,7 @@ export interface components {
             route: components["schemas"]["VideoGenerationRoute"];
             /**
              * Semantic Model
-             * @default gpt-5.6-sol
+             * @default gpt-6-astra
              */
             semantic_model: string;
             /** @default COMPLETE */
@@ -6860,7 +7492,7 @@ export interface components {
             selected_version_id?: string | null;
             /**
              * Semantic Model
-             * @default gpt-5.6-sol
+             * @default gpt-6-astra
              */
             semantic_model: string;
             /** @default COMPLETE */
@@ -6928,24 +7560,52 @@ export interface components {
         LanguagePromptCompileRequest: {
             /** Duration Seconds */
             duration_seconds?: number | null;
+            /** Generation Plan Document Id */
+            generation_plan_document_id?: string | null;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /** Media Inputs */
             media_inputs?: components["schemas"]["H3MediaInput"][];
+            /** Method Skill Ids */
+            method_skill_ids?: string[];
+            /**
+             * Revision Instructions
+             * @description Agent feedback for this compilation, including a prior failure. May revise wording, never locked facts or media order.
+             */
+            revision_instructions?: string | null;
             /** @default DIRECT */
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
-            shot_id: string;
-            /** Source Prompt */
+            shot_id?: string | null;
+            /**
+             * Source Prompt
+             * @description Optional complete prior draft to revise. Drafts may exceed the final H3 limit; only a validated output can be saved for execution.
+             */
             source_prompt?: string | null;
         };
         /** LanguagePromptCompileResponse */
         LanguagePromptCompileResponse: {
+            /** Candidate Id */
+            candidate_id?: string | null;
             /** Compiled Prompt */
             compiled_prompt: string;
             /** Duration Seconds */
             duration_seconds: number;
+            /** Generation Plan Document Id */
+            generation_plan_document_id?: string | null;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
+            /** Media Inputs */
+            media_inputs?: components["schemas"]["H3MediaInput"][];
+            /** Method Skill Ids */
+            method_skill_ids?: string[];
             /**
              * Model
-             * @default gpt-5.6-sol
+             * @default gpt-6-astra
              */
             model: string;
             /**
@@ -6953,9 +7613,16 @@ export interface components {
              * @default openai-compatible
              */
             provider: string;
+            /**
+             * Reasoning Effort
+             * @default xhigh
+             */
+            reasoning_effort: string;
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
-            shot_id: string;
+            shot_id?: string | null;
+            /** Shot Ids */
+            shot_ids?: string[];
             /** Source Prompt */
             source_prompt: string;
             /** Validation Notes */
@@ -6976,7 +7643,7 @@ export interface components {
             key_source: string;
             /**
              * Model
-             * @default gpt-5.6-sol
+             * @default gpt-6-astra
              */
             model: string;
             /**
@@ -6984,6 +7651,11 @@ export interface components {
              * @default openai-compatible
              */
             provider: string;
+            /**
+             * Reasoning Effort
+             * @default xhigh
+             */
+            reasoning_effort: string;
         };
         /** LanguageProviderConfigUpdate */
         LanguageProviderConfigUpdate: {
@@ -7512,6 +8184,7 @@ export interface components {
             /** Instructions */
             instructions: string;
             kind: components["schemas"]["ActionKind"];
+            production_prompt_stage?: components["schemas"]["ProductionPromptStage"] | null;
             production_skill_role?: components["schemas"]["ProductionSkillRole"] | null;
             /** Title */
             title: string;
@@ -7764,6 +8437,10 @@ export interface components {
         };
         /**
          * ProductionExecutionTarget
+         * @description Video-generation executor selected for one production run.
+         *
+         *     Image generation has its own Provider capability and is intentionally not
+         *     inferred from this value.
          * @enum {string}
          */
         ProductionExecutionTarget: "MOCK" | "REAL_H3";
@@ -7772,6 +8449,12 @@ export interface components {
          * @enum {string}
          */
         ProductionProfile: "GENERAL_VIDEO" | "AI_SHORT_DRAMA" | "DIGITAL_HUMAN" | "ANIME";
+        /**
+         * ProductionPromptStage
+         * @description Explicit production stage used to select only relevant Skill sections.
+         * @enum {string}
+         */
+        ProductionPromptStage: "ORCHESTRATION" | "STORY" | "STORYBOARD" | "ASSETS" | "VISUAL_GEN" | "POST";
         /**
          * ProductionProviderPreference
          * @description A user or Agent preference, not an authorization to call the Provider.
@@ -7802,7 +8485,7 @@ export interface components {
          * ProductionSkillRole
          * @enum {string}
          */
-        ProductionSkillRole: "CONCEPT" | "WRITER" | "PLANNER" | "CRITIC" | "STORY_REPAIR" | "REVISION_VERIFIER" | "FINAL_COLD_READ" | "REVIEW_ROUTER" | "DIRECTOR" | "ASSET_REVIEWER" | "ROUTE_PLANNER" | "VIDEO_PROMPT_COMPILER" | "EPISODE_REVIEWER";
+        ProductionSkillRole: "CONCEPT" | "WRITER" | "PLANNER" | "CRITIC" | "STORY_REPAIR" | "REVISION_VERIFIER" | "FINAL_COLD_READ" | "REVIEW_ROUTER" | "DIRECTOR" | "ASSET_PLANNER" | "ASSET_BUILDER" | "ASSET_VERIFIER" | "ASSET_REVIEWER" | "ROUTE_PLANNER" | "VIDEO_PROMPT_COMPILER" | "EPISODE_REVIEWER";
         /**
          * ProductionSpecContent
          * @description Versioned production decisions shared by planning and execution Agents.
@@ -8005,6 +8688,14 @@ export interface components {
             audio_structure_document_id?: string | null;
             /** Bible Versions */
             bible_versions: components["schemas"]["ProjectBibleVersion"][];
+            /** Comfy Workflows */
+            comfy_workflows?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+            /** Editorial Timeline */
+            editorial_timeline?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
             /** Execution Plan */
             execution_plan: components["schemas"]["ExecutionPlanEntry"][];
             /** Generation Plan Document Id */
@@ -8033,8 +8724,14 @@ export interface components {
             shots: components["schemas"]["ShotPlan-Output"][];
             /** Storyboard Document Id */
             storyboard_document_id?: string | null;
+            /** Studio Exports */
+            studio_exports?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
             /** Timed Text Document Id */
             timed_text_document_id?: string | null;
+            /** Trace Sources */
+            trace_sources?: string[];
             /** Voice References */
             voice_references?: components["schemas"]["VoiceReferenceBinding"][];
         };
@@ -8115,12 +8812,27 @@ export interface components {
             content_planning_output: components["schemas"]["ContentPlanningOutput"];
             /** Created At */
             created_at: string;
+            /**
+             * Creative Direction
+             * @default
+             */
+            creative_direction: string;
             /** Current Bible Version Id */
             current_bible_version_id: string;
             /** Current Manifest Id */
             current_manifest_id?: string | null;
             /** Current Script Version Id */
             current_script_version_id: string;
+            /**
+             * Episode Number
+             * @default 1
+             */
+            episode_number: number;
+            /**
+             * Episode Title
+             * @default 第 1 集
+             */
+            episode_title: string;
             /** Id */
             id: string;
             /** Input Images */
@@ -8136,6 +8848,10 @@ export interface components {
             linked_asset_project_ids?: string[];
             /** Name */
             name: string;
+            /** Parent Project Id */
+            parent_project_id?: string | null;
+            /** Preferred Method Skill Ids */
+            preferred_method_skill_ids?: string[];
             /** @default AI_SHORT_DRAMA */
             production_profile: components["schemas"]["ProductionProfile"];
             run_mode: components["schemas"]["RunMode"];
@@ -8434,7 +9150,7 @@ export interface components {
          * ReferenceRole
          * @enum {string}
          */
-        ReferenceRole: "CANONICAL_MASTER" | "CHARACTER_FACE" | "CHARACTER_BODY" | "CHARACTER_PROFILE" | "CHARACTER_BACK" | "LOCATION_MASTER" | "LOCATION_REVERSE" | "LOCATION_INTERACTION" | "PROP_PRODUCT" | "PROP_IN_HAND" | "PROP_STATE";
+        ReferenceRole: "CANONICAL_MASTER" | "CHARACTER_FACE" | "CHARACTER_BODY" | "CHARACTER_PROFILE" | "CHARACTER_BACK" | "CHARACTER_REFERENCE_SHEET" | "LOCATION_MASTER" | "LOCATION_REVERSE" | "LOCATION_INTERACTION" | "PROP_PRODUCT" | "PROP_IN_HAND" | "PROP_STATE";
         /** ReferenceSelection */
         ReferenceSelection: {
             angle: components["schemas"]["ReferenceAngle"];
@@ -8563,7 +9279,7 @@ export interface components {
             selections?: components["schemas"]["ReferenceVisualSelectionAdvice"][];
             /**
              * Semantic Model
-             * @default gpt-5.6-sol
+             * @default gpt-6-astra
              */
             semantic_model: string;
             /** @default COMPLETE */
@@ -9053,6 +9769,8 @@ export interface components {
             /** Spoken Text */
             spoken_text: string;
             story_intent?: components["schemas"]["StoryIntent"] | null;
+            /** Structure Stale Scene Ids */
+            structure_stale_scene_ids?: string[];
             /** Structured Scenes */
             structured_scenes: components["schemas"]["StructuredScene"][];
             /** Subtitle Text */
@@ -9350,6 +10068,8 @@ export interface components {
             narrative_purpose: string;
             /** Project Id */
             project_id: string;
+            /** References */
+            references?: components["schemas"]["ShotReferenceCue"][];
             /**
              * Revision
              * @default 1
@@ -9391,6 +10111,8 @@ export interface components {
             narrative_purpose: string;
             /** Project Id */
             project_id: string;
+            /** References */
+            references?: components["schemas"]["ShotReferenceCue"][];
             /**
              * Revision
              * @default 1
@@ -9466,12 +10188,22 @@ export interface components {
         ShotReferenceCue: {
             /** Alias */
             alias: string;
+            /** Asset Version Id */
+            asset_version_id?: string | null;
+            /** Field */
+            field?: ("visual" | "action" | "performance" | "camera") | null;
+            /** Id */
+            id?: string | null;
             /** Purpose */
             purpose: string;
             /** Required Tags */
             required_tags?: string[];
             /** Subject Asset Id */
             subject_asset_id: string;
+            /** Text End */
+            text_end?: number | null;
+            /** Text Start */
+            text_start?: number | null;
         };
         /** ShotReferencePlanUpdateRequest */
         "ShotReferencePlanUpdateRequest-Input": {
@@ -10754,6 +11486,316 @@ export interface components {
             /** Target Duration Seconds */
             target_duration_seconds?: number | null;
         };
+        /** StudioActivity */
+        StudioActivity: {
+            /**
+             * Context Window Tokens
+             * @default 258000
+             */
+            context_window_tokens: number;
+            /** Events */
+            events: components["schemas"]["StudioEvent"][];
+            /** Jobs */
+            jobs: components["schemas"]["StudioJob"][];
+            /** Workers */
+            workers?: components["schemas"]["StudioWorker"][];
+        };
+        /** StudioEditorial */
+        StudioEditorial: {
+            /** Project */
+            project: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Revision */
+            revision: number;
+            scope?: components["schemas"]["StudioEditorialScope"] | null;
+        };
+        /** StudioEditorialScope */
+        StudioEditorialScope: {
+            /** Anchor Clip Id */
+            anchor_clip_id: string | null;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Film Start Seconds */
+            film_start_seconds: number;
+            /** Occurrences */
+            occurrences: components["schemas"]["StudioShotOccurrence"][];
+            /** Shot Id */
+            shot_id: string;
+        };
+        /** StudioEpisodeCreate */
+        StudioEpisodeCreate: {
+            /**
+             * Title
+             * @default 新的一集
+             */
+            title: string;
+        };
+        /** StudioEpisodes */
+        StudioEpisodes: {
+            /** Episodes */
+            episodes: components["schemas"]["ProjectRecord"][];
+            /** Project Id */
+            project_id: string;
+        };
+        /** StudioEvent */
+        StudioEvent: {
+            /** Created At */
+            created_at: string;
+            /** Data */
+            data: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Project Id */
+            project_id: string;
+        };
+        /** StudioExport */
+        StudioExport: {
+            /** Clean Video Path */
+            clean_video_path?: string | null;
+            /** Created At */
+            created_at: string;
+            /**
+             * Duration Seconds
+             * @default 0
+             */
+            duration_seconds: number;
+            /** Editorial Revision */
+            editorial_revision: number;
+            /** Error */
+            error?: string | null;
+            /** Fps */
+            fps: number;
+            /** Height */
+            height: number;
+            /** Id */
+            id: string;
+            /** Input Path */
+            input_path?: string | null;
+            /**
+             * Progress
+             * @default 准备导出
+             */
+            progress: string;
+            /** Project Id */
+            project_id: string;
+            /** Srt Path */
+            srt_path?: string | null;
+            /**
+             * Status
+             * @default running
+             * @enum {string}
+             */
+            status: "running" | "completed" | "failed";
+            /** Video Path */
+            video_path?: string | null;
+            /** Width */
+            width: number;
+        };
+        /** StudioExportRequest */
+        StudioExportRequest: {
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Fps
+             * @default 24
+             */
+            fps: number;
+            /**
+             * Height
+             * @default 720
+             */
+            height: number;
+            /**
+             * Subtitles
+             * @default true
+             */
+            subtitles: boolean;
+            /**
+             * Width
+             * @default 1280
+             */
+            width: number;
+        };
+        /** StudioJob */
+        StudioJob: {
+            /** Created At */
+            created_at: string;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Objective */
+            objective: string;
+            /** Pending Messages */
+            pending_messages?: components["schemas"]["StudioMessage"][];
+            /** Project Id */
+            project_id: string;
+            /** Retry At */
+            retry_at?: string | null;
+            /**
+             * Retry Attempt
+             * @default 0
+             */
+            retry_attempt: number;
+            /** Run Id */
+            run_id?: string | null;
+            scope: components["schemas"]["StudioScope"];
+            /**
+             * Status
+             * @default queued
+             * @enum {string}
+             */
+            status: "queued" | "running" | "retrying" | "pausing" | "paused" | "waiting_user" | "completed" | "failed";
+            /** Updated At */
+            updated_at: string;
+        };
+        /** StudioJobControl */
+        StudioJobControl: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "pause" | "resume";
+        };
+        /** StudioMessage */
+        StudioMessage: {
+            scope?: components["schemas"]["StudioScope"];
+            /** Text */
+            text: string;
+        };
+        /** StudioMutationResult */
+        StudioMutationResult: {
+            /** Notices */
+            notices?: string[];
+            project: components["schemas"]["ProjectAggregate"];
+        };
+        /** StudioPreferences */
+        StudioPreferences: {
+            /**
+             * Aspect Ratio
+             * @enum {string}
+             */
+            aspect_ratio: "16:9" | "9:16" | "1:1";
+            /**
+             * Creative Direction
+             * @default
+             */
+            creative_direction: string;
+            /** Method Skill Ids */
+            method_skill_ids?: string[];
+        };
+        /** StudioProjectCreate */
+        StudioProjectCreate: {
+            /**
+             * Brief
+             * @default
+             */
+            brief: string;
+            /**
+             * Name
+             * @default 未命名作品
+             */
+            name: string;
+        };
+        /** StudioRename */
+        StudioRename: {
+            /** Name */
+            name: string;
+        };
+        /** StudioSceneSave */
+        StudioSceneSave: {
+            /** Expected Text */
+            expected_text?: string | null;
+            /** Heading */
+            heading: string;
+            /** Lines */
+            lines?: components["schemas"]["ScriptLine"][] | null;
+            /** Scene Id */
+            scene_id?: string | null;
+            /** Screenplay Text */
+            screenplay_text: string;
+            /** Summary */
+            summary?: string | null;
+        };
+        /** StudioScope */
+        StudioScope: {
+            /** Id */
+            id?: string | null;
+            /**
+             * Kind
+             * @default episode
+             * @enum {string}
+             */
+            kind: "episode" | "scene" | "shot" | "asset" | "film";
+            /**
+             * Label
+             * @default 当前集
+             */
+            label: string;
+        };
+        /** StudioShotMediaSelect */
+        StudioShotMediaSelect: {
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+        };
+        /** StudioShotOccurrence */
+        StudioShotOccurrence: {
+            /** Anchor Clip Id */
+            anchor_clip_id: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Start Seconds */
+            start_seconds: number;
+        };
+        /** StudioShotSave */
+        StudioShotSave: {
+            /** Expected Revision */
+            expected_revision: number;
+            shot: components["schemas"]["ShotPlan-Input"];
+        };
+        /** StudioTimelineSave */
+        StudioTimelineSave: {
+            /** Anchor Clip Id */
+            anchor_clip_id?: string | null;
+            /**
+             * Expected Revision
+             * @default 0
+             */
+            expected_revision: number;
+            /** Timeline */
+            timeline: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
+        /** StudioWorker */
+        StudioWorker: {
+            /** Id */
+            id: string;
+            /** Next Owner */
+            next_owner?: string | null;
+            /** Objective */
+            objective: string;
+            /** Role */
+            role: string;
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary?: string | null;
+            /**
+             * Tool Turns
+             * @default 0
+             */
+            tool_turns: number;
+        };
         /** StyleProfile */
         StyleProfile: {
             /** Cinematography */
@@ -11020,11 +12062,21 @@ export interface components {
              * @default 0
              */
             advance_count: number;
+            /**
+             * Deterministic Continuation Count
+             * @default 0
+             */
+            deterministic_continuation_count: number;
             /** Error Kind */
             error_kind?: string | null;
             /** Error Message */
             error_message?: string | null;
             result_status?: components["schemas"]["AgentResultStatus"] | null;
+            /**
+             * Retryable Language Error
+             * @default false
+             */
+            retryable_language_error: boolean;
             /**
              * Serialized Project Write
              * @default false
@@ -11039,7 +12091,7 @@ export interface components {
          * TeamWorkAdvanceStatus
          * @enum {string}
          */
-        TeamWorkAdvanceStatus: "ADVANCED" | "FAILED";
+        TeamWorkAdvanceStatus: "ADVANCED" | "FAILED" | "YIELDED";
         /** TechnicalCheck */
         TechnicalCheck: {
             /** Detail */
@@ -11183,6 +12235,40 @@ export interface components {
             transition_in: string;
             /** Transition Out */
             transition_out: string;
+        };
+        /**
+         * ToolAttemptRef
+         * @description Stable, compact pointer to one persisted specialist Tool attempt.
+         *
+         *     Tool arguments can contain a useful draft that failed contract validation.
+         *     The reference lets a later WorkOrder recover that exact candidate on demand
+         *     without copying the potentially large arguments into every Leader or Worker
+         *     prompt.
+         */
+        ToolAttemptRef: {
+            /** Agent Run Id */
+            agent_run_id: string;
+            /** Attempt Id */
+            attempt_id: string;
+            /**
+             * Has Arguments
+             * @default false
+             */
+            has_arguments: boolean;
+            /**
+             * Has Result
+             * @default false
+             */
+            has_result: boolean;
+            /** Outcome Status */
+            outcome_status?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Tool Name */
+            tool_name: string;
+            turn_status: components["schemas"]["SpecialistTurnStatus"];
+            /** Work Order Id */
+            work_order_id: string;
         };
         /**
          * ToolCategory
@@ -11417,6 +12503,7 @@ export interface components {
             /** Parent Run Id */
             parent_run_id: string;
             pending_protocol_feedback?: components["schemas"]["SpecialistProtocolFeedback"] | null;
+            production_prompt_stage?: components["schemas"]["ProductionPromptStage"] | null;
             production_skill_role?: components["schemas"]["ProductionSkillRole"] | null;
             /** Recipient Role */
             recipient_role: string;
@@ -11435,12 +12522,23 @@ export interface components {
             /** Superseded By Plan Revision Id */
             superseded_by_plan_revision_id?: string | null;
             /**
+             * Task Inputs
+             * @description Leader-selected structured task data, excluding delegation control fields.
+             */
+            task_inputs?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Tool Attempt Refs */
+            tool_attempt_refs?: components["schemas"]["ToolAttemptRef"][];
+            /**
              * Updated At
              * Format: date-time
              */
             updated_at?: string;
             /** Why Now */
             why_now: string;
+            /** Working Notes */
+            working_notes?: string | null;
         };
         /**
          * WorkOrderNextOwner
@@ -17701,6 +18799,1113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StockProviderConfigResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    read_comfy_config_api_short_drama_studio_comfyui_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyConfig"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    update_comfy_config_api_short_drama_studio_comfyui_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComfyConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyConfig"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    control_job_api_short_drama_studio_jobs__job_id__control_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioJobControl"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioJob"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    media_api_short_drama_studio_media_get: {
+        parameters: {
+            query: {
+                path: string;
+                project_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_project_api_short_drama_studio_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    current_project_api_short_drama_studio_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    activity_api_short_drama_studio_projects__project_id__activity_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioActivity"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    read_editorial_api_short_drama_studio_projects__project_id__editorial_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioEditorial"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    save_timeline_api_short_drama_studio_projects__project_id__editorial_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioTimelineSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioMutationResult"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    list_episodes_api_short_drama_studio_projects__project_id__episodes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioEpisodes"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    create_episode_api_short_drama_studio_projects__project_id__episodes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioEpisodeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    events_api_short_drama_studio_projects__project_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    export_editorial_api_short_drama_studio_projects__project_id__exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioExport"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    read_export_api_short_drama_studio_projects__project_id__exports__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioExport"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_media_api_short_drama_studio_projects__project_id__media_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_media_api_short_drama_studio_projects__project_id__media_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    send_message_api_short_drama_studio_projects__project_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioMessage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioJob"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    rename_project_api_short_drama_studio_projects__project_id__name_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    preferences_api_short_drama_studio_projects__project_id__preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioPreferences"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    save_scene_api_short_drama_studio_projects__project_id__scene_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioSceneSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioMutationResult"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    save_shot_api_short_drama_studio_projects__project_id__shots__shot_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                shot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioShotSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioMutationResult"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    read_shot_editorial_api_short_drama_studio_projects__project_id__shots__shot_id__editorial_get: {
+        parameters: {
+            query?: {
+                anchor_clip_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+                shot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioEditorial"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    save_shot_editorial_api_short_drama_studio_projects__project_id__shots__shot_id__editorial_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                shot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioTimelineSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioMutationResult"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    select_shot_media_api_short_drama_studio_projects__project_id__shots__shot_id__media_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                shot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioShotMediaSelect"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAggregate"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    trace_export_api_short_drama_studio_projects__project_id__trace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    start_comfy_workflow_api_short_drama_studio_projects__project_id__workflows_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComfyRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyRun"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    read_comfy_workflow_api_short_drama_studio_projects__project_id__workflows__workflow_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComfyRun"];
                 };
             };
             /** @description Client Error */

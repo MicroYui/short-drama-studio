@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from enum import StrEnum
+from typing import Annotated, Literal, Protocol
+
+from pydantic import Field, JsonValue, model_validator
+
+from short_drama.agent_runtime import ToolAttemptRef
 
 from short_drama.asset_catalog import (
     AssetCatalogImportRequest,
@@ -23,15 +28,29 @@ from short_drama.models import (
     ProductionDocumentCreateRequest,
     ProductionDocumentListResponse,
     ProductionDocumentMutationResponse,
+    ProductionDocumentArtifactRef,
+    ProductionDocumentOrigin,
     ProductionDocumentReadResponse,
     ProductionDocumentReviseRequest,
     ProductionDocumentVersion,
 )
 from short_drama.production_contracts import (
     AssetPlanCreateRequest,
+    AssetPlanExecutionReconcileMutationResponse,
+    AssetPlanExecutionReconcileRequest,
+    AssetPlanExecutionReconcileSummary,
+    AssetPlanFieldPatch,
+    AssetPlanIndexResponse,
     AssetPlanMutationResponse,
+    AssetPlanMutationOperation,
+    AssetPlanMutationSummaryResponse,
+    AssetPlanPatchRequest,
+    AssetPlanPatchSummaryResponse,
     AssetPlanReadResponse,
     AssetPlanReplaceRequest,
+    AssetPlanningContextResponse,
+    AssetWorkContextResponse,
+    AssetWorkContextVersion,
     ProductionSpecCreateRequest,
     ProductionSpecMutationResponse,
     ProductionSpecReadResponse,
@@ -54,6 +73,18 @@ from short_drama.tools.contracts import (
     ToolModel,
     ToolSpec,
 )
+from short_drama.tools.artifact_views import (
+    AssetPlanCompactReadResponse,
+    ProductionArtifactMutationSummaryResponse,
+    ProductionDocumentCompactListResponse,
+    ProductionDocumentCompactReadResponse,
+    ProductionSpecCompactReadResponse,
+    compact_asset_plan_read,
+    compact_production_document_list,
+    compact_production_document_read,
+    compact_production_spec_read,
+    mutation_summary,
+)
 from short_drama.tools.registry import ToolRegistry
 
 
@@ -70,12 +101,47 @@ class ArtifactToolService(Protocol):
         request: AssetPlanReplaceRequest,
     ) -> AssetPlanMutationResponse: ...
 
+    def patch_asset_plan(
+        self,
+        project_id: str,
+        request: AssetPlanPatchRequest,
+    ) -> AssetPlanMutationResponse: ...
+
+    def reconcile_asset_plan_execution_contract(
+        self,
+        project_id: str,
+        request: AssetPlanExecutionReconcileRequest,
+    ) -> AssetPlanExecutionReconcileMutationResponse: ...
+
     def get_asset_plan(
         self,
         project_id: str,
         *,
         version_id: str | None = None,
     ) -> AssetPlanReadResponse: ...
+
+    def get_asset_plan_index(
+        self,
+        project_id: str,
+        *,
+        version_id: str | None = None,
+    ) -> AssetPlanIndexResponse: ...
+
+    def get_asset_planning_context(
+        self,
+        project_id: str,
+    ) -> AssetPlanningContextResponse: ...
+
+    def get_asset_work_context(
+        self,
+        project_id: str,
+        *,
+        item_ids: list[str],
+        work_item_ids: list[str],
+        shot_ids: list[str],
+        clip_group_ids: list[str],
+        version_id: str | None = None,
+    ) -> AssetWorkContextResponse: ...
 
     def create_production_spec(
         self,
@@ -190,6 +256,68 @@ class ArtifactToolService(Protocol):
     ) -> ReferencePackEntryMutationResponse: ...
 
 
+class AssetPlanAttemptPatchOperation(StrEnum):
+    """RFC 6902 operations supported by compact AssetPlan attempt repair."""
+
+    ADD = "add"
+    REMOVE = "remove"
+    REPLACE = "replace"
+    TEST = "test"
+
+
+class AssetPlanAttemptPatch(ToolModel):
+    """One JSON Patch operation relative to a stable AssetPlan entity."""
+
+    item_id: str | None = Field(default=None, min_length=1, max_length=200)
+    work_item_id: str | None = Field(default=None, min_length=1, max_length=200)
+    op: AssetPlanAttemptPatchOperation
+    path: str = Field(max_length=1000)
+    value: JsonValue = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> AssetPlanAttemptPatch:
+        if not self.path:
+            if (
+                self.op != AssetPlanAttemptPatchOperation.REMOVE
+                or (self.item_id is None and self.work_item_id is None)
+            ):
+                raise ValueError(
+                    "An empty AssetPlan patch path is only valid for removing "
+                    "one stable-ID item or work item"
+                )
+            return self
+        if not self.path.startswith("/"):
+            raise ValueError("AssetPlan attempt patch path must be an RFC 6901 pointer")
+        if (
+            self.op
+            in {
+                AssetPlanAttemptPatchOperation.ADD,
+                AssetPlanAttemptPatchOperation.REPLACE,
+                AssetPlanAttemptPatchOperation.TEST,
+            }
+            and "value" not in self.model_fields_set
+        ):
+            raise ValueError(
+                f"AssetPlan attempt patch operation {self.op.value} requires value"
+            )
+        return self
+
+
+class AssetPlanAttemptRetryInput(ToolModel):
+    """Retry one failed AssetPlan mutation by patching its persisted arguments."""
+
+    project_id: str = Field(min_length=1)
+    attempt_ref: ToolAttemptRef
+    patches: list[AssetPlanAttemptPatch] = Field(min_length=1, max_length=64)
+
+
+class AssetPlanAttemptRetrier(Protocol):
+    def retry_asset_plan_attempt(
+        self,
+        request: AssetPlanAttemptRetryInput,
+    ) -> ToolExecution[AssetPlanMutationSummaryResponse]: ...
+
+
 class AssetCreateInput(ToolModel):
     project_id: str
     request: AssetCreateRequest
@@ -294,9 +422,109 @@ class AssetPlanReplaceInput(ToolModel):
     request: AssetPlanReplaceRequest
 
 
+class AssetPlanPatchInput(ToolModel):
+    project_id: str
+    request: AssetPlanPatchRequest
+
+
+class AssetPlanFieldPatchInput(ToolModel):
+    """Compact atomic field changes against one exact current AssetPlan."""
+
+    project_id: str = Field(min_length=1)
+    base_version_id: str = Field(min_length=1)
+    patches: list[AssetPlanFieldPatch] = Field(min_length=1)
+    notes: list[str] | None = None
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+
+
+class AssetPlanExecutionReconcileInput(ToolModel):
+    project_id: str = Field(min_length=1)
+    request: AssetPlanExecutionReconcileRequest
+
+
 class AssetPlanGetInput(ToolModel):
     project_id: str
     version_id: str | None = None
+
+
+class AssetPlanIndexGetInput(ToolModel):
+    project_id: str
+    version_id: str | None = None
+
+
+class AssetPlanningContextGetInput(ToolModel):
+    project_id: str
+
+
+class AssetItemContextScope(ToolModel):
+    """Select complete AssetPlan items for planning-level inspection."""
+
+    mode: Literal["ITEM"] = "ITEM"
+    item_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_item_ids(self) -> AssetItemContextScope:
+        if len(self.item_ids) != len(set(self.item_ids)):
+            raise ValueError("Asset item scope repeats an item ID")
+        return self
+
+
+class AssetWorkItemContextScope(ToolModel):
+    """Select executable work items without expanding sibling work."""
+
+    mode: Literal["WORK_ITEM"] = "WORK_ITEM"
+    work_item_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_work_item_ids(self) -> AssetWorkItemContextScope:
+        if len(self.work_item_ids) != len(set(self.work_item_ids)):
+            raise ValueError("Asset work-item scope repeats a work-item ID")
+        return self
+
+
+AssetWorkContextScope = Annotated[
+    AssetItemContextScope | AssetWorkItemContextScope,
+    Field(discriminator="mode"),
+]
+
+
+class AssetWorkContextGetInput(ToolModel):
+    project_id: str
+    scope: AssetWorkContextScope
+    shot_ids: list[str] = Field(
+        default_factory=list[str],
+        description=(
+            "仅返回本任务确实需要的 Storyboard Shot ID；必须属于所选 "
+            "AssetPlan item 的 serves_shot_ids。仅选 work_item 时默认不携带镜头正文。"
+        ),
+    )
+    clip_group_ids: list[str] = Field(
+        default_factory=list[str],
+        description=(
+            "仅返回本任务确实需要的 Storyboard ClipGroup ID；必须属于"
+            "所选 AssetPlan item 的 serves_clip_group_ids。"
+        ),
+    )
+    version_id: str | None = Field(
+        default=None,
+        description=(
+            "可省略以读取当前 AssetPlan。指定时只能使用 asset_plan_identity.version_id "
+            "返回的生产文档版本 ID；不是整数 version、v17 或图片 AssetVersion ID。"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def require_selector(self) -> AssetWorkContextGetInput:
+        for label, values in (
+            ("shot", self.shot_ids),
+            ("clip-group", self.clip_group_ids),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"Asset work context repeats a {label} ID")
+        return self
 
 
 def _production_document_refs(
@@ -350,6 +578,306 @@ def _asset_plan_refs(
     )
 
 
+def _asset_plan_index_refs(
+    project_id: str,
+    result: AssetPlanIndexResponse,
+) -> tuple[ArtifactRef, ...]:
+    return (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan_index",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+    )
+
+
+def _asset_plan_patch_refs(
+    project_id: str,
+    result: AssetPlanPatchSummaryResponse,
+) -> tuple[ArtifactRef, ...]:
+    return (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan_index",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+    )
+
+
+def _asset_plan_reconcile_refs(
+    project_id: str,
+    result: AssetPlanExecutionReconcileSummary,
+) -> tuple[ArtifactRef, ...]:
+    return (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan_index",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+    )
+
+
+def _asset_plan_mutation_refs(
+    project_id: str,
+    result: AssetPlanMutationSummaryResponse,
+) -> tuple[ArtifactRef, ...]:
+    return (
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan_index",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+    )
+
+
+def _asset_plan_mutation_summary(
+    *,
+    project_id: str,
+    result: AssetPlanMutationResponse,
+    operation: AssetPlanMutationOperation,
+    base_version_id: str | None,
+) -> AssetPlanMutationSummaryResponse:
+    return AssetPlanMutationSummaryResponse(
+        project_id=project_id,
+        operation=operation,
+        asset_plan_identity=AssetWorkContextVersion(
+            document_id=result.document.id,
+            version_id=result.version.id,
+            version=result.version.version,
+        ),
+        base_version_id=base_version_id,
+        item_count=len(result.asset_plan.items),
+        work_item_count=sum(
+            len(item.work_items) for item in result.asset_plan.items
+        ),
+    )
+
+
+def _asset_planning_context_refs(
+    project_id: str,
+    result: AssetPlanningContextResponse,
+) -> tuple[ArtifactRef, ...]:
+    refs = [
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="project",
+            artifact_id=project_id,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="script_version",
+            artifact_id=result.script.id,
+            version=result.script.version,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="bible_version",
+            artifact_id=result.bible.id,
+            version=result.bible.version,
+        ),
+    ]
+    for artifact_type, identity in (
+        ("production_spec", result.production_spec_identity),
+        ("storyboard", result.storyboard_identity),
+    ):
+        refs.extend(
+            (
+                ArtifactRef(
+                    project_id=project_id,
+                    artifact_type=artifact_type,
+                    artifact_id=identity.document_id,
+                    version=identity.version,
+                ),
+                ArtifactRef(
+                    project_id=project_id,
+                    artifact_type="production_document",
+                    artifact_id=identity.document_id,
+                    version=identity.version,
+                ),
+                ArtifactRef(
+                    project_id=project_id,
+                    artifact_type="production_document_version",
+                    artifact_id=identity.version_id,
+                    version=identity.version,
+                ),
+            )
+        )
+    refs.extend(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="shot",
+            artifact_id=shot.id,
+            version=shot.revision,
+        )
+        for shot in result.storyboard.shots
+    )
+    refs.extend(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="clip_group",
+            artifact_id=group.id,
+            version=result.storyboard_identity.version,
+        )
+        for group in result.storyboard.clip_groups
+    )
+    if result.existing_asset_plan_index is not None:
+        refs.append(
+            ArtifactRef(
+                project_id=project_id,
+                artifact_type="asset_plan",
+                artifact_id=(
+                    result.existing_asset_plan_index.asset_plan_identity.document_id
+                ),
+                version=result.existing_asset_plan_index.asset_plan_identity.version,
+            )
+        )
+    for asset in result.existing_assets:
+        refs.append(
+            ArtifactRef(
+                project_id=project_id,
+                artifact_type="asset",
+                artifact_id=asset.id,
+            )
+        )
+        version_ids = [(asset.current_version_id, asset.current_version)]
+        if (
+            asset.approved_version_id is not None
+            and asset.approved_version_id != asset.current_version_id
+        ):
+            assert asset.approved_version is not None
+            version_ids.append((asset.approved_version_id, asset.approved_version))
+        refs.extend(
+            ArtifactRef(
+                project_id=project_id,
+                artifact_type="asset_version",
+                artifact_id=version_id,
+                version=version,
+            )
+            for version_id, version in version_ids
+        )
+    unique: dict[tuple[str, str, str, int | None], ArtifactRef] = {}
+    for ref in refs:
+        unique[(ref.project_id, ref.artifact_type, ref.artifact_id, ref.version)] = ref
+    return tuple(unique.values())
+
+
+def _asset_work_context_refs(
+    project_id: str,
+    result: AssetWorkContextResponse,
+) -> tuple[ArtifactRef, ...]:
+    refs = [
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_plan_index",
+            artifact_id=result.asset_plan_identity.document_id,
+            version=result.asset_plan_identity.version,
+        ),
+    ]
+    refs.extend(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="shot",
+            artifact_id=shot.id,
+            version=shot.revision,
+        )
+        for shot in result.storyboard.shots
+    )
+    refs.extend(
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="clip_group",
+            artifact_id=group.id,
+            version=result.storyboard.identity.version,
+        )
+        for group in result.storyboard.clip_groups
+    )
+    for item in result.asset_plan_items:
+        for work_item in item.work_items:
+            references = list(work_item.ordered_references)
+            if work_item.reference_pack_intent is not None:
+                lineage_root = work_item.reference_pack_intent.lineage_root
+                if lineage_root is not None:
+                    references.append(lineage_root)
+            if work_item.compose_intent is not None:
+                references.extend(
+                    cell.source for cell in work_item.compose_intent.cells
+                )
+            for reference in references:
+                if (
+                    reference.asset_id is None
+                    or reference.asset_version_id is None
+                ):
+                    continue
+                refs.extend(
+                    (
+                        ArtifactRef(
+                            project_id=project_id,
+                            artifact_type="asset",
+                            artifact_id=reference.asset_id,
+                        ),
+                        ArtifactRef(
+                            project_id=project_id,
+                            artifact_type="asset_version",
+                            artifact_id=reference.asset_version_id,
+                        ),
+                    )
+                )
+    for media_version in result.media_versions:
+        refs.extend((
+            ArtifactRef(project_id=project_id, artifact_type="asset",
+                        artifact_id=media_version.asset_id),
+            ArtifactRef(project_id=project_id, artifact_type="asset_version",
+                        artifact_id=media_version.asset_version_id,
+                        version=media_version.version),
+        ))
+    refs.extend(
+        ArtifactRef(project_id=project_id, artifact_type="reference_pack", artifact_id=pack.id)
+        for pack in result.reference_packs
+    )
+    for intake in result.source_intake:
+        refs.extend(
+            (
+                ArtifactRef(
+                    project_id=project_id,
+                    artifact_type="asset",
+                    artifact_id=intake.asset_id,
+                ),
+                ArtifactRef(
+                    project_id=project_id,
+                    artifact_type="asset_version",
+                    artifact_id=intake.version.id,
+                    version=intake.version.version,
+                ),
+            )
+        )
+    unique: dict[tuple[str, str, str, int | None], ArtifactRef] = {}
+    for ref in refs:
+        unique[(ref.project_id, ref.artifact_type, ref.artifact_id, ref.version)] = ref
+    return tuple(unique.values())
+
+
 def _asset_mutation_execution(
     project_id: str,
     result: AssetMutationResponse,
@@ -375,27 +903,33 @@ def _asset_mutation_execution(
 def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None:
     def create_production_spec(
         request: ProductionSpecCreateInput,
-    ) -> ToolExecution[ProductionSpecMutationResponse]:
+    ) -> ToolExecution[ProductionArtifactMutationSummaryResponse]:
         result = service.create_production_spec(request.project_id, request.request)
         return ToolExecution(
-            output=result,
+            output=mutation_summary(
+                document=result.document,
+                version=result.version,
+                output_slot=result.output_slot,
+            ),
             artifact_refs=_production_spec_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="artifact.create_production_spec",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
                 "在完整剧本已确定、准备开始分镜和资产规划时，创建项目级"
                 " ProductionSpec。它统一记录时长意图、画幅、语言、视听方向与"
                 " Provider 偏好，但不会触发任何真实生成。"
+                "成功时只返回精确新版本身份和输出槽指针；"
+                "需要正文时显式读取 artifact.get_production_spec。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=ProductionSpecCreateInput,
-            output_model=ProductionSpecMutationResponse,
+            output_model=ProductionArtifactMutationSummaryResponse,
             handler=create_production_spec,
             tags=frozenset({"production-spec", "planning", "handoff"}),
         )
@@ -403,26 +937,31 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
     def replace_production_spec(
         request: ProductionSpecReplaceInput,
-    ) -> ToolExecution[ProductionSpecMutationResponse]:
+    ) -> ToolExecution[ProductionArtifactMutationSummaryResponse]:
         result = service.replace_production_spec(request.project_id, request.request)
         return ToolExecution(
-            output=result,
+            output=mutation_summary(
+                document=result.document,
+                version=result.version,
+                output_slot=result.output_slot,
+            ),
             artifact_refs=_production_spec_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="artifact.replace_production_spec",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
                 "当用户意图或 Agent 的制片判断发生整体变化时，基于当前版本替换"
                 " ProductionSpec 并保留历史版本；它不会静默改写既有分镜。"
+                "成功响应是新版本身份的轻量确认，不回传正文和历史。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=ProductionSpecReplaceInput,
-            output_model=ProductionSpecMutationResponse,
+            output_model=ProductionArtifactMutationSummaryResponse,
             handler=replace_production_spec,
             tags=frozenset({"production-spec", "revision", "handoff"}),
         )
@@ -430,29 +969,30 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
     def get_production_spec(
         request: ProductionSpecGetInput,
-    ) -> ToolExecution[ProductionSpecReadResponse]:
+    ) -> ToolExecution[ProductionSpecCompactReadResponse]:
         result = service.get_production_spec(
             request.project_id,
             version_id=request.version_id,
         )
         return ToolExecution(
-            output=result,
+            output=compact_production_spec_read(result),
             artifact_refs=_production_spec_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="artifact.get_production_spec",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
                 "读取当前或指定历史版本的 ProductionSpec，供分镜、资产和生成 Agent"
-                " 使用同一份制片约束。"
+                " 使用同一份制片约束。响应只携带所选正文一次，"
+                "不携带 document.versions 历史或 version.payload 副本。"
             ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=ProductionSpecGetInput,
-            output_model=ProductionSpecReadResponse,
+            output_model=ProductionSpecCompactReadResponse,
             handler=get_production_spec,
             tags=frozenset({"production-spec", "read", "handoff"}),
         )
@@ -460,28 +1000,37 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
     def create_asset_plan(
         request: AssetPlanCreateInput,
-    ) -> ToolExecution[AssetPlanMutationResponse]:
+    ) -> ToolExecution[AssetPlanMutationSummaryResponse]:
         result = service.create_asset_plan(request.project_id, request.request)
+        summary = _asset_plan_mutation_summary(
+            project_id=request.project_id,
+            result=result,
+            operation=AssetPlanMutationOperation.CREATE,
+            base_version_id=None,
+        )
         return ToolExecution(
-            output=result,
-            artifact_refs=_asset_plan_refs(request.project_id, result),
+            output=summary,
+            artifact_refs=_asset_plan_mutation_refs(request.project_id, summary),
         )
 
     registry.register(
         ToolSpec(
             id="artifact.create_asset_plan",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
                 "基于当前精确 Script、ProjectBible、ProductionSpec 与 Storyboard，"
                 "创建版本化 AssetPlan。计划显式记录哪些主体需要锚点、仅保留文字"
                 "或复用既有资产，并携带稳定工作项、依赖、最终提示词和有序引用；"
-                "不会调用图片 Provider。"
+                "只因后续确定性文字不同的同规格重复载体，优先共享一份"
+                "单件干净物理母版并分开计划 TEXT_PLATE；"
+                "不会调用图片 Provider。成功响应只返回新版本身份与项目/"
+                "工作项数量摘要，不回传完整 AssetPlan。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=AssetPlanCreateInput,
-            output_model=AssetPlanMutationResponse,
+            output_model=AssetPlanMutationSummaryResponse,
             handler=create_asset_plan,
             tags=frozenset({"asset-plan", "planning", "handoff"}),
         )
@@ -489,71 +1038,405 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
     def replace_asset_plan(
         request: AssetPlanReplaceInput,
-    ) -> ToolExecution[AssetPlanMutationResponse]:
+    ) -> ToolExecution[AssetPlanMutationSummaryResponse]:
         result = service.replace_asset_plan(request.project_id, request.request)
+        summary = _asset_plan_mutation_summary(
+            project_id=request.project_id,
+            result=result,
+            operation=AssetPlanMutationOperation.REPLACE,
+            base_version_id=request.request.base_version_id,
+        )
         return ToolExecution(
-            output=result,
-            artifact_refs=_asset_plan_refs(request.project_id, result),
+            output=summary,
+            artifact_refs=_asset_plan_mutation_refs(request.project_id, summary),
         )
 
     registry.register(
         ToolSpec(
             id="artifact.replace_asset_plan",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
                 "基于当前版本修订 AssetPlan，保留稳定计划身份和历史版本。"
-                "Agent 可按完整语义调整少数资产或整体计划；Tool 不替 Agent 做"
+                "Agent 可按完整语义调整少数资产或整体计划，但这是完整快照替换，"
+                "不是单条 item 的 patch：即使只调整少数资产，"
+                "asset_plan 也必须保留其余 item/work item。只有真正的语义删除"
+                "才分别列入 removed_item_ids 或 removed_work_item_ids；Tool 不替 Agent 做"
                 "四视图、轻量参考等创意路由，也不会调用 Provider。"
+                "恢复中断或发现旧 work item 缺少当前 Method 需要的精确"
+                "布局 guide、identity reference 或其他真实输入时，Agent 可用它"
+                "局部补全未提交工作，不因计划已持久化就沿用过时输入。"
+                "成功响应只返回新版本身份与数量摘要，不回传完整"
+                " AssetPlan；需要继续调度时读取轻量 index 或任务切片。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=AssetPlanReplaceInput,
-            output_model=AssetPlanMutationResponse,
+            output_model=AssetPlanMutationSummaryResponse,
             handler=replace_asset_plan,
             tags=frozenset({"asset-plan", "revision", "handoff"}),
         )
     )
 
-    def get_asset_plan(
-        request: AssetPlanGetInput,
-    ) -> ToolExecution[AssetPlanReadResponse]:
-        result = service.get_asset_plan(
+    def patch_asset_plan(
+        request: AssetPlanPatchInput,
+    ) -> ToolExecution[AssetPlanPatchSummaryResponse]:
+        result = service.patch_asset_plan(request.project_id, request.request)
+        summary = AssetPlanPatchSummaryResponse(
+            project_id=request.project_id,
+            asset_plan_identity=AssetWorkContextVersion(
+                document_id=result.document.id,
+                version_id=result.version.id,
+                version=result.version.version,
+            ),
+            base_version_id=request.request.base_version_id,
+            upserted_item_ids=[item.id for item in request.request.upsert_items],
+            work_item_patch_item_ids=[
+                patch.item_id for patch in request.request.work_item_patches
+            ],
+            upserted_work_item_ids=[
+                work_item.id
+                for patch in request.request.work_item_patches
+                for work_item in patch.upsert_work_items
+            ],
+            removed_item_ids=list(request.request.removed_item_ids),
+            removed_work_item_ids=[
+                work_item_id
+                for patch in request.request.work_item_patches
+                for work_item_id in patch.removed_work_item_ids
+            ],
+            notes_updated=request.request.notes is not None,
+        )
+        return ToolExecution(
+            output=summary,
+            artifact_refs=_asset_plan_patch_refs(request.project_id, summary),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.patch_asset_plan",
+            version=2,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "对当前精确 AssetPlan 做局部语义修改：按稳定 item/work-item ID "
+                "原位替换或追加，并显式移除指定 ID。服务端会把 patch 合并成完整"
+                "计划后执行结构、依赖、当前上游版本、媒体与完成引用校验。"
+                "跨多个 item 但只需修改局部字段时，使用 field_patches "
+                "按稳定 item_id/work_item_id 提交一组原子 RFC 6902 修订，避免"
+                "重传多个完整 item。校验成功后写入一个新版本；不会调用 Provider。局部完成"
+                "回写、补参考或少量修复优先使用本 Tool，只有整体结构重构才提交"
+                " artifact.replace_asset_plan 的完整快照。成功响应只返回新版本身份与"
+                "本次变更 ID 摘要，不回传完整 AssetPlan；需要继续调度时读取轻量"
+                " artifact.get_asset_plan_index。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=AssetPlanPatchInput,
+            output_model=AssetPlanPatchSummaryResponse,
+            handler=patch_asset_plan,
+            tags=frozenset({"asset-plan", "patch", "revision", "handoff"}),
+        )
+    )
+
+    def reconcile_asset_plan_execution(
+        request: AssetPlanExecutionReconcileInput,
+    ) -> ToolExecution[AssetPlanExecutionReconcileSummary]:
+        result = service.reconcile_asset_plan_execution_contract(
+            request.project_id,
+            request.request,
+        )
+        summary = AssetPlanExecutionReconcileSummary(
+            project_id=request.project_id,
+            base_version_id=request.request.base_version_id,
+            asset_plan_identity=AssetWorkContextVersion(
+                document_id=result.document.id,
+                version_id=result.version.id,
+                version=result.version.version,
+            ),
+            canonicalized_item_ids=result.canonicalized_item_ids,
+            canonical_work_item_ids=result.canonical_work_item_ids,
+            supplemental_work_item_ids=result.supplemental_work_item_ids,
+            created_text_plate_item_ids=result.created_text_plate_item_ids,
+            removed_text_work_item_ids=result.removed_text_work_item_ids,
+            created_physical_master_work_item_ids=(
+                result.created_physical_master_work_item_ids
+            ),
+            normalized_layout_item_ids=result.normalized_layout_item_ids,
+            applied_execution_overrides=result.applied_execution_overrides,
+        )
+        return ToolExecution(
+            output=summary,
+            artifact_refs=_asset_plan_reconcile_refs(
+                request.project_id,
+                summary,
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.reconcile_asset_plan_execution_contract",
+            version=2,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "把 Agent 已经做出的资产执行语义决定编译成一个合法的 AssetPlan "
+                "版本：为主体指定唯一 canonical work、supplemental work 与必要的 "
+                "ReferencePack override；把物理载体和精确文字图版拆成独立 item。"
+                "Tool 会确定性同步 review purpose、ReferencePack role、lineage、"
+                "dependency、authoritative ordered reference、角色参考卡语义和布局，"
+                "也可通过 execution_overrides 精确修改任意基础或补充 "
+                "work-item 的 size/output layout；COMPOSE 的底层 intent 会自动同步。"
+                "并构造合法的 SCREEN_CONTENT_PLATE；完整校验后只持久化一个版本。"
+                "它不替 Agent 决定创意、不调用图片 Provider，也不返回完整 AssetPlan。"
+                "notes 只是说明，不能代替结构化变更；成功摘要来自实际编译"
+                "并落盘的结果。"
+                "跨多个 item 的执行合同迁移优先使用本 Tool；"
+                "artifact.patch_asset_plan_fields 只用于少量局部字段修正。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=AssetPlanExecutionReconcileInput,
+            output_model=AssetPlanExecutionReconcileSummary,
+            handler=reconcile_asset_plan_execution,
+            tags=frozenset(
+                {"asset-plan", "execution-contract", "reconcile", "handoff"}
+            ),
+        )
+    )
+
+    def patch_asset_plan_fields(
+        request: AssetPlanFieldPatchInput,
+    ) -> ToolExecution[AssetPlanPatchSummaryResponse]:
+        result = service.patch_asset_plan(
+            request.project_id,
+            AssetPlanPatchRequest(
+                base_version_id=request.base_version_id,
+                field_patches=request.patches,
+                notes=request.notes,
+                source_artifact_refs=request.source_artifact_refs,
+                origin=request.origin,
+            ),
+        )
+        summary = AssetPlanPatchSummaryResponse(
+            project_id=request.project_id,
+            asset_plan_identity=AssetWorkContextVersion(
+                document_id=result.document.id,
+                version_id=result.version.id,
+                version=result.version.version,
+            ),
+            base_version_id=request.base_version_id,
+            notes_updated=request.notes is not None,
+        )
+        return ToolExecution(
+            output=summary,
+            artifact_refs=_asset_plan_patch_refs(request.project_id, summary),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.patch_asset_plan_fields",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "对当前精确 AssetPlan 提交一组紧凑、原子的字段修订。"
+                "每项修订用稳定 item_id/work_item_id 选择实体，path 是相对"
+                "该实体的 RFC 6901 路径；删除选中的整个 item/work item "
+                "使用 remove 和空 path。新增顶层 item 时不填 item_id，"
+                "使用 add /items/- 并在 value 中提供新 item。该 Tool 只适合"
+                "少量、局部且字段语义已经明确的修正；跨多项的 canonical、"
+                "lineage、参考依赖或文字载体迁移应使用 "
+                "artifact.reconcile_asset_plan_execution_contract。服务端"
+                "先在内存合并全部修订，再对完整计划做一次结构、依赖、"
+                "当前上游版本、媒体和完成引用校验，成功后只写入一个"
+                "新 AssetPlan 版本；不调用 Provider，不回传完整计划。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=AssetPlanFieldPatchInput,
+            output_model=AssetPlanPatchSummaryResponse,
+            handler=patch_asset_plan_fields,
+            tags=frozenset(
+                {"asset-plan", "field-patch", "revision", "handoff"}
+            ),
+        )
+    )
+
+    def get_asset_planning_context(
+        request: AssetPlanningContextGetInput,
+    ) -> ToolExecution[AssetPlanningContextResponse]:
+        result = service.get_asset_planning_context(request.project_id)
+        return ToolExecution(
+            output=result,
+            artifact_refs=_asset_planning_context_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.get_asset_planning_context",
+            version=1,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "为 ASSET_PLANNER 一次读取去重后的当前制片真相：当前 ScriptVersion、"
+                "ProjectBibleVersion、ProductionSpec 与完整 Storyboard 正文各一份，"
+                "以及用户原始要求、source intake 的当前/已批准精确版本和已有资产"
+                "轻量索引。若 AssetPlan 已存在，只附轻量 identity/index，不附完整"
+                "计划。响应不包含 ProjectDocument、script/bible 历史、"
+                "ProductionDocument.versions 或重复 payload；只有整体修改已有计划时"
+                "再单独调用 artifact.get_asset_plan。"
+            ),
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=AssetPlanningContextGetInput,
+            output_model=AssetPlanningContextResponse,
+            handler=get_asset_planning_context,
+            tags=frozenset(
+                {"asset-plan", "planning-context", "read", "handoff"}
+            ),
+        )
+    )
+
+    def get_asset_plan_index(
+        request: AssetPlanIndexGetInput,
+    ) -> ToolExecution[AssetPlanIndexResponse]:
+        result = service.get_asset_plan_index(
             request.project_id,
             version_id=request.version_id,
         )
         return ToolExecution(
             output=result,
+            artifact_refs=_asset_plan_index_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.get_asset_plan_index",
+            version=2,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "轻量读取 AssetPlan 的版本身份和可分派目录：item/work-item 稳定 "
+                "ID、名称、kind/disposition、执行状态、依赖、服务的 Shot/ClipGroup "
+                "ID 与完成 AssetVersion 引用，并给出当前执行合同是否需要"
+                "语义协调的结构化事实。不返回 brief、final prompt、有序"
+                "参考或完整 Storyboard/ProductionSpec。已有计划时 Leader 应先用本"
+                "索引语义判断是先委派 Planner 协调旧合同，还是按 ID 分组"
+                "委派 Builder/Verifier；Worker 再调用 artifact.get_asset_work_context；"
+                "只有明确需要全局结构重构的 Worker 才读取完整 AssetPlan。"
+            ),
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=AssetPlanIndexGetInput,
+            output_model=AssetPlanIndexResponse,
+            handler=get_asset_plan_index,
+            tags=frozenset(
+                {"asset-plan", "inventory", "index", "read", "handoff"}
+            ),
+        )
+    )
+
+    def get_asset_plan(
+        request: AssetPlanGetInput,
+    ) -> ToolExecution[AssetPlanCompactReadResponse]:
+        result = service.get_asset_plan(
+            request.project_id,
+            version_id=request.version_id,
+        )
+        return ToolExecution(
+            output=compact_asset_plan_read(result),
             artifact_refs=_asset_plan_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="artifact.get_asset_plan",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
                 "读取当前或指定历史版本的 AssetPlan，供资产 Worker、图片 Worker "
-                "和后续镜头输入编排共享同一份资产决策与依赖。"
+                "和后续镜头输入编排共享同一份资产决策与依赖。该 Tool 返回完整 "
+                "brief、prompt 与 references；已有计划的 Leader 分派应先读取 "
+                "artifact.get_asset_plan_index，只有明确的全局结构审阅或重构才读取本"
+                "完整载荷。所选 AssetPlan 正文只出现一次，"
+                "不回传 document.versions 历史或 version.payload 副本。"
             ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=AssetPlanGetInput,
-            output_model=AssetPlanReadResponse,
+            output_model=AssetPlanCompactReadResponse,
             handler=get_asset_plan,
             tags=frozenset({"asset-plan", "read", "handoff"}),
         )
     )
 
+    def get_asset_work_context(
+        request: AssetWorkContextGetInput,
+    ) -> ToolExecution[AssetWorkContextResponse]:
+        item_ids = (
+            request.scope.item_ids
+            if isinstance(request.scope, AssetItemContextScope)
+            else []
+        )
+        work_item_ids = (
+            request.scope.work_item_ids
+            if isinstance(request.scope, AssetWorkItemContextScope)
+            else []
+        )
+        result = service.get_asset_work_context(
+            request.project_id,
+            item_ids=item_ids,
+            work_item_ids=work_item_ids,
+            shot_ids=request.shot_ids,
+            clip_group_ids=request.clip_group_ids,
+            version_id=request.version_id,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=_asset_work_context_refs(request.project_id, result),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="artifact.get_asset_work_context",
+            version=2,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "通过互斥 scope 按稳定 AssetPlan ID 读取一次资产任务所需的精确"
+                "上下文切片：所选工作项及依赖、关联 Storyboard Shot/ClipGroup、"
+                "当前 ProductionSpec、原始用户要求和已登记 source intake。返回的"
+                "版本身份不携带完整文档 payload，避免 project.get、完整 Storyboard、"
+                "ProductionSpec 与 AssetPlan 的重复传输。WORK_ITEM scope 只自动补齐父 item "
+                "和真实依赖，永不展开兄弟 work；ITEM scope 才读取整个 item。"
+                "item_ids 与 work_item_ids 只能出现在各自的 scope 中，不接受"
+                "顶层旧式 selector 或混合 scope。Worker 按本次职责显式传 shot_ids/"
+                "clip_group_ids。source intake 也只返回当前工作项精确引用的"
+                " AssetVersion。media_versions 返回候选、完成版本和输入版本的真实尺寸、"
+                "审核状态、review_notes 和 lineage；返工先使用已有拒绝理由，不因缺少"
+                "历史对话而重复验收。reference_packs 给出当前范围涉及的实际可用条目，"
+                "包括载体包内的独立文字层，保留真实role/tags/angle/framing；"
+                "shot_reference_plans 返回显式请求Shot的现有引用计划，供合并后更新。"
+                "编排Shot引用时按这些已保存字段选择，不把reference_pack_intent或自拟标签"
+                "当成已存在的条目。完整计划审阅仍使用"
+                " artifact.get_asset_plan。"
+            ),
+            effect=ToolEffect.READ,
+            idempotent=True,
+            input_model=AssetWorkContextGetInput,
+            output_model=AssetWorkContextResponse,
+            handler=get_asset_work_context,
+            tags=frozenset({"asset-plan", "context-slice", "read", "handoff"}),
+        )
+    )
+
     def create_production_document(
         request: ProductionDocumentCreateInput,
-    ) -> ToolExecution[ProductionDocumentMutationResponse]:
+    ) -> ToolExecution[ProductionArtifactMutationSummaryResponse]:
         result = service.create_production_document(
             request.project_id,
             request.request,
         )
         return ToolExecution(
-            output=result,
+            output=mutation_summary(
+                document=result.document,
+                version=result.version,
+            ),
             artifact_refs=_production_document_refs(
                 request.project_id,
                 result.document,
@@ -564,16 +1447,17 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
     registry.register(
         ToolSpec(
             id="artifact.create_production_document",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
                 "Create a versioned structured production document for durable "
-                "cross-agent handoff."
+                "cross-agent handoff. The success result is a lightweight exact-version "
+                "acknowledgement; read the document explicitly when its payload is needed."
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=ProductionDocumentCreateInput,
-            output_model=ProductionDocumentMutationResponse,
+            output_model=ProductionArtifactMutationSummaryResponse,
             handler=create_production_document,
             tags=frozenset({"production-document", "handoff", "planning"}),
         )
@@ -581,14 +1465,17 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
     def revise_production_document(
         request: ProductionDocumentReviseInput,
-    ) -> ToolExecution[ProductionDocumentMutationResponse]:
+    ) -> ToolExecution[ProductionArtifactMutationSummaryResponse]:
         result = service.revise_production_document(
             request.project_id,
             request.production_document_id,
             request.request,
         )
         return ToolExecution(
-            output=result,
+            output=mutation_summary(
+                document=result.document,
+                version=result.version,
+            ),
             artifact_refs=_production_document_refs(
                 request.project_id,
                 result.document,
@@ -599,15 +1486,16 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
     registry.register(
         ToolSpec(
             id="artifact.revise_production_document",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
             description=(
-                "Append a structured production-document version from its current base."
+                "Append a structured production-document version from its current base. "
+                "The success result contains version identity rather than payload history."
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=ProductionDocumentReviseInput,
-            output_model=ProductionDocumentMutationResponse,
+            output_model=ProductionArtifactMutationSummaryResponse,
             handler=revise_production_document,
             tags=frozenset({"production-document", "handoff", "revision"}),
         )
@@ -615,14 +1503,17 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
     def get_production_document(
         request: ProductionDocumentGetInput,
-    ) -> ToolExecution[ProductionDocumentReadResponse]:
+    ) -> ToolExecution[ProductionDocumentCompactReadResponse]:
         result = service.get_production_document(
             request.project_id,
             request.production_document_id,
             version_id=request.version_id,
         )
         return ToolExecution(
-            output=result,
+            output=compact_production_document_read(
+                document=result.document,
+                version=result.version,
+            ),
             artifact_refs=_production_document_refs(
                 request.project_id,
                 result.document,
@@ -633,13 +1524,16 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
     registry.register(
         ToolSpec(
             id="artifact.get_production_document",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
-            description="Read one current or historical production-document version.",
+            description=(
+                "Read one current or historical production-document version. The selected "
+                "payload appears exactly once; document.versions is not returned."
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=ProductionDocumentGetInput,
-            output_model=ProductionDocumentReadResponse,
+            output_model=ProductionDocumentCompactReadResponse,
             handler=get_production_document,
             tags=frozenset({"production-document", "handoff", "read"}),
         )
@@ -647,7 +1541,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
 
     def list_production_documents(
         request: ProductionDocumentListInput,
-    ) -> ToolExecution[ProductionDocumentListResponse]:
+    ) -> ToolExecution[ProductionDocumentCompactListResponse]:
         result = service.list_production_documents(request.project_id)
         refs: list[ArtifactRef] = []
         for document in result.documents:
@@ -659,18 +1553,25 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             refs.extend(
                 _production_document_refs(request.project_id, document, version)
             )
-        return ToolExecution(output=result, artifact_refs=tuple(refs))
+        return ToolExecution(
+            output=compact_production_document_list(result.documents),
+            artifact_refs=tuple(refs),
+        )
 
     registry.register(
         ToolSpec(
             id="artifact.list_production_documents",
-            version=1,
+            version=2,
             category=ToolCategory.ARTIFACT,
-            description="List durable production documents and their current versions.",
+            description=(
+                "List durable production-document identities and their exact current "
+                "versions without payloads or document.versions history. Read a selected "
+                "body explicitly with artifact.get_production_document."
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=ProductionDocumentListInput,
-            output_model=ProductionDocumentListResponse,
+            output_model=ProductionDocumentCompactListResponse,
             handler=list_production_documents,
             tags=frozenset({"production-document", "handoff", "discovery"}),
         )
@@ -944,6 +1845,10 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 "在 Agent 已观察实际媒体并完成语义判断后，记录对某个"
                 " AssetVersion 的批准或拒绝及理由。它只写入决策，不会自动看图；"
                 "图片候选通常先调用 qa.inspect_asset_version。"
+                "记录决策时按资产的实际制作职责判断问题是否阻碍使用，"
+                "不把一图生成卡的近似分区或轻微背景渐变默认变成隐式门禁。"
+                "同规格重复载体中能独立裁用的单件，不因副本间轻微尺寸"
+                "或透视差就默认拒绝并全量重绘。"
                 "CANONICAL_MASTER 更换资产母版；SUPPLEMENTAL_REFERENCE "
                 "保留额外图像而不顶替母版，不适用于音频或视频。"
             ),
@@ -1004,7 +1909,51 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
     )
 
 
+def register_asset_plan_attempt_tools(
+    registry: ToolRegistry,
+    retrier: AssetPlanAttemptRetrier,
+) -> None:
+    """Register compact repair for failed, not-yet-persisted AssetPlan drafts."""
+
+    if registry.contains("artifact.retry_asset_plan_attempt"):
+        return
+
+    registry.register(
+        ToolSpec(
+            id="artifact.retry_asset_plan_attempt",
+            version=2,
+            category=ToolCategory.ARTIFACT,
+            description=(
+                "对已持久化的失败 AssetPlan create/replace/retry 尝试做局部修复并"
+                "原地重试。使用 ToolAttemptRef 保留完整候选，每个 patch 先按稳定"
+                " item_id 或全局唯一 work_item_id 选中对象，再用相对 RFC 6901 "
+                "JSON Pointer "
+                "执行 RFC 6902 add/remove/replace/test；需删除选中的整个 "
+                "item/work item 时使用 remove 和空 path，不使用数组下标。"
+                "不要先把整份失败请求读回并"
+                "重传；只提交需要修改的小补丁。失败重试可继续引用上一次"
+                " retry 尝试，运行时会恢复并累积既有补丁。成功时只返回现有"
+                " AssetPlan 版本与数量摘要，不回传完整正文，不调用媒体 Provider。"
+                "适用对象是未成功落盘的计划候选；图片质量审核后的新版本制作使用"
+                "已有 image Tool，并从 media_versions.review_notes 取得具体修改依据。"
+            ),
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=AssetPlanAttemptRetryInput,
+            output_model=AssetPlanMutationSummaryResponse,
+            handler=retrier.retry_asset_plan_attempt,
+            tags=frozenset(
+                {"asset-plan", "attempt", "patch", "retry", "handoff"}
+            ),
+        )
+    )
+
+
 __all__ = [
+    "AssetPlanAttemptPatch",
+    "AssetPlanAttemptPatchOperation",
+    "AssetPlanAttemptRetrier",
+    "AssetPlanAttemptRetryInput",
     "AssetPlanCreateInput",
     "AssetPlanGetInput",
     "AssetPlanReplaceInput",
@@ -1026,5 +1975,6 @@ __all__ = [
     "ReferencePackEntryAddInput",
     "StockAssetImportInput",
     "StockAssetSearchInput",
+    "register_asset_plan_attempt_tools",
     "register_tools",
 ]

@@ -32,11 +32,16 @@ from short_drama.agent_runtime import (
     PlanRevision,
     PlanStep,
     ProjectMemory,
+    WorkOrder,
     WorkOrderNextOwner,
 )
 from short_drama.agent_runtime.models import utc_now
 from short_drama.models import ProductionExecutionTarget
 from short_drama.observability import LOGGER_NAME
+from short_drama.production_profiles import (
+    ProductionPromptStage,
+    ProductionSkillRole,
+)
 
 
 class FakeArtifactResolver:
@@ -70,6 +75,61 @@ def _runtime(
     store = AgentRuntimeStore(database_path)
     compiler = None if resolver is None else ContextCompiler(store, resolver)
     return store, AgentRuntime(store, compiler), compiler
+
+
+def test_work_order_persists_explicit_prompt_stage_without_role_inference(
+    tmp_path: Path,
+) -> None:
+    store, runtime, _compiler = _runtime(tmp_path / "runtime.sqlite3")
+    run = runtime.create_run(
+        project_id="project-stage",
+        objective="Prepare only the approved core assets.",
+        root_agent="production-manager",
+    )
+
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="arbitrary-worker-name",
+        production_skill_role=ProductionSkillRole.ASSET_REVIEWER,
+        production_prompt_stage=ProductionPromptStage.ASSETS,
+        objective="Prepare the exact asset-plan work items.",
+        why_now="The storyboard and asset plan are approved.",
+    )
+
+    persisted = store.get_work_order(order.id)
+    assert persisted is not None
+    assert persisted.production_prompt_stage == ProductionPromptStage.ASSETS
+    assert persisted.context_manifest is not None
+    assert (
+        persisted.context_manifest.production_prompt_stage
+        == ProductionPromptStage.ASSETS
+    )
+    assert persisted.recipient_role == "arbitrary-worker-name"
+
+
+def test_work_order_rejects_prompt_stage_drift_from_context_manifest() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="production_prompt_stage must match",
+    ):
+        WorkOrder(
+            id="work-order-stage-drift",
+            parent_run_id="agent-run-stage-drift",
+            sender="production-manager",
+            recipient_role="worker",
+            production_skill_role=ProductionSkillRole.DIRECTOR,
+            production_prompt_stage=ProductionPromptStage.STORYBOARD,
+            objective="Design one storyboard scope.",
+            why_now="The script is approved.",
+            context_manifest={
+                "id": "context-manifest-stage-drift",
+                "work_order_id": "work-order-stage-drift",
+                "objective": "Design one storyboard scope.",
+                "why_now": "The script is approved.",
+                "production_prompt_stage": "ASSETS",
+            },
+        )
 
 
 def _context_content_characters(context: ContextPack) -> int:
@@ -106,6 +166,16 @@ def _context_content_characters(context: ContextPack) -> int:
             ref.model_dump_json() for ref in action.agent_result.evidence_refs
         )
     return sum(len(value) for value in values)
+
+
+def _serialized_model_context_characters(context: ContextPack) -> int:
+    return len(
+        json.dumps(
+            context.model_context_dump(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
 
 
 def test_dynamic_plan_graph_exposes_only_ready_steps(tmp_path: Path) -> None:
@@ -663,6 +733,244 @@ def test_context_budget_keeps_latest_actions_before_decisions_in_time_order(
     ]
     assert context.decisions == []
     assert _context_content_characters(context) <= 2_600
+    assert _serialized_model_context_characters(context) <= 2_600
+
+
+def test_model_context_deduplicates_repeated_artifact_refs_without_losing_records(
+    tmp_path: Path,
+) -> None:
+    shared_ref = ArtifactRef(
+        project_id="project-deduplicated-context",
+        artifact_type="storyboard",
+        artifact_id="storyboard-current",
+        version=7,
+    )
+    resolver = FakeArtifactResolver(
+        [
+            ArtifactSummary(
+                ref=shared_ref,
+                title="Storyboard v7",
+                summary="The accepted storyboard for the current production pass.",
+            )
+        ]
+    )
+    store, runtime, _compiler = _runtime(tmp_path / "runtime.sqlite3", resolver)
+    run = runtime.create_run(
+        project_id=shared_ref.project_id,
+        objective="Continue production from the accepted storyboard.",
+        root_agent="production-manager",
+        active_skill_ids=["method.production"],
+    )
+    for index in range(12):
+        runtime.remember_decision(
+            project_id=run.project_id,
+            run_id=run.id,
+            statement=f"Decision {index}",
+            rationale="This remains part of the accepted production direction.",
+            artifact_refs=[shared_ref],
+        )
+    for index in range(8):
+        runtime.remember_experience(
+            summary=f"Experience {index}",
+            applicability="The current production method.",
+            evidence="Observed in the accepted storyboard revision.",
+            confidence=ExperienceConfidence.MEDIUM,
+            tags=["production"],
+            project_id=run.project_id,
+            skill_id="method.production",
+            artifact_refs=[shared_ref],
+        )
+
+    context = runtime.context(
+        run.id,
+        requested_artifact_refs=[shared_ref],
+        experience_tags=["production"],
+        max_characters=12_000,
+    )
+    projection = context.model_context_dump()
+    serialized_projection = json.dumps(
+        projection,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    raw_dump = context.model_dump(mode="json")
+    serialized_raw = json.dumps(raw_dump, ensure_ascii=False, separators=(",", ":"))
+
+    assert list(context.artifact_index) == ["artifact-1"]
+    assert context.resolve_artifact_ref("artifact-1") == shared_ref
+    assert projection["artifact_index"] == {
+        "artifact-1": shared_ref.model_dump(mode="json")
+    }
+    assert serialized_projection.count('"artifact_id":"storyboard-current"') == 1
+    assert len(serialized_projection) < len(serialized_raw)
+    assert all(
+        item["artifact_ref_ids"] == ["artifact-1"]
+        for item in projection["decisions"]
+    )
+    assert all(
+        item["artifact_ref_ids"] == ["artifact-1"]
+        for item in projection["experiences"]
+    )
+    assert "artifact_index" not in raw_dump
+    assert all(decision.artifact_refs == [shared_ref] for decision in context.decisions)
+    assert all(
+        experience.artifact_refs == [shared_ref]
+        for experience in context.experiences
+    )
+
+    reopened = AgentRuntimeStore(tmp_path / "runtime.sqlite3")
+    saved_decisions = reopened.list_decisions(run.project_id, run_id=run.id)
+    saved_experiences = reopened.list_experiences_for_scope(
+        project_id=run.project_id,
+        skill_id="method.production",
+    )
+    assert all(item.artifact_refs == [shared_ref] for item in saved_decisions)
+    assert all(item.artifact_refs == [shared_ref] for item in saved_experiences)
+    assert _serialized_model_context_characters(context) <= 12_000
+
+
+def test_exact_manifest_fairly_bounds_all_parent_and_child_artifact_summaries(
+    tmp_path: Path,
+) -> None:
+    project_id = "project-bounded-handoff"
+    refs = [
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="project",
+            artifact_id=project_id,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="storyboard",
+            artifact_id="storyboard-current",
+            version=3,
+        ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="clip_group",
+            artifact_id="clip-group-1",
+            version=3,
+        ),
+        *[
+            ArtifactRef(
+                project_id=project_id,
+                artifact_type="shot",
+                artifact_id=f"shot-{index}",
+                version=3,
+            )
+            for index in range(1, 9)
+        ],
+    ]
+    resolver = FakeArtifactResolver(
+        [
+            ArtifactSummary(
+                ref=ref,
+                title=f"Required {ref.artifact_type} {ref.artifact_id}",
+                summary=(f"{ref.artifact_id} exact canonical content " * 400),
+            )
+            for ref in refs
+        ]
+    )
+    _store, runtime, compiler = _runtime(
+        tmp_path / "runtime.sqlite3",
+        resolver,
+    )
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=project_id,
+        objective="Repair the current asset plan from exact production evidence.",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="asset-planner",
+        objective="Repair only the invalid asset-plan assignments.",
+        why_now="Semantic validation found incompatible references.",
+        scope=refs,
+        constraints=[("Preserve every unaffected assignment. " * 400).strip()],
+    )
+
+    context = compiler.compile_for_work_order(
+        order.id,
+        max_characters=4_800,
+    )
+
+    assert [item.ref for item in context.artifacts] == refs
+    assert resolver.requested == refs
+    assert all(item.summary.endswith("…") for item in context.artifacts)
+    assert all(len(item.summary) > 100 for item in context.artifacts)
+    assert max(len(item.summary) for item in context.artifacts) < 1_000
+    assert _context_content_characters(context) <= 4_800
+    assert _serialized_model_context_characters(context) <= 4_800
+
+
+def test_exact_manifest_finds_feasible_budget_above_public_floor(
+    tmp_path: Path,
+) -> None:
+    """Mandatory decisions can need more than the generic 256-char floor."""
+
+    project_id = "project-manifest-lower-bound"
+    refs = [
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="asset_source",
+            artifact_id=f"source-{index}",
+            version=1,
+        )
+        for index in range(6)
+    ]
+    resolver = FakeArtifactResolver(
+        [
+            ArtifactSummary(
+                ref=ref,
+                title=f"Required source {index}",
+                summary=(f"Exact canonical source {index}. " * 500),
+            )
+            for index, ref in enumerate(refs)
+        ]
+    )
+    _store, runtime, compiler = _runtime(
+        tmp_path / "runtime.sqlite3",
+        resolver,
+    )
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=project_id,
+        objective="Create the core-asset references from accepted evidence.",
+        root_agent="production-manager",
+    )
+    decisions = [
+        runtime.remember_decision(
+            project_id=project_id,
+            run_id=run.id,
+            statement=(f"Preserve accepted decision {index}. " * 2).strip(),
+            rationale=(f"This constraint remains authoritative {index}. " * 5).strip(),
+        )
+        for index in range(6)
+    ]
+    order = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="core-asset-reviewer",
+        objective=("Review the complete core-asset plan without losing context. " * 24),
+        why_now="The canonical plan is ready for semantic review.",
+        scope=refs,
+        inherited_decision_ids=[decision.id for decision in decisions],
+        confirmed_decisions=[decision.statement for decision in decisions],
+        constraints=[("Preserve every accepted assignment. " * 80).strip()],
+    )
+
+    context = compiler.compile_for_work_order(
+        order.id,
+        max_characters=24_000,
+    )
+
+    assert [decision.id for decision in context.decisions] == [
+        decision.id for decision in decisions
+    ]
+    assert [artifact.ref for artifact in context.artifacts] == refs
+    assert _serialized_model_context_characters(context) <= 24_000
 
 
 def test_recent_delegation_action_carries_bounded_agent_result_semantics(
@@ -698,6 +1006,10 @@ def test_recent_delegation_action_carries_bounded_agent_result_semantics(
         input_summary="Verify the complete storyboard draft.",
         work_order_id=order.id,
     )
+    in_progress = runtime.context(run.id, max_characters=6_000)
+    assert in_progress.recent_actions[0].id == action.id
+    assert in_progress.recent_actions[0].work_order_id == order.id
+    assert in_progress.model_context_dump()["recent_actions"][0]["work_order_id"] == order.id
     runtime.record_result(
         order.id,
         status=AgentResultStatus.COMPLETED,
@@ -729,9 +1041,11 @@ def test_recent_delegation_action_carries_bounded_agent_result_semantics(
     assert digest.findings == [
         "The tray changes hands without a visible pickup action."
     ]
-    assert digest.evidence_refs == [draft_ref]
+    assert digest.evidence_refs == []
     assert _context_content_characters(context) <= 6_000
-    assert store.get_agent_result(order.id) is not None
+    stored_result = store.get_agent_result(order.id)
+    assert stored_result is not None
+    assert stored_result.evidence_refs == [draft_ref]
 
 
 def test_recent_action_agent_result_respects_the_shared_character_budget(
@@ -838,6 +1152,239 @@ def test_structured_delegation_round_trip_and_work_order_context(tmp_path: Path)
     assert saved_order.status == DelegationStatus.COMPLETED
     assert store.get_agent_result(order.id) == result
     assert runtime.snapshot(run.id).pending_work_orders == []
+
+
+def test_work_order_keeps_asset_plan_index_summary_complete(tmp_path: Path) -> None:
+    project_id = "project-asset-index"
+    verbose_ref = ArtifactRef(
+        project_id=project_id,
+        artifact_type="production_spec",
+        artifact_id="spec-1",
+        version=1,
+    )
+    index_ref = ArtifactRef(
+        project_id=project_id,
+        artifact_type="asset_plan_index",
+        artifact_id="asset-plan-1",
+        version=2,
+    )
+    index_summary = json.dumps(
+        {
+            "items": [
+                {"id": f"item-{index}", "work": [[f"work-{index}", "READY"]]}
+                for index in range(80)
+            ]
+        },
+        separators=(",", ":"),
+    )
+    resolver = FakeArtifactResolver(
+        [
+            ArtifactSummary(
+                ref=verbose_ref,
+                title="Production spec",
+                summary="visual direction " * 500,
+            ),
+            ArtifactSummary(
+                ref=index_ref,
+                title="Asset plan index",
+                summary=index_summary,
+            ),
+        ]
+    )
+    store, runtime, compiler = _runtime(tmp_path / "runtime.sqlite3", resolver)
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=project_id,
+        objective="Build the selected assets.",
+        root_agent="production-manager",
+    )
+    order = runtime.delegate(
+        run.id,
+        sender="production-manager",
+        recipient_role="asset-builder",
+        objective="Build the next ready asset slice.",
+        why_now="The plan is ready.",
+        scope=[verbose_ref, index_ref],
+    )
+
+    context = compiler.compile_for_work_order(order.id, max_characters=12_000)
+
+    selected_index = next(
+        artifact
+        for artifact in context.artifacts
+        if artifact.ref.artifact_type == "asset_plan_index"
+    )
+    assert selected_index.summary == index_summary
+    assert selected_index.summary.endswith("}")
+    assert "work-79" in selected_index.summary
+
+    runtime.checkpoint(
+        run.id,
+        current_focus="continue asset execution " * 200,
+        artifact_refs=[verbose_ref, index_ref],
+        blockers=["pending provider output " * 100],
+    )
+    leader_context = compiler.compile(run.id, max_characters=12_000)
+    leader_index = next(
+        artifact
+        for artifact in leader_context.artifacts
+        if artifact.ref.artifact_type == "asset_plan_index"
+    )
+    assert leader_index.summary == index_summary
+    assert "work-79" in leader_index.summary
+
+
+def test_leader_context_prefers_latest_asset_plan_index_handoff(tmp_path: Path) -> None:
+    project_id = "project-latest-asset-index"
+    old_index = ArtifactRef(
+        project_id=project_id,
+        artifact_type="asset_plan_index",
+        artifact_id="asset-plan",
+        version=1,
+    )
+    new_index = old_index.model_copy(update={"version": 2})
+    resolver = FakeArtifactResolver(
+        [
+            ArtifactSummary(ref=old_index, title="old", summary='{"version":1}'),
+            ArtifactSummary(ref=new_index, title="new", summary='{"version":2}'),
+        ]
+    )
+    store, runtime, compiler = _runtime(tmp_path / "latest-index.sqlite3", resolver)
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=project_id,
+        objective="Continue asset execution from the current plan.",
+        root_agent="production-manager",
+    )
+    runtime.checkpoint(
+        run.id,
+        current_focus="The prior plan completed.",
+        artifact_refs=[old_index],
+    )
+    store.save_project_memory(
+        ProjectMemory(
+            project_id=project_id,
+            summary="Current project",
+            artifact_refs=[new_index],
+        )
+    )
+
+    context = compiler.compile(
+        run.id,
+        requested_artifact_refs=[old_index],
+        max_artifacts=1,
+    )
+
+    assert [item.ref for item in context.artifacts] == [new_index]
+    assert context.artifacts[0].summary == '{"version":2}'
+
+
+def test_completed_asset_stage_keeps_new_generation_plan_handoff(tmp_path: Path) -> None:
+    project_id = "project-video-handoff"
+    index_ref = ArtifactRef(
+        project_id=project_id, artifact_type="asset_plan_index",
+        artifact_id="completed-assets", version=24,
+    )
+    generation_ref = ArtifactRef(
+        project_id=project_id, artifact_type="generation_plan",
+        artifact_id="new-generation-plan", version=1,
+    )
+    index_summary = json.dumps({
+        "execution_contract": {"needs_reconciliation": False, "issues": []},
+        "items": [{
+            "id": f"item-{index}", "status": "COMPLETED",
+            "completed_asset_id": f"asset-{index}",
+            "work": [[f"work-{index}", "COMPLETED", "accepted detail " * 45]],
+        } for index in range(21)],
+    })
+    resolver = FakeArtifactResolver([
+        ArtifactSummary(ref=index_ref, summary=index_summary),
+        ArtifactSummary(ref=generation_ref, summary="GenerationPlan with twelve units."),
+    ])
+    store, runtime, compiler = _runtime(tmp_path / "video-handoff.sqlite3", resolver)
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=project_id, objective="Prepare every generation unit before H3.",
+        root_agent="production-manager",
+    )
+    store.save_project_memory(ProjectMemory(
+        project_id=project_id, summary="Earlier asset production context " * 200,
+        artifact_refs=[index_ref, generation_ref],
+    ))
+    action = runtime.start_action(
+        run.id, kind=ActionKind.TOOL_CALL, agent_id="production-manager",
+        input_summary="Compile the GenerationPlan",
+    )
+    runtime.complete_action(
+        action.id, output_summary="Created the current GenerationPlan with twelve units.",
+        artifact_refs=[generation_ref],
+    )
+
+    context = compiler.compile(run.id)
+
+    assert context.recent_actions[-1].id == action.id
+    assert context.recent_actions[-1].artifact_refs == [generation_ref]
+    assert generation_ref in context.artifact_index.values()
+    leader_index = next(item for item in context.artifacts if item.ref == index_ref)
+    completed_items = json.loads(leader_index.summary)["items"]
+    assert len(completed_items) == 21
+    assert all(item["completed_work_count"] == 1 for item in completed_items)
+    assert all("work" not in item for item in completed_items)
+    assert _serialized_model_context_characters(context) <= 24_000
+
+    order = runtime.delegate(
+        run.id, sender="production-manager", recipient_role="asset-builder",
+        objective="Inspect an exact completed work row.", why_now="Explicit inspection.",
+        scope=[index_ref],
+    )
+    assert compiler.compile_for_work_order(order.id).artifacts[0].summary == index_summary
+
+
+def test_leader_uses_current_generation_unit_while_worker_keeps_explicit_version(tmp_path: Path) -> None:
+    old = ArtifactRef(project_id="current-units", artifact_type="generation_unit", artifact_id="unit-1", version=2)
+    current = old.model_copy(update={"version": 3})
+    store, runtime, compiler = _runtime(tmp_path / "unit-version.sqlite3", FakeArtifactResolver([
+        ArtifactSummary(ref=old, summary="Old source"),
+        ArtifactSummary(ref=current, summary="Current source"),
+    ]))
+    assert compiler is not None
+    run = runtime.create_run(project_id=old.project_id, objective="Continue video preparation.", root_agent="leader")
+    runtime.checkpoint(run.id, current_focus="A new GenerationPlan was created.", artifact_refs=[old])
+    store.save_project_memory(ProjectMemory(project_id=old.project_id, summary="Current plan v3", artifact_refs=[current]))
+    assert compiler.compile(run.id, requested_artifact_refs=[old], max_artifacts=1).artifacts[0].ref == current
+    order = runtime.delegate(run.id, sender="leader", recipient_role="reviewer",
+        objective="Inspect the historical source.", why_now="Compare a past attempt.", scope=[old])
+    assert compiler.compile_for_work_order(order.id).artifacts[0].ref == old
+
+
+def test_leader_budget_keeps_selected_refs_when_summaries_do_not_fit(tmp_path: Path) -> None:
+    project_id = "project-preserved-refs"
+    refs = [ArtifactRef(
+        project_id=project_id, artifact_type="generation_unit",
+        artifact_id=f"unit-{index}", version=1,
+    ) for index in range(12)]
+    store, runtime, compiler = _runtime(
+        tmp_path / "refs.sqlite3",
+        FakeArtifactResolver([
+            ArtifactSummary(ref=ref, summary="Long full source material " * 500)
+            for ref in refs
+        ]),
+    )
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=project_id, objective="Prepare all units.", root_agent="production-manager",
+    )
+    store.save_project_memory(ProjectMemory(
+        project_id=project_id, summary="Earlier context " * 500, artifact_refs=refs,
+    ))
+
+    context = compiler.compile(run.id, max_characters=6_000)
+
+    assert [item.ref for item in context.artifacts] == refs
+    assert set(ref.identity() for ref in context.artifact_index.values()) == {
+        ref.identity() for ref in refs
+    }
+    assert _serialized_model_context_characters(context) <= 6_000
 
 
 def test_work_order_manifest_loads_only_explicit_artifacts_decisions_and_tags(

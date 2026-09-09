@@ -5,6 +5,7 @@ import os from 'os'
 export const APP_FOLDER_NAME = 'ShortDramaStudio'
 
 function resolveUserDataPath(): string {
+  if (process.env.STUDIO_APP_DATA_DIR) return path.resolve(process.env.STUDIO_APP_DATA_DIR)
   if (process.platform === 'win32') {
     const localAppData = process.env.LOCALAPPDATA
       || path.join(os.homedir(), 'AppData', 'Local')

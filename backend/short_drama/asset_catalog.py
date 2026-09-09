@@ -23,6 +23,7 @@ from short_drama.models import (
     ReferenceRole,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
 )
@@ -374,8 +375,9 @@ def build_reference_view_prompt(
     requirement_level = "必需" if need.required else "可选建议"
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
-        roles=(ProductionSkillRole.ASSET_REVIEWER,),
+        roles=(ProductionSkillRole.ASSET_BUILDER,),
         include_constitution=False,
+        stage=ProductionPromptStage.ASSETS,
     )
     style = bible.style
     medium = declared_style_value(style.medium)

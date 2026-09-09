@@ -74,8 +74,9 @@ class ToolUsingSpecialistLanguageClient:
     ) -> str:
         del instructions, image_urls, max_output_tokens
         payload = cast(dict[str, object], json.loads(input_text))
-        tool_history = cast(list[object], payload["tool_history"])
-        if not tool_history:
+        working_set = cast(dict[str, object], payload["working_set"])
+        total_tool_turns = cast(int, working_set["total_tool_turns"])
+        if total_tool_turns == 0:
             context = cast(dict[str, object], payload["context"])
             project_id = cast(str, context["project_id"])
             return json.dumps(
@@ -329,6 +330,76 @@ def test_board_and_team_advance_are_available_through_the_http_api(
     )
     assert leader_advance.status_code == 200, leader_advance.text
     assert leader_advance.json()["run"]["snapshot"]["run"]["status"] == "COMPLETED"
+
+
+def test_unattended_advance_dispatches_ready_siblings_before_waiting_for_workers(
+    tmp_path: Path,
+) -> None:
+    language_client = CompletingSpecialistLanguageClient()
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: language_client,
+    )
+    project = service.initialize_fixture().document.project
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    created = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Run independent reviews before their dependent handoff.",
+            unattended=True,
+            execution_target=ProductionExecutionTarget.MOCK,
+            initial_plan=AgentPlanProposal(
+                summary="Two independent reviews followed by their joint handoff.",
+                goal_complete=True,
+                steps=[
+                    PlanStep(
+                        id=step_id,
+                        title=step_id,
+                        kind=ActionKind.DELEGATION,
+                        assigned_agent=step_id,
+                        production_skill_role=ProductionSkillRole.PLANNER,
+                        instructions="Complete the assigned bounded review.",
+                        depends_on=dependencies,
+                    )
+                    for step_id, dependencies in [
+                        ("review-a", []),
+                        ("review-b", []),
+                        ("joint-handoff", ["review-a", "review-b"]),
+                    ]
+                ],
+            ),
+        ),
+    )
+    run_id = created.snapshot.run.id
+    first = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
+    second = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
+    assert len(first.created_work_order_ids) == 1
+    assert len(second.created_work_order_ids) == 1
+    assert second.advanced_work_order_ids == []
+    siblings = first.created_work_order_ids + second.created_work_order_ids
+    assert {
+        item.id for item in service.get_agent_production_board(run_id).work_orders
+    } == set(siblings)
+    assert all(
+        service.get_agent_work_order(work_order_id).work_order.status
+        == DelegationStatus.PENDING
+        for work_order_id in siblings
+    )
+
+    completed = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
+    assert set(completed.advanced_work_order_ids) == set(siblings)
+    assert completed.created_work_order_ids == []
+    assert all(
+        service.get_agent_work_order(work_order_id).work_order.status
+        == DelegationStatus.COMPLETED
+        for work_order_id in siblings
+    )
+    dependent = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
+    assert len(dependent.created_work_order_ids) == 1
+    assert dependent.advanced_work_order_ids == []
 
 
 def test_unattended_advance_owns_worker_tool_restart_and_leader_completion(

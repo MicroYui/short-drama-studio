@@ -135,6 +135,7 @@ export const DEFAULT_TRACKS = trackSchema.array().parse([
 
 export const subtitleClipSchema = z.object({
   id: z.string(),
+  sourceShotId: z.string().optional(),
   text: z.string(),
   startTime: z.number(),
   endTime: z.number(),
@@ -273,6 +274,7 @@ export const DEFAULT_TEXT_STYLE = textOverlayStyleSchema.parse({
 
 export const assetSchema = z.object({
   id: z.string(),
+  sourceAssetVersionId: z.string().optional(),
   type: z.enum(assetTypeValues),
   path: z.string(),
   bigThumbnailPath: z.string().optional(),
@@ -293,6 +295,10 @@ export const assetSchema = z.object({
 
 export const timelineClipSchema = z.object({
   id: z.string(),
+  sourceShotId: z.string().optional(),
+  sourceTakeId: z.string().optional(),
+  sourceWindowStart: z.number().optional(),
+  sourceWindowEnd: z.number().optional(),
   assetId: z.string().nullable(),
   type: z.enum(timelineClipTypeValues),
   startTime: z.number(),
@@ -302,7 +308,7 @@ export const timelineClipSchema = z.object({
   speed: z.number().default(1),
   reversed: z.boolean().default(false),
   muted: z.boolean().default(false),
-  volume: z.number().default(100),
+  volume: z.number().default(1),
   trackIndex: z.number(),
   asset: assetSchema.nullable(),
   importedName: z.string().optional(),
@@ -334,6 +340,7 @@ export const assetBinsSchema = z.record(z.string(), z.string())
 
 export const projectV2Schema = z.object({
   version: z.literal(2),
+  studioShotScope: z.object({ shotId: z.string(), anchorClipId: z.string().nullable().optional() }).optional(),
   id: z.string(),
   name: z.string(),
   createdAt: z.number(),

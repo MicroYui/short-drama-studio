@@ -11,6 +11,7 @@ from short_drama.asset_catalog import (
     AssetCatalogImportRequest,
     AssetCatalogSearchRequest,
 )
+from short_drama.asset_inspection import AssetVersionInspectionRequest
 from short_drama.image_models import (
     AssetCreateRequest,
     AssetImportLocalRequest,
@@ -318,6 +319,230 @@ def test_catalog_candidate_identifies_supplement_owner_and_imports_by_pack_kind(
     assert imported.asset.kind == AssetKind.CHARACTER
     assert imported.version.source is not None
     assert f"/assets/{holder.id}/" in (imported.version.source.source_uri or "")
+    assert [
+        reference.model_dump(mode="json")
+        for reference in imported.version.derivation_references
+    ] == [
+        {
+            "asset_version_id": supplemental_id,
+            "source_project_id": source_project_id,
+            "reference_role": "SUBJECT_IDENTITY",
+            "reference_authority": "SUPPORTING",
+            "purpose": "Imported approved profile reference.",
+            "subject_alias": target_character.name,
+        }
+    ]
+
+
+def test_explicit_target_can_reuse_user_source_intake_reference(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    target_character = next(
+        asset for asset in project.document.assets if asset.kind == AssetKind.CHARACTER
+    )
+    source = service.create_asset(
+        project_id,
+        AssetCreateRequest(
+            kind=AssetKind.REFERENCE,
+            name="用户上传的完整主角卡",
+            descriptor="用户明确指定为主角，画面已覆盖当前需要的标准视图。",
+        ),
+    ).asset
+    source_version_id = _import_image(
+        service,
+        tmp_path,
+        project_id=project_id,
+        asset_id=source.id,
+        label="uploaded-complete-character-card",
+        color="#dbeafe",
+    )
+    _approve(
+        service,
+        project_id=project_id,
+        asset_id=source.id,
+        version_id=source_version_id,
+        purpose=AssetReviewPurpose.CANONICAL_MASTER,
+    )
+
+    imported = service.import_catalog_asset(
+        project_id,
+        AssetCatalogImportRequest(
+            source_project_id=project_id,
+            source_asset_id=source.id,
+            source_version_id=source_version_id,
+            target_asset_id=target_character.id,
+            descriptor="精确复用用户完整角色卡，不重新生成身份。",
+        ),
+    )
+
+    assert imported.asset.kind == AssetKind.CHARACTER
+    assert imported.version.source is not None
+    assert imported.version.source.source_uri is not None
+    assert f"/assets/{source.id}/" in imported.version.source.source_uri
+    assert [
+        reference.model_dump(mode="json")
+        for reference in imported.version.derivation_references
+    ] == [
+        {
+            "asset_version_id": source_version_id,
+            "source_project_id": project_id,
+            "reference_role": "SUBJECT_IDENTITY",
+            "reference_authority": "AUTHORITATIVE",
+            "purpose": "精确复用用户完整角色卡，不重新生成身份。",
+            "subject_alias": target_character.name,
+        }
+    ]
+
+
+def test_cross_project_reference_clone_keeps_provenance_without_dangling_lineage(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    source_project = service.create_project(
+        CreateProjectRequest(
+            source_mode=SourceMode.IDEA_EXPANSION,
+            input_text="用户素材库项目",
+            target_duration_seconds=30.0,
+        ),
+        project_id="source-reference-project",
+    )
+    source = service.create_asset(
+        source_project.document.project.id,
+        AssetCreateRequest(
+            kind=AssetKind.REFERENCE,
+            name="用户上传的主角照片",
+            descriptor="用户声明为主角的身份参考",
+        ),
+    ).asset
+    source_version_id = _import_image(
+        service,
+        tmp_path,
+        project_id=source_project.document.project.id,
+        asset_id=source.id,
+        label="cross-project-user-protagonist",
+        color="#bfdbfe",
+    )
+    _approve(
+        service,
+        project_id=source_project.document.project.id,
+        asset_id=source.id,
+        version_id=source_version_id,
+        purpose=AssetReviewPurpose.CANONICAL_MASTER,
+    )
+
+    target_project = service.initialize_fixture()
+    target = next(
+        asset
+        for asset in target_project.document.assets
+        if asset.kind == AssetKind.CHARACTER
+    )
+    imported = service.import_catalog_asset(
+        target_project.document.project.id,
+        AssetCatalogImportRequest(
+            source_project_id=source_project.document.project.id,
+            source_asset_id=source.id,
+            source_version_id=source_version_id,
+            target_asset_id=target.id,
+            descriptor="跨项目精确复用用户主角照片",
+        ),
+    )
+
+    assert [
+        reference.model_dump(mode="json")
+        for reference in imported.version.derivation_references
+    ] == [
+        {
+            "asset_version_id": source_version_id,
+            "source_project_id": source_project.document.project.id,
+            "reference_role": "SUBJECT_IDENTITY",
+            "reference_authority": "AUTHORITATIVE",
+            "purpose": "跨项目精确复用用户主角照片",
+            "subject_alias": target.name,
+        }
+    ]
+    assert imported.version.source is not None
+    assert imported.version.source.source_uri is not None
+    assert source_version_id in imported.version.source.source_uri
+    assert service.asset_inspection_reference_version_refs(
+        target_project.document.project.id,
+        target.id,
+        imported.version.id,
+        AssetVersionInspectionRequest(),
+    ) == [(source_project.document.project.id, source_version_id)]
+
+
+def test_cross_project_character_master_clone_keeps_authoritative_lineage(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    source_project = service.initialize_fixture()
+    source_project_id = source_project.document.project.id
+    source_character = next(
+        asset
+        for asset in source_project.document.assets
+        if asset.kind == AssetKind.CHARACTER
+    )
+    source_version_id = _import_image(
+        service,
+        tmp_path,
+        project_id=source_project_id,
+        asset_id=source_character.id,
+        label="cross-project-character-master",
+        color="#fde68a",
+    )
+    _approve(
+        service,
+        project_id=source_project_id,
+        asset_id=source_character.id,
+        version_id=source_version_id,
+        purpose=AssetReviewPurpose.CANONICAL_MASTER,
+    )
+
+    target_project = service.create_project(
+        CreateProjectRequest(
+            name="Character lineage target",
+            source_mode=SourceMode.IDEA_EXPANSION,
+            input_text="A compact school story.",
+        )
+    )
+    target_character = next(
+        asset
+        for asset in target_project.document.assets
+        if asset.kind == AssetKind.CHARACTER
+    )
+    imported = service.import_catalog_asset(
+        target_project.document.project.id,
+        AssetCatalogImportRequest(
+            source_project_id=source_project_id,
+            source_asset_id=source_character.id,
+            source_version_id=source_version_id,
+            target_asset_id=target_character.id,
+            descriptor="Reuse the approved character master exactly.",
+        ),
+    )
+
+    assert [
+        reference.model_dump(mode="json")
+        for reference in imported.version.derivation_references
+    ] == [
+        {
+            "asset_version_id": source_version_id,
+            "source_project_id": source_project_id,
+            "reference_role": "SUBJECT_IDENTITY",
+            "reference_authority": "AUTHORITATIVE",
+            "purpose": "Reuse the approved character master exactly.",
+            "subject_alias": target_character.name,
+        }
+    ]
+    assert service.asset_inspection_reference_version_refs(
+        target_project.document.project.id,
+        target_character.id,
+        imported.version.id,
+        AssetVersionInspectionRequest(),
+    ) == [(source_project_id, source_version_id)]
 
 
 def test_canonical_pack_role_cannot_be_faked_by_a_supplement(

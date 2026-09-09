@@ -1874,7 +1874,7 @@ def test_story_orientation_method_selection_survives_restart_and_reaches_agents(
     language = StagedLanguageClient(request)
     language.selected_method_skills = [
         ProductionMethodSelection(
-            skill_id="method.minimax_h3.brand_promo_video",
+            skill_id="method.brand_promo",
             rationale="需要把品牌事实、核心主张与可见产品证据对齐。",
         )
     ]
@@ -1887,7 +1887,7 @@ def test_story_orientation_method_selection_survives_restart_and_reaches_agents(
     oriented = service.advance_planning_run(started.run.id)
 
     assert oriented.run.selected_method_skill_ids == [
-        "method.minimax_h3.brand_promo_video"
+        "method.brand_promo"
     ]
     assert oriented.run.method_selection_reasons == [
         "需要把品牌事实、核心主张与可见产品证据对齐。"
@@ -1905,18 +1905,18 @@ def test_story_orientation_method_selection_survives_restart_and_reaches_agents(
     restarted = _service(tmp_path, language)
     restored = restarted.get_planning_run(started.run.id).run
     assert restored.selected_method_skill_ids == [
-        "method.minimax_h3.brand_promo_video"
+        "method.brand_promo"
     ]
 
     after_architect = restarted.advance_planning_run(started.run.id)
     assert after_architect.run.current_step == PlanningRunStep.SCENE_WRITER
-    assert "MiniMax-H3：品牌宣传短片" in (
+    assert "品牌宣传片" in (
         language.story_architect_instructions[-1]
     )
     assert "步骤 2：建立品牌事实表" in language.story_architect_instructions[-1]
 
     restarted.advance_planning_run(started.run.id)
-    assert "MiniMax-H3：品牌宣传短片" in language.scene_writer_instructions[-1]
+    assert "品牌宣传片" in language.scene_writer_instructions[-1]
     assert "选择故事脊柱" in language.scene_writer_instructions[-1]
 
 
@@ -2321,6 +2321,56 @@ def test_script_only_owner_finalize_retry_recognizes_script_ready_document(
     )
     assert completed.project.document.assets == []
     assert completed.project.document.shots == []
+
+
+def test_script_only_finalize_registers_user_image_before_later_asset_planning(
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "script-only-hero.png"
+    Image.new("RGB", (48, 64), "#91745d").save(image_path)
+    planning_request = _request(120).model_copy(
+        update={
+            "source_mode": SourceMode.IMAGE_SEEDED,
+            "content_planning_output": ContentPlanningOutput.SCRIPT_ONLY,
+            "input_text": "这张照片就是男主角，先完成剧本。",
+            "input_images": [
+                CreativeInputImage(
+                    local_path=str(image_path),
+                    descriptor="用户指定的男主角身份照片",
+                )
+            ],
+        }
+    )
+    service = _service(tmp_path, StagedLanguageClient(planning_request))
+    scaffold = service.create_project(
+        planning_request,
+        project_id="project-script-only-source-intake",
+        owner_agent_run_id="agent-run-script-only-source-intake",
+    )
+    assert scaffold.document.planning is not None
+    assert scaffold.document.planning.run_id is not None
+    run_id = scaffold.document.planning.run_id
+    _advance_to_step(service, run_id, PlanningRunStep.FINALIZE)
+
+    completed = service.advance_planning_run(run_id)
+
+    assert completed.run.status == PlanningRunStatus.COMPLETE
+    assert completed.project.document.project.stage == ProjectStage.SCRIPT_READY
+    assert completed.project.document.shots == []
+    assert len(completed.project.document.assets) == 1
+    source_asset = completed.project.document.assets[0]
+    assert source_asset.kind.value == "REFERENCE"
+    assert source_asset.approved_version_id is not None
+    source_version = next(
+        version
+        for version in source_asset.versions
+        if version.id == source_asset.approved_version_id
+    )
+    assert source_version.local_path is not None
+    assert Path(source_version.local_path).is_file()
+    assert source_version.review_notes is not None
+    assert "source intake" in source_version.review_notes
+    assert completed.project.document.reference_plan == []
 
 
 def test_scene_writer_upstream_replan_is_persisted_as_the_next_creative_unit(

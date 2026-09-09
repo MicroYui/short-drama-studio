@@ -5,6 +5,9 @@
  *   C:\Users\me\video#1.mp4 → file:///C:/Users/me/video%231.mp4
  */
 export function pathToFileUrl(filePath: string): string {
+  if (typeof window !== 'undefined' && !window.electronAPI) {
+    return `/__studio_backend/api/short-drama/studio/media?path=${encodeURIComponent(filePath)}`
+  }
   // Normalize Windows separators
   let normalized = filePath.replace(/\\/g, '/')
 

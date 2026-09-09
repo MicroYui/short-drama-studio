@@ -2,9 +2,11 @@
 
 当前最终产品形态和实施顺序见 [AI Agent 视频制片桌面产品 PRD 与里程碑](product-prd-and-roadmap.md)。本文件说明当前工程能力；旧 Phase 编号只保留为实现历史，不再定义后续产品路线。
 
+2026-09-09 已实现“剧本 / 镜头 / 成片”三入口，镜头内呈现分镜与视频，项目资产统一查看。Agent 按当前要求自主判断交付边界；取消画布和内容版本管理，右侧保留 Agent、范围与制作 Trace。正式页面、多集共享素材、Skills 整理、Astra/xhigh 真实请求、LTX 后端回写与本机桌面包均已有验收记录。镜头默认只读、明确保存，单镜头剪辑保存后同步成片，设计、素材和采用时长分别显示。当前规则见 [页面方案](product-interface-spec.md) 与 [镜头编辑与时长](shot-editing-and-timing.md)，逐项结果、已通过的 ComfyUI 实跑及交付边界见 [产品交付清单](product-delivery-checklist.md)。131 秒案例与原始 Trace 继续保留，下文旧 Phase 叙述不替代当前状态。
+
 本仓库已经以 LTX Desktop `v1.1.0` 建立 Phase 0 上游工程基线，完成 Phase 1–11 的供应商中立 Mock、MiniMax-H3 768P、GPT Image 2、通用 Director、从锁定剧本到单集成片、音频 QA 和可选角色声线输入。Phase 12–21 建立跨剧本资产、Production Skills、多分钟 PlanningRun、H3 长篇衔接、整集 Reviewer、Critic 路由、来源诊断与语义修改控制面；Phase 22–28 补齐分层 Tools、视频生成前质量工具和分层 Production Skill 注入。Phase 29 将最终控制面收敛为 `Production Manager + Markdown Skills + Typed Tool Registry + Dynamic AgentRuntime`。General、AI 短剧、数字人与动漫共享同一业务核心和 Tool 合同；类型 Skill 只描述目标、创作维度与角色判断，具体视觉和节奏由 Agent 写入项目 Bible Style，不由 Profile 或 Tool 硬编码。中文共享生产方法位于 `backend/short_drama/skills/workflows/end_to_end.md`。桌面端默认新建 GUIDED/AUTO_DRAFT 已转为 AgentRun bootstrap；已配置语言模型的长篇 `AUTO_DRAFT` 会由 `project.create` 建立同一项目 ID 的 `INPUT` scaffold 和 AgentRun 拥有的 Content Planning Job，再由 `planning.advance` 每个 Action 推进一步，完成后回到动态 Agent 制片。当前代码与 SQLite 继续使用兼容名 `PlanningRun`；独立 PlanningRun 与旧 AutonomousRun 的公开控制面已删除，只保留内容规划游标和恢复所需中间工件。ProjectDocument 是唯一项目内容真相，当前不抽象通用 `ChildJob`；Provider 对账由各自任务状态机负责。
 
-当前方法层已分为 MiniMax Design 3.0.11 的 3 个项目 Workflow（`drama-series`、`ad-tvc`、`mv`）与 MiniMax-H3 的 8 个任务 Method。`AI_SHORT_DRAMA` 仍只是 schema/profile adapter，通用短剧/漫剧方法主骨架由 `drama-series` 提供。Design 的 Canvas/Hub/Stage Plan 只映射到现有 ProjectDocument/ProductionDocument、AgentRun/PlanRevision/WorkOrder 和派生 ProductionBoardView，不替换本地 Harness。Phase 30 进一步将分镜后的核心资产决策收敛为版本化 `AssetPlan`，并补齐 canonical master、补充参考与 H3 有序引用语义。真实 AgentRun 规划验证已以 `PASSED_PLAN_ONLY` 完成：约 6 分 10 秒内自主产出 9 个 `ANCHOR`、6 个 `TEXT_ONLY`、0 个 `REUSE_EXISTING` 和 11 个媒体工作项；本轮未配置图像 Provider，因此只证明了计划闭环，尚未证明真实媒体闭环。
+当前方法层包含 MiniMax Design 3.0.11 的 3 个项目 Workflow（`drama-series`、`ad-tvc`、`mv`）与 MiniMax-H3 的 8 个任务 Method，并已拆分可读正文、manifest 与按任务注入的内容。`AI_SHORT_DRAMA` 保留为 schema/profile adapter，Style 由项目定义。Phase 30 的 `AssetPlan`、canonical master、补充参考与 H3 有序引用语义继续复用；源图由 Agent 按完整语义决定直接复用、派生、辅助参考或暂不使用。早期 `PASSED_PLAN_ONLY` 只证明当时的规划；后续校园案例已完成用户补图、图片引用、12 段 H3 视频、21 个叙事镜头和 131 秒成片，过程及修复见 [真实成片记录](50-complete-film-agent-case-trace.md)。该案例不被改写为无人干预的一次成功。
 
 ## 结论先行
 
@@ -26,7 +28,7 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 - LumenX 只参考模型目录、生成工作台和候选管理，不进入底座实现；
 - Toonflow 最适合复用短剧编剧与分镜 Skill；
 - ViMax 最适合复用首尾帧拆解和机位连续性思路；
-- MiniMax Design 的开源 ComfyUI Plugin 可在几分钟成片 PoC 后直接移植为媒体执行层，但不接管项目主控；外层 Design 语义画布未确认开源，应基于现有工件和派生关系实现等价体验。
+- MiniMax Design 的开源 ComfyUI Plugin 可作为高级媒体执行层接入，不接管项目主控；外层语义画布的调研保留，当前产品已取消画布，不再建设等价界面。
 
 首版采用“LTX Desktop 应用与编辑底座 + 自建 Agent 制片核心”的本地桌面方案。几分钟成片 PoC 与最终视频生成主链都使用 H3；最终产品复用 LTX 时间线、媒体管理和导出能力，但不启用、不集成、不分发 LTX 模型权重。需要新媒体的局部重做由 Agent 映射到 H3 路线。
 
@@ -82,6 +84,6 @@ GPT Image 2、MiniMax-H3 和 Azure Speech 是**可用能力池，不是形式上
 
 ## 当前边界
 
-- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；通用视频/AI 短剧 Production Skills 与项目级自由 Style；任意目标时长、整集大纲、场次契约、逐场 Director、连续性 handoff、由 AgentRun 总调度的可恢复 Content Planning Job（当前兼容实现名 `PlanningRun`）、每轮大纲/审稿工件、跨剧本修订轨迹和条件触发的 Revision Judge；H3 前序 Take/尾窗/机位预演 Tool、同场 continuity wave 和真实 768P 对照；长篇 FINALIZE→AUTO_DRAFT 同一运行时衔接、每镜返工额度、2 分钟重启导出和 5 分钟 20 镜离线规模验证；分层 Scene/Episode Reviewer、关联 Director 局部返工、重启恢复和不阻断导出语义；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片；另已完成默认 AgentRun bootstrap、统一 Tool Registry、四类 Markdown Skills、带 `goal_complete` 反馈的动态 PlanGraph、跨 Run 决策召回与经验沉淀/去重、字符预算 ContextPack、WorkOrder/AgentResult 合同校验、可调用共享 Tools 的专业 Agent、本地 Planner fallback 与语义变更局部 apply；Phase 30 的 AgentRun 资产规划实跑已通过 `PASSED_PLAN_ONLY`，并修复 Specialist 尾随 `}` 窄恢复及复杂 AssetPlan schema 跨字段说明不足的问题。ProjectDocument 及其版本化工件仍是唯一项目内容真相；当前不抽象通用 `ChildJob`。
+- 已做：官方资料与开源源码审查、固定样片、统一 SQLite/API 核心、可恢复 Mock/H3 Worker、多 Take、局部返工、TimelineManifest、字幕/音频与 9:16 导出；资产工作台、Azure GPT Image 2、本地 GPT-5.6-sol；四种输入归一化、通用 Director/Route Planner、长镜头与镜间观察、自动选 Take 和直接拼接导出；可选角色声线输入；跨项目资产搜索/导入、母版与同源派生视图、覆盖检查和逐镜 `ReferencePlan`；通用视频/AI 短剧 Production Skills 与项目级自由 Style；任意目标时长、整集大纲、场次契约、逐场 Director、连续性 handoff、由 AgentRun 总调度的可恢复 Content Planning Job（当前兼容实现名 `PlanningRun`）、每轮大纲/审稿工件、跨剧本修订轨迹和条件触发的 Revision Judge；H3 前序 Take/尾窗/机位预演 Tool、同场 continuity wave 和真实 768P 对照；长篇 FINALIZE→AUTO_DRAFT 同一运行时衔接、每镜返工额度、2 分钟重启导出和 5 分钟 20 镜离线规模验证；分层 Scene/Episode Reviewer、关联 Director 局部返工、重启恢复和不阻断导出语义；三次同剧本真实 `AUTO_DRAFT` 均完成 9 镜、54.31 秒成片，新剧本《明天别来了》完成 8 镜、58.00 秒真实跨剧本成片；另已完成默认 AgentRun bootstrap、统一 Tool Registry、四类 Markdown Skills、带 `goal_complete` 反馈的动态 PlanGraph、跨 Run 决策召回与经验沉淀/去重、字符预算 ContextPack、WorkOrder/AgentResult 合同校验、可调用共享 Tools 的专业 Agent、本地 Planner fallback 与语义变更局部 apply；Phase 30 的 AgentRun 资产规划实跑已通过 `PASSED_PLAN_ONLY`，当前代码还已补齐双区角色卡、场景四向卡、道具 base-first、确定性文字板、图像多参考职责/权威性、`GENERATE` / `REFERENCE_GENERATE` / `EDIT`、源图语义分配和实际图审看证据。ProjectDocument 及其版本化工件仍是唯一项目内容真相；当前不抽象通用 `ChildJob`。
 - 不做：把闭源平台接入或作为生产执行器；不做注册、登录、RBAC、多租户、团队权限、抖音账号接入、自动发布和运营管理；不增加创意或 Tool 门禁、冻结层、SHA256 锁定、对抗评测或密码学证据系统。尚未完成：复杂多人对白、参考声线、数字人专用口型/主播和动漫专用生成路线的跨项目真实质量验证。
-- 下一步：先让 Agent 按已补充的多页文件、精确文字图版与 Shot/ClipGroup 索引语义局部修订 AssetPlan v1；完成确定性文字排版/合成执行器。然后在用户明确选择并授权图像执行方式后，继续验证 Phase 30 的图片生成、审看、ReferencePack 与逐镜绑定媒体闭环。随后在新 AgentRuntime 上累积真实用户任务的委派粒度、重新规划和局部重算样本，并以真实任务验证三个 MiniMax Design Workflow 与八个 MiniMax-H3 Task Method 的 Agent-native 选择和组合。H3 尚未暴露的模式、数字人/动漫专用 Provider 能力仅在有明确质量目标和用户授权时进一步接入；通用短剧已由 `drama-series` 提供创作主干，后续只把两层成熟方法与现有本地能力都未覆盖的具体需求记录为缺口。
+- 下一步：Artifact handoff 已在离线回归中完成分层：项目真相与完整 Trace 仍持久化，模型只读当前 Stage 的去重 ContextPack 和 SpecialistWorkingSet，普通轮询只返回 WorkOrder 摘要，图片任务状态推进也不再每步调用 LLM。下一步从新项目重跑经授权核心图片资产 AgentRun，确认 Agent 不经人工代调 Tool 完成 AssetPlan 修正、生成、审图、批准、ReferencePack 和 Shot 最少充分引用，并重新记录实际 token、耗时与费用。真实资产闭环通过后再进入几分钟完整视频 PoC。

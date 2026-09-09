@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from short_drama.skill_ids import SkillIds
+
 from enum import StrEnum
 from typing import Literal, cast
 
@@ -10,6 +12,7 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
+    PrivateAttr,
     field_validator,
     model_validator,
 )
@@ -43,6 +46,12 @@ class ProductionProfile(StrEnum):
 
 
 class ProductionExecutionTarget(StrEnum):
+    """Video-generation executor selected for one production run.
+
+    Image generation has its own Provider capability and is intentionally not
+    inferred from this value.
+    """
+
     MOCK = "MOCK"
     REAL_H3 = "REAL_H3"
 
@@ -462,13 +471,38 @@ class AssetStandardView(StrEnum):
     CHARACTER_RIGHT_PROFILE = "CHARACTER_RIGHT_PROFILE"
     CHARACTER_BACK = "CHARACTER_BACK"
     CHARACTER_WARDROBE_DETAIL = "CHARACTER_WARDROBE_DETAIL"
+    CHARACTER_SHEET = "CHARACTER_SHEET"
     SCENE_MASTER = "SCENE_MASTER"
+    SCENE_FRONT = "SCENE_FRONT"
     SCENE_OVERHEAD = "SCENE_OVERHEAD"
     SCENE_REVERSE = "SCENE_REVERSE"
+    SCENE_LEFT = "SCENE_LEFT"
+    SCENE_RIGHT = "SCENE_RIGHT"
     SCENE_INTERACTION_ZONE = "SCENE_INTERACTION_ZONE"
     PROP_PRODUCT = "PROP_PRODUCT"
     PROP_IN_HAND = "PROP_IN_HAND"
     PROP_STATE = "PROP_STATE"
+
+
+class ImageReferenceRole(StrEnum):
+    """The visual fact an image input is allowed to contribute."""
+
+    SUPPORTING_VISUAL = "SUPPORTING_VISUAL"
+    SUBJECT_IDENTITY = "SUBJECT_IDENTITY"
+    WARDROBE = "WARDROBE"
+    STYLE = "STYLE"
+    LAYOUT_GUIDE = "LAYOUT_GUIDE"
+    SCENE_IDENTITY = "SCENE_IDENTITY"
+    PROP_IDENTITY = "PROP_IDENTITY"
+    COMPOSITION = "COMPOSITION"
+
+
+class ImageReferenceAuthority(StrEnum):
+    """How strictly a provider must obey one declared image reference."""
+
+    SUPPORTING = "SUPPORTING"
+    AUTHORITATIVE = "AUTHORITATIVE"
+    GUIDE_ONLY = "GUIDE_ONLY"
 
 
 class AssetSheetInputPolicy(StrEnum):
@@ -484,6 +518,7 @@ class ReferenceRole(StrEnum):
     CHARACTER_BODY = "CHARACTER_BODY"
     CHARACTER_PROFILE = "CHARACTER_PROFILE"
     CHARACTER_BACK = "CHARACTER_BACK"
+    CHARACTER_REFERENCE_SHEET = "CHARACTER_REFERENCE_SHEET"
     LOCATION_MASTER = "LOCATION_MASTER"
     LOCATION_REVERSE = "LOCATION_REVERSE"
     LOCATION_INTERACTION = "LOCATION_INTERACTION"
@@ -589,9 +624,14 @@ class CreativeInputImage(DomainModel):
 class ProjectRecord(DomainModel):
     id: str
     name: str
+    parent_project_id: str | None = None
+    episode_number: int = Field(default=1, ge=1)
+    episode_title: str = "第 1 集"
     source_mode: SourceMode
     run_mode: RunMode
     production_profile: ProductionProfile = ProductionProfile.AI_SHORT_DRAMA
+    preferred_method_skill_ids: SkillIds = Field(default_factory=list[str])
+    creative_direction: str = ""
     content_planning_output: ContentPlanningOutput = (
         ContentPlanningOutput.SCRIPT_AND_SHOTS
     )
@@ -1178,6 +1218,7 @@ class ScriptVersion(DomainModel):
     subtitle_text: str
     lines: list[ScriptLine]
     structured_scenes: list[StructuredScene]
+    structure_stale_scene_ids: list[str] = Field(default_factory=list[str])
     review_report: ScriptReviewReport | None = None
     review_disposition: ScriptReviewDisposition | None = None
     final_cold_read_report: ScriptReviewReport | None = None
@@ -1279,7 +1320,14 @@ class CoreAssetBrief(DomainModel):
     presentation_mode: AssetPresentationMode | None = None
     required_visible_text: list[str] = Field(default_factory=list[str])
     reference_strategy: AssetReferenceStrategy = AssetReferenceStrategy.LIGHTWEIGHT
-    layout_profile: AssetLayoutProfile = AssetLayoutProfile.LIGHTWEIGHT_SINGLE
+    layout_profile: AssetLayoutProfile = Field(
+        default=AssetLayoutProfile.LIGHTWEIGHT_SINGLE,
+        description=(
+            "该核心资产最终呈现或参考卡的总体布局；它不是每个 "
+            "AssetPlan work-item 的默认输出布局。单个视图由 work-item "
+            "和 image.enqueue 自身声明布局。"
+        ),
+    )
     requested_views: list[AssetStandardView] = Field(
         default_factory=list[AssetStandardView],
         max_length=12,
@@ -1297,7 +1345,6 @@ class CoreAssetBrief(DomainModel):
             "texture_constraints",
             "continuity_anchors",
             "named_views_or_zones",
-            "required_visible_text",
         ):
             values = getattr(self, field_name)
             normalized = [item.strip() for item in values if item.strip()]
@@ -1305,6 +1352,13 @@ class CoreAssetBrief(DomainModel):
                 raise ValueError(
                     f"Core asset {field_name} entries must be trimmed, non-empty, and unique"
                 )
+        normalized_visible_text = [
+            item.strip() for item in self.required_visible_text if item.strip()
+        ]
+        if normalized_visible_text != self.required_visible_text:
+            raise ValueError(
+                "Core asset required_visible_text entries must be trimmed and non-empty"
+            )
         if len(self.requested_views) != len(set(self.requested_views)):
             raise ValueError("Core asset requested views must be unique")
         if self.layout_profile in {
@@ -1354,6 +1408,18 @@ class AssetReferenceSheet(DomainModel):
         return self
 
 
+class AssetTextPlate(DomainModel):
+    """Exact text and deterministic layout metadata for a local text plate."""
+
+    size: str = Field(min_length=1, max_length=80)
+    background_color: str = Field(min_length=1, max_length=64)
+    foreground_color: str = Field(min_length=1, max_length=64)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
+    layout_description: str = Field(min_length=1, max_length=2000)
+    font_family: str = Field(min_length=1, max_length=200)
+
+
 class AssetSourceRecord(DomainModel):
     source_type: OriginType
     source_label: str
@@ -1372,6 +1438,17 @@ class AssetSourceRecord(DomainModel):
     created_at: str
 
 
+class AssetDerivationReference(DomainModel):
+    """Exact ordered visual evidence used to derive an AssetVersion."""
+
+    asset_version_id: str = Field(min_length=1, max_length=200)
+    source_project_id: str | None = Field(default=None, min_length=1, max_length=200)
+    reference_role: ImageReferenceRole = ImageReferenceRole.SUPPORTING_VISUAL
+    reference_authority: ImageReferenceAuthority = ImageReferenceAuthority.SUPPORTING
+    purpose: str = Field(min_length=1, max_length=1000)
+    subject_alias: str | None = Field(default=None, min_length=1, max_length=120)
+
+
 class AssetVersion(DomainModel):
     id: str
     version: int
@@ -1387,7 +1464,12 @@ class AssetVersion(DomainModel):
     file_size_bytes: int | None = None
     parent_version_id: str | None = None
     image_task_id: str | None = None
+    derivation_references: list[AssetDerivationReference] = Field(
+        default_factory=list[AssetDerivationReference],
+        max_length=16,
+    )
     reference_sheet: AssetReferenceSheet | None = None
+    text_plate: AssetTextPlate | None = None
     source: AssetSourceRecord | None = None
     approval_status: ApprovalStatus
     review_notes: str | None = None
@@ -1449,6 +1531,11 @@ class ShotReferenceCue(DomainModel):
     """Semantic reference requested by one time-bounded part of a shot."""
 
     subject_asset_id: str = Field(min_length=1, max_length=200)
+    id: str | None = None
+    asset_version_id: str | None = None
+    field: Literal["visual", "action", "performance", "camera"] | None = None
+    text_start: int | None = Field(default=None, ge=0)
+    text_end: int | None = Field(default=None, gt=0)
     alias: str = Field(min_length=1, max_length=80)
     required_tags: list[str] = Field(default_factory=list[str], max_length=12)
     purpose: str = Field(min_length=1, max_length=500)
@@ -1466,6 +1553,11 @@ class ShotReferenceCue(DomainModel):
 
     @model_validator(mode="after")
     def validate_reference_cue(self) -> ShotReferenceCue:
+        if (self.text_start is None) != (self.text_end is None):
+            raise ValueError("A reference text range requires both start and end")
+        if self.text_start is not None and self.text_end is not None:
+            if self.field is None or self.text_end <= self.text_start:
+                raise ValueError("A reference needs a field and a non-empty text range")
         normalized_tags = [item.strip() for item in self.required_tags if item.strip()]
         if normalized_tags != self.required_tags or len(normalized_tags) != len(
             set(normalized_tags)
@@ -1477,8 +1569,8 @@ class ShotReferenceCue(DomainModel):
 class ShotTimelineBeat(DomainModel):
     """One observable camera/action/performance phase inside an editorial shot."""
 
-    start_seconds: float = Field(ge=0.0)
-    end_seconds: float = Field(gt=0.0)
+    start_seconds: float = Field(ge=0.0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0.0, allow_inf_nan=False)
     visual: str = Field(min_length=1, max_length=1200)
     framing: str = Field(min_length=1, max_length=200)
     camera: str = Field(min_length=1, max_length=500)
@@ -1498,9 +1590,12 @@ class ShotTimelineBeat(DomainModel):
             raise ValueError("Shot timeline beat end_seconds must follow start_seconds")
         if len(self.dialogue_line_ids) != len(set(self.dialogue_line_ids)):
             raise ValueError("Shot timeline beat dialogue line IDs must be unique")
-        aliases = [item.alias for item in self.references]
-        if len(aliases) != len(set(aliases)):
-            raise ValueError("Shot timeline beat reference aliases must be unique")
+        aliases: dict[str, tuple[str, str | None]] = {}
+        for cue in self.references:
+            target = (cue.subject_asset_id, cue.asset_version_id)
+            if cue.alias in aliases and (cue.id is None or aliases[cue.alias] != target):
+                raise ValueError("Shot timeline beat reference aliases must identify one subject and media")
+            aliases[cue.alias] = target
         return self
 
 
@@ -1509,13 +1604,14 @@ class ShotPlan(DomainModel):
     project_id: str
     sequence: int
     scene_id: str | None = None
-    duration_seconds: float
+    duration_seconds: float = Field(gt=0.0, allow_inf_nan=False)
     narrative_purpose: str
     visual: str
     framing: str
     camera: str
     audio_intent: str
     dialogue_line_ids: list[str]
+    references: list[ShotReferenceCue] = Field(default_factory=list[ShotReferenceCue], max_length=24)
     timeline_beats: list[ShotTimelineBeat] = Field(
         default_factory=list[ShotTimelineBeat],
         max_length=24,
@@ -1558,10 +1654,10 @@ class ShotPlan(DomainModel):
                 "Shot timeline beats must cover shot dialogue lines in order; "
                 "one line may span adjacent beats"
             )
-        alias_targets: dict[str, tuple[str, tuple[str, ...]]] = {}
-        for beat in self.timeline_beats:
-            for cue in beat.references:
-                target = (cue.subject_asset_id, tuple(cue.required_tags))
+        alias_targets: dict[str, tuple[str, str | None, tuple[str, ...]]] = {}
+        for cues in [self.references, *(beat.references for beat in self.timeline_beats)]:
+            for cue in cues:
+                target = (cue.subject_asset_id, cue.asset_version_id, tuple(cue.required_tags))
                 existing = alias_targets.setdefault(cue.alias, target)
                 if existing != target:
                     raise ValueError(
@@ -2171,6 +2267,20 @@ class MusicAnalysisResponse(DomainModel):
 
 
 class ProjectDocument(DomainModel):
+    _loaded_snapshot: dict[str, JsonValue] | None = PrivateAttr(default=None)
+    _save_conflicts: list[str] = PrivateAttr(default_factory=list[str])
+
+    @property
+    def loaded_snapshot(self) -> dict[str, JsonValue] | None:
+        return self._loaded_snapshot
+
+    @property
+    def save_conflicts(self) -> list[str]:
+        return list(self._save_conflicts)
+
+    def record_loaded_content(self, conflicts: list[str] | None = None) -> None:
+        self._loaded_snapshot = cast(dict[str, JsonValue], self.model_dump(mode="json"))
+        self._save_conflicts = list(conflicts or [])
     project: ProjectRecord
     planning: ProjectPlanningMetadata | None = None
     script_versions: list[ScriptVersion]
@@ -2180,6 +2290,10 @@ class ProjectDocument(DomainModel):
     execution_plan: list[ExecutionPlanEntry]
     reference_plan: list[ReferencePlanEntry]
     manifests: list[TimelineManifest]
+    editorial_timeline: dict[str, JsonValue] | None = None
+    studio_exports: list[dict[str, JsonValue]] = Field(default_factory=list[dict[str, JsonValue]])
+    comfy_workflows: list[dict[str, JsonValue]] = Field(default_factory=list[dict[str, JsonValue]])
+    trace_sources: list[str] = Field(default_factory=list[str])
     reference_packs: list[ReferencePack] = Field(default_factory=list[ReferencePack])
     voice_references: list[VoiceReferenceBinding] = Field(
         default_factory=list[VoiceReferenceBinding]
@@ -2932,7 +3046,7 @@ class PlanningRunRecord(DomainModel):
         max_length=24,
     )
     narrative_skill_decision: str | None = Field(default=None, max_length=2400)
-    selected_method_skill_ids: list[str] = Field(
+    selected_method_skill_ids: SkillIds = Field(
         default_factory=list[str],
         max_length=24,
     )
@@ -3077,6 +3191,11 @@ class ExportRequest(DomainModel):
 class VideoInspectionResponse(DomainModel):
     report: VideoInspectionReport
     project: ProjectAggregate
+
+
+class VideoInspectionLookupResponse(DomainModel):
+    take: Take
+    report: VideoInspectionReport | None = None
 
 
 class AudioInspectionResponse(DomainModel):

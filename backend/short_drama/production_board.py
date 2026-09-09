@@ -7,6 +7,8 @@ the canonical :class:`ProjectDocument`, and its owned content-planning cursor.
 
 from __future__ import annotations
 
+from short_drama.skill_ids import SkillIds
+
 from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
@@ -89,7 +91,7 @@ class ProductionBoardView(RuntimeModel):
     run_status: AgentRunStatus
     plan_revision_id: str | None = None
     plan_summary: str | None = None
-    selected_method_skill_ids: list[str] = Field(default_factory=list[str])
+    selected_method_skill_ids: SkillIds = Field(default_factory=list[str])
     method_selection_rationale: str | None = None
     content_planning_status: str | None = None
     content_planning_step: str | None = None

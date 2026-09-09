@@ -1,7 +1,43 @@
 # Third-Party Notices
 
-This file contains the licenses and notices for third-party software and models
-used by LTX Desktop.
+Short Drama Studio reuses the Apache-2.0 LTX Desktop application and editing code
+(copyright Lightricks contributors), plus the dependencies listed below. The
+studio entry point does not load or distribute LTX model weights. Legacy model
+references below document the retained upstream source, not enabled providers.
+
+## Production methods and optional workflows
+
+- MiniMax-H3 public Skills: https://github.com/MiniMax-AI/skills . Original source
+  notices remain in `backend/short_drama/skills/sources/minimax_h3/original/`.
+- MiniMax Design 3.0.11 Workflow text was obtained from the locally installed app.
+  These references have no confirmed public redistribution grant. The local
+  development build is for this workspace; public distribution must obtain that
+  grant or replace those references with material licensed for distribution.
+  No private Design frontend or Agent runtime was copied into the product.
+- The optional ComfyUI adapter uses the documented HTTP protocol. ComfyUI and the
+  public MiniMax Design ComfyUI plugin run as separate user-configured services:
+  https://github.com/Comfy-Org/ComfyUI and
+  https://github.com/MiniMax-AI/minimax-desgin-plugin . Both upstream projects use
+  GPL-3.0; their source and license remain with those services. The plugin clone
+  under `output/product-delivery/upstream` is research/acceptance material and is
+  not bundled into the application.
+- Local rendering uses the FFmpeg binary supplied by imageio-ffmpeg. Its build
+  license must accompany any redistributed binary; retained package notices and
+  https://ffmpeg.org/legal.html identify the upstream terms and source.
+
+---
+
+## Offline context tokenizer
+
+The Studio harness bundles the `o200k_base` vocabulary and its splitting rules
+from OpenAI tiktoken (MIT): https://github.com/openai/tiktoken . The local build
+script follows the byte alphabet and BPE merge conversion in Hugging Face
+Transformers `TikTokenConverter` (Apache-2.0):
+https://github.com/huggingface/transformers/blob/main/src/transformers/convert_slow_tokenizer.py .
+The existing Hugging Face Tokenizers dependency executes the encoding offline.
+The vocabulary is text-tokenization data, not model weights. Source notes,
+rebuild instructions and both license texts are retained in
+`backend/short_drama/agent_runtime/tokenizer/`.
 
 ---
 

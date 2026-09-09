@@ -8,7 +8,7 @@ interface VideoGenerationModelSpecsState {
   errorMessage: string | null
 }
 
-export function useVideoGenerationModelSpecs(): VideoGenerationModelSpecsState {
+export function useVideoGenerationModelSpecs(enabled = true): VideoGenerationModelSpecsState {
   const [state, setState] = useState<VideoGenerationModelSpecsState>({
     modelSpecs: null,
     isLoading: true,
@@ -16,6 +16,10 @@ export function useVideoGenerationModelSpecs(): VideoGenerationModelSpecsState {
   })
 
   useEffect(() => {
+    if (!enabled) {
+      setState({ modelSpecs: null, isLoading: false, errorMessage: null })
+      return
+    }
     const abortController = new AbortController()
     let isActive = true
 
@@ -45,7 +49,7 @@ export function useVideoGenerationModelSpecs(): VideoGenerationModelSpecsState {
       isActive = false
       abortController.abort()
     }
-  }, [])
+  }, [enabled])
 
   return state
 }

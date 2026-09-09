@@ -10,7 +10,9 @@ from typing import TypeAlias, cast
 from short_drama.models import ProductionProfile
 from short_drama.skills.models import (
     ComposableProductionSkill,
+    LEGACY_ROLE_FILE_ALIASES,
     ProviderPromptSkill,
+    ProductionPromptStage,
     ProductionSkill,
     ProductionSkillRole,
     SkillProvenanceKind,
@@ -30,17 +32,17 @@ DEFAULT_SHARED_SKILL_ROOT = Path(__file__).resolve().parent / "shared"
 DEFAULT_NARRATIVE_SKILLS_ROOT = Path(__file__).resolve().parent / "narrative"
 DEFAULT_PRODUCTION_METHOD_SKILLS_ROOT = Path(__file__).resolve().parent / "methods"
 DEFAULT_OFFICIAL_MINIMAX_H3_SKILLS_ROOT = (
-    Path(__file__).resolve().parent / "official" / "minimax_h3"
+    Path(__file__).resolve().parent / "sources" / "minimax_h3" / "original"
 )
 DEFAULT_OFFICIAL_MINIMAX_DESIGN_WORKFLOWS_ROOT = (
     Path(__file__).resolve().parent
-    / "official"
+    / "sources"
     / "minimax_design"
     / "3.0.11"
     / "workflows"
 )
 DEFAULT_MINIMAX_H3_SKILL_TRANSLATIONS_ROOT = (
-    Path(__file__).resolve().parent / "translations" / "minimax_h3"
+    Path(__file__).resolve().parent / "sources" / "minimax_h3" / "translations"
 )
 
 
@@ -97,6 +99,23 @@ def _read_markdown(path: Path) -> tuple[Frontmatter, str]:
         if not separator or not key.strip():
             raise ValueError(f"Invalid frontmatter line in {path}: {line}")
         metadata[key.strip()] = _parse_frontmatter_value(raw_value, path=path)
+    manifest = metadata.pop("manifest", None)
+    if manifest is not None:
+        if not isinstance(manifest, str):
+            raise ValueError(f"manifest must name a JSON file in {path}")
+        manifest_path = path.parent / manifest
+        try:
+            raw_manifest = cast(object, json.loads(manifest_path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Cannot read Skill manifest {manifest_path}: {exc}") from exc
+        if not isinstance(raw_manifest, dict):
+            raise ValueError(f"Skill manifest must be an object: {manifest_path}")
+        expanded: Frontmatter = {}
+        for key, value in cast(dict[str, object], raw_manifest).items():
+            expanded[key] = _parse_frontmatter_value(json.dumps(value, ensure_ascii=False), path=manifest_path)
+        # A small frontmatter override is useful for user-authored methods and
+        # keeps the existing editable Markdown contract compatible.
+        metadata = {**expanded, **metadata}
     return metadata, _clean_markdown_body(text[closing + 5 :], path=path)
 
 
@@ -286,6 +305,39 @@ def _optional_role_reference_map(
     return references
 
 
+def _optional_stage_role_reference_map(
+    metadata: Frontmatter,
+    *,
+    path: Path,
+    key: str = "stage_role_source_sections",
+) -> dict[tuple[ProductionPromptStage, ProductionSkillRole], tuple[str, ...]]:
+    value = metadata.get(key, {})
+    if not isinstance(value, dict):
+        raise ValueError(f"Frontmatter field '{key}' must be an object in {path}")
+    references: dict[
+        tuple[ProductionPromptStage, ProductionSkillRole],
+        tuple[str, ...],
+    ] = {}
+    for raw_scope, raw_paths in value.items():
+        raw_stage, separator, raw_role = raw_scope.partition(".")
+        if not separator or not raw_stage or not raw_role:
+            raise ValueError(
+                f"Stage-role source key must use '<STAGE>.<ROLE>' in {path}: "
+                f"{raw_scope}"
+            )
+        try:
+            stage = ProductionPromptStage(raw_stage)
+            role = ProductionSkillRole(raw_role)
+        except ValueError as exc:
+            raise ValueError(
+                f"Unknown stage-role source target '{raw_scope}' in {path}"
+            ) from exc
+        references[(stage, role)] = tuple(
+            item.strip() for item in raw_paths if item.strip()
+        )
+    return references
+
+
 def _load_playbook(path: Path) -> tuple[str, tuple[str, ...]]:
     _metadata, body = _read_markdown(path)
     steps: list[str] = []
@@ -341,6 +393,7 @@ def _load_role_prompts(
     role_references: dict[ProductionSkillRole, tuple[str, ...]] | None = None,
     role_source_sections: dict[ProductionSkillRole, tuple[str, ...]] | None = None,
     allow_missing_roles: bool = False,
+    include_shared: bool = True,
 ) -> dict[ProductionSkillRole, str]:
     prompts: dict[ProductionSkillRole, str] = {}
     requested_roles = tuple(ProductionSkillRole) if roles is None else roles
@@ -366,7 +419,7 @@ def _load_role_prompts(
                 )
             _footer_metadata, footer_body = _read_markdown(shared_footer_path)
         for role in requested_roles:
-            sections = [body]
+            sections = [body] if include_shared else []
             for source_reference in source_sections_by_role.get(role, ()):
                 _relative_path, source_body = _read_role_source_section(
                     skill_directory,
@@ -392,12 +445,15 @@ def _load_role_prompts(
                         body=_read_source_document(reference_path),
                     )
                 )
-            if footer_body is not None:
+            if footer_body is not None and include_shared:
                 sections.append(footer_body)
             prompts[role] = "\n\n".join(sections)
         return prompts
     for role in requested_roles:
         role_path = skill_directory / "roles" / f"{role.value.casefold()}.md"
+        if not role_path.is_file() and role in LEGACY_ROLE_FILE_ALIASES:
+            current_role = LEGACY_ROLE_FILE_ALIASES[role]
+            role_path = skill_directory / "roles" / f"{current_role.value.casefold()}.md"
         if not role_path.is_file():
             if allow_missing_roles:
                 prompts[role] = ""
@@ -464,6 +520,10 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
         path=skill_path,
         key="role_source_sections",
     )
+    stage_role_source_sections = _optional_stage_role_reference_map(
+        metadata,
+        path=skill_path,
+    )
     unsupported_reference_roles = set(role_references).union(
         role_source_sections
     ).difference(roles)
@@ -473,6 +533,17 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
         )
         raise ValueError(
             f"Role references target undeclared roles ({unsupported}) in {skill_path}"
+        )
+    unsupported_stage_roles = {
+        role for _stage, role in stage_role_source_sections if role not in roles
+    }
+    if unsupported_stage_roles:
+        unsupported = ", ".join(
+            sorted(role.value for role in unsupported_stage_roles)
+        )
+        raise ValueError(
+            f"Stage-role references target undeclared roles ({unsupported}) in "
+            f"{skill_path}"
         )
     if "constitution_references" in metadata:
         raise ValueError(
@@ -495,20 +566,62 @@ def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:
         raise ValueError(
             f"Frontmatter field 'shared_role_footer' must be a string in {skill_path}"
         )
+    stage_role_prompts = {
+        (stage, role): _load_role_prompts(
+            skill_directory,
+            roles=(role,),
+            shared_role_prompt=shared_role_prompt_value,
+            shared_role_footer=shared_role_footer_value,
+            role_references={
+                role: role_references.get(role, ()),
+            },
+            role_source_sections={role: source_sections},
+            include_shared=False,
+        )[role]
+        for (stage, role), source_sections in stage_role_source_sections.items()
+    }
+    role_prompts = _load_role_prompts(
+        skill_directory,
+        roles=roles,
+        shared_role_prompt=shared_role_prompt_value,
+        shared_role_footer=shared_role_footer_value,
+        role_references=role_references,
+        role_source_sections=role_source_sections,
+        include_shared=False,
+    )
+    # Published MiniMax Design/H3 methods used one broad ASSET_REVIEWER slot.
+    # Keep their vendored metadata untouched and expose that exact upstream
+    # guidance to the three narrower local runtime responsibilities.
+    legacy_asset_prompt = role_prompts.get(ProductionSkillRole.ASSET_REVIEWER)
+    if legacy_asset_prompt is not None:
+        asset_role_aliases = (
+            ProductionSkillRole.ASSET_PLANNER,
+            ProductionSkillRole.ASSET_BUILDER,
+            ProductionSkillRole.ASSET_VERIFIER,
+        )
+        for role in asset_role_aliases:
+            role_prompts.setdefault(role, legacy_asset_prompt)
+        for (stage, role), prompt in tuple(stage_role_prompts.items()):
+            if role != ProductionSkillRole.ASSET_REVIEWER:
+                continue
+            for alias in asset_role_aliases:
+                stage_role_prompts.setdefault((stage, alias), prompt)
     return ComposableProductionSkill(
         id=_required_string(metadata, "id", path=skill_path),
         label=_required_string(metadata, "label", path=skill_path),
         description=_required_string(metadata, "description", path=skill_path),
         constitution=constitution,
-        role_prompts=_load_role_prompts(
-            skill_directory,
-            roles=roles,
-            shared_role_prompt=shared_role_prompt_value,
-            shared_role_footer=shared_role_footer_value,
-            role_references=role_references,
-            role_source_sections=role_source_sections,
-        ),
+        role_prompts=role_prompts,
         source_path=str(skill_path),
+        shared_prefix=(
+            (str((skill_directory / shared_role_prompt_value).resolve()), _read_markdown(skill_directory / shared_role_prompt_value)[1])
+            if shared_role_prompt_value is not None else None
+        ),
+        shared_suffix=(
+            (str((skill_directory / shared_role_footer_value).resolve()), _read_markdown(skill_directory / shared_role_footer_value)[1])
+            if shared_role_footer_value is not None else None
+        ),
+        stage_role_prompts=stage_role_prompts,
         provenance=_optional_provenance(metadata, path=skill_path),
         upstream_sources=_optional_string_list(
             metadata,
@@ -529,10 +642,9 @@ def load_narrative_skills(
 ) -> tuple[ComposableProductionSkill, ...]:
     """Load explicitly supplied narrative methods, if any.
 
-    The built-in catalog is intentionally empty.  MiniMax-H3 does not publish a
-    generic short-drama narrative Skill, so this project does not substitute a
-    locally invented one.  The field remains for persisted-run compatibility
-    and for a future, source-verifiable upstream Skill.
+    The retired built-in narrative directory has been removed. This optional
+    entry point still accepts a caller-provided directory; current production
+    methods are loaded from the methods catalog instead.
     """
 
     skill_directories = sorted(
@@ -592,6 +704,9 @@ def _load_skill(skill_directory: Path) -> ProductionSkill:
         final_cold_read=prompts[ProductionSkillRole.FINAL_COLD_READ],
         review_router=prompts[ProductionSkillRole.REVIEW_ROUTER],
         director=prompts[ProductionSkillRole.DIRECTOR],
+        asset_planner=prompts[ProductionSkillRole.ASSET_PLANNER],
+        asset_builder=prompts[ProductionSkillRole.ASSET_BUILDER],
+        asset_verifier=prompts[ProductionSkillRole.ASSET_VERIFIER],
         asset_reviewer=prompts[ProductionSkillRole.ASSET_REVIEWER],
         route_planner=prompts[ProductionSkillRole.ROUTE_PLANNER],
         video_prompt_compiler=prompts[ProductionSkillRole.VIDEO_PROMPT_COMPILER],

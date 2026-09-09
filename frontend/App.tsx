@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { PythonSetup } from './components/PythonSetup'
-import { ShortDramaStudio } from './features/short-drama/ShortDramaStudio'
+import { StudioWorkspace } from './features/short-drama/StudioWorkspace'
 import { useBackend } from './hooks/use-backend'
 import { logger } from './lib/logger'
 
 export default function App() {
+  return window.electronAPI ? <DesktopStudio /> : <StudioWorkspace />
+}
+
+function DesktopStudio() {
   const [pythonReady, setPythonReady] = useState<boolean | null>(null)
   const [backendStartRequested, setBackendStartRequested] = useState(false)
   const { connected, processStatus, isLoading } = useBackend()
@@ -47,7 +51,7 @@ export default function App() {
         <div className="max-w-md rounded-2xl border border-red-500/30 bg-red-950/20 p-6 text-center">
           <AlertCircle className="mx-auto h-10 w-10 text-red-400" />
           <h1 className="mt-4 text-lg font-semibold">本地制片核心未能启动</h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">请重新启动应用；项目、任务和恢复点已保存在 SQLite 中，不会因后端进程退出而丢失。</p>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">请重新启动应用。已保存的项目和制作记录仍在本机，可继续编辑。</p>
           <button className="mt-5 rounded-lg bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-950" onClick={() => window.location.reload()}>重新加载</button>
         </div>
       </div>
@@ -55,10 +59,10 @@ export default function App() {
   }
 
   if (isLoading || !connected) {
-    return <LaunchStatus title="正在启动本地制片核心" detail="连接 FastAPI、SQLite Worker 与 FFmpeg…" />
+    return <LaunchStatus title="正在打开工作台" detail="准备项目、素材和剪辑工具…" />
   }
 
-  return <ShortDramaStudio />
+  return <StudioWorkspace />
 }
 
 function LaunchStatus({ title, detail }: { title: string; detail: string }) {

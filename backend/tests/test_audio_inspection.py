@@ -11,8 +11,8 @@ import numpy as np
 from short_drama.audio_inspection import (
     AudioSemanticResult,
     AudioSemanticService,
-    _normalize_dialogue,
-    _signal_metrics,
+    normalize_dialogue_text,
+    measure_audio_signal,
 )
 from short_drama.fixture import CANONICAL_LINES, CANONICAL_SPEAKER_CHARACTER_IDS
 from short_drama.language_models import LanguageProviderConfigUpdate
@@ -266,7 +266,7 @@ def test_audio_inspection_endpoint_persists_non_semantic_report(client) -> None:
     )
 
 
-def test_signal_metrics_detect_clipped_pcm(tmp_path: Path) -> None:
+def test_measure_audio_signal_detect_clipped_pcm(tmp_path: Path) -> None:
     path = tmp_path / "clipped.wav"
     samples = np.full(16000, 32767, dtype="<i2")
     with wave.open(str(path), "wb") as destination:
@@ -275,7 +275,7 @@ def test_signal_metrics_detect_clipped_pcm(tmp_path: Path) -> None:
         destination.setframerate(16000)
         destination.writeframes(samples.tobytes())
 
-    metrics = _signal_metrics(path)
+    metrics = measure_audio_signal(path)
 
     assert metrics.duration_seconds == 1.0
     assert metrics.clipped_sample_ratio > 0.99
@@ -283,6 +283,6 @@ def test_signal_metrics_detect_clipped_pcm(tmp_path: Path) -> None:
 
 
 def test_dialogue_normalization_treats_traditional_and_simplified_as_equivalent() -> None:
-    assert _normalize_dialogue("現在，你還信自己嗎？") == _normalize_dialogue(
+    assert normalize_dialogue_text("現在，你還信自己嗎？") == normalize_dialogue_text(
         "现在，你还信自己吗?"
     )

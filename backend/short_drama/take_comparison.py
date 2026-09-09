@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from short_drama.language_defaults import LANGUAGE_MODEL
+
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -179,7 +181,7 @@ def compare_take_candidates(
         decision=judgment.decision,
         selected_take_id=judgment.selected_take_id,
         semantic_status=SemanticReviewStatus.COMPLETE,
-        semantic_model="gpt-5.6-sol",
+        semantic_model=LANGUAGE_MODEL,
         candidate_reviews=judgment.candidate_reviews,
         summary=judgment.summary,
         advisory_only=True,

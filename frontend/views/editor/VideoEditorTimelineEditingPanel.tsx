@@ -106,6 +106,9 @@ interface GapGenerationApi {
 }
 
 export interface VideoEditorTimelineEditingPanelProps {
+  agentMode?: boolean
+  singleTimeline?: boolean
+  onAgentGap?: (gap: NonNullable<GapSelection>) => void
   currentProjectId: string | null
   playbackTimeRef: React.MutableRefObject<number>
   centerOnPlayheadRef: React.MutableRefObject<boolean>
@@ -185,7 +188,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
     modelSpecs: videoGenerationModelSpecsResponse,
     isLoading: isLoadingVideoGenerationModelSpecs,
     errorMessage: videoGenerationModelSpecsErrorMessage,
-  } = useVideoGenerationModelSpecs()
+  } = useVideoGenerationModelSpecs(!props.agentMode)
 
   const assets = useEditorStore(selectAssets)
   const timelines = useEditorStore(selectTimelines)
@@ -318,8 +321,14 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
   }, [actions])
 
   const addTextClip = useCallback((style?: Partial<TextOverlayStyle>, startTime?: number, trackIdx?: number) => {
+    if (props.agentMode) {
+      const index = tracks.findIndex(track => track.type === 'subtitle')
+      if (index < 0) actions.addSubtitleTrack()
+      actions.addSubtitle({ trackIndex: index < 0 ? tracks.length : index, text: style?.text || '新字幕', startTime: startTime ?? currentTime, endTime: (startTime ?? currentTime) + 3 })
+      return
+    }
     actions.addTextClip({ style, startTime, trackIndex: trackIdx })
-  }, [actions])
+  }, [actions, props.agentMode, currentTime, tracks])
 
   const duplicateClip = useCallback((clipId: string) => {
     actions.duplicateClips([clipId])
@@ -1390,7 +1399,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
     <>
       <div className="h-full min-h-0 flex flex-col">
         {/* Timeline Tabs */}
-        <div className="h-8 bg-zinc-900 flex items-center px-1 gap-0.5 overflow-x-auto flex-shrink-0">
+        {props.singleTimeline ? <div className="h-8 bg-zinc-900 flex items-center px-3 text-xs text-zinc-400">镜头内部时间</div> : <div className="h-8 bg-zinc-900 flex items-center px-1 gap-0.5 overflow-x-auto flex-shrink-0">
           {timelines.filter(tl => openTimelineIds.has(tl.id)).map(tl => (
             <div
               key={tl.id}
@@ -1552,7 +1561,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
               )}
             </div>
           )}
-        </div>
+        </div>}
         
         {/* Timeline with Tools */}
         <div className="bg-zinc-950 border-t border-zinc-800 flex overflow-hidden flex-1 min-h-0">
@@ -1928,14 +1937,14 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
                     Subs
                   </button>
                   <div className="w-px h-3 bg-zinc-700" />
-                  <button 
+                  {!props.agentMode && <button
                     onClick={() => createAdjustmentLayerAsset()}
                     className="text-[10px] text-blue-400/70 hover:text-blue-300 flex items-center gap-0.5"
                     title="Create adjustment layer asset"
                   >
                     <Layers className="h-3 w-3" />
                     Adj
-                  </button>
+                  </button>}
                 </div>
                 {/* Scrollable track headers - synced with vertical scroll */}
                 <div ref={trackHeadersRef} className="flex-1 overflow-hidden flex flex-col select-none">
@@ -2523,7 +2532,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
                             {(() => {
                               const resInfo = getClipResolution(clip)
                               if (!resInfo) return null
-                              return <span style={{ color: resInfo.color }} className="font-semibold">{resInfo.height >= 2160 ? '4K' : `${resInfo.height}p`}</span>
+                              return <span style={{ color: `var(--sd-media-muted, ${resInfo.color})` }} className="font-semibold">{resInfo.height >= 2160 ? '4K' : `${resInfo.height}p`}</span>
                             })()}
                             {clip.speed !== 1 && <span className="text-yellow-400">{clip.speed}x</span>}
                             {clip.reversed && <span className="text-blue-400">REV</span>}
@@ -2929,7 +2938,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
                   })}
                   
                   {/* Cut point indicators for cross-dissolve */}
-                  {cutPoints.map((cp) => {
+                  {(props.agentMode ? [] : cutPoints).map((cp) => {
                     const leftPx = cp.time * pixelsPerSecond
                     const topPx = trackTopPx(cp.trackIndex, 4)
                     const isHovered = hoveredCutPoint?.leftClipId === cp.leftClip.id && hoveredCutPoint?.rightClipId === cp.rightClip.id
@@ -3122,7 +3131,10 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
                     const maxDur = getMaxClipDuration({ ...selectedClip, speed: newSpeed })
                     newDuration = Math.min(newDuration, maxDur)
                     newDuration = Math.max(0.5, newDuration)
-                    updateClip(selectedClip.id, { speed: newSpeed, duration: newDuration })
+                    if (props.agentMode && selectedClip.linkedClipIds?.length) {
+                      const ids = new Set([selectedClip.id, ...selectedClip.linkedClipIds])
+                      actions.setTimelineClips(clips.map(clip => ids.has(clip.id) ? { ...clip, speed: newSpeed, duration: newDuration } : clip))
+                    } else updateClip(selectedClip.id, { speed: newSpeed, duration: newDuration })
                   }}
                   className="bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-[10px] text-white"
                 >
@@ -3141,7 +3153,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
           
           <div className="w-px h-4 bg-zinc-700" />
           
-          <Button
+          {!props.agentMode && <Button
             variant="outline"
             size="sm"
             className="h-6 border-zinc-700 text-zinc-400 text-[10px] px-2"
@@ -3149,7 +3161,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
           >
             <Upload className="h-3 w-3 mr-1" />
             Export
-          </Button>
+          </Button>}
           
           
           {/* Subtitle import/export */}
@@ -3267,7 +3279,10 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
           onCreateVideoFromAudio={onCreateVideoFromAudio}
         />
       )}
-      {selectedGap && tracks[selectedGap.trackIndex]?.kind !== 'audio' && (
+      {selectedGap && props.agentMode && tracks[selectedGap.trackIndex]?.kind !== 'audio' && (
+        <div className="sd-editor-gap"><span>{selectedGap.startTime.toFixed(1)}–{selectedGap.endTime.toFixed(1)} 秒空隙</span><button onClick={() => { props.onAgentGap?.(selectedGap); handleCloseGap() }}>让 Agent 补充镜头</button><button onClick={handleCloseGap}>关闭</button></div>
+      )}
+      {selectedGap && !props.agentMode && tracks[selectedGap.trackIndex]?.kind !== 'audio' && (
         <GapGenerationModal
           selectedGap={selectedGap}
           anchorPosition={selectedGapAnchor}

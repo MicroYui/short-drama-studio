@@ -20,11 +20,14 @@ from short_drama.agent_runtime import (
     SpecialistTurnStatus,
     WorkOrderNextOwner,
 )
+from short_drama.agent_runtime.execution_control import execution_control
 from short_drama.fixture import build_dont_trust_me_fixture
+from short_drama.models import ProductionExecutionTarget
 from short_drama.production_manager import (
     AgentWorkOrderResultRequest,
     AgentWorkOrderView,
     ProductionManager,
+    SpecialistToolRequest,
 )
 from short_drama.production_profiles import ProductionSkillRole
 from short_drama.team_executor import (
@@ -48,6 +51,35 @@ class EmptyInput(ToolModel):
 
 class EmptyOutput(ToolModel):
     ok: bool = True
+
+
+class LifecycleEnqueueInput(ToolModel):
+    project_id: str
+
+
+class LifecycleAdvanceInput(ToolModel):
+    task_id: str
+
+
+class LifecycleTask(ToolModel):
+    id: str
+    project_id: str
+    asset_id: str
+    status: str
+
+
+class LifecycleOutput(ToolModel):
+    task: LifecycleTask
+
+
+class VideoPollTask(ToolModel):
+    id: str
+    project_id: str
+    status: str
+    provider: str = "minimax"
+    model: str = "MiniMax-H3"
+    provider_task_id: str | None = "remote-h3"
+    error_code: str | None = None
 
 
 def _empty_tool(_request: EmptyInput) -> ToolExecution[EmptyOutput]:
@@ -240,6 +272,54 @@ class BarrierSpecialist:
         )
 
 
+class ImageLifecycleSpecialist:
+    def __init__(self, project_id: str, terminal_status: str) -> None:
+        self._project_id = project_id
+        self._terminal_status = terminal_status
+        self.calls = 0
+
+    def execute(
+        self,
+        work_order: AgentWorkOrderView,
+    ) -> AgentWorkOrderResultRequest | SpecialistToolRequest:
+        self.calls += 1
+        if self.calls == 1:
+            return SpecialistToolRequest(
+                tool_name="image.enqueue",
+                arguments={"project_id": self._project_id},
+                reason="Generate the already-planned character master.",
+            )
+        latest_turn = work_order.work_order.specialist_turns[-1]
+        assert latest_turn.result is not None
+        output = latest_turn.result["output"]
+        assert isinstance(output, dict)
+        task = output["task"]
+        assert isinstance(task, dict)
+        assert task["status"] == self._terminal_status
+        return AgentWorkOrderResultRequest(
+            status=AgentResultStatus.COMPLETED,
+            concise_summary="Worker reviewed the terminal image task result.",
+        )
+
+
+class VideoPollingSpecialist:
+    def __init__(self, terminal_status: str) -> None:
+        self.terminal_status = terminal_status
+        self.calls = 0
+
+    def execute(self, work_order: AgentWorkOrderView) -> AgentWorkOrderResultRequest | SpecialistToolRequest:
+        self.calls += 1
+        if not work_order.work_order.specialist_turns:
+            return SpecialistToolRequest(tool_name="task.advance", arguments={"task_id": "task-h3"},
+                                         reason="Advance the already submitted video task.")
+        latest = work_order.work_order.specialist_turns[-1]
+        assert latest.result is not None
+        output = latest.result["output"]
+        assert isinstance(output, dict) and output["status"] == self.terminal_status
+        return AgentWorkOrderResultRequest(status=AgentResultStatus.COMPLETED,
+                                          concise_summary="Worker received the video result or recovery decision.")
+
+
 def _runtime(tmp_path: Path) -> tuple[AgentRuntime, str]:
     runtime = AgentRuntime(AgentRuntimeStore(tmp_path / "runtime.sqlite3"))
     run = runtime.create_run(
@@ -343,6 +423,179 @@ def test_drain_continues_model_tool_model_until_worker_handoff(
     assert batch.advances[0].serialized_project_write is True
     assert batch.advances[0].work_order_status == DelegationStatus.COMPLETED
     assert batch.advances[0].result_status == AgentResultStatus.COMPLETED
+
+
+@pytest.mark.parametrize(
+    ("lifecycle_sequence", "expected_continuations", "expected_tool_names"),
+    [
+        (
+            ("QUEUED", "SUBMITTING", "SUCCEEDED"),
+            2,
+            ("image.enqueue", "image.advance", "image.advance"),
+        ),
+        (("FAILED",), 0, ("image.enqueue",)),
+    ],
+)
+def test_production_manager_image_lifecycle_continuation_preserves_full_trace(
+    tmp_path: Path,
+    lifecycle_sequence: tuple[str, ...],
+    expected_continuations: int,
+    expected_tool_names: tuple[str, ...],
+) -> None:
+    store = AgentRuntimeStore(tmp_path / "runtime.sqlite3")
+    runtime = AgentRuntime(store, ContextCompiler(store, EmptyArtifactResolver()))
+    projects = FixtureProjectStore()
+    project_id = projects.document.project.id
+    registry = _registry()
+    lifecycle_statuses = iter(lifecycle_sequence)
+
+    def lifecycle_output() -> ToolExecution[LifecycleOutput]:
+        return ToolExecution(
+            output=LifecycleOutput(
+                task=LifecycleTask(
+                    id="image-task-character",
+                    project_id=project_id,
+                    asset_id="asset-character",
+                    status=next(lifecycle_statuses),
+                )
+            )
+        )
+
+    registry.register(
+        ToolSpec(
+            id="image.enqueue",
+            version=1,
+            category=ToolCategory.IMAGE,
+            description="Create one persisted test image task.",
+            effect=ToolEffect.WRITE,
+            idempotent=False,
+            input_model=LifecycleEnqueueInput,
+            output_model=LifecycleOutput,
+            handler=lambda _request: lifecycle_output(),
+        )
+    )
+    registry.register(
+        ToolSpec(
+            id="image.advance",
+            version=1,
+            category=ToolCategory.IMAGE,
+            description="Advance one persisted test image task.",
+            effect=ToolEffect.EXTERNAL,
+            idempotent=False,
+            input_model=LifecycleAdvanceInput,
+            output_model=LifecycleOutput,
+            handler=lambda _request: lifecycle_output(),
+        )
+    )
+    specialist = ImageLifecycleSpecialist(project_id, lifecycle_sequence[-1])
+    manager = ProductionManager(
+        runtime=runtime,
+        tools=registry,
+        projects=projects,
+        language_client_resolver=lambda: object(),
+        specialist_agent_factory=lambda _client: specialist,
+    )
+    run = runtime.create_run(
+        project_id=project_id,
+        objective="Generate one planned character image and review the result.",
+        root_agent="production-manager",
+    )
+    work_order_id = runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="asset-worker",
+        production_skill_role=ProductionSkillRole.ASSET_REVIEWER,
+        objective="Generate the planned character master.",
+        why_now="Its asset brief and prompt are already final.",
+    ).id
+
+    batch = LocalTeamExecutor(manager, max_workers=1).drain_ready_work_until_handoff(
+        run.id
+    )
+
+    assert specialist.calls == 2
+    assert (
+        batch.advances[0].deterministic_continuation_count
+        == expected_continuations
+    )
+    final_work_order = runtime.store.get_work_order(work_order_id)
+    assert final_work_order is not None
+    assert final_work_order.status == DelegationStatus.COMPLETED
+    assert [
+        turn.tool_name for turn in final_work_order.specialist_turns
+    ] == list(expected_tool_names)
+    assert [
+        turn.result["output"]["task"]["status"]
+        for turn in final_work_order.specialist_turns
+        if turn.result is not None
+    ] == list(lifecycle_sequence)
+    progress = runtime.store.list_work_order_progress(work_order_id)
+    assert sum(
+        entry.author == "local-team-executor" for entry in progress
+    ) == expected_continuations
+    assert runtime.store.get_agent_result(work_order_id).status == AgentResultStatus.COMPLETED
+
+
+@pytest.mark.parametrize(("sequence", "error_code", "remote_id", "resume"), [
+    (("ACKNOWLEDGED", "RUNNING", "RUNNING", "SUCCEEDED"), None, "remote-h3", False),
+    (("RUNNING", "SUCCEEDED"), None, "remote-h3", True),
+    (("FAILED",), None, "remote-h3", False),
+    (("SUBMIT_UNKNOWN",), None, None, False),
+    (("OUTPUT_MISSING",), None, "remote-h3", False),
+    (("SUBMITTING",), None, None, False),
+    (("RUNNING",), "H3_POLL_TRANSIENT", "remote-h3", False),
+    (("RUNNING",), None, None, False),
+])
+def test_h3_polling_returns_to_worker_only_for_result_or_recovery_and_resumes_trace(
+    tmp_path: Path, sequence: tuple[str, ...], error_code: str | None,
+    remote_id: str | None, resume: bool,
+) -> None:
+    store = AgentRuntimeStore(tmp_path / "runtime.sqlite3")
+    runtime = AgentRuntime(store, ContextCompiler(store, EmptyArtifactResolver()))
+    projects = FixtureProjectStore()
+    project_id = projects.document.project.id
+    statuses = iter(sequence[1:] if resume else sequence)
+    registry = _registry()
+
+    def poll(_request: LifecycleAdvanceInput) -> ToolExecution[VideoPollTask]:
+        return ToolExecution(output=VideoPollTask(id="task-h3", project_id=project_id,
+                                                 status=next(statuses), error_code=error_code,
+                                                 provider_task_id=remote_id))
+
+    registry.register(ToolSpec(
+        id="task.advance", version=1, category=ToolCategory.TASK,
+        description="Advance one test H3 lifecycle transition.", effect=ToolEffect.EXTERNAL,
+        idempotent=False, input_model=LifecycleAdvanceInput, output_model=VideoPollTask, handler=poll,
+    ))
+    specialist = VideoPollingSpecialist(sequence[-1])
+    manager = ProductionManager(runtime=runtime, tools=registry, projects=projects,
+                                language_client_resolver=lambda: object(),
+                                specialist_agent_factory=lambda _client: specialist)
+    run = runtime.create_run(project_id=project_id, objective="Recover the existing H3 video.",
+                             root_agent="production-manager", execution_target=ProductionExecutionTarget.REAL_H3)
+    order = runtime.create_work_order(run.id, sender="production-manager", recipient_role="video-worker",
+                                     production_skill_role=ProductionSkillRole.ROUTE_PLANNER,
+                                     objective="Recover one video task.", why_now="It has been submitted.")
+    if resume:
+        order.specialist_turns.append(SpecialistTurnRecord(
+            id="poll-before-restart", sequence=1, tool_name="task.advance", arguments={"task_id": "task-h3"},
+            reason="The original Worker chose to poll this task.", status=SpecialistTurnStatus.COMPLETED,
+            result={"tool_id": "task.advance", "status": "SUCCEEDED", "output": {
+                "id": "task-h3", "project_id": project_id, "status": sequence[0],
+                "provider": "minimax", "model": "MiniMax-H3", "provider_task_id": remote_id,
+            }},
+        ))
+        order.next_owner = WorkOrderNextOwner.WORKER_DECISION
+        runtime.store.save_work_order(order)
+    batch = LocalTeamExecutor(manager, max_workers=1, video_poll_interval_seconds=0.001).drain_ready_work_until_handoff(run.id)
+    assert batch.advances[0].status == TeamWorkAdvanceStatus.ADVANCED, batch.model_dump_json()
+    assert specialist.calls == (1 if resume else 2)
+    assert batch.advances[0].deterministic_continuation_count == len(sequence) - 1
+    persisted = runtime.store.get_work_order(order.id)
+    assert persisted is not None
+    assert [turn.result["output"]["status"] for turn in persisted.specialist_turns if turn.result] == list(sequence)
+    assert all(turn.tool_name == "task.advance" and turn.arguments == {"task_id": "task-h3"}
+               for turn in persisted.specialist_turns)
 
 
 @pytest.mark.parametrize(
@@ -514,6 +767,45 @@ def test_executor_reserves_pending_work_before_worker_claims_it(tmp_path: Path) 
     first_runner.join(timeout=2.0)
     assert not first_runner.is_alive()
     assert first_batches[0].selected_work_order_ids == [work_order_id]
+
+
+def test_executor_leaves_backlog_unclaimed_until_slots_are_free(tmp_path: Path) -> None:
+    runtime, run_id = _runtime(tmp_path)
+    work_ids = [_work_order(runtime, run_id, f'bounded-{index}') for index in range(5)]
+    executor = LocalTeamExecutor(RecordingManager(runtime, _registry(), lambda _id: None), max_workers=2)
+    batches = [executor.run_ready_work(run_id) for _ in range(3)]
+    assert [len(batch.selected_work_order_ids) for batch in batches] == [2, 2, 1]
+    assert {item for batch in batches for item in batch.selected_work_order_ids} == set(work_ids)
+
+
+def test_pause_reaches_worker_waiting_for_project_write_lane(tmp_path: Path) -> None:
+    runtime, run_id = _runtime(tmp_path)
+    work_ids = [_work_order_with_tool(runtime, run_id, f'write-{index}', 'project.write-for-team') for index in range(2)]
+    first_entered, release_first, paused = threading.Event(), threading.Event(), threading.Event()
+    executed: list[str] = []
+    def write(work_id: str) -> None:
+        executed.append(work_id)
+        first_entered.set()
+        assert release_first.wait(2)
+    executor = LocalTeamExecutor(RecordingManager(runtime, _registry(), write), max_workers=2)
+    batches: list[TeamExecutionBatch] = []
+    def advance() -> None:
+        with execution_control(lambda: 'paused' if paused.is_set() else None):
+            batches.append(executor.run_ready_work(run_id))
+    thread = threading.Thread(target=advance, daemon=True)
+    thread.start()
+    try:
+        assert first_entered.wait(2)
+        paused.set()
+    finally:
+        release_first.set()
+    thread.join(2)
+    assert not thread.is_alive()
+    assert len(executed) == 1 and executed[0] in work_ids
+    assert sum(item.status == TeamWorkAdvanceStatus.YIELDED for item in batches[0].advances) == 1
+    # A yielded slot is released; the remaining write can continue normally.
+    executor.run_ready_work(run_id)
+    assert set(executed) == set(work_ids)
 
 
 def test_executor_uses_production_manager_lock_free_specialist_boundary(

@@ -7,6 +7,9 @@ from typing import Protocol
 from short_drama.asset_inspection import (
     AssetVersionInspectionRequest,
     SemanticAssetReview,
+    SemanticAssetReviewEvidenceReference,
+    SemanticSourceImageAnalysis,
+    SourceImageAnalysisRequest,
 )
 from short_drama.models import EpisodeReviewRequest, EpisodeReviewResponse
 from short_drama.tools.contracts import (
@@ -30,6 +33,14 @@ from short_drama.visual_input_quality import (
 
 
 class QaToolService(Protocol):
+    def analyze_source_image(
+        self,
+        project_id: str,
+        asset_id: str,
+        version_id: str,
+        request: SourceImageAnalysisRequest,
+    ) -> SemanticSourceImageAnalysis: ...
+
     def inspect_asset_version(
         self,
         project_id: str,
@@ -37,6 +48,14 @@ class QaToolService(Protocol):
         version_id: str,
         request: AssetVersionInspectionRequest,
     ) -> SemanticAssetReview: ...
+
+    def asset_inspection_reference_version_refs(
+        self,
+        project_id: str,
+        asset_id: str,
+        version_id: str,
+        request: AssetVersionInspectionRequest,
+    ) -> list[tuple[str, str]]: ...
 
     def review_current_episode(
         self,
@@ -83,6 +102,13 @@ class QaAssetVersionInspectInput(ToolModel):
     request: AssetVersionInspectionRequest
 
 
+class QaSourceImageAnalyzeInput(ToolModel):
+    project_id: str
+    asset_id: str
+    version_id: str
+    request: SourceImageAnalysisRequest
+
+
 class QaReferenceRerankInput(ToolModel):
     project_id: str
     shot_id: str
@@ -106,6 +132,51 @@ class QaVisualReportsInput(ToolModel):
 
 
 def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
+    def analyze_source_image(
+        request: QaSourceImageAnalyzeInput,
+    ) -> ToolExecution[SemanticSourceImageAnalysis]:
+        result = service.analyze_source_image(
+            request.project_id,
+            request.asset_id,
+            request.version_id,
+            request.request,
+        )
+        return ToolExecution(
+            output=result,
+            artifact_refs=(
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="asset",
+                    artifact_id=request.asset_id,
+                ),
+                ArtifactRef(
+                    project_id=request.project_id,
+                    artifact_type="asset_version",
+                    artifact_id=request.version_id,
+                ),
+            ),
+        )
+
+    registry.register(
+        ToolSpec(
+            id="qa.analyze_source_image",
+            version=1,
+            category=ToolCategory.QA,
+            description=(
+                "在 AssetPlan 分配用户或外部源图用途前观察精确图片。Agent 可把"
+                "对话中已确定的目标资产、参考职责与权威级别结构化传入；工具只依据"
+                "可见证据说明覆盖、缺口、可直接复用还是应从原图派生，不会用文件名"
+                "或关键词替 Agent 路由，也不会把未分配素材自动绑定全片。"
+            ),
+            effect=ToolEffect.EXTERNAL,
+            idempotent=False,
+            input_model=QaSourceImageAnalyzeInput,
+            output_model=SemanticSourceImageAnalysis,
+            handler=analyze_source_image,
+            tags=frozenset({"asset", "image", "source-intake", "semantic-analysis"}),
+        )
+    )
+
     def inspect_asset_version(
         request: QaAssetVersionInspectInput,
     ) -> ToolExecution[SemanticAssetReview]:
@@ -114,6 +185,26 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             request.asset_id,
             request.version_id,
             request.request,
+        )
+        resolved_reference_refs = service.asset_inspection_reference_version_refs(
+            request.project_id,
+            request.asset_id,
+            request.version_id,
+            request.request,
+        )
+        unique_reference_refs = list(dict.fromkeys(resolved_reference_refs))
+        result = result.model_copy(
+            update={
+                "evidence_references": [
+                    SemanticAssetReviewEvidenceReference(
+                        source_project_id=reference_project_id,
+                        asset_version_id=reference_version_id,
+                    )
+                    for reference_project_id, reference_version_id in (
+                        unique_reference_refs
+                    )
+                ]
+            }
         )
         refs = [
             ArtifactRef(
@@ -137,13 +228,12 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             )
         refs.extend(
             ArtifactRef(
-                project_id=request.project_id,
+                project_id=reference_project_id,
                 artifact_type="asset_version",
                 artifact_id=version_id,
             )
-            for version_id in dict.fromkeys(
-                request.request.canonical_reference_version_ids
-            )
+            for reference_project_id, version_id in unique_reference_refs
+            if reference_project_id == request.project_id
         )
         return ToolExecution(output=result, artifact_refs=tuple(refs))
 
@@ -154,8 +244,18 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             category=ToolCategory.QA,
             description=(
                 "生成或导入一个实际图片版本后调用；对照资产 brief、"
-                "可选镜头与已批准标准参考进行多模态语义检查。它只返回"
-                "建议和问题，不会自动批准或拒绝；随后由 Agent 决定是否调用 "
+                "可选镜头、已批准母版与候选固化的派生来源进行多模态语义检查。"
+                "审图保留每个派生来源的参考职责、权威级别、用途和主体别名；"
+                "用户明确锁定的原始图可在它声明的职责内作为历史证据，但不因此"
+                "被泛化为已批准资产。它只返回"
+                "建议和问题，不会自动批准或拒绝。问题的重要性取决于"
+                "已声明的下游职责；Provider 直接生成卡的近似分区或轻微中性"
+                "背景渐变，在不影响身份、视图可读性或后续使用时不应单独成为"
+                "拒绝理由。通用轮廓侧面的左/右反向也只在非对称身份特征"
+                "或 Shot/裁切明确要求某一侧时成为阻断问题，不从 LEFT/RIGHT 枚举名"
+                "自动推导。同规格重复载体中能独立裁用的单件，不因副本间"
+                "轻微尺寸或透视差就默认拒绝；只有结构、材质、组件或可裁用性"
+                "已影响声明的制作职责时才是实质问题。随后由 Agent 决定是否调用 "
                 "artifact.review_version 记录结论。"
             ),
             effect=ToolEffect.EXTERNAL,

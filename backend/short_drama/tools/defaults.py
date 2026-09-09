@@ -20,6 +20,7 @@ from short_drama.tools.shot import register_tools as register_shot_tools
 from short_drama.tools.task import register_tools as register_task_tools
 from short_drama.tools.timeline import register_tools as register_timeline_tools
 from short_drama.tools.video import register_tools as register_video_tools
+from short_drama.tools.studio import register_tools as register_studio_tools
 
 if TYPE_CHECKING:
     from short_drama.service import ShortDramaService
@@ -47,6 +48,7 @@ def build_default_tool_registry(
     register_task_tools(target, service)
     register_route_tools(target, service)
     register_change_tools(target, service)
+    register_studio_tools(target, service)
     if agent_delegator is not None:
         register_agent_tools(target, agent_delegator)
     return target

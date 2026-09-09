@@ -32,12 +32,13 @@ from short_drama.agent_runtime.models import (
     PlanRevision,
     PlanStep,
     RunMemory,
+    ToolAttemptRef,
     WorkOrder,
     WorkOrderNextOwner,
     WorkOrderProgressEntry,
     utc_now,
 )
-from short_drama.skills.models import ProductionSkillRole
+from short_drama.skills.models import ProductionPromptStage, ProductionSkillRole
 from short_drama.agent_runtime.plan_graph import PlanGraph
 from short_drama.agent_runtime.store import AgentRuntimeStore
 from short_drama.models import ProductionExecutionTarget
@@ -563,10 +564,8 @@ class AgentRuntime:
             evidence_text = "\n".join(evidence_parts) or result.concise_summary
         refs = _unique_artifact_refs(
             [
-                *work_order.scope,
                 *result.created_artifacts,
                 *result.updated_artifacts,
-                *result.evidence_refs,
             ]
         )
         return self.remember_experience(
@@ -588,9 +587,12 @@ class AgentRuntime:
         sender: str,
         recipient_role: str,
         production_skill_role: ProductionSkillRole | None = None,
+        production_prompt_stage: ProductionPromptStage | None = None,
         objective: str,
         why_now: str,
+        task_inputs: dict[str, JsonValue] | None = None,
         scope: Sequence[ArtifactRef] = (),
+        tool_attempt_refs: Sequence[ToolAttemptRef] = (),
         constraints: Sequence[str] = (),
         confirmed_decisions: Sequence[str] = (),
         inherited_decision_ids: Sequence[str] = (),
@@ -616,6 +618,57 @@ class AgentRuntime:
             raise ValueError(
                 "WorkOrder context artifacts must belong to the AgentRun project"
             )
+        if any(
+            ref.project_id != run.project_id or ref.agent_run_id != run.id
+            for ref in tool_attempt_refs
+        ):
+            raise ValueError(
+                "WorkOrder Tool attempt references must belong to the AgentRun"
+            )
+        canonical_tool_attempt_refs: list[ToolAttemptRef] = []
+        for ref in tool_attempt_refs:
+            source_work_order = self.store.get_work_order(ref.work_order_id)
+            source_turn = (
+                None
+                if source_work_order is None
+                else next(
+                    (
+                        turn
+                        for turn in source_work_order.specialist_turns
+                        if turn.id == ref.attempt_id
+                    ),
+                    None,
+                )
+            )
+            if (
+                source_work_order is None
+                or source_work_order.parent_run_id != run.id
+                or source_turn is None
+                or source_turn.tool_name != ref.tool_name
+            ):
+                raise ValueError(
+                    f"Unknown or stale ToolAttemptRef: {ref.attempt_id}"
+                )
+            outcome_status = (
+                None
+                if source_turn.result is None
+                else source_turn.result.get("status")
+            )
+            canonical_tool_attempt_refs.append(
+                ToolAttemptRef(
+                    project_id=run.project_id,
+                    agent_run_id=run.id,
+                    work_order_id=source_work_order.id,
+                    attempt_id=source_turn.id,
+                    tool_name=source_turn.tool_name,
+                    turn_status=source_turn.status,
+                    outcome_status=(
+                        outcome_status if isinstance(outcome_status, str) else None
+                    ),
+                    has_arguments=bool(source_turn.arguments),
+                    has_result=source_turn.result is not None,
+                )
+            )
         for decision_id in inherited_decision_ids:
             decision = self.store.get_decision(decision_id)
             if decision is None or decision.project_id != run.project_id:
@@ -630,10 +683,12 @@ class AgentRuntime:
             objective=objective,
             why_now=why_now,
             required_artifacts=list(scope),
+            tool_attempt_refs=list(canonical_tool_attempt_refs),
             adjacent_boundaries=list(adjacent_boundaries),
             inherited_decision_ids=list(inherited_decision_ids),
             inherited_decisions=list(confirmed_decisions),
             selected_skill_ids=list(run.active_skill_ids),
+            production_prompt_stage=production_prompt_stage,
             experience_tags=list(experience_tags),
             constraints=list(constraints),
             open_questions=list(open_questions),
@@ -651,9 +706,12 @@ class AgentRuntime:
             sender=sender,
             recipient_role=recipient_role,
             production_skill_role=production_skill_role,
+            production_prompt_stage=production_prompt_stage,
             objective=objective,
             why_now=why_now,
+            task_inputs=task_inputs or {},
             scope=list(scope),
+            tool_attempt_refs=list(canonical_tool_attempt_refs),
             constraints=list(constraints),
             confirmed_decisions=list(confirmed_decisions),
             open_questions=list(open_questions),
@@ -680,9 +738,11 @@ class AgentRuntime:
         sender: str,
         recipient_role: str,
         production_skill_role: ProductionSkillRole | None = None,
+        production_prompt_stage: ProductionPromptStage | None = None,
         objective: str,
         why_now: str,
         scope: Sequence[ArtifactRef] = (),
+        tool_attempt_refs: Sequence[ToolAttemptRef] = (),
         constraints: Sequence[str] = (),
         confirmed_decisions: Sequence[str] = (),
         inherited_decision_ids: Sequence[str] = (),
@@ -700,9 +760,11 @@ class AgentRuntime:
             sender=sender,
             recipient_role=recipient_role,
             production_skill_role=production_skill_role,
+            production_prompt_stage=production_prompt_stage,
             objective=objective,
             why_now=why_now,
             scope=scope,
+            tool_attempt_refs=tool_attempt_refs,
             constraints=constraints,
             confirmed_decisions=confirmed_decisions,
             inherited_decision_ids=inherited_decision_ids,

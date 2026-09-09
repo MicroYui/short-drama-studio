@@ -1,7 +1,7 @@
 # 从完整分镜到 H3 生成单元的后端闭环
 
 > 状态：本轮后端实现合同
-> 更新日期：2026-09-05
+> 更新日期：2026-09-08
 > 验证边界：不启用 LTX 模型，不调用真实付费 Provider；自动化回归使用 Fake Provider 和本地媒体
 
 本文定义“完整剧本已存在”之后，Agent 如何形成可修改的完整分镜，将编辑镜头组合为一次 H3 生成，再把同一段生成媒体按原始镜头边界送入时间线。它是普通产品工程中的数据与执行合同，不代替 Agent 的具体创作选择。
@@ -93,6 +93,8 @@ MiniMax Design `drama-series` 的原始 Workflow 明确把每个 episode/scope �
 - 稳定的 `video.generation-unit.<clip_group_id>` 输出槽位。
 
 因此“一次生成多个编辑镜头”不再需要把多个 Shot 合并成一个假 Shot。
+
+2026-09-08 补齐片段级语言编译与执行交接：`route.compile_h3_prompt` 可接受精确 GenerationPlan document/version/unit、有序媒体和 Agent 已选方法，读取整组来源后编译最终 H3 Prompt。结果通过对应 unit directive 的 `prompt_override + media_inputs` 写入现有 RoutePlan；执行、持久化及恢复使用同一份最终输入。具体公开来源、真实案例输入检查与验证边界见 [视频生成实现调研](47-video-generation-reuse-and-execution.md)。
 
 ## 3. 稳定逻辑输出槽位
 

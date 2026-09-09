@@ -1,10 +1,13 @@
-"""Configuration contracts for the fixed GPT-5.6-sol language provider."""
+"""Configuration contracts for the shared language provider."""
 
 from __future__ import annotations
 
-from pydantic import Field
+from short_drama.skill_ids import SkillIds
+
+from pydantic import Field, JsonValue, model_validator
 
 from short_drama.h3_models import H3MediaInput
+from short_drama.language_defaults import LANGUAGE_MODEL, LANGUAGE_REASONING_EFFORT
 from short_drama.models import DomainModel, VideoGenerationRoute
 
 
@@ -16,28 +19,97 @@ class LanguageProviderConfigUpdate(DomainModel):
 
 class LanguageProviderConfigResponse(DomainModel):
     provider: str = "openai-compatible"
-    model: str = "gpt-5.6-sol"
+    model: str = LANGUAGE_MODEL
+    reasoning_effort: str = LANGUAGE_REASONING_EFFORT
     base_url: str = "https://api.openai.com/v1"
     has_api_key: bool
     key_source: str
     can_connect: bool
 
 
+class H3GenerationUnitContextRequest(DomainModel):
+    generation_plan_document_id: str = Field(min_length=1)
+    generation_plan_version_id: str = Field(min_length=1)
+    generation_unit_id: str = Field(min_length=1)
+
+
+class H3GenerationUnitMediaCandidate(DomainModel):
+    media_input: H3MediaInput
+    reference_role: str
+    serves_shot_ids: list[str]
+
+
+class H3GenerationUnitContextResponse(DomainModel):
+    project_id: str
+    generation_plan_document_id: str
+    generation_plan_version_id: str
+    generation_plan_version: int
+    generation_unit_id: str
+    source_context: dict[str, JsonValue]
+    media_candidates: list[H3GenerationUnitMediaCandidate]
+    warnings: list[str] = Field(default_factory=list[str])
+    selection_guidance: str = (
+        "Candidates are an inventory, not a request. Choose the route and the "
+        "smallest sufficient ordered subset for this unit. Source locators come "
+        "from approved current AssetVersions; copy them without guessing. "
+        "Read the next unit separately; full project and prior-stage reads are unnecessary."
+    )
+
+
 class LanguagePromptCompileRequest(DomainModel):
-    shot_id: str
+    shot_id: str | None = Field(default=None, min_length=1)
+    generation_plan_document_id: str | None = Field(default=None, min_length=1)
+    generation_plan_version_id: str | None = Field(default=None, min_length=1)
+    generation_unit_id: str | None = Field(default=None, min_length=1)
+    method_skill_ids: SkillIds = Field(default_factory=list[str])
     route: VideoGenerationRoute = VideoGenerationRoute.DIRECT
     duration_seconds: int | None = Field(default=None, ge=4, le=15)
-    source_prompt: str | None = Field(default=None, max_length=7000)
+    source_prompt: str | None = Field(
+        default=None, max_length=32000,
+        description="Optional complete prior draft to revise. Drafts may exceed the final H3 limit; only a validated output can be saved for execution.",
+    )
+    revision_instructions: str | None = Field(
+        default=None, min_length=1, max_length=2000,
+        description="Agent feedback for this compilation, including a prior failure. May revise wording, never locked facts or media order.",
+    )
     media_inputs: list[H3MediaInput] = Field(
         default_factory=list[H3MediaInput],
         max_length=12,
     )
 
+    @model_validator(mode="after")
+    def validate_target(self) -> LanguagePromptCompileRequest:
+        unit_target = (
+            self.generation_plan_document_id,
+            self.generation_plan_version_id,
+            self.generation_unit_id,
+        )
+        if any(value is not None for value in unit_target):
+            if self.shot_id is not None or not all(unit_target):
+                raise ValueError(
+                    "Choose one shot_id or a complete generation plan document/version/unit target"
+                )
+        elif self.shot_id is None:
+            raise ValueError("A shot or generation-unit target is required")
+        if any(not value.strip() for value in self.method_skill_ids) or len(
+            self.method_skill_ids
+        ) != len(set(self.method_skill_ids)):
+            raise ValueError("Method skill IDs must be non-empty and unique")
+        return self
+
 
 class LanguagePromptCompileResponse(DomainModel):
+    candidate_id: str | None = None
     provider: str = "openai-compatible"
-    model: str = "gpt-5.6-sol"
-    shot_id: str
+    model: str = LANGUAGE_MODEL
+    reasoning_effort: str = LANGUAGE_REASONING_EFFORT
+    shot_id: str | None = None
+    generation_plan_document_id: str | None = None
+    generation_plan_version_id: str | None = None
+    generation_unit_id: str | None = None
+    shot_ids: list[str] = Field(default_factory=list[str])
+    method_skill_ids: SkillIds = Field(default_factory=list[str])
+    media_inputs: list[H3MediaInput] = Field(default_factory=list[H3MediaInput])
     route: VideoGenerationRoute
     duration_seconds: int
     source_prompt: str

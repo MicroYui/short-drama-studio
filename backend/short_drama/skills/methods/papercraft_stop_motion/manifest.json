@@ -1,0 +1,55 @@
+{
+  "id": "method.papercraft_stop_motion",
+  "label": "纸艺定格讲解",
+  "description": "适合纸艺定格讲解项目，把学习目标、纸艺隐喻、布景、镜头、旁白与声音组织成片。",
+  "roles": [
+    "CONCEPT",
+    "PLANNER",
+    "REVISION_VERIFIER",
+    "DIRECTOR",
+    "ASSET_REVIEWER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::画面层次与纸艺定格优先级",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 3：提出 3-5 个创意方向"
+    ],
+    "PLANNER": [
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 12：为已选时长创建分镜",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 13：定义剪辑节奏",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 15：定义转场规则",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 16：定义声音设计"
+    ],
+    "REVISION_VERIFIER": [
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 19：执行审核清单"
+    ],
+    "DIRECTOR": [
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 14：定义运镜规则",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 15：定义转场规则"
+    ],
+    "ASSET_REVIEWER": [
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 4：设计纸艺角色",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 5：设计纸片场景",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 6：规划分层纸雕布景",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 7：规划道具资产库"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 9：撰写单图提示词",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 10：撰写系列图提示词",
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 18：提供反向提示词"
+    ],
+    "EPISODE_REVIEWER": [
+      "../../sources/minimax_h3/original/papercraft-stop-motion-explainer/SKILL.cn.md::STEP 19：执行审核清单"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/papercraft-stop-motion-explainer/SKILL.cn.md",
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/papercraft-stop-motion-explainer/meta.yaml [source=official; author-en=MiniMax Hub]"
+  ],
+  "user_overridable": true
+}

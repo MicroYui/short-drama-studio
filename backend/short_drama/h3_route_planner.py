@@ -59,6 +59,7 @@ from short_drama.models import (
     VideoInspectionScope,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
 )
@@ -66,12 +67,14 @@ from short_drama.production_contracts import (
     GENERATION_PLAN_OUTPUT_SLOT_ID,
     GenerationUnit,
 )
+from short_drama.language_models import H3GenerationUnitMediaCandidate
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
     build_h3_generation_unit_prompt,
     build_h3_prompt,
     validate_h3_probe,
 )
+from short_drama.providers.h3_prompt_skill import validate_h3_generation_unit_prompt_ir
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
     LanguageProviderError,
@@ -269,13 +272,13 @@ def build_h3_production_route_plan(
                 used_language_agent = True
             except (LanguageProviderError, ValueError) as exc:
                 global_warnings.append(
-                    "GPT-5.6-sol route advice unavailable for shots "
+                    "语言模型 route advice unavailable for shots "
                     + ", ".join(shot.id for shot in batch)
                     + "; the technical baseline remains visible for debugging, but these "
                     + f"shots are waiting for a structured route decision: {exc}"
                 )
         if used_language_agent:
-            planner += "+gpt-5.6-sol"
+            planner += "+gpt-6-astra"
 
     decisions: list[H3ShotRoutePlan] = []
     new_seconds = 0
@@ -537,17 +540,25 @@ def _build_h3_generation_unit_route_plan(
                 for shot_id in unit.shot_ids
                 for item in prepared_media_inputs.get(shot_id, [])
             ]
+        directive = directive_by_unit.get(unit.id)
+        if directive is not None and directive.media_inputs is not None:
+            unit_inputs = [item.model_copy(deep=True) for item in directive.media_inputs]
         candidates_by_unit[unit.id] = _build_generation_unit_candidates(
             document=document,
             unit=unit,
             shots=shots,
             media_inputs=unit_inputs,
+            directive=directive,
         )
 
     agent_choices: dict[str, _AgentRouteChoice] = {}
     planner = "evidence-first-generation-unit-route-agent-v1"
-    if language_client is not None:
-        synthetic_shots = [synthetic_by_unit[item.id] for item in generation_units]
+    synthetic_shots = [
+        synthetic_by_unit[item.id]
+        for item in generation_units
+        if item.id not in directive_by_unit or directive_by_unit[item.id].candidate_id is None
+    ]
+    if language_client is not None and synthetic_shots:
         try:
             agent_choices = _choose_with_language_agent(
                 document=document,
@@ -558,12 +569,12 @@ def _build_h3_generation_unit_route_plan(
             )
         except (LanguageProviderError, ValueError) as exc:
             warnings.append(
-                "GPT-5.6-sol route advice unavailable for generation units; "
+                "语言模型 route advice unavailable for generation units; "
                 "provider-compatible candidates remain visible, but execution waits for "
                 f"a structured Agent decision: {exc}"
             )
         else:
-            planner += "+gpt-5.6-sol"
+            planner += "+gpt-6-astra"
 
     decisions: list[H3ShotRoutePlan] = []
     new_seconds = 0
@@ -571,7 +582,17 @@ def _build_h3_generation_unit_route_plan(
     for unit in generation_units:
         shots = [shot_by_id[shot_id] for shot_id in unit.shot_ids]
         candidates = candidates_by_unit[unit.id]
-        chosen = _technical_baseline_candidate(candidates)
+        directive = directive_by_unit.get(unit.id)
+        chosen = next(
+            (
+                item
+                for item in candidates
+                if directive is not None and item.id == directive.candidate_id
+            ),
+            None,
+        )
+        if chosen is None:
+            chosen = _technical_baseline_candidate(candidates)
         choice_warnings: list[str] = []
         has_structured_choice = False
 
@@ -715,17 +736,74 @@ def _build_generation_unit_candidates(
     unit: GenerationUnit,
     shots: list[ShotPlan],
     media_inputs: list[H3MediaInput],
+    directive: H3ShotRouteDirective | None = None,
 ) -> list[_RouteCandidate]:
     duration, duration_warnings, supported = _duration_for_h3(
         unit.requested_duration_seconds
     )
-    direct_prompt = build_h3_generation_unit_prompt(
-        document,
-        unit,
-        shots,
-        route=VideoGenerationRoute.DIRECT,
-        duration_seconds=duration,
-    )
+    if directive is not None and directive.prompt_override is not None:
+        route_by_candidate = {
+            f"{prefix}:{unit.id}": route
+            for prefix, route in (
+                ("direct", VideoGenerationRoute.DIRECT),
+                ("frame-first", VideoGenerationRoute.FRAME_FIRST),
+                ("frame-last", VideoGenerationRoute.FRAME_LAST),
+                ("frame-first-last", VideoGenerationRoute.FRAME_FIRST_LAST),
+                ("reference", VideoGenerationRoute.REFERENCE),
+            )
+        }
+        route = route_by_candidate.get(directive.candidate_id or "")
+        if route is None or not supported:
+            raise RoutePlanningError(
+                f"Unsupported authored candidate for generation unit {unit.id}"
+            )
+        prompt = directive.prompt_override
+        try:
+            validate_h3_probe(
+                route=route,
+                prompt=prompt,
+                duration_seconds=duration,
+                media_inputs=media_inputs,
+            )
+            validate_h3_generation_unit_prompt_ir(
+                prompt,
+                document,
+                unit,
+                shots,
+                route=route,
+                duration_seconds=duration,
+                media_inputs=media_inputs,
+            )
+        except ValueError as exc:
+            raise RoutePlanningError(
+                f"Invalid authored generation unit {unit.id}: {exc}"
+            ) from exc
+        return [
+            _RouteCandidate(
+                id=directive.candidate_id or "",
+                action=H3ShotRouteAction.GENERATE,
+                route=route,
+                prompt=prompt,
+                duration_seconds=duration,
+                media_inputs=[item.model_copy(deep=True) for item in media_inputs],
+                rationale="Execute the Agent-authored clip prompt and ordered references unchanged.",
+                warnings=duration_warnings,
+            )
+        ]
+    try:
+        direct_prompt = build_h3_generation_unit_prompt(
+            document,
+            unit,
+            shots,
+            route=VideoGenerationRoute.DIRECT,
+            duration_seconds=duration,
+        )
+    except H3CapabilityError as exc:
+        raise RoutePlanningError(
+            f"Generation unit {unit.id} requires route.compile_h3_prompt with its exact "
+            "generation-plan target; pass the result as prompt_override with ordered media_inputs. "
+            f"Source facts were not truncated: {exc}"
+        ) from exc
     candidates = [
         _RouteCandidate(
             id=f"direct:{unit.id}",
@@ -804,6 +882,56 @@ def _build_generation_unit_candidates(
         )
     )
     return candidates
+
+
+def generation_unit_media_candidates(
+    document: ProjectDocument,
+    shots: list[ShotPlan],
+) -> tuple[list[H3GenerationUnitMediaCandidate], list[str]]:
+    """Expose scoped approved references before prompt compilation, without IO.
+
+    Reuse the same reference resolver and H3 mapping as route planning. This
+    only exposes candidates; the Agent still chooses its route and media order.
+    """
+
+    approved = _approved_media_inputs(document)
+    plans = {plan.shot_id: plan for plan in document.reference_plan}
+    candidates: dict[tuple[str | None, str | None], H3GenerationUnitMediaCandidate] = {}
+    aliases: set[str] = set()
+    warnings: list[str] = []
+    for shot in shots:
+        plan = plans.get(shot.id)
+        if plan is None:
+            warnings.append(f"No ReferencePlan for {shot.id}")
+            continue
+        try:
+            selections, _limit, notes = build_reference_visual_candidates(
+                document=document, shot=shot, plan=plan,
+                request=ReferenceVisualRerankRequest(), bound_candidates=False,
+            )
+            warnings.extend(notes)
+        except VisualInputContractError as exc:
+            warnings.append(f"{shot.id}: {exc}")
+            continue
+        for selected in selections:
+            key = (selected.subject_asset_id, selected.asset_version_id)
+            if key in candidates:
+                if shot.id not in candidates[key].serves_shot_ids:
+                    candidates[key].serves_shot_ids.append(shot.id)
+                continue
+            try:
+                media = _reference_selection_media_input(
+                    document=document, shot=shot, plan=plan, selected=selected,
+                    approved_inputs=approved, used_aliases=aliases,
+                )
+            except (ValueError, KeyError) as exc:
+                warnings.append(f"{selected.asset_version_id}: {exc}")
+                continue
+            candidates[key] = H3GenerationUnitMediaCandidate(
+                media_input=media, reference_role=selected.role.value,
+                serves_shot_ids=[shot.id],
+            )
+    return list(candidates.values()), list(dict.fromkeys(warnings))
 
 
 def _generation_unit_media_route(
@@ -1745,10 +1873,12 @@ def _selected_reference_metadata(
     )
     subject_name = subject.name if subject is not None else selected.subject_asset_id
     matching_cues = [
-        (beat.start_seconds, cue)
-        for beat in shot.timeline_beats
-        for cue in beat.references
+        (start, cue)
+        for start, cue in [(0.0, cue) for cue in shot.references] + [
+            (beat.start_seconds, cue) for beat in shot.timeline_beats for cue in beat.references
+        ]
         if cue.subject_asset_id == selected.subject_asset_id
+        and (cue.asset_version_id is None or cue.asset_version_id == selected.asset_version_id)
         and set(cue.required_tags).issubset(selected.tags)
     ]
     if matching_cues:
@@ -2324,6 +2454,7 @@ def _choose_with_language_agent(
         document.project.production_profile,
         roles=(ProductionSkillRole.ROUTE_PLANNER,),
         include_constitution=False,
+        stage=ProductionPromptStage.VISUAL_GEN,
     )
     instructions = (
         "你是 AI 原生竖屏视频制片流程中的生成路线 Agent。"

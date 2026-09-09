@@ -7,7 +7,11 @@ from typing import Protocol
 from pydantic import Field
 
 from short_drama.image_models import ImageProviderRequest, ImageUsage
-from short_drama.models import DomainModel
+from short_drama.models import (
+    DomainModel,
+    ImageReferenceAuthority,
+    ImageReferenceRole,
+)
 
 
 class ImageProviderError(RuntimeError):
@@ -17,10 +21,18 @@ class ImageProviderError(RuntimeError):
 class ImageProviderDefiniteError(ImageProviderError):
     """A definite rejection where the provider did not accept useful work."""
 
-    def __init__(self, status_code: int, code: str, message: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        code: str,
+        message: str,
+        *,
+        same_request_retryable: bool = False,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.code = code
+        self.same_request_retryable = same_request_retryable
 
 
 class ImageProviderSubmissionUnknown(ImageProviderError):
@@ -32,6 +44,10 @@ class ImageProviderInput(DomainModel):
     image_url: str
     purpose: str | None = None
     subject_alias: str | None = None
+    reference_role: ImageReferenceRole = ImageReferenceRole.SUPPORTING_VISUAL
+    reference_authority: ImageReferenceAuthority = (
+        ImageReferenceAuthority.SUPPORTING
+    )
 
 
 class ImageProviderResult(DomainModel):

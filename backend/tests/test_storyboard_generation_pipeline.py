@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from short_drama.h3_models import (
     H3ProductionRouteExecuteRequest,
     H3ProductionRoutePlanRequest,
@@ -31,7 +33,7 @@ from short_drama.production_contracts import (
     StoryboardContent,
     StoryboardCreateRequest,
 )
-from short_drama.service import ShortDramaService
+from short_drama.service import ShortDramaService, WorkflowConflictError
 from tests.test_short_drama_h3 import (
     FakeH3Client,
     _fake_factory,
@@ -64,8 +66,10 @@ def _finish_h3_task(
     assert service.advance_task(task_id).status == TaskStatus.SUCCEEDED
 
 
+@pytest.mark.parametrize("preparation_revision_offset", [0, 3])
 def test_script_only_agent_pipeline_preserves_multi_shot_edit_boundaries(
     tmp_path: Path,
+    preparation_revision_offset: int,
 ) -> None:
     fake = FakeH3Client()
     service = _service(tmp_path, fake)
@@ -158,6 +162,13 @@ def test_script_only_agent_pipeline_preserves_multi_shot_edit_boundaries(
             origin=ProductionDocumentOrigin.AGENT,
         ),
     )
+    if preparation_revision_offset:
+        # Reference preparation advances the execution projection's revision
+        # while the accepted Storyboard content and version remain unchanged.
+        prepared = service.get_project(project_id).document
+        for shot in prepared.shots:
+            shot.revision += preparation_revision_offset + shot.sequence
+        service.repository.save_project(prepared)
     generation_plan = service.compile_generation_plan(
         project_id,
         GenerationPlanCompileRequest(
@@ -246,6 +257,20 @@ def test_script_only_agent_pipeline_preserves_multi_shot_edit_boundaries(
     assert opening_clips[1].source_in_seconds == authored_shots[0].duration_seconds
     assert opening_clips[1].duration_seconds == authored_shots[1].duration_seconds
     assert sum(item.duration_seconds for item in manifest.video_clips) == 50.0
+
+    if preparation_revision_offset:
+        prepared = service.get_project(project_id).document
+        original = prepared.model_copy(deep=True)
+        prepared.shots[0].revision += 1
+        service.repository.save_project(prepared)
+        with pytest.raises(WorkflowConflictError, match="outdated Shot revision"):
+            service.rebuild_manifest(project_id)
+        prepared = original.model_copy(deep=True)
+        prepared.shots[0].narrative_purpose += " A different authored action."
+        service.repository.save_project(prepared)
+        with pytest.raises(WorkflowConflictError, match="differs from the current Storyboard"):
+            service.rebuild_manifest(project_id)
+        service.repository.save_project(original)
 
     # Clearing one covered Shot keeps the shared Take and unit slot available for
     # its still-selected sibling. Rejecting the Take clears the remaining selection,

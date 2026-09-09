@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 import requests
+from PIL import Image
 
 from short_drama.image_models import (
     ImageOperation,
@@ -16,6 +18,7 @@ from short_drama.image_models import (
     ImageProviderRequest,
     ImageReferenceInput,
 )
+from short_drama.models import ImageReferenceAuthority, ImageReferenceRole
 from short_drama.providers.image_config import ImageProviderConfigStore
 from short_drama.providers.image_provider import (
     ImageProviderDefiniteError,
@@ -33,14 +36,26 @@ class FakeResponse:
         payload: object,
         *,
         headers: dict[str, str] | None = None,
+        content: bytes = b"",
     ) -> None:
         self.status_code = status_code
         self.payload = payload
         self.text = json.dumps(payload)
         self.headers = headers or {}
+        self.content = content
+        self.closed = False
 
     def json(self) -> object:
         return self.payload
+
+    def iter_content(self, chunk_size: int) -> list[bytes]:
+        return [
+            self.content[offset : offset + chunk_size]
+            for offset in range(0, len(self.content), chunk_size)
+        ]
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class FakeSession:
@@ -91,6 +106,25 @@ def _success_payload() -> dict[str, object]:
     }
 
 
+def _image_bytes(image_format: str) -> bytes:
+    mode = "RGB" if image_format == "JPEG" else "RGBA"
+    color = (20, 40, 60) if mode == "RGB" else (20, 40, 60, 255)
+    image = Image.new(mode, (2, 2), color)
+    output = BytesIO()
+    image.save(output, format=image_format)
+    return output.getvalue()
+
+
+def _data_image_url(image_format: str = "PNG") -> str:
+    mime_type = {
+        "JPEG": "image/jpeg",
+        "PNG": "image/png",
+        "WEBP": "image/webp",
+    }[image_format]
+    encoded = base64.b64encode(_image_bytes(image_format)).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
 def test_generation_uses_current_gpt_image_json_contract() -> None:
     session = FakeSession()
     session.responses.append(
@@ -125,6 +159,15 @@ def test_generation_uses_current_gpt_image_json_contract() -> None:
 
 def test_edit_uses_high_fidelity_multi_image_inputs() -> None:
     session = FakeSession()
+    remote_webp = _image_bytes("WEBP")
+    session.responses.append(
+        FakeResponse(
+            200,
+            {},
+            headers={"Content-Length": str(len(remote_webp))},
+            content=remote_webp,
+        )
+    )
     session.responses.append(FakeResponse(200, _success_payload()))
     request = ImageProviderRequest(
         operation=ImageOperation.EDIT,
@@ -132,23 +175,35 @@ def test_edit_uses_high_fidelity_multi_image_inputs() -> None:
         input_version_ids=["version-1", "version-2"],
     )
     inputs = [
-        ImageProviderInput(asset_version_id="version-1", image_url="data:image/png;base64,AA=="),
+        ImageProviderInput(
+            asset_version_id="version-1",
+            image_url=_data_image_url(),
+        ),
         ImageProviderInput(asset_version_id="version-2", image_url="https://example.com/store.png"),
     ]
 
     _client(session).create(request, inputs)
 
-    payload = session.calls[0][2]["json"]
-    assert payload["images"] == [
-        {"image_url": "data:image/png;base64,AA=="},
-        {"image_url": "https://example.com/store.png"},
-    ]
-    assert payload["input_fidelity"] == "high"
-    assert session.calls[0][1] == "https://image.example.test/v1/images/edits"
+    assert session.calls[0][0:2] == ("GET", "https://example.com/store.png")
+    call = session.calls[1]
+    assert call[1] == "https://image.example.test/v1/images/edits"
+    assert call[2]["headers"] == {"Authorization": "Bearer secret"}
+    assert "json" not in call[2]
+    assert call[2]["data"]["input_fidelity"] == "high"
+    files = call[2]["files"]
+    assert [item[0] for item in files] == ["image[]", "image[]"]
+    assert files[0][1][0] == "input-1.png"
+    assert files[0][1][2] == "image/png"
+    assert files[1][1][0] == "input-2.png"
+    assert files[1][1][2] == "image/png"
+    with Image.open(BytesIO(files[1][1][1])) as normalized:
+        assert normalized.format == "PNG"
 
 
 def test_edit_projects_typed_reference_inputs_to_provider_images_in_order() -> None:
     session = FakeSession()
+    remote_jpeg = _image_bytes("JPEG")
+    session.responses.append(FakeResponse(200, {}, content=remote_jpeg))
     session.responses.append(FakeResponse(200, _success_payload()))
     request = ImageProviderRequest(
         operation=ImageOperation.EDIT,
@@ -170,7 +225,7 @@ def test_edit_projects_typed_reference_inputs_to_provider_images_in_order() -> N
     inputs = [
         ImageProviderInput(
             asset_version_id="hero-version",
-            image_url="data:image/png;base64,AA==",
+            image_url=_data_image_url(),
             purpose="identity lock",
             subject_alias="hero",
         ),
@@ -184,19 +239,142 @@ def test_edit_projects_typed_reference_inputs_to_provider_images_in_order() -> N
 
     _client(session).create(request, inputs)
 
-    payload = session.calls[0][2]["json"]
-    assert payload["images"] == [
-        {"image_url": "data:image/png;base64,AA=="},
-        {"image_url": "https://example.com/canteen.png"},
-    ]
-    assert payload["prompt"] == (
+    call = session.calls[1]
+    payload = call[2]["data"]
+    assert [item[0] for item in call[2]["files"]] == ["image[]", "image[]"]
+    assert call[2]["files"][1][1][2] == "image/jpeg"
+    assert payload["prompt"].startswith(
         "keep the hero identity and use the canteen layout\n\n"
         "有序参考图职责（按上传顺序）：\n"
-        "参考图1（主体别名：hero）：identity lock\n"
-        "参考图2（主体别名：canteen）：location topology"
+        "参考图1（主体别名：hero）"
     )
+    assert "角色：SUPPORTING_VISUAL；权威级别：SUPPORTING" in payload["prompt"]
+    assert "只在其已声明的职责范围内作为辅助参考" in payload["prompt"]
     assert payload["prompt"].count("有序参考图职责") == 1
     assert request.prompt == "keep the hero identity and use the canteen layout"
+
+
+def test_reference_generation_uses_edit_endpoint_and_semantic_reference_rules() -> None:
+    session = FakeSession()
+    for image_format in ("PNG", "JPEG", "WEBP"):
+        session.responses.append(
+            FakeResponse(200, {}, content=_image_bytes(image_format))
+        )
+    session.responses.append(FakeResponse(200, _success_payload()))
+    request = ImageProviderRequest(
+        operation=ImageOperation.REFERENCE_GENERATE,
+        prompt="生成男主角双区标准卡",
+        reference_inputs=[
+            ImageReferenceInput(
+                asset_version_id="uploaded-hero",
+                purpose="用户指定这张照片就是男主角",
+                subject_alias="hero",
+                reference_role=ImageReferenceRole.SUBJECT_IDENTITY,
+                reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+            ),
+            ImageReferenceInput(
+                asset_version_id="layout-guide",
+                purpose="双区角色卡版式",
+                reference_role=ImageReferenceRole.LAYOUT_GUIDE,
+                reference_authority=ImageReferenceAuthority.GUIDE_ONLY,
+            ),
+            ImageReferenceInput(
+                asset_version_id="style-guide",
+                purpose="真人校园短剧质感",
+                reference_role=ImageReferenceRole.STYLE,
+                reference_authority=ImageReferenceAuthority.GUIDE_ONLY,
+            ),
+        ],
+        primary_input_version_id="uploaded-hero",
+    )
+    inputs = [
+        ImageProviderInput(
+            asset_version_id=reference.asset_version_id,
+            image_url=f"https://example.com/{index}.png",
+        )
+        for index, reference in enumerate(request.reference_inputs, start=1)
+    ]
+
+    _client(session).create(request, inputs)
+
+    call = session.calls[3]
+    assert call[1] == "https://image.example.test/v1/images/edits"
+    assert call[2]["data"]["input_fidelity"] == "high"
+    assert [item[0] for item in call[2]["files"]] == [
+        "image[]",
+        "image[]",
+        "image[]",
+    ]
+    assert [item[1][2] for item in call[2]["files"]] == [
+        "image/png",
+        "image/jpeg",
+        "image/png",
+    ]
+    provider_prompt = call[2]["data"]["prompt"]
+    assert "不得改成另一人" in provider_prompt
+    assert "只使用版式、分区和构图关系" in provider_prompt
+    assert "不得复制其中的人物身份或具体主体" in provider_prompt
+
+
+def test_image_operation_contract_distinguishes_generation_reference_and_edit() -> None:
+    reference = ImageReferenceInput(
+        asset_version_id="uploaded-hero",
+        purpose="identity",
+    )
+    with pytest.raises(ValueError, match="does not accept reference"):
+        ImageProviderRequest(
+            operation=ImageOperation.GENERATE,
+            prompt="generate",
+            reference_inputs=[reference],
+        )
+    with pytest.raises(ValueError, match="requires at least one reference"):
+        ImageProviderRequest(
+            operation=ImageOperation.REFERENCE_GENERATE,
+            prompt="derive first master",
+        )
+
+
+def test_image_size_contract_matches_azure_gpt_image_2_bounds() -> None:
+    assert ImageProviderRequest(
+        operation=ImageOperation.GENERATE,
+        prompt="sixteen by nine",
+        size="2048x1152",
+    ).size == "2048x1152"
+    assert ImageProviderRequest(
+        operation=ImageOperation.GENERATE,
+        prompt="minimum pixels",
+        size="1024x640",
+    ).size == "1024x640"
+    assert ImageProviderRequest(
+        operation=ImageOperation.GENERATE,
+        prompt="maximum pixels",
+        size="3840x2160",
+    ).size == "3840x2160"
+
+    with pytest.raises(ValueError, match="long edge"):
+        ImageProviderRequest(
+            operation=ImageOperation.GENERATE,
+            prompt="too long",
+            size="3856x2160",
+        )
+    with pytest.raises(ValueError, match="multiples of 16"):
+        ImageProviderRequest(
+            operation=ImageOperation.GENERATE,
+            prompt="unaligned full hd",
+            size="1920x1080",
+        )
+    with pytest.raises(ValueError, match="pixel count"):
+        ImageProviderRequest(
+            operation=ImageOperation.GENERATE,
+            prompt="too few pixels",
+            size="1024x624",
+        )
+    with pytest.raises(ValueError, match="pixel count"):
+        ImageProviderRequest(
+            operation=ImageOperation.GENERATE,
+            prompt="too many pixels",
+            size="3840x2176",
+        )
 
 
 def test_azure_masked_edit_uses_multipart_and_applies_mask_to_primary() -> None:
@@ -217,19 +395,18 @@ def test_azure_masked_edit_uses_multipart_and_applies_mask_to_primary() -> None:
         primary_input_version_id="primary",
         mask_version_id="mask",
     )
-    encoded = base64.b64encode(b"png-bytes").decode("ascii")
     inputs = [
         ImageProviderInput(
             asset_version_id="primary",
-            image_url=f"data:image/png;base64,{encoded}",
+            image_url=_data_image_url(),
         ),
         ImageProviderInput(
             asset_version_id="actor",
-            image_url=f"data:image/png;base64,{encoded}",
+            image_url=_data_image_url("JPEG"),
         ),
         ImageProviderInput(
             asset_version_id="mask",
-            image_url=f"data:image/png;base64,{encoded}",
+            image_url=_data_image_url(),
         ),
     ]
 
@@ -243,8 +420,38 @@ def test_azure_masked_edit_uses_multipart_and_applies_mask_to_primary() -> None:
     assert call[2]["data"]["input_fidelity"] == "high"
     files = call[2]["files"]
     assert [item[0] for item in files] == ["image[]", "image[]", "mask"]
-    assert files[0][1][1] == b"png-bytes"
+    assert files[0][1][1] == _image_bytes("PNG")
+    assert files[1][1][2] == "image/jpeg"
     assert files[-1][1][2] == "image/png"
+
+
+def test_edit_rejects_remote_images_larger_than_20_mib_before_submission() -> None:
+    session = FakeSession()
+    session.responses.append(
+        FakeResponse(
+            200,
+            {},
+            headers={"Content-Length": str(20 * 1024 * 1024 + 1)},
+        )
+    )
+    request = ImageProviderRequest(
+        operation=ImageOperation.EDIT,
+        prompt="keep the actor",
+        input_version_ids=["actor"],
+    )
+
+    with pytest.raises(ValueError, match="20 MiB"):
+        _client(session).create(
+            request,
+            [
+                ImageProviderInput(
+                    asset_version_id="actor",
+                    image_url="https://example.com/too-large.png",
+                )
+            ],
+        )
+
+    assert [call[0] for call in session.calls] == ["GET"]
 
 
 def test_validation_and_error_classification() -> None:
@@ -263,6 +470,22 @@ def test_validation_and_error_classification() -> None:
     with pytest.raises(ImageProviderDefiniteError) as definite:
         client.create(ImageProviderRequest(operation="GENERATE", prompt="x"), [])
     assert definite.value.code == "invalid_image"
+    assert definite.value.same_request_retryable is False
+
+    session.responses.append(
+        FakeResponse(
+            429,
+            {"error": {"code": "rate_limit_exceeded", "message": "try later"}},
+        )
+    )
+    with pytest.raises(ImageProviderDefiniteError) as transient:
+        client.create(ImageProviderRequest(operation="GENERATE", prompt="x"), [])
+    assert transient.value.code == "rate_limit_exceeded"
+    assert transient.value.same_request_retryable is True
+
+    session.responses.append(FakeResponse(408, {"error": {"message": "timed out"}}))
+    with pytest.raises(ImageProviderSubmissionUnknown):
+        client.create(ImageProviderRequest(operation="GENERATE", prompt="x"), [])
 
     session.responses.append(FakeResponse(500, {"error": {"message": "server error"}}))
     with pytest.raises(ImageProviderSubmissionUnknown):

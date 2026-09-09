@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from short_drama.models import ProjectAggregate
+from short_drama.models import ProjectAggregate, ReferencePlanEntry
 from short_drama.production_contracts import (
     StoryboardDraftAppendRequest,
     StoryboardDraftBeginRequest,
@@ -42,6 +42,12 @@ from short_drama.tools.contracts import (
     ToolExecution,
     ToolModel,
     ToolSpec,
+)
+from short_drama.tools.artifact_views import (
+    StoryboardCompactReadResponse,
+    StoryboardMutationSummaryResponse,
+    compact_storyboard_read,
+    storyboard_mutation_summary,
 )
 from short_drama.tools.registry import ToolRegistry
 
@@ -179,6 +185,13 @@ class ShotReferencePlanUpdateInput(ToolModel):
     project_id: str
     shot_id: str
     request: ShotReferencePlanUpdateRequest
+
+
+class ShotReferencePlanMutationResponse(ToolModel):
+    project_id: str
+    shot_id: str
+    shot_revision: int
+    reference_plan: ReferencePlanEntry
 
 
 class ShotReferencePlanPreviewInput(ToolModel):
@@ -687,20 +700,20 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
 
     def finalize_storyboard(
         request: StoryboardDraftFinalizeInput,
-    ) -> ToolExecution[StoryboardMutationResponse]:
+    ) -> ToolExecution[StoryboardMutationSummaryResponse]:
         result = service.finalize_storyboard(
             request.project_id,
             request.request,
         )
         return ToolExecution(
-            output=result,
+            output=storyboard_mutation_summary(result),
             artifact_refs=_storyboard_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="shot.finalize_storyboard",
-            version=1,
+            version=2,
             category=ToolCategory.SHOT,
             description=(
                 "在完整计划中的每个 ClipGroup 都已提交后进行确定性装配和结构校验，"
@@ -708,12 +721,14 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
                 " Shot。装配要求私有时长账本、Shot、ClipGroup、outline 与 TimingAudit"
                 "秒数一致且无超载；自然语言连续性与可见变化由 Verifier 做语义"
                 "判断，不做逐字等值匹配。Verifier 报告供 Agent 语义决策，不作为用户审批门；"
-                "不会调用 H3 或生成视频。"
+                "不会调用 H3 或生成视频。成功时只返回 canonical "
+                "Storyboard 的版本身份和结构摘要；需要镜头正文时"
+                "显式读取 shot.get_storyboard。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftFinalizeInput,
-            output_model=StoryboardMutationResponse,
+            output_model=StoryboardMutationSummaryResponse,
             handler=finalize_storyboard,
             tags=frozenset(
                 {"storyboard", "finalize", "canonical", "clip-group", "handoff"}
@@ -723,28 +738,29 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
 
     def create_storyboard(
         request: StoryboardCreateInput,
-    ) -> ToolExecution[StoryboardMutationResponse]:
+    ) -> ToolExecution[StoryboardMutationSummaryResponse]:
         result = service.create_storyboard(request.project_id, request.request)
         return ToolExecution(
-            output=result,
+            output=storyboard_mutation_summary(result),
             artifact_refs=_storyboard_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="shot.create_storyboard",
-            version=1,
+            version=2,
             category=ToolCategory.SHOT,
             description=(
                 "兼容旧调用或导入已经完整存在的结构化分镜，一次写入镜头、"
                 "ClipGroup 和连续性信息；不会生成视频。新的 Agent 自主制片"
                 "默认使用轻量 begin → 增量账本 → 增量 outline → 逐组详细分镜 "
-                "→ finalize 的可恢复链路。"
+                "→ finalize 的可恢复链路。成功响应只包含精确版本"
+                "与结构摘要，不回传分镜正文和历史。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardCreateInput,
-            output_model=StoryboardMutationResponse,
+            output_model=StoryboardMutationSummaryResponse,
             handler=create_storyboard,
             tags=frozenset(
                 {"storyboard", "shot", "clip-group", "compatibility", "import"}
@@ -754,26 +770,27 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
 
     def replace_storyboard(
         request: StoryboardReplaceInput,
-    ) -> ToolExecution[StoryboardMutationResponse]:
+    ) -> ToolExecution[StoryboardMutationSummaryResponse]:
         result = service.replace_storyboard(request.project_id, request.request)
         return ToolExecution(
-            output=result,
+            output=storyboard_mutation_summary(result),
             artifact_refs=_storyboard_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="shot.replace_storyboard",
-            version=1,
+            version=2,
             category=ToolCategory.SHOT,
             description=(
                 "当分镜结构需要整体重构时，基于明确的当前版本写入一份新版本。"
                 "旧分镜与旧镜头引用继续可读，供 Agent 追溯和比较。"
+                "成功时只返回新版本身份与结构摘要。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardReplaceInput,
-            output_model=StoryboardMutationResponse,
+            output_model=StoryboardMutationSummaryResponse,
             handler=replace_storyboard,
             tags=frozenset({"storyboard", "replace", "versioned"}),
         )
@@ -781,26 +798,27 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
 
     def patch_storyboard(
         request: StoryboardPatchInput,
-    ) -> ToolExecution[StoryboardMutationResponse]:
+    ) -> ToolExecution[StoryboardMutationSummaryResponse]:
         result = service.patch_storyboard(request.project_id, request.request)
         return ToolExecution(
-            output=result,
+            output=storyboard_mutation_summary(result),
             artifact_refs=_storyboard_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="shot.patch_storyboard",
-            version=1,
+            version=2,
             category=ToolCategory.SHOT,
             description=(
                 "只修改 Agent 明确选中的镜头或 ClipGroup，并通过 expected_revision"
                 " 保护其他已确认镜头；未修改镜头保持原修订号。"
+                "成功响应不重放完整 Storyboard；按需显式读取新版本。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardPatchInput,
-            output_model=StoryboardMutationResponse,
+            output_model=StoryboardMutationSummaryResponse,
             handler=patch_storyboard,
             tags=frozenset({"storyboard", "partial-edit", "versioned"}),
         )
@@ -808,29 +826,30 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
 
     def get_storyboard(
         request: StoryboardGetInput,
-    ) -> ToolExecution[StoryboardReadResponse]:
+    ) -> ToolExecution[StoryboardCompactReadResponse]:
         result = service.get_storyboard(
             request.project_id,
             version_id=request.version_id,
         )
         return ToolExecution(
-            output=result,
+            output=compact_storyboard_read(result),
             artifact_refs=_storyboard_refs(request.project_id, result),
         )
 
     registry.register(
         ToolSpec(
             id="shot.get_storyboard",
-            version=1,
+            version=2,
             category=ToolCategory.SHOT,
             description=(
                 "读取当前或指定历史版本的完整分镜及 ClipGroup，供局部修改、资产规划"
-                "和生成计划编译使用。"
+                "和生成计划编译使用。所选 Storyboard 正文只出现"
+                "一次，不回传 document.versions 历史或 version.payload 副本。"
             ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=StoryboardGetInput,
-            output_model=StoryboardReadResponse,
+            output_model=StoryboardCompactReadResponse,
             handler=get_storyboard,
             tags=frozenset({"storyboard", "read", "clip-group"}),
         )
@@ -838,28 +857,39 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
 
     def update_plan(
         request: ShotReferencePlanUpdateInput,
-    ) -> ToolExecution[ProjectAggregate]:
+    ) -> ToolExecution[ShotReferencePlanMutationResponse]:
         result = service.update_shot_reference_plan(
             request.project_id,
             request.shot_id,
             request.request,
         )
         shot = next(item for item in result.document.shots if item.id == request.shot_id)
+        plan = next(item for item in result.document.reference_plan
+                    if item.shot_id == request.shot_id)
         return ToolExecution(
-            output=result,
+            output=ShotReferencePlanMutationResponse(
+                project_id=request.project_id,
+                shot_id=shot.id,
+                shot_revision=shot.revision,
+                reference_plan=plan,
+            ),
             artifact_refs=(_shot_ref(request.project_id, shot.id, shot.revision),),
         )
 
     registry.register(
         ToolSpec(
             id="shot.update_reference_plan",
-            version=1,
+            version=2,
             category=ToolCategory.SHOT,
-            description="Update one shot's reference, action, and interaction plan.",
+            description=(
+                "Update one shot's reference, action, and interaction plan. "
+                "Return the exact saved reference_plan and shot revision, without "
+                "a full project snapshot."
+            ),
             effect=ToolEffect.WRITE,
             idempotent=True,
             input_model=ShotReferencePlanUpdateInput,
-            output_model=ProjectAggregate,
+            output_model=ShotReferencePlanMutationResponse,
             handler=update_plan,
             tags=frozenset({"shot", "reference-plan", "partial-edit"}),
         )

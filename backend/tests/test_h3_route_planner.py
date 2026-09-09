@@ -11,6 +11,8 @@ import imageio_ffmpeg
 import pytest
 from PIL import Image
 
+from short_drama.agent_runtime.artifact_resolver import ProjectArtifactResolver
+
 from short_drama.h3_models import (
     H3CameraMotionPreset,
     H3MediaInput,
@@ -743,6 +745,18 @@ def test_explicit_candidate_directive_selects_an_executable_route(
     assert compiled.plan.decisions[0].readiness == H3ShotRouteReadiness.READY
     assert compiled.plan.estimated_new_h3_seconds > 0
     assert "+awaiting-agent-decision" not in compiled.plan.planner
+
+    listed = service.tool_registry.invoke("route.list_h3_plans", {"project_id": project.document.project.id})
+    assert listed.status.value == "SUCCEEDED"
+    assert any(ref.artifact_id == compiled.plan.id and ref.version == compiled.plan.state_revision
+               for ref in listed.artifact_refs)
+    index_ref = next(ref for ref in listed.artifact_refs if ref.artifact_type == "h3_route_plan_index")
+    index = ProjectArtifactResolver(service.repository).summarize_artifact(index_ref)
+    assert index is not None
+    row = json.loads(index.summary)["plans"][0]
+    assert row["plan_id"] == compiled.plan.id and row["shot_ids"] == [shot.id]
+    assert row["state_revision"] == compiled.plan.state_revision
+    assert compiled.plan.decisions[0].prompt not in index.summary
 
 
 def test_unknown_explicit_candidate_is_rejected_without_fallback(

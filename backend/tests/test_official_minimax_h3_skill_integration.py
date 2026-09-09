@@ -18,14 +18,14 @@ from short_drama.skills.models import SkillProvenanceKind
 UPSTREAM_COMMIT = "d21241f0a4b3acbb34c97dae47fa417b7065e438"
 
 METHOD_DIRECTORIES = {
-    "method.minimax_h3.3d_animation_short": "3d-animation-short-generator",
-    "method.minimax_h3.brand_promo_video": "brand-promo-video-generator",
-    "method.minimax_h3.co_op_game_intro": "co-op-game-intro-generator",
-    "method.minimax_h3.handdrawn_live_video": "handdrawn-live-video-generator",
-    "method.minimax_h3.minimalist_product_ad": "minimalist-product-ad-generator",
-    "method.minimax_h3.music_video_subtitle": "music-video-subtitle-generator",
-    "method.minimax_h3.paper_collage_explainer": "paper-collage-explainer-generator",
-    "method.minimax_h3.papercraft_stop_motion_explainer": (
+    "method.animation_short": "3d-animation-short-generator",
+    "method.brand_promo": "brand-promo-video-generator",
+    "method.co_op_game_intro": "co-op-game-intro-generator",
+    "method.handdrawn_live": "handdrawn-live-video-generator",
+    "method.minimalist_product_ad": "minimalist-product-ad-generator",
+    "method.lyric_video": "music-video-subtitle-generator",
+    "method.paper_collage_explainer": "paper-collage-explainer-generator",
+    "method.papercraft_stop_motion": (
         "papercraft-stop-motion-explainer"
     ),
 }
@@ -73,38 +73,27 @@ EXPECTED_UPSTREAM_ATTRIBUTION = {
     ),
 }
 
-VENDORED_FILE_PATHS = {
+RETAINED_SOURCE_FILE_PATHS = {
     "3d-animation-short-generator/meta.yaml",
     "3d-animation-short-generator/SKILL.cn.md",
-    "3d-animation-short-generator/SKILL.md",
-    "3d-animation-short-generator/references/fallback-policy.md",
-    "3d-animation-short-generator/references/model-selection.md",
     "3d-animation-short-generator/references/qc-checklist.md",
-    "3d-animation-short-generator/references/shot-table-spec.md",
     "3d-animation-short-generator/references/storyboard-guidelines.md",
     "brand-promo-video-generator/meta.yaml",
     "brand-promo-video-generator/SKILL.cn.md",
-    "brand-promo-video-generator/SKILL.md",
     "co-op-game-intro-generator/meta.yaml",
     "co-op-game-intro-generator/SKILL.cn.md",
-    "co-op-game-intro-generator/SKILL.md",
     "co-op-game-intro-generator/references/h3-confirmation-image-template.md",
     "co-op-game-intro-generator/references/h3-video-prompt-template.md",
     "handdrawn-live-video-generator/meta.yaml",
     "handdrawn-live-video-generator/SKILL.cn.md",
-    "handdrawn-live-video-generator/SKILL.md",
     "minimalist-product-ad-generator/meta.yaml",
     "minimalist-product-ad-generator/SKILL.cn.md",
-    "minimalist-product-ad-generator/SKILL.md",
     "music-video-subtitle-generator/meta.yaml",
     "music-video-subtitle-generator/SKILL.cn.md",
-    "music-video-subtitle-generator/SKILL.md",
     "paper-collage-explainer-generator/meta.yaml",
     "paper-collage-explainer-generator/SKILL.cn.md",
-    "paper-collage-explainer-generator/SKILL.md",
     "papercraft-stop-motion-explainer/meta.yaml",
     "papercraft-stop-motion-explainer/SKILL.cn.md",
-    "papercraft-stop-motion-explainer/SKILL.md",
 }
 
 
@@ -118,14 +107,14 @@ def _top_level_meta_values(source_directory: str) -> dict[str, str]:
     return values
 
 
-def test_vendored_files_match_the_pinned_upstream_inventory_and_attribution() -> None:
+def test_retained_sources_keep_their_upstream_inventory_and_attribution() -> None:
     actual_files = {
         path.relative_to(DEFAULT_OFFICIAL_MINIMAX_H3_SKILLS_ROOT).as_posix()
         for path in DEFAULT_OFFICIAL_MINIMAX_H3_SKILLS_ROOT.rglob("*")
         if path.is_file()
     }
 
-    assert actual_files == VENDORED_FILE_PATHS
+    assert actual_files == RETAINED_SOURCE_FILE_PATHS
 
     for method_id, upstream_directory in METHOD_DIRECTORIES.items():
         method = production_method_skill(method_id)
@@ -155,19 +144,19 @@ def test_vendored_files_match_the_pinned_upstream_inventory_and_attribution() ->
     ("method_id", "source_directory", "upstream_directive", "selected_heading"),
     (
         (
-            "method.minimax_h3.minimalist_product_ad",
+            "method.minimalist_product_ad",
             "minimalist-product-ad-generator",
             "启动问询是强制 Gate",
             "## 步骤 1：素材检查与产品事实摘要",
         ),
         (
-            "method.minimax_h3.3d_animation_short",
+            "method.animation_short",
             "3d-animation-short-generator",
             "同一镜连续 3 次失败后",
             "## 全局视觉风格锁",
         ),
         (
-            "method.minimax_h3.music_video_subtitle",
+            "method.lyric_video",
             "music-video-subtitle-generator",
             "必须写入 Hub 画布文本节点",
             "## 核心原则",
@@ -195,7 +184,7 @@ def test_upstream_product_directives_stay_on_disk_but_out_of_compiled_prompts(
     assert selected_heading in prompt
     assert "<official_method_reference" not in prompt
     assert "source=\"" not in prompt
-    assert "上游不存在于 Tool Catalog 的 Provider 调用不得伪造" in prompt
+    assert "不伪造目录中不存在的调用" in prompt
 
 
 def test_upstream_tool_declarations_remain_source_evidence_not_harness_tools() -> None:
@@ -206,21 +195,21 @@ def test_upstream_tool_declarations_remain_source_evidence_not_harness_tools() -
     )
     source = source_path.read_text(encoding="utf-8")
     prompt = compile_production_method_skill_prompt(
-        ("method.minimax_h3.brand_promo_video",),
+        ("method.brand_promo",),
         roles=(ProductionSkillRole.CONCEPT,),
     )
 
     assert "hub_image_search" in source
     assert "hub_image_search" not in prompt
     assert "hub_canvas_get_node" not in prompt
-    assert "上游不存在于 Tool Catalog 的 Provider 调用不得伪造" in prompt
-    assert "上游不存在于 Tool Catalog 的 Provider 调用不得伪造" in prompt
+    assert "不伪造目录中不存在的调用" in prompt
+    assert "不伪造目录中不存在的调用" in prompt
 
 
 def test_official_3d_loads_only_explicit_sections_for_each_supported_role() -> None:
     prompts = {
         role: compile_production_method_skill_prompt(
-            ("method.minimax_h3.3d_animation_short",),
+            ("method.animation_short",),
             roles=(role,),
         )
         for role in (
@@ -285,11 +274,11 @@ def test_ai_short_drama_and_official_3d_are_composable_but_not_coupled() -> None
     composed = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
         roles=(ProductionSkillRole.CONCEPT,),
-        method_skill_ids=("method.minimax_h3.3d_animation_short",),
+        method_skill_ids=("method.animation_short",),
     )
 
     assert composed.selected_method_skill_ids == (
-        "method.minimax_h3.3d_animation_short",
+        "method.animation_short",
     )
     assert "AI 短剧（本地格式适配）" in composed.text
     assert "## 全局视觉风格锁" in composed.text

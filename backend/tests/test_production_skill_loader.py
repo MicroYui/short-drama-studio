@@ -10,6 +10,7 @@ import pytest
 from short_drama.models import CreateProjectRequest, ProductionProfile, SourceMode
 from short_drama.production_planner import _outline_prompt
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_narrative_skill_prompt,
     compile_production_prompt,
@@ -27,6 +28,7 @@ from short_drama.skills.loader import (
     load_production_skills,
     load_shared_role_prompts,
 )
+from short_drama.skills.models import LEGACY_ROLE_FILE_ALIASES
 
 
 def test_every_profile_is_compiled_from_reviewable_markdown() -> None:
@@ -38,13 +40,15 @@ def test_every_profile_is_compiled_from_reviewable_markdown() -> None:
         assert (directory / "SKILL.md").is_file()
         assert (directory / "playbooks" / "default.md").is_file()
         role_paths = {
-            role: directory / "roles" / f"{role.value.casefold()}.md"
+            role: directory / "roles" / f"{LEGACY_ROLE_FILE_ALIASES.get(role, role).value.casefold()}.md"
             for role in ProductionSkillRole
         }
         if skill.profile == ProductionProfile.AI_SHORT_DRAMA:
             assert not any(path.exists() for path in role_paths.values())
         else:
             assert all(path.is_file() for path in role_paths.values())
+            for legacy_role in LEGACY_ROLE_FILE_ALIASES:
+                assert not (directory / "roles" / f"{legacy_role.value.casefold()}.md").exists()
 
 
 def test_packaged_backend_includes_runtime_markdown_skills() -> None:
@@ -131,16 +135,16 @@ def test_ai_short_drama_composes_with_an_explicit_official_method() -> None:
     composed = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
         roles=(ProductionSkillRole.CONCEPT,),
-        method_skill_ids=("method.minimax_h3.3d_animation_short",),
+        method_skill_ids=("method.animation_short",),
     )
 
     assert format_only.selected_method_skill_ids == ()
-    assert "MiniMax-H3：3D 动画短片" not in format_only.text
+    assert "3D 动画短片" not in format_only.text
     assert "皮克斯感 3D 卡通渲染" not in format_only.text
     assert composed.selected_method_skill_ids == (
-        "method.minimax_h3.3d_animation_short",
+        "method.animation_short",
     )
-    assert "MiniMax-H3：3D 动画短片" in composed.text
+    assert "3D 动画短片" in composed.text
     assert "全局视觉风格锁" in composed.text
     assert "皮克斯感 3D 卡通渲染" in composed.text
 
@@ -383,8 +387,21 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
     planner = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
         roles=(ProductionSkillRole.PLANNER,),
+        stage=ProductionPromptStage.ORCHESTRATION,
     )
-    asset_reviewer = compile_production_prompt(
+    asset_planner = compile_production_prompt(
+        ProductionProfile.AI_SHORT_DRAMA,
+        roles=(ProductionSkillRole.ASSET_PLANNER,),
+    )
+    asset_builder = compile_production_prompt(
+        ProductionProfile.AI_SHORT_DRAMA,
+        roles=(ProductionSkillRole.ASSET_BUILDER,),
+    )
+    asset_verifier = compile_production_prompt(
+        ProductionProfile.AI_SHORT_DRAMA,
+        roles=(ProductionSkillRole.ASSET_VERIFIER,),
+    )
+    legacy_asset_reviewer = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
     )
@@ -395,27 +412,46 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
 
     assert skill.user_overridable
     assert skill.planner == ""
+    assert skill.asset_planner == ""
+    assert skill.asset_builder == ""
+    assert skill.asset_verifier == ""
     assert skill.asset_reviewer == ""
     assert skill.video_prompt_compiler == ""
-    assert "共享端到端制片流程" in planner.text
-    assert "资产审核的通用职责" in asset_reviewer.text
-    assert "artifact.create_asset_plan" in asset_reviewer.text
-    assert "asset.plan.current" in asset_reviewer.text
-    assert "DRAMA_CHARACTER_DUAL_ZONE_16_9" in asset_reviewer.text
-    assert "SCENE_FOUR_DIRECTION_2X2" in asset_reviewer.text
-    assert "ReferencePack 可保留多张职责不同的有效参考" in (
-        asset_reviewer.text
+    assert "完整端到端文档" in planner.text
+    assert "不进入每个 Worker prompt" in planner.text
+    assert "资产规划的通用职责" in asset_planner.text
+    assert "artifact.get_asset_planning_context" in asset_planner.text
+    assert "不再叠加 `project.get`" in asset_planner.text
+    assert "artifact.get_asset_plan" in asset_planner.text
+    assert "写入精确 AssetPlan ArtifactRef 后立即结束 WorkOrder" in (
+        asset_planner.text
     )
-    assert "Subject reference" in asset_reviewer.text
-    assert "Picture/keyframe" in asset_reviewer.text
-    assert "artifact.update_brief" in asset_reviewer.text
-    assert "image.enqueue" in asset_reviewer.text
-    assert "qa.inspect_asset_version" in asset_reviewer.text
-    assert "artifact.review_version" in asset_reviewer.text
-    assert "route.plan_h3" in asset_reviewer.text
+    assert "不调用媒体 Provider" in asset_planner.text
+    assert "用户源素材" in asset_planner.text
+    assert "ANCHOR" in asset_planner.text
+    assert "委派 ASSET_BUILDER" in asset_planner.text
+
+    assert "资产制作的通用职责" in asset_builder.text
+    assert "artifact.get_asset_work_context" in asset_builder.text
+    assert "不要叠加 `project.get`" in asset_builder.text
+    assert "image.capability" in asset_builder.text
+    assert "image.compose_reference_sheet" in asset_builder.text
+    assert "批准自己的输出" in asset_builder.text
+
+    assert "资产验收的通用职责" in asset_verifier.text
+    assert "qa.inspect_asset_version" in asset_verifier.text
+    assert "artifact.review_version" in asset_verifier.text
+    assert "不调用媒体 Provider" in asset_verifier.text
+    assert "artifact.patch_asset_plan" in asset_verifier.text
+    assert "不要自己发起返工循环" in asset_verifier.text
+
+    assert "兼容角色" in legacy_asset_reviewer.text
+    assert "新的 Agent Plan 不再选择它" in legacy_asset_reviewer.text
     assert "视频提示词编译的通用职责" in compiler.text
     assert "当前格式补充" not in planner.text
-    assert "当前格式补充" not in asset_reviewer.text
+    assert "当前格式补充" not in asset_planner.text
+    assert "当前格式补充" not in asset_builder.text
+    assert "当前格式补充" not in asset_verifier.text
     assert "当前格式补充" not in compiler.text
 
 

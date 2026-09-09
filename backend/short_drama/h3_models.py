@@ -19,6 +19,7 @@ from short_drama.models import (
     QaFailureCategory,
     RouteEvidence,
     Take,
+    TaskStatus,
     TimelineManifest,
     VideoInspectionReport,
     VideoInspectionScope,
@@ -448,6 +449,8 @@ class H3ShotRouteDirective(DomainModel):
     reuse_take_id: str | None = Field(default=None, min_length=1, max_length=200)
     reference_selection_candidate_ids: list[str] | None = None
     camera_previs_motion: H3CameraMotionPreset | None = None
+    prompt_override: str | None = Field(default=None, min_length=1, max_length=7000)
+    media_inputs: list[H3MediaInput] | None = Field(default=None, max_length=12)
 
     @model_validator(mode="after")
     def validate_route_choice(self) -> H3ShotRouteDirective:
@@ -455,6 +458,11 @@ class H3ShotRouteDirective(DomainModel):
             raise ValueError(
                 "An H3 route directive must target exactly one shot or generation unit"
             )
+        if self.prompt_override is not None or self.media_inputs is not None:
+            if self.generation_unit_id is None or self.candidate_id is None:
+                raise ValueError(
+                    "Authored prompt/media requires an explicit generation-unit candidate"
+                )
         if self.candidate_id is not None and self.reuse_take_id is not None:
             raise ValueError(
                 "An H3 shot route directive may choose candidate_id or reuse_take_id, not both"
@@ -777,6 +785,40 @@ class H3CompilePreviewResponse(DomainModel):
 
 class H3ProviderRunsResponse(DomainModel):
     runs: list[H3ProviderRun]
+
+
+class H3RemoteTaskSummary(DomainModel):
+    id: str
+    status: H3RemoteStatus
+    error: H3TaskError | None = None
+
+
+class H3ProviderRunIndexItem(DomainModel):
+    id: str
+    task_id: str
+    project_id: str
+    shot_id: str
+    generation_unit_id: str | None = None
+    shot_ids: list[str] = Field(default_factory=list[str])
+    route: VideoGenerationRoute
+    task_status: TaskStatus | None = None
+    take_ids: list[str] = Field(default_factory=list[str])
+    remote: H3RemoteTaskSummary | None = None
+    prompt_characters: int = Field(ge=0)
+    media_input_count: int = Field(ge=0)
+    downloaded_path: str | None = None
+    last_error_code: str | None = None
+    last_error_message: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class H3ProviderRunIndexResponse(DomainModel):
+    """Discovery metadata; full requests stay in the exact ProviderRun record."""
+
+    runs: list[H3ProviderRunIndexItem]
+    details_tool: Literal["route.get_h3_run"] = "route.get_h3_run"
+    task_state_tool: Literal["task.get"] = "task.get"
 
 
 class H3ReconciliationCandidatesResponse(DomainModel):

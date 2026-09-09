@@ -355,7 +355,7 @@ def test_scene_writer_receives_story_intent_and_selected_skill_context() -> None
     assert "不要把它改写成固定模板" in instructions
 
 
-def test_scene_writer_receives_readable_episode_so_far_as_explicit_handoff() -> None:
+def test_scene_writer_uses_rolling_state_without_replaying_prior_screenplays() -> None:
     request = _request(180)
     blueprint = _explicit_multi_scene_blueprint(request, scene_count=3)
     previous_patches = [
@@ -371,14 +371,78 @@ def test_scene_writer_receives_readable_episode_so_far_as_explicit_handoff() -> 
     )
     payload = json.loads(input_text)
 
-    assert payload["readable_episode_so_far"] == [
-        {
-            "scene_sequence": patch.scene_sequence,
-            "screenplay_text": patch.screenplay_text,
-            "continuity_out": patch.continuity_out.model_dump(mode="json"),
-        }
+    assert "readable_episode_so_far" not in payload
+    assert payload["previous_scene_boundary"] == {
+        "scene_ref": "scene:2",
+        "scene_sequence": 2,
+        "outcome": previous_patches[1].summary,
+        "final_rendered_line": previous_patches[1].screenplay_text.splitlines()[-1],
+        "final_dialogue_line": {
+            "line_ref": "scene:2:line:1",
+            **previous_patches[1].lines[-1].model_dump(mode="json"),
+        },
+        "continuity_out": previous_patches[1].continuity_out.model_dump(mode="json"),
+    }
+    assert payload["story_state_before_current_scene"] == (
+        blueprint.scenes[2].continuity_in.model_dump(mode="json")
+    )
+    assert payload["older_scene_rollup"] == {
+        "through_scene_sequence": 1,
+        "fulfilled_events": previous_patches[1].continuity_in.known_facts,
+        "character_and_relationship_states": (
+            previous_patches[1].continuity_in.character_states
+        ),
+        "prop_states": previous_patches[1].continuity_in.prop_states,
+        "unresolved_promises": previous_patches[1].continuity_in.open_threads,
+    }
+    assert payload["prior_scene_archive"] == {
+        "written_scene_range": {"start_sequence": 1, "end_sequence": 2},
+        "scene_ref_format": "scene:{scene_sequence}",
+        "line_ref_format": "scene:{scene_sequence}:line:{one_based_line_index}",
+        "screenplay_bodies_included": False,
+    }
+
+
+def test_scene_writer_payload_does_not_scale_with_prior_screenplay_body_size() -> None:
+    request = _request(180)
+    blueprint = _explicit_multi_scene_blueprint(request, scene_count=3)
+    previous_patches = [
+        _scene_patch(blueprint, blueprint.scenes[0].sequence, "第一场。"),
+        _scene_patch(blueprint, blueprint.scenes[1].sequence, "第二场。"),
+    ]
+    short_tail = "林一：这件事还没结束。"
+    compact_patches = [
+        patch.model_copy(update={"screenplay_text": f"场景正文\n{short_tail}"})
         for patch in previous_patches
     ]
+    large_marker = "不应进入后续场输入的历史正文"
+    expanded_patches = [
+        patch.model_copy(
+            update={
+                "screenplay_text": (
+                    f"{large_marker}\n" * 1000
+                    + short_tail
+                )
+            }
+        )
+        for patch in previous_patches
+    ]
+
+    _, compact_input = _scene_writer_prompt(
+        request,
+        blueprint,
+        blueprint.scenes[2],
+        compact_patches,
+    )
+    _, expanded_input = _scene_writer_prompt(
+        request,
+        blueprint,
+        blueprint.scenes[2],
+        expanded_patches,
+    )
+
+    assert large_marker not in expanded_input
+    assert expanded_input == compact_input
 
 
 def test_scene_writers_receive_only_explicitly_related_props_with_state() -> None:

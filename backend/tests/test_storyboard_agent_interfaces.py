@@ -30,15 +30,17 @@ from short_drama.production_contracts import (
     ProductionProviderPreference,
     ProductionSpecContent,
     ProductionSpecCreateRequest,
-    ProductionSpecMutationResponse,
     ProductionSpecReplaceRequest,
     ProductionVisualDirection,
     StoryboardContent,
     StoryboardCreateRequest,
-    StoryboardMutationResponse,
 )
 from short_drama.service import ShortDramaService, WorkflowConflictError
 from short_drama.tools import ToolCallStatus
+from short_drama.tools.artifact_views import (
+    ProductionArtifactMutationSummaryResponse,
+    StoryboardMutationSummaryResponse,
+)
 
 
 def _service(tmp_path: Path) -> ShortDramaService:
@@ -381,13 +383,29 @@ def test_agent_tools_handoff_exact_storyboard_and_generation_artifacts(
 
     assert spec_call.status == ToolCallStatus.SUCCEEDED
     assert spec_call.output is not None
-    spec_result = ProductionSpecMutationResponse.model_validate(spec_call.output)
+    spec_result = ProductionArtifactMutationSummaryResponse.model_validate(
+        spec_call.output
+    )
+    assert "versions" not in spec_call.output["document"]
+    assert "payload" not in spec_call.output["version"]
     assert spec_call.artifact_refs[0] == ArtifactRef(
         project_id=project_id,
         artifact_type="production_spec",
         artifact_id=spec_result.document.id,
         version=1,
     )
+    spec_read_call = service.tool_registry.invoke(
+        "artifact.get_production_spec",
+        {"project_id": project_id, "version_id": spec_result.version.id},
+    )
+    assert spec_read_call.status == ToolCallStatus.SUCCEEDED
+    assert spec_read_call.output is not None
+    spec_read_json = json.dumps(spec_read_call.output, ensure_ascii=False)
+    assert spec_read_json.count(
+        "从完整剧本形成分镜、资产、视频、音频和初步时间线。"
+    ) == 1
+    assert "versions" not in spec_read_call.output["document"]
+    assert "payload" not in spec_read_call.output["version"]
 
     storyboard = _storyboard(
         service,
@@ -408,11 +426,28 @@ def test_agent_tools_handoff_exact_storyboard_and_generation_artifacts(
 
     assert storyboard_call.status == ToolCallStatus.SUCCEEDED
     assert storyboard_call.output is not None
-    storyboard_result = StoryboardMutationResponse.model_validate(
+    storyboard_result = StoryboardMutationSummaryResponse.model_validate(
         storyboard_call.output
     )
+    assert "versions" not in storyboard_call.output["document"]
+    assert "payload" not in storyboard_call.output["version"]
+    assert "visual" not in json.dumps(storyboard_call.output, ensure_ascii=False)
     storyboard_ref_types = {item.artifact_type for item in storyboard_call.artifact_refs}
     assert {"storyboard", "shot", "clip_group"} <= storyboard_ref_types
+    storyboard_read_call = service.tool_registry.invoke(
+        "shot.get_storyboard",
+        {"project_id": project_id, "version_id": storyboard_result.version.id},
+    )
+    assert storyboard_read_call.status == ToolCallStatus.SUCCEEDED
+    assert storyboard_read_call.output is not None
+    assert set(storyboard_read_call.output) == {
+        "storyboard",
+        "document",
+        "version",
+        "output_slot",
+    }
+    assert "versions" not in storyboard_read_call.output["document"]
+    assert "payload" not in storyboard_read_call.output["version"]
 
     plan_call = service.tool_registry.invoke(
         "route.compile_generation_plan",

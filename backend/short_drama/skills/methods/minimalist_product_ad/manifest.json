@@ -1,0 +1,51 @@
+{
+  "id": "method.minimalist_product_ad",
+  "label": "极简产品广告",
+  "description": "适合极简高质感产品广告项目，覆盖产品事实、锚定图、字卡、镜头与声音。",
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "REVISION_VERIFIER",
+    "DIRECTOR",
+    "ASSET_REVIEWER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 1：素材检查与产品事实摘要",
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 3：选择产品叙事脊柱"
+    ],
+    "WRITER": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::文字规范",
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 5：生成或确认 Apple 风英文文案"
+    ],
+    "PLANNER": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 7：精确节拍与文字分镜表"
+    ],
+    "REVISION_VERIFIER": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 10：音乐分析、卡点剪辑与交付验证"
+    ],
+    "DIRECTOR": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 4：导演动效语言"
+    ],
+    "ASSET_REVIEWER": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 6：生成三张独立产品锚定照片"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 8：视频生成"
+    ],
+    "EPISODE_REVIEWER": [
+      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 10：音乐分析、卡点剪辑与交付验证"
+    ]
+  },
+  "provenance": "UPSTREAM_COMMUNITY_WITH_ADAPTER",
+  "upstream_sources": [
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/minimalist-product-ad-generator/SKILL.cn.md",
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/minimalist-product-ad-generator/meta.yaml [source=community; author-en=User]"
+  ],
+  "user_overridable": true
+}

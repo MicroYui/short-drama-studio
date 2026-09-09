@@ -17,6 +17,8 @@ prompt_references: ["references/official_h3_prompt_writing_zh_cn.md", "reference
 
 ## 输入权威顺序
 
+当前完整分镜以 `GenerationUnit` 为视频执行边界。`route.compile_h3_prompt` 可接收精确的 GenerationPlan document/version/unit、当前 Agent 选择的 `method_skill_ids` 和有序 `media_inputs`。此时以 `locked_generation_unit`、`locked_shots`、逐镜台词与 source window 为输入权威；每镜的可见名单限制该镜内容，整组媒体清单仅表示本组可用参考。单 Shot 调用仍兼容下方既有输入。
+
 当信息冲突时，按以下顺序处理：
 
 1. 用户明确锁定的事实和当前项目版本；
@@ -49,6 +51,10 @@ prompt_references: ["references/official_h3_prompt_writing_zh_cn.md", "reference
 - `FIRST_FRAME`、`LAST_FRAME` 及其他具体关键帧/构图锚点继续直接使用 `<Picture N>`，不转换为 `<Subject N>`。
 - 不添加未声明人物、道具、动作、对白、切镜、场景转换或画面文字。
 - 最终文本不得超过当前适配器规定的字符上限；无法忠实容纳时应返回上游重新设计镜头，而不是暗中删减锁定事实。
+
+生成单元的来源事实不受最终请求的 7000 字符限制：编译工具直接读取该组完整分镜，避免先把重复字段拼成超限请求再拒绝编译。最终 Prompt 必须保留每条 `required_timing_marker`、该段逐字台词及全部参考标签。返回值中的 `compiled_prompt` 与有序 `media_inputs` 共同交给 `route.plan_h3` 的对应 generation-unit directive；Executor 和传输重试沿用已保存的 Prompt 与媒体顺序。
+
+已选 Design Method 提供逐镜叙事、空间和声音连续性方法；最终 API 输出使用公开 H3 Prompt IR。安装包 Workflow 的固定中文骨架、Hub 参数和示例摄影风格不能覆盖当前 API 格式及用户声明的视觉方向。没有独立配音文件不代表静音；保留本片段已声明的原生对白、环境和动作声，另配音、BGM 与字幕按项目制作方向决定。
 
 ## 编译完成的判断
 

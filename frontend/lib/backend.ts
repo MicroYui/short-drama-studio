@@ -1,7 +1,9 @@
 let cached: { url: string; token: string } | null = null
 
 export async function getBackendCredentials(): Promise<{ url: string; token: string }> {
-  if (!cached) cached = await window.electronAPI.getBackend()
+  if (!cached) cached = window.electronAPI
+    ? await window.electronAPI.getBackend()
+    : { url: '/__studio_backend', token: '' }
   return cached
 }
 

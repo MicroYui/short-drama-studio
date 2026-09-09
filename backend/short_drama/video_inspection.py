@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from short_drama.language_defaults import LANGUAGE_MODEL
+
 import base64
 import json
 import math
@@ -414,10 +416,10 @@ class VideoInspector:
             if language_client is None:
                 status = SemanticReviewStatus.UNAVAILABLE
                 warnings.append(
-                    "GPT-5.6-sol 未配置；已保留抽帧与接触表，语义内容检查为 UNKNOWN。"
+                    "语言模型 未配置；已保留抽帧与接触表，语义内容检查为 UNKNOWN。"
                 )
             else:
-                semantic_model = "gpt-5.6-sol"
+                semantic_model = LANGUAGE_MODEL
                 try:
                     review = self._semantic_review(
                         document=document,
@@ -635,6 +637,13 @@ class VideoInspector:
             (item for item in document.reference_plan if item.shot_id == shot.id),
             None,
         )
+        shot_by_id = {item.id: item for item in document.shots}
+        covered_shots = [shot_by_id[window.shot_id] for window in take.shot_windows
+                         if window.shot_id in shot_by_id] if take.shot_windows else [shot]
+        if take.shot_windows and len(covered_shots) != len(take.shot_windows):
+            raise ValueError("A grouped Take is missing a declared source shot for inspection")
+        covered_ids = {item.id for item in covered_shots}
+        reference_plans = [item for item in document.reference_plan if item.shot_id in covered_ids]
         instructions = (
             "你是供电影导演 Agent 调用的视频观察 Tool。只返回 JSON，并严格匹配所给 schema。"
             "检查按时间顺序排列的接触表，识别镜头内部可见的漂移；如果提供了前后镜头边界，也一并"
@@ -650,8 +659,19 @@ class VideoInspector:
             "使用稳定、通用的 QA 分类，不要创建场景专属字段。提供标准资产参考图时，将项目声明且"
             "在画面中可见的人物锚点、必要场景关系和道具外观与对应参考图比较；报告清晰漂移，但不要"
             "要求判断被遮挡或小到无法辨认的细节。"
+            "inspection_target.scope 为 GENERATION_UNIT 时，当前 Take 是完整镜头组，"
+            "按 shot_windows 和 current_shots 逐段观察，并以组的 requested_duration_seconds "
+            "核对总时长；不能拿第一个编辑镜头的时长判断整组超长，已声明的组内切镜不等于漂移。"
+            "当前输入只有静态图像，不能据此验证对白、声线或音画同步；未观察音频记为 UNKNOWN，"
+            "不能仅由缺少音频观察证据推定实际音频错误或缺失。"
         )
-        reference_images = _semantic_reference_images(document, reference_plan)
+        reference_images: list[tuple[str, str]] = []
+        seen_reference_labels: set[str] = set()
+        for plan in reference_plans:
+            for label, url in _semantic_reference_images(document, plan):
+                if label not in seen_reference_labels and len(reference_images) < 8:
+                    reference_images.append((label, url))
+                    seen_reference_labels.add(label)
         image_map: list[dict[str, object]] = [
             {
                 "index": 1,
@@ -680,12 +700,22 @@ class VideoInspector:
             next_image_index += 1
         payload = {
             "output_schema": SemanticVideoReview.model_json_schema(),
-            "current_shot": shot.model_dump(mode="json"),
+            "inspection_target": {
+                "scope": "GENERATION_UNIT" if take.shot_windows else "SHOT",
+                "generation_unit_id": take.generation_unit_id,
+                "requested_duration_seconds": max(window.source_out_seconds for window in take.shot_windows)
+                if take.shot_windows else shot.duration_seconds,
+                "shot_windows": [window.model_dump(mode="json") for window in take.shot_windows],
+            },
+            "current_shot": None if take.shot_windows else shot.model_dump(mode="json"),
+            "current_shots": [item.model_dump(mode="json") for item in covered_shots]
+            if take.shot_windows else [],
             "current_take": {
                 "id": take.id,
                 "provider": take.provider,
                 "model": take.model,
                 "route": take.route.value,
+                "actual_duration_seconds": take.duration_seconds,
             },
             "previous_shot": (
                 previous_shot.model_dump(mode="json") if previous_shot is not None else None
@@ -694,9 +724,11 @@ class VideoInspector:
             "bible": current_bible.model_dump(mode="json"),
             "reference_plan": (
                 reference_plan.model_dump(mode="json")
-                if reference_plan is not None
+                if reference_plan is not None and not take.shot_windows
                 else None
             ),
+            "reference_plans": [item.model_dump(mode="json") for item in reference_plans]
+            if take.shot_windows else [],
             "samples": [sample.model_dump(mode="json") for sample in samples],
             "allowed_issue_categories": [item.value for item in QaFailureCategory],
             "confidence_values": [item.value for item in ObservationConfidence],

@@ -34,7 +34,7 @@ def _run_view(status: str) -> JsonObject:
                 "revision": 1,
                 "summary": "完成核心资产计划并在环境允许时执行。",
                 "goal_complete": status == "COMPLETED",
-                "selected_method_skill_ids": ["minimax_design_drama_series"],
+                "selected_method_skill_ids": ["drama_series"],
             },
         }
     }
@@ -462,6 +462,93 @@ def test_asset_stage_validator_rejects_downstream_generation() -> None:
 
     assert "Asset-only run changed generation_plan_document_id" in assessment.errors
     assert any("video.enqueue" in error for error in assessment.errors)
+
+
+@pytest.mark.parametrize("plate_state", ["MATCHED", "NONPREFERRED", "UNMATCHED", "MISSING_ENTRY", "STALE_ROOT"])
+def test_text_plate_closure_uses_its_carrier_pack_and_exact_requirement(
+    plate_state: str,
+) -> None:
+    after = _project(with_plan=True, with_media=True)
+    document = cast(JsonObject, after["document"])
+    assets = cast(list[JsonObject], document["assets"])
+    for asset_id, kind, version_id in [
+        ("asset-price-carrier", "PROP", "price-carrier-v1"),
+        ("asset-pork-text", "REFERENCE", "pork-text-v1"),
+    ]:
+        assets.append({
+            "id": asset_id,
+            "kind": kind,
+            "brief": {"identity_anchor": asset_id},
+            "approved_version_id": version_id,
+            "versions": [{
+                "id": version_id,
+                "media_type": "IMAGE",
+                "approval_status": "APPROVED",
+                "freshness": "CURRENT",
+            }],
+        })
+    entries: list[JsonObject] = [{
+        "asset_version_id": "price-carrier-v1",
+        "role": "CANONICAL_MASTER",
+        "lineage_root_version_id": "price-carrier-v1",
+    }]
+    if plate_state != "MISSING_ENTRY":
+        entries.append({
+            "asset_version_id": "pork-text-v1",
+            "role": "PROP_STATE",
+            "tags": ["pork-price"],
+            "angle": "FRONT" if plate_state == "NONPREFERRED" else "NOT_APPLICABLE",
+            "framing": "MEDIUM" if plate_state == "NONPREFERRED" else "DETAIL",
+            "lineage_root_version_id": (
+                "price-carrier-old" if plate_state == "STALE_ROOT" else None
+            ),
+        })
+    cast(list[JsonObject], document["reference_packs"]).append({
+        "subject_asset_id": "asset-price-carrier",
+        "entries": entries,
+    })
+    shot_plan = cast(list[JsonObject], document["reference_plan"])[0]
+    shot_plan["requirements"] = [{
+        "subject_asset_id": "asset-price-carrier",
+        "acceptable_roles": ["PROP_STATE"],
+        "required_tags": ["greens-price" if plate_state == "UNMATCHED" else "pork-price"],
+        "preferred_angles": ["NOT_APPLICABLE"],
+        "preferred_framings": ["DETAIL"],
+    }]
+    response = _asset_plan_response(with_media=True)
+    payload = cast(JsonObject, cast(JsonObject, response["version"])["payload"])
+    cast(list[JsonObject], payload["items"]).append({
+        "id": "asset-item-pork-text",
+        "disposition": "ANCHOR",
+        "asset_kind": "REFERENCE",
+        "brief": {"identity_anchor": "红烧肉八元文字内容层"},
+        "rationale": "跨镜头复用准确文字，与无字物理载体分开保存。",
+        "serves_shot_ids": ["shot-1"],
+        "completed_asset_id": "asset-pork-text",
+        "completed_asset_version_id": "pork-text-v1",
+        "work_items": [{
+            "id": "work-pork-text",
+            "final_prompt": "确定性排版红烧肉八元文字内容层。",
+            "dependency_ids": [],
+            "ordered_references": [],
+        }],
+    })
+
+    assessment = _validate_asset_stage_result(
+        run_view=_run_view("COMPLETED"),
+        before=_project(with_plan=False, with_media=False),
+        after=after,
+        asset_plan_response=response,
+        trace=_empty_trace(),
+    )
+
+    assert assessment.errors == []
+    assert assessment.media_closed is (plate_state in {"MATCHED", "NONPREFERRED"})
+    if plate_state in {"MATCHED", "NONPREFERRED"}:
+        assert "asset-item-pork-text" in assessment.completed_anchor_item_ids
+    else:
+        assert "asset-item-pork-text" not in assessment.completed_anchor_item_ids
+        assert any("asset-item-pork-text" in gap for gap in assessment.media_gaps)
 
 
 def test_probe_http_boundary_allows_only_agent_run_mutations(tmp_path: Path) -> None:

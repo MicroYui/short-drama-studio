@@ -123,6 +123,7 @@ def test_service_exposes_default_registry_and_keeps_injected_tools(tmp_path: Pat
     expected_ids = {
         "artifact.create_asset",
         "audio.inspect_manifest",
+        "image.capability",
         "image.enqueue",
         "planning.advance",
         "planning.resolve_story_verification",
@@ -131,6 +132,7 @@ def test_service_exposes_default_registry_and_keeps_injected_tools(tmp_path: Pat
         "project.get",
         "project.list",
         "project.multiply",
+        "qa.analyze_source_image",
         "qa.review_episode",
         "script.revise_lines",
         "shot.update_reference_plan",

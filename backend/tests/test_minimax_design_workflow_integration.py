@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     production_method_skill,
+    compile_production_method_skill_prompt,
 )
 from short_drama.skills.loader import (
     DEFAULT_OFFICIAL_MINIMAX_DESIGN_WORKFLOWS_ROOT,
@@ -21,9 +23,9 @@ INSTALLED_MINIMAX_DESIGN_WORKFLOWS_ROOT = Path(
 )
 
 DESIGN_METHOD_ROLES = {
-    "method.minimax_design.drama_series": ProductionSkillRole.CONCEPT,
-    "method.minimax_design.ad_tvc": ProductionSkillRole.CONCEPT,
-    "method.minimax_design.mv": ProductionSkillRole.CONCEPT,
+    "method.drama_series": ProductionSkillRole.CONCEPT,
+    "method.advertising": ProductionSkillRole.CONCEPT,
+    "method.music_video": ProductionSkillRole.CONCEPT,
 }
 
 
@@ -91,7 +93,7 @@ def test_minimax_design_active_workflows_are_vendored_as_original_markdown() -> 
 def test_design_methods_share_the_local_interaction_precedence_preamble() -> None:
     for method_id, role in DESIGN_METHOD_ROLES.items():
         method = production_method_skill(method_id)
-        role_prompt = method.role_prompts[role]
+        role_prompt = compile_production_method_skill_prompt([method_id], roles=[role])
 
         assert method.provenance == SkillProvenanceKind.OFFICIAL_ORIGINAL_WITH_ADAPTER
         assert "交互按以下优先级解释上游步骤" in role_prompt
@@ -105,7 +107,8 @@ def test_design_methods_share_the_local_interaction_precedence_preamble() -> Non
 
 def test_official_method_prompts_end_with_local_execution_precedence() -> None:
     for method in load_production_method_skills():
-        for role_prompt in method.role_prompts.values():
+        for role in method.role_prompts:
+            role_prompt = compile_production_method_skill_prompt([method.id], roles=[role])
             footer_index = role_prompt.rfind("上游原文提供成熟的制片经验")
 
             assert footer_index >= 0
@@ -116,7 +119,7 @@ def test_official_method_prompts_end_with_local_execution_precedence() -> None:
 
 
 def test_design_methods_load_only_role_relevant_original_sections() -> None:
-    drama = production_method_skill("method.minimax_design.drama_series")
+    drama = production_method_skill("method.drama_series")
     assert "DurationContract.rhythm_shape" in drama.constitution
     assert "可根据当前题材、单篇时长" in drama.constitution
     assert "不把原文的秒数、百分比、集数或连续次数变成剧本配额" in (
@@ -189,6 +192,27 @@ def test_design_methods_load_only_role_relevant_original_sections() -> None:
     assert "## 角色 Profile 维度" in drama.role_prompts[
         ProductionSkillRole.ASSET_REVIEWER
     ]
+    assert "## 建卡启发式规则" in (
+        drama.prompt_for(
+            ProductionSkillRole.ASSET_PLANNER,
+            stage=ProductionPromptStage.ASSETS,
+        )
+        or ""
+    )
+    assert "## 角色设定图 Prompt 模板" in (
+        drama.prompt_for(
+            ProductionSkillRole.ASSET_BUILDER,
+            stage=ProductionPromptStage.ASSETS,
+        )
+        or ""
+    )
+    assert "## 站位质量" in (
+        drama.prompt_for(
+            ProductionSkillRole.ASSET_VERIFIER,
+            stage=ProductionPromptStage.ASSETS,
+        )
+        or ""
+    )
     assert "## H3 唯一可执行填空骨架" in drama.role_prompts[
         ProductionSkillRole.VIDEO_PROMPT_COMPILER
     ]
@@ -196,12 +220,15 @@ def test_design_methods_load_only_role_relevant_original_sections() -> None:
         ProductionSkillRole.WRITER
     ]
 
-    ad_tvc = production_method_skill("method.minimax_design.ad_tvc")
+    ad_tvc = production_method_skill("method.advertising")
     assert "## 高信息量问询" in ad_tvc.role_prompts[
         ProductionSkillRole.CONCEPT
     ]
     assert "## Prompt Skeleton" in ad_tvc.role_prompts[
         ProductionSkillRole.ASSET_REVIEWER
+    ]
+    assert "## Prompt Skeleton" in ad_tvc.role_prompts[
+        ProductionSkillRole.ASSET_BUILDER
     ]
     assert "## Unit 编译" in ad_tvc.role_prompts[
         ProductionSkillRole.VIDEO_PROMPT_COMPILER
@@ -210,7 +237,7 @@ def test_design_methods_load_only_role_relevant_original_sections() -> None:
         ProductionSkillRole.CONCEPT
     ]
 
-    mv = production_method_skill("method.minimax_design.mv")
+    mv = production_method_skill("method.music_video")
     assert "# Script Writing — 故事与剧本写作" in mv.role_prompts[
         ProductionSkillRole.WRITER
     ]
@@ -227,7 +254,7 @@ def test_design_methods_load_only_role_relevant_original_sections() -> None:
 
 def test_root_routing_index_is_snapshot_only_not_a_method_prompt_source() -> None:
     root_source_label = (
-        'source="../../official/minimax_design/3.0.11/workflows/workflow.md"'
+        'source="../../sources/minimax_design/3.0.11/workflows/workflow.md"'
     )
     for method_id in DESIGN_METHOD_ROLES:
         method = production_method_skill(method_id)

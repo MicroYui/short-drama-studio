@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Final
 
 from short_drama.models import ProductionProfile
 
@@ -18,10 +19,30 @@ class ProductionSkillRole(StrEnum):
     FINAL_COLD_READ = "FINAL_COLD_READ"
     REVIEW_ROUTER = "REVIEW_ROUTER"
     DIRECTOR = "DIRECTOR"
+    ASSET_PLANNER = "ASSET_PLANNER"
+    ASSET_BUILDER = "ASSET_BUILDER"
+    ASSET_VERIFIER = "ASSET_VERIFIER"
     ASSET_REVIEWER = "ASSET_REVIEWER"
     ROUTE_PLANNER = "ROUTE_PLANNER"
     VIDEO_PROMPT_COMPILER = "VIDEO_PROMPT_COMPILER"
     EPISODE_REVIEWER = "EPISODE_REVIEWER"
+
+
+LEGACY_ROLE_FILE_ALIASES: Final[dict[ProductionSkillRole, ProductionSkillRole]] = {
+    ProductionSkillRole.STORY_REPAIR: ProductionSkillRole.CONCEPT,
+    ProductionSkillRole.REVIEW_ROUTER: ProductionSkillRole.PLANNER,
+}
+
+
+class ProductionPromptStage(StrEnum):
+    """Explicit production stage used to select only relevant Skill sections."""
+
+    ORCHESTRATION = "ORCHESTRATION"
+    STORY = "STORY"
+    STORYBOARD = "STORYBOARD"
+    ASSETS = "ASSETS"
+    VISUAL_GEN = "VISUAL_GEN"
+    POST = "POST"
 
 
 class SkillProvenanceKind(StrEnum):
@@ -55,6 +76,9 @@ class ProductionSkill:
     final_cold_read: str
     review_router: str
     director: str
+    asset_planner: str
+    asset_builder: str
+    asset_verifier: str
     asset_reviewer: str
     route_planner: str
     video_prompt_compiler: str
@@ -74,12 +98,32 @@ class ComposableProductionSkill:
     constitution: str
     role_prompts: dict[ProductionSkillRole, str]
     source_path: str
+    shared_prefix: tuple[str, str] | None = None
+    shared_suffix: tuple[str, str] | None = None
+    stage_role_prompts: dict[
+        tuple[ProductionPromptStage, ProductionSkillRole],
+        str,
+    ] | None = None
     provenance: SkillProvenanceKind = SkillProvenanceKind.PROJECT_ORIGINAL
     upstream_sources: tuple[str, ...] = ()
     user_overridable: bool = True
 
     def supports(self, role: ProductionSkillRole) -> bool:
         return role in self.role_prompts
+
+    def prompt_for(
+        self,
+        role: ProductionSkillRole,
+        *,
+        stage: ProductionPromptStage | None = None,
+    ) -> str | None:
+        """Return the narrowest declared prompt for an explicit stage and role."""
+
+        if stage is not None and self.stage_role_prompts is not None:
+            stage_prompt = self.stage_role_prompts.get((stage, role))
+            if stage_prompt is not None:
+                return stage_prompt
+        return self.role_prompts.get(role)
 
 
 @dataclass(frozen=True)
@@ -123,3 +167,4 @@ class CompiledProductionPrompt:
     text: str
     selected_skill_ids: tuple[str, ...] = ()
     selected_method_skill_ids: tuple[str, ...] = ()
+    stage: ProductionPromptStage | None = None

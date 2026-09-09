@@ -15,12 +15,15 @@ from short_drama.image_models import (
 )
 from short_drama.models import (
     ApprovalStatus,
+    AssetDerivationReference,
     AssetKind,
     AssetLayoutProfile,
     AssetReferenceStrategy,
     AssetSheetInputPolicy,
     AssetStandardView,
     CoreAssetBrief,
+    ImageReferenceAuthority,
+    ImageReferenceRole,
     OriginType,
 )
 from short_drama.service import ShortDramaService, WorkflowConflictError
@@ -291,6 +294,275 @@ def test_compose_dual_zone_machine_reference_card_is_16_9_without_labels(
         assert (32, 36, 42) not in {color for _count, color in colors}
 
 
+def test_profiled_reference_sheet_maps_cells_to_semantic_slots(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    target = _fixture_character(service)
+    source_by_view = {
+        view: _import_solid_image(
+            service,
+            project_id=target.project_id,
+            asset_id=target.id,
+            path=tmp_path / f"semantic-{view.value}.png",
+            color=color,
+            descriptor=view.value,
+        )
+        for view, color in (
+            (AssetStandardView.CANONICAL_MASTER, "red"),
+            (AssetStandardView.CHARACTER_FRONT, "green"),
+            (AssetStandardView.CHARACTER_LEFT_PROFILE, "blue"),
+            (AssetStandardView.CHARACTER_BACK, "yellow"),
+        )
+    }
+    request = AssetReferenceSheetComposeRequest(
+        strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+        layout_profile=AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+        show_labels=False,
+        cells=[
+            AssetReferenceSheetCellRequest(
+                asset_version_id=source_by_view[view].id,
+                view=view,
+            )
+            for view in (
+                AssetStandardView.CHARACTER_BACK,
+                AssetStandardView.CHARACTER_LEFT_PROFILE,
+                AssetStandardView.CANONICAL_MASTER,
+                AssetStandardView.CHARACTER_FRONT,
+            )
+        ],
+        descriptor="semantically ordered character card",
+    )
+
+    assert [cell.view for cell in request.cells] == [
+        AssetStandardView.CANONICAL_MASTER,
+        AssetStandardView.CHARACTER_FRONT,
+        AssetStandardView.CHARACTER_LEFT_PROFILE,
+        AssetStandardView.CHARACTER_BACK,
+    ]
+    result = service.compose_asset_reference_sheet(
+        target.project_id,
+        target.id,
+        request,
+    )
+    assert result.version.reference_sheet is not None
+    assert [cell.view for cell in result.version.reference_sheet.cells] == [
+        AssetStandardView.CANONICAL_MASTER,
+        AssetStandardView.CHARACTER_FRONT,
+        AssetStandardView.CHARACTER_LEFT_PROFILE,
+        AssetStandardView.CHARACTER_BACK,
+    ]
+
+
+def test_profiled_reference_sheet_rejects_duplicate_or_missing_semantic_slots() -> None:
+    with pytest.raises(ValueError, match="duplicate profile body"):
+        AssetReferenceSheetComposeRequest(
+            strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+            layout_profile=AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            cells=[
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="canonical",
+                    view=AssetStandardView.CANONICAL_MASTER,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="front",
+                    view=AssetStandardView.CHARACTER_FRONT,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="left",
+                    view=AssetStandardView.CHARACTER_LEFT_PROFILE,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="right",
+                    view=AssetStandardView.CHARACTER_RIGHT_PROFILE,
+                ),
+            ],
+            descriptor="invalid duplicate profile slot",
+        )
+
+    with pytest.raises(ValueError, match="requires exactly 4 cells"):
+        AssetReferenceSheetComposeRequest(
+            strategy=AssetReferenceStrategy.SCENE_COVERAGE,
+            layout_profile=AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
+            cells=[
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="master",
+                    view=AssetStandardView.SCENE_FRONT,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="reverse",
+                    view=AssetStandardView.SCENE_REVERSE,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="left",
+                    view=AssetStandardView.SCENE_LEFT,
+                ),
+            ],
+            descriptor="invalid missing scene slot",
+        )
+
+    scene_request = AssetReferenceSheetComposeRequest(
+        strategy=AssetReferenceStrategy.SCENE_COVERAGE,
+        layout_profile=AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
+        cells=[
+            AssetReferenceSheetCellRequest(
+                asset_version_id="right",
+                view=AssetStandardView.SCENE_RIGHT,
+            ),
+            AssetReferenceSheetCellRequest(
+                asset_version_id="front",
+                view=AssetStandardView.SCENE_FRONT,
+            ),
+            AssetReferenceSheetCellRequest(
+                asset_version_id="left",
+                view=AssetStandardView.SCENE_LEFT,
+            ),
+            AssetReferenceSheetCellRequest(
+                asset_version_id="reverse",
+                view=AssetStandardView.SCENE_REVERSE,
+            ),
+        ],
+        descriptor="valid semantically mapped scene directions",
+    )
+    assert [cell.view for cell in scene_request.cells] == [
+        AssetStandardView.SCENE_FRONT,
+        AssetStandardView.SCENE_REVERSE,
+        AssetStandardView.SCENE_LEFT,
+        AssetStandardView.SCENE_RIGHT,
+    ]
+
+    with pytest.raises(ValueError, match="does not accept view SCENE_OVERHEAD"):
+        AssetReferenceSheetComposeRequest(
+            strategy=AssetReferenceStrategy.SCENE_COVERAGE,
+            layout_profile=AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
+            cells=[
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="front",
+                    view=AssetStandardView.SCENE_FRONT,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="reverse",
+                    view=AssetStandardView.SCENE_REVERSE,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="left",
+                    view=AssetStandardView.SCENE_LEFT,
+                ),
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="overhead",
+                    view=AssetStandardView.SCENE_OVERHEAD,
+                ),
+            ],
+            descriptor="overhead is not a right-direction substitute",
+        )
+
+
+def test_reference_sheet_inherits_unique_authoritative_source_lineage(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    target = _fixture_character(service)
+    identity_root = _import_solid_image(
+        service,
+        project_id=target.project_id,
+        asset_id=target.id,
+        path=tmp_path / "identity-root.png",
+        color="white",
+        descriptor="user identity root",
+    )
+    wardrobe_root = _import_solid_image(
+        service,
+        project_id=target.project_id,
+        asset_id=target.id,
+        path=tmp_path / "wardrobe-root.png",
+        color="black",
+        descriptor="user wardrobe root",
+    )
+    views = [
+        AssetStandardView.CANONICAL_MASTER,
+        AssetStandardView.CHARACTER_FRONT,
+        AssetStandardView.CHARACTER_LEFT_PROFILE,
+        AssetStandardView.CHARACTER_BACK,
+    ]
+    view_versions = [
+        _import_solid_image(
+            service,
+            project_id=target.project_id,
+            asset_id=target.id,
+            path=tmp_path / f"derived-{index}.png",
+            color=color,
+            descriptor=view.value,
+        )
+        for index, (view, color) in enumerate(
+            zip(views, ("red", "green", "blue", "yellow"), strict=True)
+        )
+    ]
+    document = service.repository.get_project(target.project_id)
+    assert document is not None
+    persisted_asset = next(asset for asset in document.assets if asset.id == target.id)
+    authoritative_roots = [
+        AssetDerivationReference(
+            asset_version_id=identity_root.id,
+            reference_role=ImageReferenceRole.SUBJECT_IDENTITY,
+            reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+            purpose="user-declared protagonist identity",
+            subject_alias="hero",
+        ),
+        AssetDerivationReference(
+            asset_version_id=wardrobe_root.id,
+            reference_role=ImageReferenceRole.WARDROBE,
+            reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+            purpose="user-declared protagonist wardrobe",
+            subject_alias="hero",
+        ),
+    ]
+    for index, view_version in enumerate(view_versions):
+        persisted_version = next(
+            version for version in persisted_asset.versions if version.id == view_version.id
+        )
+        persisted_version.derivation_references = [
+            *(
+                authoritative_roots
+                if index == 0
+                else list(reversed(authoritative_roots))
+            ),
+            AssetDerivationReference(
+                asset_version_id=f"supporting-{index}",
+                reference_role=ImageReferenceRole.STYLE,
+                reference_authority=ImageReferenceAuthority.SUPPORTING,
+                purpose="non-authoritative style hint",
+            ),
+        ]
+    service.repository.save_project(document)
+
+    composed = service.compose_asset_reference_sheet(
+        target.project_id,
+        target.id,
+        AssetReferenceSheetComposeRequest(
+            strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+            layout_profile=AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+            show_labels=False,
+            cells=[
+                AssetReferenceSheetCellRequest(
+                    asset_version_id=version.id,
+                    view=view,
+                )
+                for view, version in zip(views, view_versions, strict=True)
+            ],
+            descriptor="character card retaining authoritative source lineage",
+        ),
+    )
+
+    assert [
+        reference.asset_version_id
+        for reference in composed.version.derivation_references
+    ] == [identity_root.id, wardrobe_root.id]
+    assert all(
+        reference.reference_authority == ImageReferenceAuthority.AUTHORITATIVE
+        for reference in composed.version.derivation_references
+    )
+
+
 def test_reference_sheet_policy_and_strategy_reject_mismatched_inputs(
     tmp_path: Path,
 ) -> None:
@@ -347,4 +619,37 @@ def test_reference_sheet_policy_and_strategy_reject_mismatched_inputs(
                     reference_strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
                 ),
             ),
+        )
+
+
+def test_local_reference_sheet_accepts_standard_full_hd_canvas() -> None:
+    request = AssetReferenceSheetComposeRequest(
+        strategy=AssetReferenceStrategy.LIGHTWEIGHT,
+        cells=[
+            AssetReferenceSheetCellRequest(
+                asset_version_id="source-version",
+                view=AssetStandardView.CANONICAL_MASTER,
+            )
+        ],
+        descriptor="Local deterministic sheet",
+        columns=1,
+        target_size="1920x1080",
+    )
+
+    assert request.target_size == "1920x1080"
+
+
+def test_local_reference_sheet_rejects_tiny_canvas_before_rendering() -> None:
+    with pytest.raises(ValueError, match="at least 256 pixels"):
+        AssetReferenceSheetComposeRequest(
+            strategy=AssetReferenceStrategy.LIGHTWEIGHT,
+            cells=[
+                AssetReferenceSheetCellRequest(
+                    asset_version_id="source-version",
+                    view=AssetStandardView.CANONICAL_MASTER,
+                )
+            ],
+            descriptor="invalid tiny sheet",
+            columns=1,
+            target_size="16x9",
         )

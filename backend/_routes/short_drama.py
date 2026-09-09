@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from _routes.studio import router as studio_router
+
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from _routes._errors import HTTPError
@@ -2050,3 +2052,6 @@ def export_project(
         return service.export_project(project_id, request.rebuild_manifest)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError, MediaGenerationError) as exc:
         raise _translate_error(exc) from exc
+
+
+router.include_router(studio_router)

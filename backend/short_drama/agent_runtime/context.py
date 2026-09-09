@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 import json
 from typing import Protocol
 
@@ -17,7 +17,11 @@ from short_drama.agent_runtime.models import (
     ContextPack,
     DecisionMemory,
     ExperienceMemory,
+    SpecialistTurnRecord,
+    SpecialistTurnStatus,
+    ToolAttemptRef,
     WorkOrder,
+    WorkOrderNextOwner,
 )
 from short_drama.agent_runtime.store import AgentRuntimeStore
 
@@ -48,6 +52,132 @@ def _unique_artifact_refs(values: Sequence[ArtifactRef]) -> list[ArtifactRef]:
         if identity in seen:
             continue
         seen.add(identity)
+        selected.append(ref)
+    return selected
+
+
+def _prioritize_current_asset_plan_indexes(
+    values: Sequence[ArtifactRef],
+) -> list[ArtifactRef]:
+    """Put only the newest lightweight index for each AssetPlan first.
+
+    Leader context may still contain an index selected by the just-completed
+    plan plus the newer index published by an AssetPlan write.  Both identities
+    remain resolvable, but replaying the stale scheduling view ahead of the new
+    handoff invites the Leader to plan against superseded work status.  WorkOrder
+    manifests are unaffected because they use ``compile_for_work_order`` and
+    preserve every explicitly selected immutable reference.
+    """
+
+    latest_indexes: dict[tuple[str, str], ArtifactRef] = {}
+    for ref in values:
+        if ref.artifact_type != "asset_plan_index":
+            continue
+        key = (ref.project_id, ref.artifact_id)
+        current = latest_indexes.get(key)
+        if current is None or (ref.version or -1) > (current.version or -1):
+            latest_indexes[key] = ref
+    indexes = list(latest_indexes.values())
+    return [
+        *indexes,
+        *[ref for ref in values if ref.artifact_type != "asset_plan_index"],
+    ]
+
+
+def _tool_attempt_ref(
+    project_id: str,
+    work_order: WorkOrder,
+    turn: SpecialistTurnRecord,
+) -> ToolAttemptRef:
+    result_status = None if turn.result is None else turn.result.get("status")
+    return ToolAttemptRef(
+        project_id=project_id,
+        agent_run_id=work_order.parent_run_id,
+        work_order_id=work_order.id,
+        attempt_id=turn.id,
+        tool_name=turn.tool_name,
+        turn_status=turn.status,
+        outcome_status=(result_status if isinstance(result_status, str) else None),
+        has_arguments=bool(turn.arguments),
+        has_result=turn.result is not None,
+    )
+
+
+def _recoverable_tool_attempt_refs(
+    project_id: str,
+    work_order: WorkOrder,
+) -> list[ToolAttemptRef]:
+    """Expose current repair bases and unsaved successful prompt compilations.
+
+    A completed compiler result is an addressable output even when its Worker
+    has returned or been superseded. RoutePlan persistence retires that inline
+    result. Exact arguments and prompt bodies remain outside normal context.
+    """
+
+    include_repairs = work_order.next_owner == WorkOrderNextOwner.LEADER_REPLAN
+    latest_by_tool: dict[str, ToolAttemptRef] = {}
+    compiled_by_target: dict[tuple[str | None, str | None], ToolAttemptRef] = {}
+    for turn in sorted(work_order.specialist_turns, key=lambda item: item.sequence):
+        result_status = None if turn.result is None else turn.result.get("status")
+        selected_attempt = turn.arguments.get("attempt_ref")
+        if include_repairs and result_status == "SUCCEEDED" and isinstance(selected_attempt, dict):
+            try:
+                selected_ref = ToolAttemptRef.model_validate(selected_attempt)
+            except ValueError:
+                selected_ref = None
+            if selected_ref is not None:
+                # A repair Worker may discover that the candidate needs another
+                # bounded planning decision before it can issue a new write. Keep
+                # the exact source attempt addressable across that Leader replan
+                # instead of falling back to user input or copying its payload.
+                latest_by_tool[selected_ref.tool_name] = selected_ref
+        request_value = turn.arguments.get("request")
+        request = request_value if isinstance(request_value, dict) else turn.arguments
+        if turn.tool_name == "route.compile_h3_prompt":
+            version = request.get("generation_plan_version_id")
+            target = request.get("generation_unit_id") or request.get("shot_id")
+            key = (version if isinstance(version, str) else None, target if isinstance(target, str) else None)
+            compiled_by_target.pop(key, None)
+            if result_status == "SUCCEEDED":
+                compiled_by_target[key] = _tool_attempt_ref(project_id, work_order, turn)
+        if result_status == "SUCCEEDED":
+            # A newer successful invocation supersedes its old failure pointer.
+            latest_by_tool.pop(turn.tool_name, None)
+            if turn.tool_name == "route.plan_h3" and turn.result is not None:
+                output = turn.result.get("output")
+                plan = output.get("plan") if isinstance(output, dict) else None
+                if isinstance(plan, dict):
+                    version = plan.get("input_generation_plan_version_id")
+                    decisions = plan.get("decisions")
+                    for decision in decisions if isinstance(decisions, list) else []:
+                        if isinstance(decision, dict):
+                            target = decision.get("generation_unit_id") or decision.get("shot_id")
+                            compiled_by_target.pop((version if isinstance(version, str) else None,
+                                                    target if isinstance(target, str) else None), None)
+        failed = (
+            turn.status == SpecialistTurnStatus.INTERRUPTED
+            or (
+                isinstance(result_status, str)
+                and result_status != "SUCCEEDED"
+            )
+        )
+        if include_repairs and failed and turn.arguments:
+            latest_by_tool[turn.tool_name] = _tool_attempt_ref(
+                project_id,
+                work_order,
+                turn,
+            )
+    return [*latest_by_tool.values(), *compiled_by_target.values()]
+
+
+def _bounded_tool_attempt_refs(
+    budget: _CharacterBudget,
+    values: Sequence[ToolAttemptRef],
+) -> list[ToolAttemptRef]:
+    selected: list[ToolAttemptRef] = []
+    for ref in values:
+        if not budget.take_exact(ref.model_dump_json(), limit=1_200):
+            break
         selected.append(ref)
     return selected
 
@@ -112,14 +242,178 @@ def _bounded_artifacts(
     values: Sequence[ArtifactSummary],
 ) -> list[ArtifactSummary]:
     bounded: list[ArtifactSummary] = []
-    for item in values:
+    prioritized = [
+        *[item for item in values if item.ref.artifact_type == "asset_plan_index"],
+        *[item for item in values if item.ref.artifact_type != "asset_plan_index"],
+    ]
+    for item in prioritized:
         required_fields = 1 if item.title is None else 2
         if budget.remaining < required_fields:
             break
-        title = budget.take(item.title, limit=240, reserve=1)
-        summary = budget.take(item.summary, limit=3_000)
+        if item.ref.artifact_type == "asset_plan_index":
+            title = budget.take(
+                item.title,
+                limit=min(240, max(1, budget.remaining - len(item.summary))),
+                reserve=len(item.summary),
+            )
+            if not budget.take_exact(item.summary):
+                break
+            summary = item.summary
+        else:
+            title = budget.take(item.title, limit=240, reserve=1)
+            summary = budget.take(item.summary, limit=3_000)
         if summary is None or (item.title is not None and title is None):
             break
+        bounded.append(item.model_copy(update={"title": title, "summary": summary}))
+    return bounded
+
+
+def _leader_artifact_summary(item: ArtifactSummary) -> ArtifactSummary:
+    """Keep a completed asset stage from replaying its whole work inventory.
+
+    The canonical index and explicit Worker manifests retain every work row.
+    A Leader needs the completed item identities and status to hand off to the
+    next stage; those rows remain available through the exact artifact pointer.
+    """
+
+    if item.ref.artifact_type != "asset_plan_index":
+        return item
+    try:
+        payload: JsonValue = json.loads(item.summary)
+    except ValueError:
+        return item
+    if not isinstance(payload, dict):
+        return item
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        return item
+    if any(
+        not isinstance(entry, dict)
+        or entry.get("status") not in {"COMPLETED", "NOT_REQUIRED"}
+        for entry in items
+    ):
+        return item
+    completed_items: list[dict[str, JsonValue]] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        compact = {key: value for key, value in entry.items() if key != "work"}
+        work = entry.get("work")
+        compact["completed_work_count"] = len(work) if isinstance(work, list) else 0
+        completed_items.append(compact)
+    return item.model_copy(update={"summary": json.dumps(
+        {
+            "execution_contract": payload.get("execution_contract"),
+            "items": completed_items,
+            "work_details": "Read this exact asset_plan_index artifact when needed.",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )})
+
+
+def _bounded_leader_artifacts(
+    budget: _CharacterBudget,
+    values: Sequence[ArtifactSummary],
+) -> list[ArtifactSummary]:
+    """Bound optional prose without discarding a selected artifact's identity.
+
+    Placeholder records are measured by the serialized ContextPack fitter. They
+    must survive when a large earlier summary uses the prose budget, otherwise
+    successful Tool outputs disappear from the very next planning call.
+    """
+
+    bounded = _bounded_artifacts(budget, values)
+    visible = {item.ref.identity() for item in bounded}
+    return [
+        *bounded,
+        *[
+            item.model_copy(update={
+                "title": None,
+                "summary": "Summary not loaded. Read the exact artifact when needed.",
+            })
+            for item in values
+            if item.ref.identity() not in visible
+        ],
+    ]
+
+
+def _bounded_required_artifacts(
+    budget: _CharacterBudget,
+    values: Sequence[ArtifactSummary],
+) -> list[ArtifactSummary]:
+    """Keep every exact manifest pointer while sharing its summary budget fairly.
+
+    A WorkOrder manifest is an explicit artifact handoff.  Dropping a later
+    entry because an earlier parent document consumed the prompt budget breaks
+    that contract and also makes the result depend on list order.  Required
+    artifacts therefore receive a proportional slice of the remaining budget;
+    the canonical refs stay exact while their read-only summaries may be
+    shortened.  A specialist can still load an exact artifact through the
+    artifact Tools when the bounded projection is not sufficient.
+    """
+
+    if not values:
+        return []
+    minimum_costs = [
+        (
+            len(item.summary) + (1 if item.title is not None else 0)
+            if item.ref.artifact_type == "asset_plan_index"
+            else 1 + (1 if item.title is not None else 0)
+        )
+        for item in values
+    ]
+    if sum(minimum_costs) > budget.remaining:
+        return []
+
+    bounded: list[ArtifactSummary] = []
+    for index, item in enumerate(values):
+        items_left = len(values) - index
+        required_for_rest = sum(minimum_costs[index + 1 :])
+        available_for_item = budget.remaining - required_for_rest
+        if item.ref.artifact_type == "asset_plan_index":
+            title: str | None = None
+            if item.title is not None:
+                title = budget.take(
+                    item.title,
+                    limit=min(240, max(1, available_for_item - len(item.summary))),
+                    reserve=required_for_rest + len(item.summary),
+                )
+                if title is None:
+                    return bounded
+            if not budget.take_exact(item.summary):
+                return bounded
+            bounded.append(
+                item.model_copy(update={"title": title, "summary": item.summary})
+            )
+            continue
+        fair_share = max(minimum_costs[index], budget.remaining // items_left)
+        item_limit = min(3_240, fair_share, available_for_item)
+
+        title: str | None = None
+        if item.title is not None:
+            # Leave the summary at least one character.  Short titles return
+            # their unused share to the later summaries automatically.
+            title_limit = min(240, max(1, item_limit - 1))
+            title = budget.take(
+                item.title,
+                limit=title_limit,
+                reserve=required_for_rest + 1,
+            )
+            if title is None:
+                return bounded
+
+        summary_limit = min(
+            3_000,
+            max(1, item_limit - (0 if title is None else len(title))),
+        )
+        summary = budget.take(
+            item.summary,
+            limit=summary_limit,
+            reserve=required_for_rest,
+        )
+        if summary is None:
+            return bounded
         bounded.append(item.model_copy(update={"title": title, "summary": summary}))
     return bounded
 
@@ -255,8 +549,84 @@ def _agent_result_digest(result: AgentResult | None) -> AgentResultDigest | None
         concise_summary=result.concise_summary,
         deliverable=dict(result.deliverable),
         findings=list(result.findings),
-        evidence_refs=list(result.evidence_refs),
+        # The complete evidence set remains on the durable AgentResult.  It is
+        # intentionally not promoted into every later Leader prompt: landed
+        # created/updated artifacts are carried by ActionDigest, while a later
+        # focused task can explicitly inspect the source result when needed.
+        evidence_refs=[],
     )
+
+
+def _model_context_characters(context: ContextPack) -> int:
+    """Measure the complete JSON object sent to a model, not only its prose."""
+
+    return len(
+        json.dumps(
+            context.model_context_dump(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+
+
+def _fit_model_context(
+    build: Callable[[int], ContextPack],
+    *,
+    max_characters: int,
+    error_type: type[ValueError],
+    error_message: str,
+) -> ContextPack:
+    """Fit field-aware bounded content against its actual serialized payload."""
+
+    candidate = build(max_characters)
+    if _model_context_characters(candidate) <= max_characters:
+        return candidate
+
+    # A manifest can contain mandatory semantic records such as explicitly
+    # inherited decisions and exact artifact pointers.  Such a builder may be
+    # invalid at the public 256-character floor even though a slightly larger
+    # content budget produces a compact projection that fits the complete JSON
+    # envelope.  Find that real lower bound before maximizing useful content.
+    minimum_budget = 256
+    minimum: ContextPack | None = None
+    minimum_buildable_budget = max_characters
+    lower = minimum_budget
+    upper = max_characters - 1
+    while lower <= upper:
+        content_budget = (lower + upper) // 2
+        try:
+            probe = build(content_budget)
+        except error_type:
+            lower = content_budget + 1
+            continue
+        minimum = probe
+        minimum_buildable_budget = content_budget
+        upper = content_budget - 1
+
+    if minimum is None:
+        minimum = candidate
+    if _model_context_characters(minimum) > max_characters:
+        raise error_type(error_message)
+
+    # The existing bounders shorten individual semantic fields or omit an
+    # optional record as a unit.  Binary search chooses the richest projection
+    # that fits; it never slices the final JSON or corrupts a reference object.
+    best = minimum
+    lower = minimum_buildable_budget + 1
+    upper = max_characters - 1
+    while lower <= upper:
+        content_budget = (lower + upper) // 2
+        try:
+            candidate = build(content_budget)
+        except error_type:
+            lower = content_budget + 1
+            continue
+        if _model_context_characters(candidate) <= max_characters:
+            best = candidate
+            lower = content_budget + 1
+        else:
+            upper = content_budget - 1
+    return best
 
 
 class ContextCompiler:
@@ -302,7 +672,9 @@ class ContextCompiler:
     ) -> ContextPack:
         if max_artifacts < 1:
             raise ValueError("max_artifacts must be at least 1")
-        budget = _CharacterBudget(max_characters)
+        # Preserve the public lower bound even though fitting below is based on
+        # the complete serialized projection rather than prose alone.
+        _CharacterBudget(max_characters)
         run = self._store.get_run(run_id)
         if run is None:
             raise KeyError(f"Unknown agent run: {run_id}")
@@ -332,6 +704,20 @@ class ContextCompiler:
         for decision in decisions:
             candidates.extend(decision.artifact_refs)
 
+        # A new GenerationPlan republishes the same stable unit ids. Leader
+        # memory may still hold their earlier versions; use the current project
+        # handoff at those positions. Explicit Worker manifests stay immutable.
+        current_generation = {
+            (ref.artifact_type, ref.artifact_id): ref
+            for ref in ([] if project_memory is None else project_memory.artifact_refs)
+            if ref.artifact_type in {"generation_plan", "generation_unit"}
+        }
+        candidates = [
+            current_generation.get((ref.artifact_type, ref.artifact_id), ref)
+            for ref in candidates
+        ]
+        candidates = _prioritize_current_asset_plan_indexes(candidates)
+
         selected_refs: list[ArtifactRef] = []
         seen: set[tuple[str, str, str, int | None]] = set()
         for ref in candidates:
@@ -350,7 +736,7 @@ class ContextCompiler:
             if summary is None:
                 unresolved_refs.append(ref)
             else:
-                artifacts.append(summary)
+                artifacts.append(_leader_artifact_summary(summary))
 
         actions = self._store.list_actions(run.id)
         selected_actions = (
@@ -359,6 +745,7 @@ class ContextCompiler:
         recent_actions = [
             ActionDigest(
                 id=action.id,
+                work_order_id=action.work_order_id,
                 kind=action.kind,
                 status=action.status,
                 summary=action.output_summary or action.input_summary,
@@ -371,62 +758,106 @@ class ContextCompiler:
             )
             for action in selected_actions
         ]
+        tool_attempt_refs: list[ToolAttemptRef] = []
+        seen_attempts: set[tuple[str, str, str, str]] = set()
+        for action in selected_actions:
+            if action.work_order_id is None:
+                continue
+            work_order = self._store.get_work_order(action.work_order_id)
+            if work_order is None:
+                continue
+            for ref in _recoverable_tool_attempt_refs(run.project_id, work_order):
+                if ref.identity() in seen_attempts:
+                    continue
+                seen_attempts.add(ref.identity())
+                tool_attempt_refs.append(ref)
         constraints = list(additional_constraints)
         if project_memory is not None:
             constraints = [*project_memory.constraints, *constraints]
 
-        headline_limit = max(64, min(4_000, max_characters // 4))
-        objective = budget.take(
-            objective_override or run.objective,
-            limit=headline_limit,
-        )
-        if objective is None:
-            raise ValueError("max_characters is too small for the run objective")
-        project_summary = budget.take(
-            None if project_memory is None else project_memory.summary,
-            limit=headline_limit,
-        )
-        run_focus = budget.take(
-            None if run_memory is None else run_memory.current_focus,
-            limit=2_000,
-        )
-        bounded_constraints = _bounded_strings(budget, constraints)
-        bounded_blockers = _bounded_strings(
-            budget,
-            [] if run_memory is None else run_memory.blockers,
-        )
-        bounded_questions = _bounded_strings(
-            budget,
-            [] if run_memory is None else run_memory.open_questions,
-        )
-        bounded_next_actions = _bounded_strings(
-            budget,
-            [] if run_memory is None else run_memory.next_actions,
-        )
-        bounded_recent_actions = _bounded_actions(budget, recent_actions)
-        bounded_decisions = _bounded_decisions(budget, decisions)
-        bounded_artifacts = _bounded_artifacts(budget, artifacts)
-        bounded_experiences = _bounded_experiences(budget, experiences)
+        def build(content_budget: int) -> ContextPack:
+            budget = _CharacterBudget(content_budget)
+            headline_limit = max(64, min(4_000, content_budget // 4))
+            objective = budget.take(
+                objective_override or run.objective,
+                limit=headline_limit,
+            )
+            if objective is None:
+                raise ValueError("max_characters is too small for the run objective")
+            index_artifacts = [
+                item
+                for item in artifacts
+                if item.ref.artifact_type == "asset_plan_index"
+            ]
+            other_artifacts = [
+                item
+                for item in artifacts
+                if item.ref.artifact_type != "asset_plan_index"
+            ]
+            bounded_index_artifacts = _bounded_artifacts(budget, index_artifacts)
+            if len(bounded_index_artifacts) != len(index_artifacts):
+                raise ValueError(
+                    "asset_plan_index summaries must fit the AgentRun context exactly"
+                )
+            # Current outcomes must precede ambient project prose. Otherwise a
+            # completed Tool can lose both its result and exact handoff refs.
+            bounded_tool_attempt_refs = _bounded_tool_attempt_refs(budget, tool_attempt_refs)
+            bounded_recent_actions = _bounded_actions(budget, recent_actions)
+            run_focus = budget.take(
+                None if run_memory is None else run_memory.current_focus,
+                limit=2_000,
+            )
+            bounded_constraints = _bounded_strings(budget, constraints)
+            bounded_blockers = _bounded_strings(
+                budget,
+                [] if run_memory is None else run_memory.blockers,
+            )
+            bounded_questions = _bounded_strings(
+                budget,
+                [] if run_memory is None else run_memory.open_questions,
+            )
+            bounded_next_actions = _bounded_strings(
+                budget,
+                [] if run_memory is None else run_memory.next_actions,
+            )
+            project_summary = budget.take(
+                None if project_memory is None else project_memory.summary,
+                limit=headline_limit,
+            )
+            bounded_decisions = _bounded_decisions(budget, decisions)
+            bounded_artifacts = [
+                *bounded_index_artifacts,
+                *_bounded_leader_artifacts(budget, other_artifacts),
+            ]
+            bounded_experiences = _bounded_experiences(budget, experiences)
 
-        return ContextPack(
-            run_id=run.id,
-            project_id=run.project_id,
-            objective=objective,
-            active_skill_ids=run.active_skill_ids,
-            unattended=run.unattended,
-            execution_target=run.execution_target,
-            render_export=run.render_export,
-            project_summary=project_summary,
-            run_focus=run_focus,
-            constraints=bounded_constraints,
-            decisions=bounded_decisions,
-            experiences=bounded_experiences,
-            artifacts=bounded_artifacts,
-            unresolved_artifact_refs=unresolved_refs,
-            recent_actions=bounded_recent_actions,
-            blockers=bounded_blockers,
-            open_questions=bounded_questions,
-            next_actions=bounded_next_actions,
+            return ContextPack(
+                run_id=run.id,
+                project_id=run.project_id,
+                objective=objective,
+                active_skill_ids=run.active_skill_ids,
+                unattended=run.unattended,
+                execution_target=run.execution_target,
+                render_export=run.render_export,
+                project_summary=project_summary,
+                run_focus=run_focus,
+                constraints=bounded_constraints,
+                decisions=bounded_decisions,
+                experiences=bounded_experiences,
+                artifacts=bounded_artifacts,
+                tool_attempt_refs=bounded_tool_attempt_refs,
+                unresolved_artifact_refs=unresolved_refs,
+                recent_actions=bounded_recent_actions,
+                blockers=bounded_blockers,
+                open_questions=bounded_questions,
+                next_actions=bounded_next_actions,
+            )
+
+        return _fit_model_context(
+            build,
+            max_characters=max_characters,
+            error_type=ValueError,
+            error_message="max_characters is too small for the model context structure",
         )
 
     def compile_for_work_order(
@@ -495,6 +926,39 @@ class ContextCompiler:
                 )
             decisions.append(decision)
 
+        for ref in manifest.tool_attempt_refs:
+            if (
+                ref.project_id != run.project_id
+                or ref.agent_run_id != run.id
+            ):
+                raise ContextManifestResolutionError(
+                    "ContextManifest Tool attempt references must belong to the AgentRun"
+                )
+            source_work_order = self._store.get_work_order(ref.work_order_id)
+            if (
+                source_work_order is None
+                or source_work_order.parent_run_id != run.id
+            ):
+                raise ContextManifestResolutionError(
+                    f"ContextManifest contains an unresolved Tool attempt: {ref.attempt_id}"
+                )
+            source_turn = next(
+                (
+                    turn
+                    for turn in source_work_order.specialist_turns
+                    if turn.id == ref.attempt_id
+                ),
+                None,
+            )
+            if (
+                source_turn is None
+                or _tool_attempt_ref(run.project_id, source_work_order, source_turn)
+                != ref
+            ):
+                raise ContextManifestResolutionError(
+                    f"ContextManifest contains a stale Tool attempt reference: {ref.attempt_id}"
+                )
+
         selected_tags = manifest.experience_tags
         experiences = (
             []
@@ -509,40 +973,67 @@ class ContextCompiler:
         if not manifest.selected_skill_ids:
             experiences = [item for item in experiences if item.skill_id is None]
 
-        budget = _CharacterBudget(max_characters)
-        headline_limit = max(64, min(4_000, max_characters // 4))
-        objective = budget.take(manifest.objective, limit=headline_limit)
-        if objective is None:
-            raise ContextManifestResolutionError(
-                "ContextManifest objective does not fit the context budget"
+        _CharacterBudget(max_characters)
+
+        def build(content_budget: int) -> ContextPack:
+            budget = _CharacterBudget(content_budget)
+            headline_limit = max(64, min(4_000, content_budget // 4))
+            objective = budget.take(manifest.objective, limit=headline_limit)
+            if objective is None:
+                raise ContextManifestResolutionError(
+                    "ContextManifest objective does not fit the context budget"
+                )
+            bounded_decisions = _bounded_decisions(budget, decisions)
+            bounded_tool_attempt_refs = _bounded_tool_attempt_refs(
+                budget,
+                manifest.tool_attempt_refs,
             )
-        bounded_constraints = _bounded_strings(budget, manifest.constraints)
-        bounded_questions = _bounded_strings(budget, manifest.open_questions)
-        bounded_decisions = _bounded_decisions(budget, decisions)
-        bounded_artifacts = _bounded_artifacts(budget, resolved_artifacts)
-        bounded_experiences = _bounded_experiences(budget, experiences)
-        if len(bounded_decisions) != len(decisions):
-            raise ContextManifestResolutionError(
-                "ContextManifest decisions do not fit the context budget"
+            # Exact artifact pointers are the WorkOrder's primary handoff.
+            # Optional prose must not consume the space needed to represent all
+            # explicitly selected canonical artifacts.
+            bounded_artifacts = _bounded_required_artifacts(
+                budget,
+                resolved_artifacts,
             )
-        if len(bounded_artifacts) != len(resolved_artifacts):
-            raise ContextManifestResolutionError(
-                "ContextManifest artifacts do not fit the context budget"
+            bounded_constraints = _bounded_strings(budget, manifest.constraints)
+            bounded_questions = _bounded_strings(budget, manifest.open_questions)
+            bounded_experiences = _bounded_experiences(budget, experiences)
+            if len(bounded_decisions) != len(decisions):
+                raise ContextManifestResolutionError(
+                    "ContextManifest decisions do not fit the context budget"
+                )
+            if len(bounded_artifacts) != len(resolved_artifacts):
+                raise ContextManifestResolutionError(
+                    "ContextManifest artifacts do not fit the context budget"
+                )
+            if len(bounded_tool_attempt_refs) != len(manifest.tool_attempt_refs):
+                raise ContextManifestResolutionError(
+                    "ContextManifest Tool attempt references do not fit the context budget"
+                )
+
+            return ContextPack(
+                run_id=run.id,
+                project_id=run.project_id,
+                work_order_id=work_order.id,
+                context_manifest_id=manifest.id,
+                objective=objective,
+                active_skill_ids=manifest.selected_skill_ids,
+                unattended=run.unattended,
+                execution_target=run.execution_target,
+                render_export=run.render_export,
+                constraints=bounded_constraints,
+                decisions=bounded_decisions,
+                experiences=bounded_experiences,
+                artifacts=bounded_artifacts,
+                tool_attempt_refs=bounded_tool_attempt_refs,
+                open_questions=bounded_questions,
             )
 
-        return ContextPack(
-            run_id=run.id,
-            project_id=run.project_id,
-            work_order_id=work_order.id,
-            context_manifest_id=manifest.id,
-            objective=objective,
-            active_skill_ids=manifest.selected_skill_ids,
-            unattended=run.unattended,
-            execution_target=run.execution_target,
-            render_export=run.render_export,
-            constraints=bounded_constraints,
-            decisions=bounded_decisions,
-            experiences=bounded_experiences,
-            artifacts=bounded_artifacts,
-            open_questions=bounded_questions,
+        return _fit_model_context(
+            build,
+            max_characters=max_characters,
+            error_type=ContextManifestResolutionError,
+            error_message=(
+                "ContextManifest model projection does not fit the context budget"
+            ),
         )

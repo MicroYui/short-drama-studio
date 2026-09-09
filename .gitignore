@@ -9,6 +9,8 @@ dist-electron/
 .vite/
 release/
 *.tsbuildinfo
+/python-deps-hash.txt
+/backend/short_drama/runtime/studio-export.cjs
 
 # Python
 backend/.venv/

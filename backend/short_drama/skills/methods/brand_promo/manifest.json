@@ -1,0 +1,52 @@
+{
+  "id": "method.brand_promo",
+  "label": "品牌宣传片",
+  "description": "适合品牌宣传项目，覆盖品牌事实、授权素材、受众承诺、镜头、声音、行动号召与交付检查。",
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "REVISION_VERIFIER",
+    "DIRECTOR",
+    "ASSET_REVIEWER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 2：建立品牌事实表",
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 4：选择故事脊柱"
+    ],
+    "WRITER": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 4：选择故事脊柱",
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 5：规划精确节拍"
+    ],
+    "PLANNER": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 5：规划精确节拍"
+    ],
+    "REVISION_VERIFIER": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 9：交付前验证"
+    ],
+    "DIRECTOR": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 6：导演动效语言"
+    ],
+    "ASSET_REVIEWER": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 2：建立品牌事实表",
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 3：创建来源清单"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 6：导演动效语言"
+    ],
+    "EPISODE_REVIEWER": [
+      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 9：交付前验证"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER",
+  "upstream_sources": [
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/brand-promo-video-generator/SKILL.cn.md",
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/brand-promo-video-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub]"
+  ],
+  "user_overridable": true
+}

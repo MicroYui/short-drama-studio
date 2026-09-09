@@ -105,6 +105,21 @@ def validate_h3_probe(
         raise H3CapabilityError("H3 requires a non-empty text prompt")
     if len(prompt) > 7000:
         raise H3CapabilityError("H3 prompt exceeds 7000 characters")
+    validate_h3_inputs(
+        route=route,
+        duration_seconds=duration_seconds,
+        media_inputs=media_inputs,
+    )
+
+
+def validate_h3_inputs(
+    *,
+    route: VideoGenerationRoute,
+    duration_seconds: int,
+    media_inputs: list[H3MediaInput],
+) -> None:
+    """Validate route/media before prompt authoring or any provider call."""
+
     if duration_seconds < 4 or duration_seconds > 15:
         raise H3CapabilityError("H3 duration must be an integer from 4 to 15 seconds")
     if len(media_inputs) > 12:

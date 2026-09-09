@@ -37,6 +37,7 @@ from short_drama.models import (
 )
 from short_drama.providers.h3_config import H3ProviderConfigStore
 from short_drama.providers.minimax_h3_client import (
+    H3_LOCAL_INPUT_ENCODING_PROFILE,
     H3Client,
     H3DefiniteRequestError,
     H3SubmissionUnknown,
@@ -759,7 +760,7 @@ class PersistentH3Worker:
         path = Path(media.source.local_path).expanduser().resolve()
         stat = path.stat()
         cache_key = hashlib.sha256(
-            f"{path}:{stat.st_size}:{stat.st_mtime_ns}".encode()
+            f"{H3_LOCAL_INPUT_ENCODING_PROFILE}:{path}:{stat.st_size}:{stat.st_mtime_ns}".encode()
         ).hexdigest()
         now = utc_now()
         cached = self.repository.get_provider_upload(cache_key, now)

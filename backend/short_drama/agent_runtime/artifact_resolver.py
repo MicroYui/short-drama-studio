@@ -7,7 +7,11 @@ from dataclasses import dataclass
 import json
 from typing import Protocol, cast
 
+from pydantic import JsonValue
+
+from short_drama.asset_plan_reconciler import assess_asset_plan_execution_contract
 from short_drama.agent_runtime.models import ArtifactRef, ArtifactSummary
+from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.h3_models import H3ProductionRoutePlan
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
@@ -1488,6 +1492,159 @@ class ProjectArtifactResolver:
                 title=f"AssetPlan v{version.version}",
                 summary=asset_plan.model_dump_json(),
             )
+        if ref.artifact_type == "asset_plan_index":
+            version = _typed_production_version(
+                document,
+                document_id=ref.artifact_id,
+                kind=ASSET_PLAN_DOCUMENT_KIND,
+                version=ref.version,
+            )
+            if version is None:
+                return None
+            try:
+                asset_plan = AssetPlanContent.model_validate(version.payload)
+            except ValueError:
+                return None
+            asset_versions = {
+                (asset.id, candidate.id): candidate
+                for asset in document.assets
+                for candidate in asset.versions
+            }
+            completed_work_ids = {
+                work.id
+                for item in asset_plan.items
+                for work in item.work_items
+                if work.completed_asset_id is not None
+            }
+            compact_items: list[dict[str, object]] = []
+            for item in asset_plan.items:
+                compact_work: list[list[object]] = []
+                item_work_statuses: list[str] = []
+                for work in item.work_items:
+                    candidate = (
+                        asset_versions.get((
+                            work.candidate_asset_id, work.candidate_asset_version_id,
+                        ))
+                        if work.candidate_asset_id is not None
+                        and work.candidate_asset_version_id is not None
+                        else None
+                    )
+                    status = (
+                        "COMPLETED"
+                        if work.completed_asset_id is not None
+                        else "CANDIDATE_AVAILABLE"
+                        if work.candidate_asset_id is not None
+                        else (
+                            "READY"
+                            if all(
+                                dependency_id in completed_work_ids
+                                for dependency_id in work.dependency_ids
+                            )
+                            else "BLOCKED"
+                        )
+                    )
+                    item_work_statuses.append(status)
+                    compact_work.append(
+                        [
+                            work.id,
+                            status,
+                            work.operation.value,
+                            work.output_role,
+                            None if work.output_view is None else work.output_view.value,
+                            work.resolved_output_layout_profile().value,
+                            work.size,
+                            list(work.dependency_ids),
+                            work.review_purpose.value,
+                            (
+                                None
+                                if work.reference_pack_intent is None
+                                else work.reference_pack_intent.subject_item_id
+                            ),
+                            work.completed_asset_id,
+                            work.completed_asset_version_id,
+                            work.candidate_asset_id,
+                            work.candidate_asset_version_id,
+                            None if candidate is None else candidate.approval_status.value,
+                            None if candidate is None else candidate.freshness.value,
+                        ]
+                    )
+                if item.disposition.value == "TEXT_ONLY":
+                    item_status = "NOT_REQUIRED"
+                elif (
+                    item.work_items
+                    and all(status == "COMPLETED" for status in item_work_statuses)
+                    and item.completed_asset_id is not None
+                ) or (
+                    item.disposition.value == "REUSE_EXISTING"
+                    and item.completed_asset_id is not None
+                ):
+                    item_status = "COMPLETED"
+                elif any(
+                    status in {"COMPLETED", "CANDIDATE_AVAILABLE"}
+                    for status in item_work_statuses
+                ):
+                    item_status = "IN_PROGRESS"
+                elif any(status == "READY" for status in item_work_statuses):
+                    item_status = "READY"
+                else:
+                    item_status = "BLOCKED"
+                compact_item: dict[str, object] = {
+                    "id": item.id,
+                    "name": item.name,
+                    "kind": item.asset_kind.value,
+                    "disposition": item.disposition.value,
+                    "status": item_status,
+                    "layout_profile": (
+                        None
+                        if item.brief is None
+                        else item.brief.layout_profile.value
+                    ),
+                    "shot_count": len(item.serves_shot_ids),
+                    "clip_group_count": len(item.serves_clip_group_ids),
+                    "work": compact_work,
+                }
+                if item.bible_entity_id is not None:
+                    compact_item["bible_entity_id"] = item.bible_entity_id
+                if item.completed_asset_id is not None:
+                    compact_item["completed_asset_id"] = item.completed_asset_id
+                    compact_item["completed_asset_version_id"] = (
+                        item.completed_asset_version_id
+                    )
+                compact_items.append(compact_item)
+            return ArtifactSummary(
+                ref=ref,
+                title=f"AssetPlan dispatch index v{version.version}",
+                summary=json.dumps(
+                    {
+                        "columns": [
+                            "work_id",
+                            "status",
+                            "operation",
+                            "output_role",
+                            "output_view",
+                            "output_layout_profile",
+                            "size",
+                            "dependency_ids",
+                            "review_purpose",
+                            "reference_pack_subject_item_id",
+                            "completed_asset_id",
+                            "completed_asset_version_id",
+                            "candidate_asset_id",
+                            "candidate_asset_version_id",
+                            "candidate_approval_status",
+                            "candidate_freshness",
+                        ],
+                        "execution_contract": (
+                            assess_asset_plan_execution_contract(asset_plan).model_dump(
+                                mode="json"
+                            )
+                        ),
+                        "items": compact_items,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            )
         if ref.artifact_type == "clip_group":
             match = next(
                 (
@@ -1642,6 +1799,23 @@ class ProjectArtifactResolver:
             return _artifact_record_summary(ref, self._projects.get_take(ref.artifact_id))
 
         records = cast(ProjectArtifactRecordStore, self._projects)
+        if ref.artifact_type == "h3_route_plan_index":
+            if ref.artifact_id != ref.project_id:
+                return None
+            # One compact discovery view survives Leader replanning even when
+            # individual full plans exceed the context summary budget.
+            plans = records.list_h3_route_plans(ref.project_id)
+            return ArtifactSummary(
+                ref=ref, title="H3 route plan index",
+                summary=json.dumps({"plans": [
+                    {"plan_id": plan.id, "state_revision": plan.state_revision,
+                     "unit_ids": [item.generation_unit_id for item in plan.decisions
+                                  if item.generation_unit_id is not None],
+                     "shot_ids": [item.shot_id for item in plan.decisions]
+                     if all(item.generation_unit_id is None for item in plan.decisions) else []}
+                    for plan in plans
+                ], "details_tool": "route.get_h3_plan"}, ensure_ascii=False, separators=(",", ":")),
+            )
         if ref.artifact_type == "h3_route_plan":
             plan = records.get_h3_route_plan(ref.artifact_id)
             if (
@@ -1739,7 +1913,11 @@ def _artifact_record_summary(
     return ArtifactSummary(
         ref=ref,
         title=ref.artifact_type.replace("_", " ").title(),
-        summary=record.model_dump_json(),
+        summary=json.dumps(
+            provider_media_model_view(cast(JsonValue, json.loads(record.model_dump_json()))),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
     )
 
 
@@ -2017,7 +2195,11 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
             typed_refs.append(
                 ArtifactRef(
                     project_id=document.project.id,
-                    artifact_type="asset_plan",
+                    # A Leader needs the current execution inventory, not the
+                    # complete planning document.  Asset Planners still request
+                    # the exact ``asset_plan`` ref explicitly when they must
+                    # revise its authored semantics.
+                    artifact_type="asset_plan_index",
                     artifact_id=production_document.id,
                     version=current.version,
                 )

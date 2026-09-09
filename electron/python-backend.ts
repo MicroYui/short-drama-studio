@@ -342,6 +342,7 @@ export async function startPythonBackend(): Promise<void> {
         LTX_ADMIN_TOKEN: adminToken,
         LTX_LOG_FILE: getCurrentLogFilename(),
         LTX_APP_DATA_DIR: getAppDataDir(),
+        STUDIO_NODE_EXECUTABLE: process.execPath,
         LTX_DEV_MODE: isDev ? '1' : '0',
         // Bundled prebuilt mps-sdpa zero-copy extension cache (macOS). Lives inside
         // python-embed (→ resources/python) so it rides the CI python-embed cache. The

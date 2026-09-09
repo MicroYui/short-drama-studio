@@ -33,6 +33,9 @@ REQUIRED_PRODUCTION_TOOLS = {
         "artifact.get_production_document",
         "artifact.get_production_spec",
         "artifact.get_asset_plan",
+        "artifact.get_asset_plan_index",
+        "artifact.get_asset_planning_context",
+        "artifact.get_asset_work_context",
         "artifact.import_catalog",
         "artifact.import_local_version",
         "artifact.import_stock",
@@ -42,6 +45,9 @@ REQUIRED_PRODUCTION_TOOLS = {
         "artifact.review_version",
         "artifact.replace_production_spec",
         "artifact.replace_asset_plan",
+        "artifact.patch_asset_plan",
+        "artifact.reconcile_asset_plan_execution_contract",
+        "artifact.retry_asset_plan_attempt",
         "artifact.revise_production_document",
         "artifact.search_catalog",
         "artifact.search_stock",
@@ -49,8 +55,10 @@ REQUIRED_PRODUCTION_TOOLS = {
     },
     "image": {
         "image.advance",
+        "image.capability",
         "image.cancel",
         "image.compose_reference_sheet",
+        "image.compose_text_plate",
         "image.enqueue",
         "image.list",
         "image.recover_output",
@@ -90,6 +98,7 @@ REQUIRED_PRODUCTION_TOOLS = {
         "video.extend",
         "video.gap_fill",
         "video.inspect_take",
+        "video.get_take_inspection",
         "video.retake",
         "video.select_take",
     },
@@ -103,6 +112,7 @@ REQUIRED_PRODUCTION_TOOLS = {
         "task.retry",
     },
     "qa": {
+        "qa.analyze_source_image",
         "qa.check_input_compatibility",
         "qa.compare_keyframes",
         "qa.inspect_asset_version",
@@ -120,6 +130,7 @@ REQUIRED_PRODUCTION_TOOLS = {
         "route.list_h3_plans",
         "route.list_h3_reconciliation",
         "route.list_h3_runs",
+        "route.get_h3_run",
         "route.plan_h3",
         "route.preview_h3_probe",
         "route.resolve_h3_not_submitted",
@@ -164,26 +175,162 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert reconciliation.idempotent is True
     assert reconciliation.input_schema["required"] == ["project_id", "task_id"]
 
+    image_enqueue = descriptors["image.enqueue"]
+    request_ref = image_enqueue.input_schema["properties"]["request"]["$ref"]
+    request_name = request_ref.rsplit("/", maxsplit=1)[-1]
+    request_schema = image_enqueue.input_schema["$defs"][request_name]
+    assert "reference_inputs" in request_schema["properties"]
+    assert "input_version_ids" not in request_schema["properties"]
+    reference_ref = request_schema["properties"]["reference_inputs"]["items"][
+        "$ref"
+    ]
+    reference_name = reference_ref.rsplit("/", maxsplit=1)[-1]
+    reference_schema = image_enqueue.input_schema["$defs"][reference_name]
+    assert "asset_version_id" in reference_schema["properties"]
+    assert "version_id" not in reference_schema["properties"]
+
     assert "ProjectBible.style" in descriptors["artifact.create_asset"].description
     assert "需要锚点" in descriptors["artifact.create_asset_plan"].description
     assert "仅保留文字" in descriptors["artifact.create_asset_plan"].description
+    assert descriptors["artifact.create_asset_plan"].version == 2
+    assert "不回传完整 AssetPlan" in descriptors[
+        "artifact.create_asset_plan"
+    ].description
+    assert "asset_plan" not in descriptors[
+        "artifact.create_asset_plan"
+    ].output_schema["properties"]
+    assert "共享一份单件干净物理母版" in descriptors[
+        "artifact.create_asset_plan"
+    ].description
     assert "调整少数资产或整体计划" in descriptors[
         "artifact.replace_asset_plan"
     ].description
     assert "四视图、轻量参考等创意路由" in descriptors[
         "artifact.replace_asset_plan"
     ].description
+    assert "局部补全未提交工作" in descriptors[
+        "artifact.replace_asset_plan"
+    ].description
+    assert descriptors["artifact.replace_asset_plan"].version == 2
+    assert "不回传完整" in descriptors[
+        "artifact.replace_asset_plan"
+    ].description
+    assert "asset_plan" not in descriptors[
+        "artifact.replace_asset_plan"
+    ].output_schema["properties"]
+    assert "局部语义修改" in descriptors[
+        "artifact.patch_asset_plan"
+    ].description
+    assert "依赖、当前上游版本" in descriptors[
+        "artifact.patch_asset_plan"
+    ].description
+    assert descriptors["artifact.patch_asset_plan"].version == 2
+    assert "不回传完整 AssetPlan" in descriptors[
+        "artifact.patch_asset_plan"
+    ].description
+    assert "asset_plan" not in descriptors[
+        "artifact.patch_asset_plan"
+    ].output_schema["properties"]
+    reconcile = descriptors["artifact.reconcile_asset_plan_execution_contract"]
+    assert reconcile.version == 2
+    assert "Agent 已经做出的资产执行语义决定" in reconcile.description
+    assert "不调用图片 Provider" in reconcile.description
+    assert "execution_overrides" in reconcile.description
+    assert "成功摘要来自实际" in reconcile.description
+    assert "applied_execution_overrides" in reconcile.output_schema["properties"]
+    assert "asset_plan" not in reconcile.output_schema["properties"]
+    assert "不携带完整文档 payload" in descriptors[
+        "artifact.get_asset_work_context"
+    ].description
+    assert "不返回 brief、final prompt、有序参考" in descriptors[
+        "artifact.get_asset_plan_index"
+    ].description
+    assert "去重后的当前制片真相" in descriptors[
+        "artifact.get_asset_planning_context"
+    ].description
+    assert "不附完整计划" in descriptors[
+        "artifact.get_asset_planning_context"
+    ].description
+    assert "Leader 应先用本索引" in descriptors[
+        "artifact.get_asset_plan_index"
+    ].description
     assert "后续镜头输入编排" in descriptors[
         "artifact.get_asset_plan"
     ].description
     assert "不会自动看图" in descriptors["artifact.review_version"].description
+    assert "不把一图生成卡的近似分区" in descriptors[
+        "artifact.review_version"
+    ].description
+    assert "轻微尺寸或透视差" in descriptors[
+        "artifact.review_version"
+    ].description
     assert "artifact.review_version" in descriptors["qa.inspect_asset_version"].description
+    assert "不应单独成为拒绝理由" in descriptors[
+        "qa.inspect_asset_version"
+    ].description
+    assert "像素级分区" in descriptors[
+        "image.compose_reference_sheet"
+    ].description
+    assert "布局 guide 必须作为真实参考" in descriptors[
+        "image.enqueue"
+    ].description
+    assert "不用无参考GENERATE 冒充“保持原人物”" in descriptors[
+        "image.enqueue"
+    ].description
+    assert "不从 LEFT/RIGHT 枚举名自动推导" in descriptors[
+        "qa.inspect_asset_version"
+    ].description
+    assert "能独立裁用的单件" in descriptors[
+        "qa.inspect_asset_version"
+    ].description
+    assert "结构、材质、组件或可裁用性" in descriptors[
+        "qa.inspect_asset_version"
+    ].description
+    assert "不要求 Provider 一次生成多件像素级一致" in descriptors[
+        "image.enqueue"
+    ].description
+    assert "不同文案分别保存为独立 TEXT_PLATE" in descriptors[
+        "image.compose_text_plate"
+    ].description
     assert "再调用 route.plan_h3" in descriptors[
         "route.update_h3_asset_preparation"
     ].description
     assert "不会触发任何真实生成" in descriptors[
         "artifact.create_production_spec"
     ].description
+    for tool_id in (
+        "artifact.create_production_spec",
+        "artifact.replace_production_spec",
+        "artifact.get_production_spec",
+        "artifact.create_production_document",
+        "artifact.revise_production_document",
+        "artifact.get_production_document",
+        "artifact.list_production_documents",
+        "artifact.get_asset_plan",
+        "shot.create_storyboard",
+        "shot.replace_storyboard",
+        "shot.patch_storyboard",
+        "shot.finalize_storyboard",
+        "shot.get_storyboard",
+    ):
+        assert descriptors[tool_id].version == 2
+    for tool_id in (
+        "artifact.create_production_spec",
+        "artifact.replace_production_spec",
+        "artifact.create_production_document",
+        "artifact.revise_production_document",
+        "artifact.list_production_documents",
+        "shot.create_storyboard",
+        "shot.replace_storyboard",
+        "shot.patch_storyboard",
+        "shot.finalize_storyboard",
+    ):
+        schema = descriptors[tool_id].output_schema
+        assert "versions" not in schema.get("properties", {})
+        assert all(
+            "versions" not in definition.get("properties", {})
+            for definition in schema.get("$defs", {}).values()
+        )
     assert "不会生成视频" in descriptors["shot.create_storyboard"].description
     assert "轻量 seed" in descriptors[
         "shot.begin_storyboard_draft"
@@ -260,10 +407,11 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert "按组逐个创建" in descriptors[
         "shot.append_storyboard_groups"
     ].description
+    # Authored timing supports decimals; provider request limits belong to its adapter.
     group_schema = descriptors["shot.append_storyboard_group"].input_schema
     assert group_schema["$defs"]["ClipGroup"]["properties"][
         "duration_seconds"
-    ]["type"] == "integer"
+    ]["type"] == "number"
     assert group_schema["$defs"]["ShotPlan"]["properties"][
         "duration_seconds"
     ]["type"] == "number"

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+from io import BytesIO
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 import requests
+from PIL import Image
 
 from short_drama.h3_models import H3ContentItem, H3VideoRequest
 from short_drama.providers.minimax_h3_client import (
@@ -128,14 +131,47 @@ def test_client_uses_acedata_endpoints_and_exact_payload(tmp_path: Path) -> None
     assert session.calls[3][2]["json"] == {"action": "delete", "id": task_id}
 
     source = tmp_path / "reference.png"
-    source.write_bytes(b"image")
-    assert client.upload_file(source) == "data:image/png;base64,aW1hZ2U="
+    Image.new("RGB", (16, 16), "#ababab").save(source)
+    assert client.upload_file(source) == "data:image/png;base64," + base64.b64encode(source.read_bytes()).decode("ascii")
     assert len(session.calls) == 4
 
     destination = tmp_path / "output" / "take.mp4"
     client.download("https://signed.invalid/output.mp4", destination)
     assert destination.read_bytes() == b"downloaded-video"
     assert not destination.with_suffix(".mp4.part").exists()
+
+
+@pytest.mark.parametrize("size,expected", [((344, 976), (391, 976)), ((1536, 512), (1536, 615))])
+def test_local_reference_padding_preserves_every_source_pixel(
+    tmp_path: Path, size: tuple[int, int], expected: tuple[int, int],
+) -> None:
+    source = tmp_path / "reference.png"
+    original = Image.new("RGB", size, "#232b32")
+    original.putpixel((0, 0), (10, 20, 30))
+    original.putpixel((size[0] - 1, size[1] - 1), (230, 240, 250))
+    original.save(source)
+    source_bytes = source.read_bytes()
+    session = FakeSession()
+    client = MiniMaxH3Client(api_key="secret", session=session)  # type: ignore[arg-type]
+    value = client.upload_file(source)
+    with Image.open(BytesIO(base64.b64decode(value.split(",", 1)[1]))) as result:
+        assert result.size == expected
+        assert 0.4 <= result.width / result.height <= 2.5
+        left, top = (result.width - size[0]) // 2, (result.height - size[1]) // 2
+        assert result.crop((left, top, left + size[0], top + size[1])).tobytes() == original.tobytes()
+    assert source.read_bytes() == source_bytes
+    assert session.calls == []
+
+
+def test_local_image_decode_failure_is_reported_before_network(tmp_path: Path) -> None:
+    source = tmp_path / "broken.png"
+    source.write_bytes(b"not an image")
+    session = FakeSession()
+    client = MiniMaxH3Client(api_key="secret", session=session)  # type: ignore[arg-type]
+    with pytest.raises(H3DefiniteRequestError) as exc_info:
+        client.upload_file(source)
+    assert exc_info.value.code == "LOCAL_IMAGE_INVALID"
+    assert session.calls == []
 
 
 def test_submit_unknown_and_definite_errors_are_distinct() -> None:

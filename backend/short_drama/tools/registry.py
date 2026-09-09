@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Generic, Protocol, cast
+from uuid import uuid4
 
 from pydantic import ValidationError
+from short_drama.studio_trace import record_trace
 
 from short_drama.tools.contracts import (
     InputT,
@@ -47,10 +49,13 @@ class _RegisteredTool(Generic[InputT, OutputT]):
                 error=ToolError(kind="ValidationError", message=str(exc)),
             )
 
+        tool_call_id = f"tool-{uuid4().hex[:12]}"
         try:
+            record_trace("tool.started", {"tool_call_id": tool_call_id, "tool_name": self._spec.id, "description": self._spec.description})
             execution = self._spec.handler(typed_input)
             output = self._spec.output_model.model_validate(execution.output)
         except Exception as exc:
+            record_trace("tool.finished", {"tool_call_id": tool_call_id, "tool_name": self._spec.id, "status": "FAILED", "error": str(exc)})
             return ToolResult(
                 tool_id=self._spec.id,
                 status=ToolCallStatus.FAILED,
@@ -58,6 +63,7 @@ class _RegisteredTool(Generic[InputT, OutputT]):
             )
 
         serialized = cast(dict[str, object], output.model_dump(mode="json"))
+        record_trace("tool.finished", {"tool_call_id": tool_call_id, "tool_name": self._spec.id, "status": "SUCCEEDED"})
         return ToolResult(
             tool_id=self._spec.id,
             status=ToolCallStatus.SUCCEEDED,

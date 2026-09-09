@@ -81,6 +81,7 @@ from short_drama.models import (
     StyleProfile,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
     narrative_skill_catalog,
@@ -977,6 +978,44 @@ def _planner_image_urls(request: CreateProjectRequest) -> tuple[list[str], list[
     return urls, warnings
 
 
+def _creative_input_prompt_payload(
+    request: CreateProjectRequest,
+) -> list[dict[str, object]]:
+    """Describe user media as exact source intake, never as global shot bindings."""
+
+    return [
+        {
+            "source_intake_id": f"user-image-{index}",
+            "declared_purpose": image.descriptor,
+            "filename": Path(image.local_path).name if image.local_path else None,
+            "url": image.external_url,
+        }
+        for index, image in enumerate(request.input_images, start=1)
+    ]
+
+
+def _creative_input_usage_contract() -> dict[str, object]:
+    """Expose the MiniMax-style source/reference boundary to creative Agents."""
+
+    return {
+        "original_media_remains_visual_evidence": True,
+        "analysis_only_assigns_contributions": True,
+        "explicit_user_assignment": (
+            "用户明确说某图就是主角或其他指定人物时，该图是权威身份锁；"
+            "后续资产可以补全视角，不得改成另一个人。"
+        ),
+        "unassigned_media": (
+            "未明确用途的图片保持为 source intake；由 Agent 结合完整语义决定"
+            "是否贡献身份、服饰、场景、道具、风格或构图，不得默认绑定所有"
+            "人物、场景或镜头。"
+        ),
+        "later_asset_handling": (
+            "完整且符合当前人物的角色卡可直接登记复用；单脸、单角度或穿搭图"
+            "只作为其被明确分配的 exact identity/wardrobe 等参考派生标准资产。"
+        ),
+    }
+
+
 def _fallback_story_intent(
     request: CreateProjectRequest,
     source_contract: StorySourceContract,
@@ -1103,6 +1142,7 @@ def _story_orientation_prompt(
     profile_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.CONCEPT,),
+        stage=ProductionPromptStage.STORY,
     )
     catalog = narrative_skill_catalog()
     method_catalog = production_method_skill_catalog()
@@ -1113,6 +1153,10 @@ def _story_orientation_prompt(
         f"{_STORY_INTERACTION_PRIORITY}\n\n"
         "先把用户明确说出的承诺、禁止项、可自由创作部分与续集偏好整理进 "
         "source_contract；不得把你自己的创作选择伪装成用户要求。"
+        "source_intake_images 是用户提供的精确原始媒体，不是默认覆盖全片的泛化"
+        "视觉种子。用户明确将某图指定为主角或其他人物时，将这一身份"
+        "承诺原样保存到 source_contract；未明确用途的图片不自动绑定所有人物、"
+        "场景或镜头。对图片的语义分析只用来分配可贡献的方面，不取代原图。"
         "再用自然语言形成 story_intent：说清观众体验、戏剧发动机、推进方法、"
         "调性与本剧所需的可信度、必须保护的元素和最容易发生的创作漂移。"
         "StoryIntent 是后续 Agent 可讨论、可修订的创作方向，不是评分表或门禁。"
@@ -1165,15 +1209,8 @@ def _story_orientation_prompt(
         "user_declared_target_duration_seconds": request.target_duration_seconds,
         "working_target_duration_seconds": request.resolved_target_duration_seconds(),
         "lossless_source_contract": source_contract.model_dump(mode="json"),
-        "image_references": [
-            {
-                "index": index,
-                "descriptor": image.descriptor,
-                "filename": Path(image.local_path).name if image.local_path else None,
-                "url": image.external_url,
-            }
-            for index, image in enumerate(request.input_images, start=1)
-        ],
+        "source_intake_images": _creative_input_prompt_payload(request),
+        "source_intake_usage_contract": _creative_input_usage_contract(),
         "available_narrative_skills": [
             {
                 "id": descriptor.id,
@@ -1327,6 +1364,7 @@ def _outline_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.CONCEPT,),
+        stage=ProductionPromptStage.STORY,
         additional_skill_ids=selected_narrative_skill_ids,
         method_skill_ids=selected_method_skill_ids,
     )
@@ -1357,6 +1395,12 @@ def _outline_prompt(
         "不要写镜头、机位、关键帧或 Provider 提示词。\n\n"
         f"{skill_prompt.text}\n\n"
         "以已确定的 StoryIntent 为本剧创作方向，不得把共享职责或格式惯例当成题材答案。"
+        "source_intake_images 依然是需要保留的原始证据。用户明确说‘这就是主角’"
+        "时，蓝图中的对应人物必须继承该身份，不得重新发明一张脸。未指定用途的"
+        "图片由你结合全部需求判断是否贡献服饰、场景、道具、风格或构图，但不得"
+        "默认变成所有人物或镜头的参考。原图是事实来源；你写的分析只是用途分配。"
+        "完整角色卡是否直接复用、单脸或单角度图是否用于派生标准资产，留给后续"
+        "Asset Reviewer 观察实际媒体后决定；故事蓝图不伪造已完成的资产绑定。"
         "先稳定主导类型、主角行动路线与核心情绪，再让开篇尽快出现有冲击力的局面或台词，"
         "使观众理解核心冲突、主角处境和继续看下去的动力。爽点、情感释放或反转都应从前面的"
         "铺垫生长出来；决定性回报优先由主角可见的选择、行动或能力触发，并让对立力量的受挫、"
@@ -1429,15 +1473,8 @@ def _outline_prompt(
             else None
         ),
         "locked_dialogue": [line.model_dump(mode="json") for line in locked],
-        "image_references": [
-            {
-                "index": index,
-                "descriptor": image.descriptor,
-                "filename": Path(image.local_path).name if image.local_path else None,
-                "url": image.external_url,
-            }
-            for index, image in enumerate(request.input_images, start=1)
-        ],
+        "source_intake_images": _creative_input_prompt_payload(request),
+        "source_intake_usage_contract": _creative_input_usage_contract(),
         "handoff_contract": {
             "story_architect_owns": "story, assets, scenes, dialogue allocation, expected states",
             "scene_director_owns": "shot execution inside one scene",
@@ -1463,6 +1500,7 @@ def _story_critic_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.REVISION_VERIFIER,),
         include_constitution=False,
+        stage=ProductionPromptStage.STORY,
         additional_skill_ids=selected_narrative_skill_ids,
         method_skill_ids=selected_method_skill_ids,
     )
@@ -1609,6 +1647,7 @@ def _final_cold_read_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.FINAL_COLD_READ,),
         include_constitution=False,
+        stage=ProductionPromptStage.STORY,
     )
     instructions = (
         "你是独立的 final cold-read Agent（最终冷读编辑）。"
@@ -1676,7 +1715,7 @@ def final_cold_read_story(
         return ScriptCritiqueResult(
             report=None,
             used=False,
-            warnings=["GPT-5.6-sol 未配置，已跳过语义最终冷读。"],
+            warnings=["语言模型 未配置，已跳过语义最终冷读。"],
         )
     instructions, input_text = _final_cold_read_prompt(
         request,
@@ -1721,6 +1760,7 @@ def _revision_judge_prompt(
             ProductionSkillRole.WRITER,
             ProductionSkillRole.CRITIC,
         ),
+        stage=ProductionPromptStage.STORY,
     )
     instructions = (
         "你是独立的 revision-judge Agent，负责比较同一作品的两个相邻剧本版本。"
@@ -2107,6 +2147,7 @@ def _story_metadata_revision_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.CONCEPT, ProductionSkillRole.WRITER),
+        stage=ProductionPromptStage.STORY,
         additional_skill_ids=selected_narrative_skill_ids,
         method_skill_ids=selected_method_skill_ids,
     )
@@ -2255,6 +2296,7 @@ def _story_revision_verifier_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.REVISION_VERIFIER,),
         include_constitution=False,
+        stage=ProductionPromptStage.STORY,
         additional_skill_ids=selected_narrative_skill_ids,
         method_skill_ids=selected_method_skill_ids,
     )
@@ -2404,8 +2446,10 @@ def _scene_director_prompt(
 ) -> tuple[str, str]:
     skill_prompt = compile_production_prompt(
         request.production_profile,
-        roles=(ProductionSkillRole.PLANNER, ProductionSkillRole.DIRECTOR),
+        roles=(ProductionSkillRole.DIRECTOR,),
+        include_constitution=False,
         method_skill_ids=selected_method_skill_ids,
+        stage=ProductionPromptStage.STORYBOARD,
     )
     next_scene = next(
         (item for item in outline.scenes if item.sequence == scene.sequence + 1),
@@ -2979,14 +3023,14 @@ def create_story_architecture(
             ),
             source="deterministic structure scaffold",
             warnings=[
-                "GPT-5.6-sol 未配置；Story Architect 仅建立了不补写创意的"
+                "语言模型 未配置；Story Architect 仅建立了不补写创意的"
                 "本地结构骨架。"
             ],
             source_contract=resolved_source_contract,
         )
     image_urls, image_warnings = _planner_image_urls(request)
     warnings = list(image_warnings)
-    source = "gpt-5.6-sol story architect"
+    source = "gpt-6-astra story architect"
     instructions, input_text = _outline_prompt(
         request,
         resolved_source_contract,
@@ -3053,7 +3097,7 @@ def review_story_outline(
         return ScriptCritiqueResult(
             report=None,
             used=False,
-            warnings=["GPT-5.6-sol 未配置，已跳过语义剧本审阅并保留结构校验。"],
+            warnings=["语言模型 未配置，已跳过语义剧本审阅并保留结构校验。"],
         )
     instructions, input_text = _story_critic_prompt(
         request,
@@ -3294,7 +3338,7 @@ def judge_story_revisions(
         return RevisionJudgeResult(
             recommendation=None,
             warnings=[
-                "GPT-5.6-sol 未配置，已跳过 Revision Judge；最新版大纲继续进入逐场规划。"
+                "语言模型 未配置，已跳过 Revision Judge；最新版大纲继续进入逐场规划。"
             ],
         )
     instructions, input_text = _revision_judge_prompt(
@@ -4078,7 +4122,7 @@ def _asset(
                     source_label="自动制片规划",
                     provider=(
                         "openai-compatible"
-                        if planner.startswith("gpt-5.6-sol")
+                        if planner.startswith("gpt-6-astra")
                         else "local"
                     ),
                     model=planner,

@@ -13,10 +13,38 @@ import requests
 from requests import Response, Session
 
 from short_drama.observability import log_language_generation
+from short_drama.language_defaults import (
+    LANGUAGE_MODEL,
+    LANGUAGE_REASONING_EFFORT,
+    ReasoningEffort,
+)
 
 
 class LanguageProviderError(RuntimeError):
     """The configured language provider could not be validated."""
+
+
+class LanguageProviderTransportError(LanguageProviderError):
+    """No complete model decision arrived; the existing work can be resumed."""
+
+
+class LanguageProviderContextWindowError(LanguageProviderError):
+    """The provider rejected the input window; rebuild it before any retry."""
+
+
+class LanguageProviderTransientError(LanguageProviderTransportError):
+    """A transient HTTP failure can retry the language decision, not its Tools."""
+
+
+def is_language_transport_error(error: BaseException) -> bool:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, LanguageProviderTransportError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__
+    return False
 
 
 class LanguageProviderIncompleteError(LanguageProviderError):
@@ -30,7 +58,7 @@ class LanguageProviderIncompleteError(LanguageProviderError):
     ) -> None:
         self.reason = reason
         self.partial_output_characters = partial_output_characters
-        super().__init__(f"GPT-5.6-sol generation incomplete: {reason}")
+        super().__init__(f"Language generation incomplete: {reason}")
 
 
 class LanguageProviderClient(Protocol):
@@ -69,17 +97,21 @@ class OpenAICompatibleLanguageClient:
         *,
         api_key: str,
         base_url: str,
-        model: str = "gpt-5.6-sol",
+        model: str = LANGUAGE_MODEL,
+        reasoning_effort: ReasoningEffort = LANGUAGE_REASONING_EFFORT,
+        text_delta_observer: Callable[[str], None] | None = None,
         session: Session | None = None,
         timeout_seconds: float = 30.0,
-        generation_timeout_seconds: float | None = None,
+        generation_timeout_seconds: float | tuple[float, float] | None = (30.0, 600.0),
         monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not api_key.strip() and not is_loopback_openai_url(base_url):
-            raise ValueError("GPT-5.6-sol API key is required")
+            raise ValueError("Language provider API key is required")
         self.api_key = api_key.strip()
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.reasoning_effort = reasoning_effort
+        self.text_delta_observer = text_delta_observer
         self.session = session or requests.Session()
         self.timeout_seconds = timeout_seconds
         self.generation_timeout_seconds = generation_timeout_seconds
@@ -103,7 +135,7 @@ class OpenAICompatibleLanguageClient:
                 return
         except requests.RequestException as exc:
             raise LanguageProviderError(
-                "GPT-5.6-sol connection validation could not reach the configured URL"
+                "Language provider connection validation could not reach the configured URL"
             ) from exc
         self._raise_error(response)
         self._validate_model_identity(response)
@@ -116,6 +148,19 @@ class OpenAICompatibleLanguageClient:
         image_urls: list[str] | None = None,
         max_output_tokens: int = 2200,
     ) -> str:
+        from short_drama.studio_trace import clean_trace_text, record_trace
+        from short_drama.agent_runtime.token_budget import ContextBudget, count_text_tokens
+        from uuid import uuid4
+
+        call_id = f"model-{uuid4().hex[:12]}"
+        record_trace("model.input", {
+            "call_id": call_id, "model": self.model, "reasoning_effort": self.reasoning_effort,
+            "instructions": clean_trace_text(instructions), "input_text": clean_trace_text(input_text),
+            "image_count": len(image_urls or []), "max_output_tokens": max_output_tokens,
+        })
+        record_trace("model.started", {"call_id": call_id, "model": self.model,
+            "reasoning_effort": self.reasoning_effort, "instruction_characters": len(instructions),
+            "input_characters": len(input_text), "image_count": len(image_urls or [])})
         started_at = self._monotonic_clock()
         completion_type = "unknown_error"
         first_text_delta_at: float | None = None
@@ -123,6 +168,19 @@ class OpenAICompatibleLanguageClient:
         partial_output_characters = 0
         success = False
         error_kind: str | None = None
+        response_metadata: dict[str, object] = {}
+
+        def capture_response_metadata(payload: dict[str, object]) -> None:
+            for key in ("id", "model", "usage"):
+                if key in payload:
+                    response_metadata[key] = payload[key]
+
+        def capture_text_delta(delta: str) -> None:
+            nonlocal partial_output_characters
+            partial_output_characters += len(delta)
+            if self.text_delta_observer is not None:
+                self.text_delta_observer(delta)
+
         input_payload: object = input_text
         if image_urls:
             input_payload = [
@@ -138,6 +196,21 @@ class OpenAICompatibleLanguageClient:
                 }
             ]
         try:
+            # Leader/Worker compact before this boundary. Helpers called inside
+            # Tools share this last check, so a large text request cannot bypass
+            # the configured window. Vision usage is still provider-reported.
+            budget = ContextBudget()
+            estimated_text_tokens = count_text_tokens(instructions) + count_text_tokens(input_text)
+            input_limit = budget.input_limit(max_output_tokens)
+            record_trace("model.preflight", {"call_id": call_id, "window_tokens": budget.window_tokens,
+                "estimated_text_tokens": estimated_text_tokens, "reserved_output_tokens": max_output_tokens,
+                "input_limit_tokens": input_limit, "image_count": len(image_urls or []),
+                "image_tokens_included": False, "within_text_budget": estimated_text_tokens <= input_limit})
+            if estimated_text_tokens > input_limit:
+                completion_type = "local_context_limit"
+                raise LanguageProviderContextWindowError(
+                    f"当前文本输入约 {estimated_text_tokens:,} tokens，超过 258k 总预算中预留输出后的 "
+                    f"{input_limit:,} tokens。请缩小当前任务或按字段读取；未发送超限请求。")
             try:
                 response = self.session.post(
                     f"{self.base_url}/responses",
@@ -146,7 +219,7 @@ class OpenAICompatibleLanguageClient:
                         "model": self.model,
                         "instructions": instructions,
                         "input": input_payload,
-                        "reasoning": {"effort": "low"},
+                        "reasoning": {"effort": self.reasoning_effort},
                         "max_output_tokens": max_output_tokens,
                         "stream": True,
                     },
@@ -155,8 +228,8 @@ class OpenAICompatibleLanguageClient:
                 )
             except requests.RequestException as exc:
                 completion_type = "transport_error"
-                raise LanguageProviderError(
-                    "GPT-5.6-sol generation could not reach the configured URL"
+                raise LanguageProviderTransportError(
+                    "Language provider generation could not reach the configured URL"
                 ) from exc
             try:
                 self._raise_error(response)
@@ -173,6 +246,8 @@ class OpenAICompatibleLanguageClient:
                     stream_result = self._extract_stream_output_text(
                         response,
                         first_text_delta_observer=capture_first_text_delta,
+                        response_observer=capture_response_metadata,
+                        text_delta_observer=capture_text_delta,
                     )
                 except LanguageProviderIncompleteError as exc:
                     completion_type = f"sse_incomplete_{exc.reason}"
@@ -186,12 +261,19 @@ class OpenAICompatibleLanguageClient:
                 first_text_delta_at = stream_result.first_text_delta_at
             else:
                 try:
-                    output_text = self._extract_output_text(response)
+                    payload = cast(object, response.json())
+                    if isinstance(payload, dict):
+                        capture_response_metadata(cast(dict[str, object], payload))
+                    output_text = self._extract_output_text_payload(cast(object, payload))
+                except ValueError as exc:
+                    completion_type = "json_error"
+                    raise LanguageProviderError("Language generation returned invalid JSON") from exc
                 except LanguageProviderError:
                     completion_type = "json_error"
                     raise
                 completion_type = "json_response"
             success = True
+            record_trace("model.output", {"call_id": call_id, "text": output_text})
             return output_text
         except Exception as exc:
             error_kind = type(exc).__name__
@@ -199,7 +281,12 @@ class OpenAICompatibleLanguageClient:
         finally:
             finished_at = self._monotonic_clock()
             log_language_generation(
+                call_id=call_id,
                 model=self.model,
+                reasoning_effort=self.reasoning_effort,
+                max_output_tokens=max_output_tokens,
+                image_count=len(image_urls or []),
+                response_metadata=response_metadata,
                 success=success,
                 completion_type=completion_type,
                 elapsed_seconds=finished_at - started_at,
@@ -227,10 +314,10 @@ class OpenAICompatibleLanguageClient:
             payload = cast(object, response.json())
         except ValueError as exc:
             raise LanguageProviderError(
-                "GPT-5.6-sol model lookup returned invalid JSON"
+                "Language provider model lookup returned invalid JSON"
             ) from exc
         if not isinstance(payload, dict):
-            raise LanguageProviderError("GPT-5.6-sol model lookup returned an invalid object")
+            raise LanguageProviderError("Language provider model lookup returned an invalid object")
         raw_id = cast(dict[str, object], payload).get("id")
         if isinstance(raw_id, str) and raw_id and raw_id != self.model:
             raise LanguageProviderError(
@@ -241,13 +328,13 @@ class OpenAICompatibleLanguageClient:
             payload = cast(object, response.json())
         except ValueError as exc:
             raise LanguageProviderError(
-                "GPT-5.6-sol model list returned invalid JSON"
+                "Language provider model list returned invalid JSON"
             ) from exc
         if not isinstance(payload, dict):
-            raise LanguageProviderError("GPT-5.6-sol model list returned an invalid object")
+            raise LanguageProviderError("Language provider model list returned an invalid object")
         raw_data = cast(dict[str, object], payload).get("data")
         if not isinstance(raw_data, list):
-            raise LanguageProviderError("GPT-5.6-sol model list did not contain data")
+            raise LanguageProviderError("Language provider model list did not contain data")
         model_ids: set[str] = set()
         for item in cast(list[object], raw_data):
             if isinstance(item, str):
@@ -267,15 +354,23 @@ class OpenAICompatibleLanguageClient:
             payload = cast(object, response.json())
         except ValueError as exc:
             raise LanguageProviderError(
-                "GPT-5.6-sol generation returned invalid JSON"
+                "Language provider generation returned invalid JSON"
             ) from exc
         return OpenAICompatibleLanguageClient._extract_output_text_payload(payload)
 
     @staticmethod
     def _extract_output_text_payload(payload: object) -> str:
         if not isinstance(payload, dict):
-            raise LanguageProviderError("GPT-5.6-sol generation returned an invalid object")
+            raise LanguageProviderError("Language provider generation returned an invalid object")
         response_payload = cast(dict[str, object], payload)
+        if response_payload.get("status") == "incomplete":
+            partial = response_payload.get("output_text")
+            raise LanguageProviderIncompleteError(
+                reason=OpenAICompatibleLanguageClient._stream_incomplete_reason(response_payload) or "unknown",
+                partial_output_characters=len(partial) if isinstance(partial, str) else 0,
+            )
+        if response_payload.get("status") == "failed":
+            raise LanguageProviderError(OpenAICompatibleLanguageClient._stream_error_message(response_payload))
         direct_text = response_payload.get("output_text")
         if isinstance(direct_text, str) and direct_text.strip():
             return direct_text.strip()
@@ -298,7 +393,7 @@ class OpenAICompatibleLanguageClient:
                         text_parts.append(text)
         result = "\n".join(part.strip() for part in text_parts if part.strip()).strip()
         if not result:
-            raise LanguageProviderError("GPT-5.6-sol generation returned no output text")
+            raise LanguageProviderError("Language provider generation returned no output text")
         return result
 
     def _extract_stream_output_text(
@@ -306,6 +401,8 @@ class OpenAICompatibleLanguageClient:
         response: Response,
         *,
         first_text_delta_observer: Callable[[float], None],
+        response_observer: Callable[[dict[str, object]], None],
+        text_delta_observer: Callable[[str], None],
     ) -> _StreamGenerationResult:
         text_deltas: list[str] = []
         completed_text: str | None = None
@@ -322,10 +419,6 @@ class OpenAICompatibleLanguageClient:
                 if data == "[DONE]":
                     saw_done_marker = True
                     continue
-                if sse_event_type == "response.completed":
-                    saw_completed = True
-                    if text_deltas or completed_text is not None:
-                        continue
                 if sse_event_type not in {
                     None,
                     "response.output_text.delta",
@@ -342,7 +435,7 @@ class OpenAICompatibleLanguageClient:
                     context_start = max(0, exc.pos - 100)
                     context_end = min(len(data), exc.pos + 180)
                     raise LanguageProviderError(
-                        "GPT-5.6-sol generation returned an invalid stream event: "
+                        "Language provider generation returned an invalid stream event: "
                         f"{exc.msg} at position {exc.pos} of {len(data)} near "
                         + repr(data[context_start:context_end])
                     ) from exc
@@ -350,10 +443,14 @@ class OpenAICompatibleLanguageClient:
                     continue
                 event_payload = cast(dict[str, object], event)
                 event_type = event_payload.get("type") or sse_event_type
+                terminal_response = event_payload.get("response")
+                if event_type in {"response.completed", "response.incomplete", "response.failed"} and isinstance(terminal_response, dict):
+                    response_observer(cast(dict[str, object], terminal_response))
                 if event_type == "response.output_text.delta":
                     delta = event_payload.get("delta")
                     if isinstance(delta, str):
                         text_deltas.append(delta)
+                        text_delta_observer(delta)
                         if delta and first_text_delta_at is None:
                             first_text_delta_at = self._monotonic_clock()
                             first_text_delta_observer(first_text_delta_at)
@@ -398,14 +495,14 @@ class OpenAICompatibleLanguageClient:
                         ),
                     )
         except requests.RequestException as exc:
-            raise LanguageProviderError(
-                "GPT-5.6-sol generation stream was interrupted"
+            raise LanguageProviderTransportError(
+                "Language provider generation stream was interrupted"
             ) from exc
         finally:
             response.close()
         if not saw_completed and not (saw_text_done and saw_done_marker):
-            raise LanguageProviderError(
-                "GPT-5.6-sol generation stream ended before completion"
+            raise LanguageProviderTransportError(
+                "Language provider generation stream ended before completion"
             )
         result = "".join(text_deltas).strip()
         if result:
@@ -424,7 +521,7 @@ class OpenAICompatibleLanguageClient:
                 ),
                 first_text_delta_at=first_text_delta_at,
             )
-        raise LanguageProviderError("GPT-5.6-sol generation returned no output text")
+        raise LanguageProviderError("Language provider generation returned no output text")
 
     @staticmethod
     def _iter_sse_events(response: Response) -> Iterator[tuple[str | None, str]]:
@@ -477,7 +574,7 @@ class OpenAICompatibleLanguageClient:
         message = event.get("message")
         if isinstance(message, str) and message.strip():
             return message
-        return "GPT-5.6-sol generation stream failed"
+        return "Language provider generation stream failed"
 
     @staticmethod
     def _stream_incomplete_reason(event: dict[str, object]) -> str | None:
@@ -500,16 +597,23 @@ class OpenAICompatibleLanguageClient:
         if response.status_code < 400:
             return
         message = response.text or f"Language provider returned HTTP {response.status_code}"
+        code: str | None = None
         try:
             payload = cast(object, response.json())
             if isinstance(payload, dict):
                 error = cast(dict[str, object], payload).get("error")
                 if isinstance(error, dict):
+                    raw_code = cast(dict[str, object], error).get("code")
+                    code = raw_code if isinstance(raw_code, str) else None
                     raw_message = cast(dict[str, object], error).get("message")
                     if isinstance(raw_message, str):
                         message = raw_message
         except ValueError:
             pass
+        if code in {"context_length_exceeded", "context_window_exceeded", "max_context_length_exceeded"}:
+            raise LanguageProviderContextWindowError(message)
+        if response.status_code in {408, 429, 500, 502, 503, 504}:
+            raise LanguageProviderTransientError(message)
         raise LanguageProviderError(message)
 
 

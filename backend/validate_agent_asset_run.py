@@ -81,6 +81,18 @@ AssetPlan 能力建立 `asset.plan.current`。AssetPlan 必须记录每个候选
 work-item ID、最终可执行 Prompt、有序参考和真实依赖。这是 Agent 的
 语义取舍，不使用关键词路由、固定资产数量、审批门或重复 Critic 循环。
 
+先调用 `image.capability`，并据当前实现重新检查已有 AssetPlan 是否仍可执行。
+Provider 图像尺寸必须采用 capability 返回的合法值；16:9 角色卡和场景卡可用
+`1536x864` 或 `2048x1152`，不要继续使用不满足 16 像素对齐的
+`1920x1080`。如果当前 AssetPlan 的 operation、尺寸、精确文字处理或参考职责
+已经过时，由 ASSET_PLANNER 读取当前精确计划并做语义判断：跨多个 item 同步
+canonical、supplemental、lineage、权威参考，或拆分物理载体与文字图版时，使用
+`artifact.reconcile_asset_plan_execution_contract` 一次提交语义决定，由 Tool 编译
+联动合同；其中 work-item 的尺寸或输出布局变更必须写入结构化
+`execution_overrides`，不得只写进 notes。Tool 成功后以返回的
+`applied_execution_overrides` 为实际落盘事实。只有盘点、顺序或依赖网络整体变化时
+才使用完整替换。不在执行时偷偷修参数，也不使用低层字段 patch 手写大规模迁移。
+
 对当前校园食堂短剧，结合已装载的 MiniMax Design
 drama-series 方法自主判断资产深度。如果主要角色确实需要跨镜
 身份锁定，可选 16:9 双区角色卡；如果食堂的多个机位确实需要
@@ -88,6 +100,22 @@ drama-series 方法自主判断资产深度。如果主要角色确实需要跨�
 镜头职责和复用范围做出其他取舍，但必须在 AssetPlan 中说明理由。
 道具、群像和一次性元素同样由 Agent 结合复用、特写、状态变化和
 连续性需求判断，不为了满足预设数量而制卡或 text-only。
+
+项目若存在用户 source intake，从 `artifact.get_asset_planning_context` 或精确的
+`artifact.get_asset_work_context` 取得其当前/已批准 AssetVersion，不再叠加
+`project.get` 的完整项目聚合。
+当实际画面覆盖需要判断时调用 `qa.analyze_source_image`；把从用户原话和完整
+项目语义确定的目标资产、reference role/authority、用途和可选 layout 作为
+结构化 assignment 传入。用户明确指定的人物照片是权威身份来源；若只覆盖
+单脸或单角度，使用 `REFERENCE_GENERATE` 与高保真 identity reference 派生
+标准卡，不得换人；若图片本身已是满足当前需求的完整角色卡，使用 `IMPORT`
+精确复用，不为走流程重绘。未分配图片可以保持未使用，不能自动绑定全片。
+
+菜价、姓名、金额、标题、协议条款、通知书正文等精确可见文字不要交给图像
+Provider 碰运气。需要精确平面内容时，将其计划为带
+`required_visible_text` 的 `SCREEN_CONTENT_PLATE`，用 `TEXT_PLATE` work item
+和 `image.compose_text_plate` 确定性生成；物理外壳或纸张需要单独母版时再建
+`PHYSICAL_MASTER`。不要让一张道具图同时承担互不兼容的封面、内页和签名状态。
 
 若当前运行环境已配置可用的图像 Provider 或本地假执行器，继续按
 AssetPlan 执行就绪的 work items：建立/更新资产和 brief，生成、导入或
@@ -285,10 +313,23 @@ def _approved_image_version_ids(document: JsonObject) -> set[str]:
 
 
 def _reference_pack_subjects(document: JsonObject) -> set[str]:
+    """Include approved member assets, such as text plates in a prop's pack."""
+
     result: set[str] = set()
+    assets = _asset_by_id(document)
+    version_owners = {
+        _string(version.get("id"), "asset version id"): asset_id
+        for asset_id, asset in assets.items()
+        for version_value in _as_list(asset.get("versions"), "asset versions")
+        for version in [_as_object(version_value, "asset version")]
+    }
     approved_version_ids = _approved_image_version_ids(document)
     for value in _as_list(document.get("reference_packs"), "reference_packs"):
         pack = _as_object(value, "reference pack")
+        subject_id = pack.get("subject_asset_id")
+        if not isinstance(subject_id, str) or subject_id not in assets:
+            continue
+        canonical_id = assets[subject_id].get("approved_version_id")
         entries = [
             _as_object(entry_value, "reference pack entry")
             for entry_value in _as_list(
@@ -296,12 +337,17 @@ def _reference_pack_subjects(document: JsonObject) -> set[str]:
                 "reference pack entries",
             )
         ]
-        if any(
-            entry.get("asset_version_id") in approved_version_ids for entry in entries
-        ):
-            subject_id = pack.get("subject_asset_id")
-            if isinstance(subject_id, str) and subject_id:
-                result.add(subject_id)
+        for entry in entries:
+            version_id = entry.get("asset_version_id")
+            if not isinstance(version_id, str) or version_id not in approved_version_ids:
+                continue
+            lineage_root = entry.get("lineage_root_version_id")
+            if lineage_root is not None and lineage_root != canonical_id:
+                continue
+            result.add(subject_id)
+            owner_id = version_owners.get(version_id)
+            if owner_id is not None:
+                result.add(owner_id)
     return result
 
 
@@ -365,38 +411,25 @@ def _resolved_shot_reference_subjects(document: JsonObject) -> dict[str, set[str
                 str(item)
                 for item in _as_list(requirement.get("required_tags"), "required_tags")
             }
-            preferred_angles = {
-                str(item)
-                for item in _as_list(
-                    requirement.get("preferred_angles"),
-                    "preferred_angles",
-                )
-            }
-            preferred_framings = {
-                str(item)
-                for item in _as_list(
-                    requirement.get("preferred_framings"),
-                    "preferred_framings",
-                )
-            }
-            if any(
-                entry.get("role") in acceptable_roles
-                and required_tags.issubset(
-                    {
-                        str(item)
-                        for item in _as_list(entry.get("tags"), "reference tags")
-                    }
-                )
-                and (
-                    not preferred_angles or entry.get("angle") in preferred_angles
-                )
-                and (
-                    not preferred_framings
-                    or entry.get("framing") in preferred_framings
-                )
-                for entry in valid_entries.get(subject_id, [])
-            ):
+            # Angle and framing are ranking preferences in ReferencePlanner,
+            # not eligibility filters. Role and required tags must still match.
+            for entry in valid_entries.get(subject_id, []):
+                if not (
+                    entry.get("role") in acceptable_roles
+                    and required_tags.issubset(
+                        {
+                            str(item)
+                            for item in _as_list(entry.get("tags"), "reference tags")
+                        }
+                    )
+                ):
+                    continue
                 subjects.add(subject_id)
+                version_id = entry.get("asset_version_id")
+                if isinstance(version_id, str):
+                    owner_id = version_owners.get(version_id)
+                    if owner_id is not None:
+                        subjects.add(owner_id)
     return result
 
 
@@ -1219,9 +1252,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 and _run_status(run_view) == "WAITING"
                 and _progress_fingerprint(run_view, board) == progress_before
             ):
-                raise ProbeFailure(
-                    "Public Agent advance returned without semantic progress"
+                phase = _as_object(phases[-1], "latest trace phase")
+                notes = _as_list(phase.get("notes"), "trace phase notes")
+                notes.append(
+                    "Public Agent advance returned before the next semantic state "
+                    "was persisted; the probe will keep driving the AgentRun."
                 )
+                phase["notes"] = notes
+                _persist_trace(trace, recorder=recorder, output_dir=output_dir)
+                continue
 
         run_view = client.get_agent_run(run_id)
         after = client.get_project(project_id)

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Protocol
 
-from short_drama.models import GenerationTask, WorkerDrainRequest, WorkerDrainResponse
+from short_drama.models import GenerationTask, Take, TaskStatus, WorkerDrainRequest, WorkerDrainResponse
 from short_drama.tools.contracts import (
     ArtifactRef,
     ToolCategory,
@@ -18,6 +18,10 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class TaskToolService(Protocol):
+    def get_generation_task(self, task_id: str) -> GenerationTask: ...
+
+    def list_generation_task_takes(self, task_id: str) -> list[Take]: ...
+
     def advance_task(self, task_id: str) -> GenerationTask: ...
 
     def drain(self, project_id: str, max_steps: int) -> WorkerDrainResponse: ...
@@ -35,20 +39,40 @@ class TaskActionInput(ToolModel):
     task_id: str
 
 
-def _task_execution(task: GenerationTask) -> ToolExecution[GenerationTask]:
+class TaskReadResponse(ToolModel):
+    task: GenerationTask
+    takes: list[Take]
+
+
+def _task_refs(task: GenerationTask, takes: Sequence[Take]) -> tuple[ArtifactRef, ...]:
+    return (
+        ArtifactRef(project_id=task.project_id, artifact_type="generation_task", artifact_id=task.id),
+        *(ArtifactRef(project_id=task.project_id, artifact_type="take", artifact_id=take.id) for take in takes),
+    )
+
+
+def _task_execution(task: GenerationTask, takes: Sequence[Take] = ()) -> ToolExecution[GenerationTask]:
     return ToolExecution(
         output=task,
-        artifact_refs=(
-            ArtifactRef(
-                project_id=task.project_id,
-                artifact_type="generation_task",
-                artifact_id=task.id,
-            ),
-        ),
+        artifact_refs=_task_refs(task, takes),
     )
 
 
 def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
+    def get_task(request: TaskActionInput) -> ToolExecution[TaskReadResponse]:
+        task = service.get_generation_task(request.task_id)
+        takes = service.list_generation_task_takes(task.id)
+        return ToolExecution(output=TaskReadResponse(task=task, takes=takes), artifact_refs=_task_refs(task, takes))
+
+    registry.register(ToolSpec(
+        id="task.get", version=1, category=ToolCategory.TASK,
+        description=("Read a persisted video task and its produced Takes, including exact Take IDs and media paths. "
+                     "A downloaded Take may await review and selection before an output slot is bound; "
+                     "a missing output slot alone does not mean OUTPUT_MISSING. No provider calls."),
+        effect=ToolEffect.READ, idempotent=True, input_model=TaskActionInput,
+        output_model=TaskReadResponse, handler=get_task,
+        tags=frozenset({"generation", "task", "lifecycle", "output"}),
+    ))
     registry.register(
         ToolSpec(
             id="task.drain",
@@ -85,7 +109,9 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
         extra_tags: frozenset[str] = frozenset(),
     ) -> None:
         def invoke(request: TaskActionInput) -> ToolExecution[GenerationTask]:
-            return _task_execution(action(request.task_id))
+            task = action(request.task_id)
+            takes = service.list_generation_task_takes(task.id) if task.status == TaskStatus.SUCCEEDED else []
+            return _task_execution(task, takes)
 
         registry.register(
             ToolSpec(
@@ -104,7 +130,7 @@ def register_tools(registry: ToolRegistry, service: TaskToolService) -> None:
 
     register_action(
         tool_id="task.advance",
-        description="Advance one persisted generation task by a single transition.",
+        description="Advance one persisted generation task by a single transition; success also returns its produced Take references.",
         action=service.advance_task,
         effect=ToolEffect.EXTERNAL,
     )

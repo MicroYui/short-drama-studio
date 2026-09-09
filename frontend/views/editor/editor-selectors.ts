@@ -338,10 +338,7 @@ export function selectActiveTimelineOutPoint(state: EditorState): number | null 
 }
 
 export function selectTotalDuration(state: EditorState): number {
-  return Math.max(
-    selectClips(state).reduce((max, clip) => Math.max(max, clip.startTime + clip.duration), 0),
-    30,
-  )
+  return selectClips(state).reduce((max, clip) => Math.max(max, clip.startTime + clip.duration), 0)
 }
 
 export function selectZoom(state: EditorState): number {

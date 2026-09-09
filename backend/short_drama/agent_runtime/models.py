@@ -7,14 +7,22 @@ for production data and external side effects.
 
 from __future__ import annotations
 
+from short_drama.skill_ids import SkillIds
+
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    model_validator,
+)
 
 from short_drama.models import ProductionExecutionTarget
-from short_drama.skills.models import ProductionSkillRole
+from short_drama.skills.models import ProductionPromptStage, ProductionSkillRole
 
 
 def utc_now() -> datetime:
@@ -133,6 +141,7 @@ _VERSIONED_CONTEXT_ARTIFACT_TYPES = frozenset(
         "storyboard",
         "storyboard_draft",
         "asset_plan",
+        "asset_plan_index",
         "generation_plan",
         "generation_unit",
         "clip_group",
@@ -170,6 +179,34 @@ class ContextBoundary(RuntimeModel):
         return self
 
 
+class ToolAttemptRef(RuntimeModel):
+    """Stable, compact pointer to one persisted specialist Tool attempt.
+
+    Tool arguments can contain a useful draft that failed contract validation.
+    The reference lets a later WorkOrder recover that exact candidate on demand
+    without copying the potentially large arguments into every Leader or Worker
+    prompt.
+    """
+
+    project_id: str = Field(min_length=1)
+    agent_run_id: str = Field(min_length=1)
+    work_order_id: str = Field(min_length=1)
+    attempt_id: str = Field(min_length=1)
+    tool_name: str = Field(min_length=1, max_length=200)
+    turn_status: SpecialistTurnStatus
+    outcome_status: str | None = Field(default=None, min_length=1, max_length=100)
+    has_arguments: bool = False
+    has_result: bool = False
+
+    def identity(self) -> tuple[str, str, str, str]:
+        return (
+            self.project_id,
+            self.agent_run_id,
+            self.work_order_id,
+            self.attempt_id,
+        )
+
+
 class ContextManifest(RuntimeModel):
     """Persisted, Agent-authored context selection for one WorkOrder.
 
@@ -182,12 +219,16 @@ class ContextManifest(RuntimeModel):
     objective: str = Field(min_length=1)
     why_now: str = Field(min_length=1)
     required_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    tool_attempt_refs: list[ToolAttemptRef] = Field(
+        default_factory=list[ToolAttemptRef]
+    )
     adjacent_boundaries: list[ContextBoundary] = Field(
         default_factory=list[ContextBoundary]
     )
     inherited_decision_ids: list[str] = Field(default_factory=list[str])
     inherited_decisions: list[str] = Field(default_factory=list[str])
-    selected_skill_ids: list[str] = Field(default_factory=list[str])
+    selected_skill_ids: SkillIds = Field(default_factory=list[str])
+    production_prompt_stage: ProductionPromptStage | None = None
     experience_tags: list[str] = Field(default_factory=list[str])
     constraints: list[str] = Field(default_factory=list[str])
     open_questions: list[str] = Field(default_factory=list[str])
@@ -208,6 +249,10 @@ class ContextManifest(RuntimeModel):
         required_identities = [ref.identity() for ref in self.required_artifacts]
         if len(required_identities) != len(set(required_identities)):
             raise ValueError("Required context artifact references must be unique")
+
+        attempt_identities = [ref.identity() for ref in self.tool_attempt_refs]
+        if len(attempt_identities) != len(set(attempt_identities)):
+            raise ValueError("Context manifest Tool attempt references must be unique")
 
         refs = [
             *self.required_artifacts,
@@ -253,8 +298,10 @@ class AgentRun(RuntimeModel):
     id: str = Field(min_length=1)
     project_id: str = Field(min_length=1)
     objective: str = Field(min_length=1)
+    goal_summary: str | None = Field(default=None, max_length=16000)
+    latest_user_instructions: list[str] = Field(default_factory=list[str])
     root_agent: str = Field(min_length=1)
-    active_skill_ids: list[str] = Field(default_factory=list[str])
+    active_skill_ids: SkillIds = Field(default_factory=list[str])
     unattended: bool = False
     execution_target: ProductionExecutionTarget | None = None
     render_export: bool | None = None
@@ -274,6 +321,7 @@ class PlanStep(RuntimeModel):
     kind: ActionKind
     assigned_agent: str = Field(min_length=1)
     production_skill_role: ProductionSkillRole | None = None
+    production_prompt_stage: ProductionPromptStage | None = None
     tool_name: str | None = None
     instructions: str = Field(min_length=1)
     arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
@@ -299,7 +347,7 @@ class PlanRevision(RuntimeModel):
     revision: int = Field(ge=1)
     summary: str = Field(min_length=1)
     steps: list[PlanStep] = Field(default_factory=list[PlanStep])
-    selected_method_skill_ids: list[str] = Field(default_factory=list[str])
+    selected_method_skill_ids: SkillIds = Field(default_factory=list[str])
     method_selection_rationale: str | None = Field(
         default=None,
         min_length=1,
@@ -476,9 +524,18 @@ class WorkOrder(RuntimeModel):
     sender: str = Field(min_length=1)
     recipient_role: str = Field(min_length=1)
     production_skill_role: ProductionSkillRole | None = None
+    production_prompt_stage: ProductionPromptStage | None = None
     objective: str = Field(min_length=1)
     why_now: str = Field(min_length=1)
+    task_inputs: dict[str, JsonValue] = Field(
+        default_factory=dict[str, JsonValue],
+        description="Leader-selected structured task data, excluding delegation control fields.",
+    )
+    working_notes: str | None = Field(default=None, max_length=8000)
     scope: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    tool_attempt_refs: list[ToolAttemptRef] = Field(
+        default_factory=list[ToolAttemptRef]
+    )
     constraints: list[str] = Field(default_factory=list[str])
     confirmed_decisions: list[str] = Field(default_factory=list[str])
     open_questions: list[str] = Field(default_factory=list[str])
@@ -509,6 +566,8 @@ class WorkOrder(RuntimeModel):
                 objective=self.objective,
                 why_now=self.why_now,
                 required_artifacts=list(self.scope),
+                tool_attempt_refs=list(self.tool_attempt_refs),
+                production_prompt_stage=self.production_prompt_stage,
                 inherited_decisions=list(self.confirmed_decisions),
                 constraints=list(self.constraints),
                 open_questions=list(self.open_questions),
@@ -525,7 +584,17 @@ class WorkOrder(RuntimeModel):
         mirrored_values = (
             ("objective", manifest.objective, self.objective),
             ("why_now", manifest.why_now, self.why_now),
+            (
+                "production_prompt_stage",
+                manifest.production_prompt_stage,
+                self.production_prompt_stage,
+            ),
             ("required_artifacts", manifest.required_artifacts, self.scope),
+            (
+                "tool_attempt_refs",
+                manifest.tool_attempt_refs,
+                self.tool_attempt_refs,
+            ),
             (
                 "inherited_decisions",
                 manifest.inherited_decisions,
@@ -681,6 +750,7 @@ class AgentResultDigest(RuntimeModel):
 
 class ActionDigest(RuntimeModel):
     id: str
+    work_order_id: str | None = None
     kind: ActionKind
     status: ActionStatus
     summary: str
@@ -689,14 +759,21 @@ class ActionDigest(RuntimeModel):
 
 
 class ContextPack(RuntimeModel):
-    """Bounded context assembled for one agent call."""
+    """Bounded context assembled for one agent call.
+
+    Runtime callers keep the complete typed memories so local validation can
+    still work with exact :class:`ArtifactRef` objects.  The model-facing JSON
+    projection serializes each unique reference once in ``artifact_index``;
+    memories and action digests point to the compact index ids instead of
+    replaying the same four-field object dozens of times.
+    """
 
     run_id: str
     project_id: str
     objective: str
     work_order_id: str | None = None
     context_manifest_id: str | None = None
-    active_skill_ids: list[str] = Field(default_factory=list[str])
+    active_skill_ids: SkillIds = Field(default_factory=list[str])
     unattended: bool = False
     execution_target: ProductionExecutionTarget | None = None
     render_export: bool | None = None
@@ -706,12 +783,150 @@ class ContextPack(RuntimeModel):
     decisions: list[DecisionMemory] = Field(default_factory=list[DecisionMemory])
     experiences: list[ExperienceMemory] = Field(default_factory=list[ExperienceMemory])
     artifacts: list[ArtifactSummary] = Field(default_factory=list[ArtifactSummary])
+    tool_attempt_refs: list[ToolAttemptRef] = Field(
+        default_factory=list[ToolAttemptRef]
+    )
     unresolved_artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     recent_actions: list[ActionDigest] = Field(default_factory=list[ActionDigest])
+    artifact_index: dict[str, ArtifactRef] = Field(
+        default_factory=dict[str, ArtifactRef],
+        exclude=True,
+    )
     blockers: list[str] = Field(default_factory=list[str])
     open_questions: list[str] = Field(default_factory=list[str])
     next_actions: list[str] = Field(default_factory=list[str])
     compiled_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def build_artifact_index(self) -> Self:
+        refs: list[ArtifactRef] = [artifact.ref for artifact in self.artifacts]
+        refs.extend(self.unresolved_artifact_refs)
+        for decision in self.decisions:
+            refs.extend(decision.artifact_refs)
+        for experience in self.experiences:
+            refs.extend(experience.artifact_refs)
+        for action in self.recent_actions:
+            refs.extend(action.artifact_refs)
+            if action.agent_result is not None:
+                refs.extend(action.agent_result.evidence_refs)
+
+        unique_refs: list[ArtifactRef] = []
+        seen: set[tuple[str, str, str, int | None]] = set()
+        for ref in refs:
+            identity = ref.identity()
+            if identity in seen:
+                continue
+            seen.add(identity)
+            unique_refs.append(ref)
+        canonical_index = {
+            f"artifact-{index}": ref for index, ref in enumerate(unique_refs, start=1)
+        }
+        object.__setattr__(self, "artifact_index", canonical_index)
+        return self
+
+    def artifact_ref_id(self, ref: ArtifactRef) -> str:
+        """Return the compact id for an exact reference visible in this pack."""
+
+        for ref_id, indexed_ref in self.artifact_index.items():
+            if indexed_ref.identity() == ref.identity():
+                return ref_id
+        raise KeyError(f"Artifact reference is not visible in ContextPack: {ref.identity()}")
+
+    def resolve_artifact_ref(self, ref_id: str) -> ArtifactRef:
+        """Recover the exact canonical reference named by a model projection."""
+
+        try:
+            return self.artifact_index[ref_id]
+        except KeyError as exc:
+            raise KeyError(f"Unknown ContextPack artifact reference id: {ref_id}") from exc
+
+    def model_context_dump(self) -> dict[str, Any]:
+        """Return the compact projection intended for a model request.
+
+        Ordinary ``model_dump`` keeps its normal Pydantic meaning and therefore
+        remains safe for diagnostics, APIs, or future persistence.  Model call
+        sites opt into this projection explicitly.
+        """
+
+        payload = self.model_dump(mode="json")
+
+        def ref_ids(refs: list[ArtifactRef]) -> list[str]:
+            return [self.artifact_ref_id(ref) for ref in refs]
+
+        projected = dict(payload)
+        projected.pop("compiled_at", None)
+        projected["video_execution_target"] = projected.pop(
+            "execution_target",
+            None,
+        )
+        projected["artifact_index"] = {
+            ref_id: ref.model_dump(mode="json")
+            for ref_id, ref in self.artifact_index.items()
+        }
+
+        projected_artifacts: list[dict[str, Any]] = []
+        for artifact, serialized in zip(self.artifacts, payload["artifacts"], strict=True):
+            item = dict(serialized)
+            item.pop("ref", None)
+            item["artifact_ref_id"] = self.artifact_ref_id(artifact.ref)
+            projected_artifacts.append(item)
+        projected["artifacts"] = projected_artifacts
+        projected["unresolved_artifact_ref_ids"] = ref_ids(
+            self.unresolved_artifact_refs
+        )
+        projected.pop("unresolved_artifact_refs", None)
+
+        projected_decisions: list[dict[str, Any]] = []
+        for decision, serialized in zip(
+            self.decisions,
+            payload["decisions"],
+            strict=True,
+        ):
+            item = dict(serialized)
+            item.pop("project_id", None)
+            item.pop("run_id", None)
+            item.pop("created_at", None)
+            item.pop("artifact_refs", None)
+            item["artifact_ref_ids"] = ref_ids(decision.artifact_refs)
+            projected_decisions.append(item)
+        projected["decisions"] = projected_decisions
+
+        projected_experiences: list[dict[str, Any]] = []
+        for experience, serialized in zip(
+            self.experiences,
+            payload["experiences"],
+            strict=True,
+        ):
+            item = dict(serialized)
+            item.pop("project_id", None)
+            item.pop("created_at", None)
+            item.pop("artifact_refs", None)
+            item["artifact_ref_ids"] = ref_ids(experience.artifact_refs)
+            projected_experiences.append(item)
+        projected["experiences"] = projected_experiences
+
+        projected_actions: list[dict[str, Any]] = []
+        for action, serialized in zip(
+            self.recent_actions,
+            payload["recent_actions"],
+            strict=True,
+        ):
+            item = dict(serialized)
+            item.pop("artifact_refs", None)
+            item["artifact_ref_ids"] = ref_ids(action.artifact_refs)
+            if action.agent_result is not None:
+                serialized_result = item.get("agent_result")
+                if not isinstance(serialized_result, dict):
+                    raise TypeError("AgentResultDigest serialization must be an object")
+                result = dict(cast(dict[str, Any], serialized_result))
+                result.pop("evidence_refs", None)
+                result["evidence_ref_ids"] = ref_ids(
+                    action.agent_result.evidence_refs
+                )
+                item["agent_result"] = result
+            projected_actions.append(item)
+        projected["recent_actions"] = projected_actions
+        return projected
 
 
 class AgentRunSnapshot(RuntimeModel):

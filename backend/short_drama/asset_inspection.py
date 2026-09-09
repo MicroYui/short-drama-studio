@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import base64
 import json
-import mimetypes
+from dataclasses import dataclass
+from enum import StrEnum
+from io import BytesIO
 from pathlib import Path
 
-from pydantic import Field
+from PIL import Image, ImageOps, UnidentifiedImageError
+from pydantic import Field, model_validator
 
 from short_drama.h3_models import H3RouteAssetPreparation
 from short_drama.models import (
@@ -17,12 +20,15 @@ from short_drama.models import (
     AssetPresentationMode,
     AssetVersion,
     DomainModel,
+    ImageReferenceAuthority,
+    ImageReferenceRole,
     ProjectDocument,
     QaFailureCategory,
     QaIssue,
     ShotPlan,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
     production_skill,
@@ -31,11 +37,26 @@ from short_drama.providers.openai_compatible_language_client import LanguageProv
 from short_drama.style_context import declared_style_value
 
 
+class SemanticAssetReviewEvidenceReference(DomainModel):
+    """Exact image evidence attached by the Tool runtime after semantic review."""
+
+    source_project_id: str = Field(min_length=1)
+    asset_version_id: str = Field(min_length=1)
+
+
 class SemanticAssetReview(DomainModel):
     recommended: bool
     score: float = Field(ge=0.0, le=5.0)
     issues: list[QaIssue] = Field(default_factory=list[QaIssue], max_length=16)
     summary: str = Field(min_length=1, max_length=3000)
+    evidence_references: list[SemanticAssetReviewEvidenceReference] = Field(
+        default_factory=list[SemanticAssetReviewEvidenceReference],
+        max_length=16,
+        description=(
+            "Tool runtime attached exact image evidence. This is provenance, not a "
+            "request for the language model to create artifact references."
+        ),
+    )
 
 
 class AssetVersionInspectionRequest(DomainModel):
@@ -55,6 +76,100 @@ class AssetVersionInspectionRequest(DomainModel):
     )
 
 
+class SourceImageHandling(StrEnum):
+    """Agent-facing ways an exact source image can enter production."""
+
+    REUSE_AS_TARGET_MASTER = "REUSE_AS_TARGET_MASTER"
+    DERIVE_STANDARD_ASSET = "DERIVE_STANDARD_ASSET"
+    SUPPORTING_REFERENCE_ONLY = "SUPPORTING_REFERENCE_ONLY"
+    NOT_USABLE = "NOT_USABLE"
+
+
+class SourceImageAssignment(DomainModel):
+    """A semantic assignment already decided by the Agent or explicitly by the user."""
+
+    target_asset_kind: AssetKind
+    target_name: str = Field(min_length=1, max_length=240)
+    reference_role: ImageReferenceRole
+    reference_authority: ImageReferenceAuthority
+    purpose: str = Field(min_length=1, max_length=1000)
+    target_layout_profile: AssetLayoutProfile | None = None
+
+
+class SourceImageAnalysisRequest(DomainModel):
+    """Optional intended use for visually analysing one exact source image."""
+
+    assignment: SourceImageAssignment | None = None
+    additional_context: str | None = Field(default=None, min_length=1, max_length=2000)
+
+
+class SemanticSourceImageAnalysis(DomainModel):
+    """Visible-evidence analysis that informs, but never replaces, Agent judgment."""
+
+    observed_content: str = Field(min_length=1, max_length=3000)
+    usable_for_assignment: bool
+    visible_coverage: list[str] = Field(default_factory=list[str], max_length=24)
+    missing_coverage: list[str] = Field(default_factory=list[str], max_length=24)
+    suggested_reference_roles: list[ImageReferenceRole] = Field(
+        default_factory=list[ImageReferenceRole],
+        max_length=8,
+    )
+    recommended_handling: SourceImageHandling
+    reusable_as_target_master: bool
+    needs_derivation: bool
+    cautions: list[str] = Field(default_factory=list[str], max_length=16)
+    summary: str = Field(min_length=1, max_length=3000)
+
+    @model_validator(mode="after")
+    def validate_handling_flags(self) -> SemanticSourceImageAnalysis:
+        if self.reusable_as_target_master and self.needs_derivation:
+            raise ValueError(
+                "A source image cannot require derivation and be directly reusable"
+            )
+        expected_flags = {
+            SourceImageHandling.REUSE_AS_TARGET_MASTER: (True, True, False),
+            SourceImageHandling.DERIVE_STANDARD_ASSET: (True, False, True),
+            SourceImageHandling.NOT_USABLE: (False, False, False),
+        }
+        expected = expected_flags.get(self.recommended_handling)
+        if expected is not None and (
+            self.usable_for_assignment,
+            self.reusable_as_target_master,
+            self.needs_derivation,
+        ) != expected:
+            raise ValueError(
+                "Source image handling is inconsistent with its usability flags"
+            )
+        if self.recommended_handling == SourceImageHandling.SUPPORTING_REFERENCE_ONLY:
+            if self.reusable_as_target_master or self.needs_derivation:
+                raise ValueError(
+                    "A supporting-only source cannot be a target master or derivation job"
+                )
+        return self
+
+
+class AssetInspectionReferenceSource(StrEnum):
+    """Why one exact image is included in a semantic asset inspection."""
+
+    EXPLICIT_CANONICAL = "EXPLICIT_CANONICAL"
+    DERIVATION_SOURCE = "DERIVATION_SOURCE"
+
+
+@dataclass(frozen=True)
+class AssetInspectionReference:
+    """Resolved image evidence with the exact semantic contract used in production."""
+
+    asset: Asset
+    version: AssetVersion
+    project_id: str
+    reference_role: ImageReferenceRole
+    reference_authority: ImageReferenceAuthority
+    purpose: str
+    subject_alias: str | None
+    source: AssetInspectionReferenceSource
+    normative_for_declared_role: bool
+
+
 def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
     bible = next(
         item
@@ -67,6 +182,7 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
         include_constitution=False,
+        stage=ProductionPromptStage.ASSETS,
     )
     required_labels = (
         list(asset.brief.required_visible_text) if asset.brief is not None else []
@@ -389,6 +505,99 @@ def build_keyframe_correction_prompt(
     )
 
 
+def analyze_source_image(
+    *,
+    document: ProjectDocument,
+    asset: Asset,
+    version: AssetVersion,
+    request: SourceImageAnalysisRequest,
+    client: LanguageProviderClient,
+) -> SemanticSourceImageAnalysis:
+    """Observe one exact user/source image before the Agent assigns asset work."""
+
+    skill_prompt = compile_production_prompt(
+        document.project.production_profile,
+        roles=(ProductionSkillRole.ASSET_REVIEWER,),
+        include_constitution=False,
+        stage=ProductionPromptStage.ASSETS,
+    )
+    assignment = request.assignment
+    assignment_policy = (
+        "当前没有预先指定用途。只根据可见证据提出可能承担的参考职责；"
+        "不要把人物、服饰、场景、道具、风格或构图中的任何一种自动扩散为全片规则。"
+        if assignment is None
+        else (
+            "结构化 assignment 是 Agent 根据完整对话作出的用途声明，不是让你重新路由。"
+            "你只判断这张图在该用途下能看见什么、缺少什么、能否直接复用，或是否应以它"
+            "为精确参考派生标准资产。"
+        )
+    )
+    authority_policy = ""
+    if (
+        assignment is not None
+        and assignment.reference_role == ImageReferenceRole.SUBJECT_IDENTITY
+        and assignment.reference_authority == ImageReferenceAuthority.AUTHORITATIVE
+    ):
+        authority_policy = (
+            "用户或 Agent 已把图中人物声明为目标角色的权威身份来源。不得质疑、替换、"
+            "平均或重新设计这个人的身份；只评估脸部、发型、体型、服装及视角覆盖是否"
+            "足以直接承担目标母版。若需要侧面、背面、全身或服饰补全，结论应是从此图"
+            "派生，并明确不得变成另一个人。"
+        )
+    instructions = (
+        "你是视频制片中的源素材观察 Agent。只返回符合给定 schema 的 JSON。"
+        f"{skill_prompt.text} "
+        "图像是用户或上游工作流提供的精确原始证据。先客观描述可见主体、取景、角度、"
+        "服饰、空间、道具、可读文字和画质；不得臆造画外的侧面、背面、全身、空间拓扑"
+        "或物体结构。再结合结构化 assignment 判断处理方式。完整且覆盖目标布局的素材"
+        "可以建议 REUSE_AS_TARGET_MASTER；能锁定身份或物体但覆盖不足时建议"
+        " DERIVE_STANDARD_ASSET；只提供风格、构图或局部信息时建议"
+        " SUPPORTING_REFERENCE_ONLY；确实无法承担声明用途时才建议 NOT_USABLE。"
+        "reusable_as_target_master 与 needs_derivation 要反映可见覆盖，不按文件名、关键词"
+        "或美观程度猜测。分析是 Agent 可结合完整上下文覆盖的语义建议，不是审批门。"
+        f"{assignment_policy}{authority_policy}"
+    )
+    payload = {
+        "output_schema": SemanticSourceImageAnalysis.model_json_schema(),
+        "source_asset": {
+            "id": asset.id,
+            "kind": asset.kind.value,
+            "name": asset.name,
+            "descriptor": version.descriptor,
+            "version_id": version.id,
+            "width": version.width,
+            "height": version.height,
+        },
+        "assignment": (
+            assignment.model_dump(mode="json") if assignment is not None else None
+        ),
+        "additional_context": request.additional_context,
+        "project_style": next(
+            item.style.model_dump(mode="json")
+            for item in document.bible_versions
+            if item.id == document.project.current_bible_version_id
+        ),
+        "decision_guidance": {
+            "explicit_assignment_is_context_truth": assignment is not None,
+            "identity_must_be_preserved": bool(
+                assignment is not None
+                and assignment.reference_role
+                == ImageReferenceRole.SUBJECT_IDENTITY
+                and assignment.reference_authority
+                == ImageReferenceAuthority.AUTHORITATIVE
+            ),
+            "do_not_infer_unseen_views": True,
+        },
+    }
+    output = client.generate_text(
+        instructions=instructions,
+        input_text=json.dumps(payload, ensure_ascii=False, indent=2),
+        image_urls=[_asset_image_url(version)],
+        max_output_tokens=3000,
+    )
+    return SemanticSourceImageAnalysis.model_validate_json(_strip_json_fence(output))
+
+
 def inspect_asset_image(
     *,
     document: ProjectDocument,
@@ -398,11 +607,13 @@ def inspect_asset_image(
     shot: ShotPlan | None = None,
     preparation: H3RouteAssetPreparation | None = None,
     canonical_references: list[tuple[Asset, AssetVersion]] | None = None,
+    inspection_references: list[AssetInspectionReference] | None = None,
 ) -> SemanticAssetReview:
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
         include_constitution=False,
+        stage=ProductionPromptStage.ASSETS,
     )
     if (
         asset.brief is not None
@@ -439,9 +650,14 @@ def inspect_asset_image(
     instructions = (
         "你是 AI 原生竖屏视频生产管线中的视觉资产检查 Agent。"
         f"{skill_prompt.text} "
-        "只返回符合给定 schema 的 JSON。只比较图像中的可见证据与输入的资产简报、项目 "
+        "只返回符合给定 schema 的 JSON。evidence_references 由工具运行时附着，"
+        "你始终返回空数组，不要自行填写项目或版本 ID。"
+        "只比较图像中的可见证据与输入的资产简报、项目 "
         "Bible，以及可选的 ShotPlan 或关键帧简报。项目 Bible 已声明的媒介和 Style 是依据，"
         "不要追加项目未要求的视觉媒介、表面质感、机位或运动规则。"
+        "比较不同视角时，区分实际结构变化与透视、遮挡和正常的可见面变化。"
+        "某个正面部件在背面不可见，并不证明它缺失或被换成另一种结构；"
+        "只有可见证据支持时才报告跨视图结构不一致，不要求不同视角显示相同表面。"
         "审核镜头关键帧时分两步：先独立识别画面中的主体、必要时的肢体、接触关系、道具"
         "状态、视线和动作阶段，不预设期望答案；再与显式声明的开始/结束状态比较。"
         "如果画面明确违背了已声明的左右手、接触侧或动作阶段，报告通用连续性问题。"
@@ -454,12 +670,35 @@ def inspect_asset_image(
         "检查已声明 Style、可见破损、参考表内身份一致性、必需的场景关系、道具形状、构图"
         "可用性，以及多余文字或水印。不要发明要求。recommendation 是可被 Agent 或用户"
         "覆盖的制作建议，不是用户审批条件；使用通用 QA 分类和稳定 issue code。"
-        "提供标准参考图时，Image 1 始终是待审核候选，后续图片是已批准参考。只比较与当前"
-        "资产 ID 对应的身份和外观锚点、必需场景关系及道具结构，不要孤立评价候选，也不要"
-        "平均或混合不同角色身份。"
+        "提供参考图时，Image 1 始终是待审核候选，后续图片的准确职责、权威级别、"
+        "用途、主体别名、生命周期状态和来源都在 image_map 中结构化声明。只在它声明的"
+        "reference_role 范围内比较，不要平均或混合不同角色身份。"
+        "EXPLICIT_CANONICAL 是当前已批准母版；DERIVATION_SOURCE 是候选生成时实际使用的"
+        "历史证据，不因后来更换母版而消失。approval_status=DRAFT 不等于该图已被"
+        "批准为资产；但若它是用户明确锁定的权威源图且 normative_for_declared_role=true，"
+        "它仍是该声明职责内的事实来源，不得仅因 DRAFT 状态判定派生候选失败。"
+        "normative_for_declared_role=false 的派生输入只说明模型看过它，不是已批准的"
+        "身份、外观、场景或道具真相。"
         + review_scope
     )
-    reference_images = _canonical_reference_images(canonical_references or [])
+    resolved_references = list(inspection_references or [])
+    resolved_references.extend(
+        AssetInspectionReference(
+            asset=reference_asset,
+            version=reference_version,
+            project_id=document.project.id,
+            reference_role=_default_reference_role(reference_asset.kind),
+            reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+            purpose="当前已批准母版，用于审核候选的连续性。",
+            subject_alias=reference_asset.name,
+            source=AssetInspectionReferenceSource.EXPLICIT_CANONICAL,
+            normative_for_declared_role=True,
+        )
+        for reference_asset, reference_version in (canonical_references or [])
+        if reference_version.id
+        not in {item.version.id for item in resolved_references}
+    )
+    reference_images = _inspection_reference_images(resolved_references)
     payload = {
         "output_schema": SemanticAssetReview.model_json_schema(),
         "asset": {
@@ -501,13 +740,31 @@ def inspect_asset_image(
             *[
                 {
                     "image": index,
-                    "role": "approved_canonical_reference",
-                    "asset_id": reference_asset.id,
-                    "asset_kind": reference_asset.kind.value,
-                    "asset_name": reference_asset.name,
-                    "version_id": reference_version.id,
+                    "role": (
+                        "approved_canonical_reference"
+                        if reference.source
+                        == AssetInspectionReferenceSource.EXPLICIT_CANONICAL
+                        else "derivation_reference"
+                    ),
+                    "reference_source": reference.source.value,
+                    "source_project_id": reference.project_id,
+                    "asset_id": reference.asset.id,
+                    "asset_kind": reference.asset.kind.value,
+                    "asset_name": reference.asset.name,
+                    "version_id": reference.version.id,
+                    "reference_role": reference.reference_role.value,
+                    "reference_authority": reference.reference_authority.value,
+                    "purpose": reference.purpose,
+                    "subject_alias": reference.subject_alias,
+                    "approval_status": reference.version.approval_status.value,
+                    "is_current_canonical_master": (
+                        reference.asset.approved_version_id == reference.version.id
+                    ),
+                    "normative_for_declared_role": (
+                        reference.normative_for_declared_role
+                    ),
                 }
-                for index, (reference_asset, reference_version, _url) in enumerate(
+                for index, (reference, _url) in enumerate(
                     reference_images,
                     start=2,
                 )
@@ -519,29 +776,32 @@ def inspect_asset_image(
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
         image_urls=[
             _asset_image_url(version),
-            *(url for _asset, _version, url in reference_images),
+            *(url for _reference, url in reference_images),
         ],
         max_output_tokens=3000,
     )
     return SemanticAssetReview.model_validate_json(_strip_json_fence(output))
 
 
-def _canonical_reference_images(
-    references: list[tuple[Asset, AssetVersion]],
-) -> list[tuple[Asset, AssetVersion, str]]:
-    result: list[tuple[Asset, AssetVersion, str]] = []
+def _default_reference_role(kind: AssetKind) -> ImageReferenceRole:
+    return {
+        AssetKind.CHARACTER: ImageReferenceRole.SUBJECT_IDENTITY,
+        AssetKind.LOCATION: ImageReferenceRole.SCENE_IDENTITY,
+        AssetKind.PROP: ImageReferenceRole.PROP_IDENTITY,
+    }.get(kind, ImageReferenceRole.SUPPORTING_VISUAL)
+
+
+def _inspection_reference_images(
+    references: list[AssetInspectionReference],
+) -> list[tuple[AssetInspectionReference, str]]:
+    result: list[tuple[AssetInspectionReference, str]] = []
     seen: set[str] = set()
-    for asset, version in references:
-        if version.id in seen or version.approval_status.value != "APPROVED":
+    for reference in references:
+        if reference.version.id in seen:
             continue
-        try:
-            url = _asset_image_url(version)
-        except ValueError:
-            continue
-        result.append((asset, version, url))
-        seen.add(version.id)
-        if len(result) >= 8:
-            break
+        url = _asset_image_url(reference.version)
+        result.append((reference, url))
+        seen.add(reference.version.id)
     return result
 
 
@@ -553,9 +813,71 @@ def _asset_image_url(version: AssetVersion) -> str:
     path = Path(version.local_path).expanduser().resolve()
     if not path.is_file():
         raise ValueError(f"AssetVersion image is missing: {path}")
-    mime_type = version.mime_type or mimetypes.guess_type(path.name)[0] or "image/png"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime_type};base64,{encoded}"
+    encoded = base64.b64encode(_analysis_thumbnail_bytes(path)).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
+
+
+_ANALYSIS_IMAGE_MAX_EDGE = 2048
+_ANALYSIS_IMAGE_MAX_BYTES = 3 * 1024 * 1024
+_ANALYSIS_IMAGE_MAX_SOURCE_PIXELS = 50_000_000
+
+
+def _analysis_thumbnail_bytes(path: Path) -> bytes:
+    """Build an EXIF-correct, bounded in-memory review image without changing source."""
+
+    try:
+        with Image.open(path) as opened:
+            if opened.width * opened.height > _ANALYSIS_IMAGE_MAX_SOURCE_PIXELS:
+                raise ValueError(
+                    "AssetVersion image is too large for in-process semantic review; "
+                    "create a bounded derivative while preserving the original source"
+                )
+            # JPEG decoders can downsample during decode. Other formats still remain
+            # untouched on disk and are reduced immediately after decoding.
+            opened.draft("RGB", (_ANALYSIS_IMAGE_MAX_EDGE, _ANALYSIS_IMAGE_MAX_EDGE))
+            image = ImageOps.exif_transpose(opened)
+            image.thumbnail(
+                (_ANALYSIS_IMAGE_MAX_EDGE, _ANALYSIS_IMAGE_MAX_EDGE),
+                Image.Resampling.LANCZOS,
+                reducing_gap=3.0,
+            )
+            if image.mode in {"RGBA", "LA"} or (
+                image.mode == "P" and "transparency" in image.info
+            ):
+                rgba = image.convert("RGBA")
+                flattened = Image.new("RGB", rgba.size, "white")
+                flattened.paste(rgba, mask=rgba.getchannel("A"))
+                image = flattened
+            elif image.mode != "RGB":
+                image = image.convert("RGB")
+            else:
+                image = image.copy()
+    except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
+        raise ValueError(f"AssetVersion image cannot be decoded: {path}") from exc
+
+    quality = 90
+    while True:
+        buffer = BytesIO()
+        image.save(
+            buffer,
+            format="JPEG",
+            quality=quality,
+            optimize=True,
+            progressive=True,
+        )
+        output = buffer.getvalue()
+        if len(output) <= _ANALYSIS_IMAGE_MAX_BYTES:
+            return output
+        if quality > 72:
+            quality -= 6
+            continue
+        next_size = (
+            max(1, int(image.width * 0.85)),
+            max(1, int(image.height * 0.85)),
+        )
+        if next_size == image.size:
+            raise ValueError("AssetVersion review thumbnail cannot be bounded")
+        image = image.resize(next_size, Image.Resampling.LANCZOS)
 
 
 def _strip_json_fence(value: str) -> str:

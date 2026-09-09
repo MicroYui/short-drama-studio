@@ -1,0 +1,49 @@
+{
+  "id": "method.animation_short",
+  "label": "3D 动画短片",
+  "description": "适合明确采用 3D 动画制作范式的项目，覆盖角色/场景卡、镜头表、分镜、单镜与合成。",
+  "roles": [
+    "CONCEPT",
+    "PLANNER",
+    "REVISION_VERIFIER",
+    "DIRECTOR",
+    "ASSET_REVIEWER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::全局视觉风格锁"
+    ],
+    "PLANNER": [
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::STEP 5：六列标准镜头信息表"
+    ],
+    "REVISION_VERIFIER": [
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::STEP 9：最终复盘",
+      "../../sources/minimax_h3/translations/3d-animation-short-generator/references/qc-checklist.zh_cn.md::步骤 9：最终审核"
+    ],
+    "DIRECTOR": [
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::按镜抽取（重点迭代模式）",
+      "../../sources/minimax_h3/translations/3d-animation-short-generator/references/storyboard-guidelines.zh_cn.md::镜头级提取（高频迭代模式）"
+    ],
+    "ASSET_REVIEWER": [
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::STEP 3：角色卡",
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::STEP 4：场景卡"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::模型相关 prompt 形态"
+    ],
+    "EPISODE_REVIEWER": [
+      "../../sources/minimax_h3/original/3d-animation-short-generator/SKILL.cn.md::STEP 9：最终复盘",
+      "../../sources/minimax_h3/translations/3d-animation-short-generator/references/qc-checklist.zh_cn.md::步骤 9：最终审核"
+    ]
+  },
+  "provenance": "UPSTREAM_COMMUNITY_WITH_ADAPTER",
+  "upstream_sources": [
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/3d-animation-short-generator/SKILL.cn.md + references",
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/3d-animation-short-generator/meta.yaml [source=community; author-en=MiniMax Hub User]"
+  ],
+  "user_overridable": true
+}

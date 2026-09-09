@@ -7,7 +7,7 @@ import mimetypes
 import shutil
 import subprocess
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from uuid import uuid4
 
@@ -18,6 +18,7 @@ from PIL import (
     ImageColor,
     ImageDraw,
     ImageFilter,
+    ImageFont,
     ImageOps,
     UnidentifiedImageError,
 )
@@ -27,6 +28,7 @@ from short_drama.image_models import (
     AssetCreateRequest,
     AssetImportLocalRequest,
     AssetReferenceSheetComposeRequest,
+    AssetTextPlateComposeRequest,
     AssetImportUrlRequest,
     AssetReviewDecision,
     AssetReviewPurpose,
@@ -40,6 +42,7 @@ from short_drama.image_models import (
     ImageProviderConfigUpdate,
     ImageProviderRequest,
     ImageReferenceInput,
+    ImageRetryDisposition,
     ImageTaskCreateRequest,
     ImageTaskStatus,
     ImageUsage,
@@ -47,6 +50,7 @@ from short_drama.image_models import (
 from short_drama.models import (
     ApprovalStatus,
     Asset,
+    AssetDerivationReference,
     AssetKind,
     AssetLayoutProfile,
     AssetMediaType,
@@ -57,8 +61,11 @@ from short_drama.models import (
     AssetSheetInputPolicy,
     AssetSourceRecord,
     AssetStandardView,
+    AssetTextPlate,
     AssetVersion,
+    CoreAssetBrief,
     Freshness,
+    ImageReferenceAuthority,
     OriginType,
     ProjectDocument,
 )
@@ -94,6 +101,10 @@ class AssetProviderConfigurationError(AssetWorkbenchError):
     """A paid image action needs a configured provider credential."""
 
 
+class ImageOutputDimensionMismatch(ValueError):
+    """Provider output violates the explicit requested image dimensions."""
+
+
 ImageProviderFactory = Callable[[str, str], ImageProvider]
 
 
@@ -115,6 +126,22 @@ _REFERENCE_SHEET_IMAGE_HEIGHT = 512
 _REFERENCE_SHEET_LABEL_HEIGHT = 40
 _REFERENCE_SHEET_PADDING = 16
 _REFERENCE_SHEET_WIDE_SIZE = (1536, 864)
+_REFERENCE_SHEET_MIN_CELL_IMAGE_DIMENSION = 64
+_TEXT_PLATE_FONT_CANDIDATES = (
+    (Path("/System/Library/Fonts/STHeiti Medium.ttc"), "STHeiti Medium"),
+    (Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"), "Arial Unicode"),
+    (Path("/System/Library/Fonts/Supplemental/Songti.ttc"), "Songti"),
+    (Path("C:/Windows/Fonts/msyh.ttc"), "Microsoft YaHei"),
+    (Path("C:/Windows/Fonts/simhei.ttf"), "SimHei"),
+    (
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        "Noto Sans CJK",
+    ),
+    (
+        Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
+        "WenQuanYi Zen Hei",
+    ),
+)
 _CHARACTER_STANDARD_VIEWS = frozenset(
     {
         AssetStandardView.CANONICAL_MASTER,
@@ -123,14 +150,18 @@ _CHARACTER_STANDARD_VIEWS = frozenset(
         AssetStandardView.CHARACTER_RIGHT_PROFILE,
         AssetStandardView.CHARACTER_BACK,
         AssetStandardView.CHARACTER_WARDROBE_DETAIL,
+        AssetStandardView.CHARACTER_SHEET,
     }
 )
 _SCENE_COVERAGE_VIEWS = frozenset(
     {
         AssetStandardView.CANONICAL_MASTER,
         AssetStandardView.SCENE_MASTER,
+        AssetStandardView.SCENE_FRONT,
         AssetStandardView.SCENE_OVERHEAD,
         AssetStandardView.SCENE_REVERSE,
+        AssetStandardView.SCENE_LEFT,
+        AssetStandardView.SCENE_RIGHT,
         AssetStandardView.SCENE_INTERACTION_ZONE,
     }
 )
@@ -166,6 +197,31 @@ class AssetWorkbench:
     def validate_credentials(self) -> ImageProviderConfigResponse:
         self._provider().validate_credentials()
         return self.config_store.response()
+
+    def validate_planned_asset_contract(
+        self,
+        kind: AssetKind,
+        brief: CoreAssetBrief | None,
+        outputs: Sequence[tuple[AssetLayoutProfile, str]],
+    ) -> None:
+        """Check that an AssetPlan can be executed by the same workbench rules."""
+
+        presentation_mode = None
+        if brief is not None:
+            presentation_mode = brief.presentation_mode
+            self._validate_asset_strategy(kind, brief.reference_strategy)
+            self._validate_asset_layout(
+                kind,
+                brief.layout_profile,
+                brief.presentation_mode,
+            )
+            self._validate_standard_views(
+                brief.reference_strategy,
+                brief.requested_views,
+            )
+        for layout_profile, size in outputs:
+            self._validate_asset_layout(kind, layout_profile, presentation_mode)
+            self._validate_layout_output_size(layout_profile, size)
 
     def create_asset(self, project_id: str, request: AssetCreateRequest) -> AssetVersion:
         self._validate_asset_strategy(
@@ -257,6 +313,9 @@ class AssetWorkbench:
         if size_bytes <= 0 or size_bytes > _MAX_LOCAL_ASSET_BYTES:
             raise AssetWorkbenchConflict("Local asset must be between 1 byte and 256 MB")
         media_type = self._media_type_for_path(source_path)
+        metadata = probe_media_with_ffmpeg(source_path) if media_type in {AssetMediaType.VIDEO, AssetMediaType.AUDIO} else None
+        if metadata is not None and float(metadata["duration"]) <= 0:
+            raise AssetWorkbenchConflict("导入的音视频文件没有可读取的时长。")
         with self._lock:
             document = self._require_project(project_id)
             asset = self._require_asset(document, asset_id)
@@ -271,6 +330,11 @@ class AssetWorkbench:
             shutil.copy2(source_path, destination)
             mime_type = mimetypes.guess_type(destination.name)[0]
             width, height = self._image_dimensions(destination, media_type)
+            if media_type == AssetMediaType.VIDEO and metadata is not None:
+                dimensions = metadata["size"].split("x")
+                if len(dimensions) != 2:
+                    raise AssetWorkbenchConflict("导入文件没有可读取的视频画面。")
+                width, height = int(dimensions[0]), int(dimensions[1])
             now = utc_now()
             version = AssetVersion(
                 id=version_id,
@@ -282,6 +346,7 @@ class AssetWorkbench:
                 mime_type=mime_type,
                 width=width,
                 height=height,
+                duration_seconds=float(metadata["duration"]) if metadata else None,
                 file_size_bytes=destination.stat().st_size,
                 parent_version_id=parent_id,
                 source=AssetSourceRecord(
@@ -470,6 +535,28 @@ class AssetWorkbench:
                             "A reference sheet source was rejected while it was being "
                             "composed; retry"
                         )
+                authoritative_lineage: list[AssetDerivationReference] = []
+                seen_lineage_version_ids: set[str] = set()
+                for _source_path, cell in source_rows:
+                    _source_asset, source_version = self._find_version(
+                        document,
+                        cell.source_version_id,
+                    )
+                    for reference in source_version.derivation_references:
+                        if (
+                            reference.reference_authority
+                            != ImageReferenceAuthority.AUTHORITATIVE
+                            or reference.asset_version_id
+                            in seen_lineage_version_ids
+                        ):
+                            continue
+                        authoritative_lineage.append(reference.model_copy(deep=True))
+                        seen_lineage_version_ids.add(reference.asset_version_id)
+                if len(authoritative_lineage) > 16:
+                    raise AssetWorkbenchConflict(
+                        "Reference sheet authoritative derivation lineage exceeds "
+                        "16 unique source versions"
+                    )
                 temporary_path.replace(output_path)
                 now = utc_now()
                 version = AssetVersion(
@@ -484,6 +571,7 @@ class AssetWorkbench:
                     height=height,
                     file_size_bytes=output_path.stat().st_size,
                     parent_version_id=parent_id,
+                    derivation_references=authoritative_lineage,
                     reference_sheet=AssetReferenceSheet(
                         strategy=request.strategy,
                         input_policy=request.input_policy,
@@ -503,6 +591,105 @@ class AssetWorkbench:
                         source_label="本地确定性标准视图拼图",
                         provider="local",
                         model="pillow-reference-sheet-v1",
+                        created_at=now,
+                    ),
+                    approval_status=ApprovalStatus.DRAFT,
+                    freshness=Freshness.CURRENT,
+                    created_at=now,
+                )
+                self._append_version(document, target, version)
+                return version
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)
+            raise
+
+    def compose_text_plate(
+        self,
+        project_id: str,
+        asset_id: str,
+        request: AssetTextPlateComposeRequest,
+    ) -> AssetVersion:
+        """Render exact visible copy into a deterministic local PNG draft."""
+
+        with self._lock:
+            document = self._require_project(project_id)
+            target = self._require_asset(document, asset_id)
+            self._validate_text_plate_contract(target, request)
+            parent_id = self._resolve_parent(target, request.parent_version_id)
+            expected_current_version_id = target.current_version_id
+            output_number = self._next_version_number(target)
+            output_version_id = f"asset-version-{uuid4().hex[:12]}"
+
+        try:
+            background = ImageColor.getrgb(request.background_color)
+            foreground = ImageColor.getrgb(request.foreground_color)
+        except ValueError as exc:
+            raise AssetWorkbenchConflict(
+                "Text plate colors must be recognized image colors"
+            ) from exc
+        if background == foreground:
+            raise AssetWorkbenchConflict(
+                "Text plate foreground and background colors must differ"
+            )
+
+        font_source, font_family = self._text_plate_font(
+            request.required_visible_text()
+        )
+        output_directory = self._asset_directory(project_id, asset_id)
+        output_directory.mkdir(parents=True, exist_ok=True)
+        temporary_path = output_directory / f".{output_version_id}-text-plate.png"
+        output_path = output_directory / (
+            f"v{output_number}-{output_version_id}-text-plate.png"
+        )
+        try:
+            width, height = self._render_text_plate(
+                request,
+                font_source=font_source,
+                destination=temporary_path,
+            )
+            with self._lock:
+                document = self._require_project(project_id)
+                target = self._require_asset(document, asset_id)
+                if (
+                    target.current_version_id != expected_current_version_id
+                    or self._next_version_number(target) != output_number
+                ):
+                    raise AssetWorkbenchConflict(
+                        "Target asset changed while the text plate was being composed; retry"
+                    )
+                self._validate_text_plate_contract(target, request)
+                if parent_id is not None:
+                    self._require_asset_version(target, parent_id)
+                temporary_path.replace(output_path)
+                now = utc_now()
+                version = AssetVersion(
+                    id=output_version_id,
+                    version=output_number,
+                    origin_type=OriginType.LOCAL_DERIVED,
+                    descriptor=request.descriptor,
+                    media_type=AssetMediaType.IMAGE,
+                    local_path=str(output_path),
+                    mime_type="image/png",
+                    width=width,
+                    height=height,
+                    file_size_bytes=output_path.stat().st_size,
+                    parent_version_id=parent_id,
+                    text_plate=AssetTextPlate(
+                        size=request.size,
+                        background_color=request.background_color,
+                        foreground_color=request.foreground_color,
+                        title=request.title,
+                        exact_lines=list(request.exact_lines),
+                        layout_description=request.layout_description,
+                        font_family=font_family,
+                    ),
+                    source=AssetSourceRecord(
+                        source_type=OriginType.LOCAL_DERIVED,
+                        source_label="本地确定性精确文字图版",
+                        provider="local",
+                        model="pillow-text-plate-v1",
+                        prompt=request.layout_description,
                         created_at=now,
                     ),
                     approval_status=ApprovalStatus.DRAFT,
@@ -578,6 +765,7 @@ class AssetWorkbench:
         source_asset_name: str,
         source_version: AssetVersion,
         descriptor: str,
+        derivation_references: list[AssetDerivationReference] | None = None,
     ) -> AssetVersion:
         """Copy one approved catalog image into a target asset as a draft version."""
 
@@ -635,6 +823,10 @@ class AssetWorkbench:
                 width=width,
                 height=height,
                 file_size_bytes=file_size_bytes,
+                derivation_references=[
+                    reference.model_copy(deep=True)
+                    for reference in (derivation_references or [])
+                ],
                 source=AssetSourceRecord(
                     source_type=OriginType.LIBRARY_IMPORT,
                     source_label=f"资产库复用：{source_asset_name}",
@@ -870,6 +1062,7 @@ class AssetWorkbench:
             quality=request.quality,
             background=request.background,
             output_format=request.output_format,
+            layout_profile=request.layout_profile,
             input_version_ids=request.input_version_ids,
             reference_inputs=request.reference_inputs,
             primary_input_version_id=request.primary_input_version_id,
@@ -892,7 +1085,11 @@ class AssetWorkbench:
         with self._lock:
             document = self._require_project(project_id)
             asset = self._require_asset(document, asset_id)
-            self._validate_asset_output_size(asset, provider_request.size)
+            self._validate_asset_output(
+                asset,
+                provider_request.layout_profile,
+                provider_request.size,
+            )
             parent_id = (
                 self._resolve_parent(asset, request.parent_version_id)
                 if request.operation == ImageOperation.EDIT
@@ -948,6 +1145,7 @@ class AssetWorkbench:
         task.status = ImageTaskStatus.CANCELLED
         task.error_code = "CANCELLED_BY_USER"
         task.error_message = "尚未提交到 OpenAI 的图像任务已取消。"
+        task.retry_disposition = ImageRetryDisposition.NEW_ENQUEUE
         task.finished_at = utc_now()
         task.updated_at = task.finished_at
         self.repository.save_image_task(task)
@@ -961,13 +1159,26 @@ class AssetWorkbench:
                 "direct retry is disabled. Verify the provider outcome, then create a "
                 "new image task explicitly if another submission is required"
             )
-        if task.status not in {
-            ImageTaskStatus.FAILED,
-            ImageTaskStatus.CANCELLED,
-            ImageTaskStatus.OUTPUT_MISSING,
-        }:
+        if task.status == ImageTaskStatus.OUTPUT_MISSING:
+            raise AssetWorkbenchConflict(
+                f"Image task {task.id} has provider output to recover; use "
+                "image.recover_output instead of submitting the same paid request again"
+            )
+        if task.status == ImageTaskStatus.CANCELLED:
+            raise AssetWorkbenchConflict(
+                f"Image task {task.id} was cancelled; create a new image.enqueue task "
+                "if generation is still required"
+            )
+        if task.status != ImageTaskStatus.FAILED:
             raise AssetWorkbenchConflict(
                 f"Image task {task.id} cannot retry from {task.status.value}"
+            )
+        if task.retry_disposition != ImageRetryDisposition.RETRY_SAME_REQUEST:
+            raise AssetWorkbenchConflict(
+                f"Image task {task.id} failed with a non-transient or legacy "
+                "classification; identical paid resubmission is disabled. Inspect the "
+                "structured error, revise the prompt, references, operation, or request "
+                "semantics, then create a new image.enqueue task"
             )
         request = ImageTaskCreateRequest(
             operation=task.operation,
@@ -983,6 +1194,7 @@ class AssetWorkbench:
             quality=task.request.quality,
             background=task.request.background,
             output_format=task.request.output_format,
+            layout_profile=task.request.layout_profile,
         )
         return self.enqueue_image_task(
             task.project_id,
@@ -1009,6 +1221,7 @@ class AssetWorkbench:
         task.status = ImageTaskStatus.FAILED
         task.error_code = "IMAGE_SUBMISSION_NOT_CREATED"
         task.error_message = reason
+        task.retry_disposition = ImageRetryDisposition.RETRY_SAME_REQUEST
         task.finished_at = now
         task.updated_at = now
         self.repository.save_image_task(task)
@@ -1025,31 +1238,74 @@ class AssetWorkbench:
                 raise AssetWorkbenchConflict(
                     "No staged image remains; create an explicit retry task"
                 )
+            width, height = self._validate_output_image(staged)
+            try:
+                self._validate_requested_output_dimensions(task, width, height)
+            except ImageOutputDimensionMismatch as exc:
+                return self._mark_task_failed(
+                    task,
+                    "IMAGE_OUTPUT_DIMENSION_MISMATCH",
+                    str(exc),
+                )
             candidate = self._final_output_path(task)
             candidate.parent.mkdir(parents=True, exist_ok=True)
             staged.replace(candidate)
             task.output_path = str(candidate)
-        width, height = self._validate_output_image(candidate)
+        else:
+            width, height = self._validate_output_image(candidate)
+            try:
+                self._validate_requested_output_dimensions(task, width, height)
+            except ImageOutputDimensionMismatch as exc:
+                return self._mark_task_failed(
+                    task,
+                    "IMAGE_OUTPUT_DIMENSION_MISMATCH",
+                    str(exc),
+                )
         return self._finalize_image_version(task, candidate, width, height)
 
     def _submit_image_task(self, task: ImageGenerationTask) -> ImageGenerationTask:
+        try:
+            inputs = self._resolve_provider_inputs(task)
+            provider = self._provider()
+        except (AssetWorkbenchError, OSError, ValueError) as exc:
+            return self._mark_task_failed(
+                task,
+                "IMAGE_INPUT_PREPARATION_FAILED",
+                str(exc),
+            )
         task.submitted_at = utc_now()
         task.updated_at = task.submitted_at
         task.error_code = None
         task.error_message = None
+        task.retry_disposition = None
         self.repository.save_image_task(task)
-        inputs = self._resolve_provider_inputs(task)
         try:
-            result = self._provider().create(task.request, inputs)
+            result = provider.create(task.request, inputs)
         except ImageProviderDefiniteError as exc:
-            return self._mark_task_failed(task, exc.code, str(exc))
+            return self._mark_task_failed(
+                task,
+                exc.code,
+                str(exc),
+                retry_disposition=(
+                    ImageRetryDisposition.RETRY_SAME_REQUEST
+                    if exc.same_request_retryable
+                    else ImageRetryDisposition.REVISE_AND_ENQUEUE
+                ),
+            )
         except ImageProviderSubmissionUnknown as exc:
             task.status = ImageTaskStatus.SUBMIT_UNKNOWN
             task.error_code = "IMAGE_SUBMIT_UNKNOWN"
             task.error_message = str(exc)
+            task.retry_disposition = ImageRetryDisposition.RECONCILE_SUBMISSION
             task.updated_at = utc_now()
             self.repository.save_image_task(task)
             return task
+        except (OSError, ValueError) as exc:
+            return self._mark_task_failed(
+                task,
+                "IMAGE_INPUT_PREPARATION_FAILED",
+                str(exc),
+            )
 
         task.provider_request_id = result.provider_request_id
         task.revised_prompt = result.revised_prompt
@@ -1058,10 +1314,17 @@ class AssetWorkbench:
         try:
             output_path, width, height = self._land_provider_output(task, result)
             return self._finalize_image_version(task, output_path, width, height)
+        except ImageOutputDimensionMismatch as exc:
+            return self._mark_task_failed(
+                task,
+                "IMAGE_OUTPUT_DIMENSION_MISMATCH",
+                str(exc),
+            )
         except (OSError, ValueError, UnidentifiedImageError) as exc:
             task.status = ImageTaskStatus.OUTPUT_MISSING
             task.error_code = "IMAGE_OUTPUT_MISSING"
             task.error_message = str(exc)
+            task.retry_disposition = ImageRetryDisposition.RECOVER_OUTPUT
             task.updated_at = utc_now()
             self.repository.save_image_task(task)
             return task
@@ -1091,9 +1354,11 @@ class AssetWorkbench:
         task.updated_at = utc_now()
         self.repository.save_image_task(task)
         width, height = self._validate_output_image(staged)
+        self._validate_requested_output_dimensions(task, width, height)
         if task.request.mask_version_id is not None:
             self._apply_masked_composite(task, staged, width, height)
             width, height = self._validate_output_image(staged)
+            self._validate_requested_output_dimensions(task, width, height)
         output_path = self._final_output_path(task, suffix)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         staged.replace(output_path)
@@ -1101,6 +1366,21 @@ class AssetWorkbench:
         task.updated_at = utc_now()
         self.repository.save_image_task(task)
         return output_path, width, height
+
+    @staticmethod
+    def _validate_requested_output_dimensions(
+        task: ImageGenerationTask,
+        width: int,
+        height: int,
+    ) -> None:
+        raw_width, raw_height = task.request.size.split("x", maxsplit=1)
+        requested = (int(raw_width), int(raw_height))
+        actual = (width, height)
+        if actual != requested:
+            raise ImageOutputDimensionMismatch(
+                "Provider output dimensions "
+                f"{width}x{height} do not match requested {task.request.size}"
+            )
 
     def _apply_masked_composite(
         self,
@@ -1163,6 +1443,11 @@ class AssetWorkbench:
                     if task.operation == ImageOperation.EDIT
                     else OriginType.AI_GENERATED
                 )
+                source_label = {
+                    ImageOperation.GENERATE: "GPT Image 2 生成",
+                    ImageOperation.REFERENCE_GENERATE: "GPT Image 2 参考生成",
+                    ImageOperation.EDIT: "GPT Image 2 编辑",
+                }[task.operation]
                 version = AssetVersion(
                     id=task.output_version_id,
                     version=task.output_version_number,
@@ -1176,11 +1461,20 @@ class AssetWorkbench:
                     file_size_bytes=output_path.stat().st_size,
                     parent_version_id=task.parent_version_id,
                     image_task_id=task.id,
+                    derivation_references=[
+                        AssetDerivationReference(
+                            asset_version_id=reference.asset_version_id,
+                            source_project_id=task.project_id,
+                            reference_role=reference.reference_role,
+                            reference_authority=reference.reference_authority,
+                            purpose=reference.purpose,
+                            subject_alias=reference.subject_alias,
+                        )
+                        for reference in task.request.ordered_reference_inputs()
+                    ],
                     source=AssetSourceRecord(
                         source_type=origin,
-                        source_label=(
-                            "GPT Image 2 编辑" if task.operation == ImageOperation.EDIT else "GPT Image 2 生成"
-                        ),
+                        source_label=source_label,
                         provider=task.provider,
                         model=task.model,
                         prompt=task.request.prompt,
@@ -1202,6 +1496,7 @@ class AssetWorkbench:
             task.status = ImageTaskStatus.SUCCEEDED
             task.error_code = None
             task.error_message = None
+            task.retry_disposition = None
             task.finished_at = now
             task.updated_at = now
             self.repository.save_image_task(task)
@@ -1267,6 +1562,8 @@ class AssetWorkbench:
                     image_url=image_url,
                     purpose=reference.purpose,
                     subject_alias=reference.subject_alias,
+                    reference_role=reference.reference_role,
+                    reference_authority=reference.reference_authority,
                 )
             )
         return result
@@ -1286,13 +1583,23 @@ class AssetWorkbench:
                 raise AssetWorkbenchConflict("Use EDIT to derive from an existing AssetVersion")
             return
         if not input_version_ids:
-            raise AssetWorkbenchConflict("Edit requires at least one input AssetVersion")
+            raise AssetWorkbenchConflict(
+                f"{request.operation.value} requires at least one input AssetVersion"
+            )
         for version_id in input_version_ids:
             _asset, version = self._find_version(document, version_id)
             if version.media_type != AssetMediaType.IMAGE:
-                raise AssetWorkbenchConflict("GPT Image edit inputs must be images")
+                raise AssetWorkbenchConflict("GPT Image reference inputs must be images")
             if version.local_path is None and version.external_url is None:
-                raise AssetWorkbenchConflict("GPT Image edit input has no usable media")
+                raise AssetWorkbenchConflict("GPT Image reference input has no usable media")
+        if request.operation == ImageOperation.REFERENCE_GENERATE:
+            if parent_version_id is not None:
+                raise AssetWorkbenchConflict(
+                    "REFERENCE_GENERATE must not declare a target-asset parent"
+                )
+            if request.mask_version_id is not None:
+                raise AssetWorkbenchConflict("REFERENCE_GENERATE does not accept an edit mask")
+            return
         if request.mask_version_id is not None:
             _mask_asset, mask = self._find_version(document, request.mask_version_id)
             if mask.media_type != AssetMediaType.IMAGE or mask.local_path is None:
@@ -1395,16 +1702,36 @@ class AssetWorkbench:
                 )
 
     @staticmethod
-    def _validate_asset_output_size(asset: Asset, size: str) -> None:
-        if asset.brief is None:
-            return
+    def _validate_asset_output(
+        asset: Asset,
+        layout_profile: AssetLayoutProfile,
+        size: str,
+    ) -> None:
+        presentation_mode = (
+            None if asset.brief is None else asset.brief.presentation_mode
+        )
+        AssetWorkbench._validate_asset_layout(
+            asset.kind,
+            layout_profile,
+            presentation_mode,
+        )
+        AssetWorkbench._validate_layout_output_size(
+            layout_profile,
+            size,
+        )
+
+    @staticmethod
+    def _validate_layout_output_size(
+        layout_profile: AssetLayoutProfile | None,
+        size: str,
+    ) -> None:
         raw_width, raw_height = size.split("x", maxsplit=1)
         width, height = int(raw_width), int(raw_height)
-        layout_profile = asset.brief.layout_profile
         if layout_profile in {
             AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
             AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
         } and width * 9 != height * 16:
+            assert layout_profile is not None
             raise AssetWorkbenchConflict(
                 f"{layout_profile.value} image tasks require a 16:9 size"
             )
@@ -1414,6 +1741,13 @@ class AssetWorkbench:
         ):
             raise AssetWorkbenchConflict(
                 "CHARACTER_SIX_VIEW_3X2 image tasks require a 3:2 size"
+            )
+        if (
+            layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE
+            and width != height
+        ):
+            raise AssetWorkbenchConflict(
+                "PROP_MASTER_SINGLE image tasks require a square size"
             )
 
     @staticmethod
@@ -1446,6 +1780,7 @@ class AssetWorkbench:
         if request.layout_profile is None:
             return request.columns
         columns_by_profile: dict[AssetLayoutProfile, int] = {
+            AssetLayoutProfile.LIGHTWEIGHT_SINGLE: 1,
             AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9: 2,
             AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2: 3,
             AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2: 2,
@@ -1503,11 +1838,21 @@ class AssetWorkbench:
             ):
                 left, top, right, bottom = region
                 image_bottom = bottom - label_height
+                image_width = right - left
+                image_height = image_bottom - top
+                if (
+                    image_width < _REFERENCE_SHEET_MIN_CELL_IMAGE_DIMENSION
+                    or image_height < _REFERENCE_SHEET_MIN_CELL_IMAGE_DIMENSION
+                ):
+                    raise AssetWorkbenchConflict(
+                        "Reference sheet target_size leaves a cell image region smaller "
+                        f"than {_REFERENCE_SHEET_MIN_CELL_IMAGE_DIMENSION} pixels"
+                    )
                 with Image.open(source_path) as source_image:
                     normalized = ImageOps.exif_transpose(source_image).convert("RGB")
                     fitted = ImageOps.contain(
                         normalized,
-                        (max(1, right - left), max(1, image_bottom - top)),
+                        (image_width, image_height),
                         Image.Resampling.LANCZOS,
                     )
                 image_left = left + (right - left - fitted.width) // 2
@@ -1587,6 +1932,156 @@ class AssetWorkbench:
                 )
             regions.append((left, top, right, bottom))
         return regions
+
+    @staticmethod
+    def _validate_text_plate_contract(
+        asset: Asset,
+        request: AssetTextPlateComposeRequest,
+    ) -> None:
+        brief = asset.brief
+        if (
+            brief is None
+            or brief.presentation_mode
+            != AssetPresentationMode.SCREEN_CONTENT_PLATE
+        ):
+            raise AssetWorkbenchConflict(
+                "Deterministic text plates require a SCREEN_CONTENT_PLATE asset brief"
+            )
+        if not brief.required_visible_text:
+            raise AssetWorkbenchConflict(
+                "SCREEN_CONTENT_PLATE brief must declare required_visible_text"
+            )
+        if request.required_visible_text() != brief.required_visible_text:
+            raise AssetWorkbenchConflict(
+                "Text plate title and exact_lines must exactly match required_visible_text"
+            )
+
+    @staticmethod
+    def _text_plate_font(visible_text: list[str]) -> tuple[str, str]:
+        for path, family in _TEXT_PLATE_FONT_CANDIDATES:
+            if path.is_file():
+                return str(path), family
+        if any(any(ord(character) > 127 for character in line) for line in visible_text):
+            raise AssetWorkbenchConflict(
+                "No local Unicode font is available for this text plate"
+            )
+        try:
+            ImageFont.truetype("DejaVuSans.ttf", 16)
+        except OSError as exc:
+            raise AssetWorkbenchConflict(
+                "No local font is available for this text plate"
+            ) from exc
+        return "DejaVuSans.ttf", "DejaVu Sans"
+
+    @staticmethod
+    def _render_text_plate(
+        request: AssetTextPlateComposeRequest,
+        *,
+        font_source: str,
+        destination: Path,
+    ) -> tuple[int, int]:
+        raw_width, raw_height = request.size.split("x", maxsplit=1)
+        width, height = int(raw_width), int(raw_height)
+        horizontal_margin = max(32, width // 12)
+        vertical_margin = max(32, height // 12)
+        available_width = width - horizontal_margin * 2
+        available_height = height - vertical_margin * 2
+        sheet = Image.new("RGB", (width, height), request.background_color)
+        draw = ImageDraw.Draw(sheet)
+        selected: tuple[
+            ImageFont.FreeTypeFont,
+            ImageFont.FreeTypeFont | None,
+            list[int],
+            int,
+            int,
+        ] | None = None
+        starting_size = min(96, max(18, height // max(5, len(request.exact_lines) + 3)))
+        try:
+            for body_size in range(starting_size, 11, -1):
+                body_font = ImageFont.truetype(font_source, body_size)
+                line_heights: list[int] = []
+                if any(
+                    (bounds := draw.textbbox((0, 0), line, font=body_font))[2]
+                    - bounds[0]
+                    > available_width
+                    for line in request.exact_lines
+                ):
+                    continue
+                for line in request.exact_lines:
+                    bounds = draw.textbbox((0, 0), line, font=body_font)
+                    line_heights.append(max(1, int(bounds[3] - bounds[1])))
+                line_spacing = max(8, body_size // 2)
+                body_height = sum(line_heights) + line_spacing * max(
+                    0, len(line_heights) - 1
+                )
+                title_font: ImageFont.FreeTypeFont | None = None
+                title_height = 0
+                title_gap = 0
+                if request.title is not None:
+                    title_size = min(128, max(body_size + 4, body_size * 4 // 3))
+                    while title_size >= body_size:
+                        candidate = ImageFont.truetype(font_source, title_size)
+                        bounds = draw.textbbox((0, 0), request.title, font=candidate)
+                        if bounds[2] - bounds[0] <= available_width:
+                            title_font = candidate
+                            title_height = max(1, int(bounds[3] - bounds[1]))
+                            break
+                        title_size -= 1
+                    if title_font is None:
+                        continue
+                    title_gap = max(16, body_size)
+                total_height = title_height + title_gap + body_height
+                if total_height <= available_height:
+                    selected = (
+                        body_font,
+                        title_font,
+                        line_heights,
+                        line_spacing,
+                        total_height,
+                    )
+                    break
+            if selected is None:
+                raise AssetWorkbenchConflict(
+                    "Exact text does not fit the requested plate size; enlarge or split it"
+                )
+            body_font, title_font, line_heights, line_spacing, total_height = selected
+            cursor_y = vertical_margin + (available_height - total_height) // 2
+            if request.title is not None:
+                assert title_font is not None
+                title_bounds = draw.textbbox((0, 0), request.title, font=title_font)
+                draw.text(
+                    (width // 2, cursor_y - title_bounds[1]),
+                    request.title,
+                    font=title_font,
+                    fill=request.foreground_color,
+                    anchor="mt",
+                )
+                cursor_y += title_bounds[3] - title_bounds[1] + max(
+                    16, body_font.size
+                )
+            for index, (line, line_height) in enumerate(
+                zip(request.exact_lines, line_heights, strict=True)
+            ):
+                bounds = draw.textbbox((0, 0), line, font=body_font)
+                draw.text(
+                    (horizontal_margin, cursor_y - bounds[1]),
+                    line,
+                    font=body_font,
+                    fill=request.foreground_color,
+                    anchor="lt",
+                )
+                cursor_y += line_height
+                if index != len(request.exact_lines) - 1:
+                    cursor_y += line_spacing
+            sheet.save(destination, format="PNG", optimize=False, compress_level=9)
+        except OSError as exc:
+            destination.unlink(missing_ok=True)
+            raise AssetWorkbenchConflict(
+                "Text plate font could not render the requested content"
+            ) from exc
+        finally:
+            sheet.close()
+        return width, height
 
     def _resolve_parent(self, asset: Asset, requested: str | None) -> str | None:
         if requested is not None:
@@ -1670,11 +2165,16 @@ class AssetWorkbench:
         task: ImageGenerationTask,
         code: str,
         message: str,
+        *,
+        retry_disposition: ImageRetryDisposition = (
+            ImageRetryDisposition.REVISE_AND_ENQUEUE
+        ),
     ) -> ImageGenerationTask:
         now = utc_now()
         task.status = ImageTaskStatus.FAILED
         task.error_code = code
         task.error_message = message
+        task.retry_disposition = retry_disposition
         task.finished_at = now
         task.updated_at = now
         self.repository.save_image_task(task)

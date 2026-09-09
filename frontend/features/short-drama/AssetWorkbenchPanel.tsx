@@ -240,16 +240,16 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
     onNotice(value.base_url.includes('.openai.azure.com') ? 'Azure GPT Image 凭证与部署 endpoint 无生成探测通过' : 'GPT Image 2 凭证与模型访问验证通过')
   })
 
-  const saveLanguageConnection = () => void perform('保存 GPT-5.6-sol 连接', () => ShortDramaApi.updateLanguageConfig(languageApiKey || null, languageBaseUrl.trim()), (value) => {
+  const saveLanguageConnection = () => void perform('保存 语言模型 连接', () => ShortDramaApi.updateLanguageConfig(languageApiKey || null, languageBaseUrl.trim()), (value) => {
     setLanguageConfig(value)
     setLanguageBaseUrl(value.base_url)
     setLanguageApiKey('')
-    onNotice('GPT-5.6-sol 的 Base URL 与 API Key 已保存在本机配置中')
+    onNotice('语言模型 的 Base URL 与 API Key 已保存在本机配置中')
   })
 
-  const validateLanguageConnection = () => void perform('验证 GPT-5.6-sol 连接', () => ShortDramaApi.validateLanguageConfig(), (value) => {
+  const validateLanguageConnection = () => void perform('验证 语言模型 连接', () => ShortDramaApi.validateLanguageConfig(), (value) => {
     setLanguageConfig(value)
-    onNotice('GPT-5.6-sol 兼容地址与固定模型验证通过')
+    onNotice('语言模型 兼容地址与固定模型验证通过')
   })
 
   const switchStockProvider = (provider: StockAssetProvider) => {
@@ -407,6 +407,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
       quality: 'high',
       background,
       output_format: 'png',
+      layout_profile: 'LIGHTWEIGHT_SINGLE',
     }
     setBusy(operation === 'EDIT' ? 'GPT Image 2 正在修整资产' : 'GPT Image 2 正在生成资产')
     onError(null)
@@ -534,7 +535,7 @@ export function AssetWorkbenchPanel({ project, onProjectChange, onError, onNotic
           <button className={secondaryButton} disabled={!config?.has_api_key || Boolean(busy)} onClick={validateKey}><RefreshCw className="h-4 w-4" />验证</button>
         </div>
         <div className="grid gap-3 border-t border-zinc-800 pt-3 xl:grid-cols-[170px_minmax(260px,1fr)_minmax(220px,0.8fr)_auto_auto] xl:items-end">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">Language Provider</p><p className="mt-1 text-xs text-zinc-300">{languageConfig?.model ?? 'gpt-5.6-sol'} · {languageConfig?.can_connect ? 'Ready' : '未配置'}</p></div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">Language Provider</p><p className="mt-1 text-xs text-zinc-300">{languageConfig?.model ?? 'gpt-6-astra'} · {languageConfig?.can_connect ? 'Ready' : '未配置'}</p></div>
           <div><label className="text-xs text-zinc-500">Base URL</label><input className={`${field} mt-1`} value={languageBaseUrl} onChange={(event) => setLanguageBaseUrl(event.target.value)} placeholder="OpenAI-compatible /v1" /></div>
           <div><label className="text-xs text-zinc-500">API Key</label><input className={`${field} mt-1`} value={languageApiKey} onChange={(event) => setLanguageApiKey(event.target.value)} type="password" placeholder={languageConfig?.has_api_key ? `已配置 · ${languageConfig.key_source}` : '输入密钥'} /></div>
           <button className={secondaryButton} disabled={!languageBaseUrl.trim() || Boolean(busy)} onClick={saveLanguageConnection}><KeyRound className="h-4 w-4" />保存</button>

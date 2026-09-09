@@ -1,4 +1,4 @@
-"""Offline configuration and HTTP coverage for the GPT-5.6-sol connection."""
+"""Offline configuration and HTTP coverage for the GPT-6 Astra connection."""
 
 from __future__ import annotations
 
@@ -28,6 +28,9 @@ from short_drama.models import (
 from short_drama.observability import LOGGER_NAME
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderError,
+    LanguageProviderContextWindowError,
+    LanguageProviderTransientError,
+    LanguageProviderTransportError,
     OpenAICompatibleLanguageClient,
 )
 from short_drama.providers.h3_language_prompt import build_language_prompt_input
@@ -91,7 +94,7 @@ class FakeSession:
 
 
 def test_language_client_uses_configured_url_key_and_fixed_model() -> None:
-    session = FakeSession(FakeResponse(200, {"id": "gpt-5.6-sol"}))
+    session = FakeSession(FakeResponse(200, {"id": "gpt-6-astra"}))
     client = OpenAICompatibleLanguageClient(
         api_key="secret-sol",
         base_url="https://sol.example.test/openai/v1/",
@@ -102,7 +105,7 @@ def test_language_client_uses_configured_url_key_and_fixed_model() -> None:
 
     assert session.calls == [
         (
-            "https://sol.example.test/openai/v1/models/gpt-5.6-sol",
+            "https://sol.example.test/openai/v1/models/gpt-6-astra",
             {
                 "headers": {"Authorization": "Bearer secret-sol"},
                 "timeout": 30.0,
@@ -125,7 +128,7 @@ def test_language_client_reports_transport_and_model_mismatch() -> None:
         base_url="https://sol.example.test/v1",
         session=FakeSession(FakeResponse(200, {"id": "another-model"})),  # type: ignore[arg-type]
     )
-    with pytest.raises(LanguageProviderError, match="expected 'gpt-5.6-sol'"):
+    with pytest.raises(LanguageProviderError, match="expected 'gpt-6-astra'"):
         wrong_model.validate_credentials()
 
 
@@ -139,7 +142,7 @@ def test_language_client_falls_back_to_model_list_for_local_gateway() -> None:
                     "object": "list",
                     "data": [
                         {"id": "gpt-5.6-luna"},
-                        {"id": "gpt-5.6-sol", "supported_endpoints": ["/responses"]},
+                        {"id": "gpt-6-astra", "supported_endpoints": ["/responses"]},
                     ],
                 },
             ),
@@ -154,13 +157,13 @@ def test_language_client_falls_back_to_model_list_for_local_gateway() -> None:
     client.validate_credentials()
 
     assert [call[0] for call in session.calls] == [
-        "http://localhost:4141/v1/models/gpt-5.6-sol",
+        "http://localhost:4141/v1/models/gpt-6-astra",
         "http://localhost:4141/v1/models",
     ]
     assert all(call[1]["headers"] == {} for call in session.calls)
 
 
-def test_language_client_rejects_model_list_without_sol() -> None:
+def test_language_client_rejects_model_list_without_astra() -> None:
     client = OpenAICompatibleLanguageClient(
         api_key="",
         base_url="http://127.0.0.1:4141/v1",
@@ -171,7 +174,7 @@ def test_language_client_rejects_model_list_without_sol() -> None:
             ]
         ),  # type: ignore[arg-type]
     )
-    with pytest.raises(LanguageProviderError, match="does not include 'gpt-5.6-sol'"):
+    with pytest.raises(LanguageProviderError, match="does not include 'gpt-6-astra'"):
         client.validate_credentials()
 
 
@@ -207,18 +210,80 @@ def test_language_client_generates_with_responses_api_and_reads_nested_text() ->
             {
                 "headers": {"Content-Type": "application/json"},
                 "json": {
-                    "model": "gpt-5.6-sol",
+                    "model": "gpt-6-astra",
                     "instructions": "只输出提示词",
                     "input": "锁定事实",
-                    "reasoning": {"effort": "low"},
+                    "reasoning": {"effort": "xhigh"},
                     "max_output_tokens": 2200,
                     "stream": True,
                 },
-                "timeout": None,
+                "timeout": (30.0, 600.0),
                 "stream": True,
             },
         )
     ]
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_actual_usage_is_captured_after_text_for_both_response_formats(
+    streaming: bool, caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    payload = {
+        "id": "resp-actual", "model": "gpt-6-astra", "status": "completed",
+        "output_text": "完成",
+        "usage": {
+            "input_tokens": 350, "output_tokens": 520, "total_tokens": 870,
+            "input_tokens_details": {"cached_tokens": 120},
+            "output_tokens_details": {"reasoning_tokens": 500},
+        },
+    }
+    response = FakeResponse(
+        200, payload,
+        headers={"Content-Type": "text/event-stream"} if streaming else {},
+        stream_lines=[
+            'data: {"type":"response.output_text.delta","delta":"完成"}', "",
+            "event: response.completed",
+            "data: " + json.dumps({"type": "response.completed", "response": payload}), "",
+        ] if streaming else None,
+    )
+    deltas: list[str] = []
+    session = FakeSession(response)
+    client = OpenAICompatibleLanguageClient(
+        api_key="", base_url="http://localhost:4141/v1",
+        session=session,  # type: ignore[arg-type]
+        text_delta_observer=deltas.append,
+    )
+    assert client.generate_text(instructions="当前任务", input_text="剧本") == "完成"
+    event = next(json.loads(r.getMessage()) for r in caplog.records if r.name == LOGGER_NAME)
+    assert event["model"] == event["response_model"] == "gpt-6-astra"
+    assert event["reasoning_effort"] == "xhigh"
+    assert event["response_id"] == "resp-actual"
+    assert event["usage_available"] is True
+    assert [event[k] for k in ("input_tokens", "output_tokens", "total_tokens", "cached_input_tokens", "reasoning_tokens")] == [350, 520, 870, 120, 500]
+    assert deltas == (["完成"] if streaming else [])
+    request = session.post_calls[0][1]["json"]
+    assert request["reasoning"] == {"effort": "xhigh"}
+    assert not {"temperature", "top_p", "top_logprobs", "logprobs"}.intersection(request)
+
+
+def test_incomplete_json_does_not_publish_partial_text_and_keeps_usage(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER_NAME)
+    client = OpenAICompatibleLanguageClient(
+        api_key="", base_url="http://localhost:4141/v1",
+        session=FakeSession(FakeResponse(200, {
+            "status": "incomplete", "output_text": "{未完成",
+            "incomplete_details": {"reason": "max_output_tokens"},
+            "usage": {"input_tokens": 10, "output_tokens": 2200, "total_tokens": 2210},
+        })),  # type: ignore[arg-type]
+    )
+    with pytest.raises(LanguageProviderError, match="generation incomplete"):
+        client.generate_text(instructions="生成剧本", input_text="校园")
+    event = next(json.loads(r.getMessage()) for r in caplog.records if r.name == LOGGER_NAME)
+    assert event["success"] is False
+    assert event["output_tokens"] == 2200
 
 
 def test_language_client_reads_streaming_responses_events() -> None:
@@ -289,6 +354,7 @@ def test_language_client_logs_content_free_stream_metrics(
         and json.loads(record.getMessage()).get("event")
         == "provider.language_generation"
     ]
+    assert events[0].pop("call_id").startswith("model-")
     assert events == [
         {
             "completion_type": "sse_response_completed",
@@ -298,6 +364,17 @@ def test_language_client_logs_content_free_stream_metrics(
             "input_characters": 4,
             "instruction_characters": 5,
             "model": "test-sol",
+            "reasoning_effort": "xhigh",
+            "max_output_tokens": 2200,
+            "image_count": 0,
+            "response_id": None,
+            "response_model": None,
+            "usage_available": False,
+            "input_tokens": None,
+            "output_tokens": None,
+            "total_tokens": None,
+            "cached_input_tokens": None,
+            "reasoning_tokens": None,
             "output_characters": 2,
             "provider": "openai_compatible",
             "success": True,
@@ -323,7 +400,7 @@ def test_language_client_logs_transport_failure_metrics(
         monotonic_clock=lambda: next(clock_values),
     )
 
-    with pytest.raises(LanguageProviderError, match="could not reach"):
+    with pytest.raises(LanguageProviderTransportError, match="could not reach"):
         client.generate_text(instructions="instructions", input_text="input")
 
     event = next(
@@ -340,7 +417,7 @@ def test_language_client_logs_transport_failure_metrics(
     assert event["instruction_characters"] == 12
     assert event["input_characters"] == 5
     assert event["output_characters"] == 0
-    assert event["error_kind"] == "LanguageProviderError"
+    assert event["error_kind"] == "LanguageProviderTransportError"
 
 
 def test_language_client_rejects_partial_stream_without_terminal_event() -> None:
@@ -358,7 +435,7 @@ def test_language_client_rejects_partial_stream_without_terminal_event() -> None
         session=FakeSession(response),  # type: ignore[arg-type]
     )
 
-    with pytest.raises(LanguageProviderError, match="ended before completion"):
+    with pytest.raises(LanguageProviderTransportError, match="ended before completion"):
         client.generate_text(instructions="只输出剧本", input_text="锁定事实")
 
     assert response.closed is True
@@ -488,6 +565,35 @@ def test_language_client_rejects_generation_without_output_text() -> None:
         client.generate_text(instructions="instructions", input_text="input")
 
 
+@pytest.mark.parametrize('status,code,error_type', [
+    (400, 'context_length_exceeded', LanguageProviderContextWindowError),
+    (400, 'context_window_exceeded', LanguageProviderContextWindowError),
+    (429, 'rate_limit_exceeded', LanguageProviderTransientError),
+    (503, 'service_unavailable', LanguageProviderTransientError),
+    (401, 'invalid_api_key', LanguageProviderError),
+])
+def test_context_overflow_and_transient_http_failures_are_distinct(
+    status: int, code: str, error_type: type[LanguageProviderError],
+) -> None:
+    session = FakeSession(FakeResponse(status, {'error': {'code': code, 'message': 'test failure'}}))
+    client = OpenAICompatibleLanguageClient(api_key='', base_url='http://localhost:4141/v1',
+        session=session)  # type: ignore[arg-type]
+    with pytest.raises(error_type) as raised:
+        client.generate_text(instructions='当前目标', input_text='必要内容')
+    assert type(raised.value) is error_type
+    assert len(session.post_calls) == 1
+
+
+def test_nested_language_tool_cannot_send_text_above_the_258k_budget() -> None:
+    session = FakeSession([])
+    client = OpenAICompatibleLanguageClient(api_key='', base_url='http://localhost:4141/v1',
+        session=session)  # type: ignore[arg-type]
+    with pytest.raises(LanguageProviderContextWindowError, match='未发送超限请求'):
+        client.generate_text(instructions='生成剧本', input_text='详细的角色场景和分镜。' * 60000,
+                             max_output_tokens=20000)
+    assert session.post_calls == []
+
+
 class FakeLanguageProvider:
     def __init__(self, output_text: str = "") -> None:
         self.validations = 0
@@ -543,7 +649,8 @@ def test_language_config_api_saves_url_without_exposing_key(
         assert updated.status_code == 200, updated.text
         assert updated.json() == {
             "provider": "openai-compatible",
-            "model": "gpt-5.6-sol",
+            "model": "gpt-6-astra",
+            "reasoning_effort": "xhigh",
             "base_url": "https://sol.example.test/v1",
             "has_api_key": True,
             "key_source": "LOCAL_CONFIG",
@@ -654,7 +761,7 @@ def test_language_api_compiles_h3_prompt_without_submitting_video(
 
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["model"] == "gpt-5.6-sol"
+    assert payload["model"] == "gpt-6-astra"
     assert payload["route"] == "REFERENCE"
     assert payload["compiled_prompt"] == compiled
     assert payload["validation_notes"] == [
@@ -924,6 +1031,7 @@ def test_language_prompt_binds_route_media_descriptors() -> None:
             "provider_label": "<Picture 1>",
             "prompt_label": "<Subject 1>",
             "reference_alias": "@林夏定妆",
+            "required_binding": "@林夏定妆 = <Subject 1>",
             "subject": "林夏定妆",
             "subject_asset_id": linxia.id,
             "reference_tags": [],

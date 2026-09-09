@@ -12,17 +12,18 @@ if ($PackageManager -notmatch '^pnpm@[^@]+$') {
 }
 
 # npm obeys the managed registry; Corepack does not inherit .npmrc. Prefer the
-# existing npm exec cache, then allow only the managed feed on a cache miss.
+# existing npm exec cache without invoking npm, then allow only the managed
+# feed on a cache miss.
 $env:npm_config_registry = $ManagedRegistry
 $env:npm_config_replace_registry_host = "always"
 
-$CachedPnpm = & npm exec --offline --yes "--package=$PackageManager" -- where.exe pnpm 2>$null |
+$CachedPnpm = & node (Join-Path $ScriptDir "find-cached-pnpm.mjs") $PackageManager 2>$null |
     Select-Object -First 1
 $Cached = $LASTEXITCODE -eq 0 -and $CachedPnpm -and (Test-Path $CachedPnpm)
 
 if ($Cached) {
-    & $CachedPnpm @args
+    & node $CachedPnpm @args
 } else {
-    & npm exec --yes "--package=$PackageManager" -- pnpm @args
+    & npm exec "--registry=$ManagedRegistry" --replace-registry-host=always --yes "--package=$PackageManager" -- pnpm @args
 }
 exit $LASTEXITCODE

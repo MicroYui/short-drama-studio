@@ -576,7 +576,7 @@ export function H3LabPanel({
   )
 
   const compileWithGpt = () => void run(
-    'GPT-5.6-sol 编译镜头提示词',
+    '语言模型 编译镜头提示词',
     () => ShortDramaApi.compileH3PromptWithLanguageModel(
       project.document.project.id,
       {
@@ -914,7 +914,7 @@ export function H3LabPanel({
             {inputRoles.length > 0 && <div className="space-y-3">{route === 'REFERENCE' && <p className="text-xs text-zinc-500">已填写 {mediaInputs.length}/12 个参考素材；填满后其他空槽自动锁定。</p>}{inputRoles.map((roleName) => <div key={roleName} className="space-y-2">{drafts[roleName].map((draft, draftIndex) => <SourceInput key={`${roleName}-${draftIndex}`} role={roleName} index={draftIndex} draft={draft} disabled={route === 'REFERENCE' && mediaInputs.length >= 12 && !draft.value.trim()} onChange={(next) => updateDraft(roleName, draftIndex, next)} onRemove={route === 'REFERENCE' && drafts[roleName].length > 1 ? () => removeReferenceDraft(roleName, draftIndex) : undefined} />)}{route === 'REFERENCE' && <button className={subtleButton} type="button" disabled={drafts[roleName].length >= referenceRoleLimits[roleName] || mediaInputs.length >= 12} onClick={() => addReferenceDraft(roleName)}>+ 添加{roleLabels[roleName]}（{drafts[roleName].length}/{referenceRoleLimits[roleName]}）</button>}</div>)}</div>}
             <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Prompt override（留空则由当前剧本、Bible、分镜与连续性自动编译）</span><textarea className={`${inputClass} min-h-24 resize-y leading-6`} value={promptOverride} onChange={(event) => setPromptOverride(event.target.value)} /></label>
             <div className="flex flex-wrap gap-2">
-              <button className={secondaryButton} disabled={!shotId || busy !== null} onClick={compileWithGpt}><Sparkles className="h-3.5 w-3.5" />GPT-5.6-sol 编译（仅文本）</button>
+              <button className={secondaryButton} disabled={!shotId || busy !== null} onClick={compileWithGpt}><Sparkles className="h-3.5 w-3.5" />语言模型 编译（仅文本）</button>
               <button className={secondaryButton} disabled={!shotId || !requiredInputsReady || (purpose === 'QUALITY_PROBE' && !learningObjective.trim()) || busy !== null} onClick={compilePreview}><Eye className="h-3.5 w-3.5" />预览请求</button>
               <button className={primaryButton} disabled={!config?.can_submit || !shotId || !requiredInputsReady || (purpose === 'QUALITY_PROBE' && !learningObjective.trim()) || busy !== null} onClick={submitProbe}><Send className="h-3.5 w-3.5" />提交{purpose === 'QUALITY_PROBE' ? '质量探针' : '合同冒烟'} · 约 {estimatedBillingCredits(duration, config)} credits</button>
             </div>

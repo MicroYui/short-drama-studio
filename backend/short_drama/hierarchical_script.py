@@ -28,6 +28,7 @@ from short_drama.production_planner import (
     PlannedSceneContract,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
 )
@@ -236,6 +237,19 @@ def _scene_relevant_props(
     ]
 
 
+def _last_rendered_screenplay_line(screenplay_text: str) -> str | None:
+    """Return the exact final rendered line without replaying the scene body."""
+
+    return next(
+        (
+            line.strip()
+            for line in reversed(screenplay_text.splitlines())
+            if line.strip()
+        ),
+        None,
+    )
+
+
 def compose_scene_screenplay(
     *,
     heading: str,
@@ -407,16 +421,8 @@ def _scene_writer_prompt(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.WRITER,),
+        stage=ProductionPromptStage.STORY,
     )
-    older_summaries = [
-        {
-            "scene_sequence": patch.scene_sequence,
-            "outcome": patch.summary,
-            "known_facts": patch.continuity_out.known_facts,
-            "open_threads": patch.continuity_out.open_threads,
-        }
-        for patch in previous_patches[-5:-1]
-    ]
     next_nodes = [
         {
             "sequence": item.sequence,
@@ -445,7 +451,11 @@ def _scene_writer_prompt(
         "在当前场自行收敛；只有继续压缩会破坏用户承诺、来源保真、主要因果或结尾回报时，"
         "才请求上游重规划。performance_timing_assessment 可记录自然演读的压力与取舍；"
         "不用字数公式、固定容差、逐句范围或删改清单代替语义判断。"
-        "延续精简上下文中的已知事实、关系位置和未结线索，不提前解决后续场景。"
+        "延续 story_state_before_current_scene 和 older_scene_rollup 中的人物目标与关系位置、"
+        "道具状态、已兑现事件和未回收承诺，不提前解决后续场景。previous_scene_boundary "
+        "只提供紧邻上一场的精确语义尾部；更早场次已归档为稳定滚动状态，不要假设其正文在当前输入中。"
+        "需要指向某个更早事实时，使用 prior_scene_archive 给出的 scene/line ref 格式在证据中标明，"
+        "不要要求把整集前文重放进当前场。"
         "blocks 必须是最终演出顺序，"
         "自然交错动作、反应、情绪转折、停顿与对白。playable_actions 是 Story Architect 给出的语义意图，"
         "不是必须逐字写进 screenplay 的文本清单；可以合并、压缩、重排，或用等价的可见行为完成，"
@@ -481,6 +491,7 @@ def _scene_writer_prompt(
         )
     locked_lines = _scene_lines_from_outline(blueprint, scene)
     previous_scene = previous_patches[-1] if previous_patches else None
+    older_scene = previous_patches[-2] if len(previous_patches) > 1 else None
     payload: dict[str, object] = {
         "source_mode": request.source_mode.value,
         "production_profile": request.production_profile.value,
@@ -536,22 +547,55 @@ def _scene_writer_prompt(
         "locked_scene_lines": [line.model_dump(mode="json") for line in locked_lines],
         "previous_scene_boundary": (
             {
+                "scene_ref": f"scene:{previous_scene.scene_sequence}",
                 "scene_sequence": previous_scene.scene_sequence,
-                "screenplay_tail": previous_scene.screenplay_text[-3000:],
+                "outcome": previous_scene.summary,
+                "final_rendered_line": _last_rendered_screenplay_line(
+                    previous_scene.screenplay_text
+                ),
+                "final_dialogue_line": (
+                    {
+                        "line_ref": (
+                            f"scene:{previous_scene.scene_sequence}:line:"
+                            f"{len(previous_scene.lines)}"
+                        ),
+                        **previous_scene.lines[-1].model_dump(mode="json"),
+                    }
+                    if previous_scene.lines
+                    else None
+                ),
                 "continuity_out": previous_scene.continuity_out.model_dump(mode="json"),
             }
             if previous_scene is not None
             else None
         ),
-        "readable_episode_so_far": [
+        "story_state_before_current_scene": scene.continuity_in.model_dump(mode="json"),
+        "older_scene_rollup": (
             {
-                "scene_sequence": patch.scene_sequence,
-                "screenplay_text": patch.screenplay_text,
-                "continuity_out": patch.continuity_out.model_dump(mode="json"),
+                "through_scene_sequence": older_scene.scene_sequence,
+                "fulfilled_events": list(previous_scene.continuity_in.known_facts),
+                "character_and_relationship_states": list(
+                    previous_scene.continuity_in.character_states
+                ),
+                "prop_states": list(previous_scene.continuity_in.prop_states),
+                "unresolved_promises": list(previous_scene.continuity_in.open_threads),
             }
-            for patch in previous_patches
-        ],
-        "older_scene_outcomes": older_summaries,
+            if previous_scene is not None and older_scene is not None
+            else None
+        ),
+        "prior_scene_archive": (
+            {
+                "written_scene_range": {
+                    "start_sequence": previous_patches[0].scene_sequence,
+                    "end_sequence": previous_scene.scene_sequence,
+                },
+                "scene_ref_format": "scene:{scene_sequence}",
+                "line_ref_format": "scene:{scene_sequence}:line:{one_based_line_index}",
+                "screenplay_bodies_included": False,
+            }
+            if previous_scene is not None
+            else None
+        ),
         "next_scene_nodes": next_nodes,
         "output_schema": SceneCreativeDraft.model_json_schema(),
     }
@@ -661,7 +705,7 @@ def write_story_scene(
             retry_required=False,
             retry_feedback=None,
             warnings=[
-                f"GPT-5.6-sol 未配置，第 {scene.sequence} 场已使用本地可恢复剧本补全。"
+                f"语言模型 未配置，第 {scene.sequence} 场已使用本地可恢复剧本补全。"
             ],
         )
     instructions, input_text = _scene_writer_prompt(
@@ -899,6 +943,7 @@ def revise_story_scene(
     skill_prompt = compile_production_prompt(
         request.production_profile,
         roles=(ProductionSkillRole.WRITER,),
+        stage=ProductionPromptStage.STORY,
     )
     duration_instruction = (
         "严格保持 target_duration_seconds 不变。"

@@ -16,6 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from pydantic import JsonValue
+
 from short_drama.agent_runtime.models import (
     ActionRecord,
     AgentResult,
@@ -170,8 +172,38 @@ class AgentRuntimeStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_agent_work_order_progress_order
                     ON agent_work_order_progress(work_order_id, sequence ASC);
+
+                CREATE TABLE IF NOT EXISTS agent_context_snapshots (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+                    record_json TEXT NOT NULL
+                );
                 """
             )
+
+    def save_context_snapshot(self, snapshot_id: str, run_id: str, payload: dict[str, JsonValue]) -> None:
+        """Persist an exact overflow payload before replacing it with references."""
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "INSERT INTO agent_context_snapshots(id, run_id, record_json) VALUES(?, ?, ?)",
+                (snapshot_id, run_id, json.dumps(payload, ensure_ascii=False)),
+            )
+
+    def get_context_snapshot(self, snapshot_id: str, run_id: str) -> dict[str, JsonValue] | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM agent_context_snapshots WHERE id = ? AND run_id = ?",
+                (snapshot_id, run_id),
+            ).fetchone()
+        return None if row is None else cast(dict[str, JsonValue], json.loads(row["record_json"]))
+
+    def list_context_snapshots(self, run_id: str) -> list[tuple[str, dict[str, JsonValue]]]:
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT id, record_json FROM agent_context_snapshots WHERE run_id = ? ORDER BY rowid",
+                (run_id,),
+            ).fetchall()
+        return [(row["id"], cast(dict[str, JsonValue], json.loads(row["record_json"]))) for row in rows]
 
     def create_run(self, run: AgentRun, memory: RunMemory) -> None:
         if memory.run_id != run.id:

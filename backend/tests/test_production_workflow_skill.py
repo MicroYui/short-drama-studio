@@ -6,13 +6,14 @@ import re
 
 from short_drama.models import ProductionProfile
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
     production_workflow,
 )
 
 
-def test_shared_end_to_end_workflow_is_loaded_into_planner_prompts() -> None:
+def test_shared_end_to_end_workflow_stays_reviewable_but_out_of_worker_prompts() -> None:
     workflow = production_workflow()
 
     assert "形成内容方案" in workflow
@@ -23,22 +24,23 @@ def test_shared_end_to_end_workflow_is_loaded_into_planner_prompts() -> None:
     planner = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
         roles=(ProductionSkillRole.PLANNER,),
+        stage=ProductionPromptStage.ORCHESTRATION,
     )
     director = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
         roles=(ProductionSkillRole.DIRECTOR,),
     )
 
-    assert workflow in planner.text
+    assert workflow not in planner.text
     assert workflow not in director.text
-    assert "共享端到端制片流程" in planner.text
-    assert "当前类型在共享流程上的详细制作方法" in planner.text
-    assert "每次规划前先回答的六个问题" in planner.text
-    assert "route.compile_h3_prompt" in planner.text
-    assert "change.preview" in planner.text
+    assert "完整端到端文档" in planner.text
+    assert "不进入每个 Worker prompt" in planner.text
+    assert "每次规划前先回答的六个问题" not in planner.text
+    assert "route.compile_h3_prompt" not in planner.text
+    assert "change.preview" not in planner.text
     assert "Worker 按上游 Skill 产出" in planner.text
     assert "竖屏导演重点确保核心动作" not in planner.text
-    assert "当前类型在共享流程上的详细制作方法" not in director.text
+    assert "完整端到端文档" not in director.text
 
 
 def test_shared_workflow_keeps_all_ten_reviewable_stages() -> None:

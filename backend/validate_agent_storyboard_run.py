@@ -496,7 +496,10 @@ def _waiting_blocker(run_view: JsonObject, board: JsonObject) -> str | None:
         for value in _as_list(board.get("steps"), "board.steps")
     )
     resumable_order = any(
-        order.get("status") in {"PENDING", "NEEDS_ATTENTION"}
+        # The board can observe a carried Worker already executing its next
+        # decision/tool while the preceding advance response still says WAITING.
+        # Execution owned by the local team is not an external-input blocker.
+        order.get("status") in {"PENDING", "IN_PROGRESS", "NEEDS_ATTENTION"}
         and order.get("next_owner")
         in {"WORKER_DECISION", "WORKER_TOOL", "LEADER_REPLAN"}
         for order in active_orders

@@ -1,0 +1,52 @@
+{
+  "id": "method.co_op_game_intro",
+  "label": "双人游戏开场",
+  "description": "适合明确制作双人合作游戏菜单开场的项目，覆盖人物身份、菜单首图、UI 文案与事件节拍。",
+  "roles": [
+    "CONCEPT",
+    "REVISION_VERIFIER",
+    "DIRECTOR",
+    "ASSET_REVIEWER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 1：询问视觉风格",
+      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 2：收集玩家与游戏信息"
+    ],
+    "REVISION_VERIFIER": [
+      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 7：常见失败修正"
+    ],
+    "DIRECTOR": [
+      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 6：回填视频 prompt，并用 Minimax H3 生成"
+    ],
+    "ASSET_REVIEWER": [
+      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 3：生成 GPT 首图提示词",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::核心规则",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::构图",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::角色风格",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::游戏 UI",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::负面约束"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 6：回填视频 prompt，并用 Minimax H3 生成",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::提示词原则",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::优先级顺序",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::参考素材的职责",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::角色身份与风格锁定",
+      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::负面约束"
+    ],
+    "EPISODE_REVIEWER": [
+      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 7：常见失败修正"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/co-op-game-intro-generator/SKILL.cn.md + references",
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/co-op-game-intro-generator/meta.yaml [source=official; author-en=MiniMax Hub]"
+  ],
+  "user_overridable": true
+}

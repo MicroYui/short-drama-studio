@@ -14,7 +14,8 @@ from short_drama.h3_models import (
     H3ProductionRoutePlanListResponse,
     H3ProductionRoutePlanRequest,
     H3ProductionRoutePlanResponse,
-    H3ProviderRunsResponse,
+    H3ProviderRun,
+    H3ProviderRunIndexResponse,
     H3ReconcileRequest,
     H3ReconciliationCandidatesResponse,
     H3RouteAssetPreparationUpdateRequest,
@@ -24,6 +25,8 @@ from short_drama.h3_models import (
     H3TaskActionResponse,
 )
 from short_drama.language_models import (
+    H3GenerationUnitContextRequest,
+    H3GenerationUnitContextResponse,
     LanguagePromptCompileRequest,
     LanguagePromptCompileResponse,
 )
@@ -45,6 +48,14 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class RouteToolService(Protocol):
+    def get_h3_production_route_plan(
+        self, project_id: str, plan_id: str,
+    ) -> H3ProductionRoutePlanResponse: ...
+
+    def get_h3_generation_unit_context(
+        self, project_id: str, request: H3GenerationUnitContextRequest,
+    ) -> H3GenerationUnitContextResponse: ...
+
     def compile_generation_plan(
         self,
         project_id: str,
@@ -81,7 +92,9 @@ class RouteToolService(Protocol):
         request: H3ProbeRequest,
     ) -> H3ProbeResponse: ...
 
-    def list_h3_provider_runs(self, project_id: str) -> H3ProviderRunsResponse: ...
+    def list_h3_provider_run_index(self, project_id: str) -> H3ProviderRunIndexResponse: ...
+
+    def get_h3_provider_run(self, task_id: str) -> H3ProviderRun: ...
 
     def list_h3_reconciliation_candidates_for_task(
         self,
@@ -138,6 +151,10 @@ class RouteProjectInput(ToolModel):
     project_id: str
 
 
+class RoutePlanGetInput(RouteProjectInput):
+    plan_id: str
+
+
 class RouteReconciliationInput(ToolModel):
     project_id: str
     task_id: str
@@ -148,9 +165,18 @@ class RoutePromptCompileInput(ToolModel):
     request: LanguagePromptCompileRequest
 
 
+class GenerationUnitContextInput(ToolModel):
+    project_id: str
+    request: H3GenerationUnitContextRequest
+
+
 class RouteProbeInput(ToolModel):
     project_id: str
     request: H3ProbeRequest
+
+
+class RouteTaskInput(ToolModel):
+    task_id: str
 
 
 class RouteResolveSubmissionInput(ToolModel):
@@ -221,6 +247,33 @@ def _generation_plan_refs(
 
 
 def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
+    def get_generation_unit_context(
+        request: GenerationUnitContextInput,
+    ) -> ToolExecution[H3GenerationUnitContextResponse]:
+        result = service.get_h3_generation_unit_context(request.project_id, request.request)
+        return ToolExecution(output=result, artifact_refs=(
+            ArtifactRef(project_id=result.project_id, artifact_type="generation_plan",
+                        artifact_id=result.generation_plan_document_id, version=result.generation_plan_version),
+            ArtifactRef(project_id=result.project_id, artifact_type="generation_unit",
+                        artifact_id=result.generation_unit_id, version=result.generation_plan_version),
+        ))
+
+    registry.register(ToolSpec(
+        id="route.get_generation_unit_context", version=1, category=ToolCategory.ROUTE,
+        description=(
+            "Read one exact GenerationUnit's complete canonical shots, dialogue, timing, "
+            "production direction and visible Bible, plus approved current media candidates "
+            "with real local_path/external_url, AssetVersion, subject, role, purpose and tags. "
+            "Use this before compile_h3_prompt; it replaces full Storyboard/AssetPlan reads "
+            "for video preparation. Select the route and ordered media subset yourself. "
+            "Read-only; no model, upload or H3 call."
+        ),
+        effect=ToolEffect.READ, idempotent=True,
+        input_model=GenerationUnitContextInput, output_model=H3GenerationUnitContextResponse,
+        handler=get_generation_unit_context,
+        tags=frozenset({"generation-unit", "context-slice", "media-source", "read"}),
+    ))
+
     def compile_generation_plan(
         request: GenerationPlanCompileInput,
     ) -> ToolExecution[GenerationPlanMutationResponse]:
@@ -301,7 +354,12 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             id="route.compile_h3_prompt",
             version=1,
             category=ToolCategory.ROUTE,
-            description="Compile one provider-ready H3 prompt from canonical shot context.",
+            description=(
+                "Compile an H3 prompt from one canonical shot or an exact generation-plan "
+                "document/version/unit. Pass Agent-selected method_skill_ids and ordered "
+                "media_inputs from route.get_generation_unit_context; for a unit, send the result to route.plan_h3 as its explicit "
+                "prompt_override with the same media order. Does not submit video."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=RoutePromptCompileInput,
@@ -371,19 +429,38 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
     registry.register(
         ToolSpec(
             id="route.list_h3_runs",
-            version=1,
+            version=2,
             category=ToolCategory.ROUTE,
-            description="List persisted MiniMax-H3 provider runs for a project.",
+            description=(
+                "List compact MiniMax-H3 run metadata, task status and produced Take IDs for a project. "
+                "Read exact prompt and media details with route.get_h3_run(task_id); "
+                "read local task state and produced Takes with task.get(task_id)."
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=RouteProjectInput,
-            output_model=H3ProviderRunsResponse,
+            output_model=H3ProviderRunIndexResponse,
             handler=lambda request: ToolExecution(
-                output=service.list_h3_provider_runs(request.project_id)
+                output=service.list_h3_provider_run_index(request.project_id)
             ),
             tags=frozenset({"h3", "provider-run", "route"}),
         )
     )
+
+    def get_run(request: RouteTaskInput) -> ToolExecution[H3ProviderRun]:
+        run = service.get_h3_provider_run(request.task_id)
+        return ToolExecution(output=run, artifact_refs=(
+            ArtifactRef(project_id=run.project_id, artifact_type="h3_provider_run", artifact_id=run.id),
+            ArtifactRef(project_id=run.project_id, artifact_type="generation_task", artifact_id=run.task_id),
+        ))
+
+    registry.register(ToolSpec(
+        id="route.get_h3_run", version=1, category=ToolCategory.ROUTE,
+        description="Read one task's exact persisted H3 run, prompt, ordered references and current remote result.",
+        effect=ToolEffect.READ, idempotent=True,
+        input_model=RouteTaskInput, output_model=H3ProviderRun,
+        handler=get_run, tags=frozenset({"h3", "provider-run", "read"}),
+    ))
 
     def list_reconciliation_candidates(
         request: RouteReconciliationInput,
@@ -512,7 +589,12 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             id="route.plan_h3",
             version=1,
             category=ToolCategory.ROUTE,
-            description="Compile a shot-level MiniMax-H3 production route plan.",
+            description=(
+                "Save a MiniMax-H3 route plan for shots or generation units. For units use "
+                "generation_plan_document_id/version_id and unit_ids without shot_ids; "
+                "each directive targets generation_unit_id without shot_id. Preserve the "
+                "compiled prompt and media order. Does not submit video."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=RoutePlanInput,
@@ -522,22 +604,54 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
         )
     )
 
+    def list_plans(request: RouteProjectInput) -> ToolExecution[H3ProductionRoutePlanListResponse]:
+        result = service.list_h3_production_route_plans(request.project_id)
+        return ToolExecution(
+            output=result,
+            artifact_refs=(
+                ArtifactRef(project_id=request.project_id, artifact_type="h3_route_plan_index",
+                            artifact_id=request.project_id),
+                *(ArtifactRef(project_id=request.project_id, artifact_type="h3_route_plan",
+                              artifact_id=item.id, version=item.state_revision) for item in result.plans),
+            ),
+        )
+
     registry.register(
         ToolSpec(
             id="route.list_h3_plans",
             version=1,
             category=ToolCategory.ROUTE,
-            description="List persisted H3 production route plan revisions for a project.",
+            description=(
+                "List persisted H3 route plans for coverage and readiness. Model context "
+                "contains compact plan summaries; use route.get_h3_plan for one complete "
+                "saved prompt, media order, and execution parameters."
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=RouteProjectInput,
             output_model=H3ProductionRoutePlanListResponse,
-            handler=lambda request: ToolExecution(
-                output=service.list_h3_production_route_plans(request.project_id)
-            ),
+            handler=list_plans,
             tags=frozenset({"h3", "planning", "route"}),
         )
     )
+
+    def get_plan(request: RoutePlanGetInput) -> ToolExecution[H3ProductionRoutePlanResponse]:
+        result = service.get_h3_production_route_plan(request.project_id, request.plan_id)
+        return ToolExecution(
+            output=result,
+            artifact_refs=(ArtifactRef(
+                project_id=request.project_id, artifact_type="h3_route_plan",
+                artifact_id=result.plan.id, version=result.plan.state_revision,
+            ),),
+        )
+
+    registry.register(ToolSpec(
+        id="route.get_h3_plan", version=1, category=ToolCategory.ROUTE,
+        description="Read one complete persisted H3 route plan, including its exact prompt and ordered media. No provider calls.",
+        effect=ToolEffect.READ, idempotent=True, input_model=RoutePlanGetInput,
+        output_model=H3ProductionRoutePlanResponse, handler=get_plan,
+        tags=frozenset({"h3", "planning", "route", "on-demand-payload"}),
+    ))
 
     def update_asset_preparation(
         request: RouteAssetPreparationUpdateInput,

@@ -26,6 +26,7 @@ from short_drama.models import (
     VideoInspectionReport,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
 )
@@ -152,6 +153,8 @@ def review_scene(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.EPISODE_REVIEWER,),
+        include_constitution=False,
+        stage=ProductionPromptStage.POST,
     )
     instructions = (
         "你是当前视频制作媒介中的场景级成片审校 Agent。"
@@ -231,6 +234,8 @@ def review_episode(
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.EPISODE_REVIEWER,),
+        include_constitution=False,
+        stage=ProductionPromptStage.POST,
     )
     instructions = (
         "你是当前视频制作媒介中的整集审校 Agent。"

@@ -292,6 +292,85 @@ def test_project_get_compact_keeps_exact_current_duration_contract() -> None:
         assert story_intent["duration_contract"] == expected_contract
 
 
+def test_project_get_compact_keeps_exact_current_and_approved_asset_versions() -> None:
+    source_version: dict[str, JsonValue] = {
+        "id": "asset-version-source-intake",
+        "version": 1,
+        "origin_type": "USER_PROVIDED",
+        "descriptor": "用户指定的男主角身份照片",
+        "media_type": "IMAGE",
+        "local_path": "/tmp/hero.png",
+        "external_url": None,
+        "approval_status": "APPROVED",
+        "review_notes": "已登记为 source intake。",
+    }
+    stale_version: dict[str, JsonValue] = {
+        **source_version,
+        "id": "asset-version-stale",
+        "version": 0,
+    }
+    project_record: dict[str, JsonValue] = {
+        "id": "project-source-intake",
+        "current_script_version_id": "script-current",
+        "current_bible_version_id": "bible-current",
+        "input_images": [
+            {
+                "local_path": "/tmp/hero.png",
+                "external_url": None,
+                "descriptor": "这就是男主角",
+            }
+        ],
+    }
+    result: dict[str, JsonValue] = {
+        "tool_id": "project.get",
+        "status": "SUCCEEDED",
+        "output": {
+            "document": {
+                "project": project_record,
+                "script_versions": [{"id": "script-current"}],
+                "bible_versions": [{"id": "bible-current"}],
+                "production_documents": [],
+                "output_slots": [],
+                "assets": [
+                    {
+                        "id": "asset-source-intake",
+                        "kind": "REFERENCE",
+                        "name": "用户输入图 1",
+                        "bible_entity_id": None,
+                        "brief": None,
+                        "current_version_id": source_version["id"],
+                        "approved_version_id": source_version["id"],
+                        "versions": [stale_version, source_version],
+                    }
+                ],
+            }
+        },
+        "artifact_refs": [],
+        "warnings": [],
+        "error": None,
+    }
+
+    compact = _compact_specialist_tool_result("project.get", result)
+
+    output = compact["output"]
+    assert isinstance(output, dict)
+    compact_document = output["document"]
+    assert isinstance(compact_document, dict)
+    assert compact_document["project"] == project_record
+    assert compact_document["assets"] == [
+        {
+            "id": "asset-source-intake",
+            "kind": "REFERENCE",
+            "name": "用户输入图 1",
+            "bible_entity_id": None,
+            "brief": None,
+            "current_version_id": source_version["id"],
+            "approved_version_id": source_version["id"],
+            "versions": [source_version],
+        }
+    ]
+
+
 def test_storyboard_draft_summary_exposes_resume_ledger_without_shot_prose() -> None:
     document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
     scene = document.script_versions[0].structured_scenes[0]

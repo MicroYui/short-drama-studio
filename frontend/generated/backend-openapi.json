@@ -82,6 +82,17 @@
           "summary": {
             "title": "Summary",
             "type": "string"
+          },
+          "work_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Order Id"
           }
         },
         "required": [
@@ -422,6 +433,19 @@
             "title": "Goal Complete",
             "type": "boolean"
           },
+          "goal_summary": {
+            "anyOf": [
+              {
+                "maxLength": 16000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "结合原始目标和用户最新要求维护的当前交付目标与停止条件，不是阶段进度。",
+            "title": "Goal Summary"
+          },
           "method_selection_rationale": {
             "anyOf": [
               {
@@ -522,7 +546,7 @@
           "objective": {
             "anyOf": [
               {
-                "maxLength": 12000,
+                "maxLength": 16000,
                 "minLength": 1,
                 "type": "string"
               },
@@ -798,10 +822,29 @@
               }
             ]
           },
+          "goal_summary": {
+            "anyOf": [
+              {
+                "maxLength": 16000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Summary"
+          },
           "id": {
             "minLength": 1,
             "title": "Id",
             "type": "string"
+          },
+          "latest_user_instructions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Latest User Instructions",
+            "type": "array"
           },
           "objective": {
             "minLength": 1,
@@ -907,7 +950,7 @@
             ]
           },
           "objective": {
-            "maxLength": 12000,
+            "maxLength": 16000,
             "minLength": 1,
             "title": "Objective",
             "type": "string"
@@ -959,35 +1002,9 @@
         "title": "AgentRunListResponse",
         "type": "object"
       },
-      "AgentRunReplanRequest": {
+      "AgentRunPublicSnapshot": {
         "additionalProperties": false,
-        "properties": {
-          "proposed_plan": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AgentPlanProposal"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "reason": {
-            "maxLength": 4000,
-            "minLength": 1,
-            "title": "Reason",
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ],
-        "title": "AgentRunReplanRequest",
-        "type": "object"
-      },
-      "AgentRunSnapshot": {
-        "additionalProperties": false,
-        "description": "Minimum recoverable state needed to continue an interrupted run.",
+        "description": "API projection of AgentRunSnapshot used by normal polling responses.",
         "properties": {
           "actions": {
             "items": {
@@ -1011,7 +1028,7 @@
           },
           "pending_work_orders": {
             "items": {
-              "$ref": "#/components/schemas/WorkOrder"
+              "$ref": "#/components/schemas/AgentWorkOrderSummary"
             },
             "title": "Pending Work Orders",
             "type": "array"
@@ -1025,7 +1042,41 @@
           "current_plan",
           "memory"
         ],
-        "title": "AgentRunSnapshot",
+        "title": "AgentRunPublicSnapshot",
+        "type": "object"
+      },
+      "AgentRunReplanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_decisions": {
+            "description": "明确的用户补充决定；保存为本 Run 的 DecisionMemory，供后续重规划继承。reason 只解释本次重规划，不会自动转为长期决定。",
+            "items": {
+              "type": "string"
+            },
+            "title": "Confirmed Decisions",
+            "type": "array"
+          },
+          "proposed_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentPlanProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "AgentRunReplanRequest",
         "type": "object"
       },
       "AgentRunStatus": {
@@ -1063,7 +1114,7 @@
             "type": "array"
           },
           "snapshot": {
-            "$ref": "#/components/schemas/AgentRunSnapshot"
+            "$ref": "#/components/schemas/AgentRunPublicSnapshot"
           }
         },
         "required": [
@@ -1084,7 +1135,7 @@
             "type": "string"
           },
           "answer": {
-            "maxLength": 12000,
+            "description": "完整回答，可合并多条已接收消息及各自范围；由完整请求的上下文预算控制模型输入。",
             "minLength": 1,
             "title": "Answer",
             "type": "string"
@@ -1260,6 +1311,227 @@
           "run"
         ],
         "title": "AgentWorkOrderResultResponse",
+        "type": "object"
+      },
+      "AgentWorkOrderSummary": {
+        "additionalProperties": false,
+        "description": "Public pending-WorkOrder state without its append-only execution trace.",
+        "properties": {
+          "acceptance_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acceptance Criteria",
+            "type": "array"
+          },
+          "active_plan_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Plan Revision Id"
+          },
+          "confirmed_decisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Confirmed Decisions",
+            "type": "array"
+          },
+          "constraints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Constraints",
+            "type": "array"
+          },
+          "context_manifest_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Manifest Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expected_output_slot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Output Slot Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "latest_specialist_tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Specialist Tool Name"
+          },
+          "latest_specialist_turn_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpecialistTurnStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_owner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkOrderNextOwner"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "open_questions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
+          "parent_run_id": {
+            "title": "Parent Run Id",
+            "type": "string"
+          },
+          "pending_protocol_feedback_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Protocol Feedback Id"
+          },
+          "production_prompt_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionPromptStage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "production_skill_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionSkillRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recipient_role": {
+            "title": "Recipient Role",
+            "type": "string"
+          },
+          "scope": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Scope",
+            "type": "array"
+          },
+          "sender": {
+            "title": "Sender",
+            "type": "string"
+          },
+          "source_action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Action Id"
+          },
+          "source_plan_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Plan Revision Id"
+          },
+          "specialist_turn_count": {
+            "minimum": 0.0,
+            "title": "Specialist Turn Count",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DelegationStatus"
+          },
+          "superseded_by_plan_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Plan Revision Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "why_now": {
+            "title": "Why Now",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parent_run_id",
+          "sender",
+          "recipient_role",
+          "objective",
+          "why_now",
+          "status",
+          "specialist_turn_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AgentWorkOrderSummary",
         "type": "object"
       },
       "AgentWorkOrderView": {
@@ -2016,6 +2288,64 @@
         "title": "AssetCreateRequest",
         "type": "object"
       },
+      "AssetDerivationReference": {
+        "additionalProperties": false,
+        "description": "Exact ordered visual evidence used to derive an AssetVersion.",
+        "properties": {
+          "asset_version_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "purpose": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "reference_authority": {
+            "$ref": "#/components/schemas/ImageReferenceAuthority",
+            "default": "SUPPORTING"
+          },
+          "reference_role": {
+            "$ref": "#/components/schemas/ImageReferenceRole",
+            "default": "SUPPORTING_VISUAL"
+          },
+          "source_project_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Project Id"
+          },
+          "subject_alias": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Alias"
+          }
+        },
+        "required": [
+          "asset_version_id",
+          "purpose"
+        ],
+        "title": "AssetDerivationReference",
+        "type": "object"
+      },
       "AssetImportLocalRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2474,9 +2804,13 @@
           "CHARACTER_RIGHT_PROFILE",
           "CHARACTER_BACK",
           "CHARACTER_WARDROBE_DETAIL",
+          "CHARACTER_SHEET",
           "SCENE_MASTER",
+          "SCENE_FRONT",
           "SCENE_OVERHEAD",
           "SCENE_REVERSE",
+          "SCENE_LEFT",
+          "SCENE_RIGHT",
           "SCENE_INTERACTION_ZONE",
           "PROP_PRODUCT",
           "PROP_IN_HAND",
@@ -2484,6 +2818,72 @@
         ],
         "title": "AssetStandardView",
         "type": "string"
+      },
+      "AssetTextPlate": {
+        "additionalProperties": false,
+        "description": "Exact text and deterministic layout metadata for a local text plate.",
+        "properties": {
+          "background_color": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Background Color",
+            "type": "string"
+          },
+          "exact_lines": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Exact Lines",
+            "type": "array"
+          },
+          "font_family": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Font Family",
+            "type": "string"
+          },
+          "foreground_color": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Foreground Color",
+            "type": "string"
+          },
+          "layout_description": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Layout Description",
+            "type": "string"
+          },
+          "size": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Size",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "size",
+          "background_color",
+          "foreground_color",
+          "layout_description",
+          "font_family"
+        ],
+        "title": "AssetTextPlate",
+        "type": "object"
       },
       "AssetVersion": {
         "additionalProperties": false,
@@ -2494,6 +2894,14 @@
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "derivation_references": {
+            "items": {
+              "$ref": "#/components/schemas/AssetDerivationReference"
+            },
+            "maxItems": 16,
+            "title": "Derivation References",
+            "type": "array"
           },
           "descriptor": {
             "title": "Descriptor",
@@ -2627,6 +3035,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/AssetSourceRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text_plate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetTextPlate"
               },
               {
                 "type": "null"
@@ -3322,6 +3740,51 @@
         "title": "Body_upload_character_voice_reference_api_short_drama_projects__project_id__characters__character_id__voice_reference_upload_post",
         "type": "object"
       },
+      "Body_upload_media_api_short_drama_studio_projects__project_id__media_post": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AssetKind",
+            "default": "REFERENCE"
+          },
+          "name": {
+            "default": "导入素材",
+            "title": "Name",
+            "type": "string"
+          },
+          "replace_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replace Version Id"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_media_api_short_drama_studio_projects__project_id__media_post",
+        "type": "object"
+      },
       "CancelCancellingResponse": {
         "properties": {
           "id": {
@@ -3690,10 +4153,9 @@
             "type": "array"
           },
           "duration_seconds": {
-            "maximum": 15.0,
-            "minimum": 4.0,
+            "exclusiveMinimum": 0.0,
             "title": "Duration Seconds",
-            "type": "integer"
+            "type": "number"
           },
           "generation_intent": {
             "maxLength": 4000,
@@ -3757,6 +4219,177 @@
           "generation_intent"
         ],
         "title": "ClipGroup",
+        "type": "object"
+      },
+      "ComfyConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_url",
+          "connected",
+          "message"
+        ],
+        "title": "ComfyConfig",
+        "type": "object"
+      },
+      "ComfyConfigUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "default": "http://127.0.0.1:8188",
+            "maxLength": 2000,
+            "title": "Base Url",
+            "type": "string"
+          }
+        },
+        "title": "ComfyConfigUpdate",
+        "type": "object"
+      },
+      "ComfyInputBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "input_name": {
+            "title": "Input Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "input_name",
+          "asset_version_id"
+        ],
+        "title": "ComfyInputBinding",
+        "type": "object"
+      },
+      "ComfyRun": {
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Path"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Output Asset Ids",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "prompt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Id"
+          },
+          "status": {
+            "default": "queued",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "base_url",
+          "created_at"
+        ],
+        "title": "ComfyRun",
+        "type": "object"
+      },
+      "ComfyRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ComfyInputBinding"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "workflow": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Workflow",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "workflow"
+        ],
+        "title": "ComfyRunRequest",
         "type": "object"
       },
       "ContentPlanningOutput": {
@@ -4172,6 +4805,16 @@
             "title": "Open Questions",
             "type": "array"
           },
+          "production_prompt_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionPromptStage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "required_artifacts": {
             "items": {
               "$ref": "#/components/schemas/ArtifactRef"
@@ -4184,6 +4827,13 @@
               "type": "string"
             },
             "title": "Selected Skill Ids",
+            "type": "array"
+          },
+          "tool_attempt_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolAttemptRef"
+            },
+            "title": "Tool Attempt Refs",
             "type": "array"
           },
           "why_now": {
@@ -4208,7 +4858,7 @@
       },
       "ContextPack": {
         "additionalProperties": false,
-        "description": "Bounded context assembled for one agent call.",
+        "description": "Bounded context assembled for one agent call.\n\nRuntime callers keep the complete typed memories so local validation can\nstill work with exact :class:`ArtifactRef` objects.  The model-facing JSON\nprojection serializes each unique reference once in ``artifact_index``;\nmemories and action digests point to the compact index ids instead of\nreplaying the same four-field object dozens of times.",
         "properties": {
           "active_skill_ids": {
             "items": {
@@ -4344,6 +4994,13 @@
             "title": "Run Id",
             "type": "string"
           },
+          "tool_attempt_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolAttemptRef"
+            },
+            "title": "Tool Attempt Refs",
+            "type": "array"
+          },
           "unattended": {
             "default": false,
             "title": "Unattended",
@@ -4453,7 +5110,8 @@
           },
           "layout_profile": {
             "$ref": "#/components/schemas/AssetLayoutProfile",
-            "default": "LIGHTWEIGHT_SINGLE"
+            "default": "LIGHTWEIGHT_SINGLE",
+            "description": "该核心资产最终呈现或参考卡的总体布局；它不是每个 AssetPlan work-item 的默认输出布局。单个视图由 work-item 和 image.enqueue 自身声明布局。"
           },
           "named_views_or_zones": {
             "items": {
@@ -5056,7 +5714,7 @@
             "type": "string"
           },
           "model": {
-            "default": "gpt-5.6-sol",
+            "default": "gpt-6-astra",
             "title": "Model",
             "type": "string"
           },
@@ -9492,6 +10150,34 @@
             ],
             "title": "Generation Unit Id"
           },
+          "media_inputs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/H3MediaInput"
+                },
+                "maxItems": 12,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Inputs"
+          },
+          "prompt_override": {
+            "anyOf": [
+              {
+                "maxLength": 7000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Override"
+          },
           "reference_selection_candidate_ids": {
             "anyOf": [
               {
@@ -11426,6 +12112,16 @@
           "request": {
             "$ref": "#/components/schemas/ImageProviderRequest"
           },
+          "retry_disposition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageRetryDisposition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "retry_of_task_id": {
             "anyOf": [
               {
@@ -11523,6 +12219,7 @@
       "ImageOperation": {
         "enum": [
           "GENERATE",
+          "REFERENCE_GENERATE",
           "EDIT"
         ],
         "title": "ImageOperation",
@@ -11671,6 +12368,11 @@
             "title": "Input Version Ids",
             "type": "array"
           },
+          "layout_profile": {
+            "$ref": "#/components/schemas/AssetLayoutProfile",
+            "default": "LIGHTWEIGHT_SINGLE",
+            "description": "当前这一张输出的布局，不从所属 Asset.brief 的总体参考卡布局继承。"
+          },
           "mask_feather_pixels": {
             "default": 8,
             "maximum": 64.0,
@@ -11747,6 +12449,16 @@
         "title": "ImageQuality",
         "type": "string"
       },
+      "ImageReferenceAuthority": {
+        "description": "How strictly a provider must obey one declared image reference.",
+        "enum": [
+          "SUPPORTING",
+          "AUTHORITATIVE",
+          "GUIDE_ONLY"
+        ],
+        "title": "ImageReferenceAuthority",
+        "type": "string"
+      },
       "ImageReferenceInput": {
         "additionalProperties": false,
         "description": "One ordered image input and the semantic job it performs.",
@@ -11762,6 +12474,14 @@
             "minLength": 1,
             "title": "Purpose",
             "type": "string"
+          },
+          "reference_authority": {
+            "$ref": "#/components/schemas/ImageReferenceAuthority",
+            "default": "SUPPORTING"
+          },
+          "reference_role": {
+            "$ref": "#/components/schemas/ImageReferenceRole",
+            "default": "SUPPORTING_VISUAL"
           },
           "subject_alias": {
             "anyOf": [
@@ -11784,6 +12504,33 @@
         "title": "ImageReferenceInput",
         "type": "object"
       },
+      "ImageReferenceRole": {
+        "description": "The visual fact an image input is allowed to contribute.",
+        "enum": [
+          "SUPPORTING_VISUAL",
+          "SUBJECT_IDENTITY",
+          "WARDROBE",
+          "STYLE",
+          "LAYOUT_GUIDE",
+          "SCENE_IDENTITY",
+          "PROP_IDENTITY",
+          "COMPOSITION"
+        ],
+        "title": "ImageReferenceRole",
+        "type": "string"
+      },
+      "ImageRetryDisposition": {
+        "description": "The structurally valid next action after an image task did not succeed.",
+        "enum": [
+          "RETRY_SAME_REQUEST",
+          "REVISE_AND_ENQUEUE",
+          "RECONCILE_SUBMISSION",
+          "RECOVER_OUTPUT",
+          "NEW_ENQUEUE"
+        ],
+        "title": "ImageRetryDisposition",
+        "type": "string"
+      },
       "ImageTaskCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11804,6 +12551,11 @@
             "maxItems": 16,
             "title": "Input Version Ids",
             "type": "array"
+          },
+          "layout_profile": {
+            "$ref": "#/components/schemas/AssetLayoutProfile",
+            "default": "LIGHTWEIGHT_SINGLE",
+            "description": "本次生成输出的布局。普通脸部、正面、侧面或背面素材使用 LIGHTWEIGHT_SINGLE；只有直接生成一张多视图卡时才显式指定多区布局。该字段不从 Asset.brief.layout_profile 继承。"
           },
           "mask_feather_pixels": {
             "default": 8,
@@ -12098,7 +12850,7 @@
             "$ref": "#/components/schemas/VideoGenerationRoute"
           },
           "semantic_model": {
-            "default": "gpt-5.6-sol",
+            "default": "gpt-6-astra",
             "title": "Semantic Model",
             "type": "string"
           },
@@ -12625,7 +13377,7 @@
             "title": "Selected Version Id"
           },
           "semantic_model": {
-            "default": "gpt-5.6-sol",
+            "default": "gpt-6-astra",
             "title": "Semantic Model",
             "type": "string"
           },
@@ -12851,6 +13603,42 @@
             ],
             "title": "Duration Seconds"
           },
+          "generation_plan_document_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Plan Document Id"
+          },
+          "generation_plan_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Plan Version Id"
+          },
+          "generation_unit_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Unit Id"
+          },
           "media_inputs": {
             "items": {
               "$ref": "#/components/schemas/H3MediaInput"
@@ -12859,36 +13647,74 @@
             "title": "Media Inputs",
             "type": "array"
           },
-          "route": {
-            "$ref": "#/components/schemas/VideoGenerationRoute",
-            "default": "DIRECT"
+          "method_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Method Skill Ids",
+            "type": "array"
           },
-          "shot_id": {
-            "title": "Shot Id",
-            "type": "string"
-          },
-          "source_prompt": {
+          "revision_instructions": {
             "anyOf": [
               {
-                "maxLength": 7000,
+                "maxLength": 2000,
+                "minLength": 1,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
+            "description": "Agent feedback for this compilation, including a prior failure. May revise wording, never locked facts or media order.",
+            "title": "Revision Instructions"
+          },
+          "route": {
+            "$ref": "#/components/schemas/VideoGenerationRoute",
+            "default": "DIRECT"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "source_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional complete prior draft to revise. Drafts may exceed the final H3 limit; only a validated output can be saved for execution.",
             "title": "Source Prompt"
           }
         },
-        "required": [
-          "shot_id"
-        ],
         "title": "LanguagePromptCompileRequest",
         "type": "object"
       },
       "LanguagePromptCompileResponse": {
         "additionalProperties": false,
         "properties": {
+          "candidate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Id"
+          },
           "compiled_prompt": {
             "title": "Compiled Prompt",
             "type": "string"
@@ -12897,8 +13723,55 @@
             "title": "Duration Seconds",
             "type": "integer"
           },
+          "generation_plan_document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Plan Document Id"
+          },
+          "generation_plan_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Plan Version Id"
+          },
+          "generation_unit_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Unit Id"
+          },
+          "media_inputs": {
+            "items": {
+              "$ref": "#/components/schemas/H3MediaInput"
+            },
+            "title": "Media Inputs",
+            "type": "array"
+          },
+          "method_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Method Skill Ids",
+            "type": "array"
+          },
           "model": {
-            "default": "gpt-5.6-sol",
+            "default": "gpt-6-astra",
             "title": "Model",
             "type": "string"
           },
@@ -12907,12 +13780,31 @@
             "title": "Provider",
             "type": "string"
           },
+          "reasoning_effort": {
+            "default": "xhigh",
+            "title": "Reasoning Effort",
+            "type": "string"
+          },
           "route": {
             "$ref": "#/components/schemas/VideoGenerationRoute"
           },
           "shot_id": {
-            "title": "Shot Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shot Ids",
+            "type": "array"
           },
           "source_prompt": {
             "title": "Source Prompt",
@@ -12927,7 +13819,6 @@
           }
         },
         "required": [
-          "shot_id",
           "route",
           "duration_seconds",
           "source_prompt",
@@ -12958,13 +13849,18 @@
             "type": "string"
           },
           "model": {
-            "default": "gpt-5.6-sol",
+            "default": "gpt-6-astra",
             "title": "Model",
             "type": "string"
           },
           "provider": {
             "default": "openai-compatible",
             "title": "Provider",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "default": "xhigh",
+            "title": "Reasoning Effort",
             "type": "string"
           }
         },
@@ -14378,6 +15274,16 @@
           "kind": {
             "$ref": "#/components/schemas/ActionKind"
           },
+          "production_prompt_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionPromptStage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "production_skill_role": {
             "anyOf": [
               {
@@ -15172,6 +16078,7 @@
         "type": "object"
       },
       "ProductionExecutionTarget": {
+        "description": "Video-generation executor selected for one production run.\n\nImage generation has its own Provider capability and is intentionally not\ninferred from this value.",
         "enum": [
           "MOCK",
           "REAL_H3"
@@ -15187,6 +16094,19 @@
           "ANIME"
         ],
         "title": "ProductionProfile",
+        "type": "string"
+      },
+      "ProductionPromptStage": {
+        "description": "Explicit production stage used to select only relevant Skill sections.",
+        "enum": [
+          "ORCHESTRATION",
+          "STORY",
+          "STORYBOARD",
+          "ASSETS",
+          "VISUAL_GEN",
+          "POST"
+        ],
+        "title": "ProductionPromptStage",
         "type": "string"
       },
       "ProductionProviderPreference": {
@@ -15281,6 +16201,9 @@
           "FINAL_COLD_READ",
           "REVIEW_ROUTER",
           "DIRECTOR",
+          "ASSET_PLANNER",
+          "ASSET_BUILDER",
+          "ASSET_VERIFIER",
           "ASSET_REVIEWER",
           "ROUTE_PLANNER",
           "VIDEO_PROMPT_COMPILER",
@@ -16006,6 +16929,30 @@
             "title": "Bible Versions",
             "type": "array"
           },
+          "comfy_workflows": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Comfy Workflows",
+            "type": "array"
+          },
+          "editorial_timeline": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorial Timeline"
+          },
           "execution_plan": {
             "items": {
               "$ref": "#/components/schemas/ExecutionPlanEntry"
@@ -16126,6 +17073,16 @@
             ],
             "title": "Storyboard Document Id"
           },
+          "studio_exports": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Studio Exports",
+            "type": "array"
+          },
           "timed_text_document_id": {
             "anyOf": [
               {
@@ -16136,6 +17093,13 @@
               }
             ],
             "title": "Timed Text Document Id"
+          },
+          "trace_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trace Sources",
+            "type": "array"
           },
           "voice_references": {
             "items": {
@@ -16416,6 +17380,11 @@
             "title": "Created At",
             "type": "string"
           },
+          "creative_direction": {
+            "default": "",
+            "title": "Creative Direction",
+            "type": "string"
+          },
           "current_bible_version_id": {
             "title": "Current Bible Version Id",
             "type": "string"
@@ -16433,6 +17402,17 @@
           },
           "current_script_version_id": {
             "title": "Current Script Version Id",
+            "type": "string"
+          },
+          "episode_number": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Episode Number",
+            "type": "integer"
+          },
+          "episode_title": {
+            "default": "第 1 集",
+            "title": "Episode Title",
             "type": "string"
           },
           "id": {
@@ -16467,6 +17447,24 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "parent_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Project Id"
+          },
+          "preferred_method_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Preferred Method Skill Ids",
+            "type": "array"
           },
           "production_profile": {
             "$ref": "#/components/schemas/ProductionProfile",
@@ -17273,6 +18271,7 @@
           "CHARACTER_BODY",
           "CHARACTER_PROFILE",
           "CHARACTER_BACK",
+          "CHARACTER_REFERENCE_SHEET",
           "LOCATION_MASTER",
           "LOCATION_REVERSE",
           "LOCATION_INTERACTION",
@@ -17659,7 +18658,7 @@
             "type": "array"
           },
           "semantic_model": {
-            "default": "gpt-5.6-sol",
+            "default": "gpt-6-astra",
             "title": "Semantic Model",
             "type": "string"
           },
@@ -19110,6 +20109,13 @@
               }
             ]
           },
+          "structure_stale_scene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Structure Stale Scene Ids",
+            "type": "array"
+          },
           "structured_scenes": {
             "items": {
               "$ref": "#/components/schemas/StructuredScene"
@@ -19821,6 +20827,7 @@
             "type": "array"
           },
           "duration_seconds": {
+            "exclusiveMinimum": 0.0,
             "title": "Duration Seconds",
             "type": "number"
           },
@@ -19850,6 +20857,14 @@
           "project_id": {
             "title": "Project Id",
             "type": "string"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ShotReferenceCue"
+            },
+            "maxItems": 24,
+            "title": "References",
+            "type": "array"
           },
           "revision": {
             "default": 1,
@@ -19935,6 +20950,7 @@
             "type": "array"
           },
           "duration_seconds": {
+            "exclusiveMinimum": 0.0,
             "title": "Duration Seconds",
             "type": "number"
           },
@@ -19964,6 +20980,14 @@
           "project_id": {
             "title": "Project Id",
             "type": "string"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ShotReferenceCue"
+            },
+            "maxItems": 24,
+            "title": "References",
+            "type": "array"
           },
           "revision": {
             "default": 1,
@@ -20338,6 +21362,45 @@
             "title": "Alias",
             "type": "string"
           },
+          "asset_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Version Id"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "enum": [
+                  "visual",
+                  "action",
+                  "performance",
+                  "camera"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "purpose": {
             "maxLength": 500,
             "minLength": 1,
@@ -20357,6 +21420,30 @@
             "minLength": 1,
             "title": "Subject Asset Id",
             "type": "string"
+          },
+          "text_end": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text End"
+          },
+          "text_start": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Start"
           }
         },
         "required": [
@@ -24338,6 +25425,839 @@
         "title": "StructuredScene",
         "type": "object"
       },
+      "StudioActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "context_window_tokens": {
+            "default": 258000,
+            "title": "Context Window Tokens",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/StudioEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/StudioJob"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "workers": {
+            "items": {
+              "$ref": "#/components/schemas/StudioWorker"
+            },
+            "title": "Workers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "jobs",
+          "events"
+        ],
+        "title": "StudioActivity",
+        "type": "object"
+      },
+      "StudioEditorial": {
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Project",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioEditorialScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "project"
+        ],
+        "title": "StudioEditorial",
+        "type": "object"
+      },
+      "StudioEditorialScope": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Clip Id"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "film_start_seconds": {
+            "title": "Film Start Seconds",
+            "type": "number"
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/StudioShotOccurrence"
+            },
+            "title": "Occurrences",
+            "type": "array"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "anchor_clip_id",
+          "film_start_seconds",
+          "duration_seconds",
+          "occurrences"
+        ],
+        "title": "StudioEditorialScope",
+        "type": "object"
+      },
+      "StudioEpisodeCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "default": "新的一集",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "StudioEpisodeCreate",
+        "type": "object"
+      },
+      "StudioEpisodes": {
+        "additionalProperties": false,
+        "properties": {
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRecord"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "episodes"
+        ],
+        "title": "StudioEpisodes",
+        "type": "object"
+      },
+      "StudioEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Data",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "kind",
+          "created_at",
+          "data"
+        ],
+        "title": "StudioEvent",
+        "type": "object"
+      },
+      "StudioExport": {
+        "additionalProperties": false,
+        "properties": {
+          "clean_video_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clean Video Path"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "default": 0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "editorial_revision": {
+            "title": "Editorial Revision",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fps": {
+            "title": "Fps",
+            "type": "integer"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Path"
+          },
+          "progress": {
+            "default": "准备导出",
+            "title": "Progress",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "srt_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Srt Path"
+          },
+          "status": {
+            "default": "running",
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "video_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Path"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "editorial_revision",
+          "width",
+          "height",
+          "fps",
+          "created_at"
+        ],
+        "title": "StudioExport",
+        "type": "object"
+      },
+      "StudioExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "fps": {
+            "default": 24,
+            "maximum": 60.0,
+            "minimum": 12.0,
+            "title": "Fps",
+            "type": "integer"
+          },
+          "height": {
+            "default": 720,
+            "maximum": 3840.0,
+            "minimum": 256.0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "subtitles": {
+            "default": true,
+            "title": "Subtitles",
+            "type": "boolean"
+          },
+          "width": {
+            "default": 1280,
+            "maximum": 3840.0,
+            "minimum": 256.0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "StudioExportRequest",
+        "type": "object"
+      },
+      "StudioJob": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "pending_messages": {
+            "items": {
+              "$ref": "#/components/schemas/StudioMessage"
+            },
+            "title": "Pending Messages",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "retry_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry At"
+          },
+          "retry_attempt": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Retry Attempt",
+            "type": "integer"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/StudioScope"
+          },
+          "status": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "running",
+              "retrying",
+              "pausing",
+              "paused",
+              "waiting_user",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "objective",
+          "scope",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StudioJob",
+        "type": "object"
+      },
+      "StudioJobControl": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "pause",
+              "resume"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "StudioJobControl",
+        "type": "object"
+      },
+      "StudioMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/StudioScope"
+          },
+          "text": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StudioMessage",
+        "type": "object"
+      },
+      "StudioMutationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "title": "StudioMutationResult",
+        "type": "object"
+      },
+      "StudioPreferences": {
+        "additionalProperties": false,
+        "properties": {
+          "aspect_ratio": {
+            "enum": [
+              "16:9",
+              "9:16",
+              "1:1"
+            ],
+            "title": "Aspect Ratio",
+            "type": "string"
+          },
+          "creative_direction": {
+            "default": "",
+            "maxLength": 12000,
+            "title": "Creative Direction",
+            "type": "string"
+          },
+          "method_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 11,
+            "title": "Method Skill Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "aspect_ratio"
+        ],
+        "title": "StudioPreferences",
+        "type": "object"
+      },
+      "StudioProjectCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "brief": {
+            "default": "",
+            "maxLength": 50000,
+            "title": "Brief",
+            "type": "string"
+          },
+          "name": {
+            "default": "未命名作品",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "StudioProjectCreate",
+        "type": "object"
+      },
+      "StudioRename": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "StudioRename",
+        "type": "object"
+      },
+      "StudioSceneSave": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Text"
+          },
+          "heading": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Heading",
+            "type": "string"
+          },
+          "lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ScriptLine"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lines"
+          },
+          "scene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Id"
+          },
+          "screenplay_text": {
+            "maxLength": 50000,
+            "title": "Screenplay Text",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "required": [
+          "heading",
+          "screenplay_text"
+        ],
+        "title": "StudioSceneSave",
+        "type": "object"
+      },
+      "StudioScope": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "default": "episode",
+            "enum": [
+              "episode",
+              "scene",
+              "shot",
+              "asset",
+              "film"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "当前集",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "StudioScope",
+        "type": "object"
+      },
+      "StudioShotMediaSelect": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "asset_version_id",
+          "expected_revision"
+        ],
+        "title": "StudioShotMediaSelect",
+        "type": "object"
+      },
+      "StudioShotOccurrence": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_clip_id": {
+            "title": "Anchor Clip Id",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "start_seconds": {
+            "title": "Start Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "anchor_clip_id",
+          "start_seconds",
+          "duration_seconds"
+        ],
+        "title": "StudioShotOccurrence",
+        "type": "object"
+      },
+      "StudioShotSave": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "shot": {
+            "$ref": "#/components/schemas/ShotPlan-Input"
+          }
+        },
+        "required": [
+          "shot",
+          "expected_revision"
+        ],
+        "title": "StudioShotSave",
+        "type": "object"
+      },
+      "StudioTimelineSave": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Clip Id"
+          },
+          "expected_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "timeline": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Timeline",
+            "type": "object"
+          }
+        },
+        "required": [
+          "timeline"
+        ],
+        "title": "StudioTimelineSave",
+        "type": "object"
+      },
+      "StudioWorker": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "next_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Owner"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "tool_turns": {
+            "default": 0,
+            "title": "Tool Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "role",
+          "objective",
+          "status"
+        ],
+        "title": "StudioWorker",
+        "type": "object"
+      },
       "StyleProfile": {
         "additionalProperties": false,
         "properties": {
@@ -25067,6 +26987,12 @@
             "title": "Advance Count",
             "type": "integer"
           },
+          "deterministic_continuation_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Deterministic Continuation Count",
+            "type": "integer"
+          },
           "error_kind": {
             "anyOf": [
               {
@@ -25098,6 +27024,11 @@
                 "type": "null"
               }
             ]
+          },
+          "retryable_language_error": {
+            "default": false,
+            "title": "Retryable Language Error",
+            "type": "boolean"
           },
           "serialized_project_write": {
             "default": false,
@@ -25132,7 +27063,8 @@
       "TeamWorkAdvanceStatus": {
         "enum": [
           "ADVANCED",
-          "FAILED"
+          "FAILED",
+          "YIELDED"
         ],
         "title": "TeamWorkAdvanceStatus",
         "type": "string"
@@ -25623,6 +27555,74 @@
           "transition_out"
         ],
         "title": "TimelineVideoClip",
+        "type": "object"
+      },
+      "ToolAttemptRef": {
+        "additionalProperties": false,
+        "description": "Stable, compact pointer to one persisted specialist Tool attempt.\n\nTool arguments can contain a useful draft that failed contract validation.\nThe reference lets a later WorkOrder recover that exact candidate on demand\nwithout copying the potentially large arguments into every Leader or Worker\nprompt.",
+        "properties": {
+          "agent_run_id": {
+            "minLength": 1,
+            "title": "Agent Run Id",
+            "type": "string"
+          },
+          "attempt_id": {
+            "minLength": 1,
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "has_arguments": {
+            "default": false,
+            "title": "Has Arguments",
+            "type": "boolean"
+          },
+          "has_result": {
+            "default": false,
+            "title": "Has Result",
+            "type": "boolean"
+          },
+          "outcome_status": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Status"
+          },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tool_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "turn_status": {
+            "$ref": "#/components/schemas/SpecialistTurnStatus"
+          },
+          "work_order_id": {
+            "minLength": 1,
+            "title": "Work Order Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "agent_run_id",
+          "work_order_id",
+          "attempt_id",
+          "tool_name",
+          "turn_status"
+        ],
+        "title": "ToolAttemptRef",
         "type": "object"
       },
       "ToolCategory": {
@@ -26340,6 +28340,16 @@
               }
             ]
           },
+          "production_prompt_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionPromptStage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "production_skill_role": {
             "anyOf": [
               {
@@ -26414,6 +28424,21 @@
             ],
             "title": "Superseded By Plan Revision Id"
           },
+          "task_inputs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "description": "Leader-selected structured task data, excluding delegation control fields.",
+            "title": "Task Inputs",
+            "type": "object"
+          },
+          "tool_attempt_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ToolAttemptRef"
+            },
+            "title": "Tool Attempt Refs",
+            "type": "array"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -26423,6 +28448,18 @@
             "minLength": 1,
             "title": "Why Now",
             "type": "string"
+          },
+          "working_notes": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Working Notes"
           }
         },
         "required": [
@@ -35066,6 +37103,1593 @@
         "summary": "Update Stock Provider Config",
         "tags": [
           "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/studio/comfyui": {
+      "get": {
+        "operationId": "read_comfy_config_api_short_drama_studio_comfyui_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComfyConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Comfy Config",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      },
+      "put": {
+        "operationId": "update_comfy_config_api_short_drama_studio_comfyui_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComfyConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Update Comfy Config",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/jobs/{job_id}/control": {
+      "post": {
+        "operationId": "control_job_api_short_drama_studio_jobs__job_id__control_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioJobControl"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Control Job",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/media": {
+      "get": {
+        "operationId": "media_api_short_drama_studio_media_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Media",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects": {
+      "post": {
+        "operationId": "create_project_api_short_drama_studio_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Project",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}": {
+      "get": {
+        "operationId": "current_project_api_short_drama_studio_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Current Project",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/activity": {
+      "get": {
+        "operationId": "activity_api_short_drama_studio_projects__project_id__activity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioActivity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Activity",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/editorial": {
+      "get": {
+        "operationId": "read_editorial_api_short_drama_studio_projects__project_id__editorial_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioEditorial"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Editorial",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      },
+      "put": {
+        "operationId": "save_timeline_api_short_drama_studio_projects__project_id__editorial_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioTimelineSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioMutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Save Timeline",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/episodes": {
+      "get": {
+        "operationId": "list_episodes_api_short_drama_studio_projects__project_id__episodes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioEpisodes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "List Episodes",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      },
+      "post": {
+        "operationId": "create_episode_api_short_drama_studio_projects__project_id__episodes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioEpisodeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Create Episode",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/events": {
+      "get": {
+        "operationId": "events_api_short_drama_studio_projects__project_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/exports": {
+      "post": {
+        "operationId": "export_editorial_api_short_drama_studio_projects__project_id__exports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioExport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Export Editorial",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/exports/{export_id}": {
+      "get": {
+        "operationId": "read_export_api_short_drama_studio_projects__project_id__exports__export_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "title": "Export Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioExport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Export",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/media": {
+      "post": {
+        "operationId": "upload_media_api_short_drama_studio_projects__project_id__media_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_media_api_short_drama_studio_projects__project_id__media_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Upload Media",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/messages": {
+      "post": {
+        "operationId": "send_message_api_short_drama_studio_projects__project_id__messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Send Message",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/name": {
+      "patch": {
+        "operationId": "rename_project_api_short_drama_studio_projects__project_id__name_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioRename"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Rename Project",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/preferences": {
+      "put": {
+        "operationId": "preferences_api_short_drama_studio_projects__project_id__preferences_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioPreferences"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Preferences",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/scene": {
+      "put": {
+        "operationId": "save_scene_api_short_drama_studio_projects__project_id__scene_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioSceneSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioMutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Save Scene",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/shots/{shot_id}": {
+      "put": {
+        "operationId": "save_shot_api_short_drama_studio_projects__project_id__shots__shot_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioShotSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioMutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Save Shot",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/shots/{shot_id}/editorial": {
+      "get": {
+        "operationId": "read_shot_editorial_api_short_drama_studio_projects__project_id__shots__shot_id__editorial_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "anchor_clip_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioEditorial"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Shot Editorial",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      },
+      "put": {
+        "operationId": "save_shot_editorial_api_short_drama_studio_projects__project_id__shots__shot_id__editorial_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioTimelineSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioMutationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Save Shot Editorial",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/shots/{shot_id}/media": {
+      "post": {
+        "operationId": "select_shot_media_api_short_drama_studio_projects__project_id__shots__shot_id__media_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "shot_id",
+            "required": true,
+            "schema": {
+              "title": "Shot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioShotMediaSelect"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAggregate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Select Shot Media",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/trace": {
+      "get": {
+        "operationId": "trace_export_api_short_drama_studio_projects__project_id__trace_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Trace Export",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/workflows": {
+      "post": {
+        "operationId": "start_comfy_workflow_api_short_drama_studio_projects__project_id__workflows_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComfyRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComfyRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Start Comfy Workflow",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/workflows/{workflow_id}": {
+      "get": {
+        "operationId": "read_comfy_workflow_api_short_drama_studio_projects__project_id__workflows__workflow_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComfyRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Comfy Workflow",
+        "tags": [
+          "short-drama",
+          "studio"
         ]
       }
     },

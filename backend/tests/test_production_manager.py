@@ -22,8 +22,10 @@ from short_drama.agent_runtime import (
     PlanStep,
     SpecialistTurnRecord,
     SpecialistTurnStatus,
+    ToolAttemptRef,
     WorkOrder,
     WorkOrderNextOwner,
+    WorkOrderProgressEntry,
 )
 from short_drama.deps import get_short_drama_service
 from short_drama.language_models import LanguageProviderConfigUpdate
@@ -69,17 +71,23 @@ from short_drama.production_manager import (
     AgentWorkOrderProgressRequest,
     AgentWorkOrderResultRequest,
     ProductionManagerError,
+    SpecialistWorkingSet,
+    _artifact_write_handoff_refs,
     _compact_specialist_tool_arguments,
     _compact_specialist_tool_result,
     _normalize_specialist_response_payload,
-    _specialist_tool_history,
+    _specialist_tool_result_for_persistence,
+    _specialist_working_set,
+    specialist_tool_history_for_trace,
 )
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     production_method_skill_catalog,
 )
 from short_drama.skills.models import SkillProvenanceKind
 from short_drama.service import ShortDramaService
+from short_drama.tools import ToolCallStatus
 
 
 class FakePlanningLanguageClient:
@@ -122,6 +130,74 @@ class FakePlanningLanguageClient:
                 ],
             }
         )
+
+
+@pytest.mark.parametrize("tool_name", ["route.get_generation_plan", "route.compile_generation_plan"])
+def test_generation_plan_handoff_keeps_selected_payload_once_and_omits_version_history(tool_name: str) -> None:
+    selected: dict[str, JsonValue] = {"units": [{"id": "unit-1", "generation_intent": "EXACT_SELECTED_PLAN"}]}
+    result: dict[str, JsonValue] = {
+        "tool_id": tool_name, "status": "SUCCEEDED", "artifact_refs": [], "warnings": [], "error": None,
+        "output": {
+            "document": {
+                "id": "generation-plan", "current_version_id": "version-3",
+                "versions": [{"id": "version-1", "payload": {"old": "UNREQUESTED_HISTORY"}},
+                             {"id": "version-3", "payload": selected}],
+            },
+            "version": {"id": "version-3", "version": 3, "payload": selected},
+            "generation_plan": selected, "output_slot": {"id": "slot-current"},
+        },
+    }
+    original = json.dumps(result)
+    projected = _compact_specialist_tool_result(tool_name, result)
+    output = projected["output"]
+    assert isinstance(output, dict)
+    assert output["generation_plan"] == selected
+    assert output["output_slot"] == {"id": "slot-current"}
+    encoded = json.dumps(projected)
+    assert encoded.count("EXACT_SELECTED_PLAN") == 1
+    assert "UNREQUESTED_HISTORY" not in encoded
+    assert json.dumps(result) == original  # Projection does not change the durable result.
+    compact = _compact_specialist_tool_result(tool_name, result, retain_exact_payload=False)
+    assert "EXACT_SELECTED_PLAN" not in json.dumps(compact)
+
+
+def test_route_plan_list_projects_coverage_without_replaying_prompt_bodies() -> None:
+    result: dict[str, JsonValue] = {"tool_id": "route.list_h3_plans", "status": "SUCCEEDED", "output": {"plans": [
+        {"id": f"plan-{index}", "state_revision": 1, "input_generation_plan_version_id": "gp-v3", "decisions": [
+            {"generation_unit_id": f"unit-{index}", "shot_ids": [f"shot-{index}"], "readiness": "READY",
+             "prompt": "COMPLETE_PROMPT_BODY" * 100, "media_inputs": [{"asset_version_id": f"image-{index}", "source": {"local_path": "/approved.png"}}]},
+        ]} for index in range(12)
+    ]}}
+    projected = _compact_specialist_tool_result("route.list_h3_plans", result)
+    encoded = json.dumps(projected)
+    assert "COMPLETE_PROMPT_BODY" not in encoded
+    assert "route.get_h3_plan" in encoded
+    assert all(f'"unit-{index}"' in encoded and f'"image-{index}"' in encoded for index in range(12))
+    assert encoded.count('"readiness": "READY"') == 12
+    assert "COMPLETE_PROMPT_BODY" in json.dumps(result)
+
+
+def test_asset_plan_write_handoff_adds_index_without_promoting_evidence() -> None:
+    plan_ref = ArtifactRef(
+        project_id="project-assets",
+        artifact_type="asset_plan",
+        artifact_id="asset-plan",
+        version=2,
+    )
+    evidence_ref = ArtifactRef(
+        project_id="project-assets",
+        artifact_type="storyboard",
+        artifact_id="storyboard",
+        version=4,
+    )
+
+    handoff = _artifact_write_handoff_refs([plan_ref])
+
+    assert evidence_ref not in handoff
+    assert handoff == [
+        plan_ref,
+        plan_ref.model_copy(update={"artifact_type": "asset_plan_index"}),
+    ]
 
 
 class FakeSpecialistLanguageClient(FakePlanningLanguageClient):
@@ -418,6 +494,2158 @@ def test_project_get_history_keeps_current_exact_script_without_project_history(
     assert "PRODUCTION_PAYLOAD" not in serialized
 
 
+def test_asset_mutation_history_compacts_embedded_project_aggregate_only() -> None:
+    historical_payload = "PROJECT_HISTORY_MUST_STAY_PERSISTED_NOT_REPLAYED" * 1000
+    project_aggregate: dict[str, JsonValue] = {
+        "document": {
+            "project": {
+                "id": "project-assets",
+                "name": "Asset project",
+                "stage": "ASSET_PLANNING",
+                "current_script_version_id": "script-v3",
+                "current_bible_version_id": "bible-v2",
+                "input_text": historical_payload,
+                "updated_at": "2026-09-06T00:00:00Z",
+            },
+            "script_versions": [
+                {"id": "script-v1", "screenplay_text": historical_payload}
+            ],
+            "assets": [{"id": "asset-old", "descriptor": historical_payload}],
+            "shots": [{"id": "shot-old", "visual": historical_payload}],
+            "reference_packs": [],
+            "manifests": [],
+            "production_documents": [
+                {
+                    "id": "asset-plan-1",
+                    "kind": "asset.plan",
+                    "current_version_id": "asset-plan-1-v4",
+                    "versions": [
+                        {"id": "asset-plan-1-v4", "payload": historical_payload}
+                    ],
+                }
+            ],
+            "asset_plan_document_id": "asset-plan-1",
+            "output_slots": [
+                {
+                    "id": "asset.plan.current",
+                    "revision": 4,
+                    "current_artifact_ref": {
+                        "project_id": "project-assets",
+                        "artifact_type": "asset_plan",
+                        "artifact_id": "asset-plan-1",
+                        "version": 4,
+                    },
+                    "revision_history": [historical_payload],
+                }
+            ],
+        },
+        "tasks": [],
+        "takes": [],
+        "exports": [],
+        "route_evidence": [],
+        "video_inspections": [],
+        "take_comparisons": [],
+        "audio_inspections": [],
+        "episode_reviews": [],
+        "progress": {
+            "total_tasks": 0,
+            "terminal_tasks": 0,
+            "export_ready": False,
+        },
+    }
+    artifact_refs: list[JsonValue] = [
+        {
+            "project_id": "project-assets",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-character-v1",
+            "version": 1,
+        }
+    ]
+    result: dict[str, JsonValue] = {
+        "tool_id": "artifact.create_asset",
+        "status": "SUCCEEDED",
+        "output": {
+            "asset": {
+                "id": "asset-character",
+                "project_id": "project-assets",
+                "kind": "CHARACTER",
+                "name": "Lin Yi",
+                "current_version_id": "asset-character-v1",
+            },
+            "version": {
+                "id": "asset-character-v1",
+                "version": 1,
+                "descriptor": "Structured character identity brief",
+            },
+            "project": project_aggregate,
+        },
+        "artifact_refs": artifact_refs,
+        "warnings": ["Keep the identity anchor stable."],
+        "error": None,
+    }
+
+    compact = _compact_specialist_tool_result("artifact.create_asset", result)
+    serialized = json.dumps(compact, ensure_ascii=False)
+
+    # The durable Tool result is untouched; only the next model input is projected.
+    assert historical_payload in json.dumps(result, ensure_ascii=False)
+    assert "PROJECT_HISTORY_MUST_STAY_PERSISTED_NOT_REPLAYED" not in serialized
+    assert compact["artifact_refs"] == artifact_refs
+    assert compact["warnings"] == ["Keep the identity anchor stable."]
+    output = compact["output"]
+    assert isinstance(output, dict)
+    assert output["asset"] == result["output"]["asset"]  # type: ignore[index]
+    assert output["version"] == result["output"]["version"]  # type: ignore[index]
+    project_summary = output["project"]
+    assert isinstance(project_summary, dict)
+    current_project = project_summary["project"]
+    assert isinstance(current_project, dict)
+    assert current_project["id"] == "project-assets"
+    assert current_project["current_script_version_id"] == "script-v3"
+    assert project_summary["document_pointers"] == {
+        "master_audio_document_id": None,
+        "audio_structure_document_id": None,
+        "timed_text_document_id": None,
+        "production_spec_document_id": None,
+        "storyboard_document_id": None,
+        "asset_plan_document_id": "asset-plan-1",
+        "generation_plan_document_id": None,
+    }
+    assert project_summary["production_document_refs"] == [
+        {
+            "id": "asset-plan-1",
+            "kind": "asset.plan",
+            "current_version_id": "asset-plan-1-v4",
+        }
+    ]
+    counts = project_summary["counts"]
+    assert isinstance(counts, dict)
+    assert counts["assets"] == 1
+    assert counts["production_documents"] == 1
+
+
+def test_whole_project_aggregate_tool_output_uses_same_structural_projection() -> None:
+    result: dict[str, JsonValue] = {
+        "tool_id": "script.revise_lines",
+        "status": "SUCCEEDED",
+        "output": {
+            "document": {
+                "project": {
+                    "id": "project-script",
+                    "stage": "SCRIPT_READY",
+                    "current_script_version_id": "script-v5",
+                    "current_bible_version_id": "bible-v1",
+                },
+                "script_versions": [
+                    {"id": "script-v5", "screenplay_text": "DO_NOT_REPLAY_SCRIPT"}
+                ],
+                "assets": [],
+                "shots": [],
+                "production_documents": [],
+                "output_slots": [],
+            },
+            "tasks": [],
+            "takes": [],
+            "exports": [],
+            "progress": {"total_tasks": 0, "export_ready": False},
+        },
+        "artifact_refs": [
+            {
+                "project_id": "project-script",
+                "artifact_type": "script_version",
+                "artifact_id": "script-v5",
+                "version": 5,
+            }
+        ],
+        "warnings": [],
+        "error": None,
+    }
+
+    compact = _compact_specialist_tool_result("script.revise_lines", result)
+    serialized = json.dumps(compact, ensure_ascii=False)
+
+    assert "DO_NOT_REPLAY_SCRIPT" not in serialized
+    output = compact["output"]
+    assert isinstance(output, dict)
+    project = output["project"]
+    assert isinstance(project, dict)
+    assert project["current_script_version_id"] == "script-v5"
+    assert compact["artifact_refs"] == result["artifact_refs"]
+
+
+def test_many_mutation_turns_persist_domain_results_without_project_snapshots() -> None:
+    marker = "REPEATED_PROJECT_SNAPSHOT_MUST_NOT_GROW_WORK_ORDER" * 2000
+    aggregate: dict[str, JsonValue] = {
+        "document": {
+            "project": {
+                "id": "project-assets",
+                "stage": "ASSET_PLANNING",
+                "current_script_version_id": "script-v3",
+                "current_bible_version_id": "bible-v2",
+            },
+            "script_versions": [{"id": "script-v3", "payload": marker}],
+            "assets": [{"id": "asset-existing", "payload": marker}],
+            "shots": [],
+            "production_documents": [],
+            "output_slots": [],
+        },
+        "tasks": [],
+        "takes": [],
+        "exports": [],
+        "progress": {"total_tasks": 0, "export_ready": False},
+    }
+    raw_results: list[dict[str, JsonValue]] = []
+    turns: list[SpecialistTurnRecord] = []
+    for index in range(8):
+        raw_result: dict[str, JsonValue] = {
+            "tool_id": "artifact.create_asset",
+            "status": "SUCCEEDED",
+            "output": {
+                "asset": {
+                    "id": f"asset-{index}",
+                    "current_version_id": f"asset-{index}-v1",
+                },
+                "version": {"id": f"asset-{index}-v1", "version": 1},
+                "task": {"id": f"image-task-{index}", "status": "PENDING"},
+                "entry": {
+                    "id": f"reference-entry-{index}",
+                    "asset_version_id": f"asset-{index}-v1",
+                },
+                "usage": {"input_tokens": 11, "output_tokens": 7},
+                "cost": {"estimated_amount": 0.02, "currency": "USD"},
+                "project": aggregate,
+            },
+            "artifact_refs": [
+                {
+                    "project_id": "project-assets",
+                    "artifact_type": "asset_version",
+                    "artifact_id": f"asset-{index}-v1",
+                    "version": 1,
+                }
+            ],
+            "warnings": [f"warning-{index}"],
+            "error": None,
+        }
+        raw_results.append(raw_result)
+        persisted = _specialist_tool_result_for_persistence(
+            "artifact.create_asset",
+            raw_result,
+        )
+        persisted_output = persisted["output"]
+        assert isinstance(persisted_output, dict)
+        raw_output = raw_result["output"]
+        assert isinstance(raw_output, dict)
+        for key in ("asset", "version", "task", "entry", "usage", "cost"):
+            assert persisted_output[key] == raw_output[key]
+        assert persisted["artifact_refs"] == raw_result["artifact_refs"]
+        assert persisted["warnings"] == raw_result["warnings"]
+        assert persisted["status"] == raw_result["status"]
+        assert persisted["error"] == raw_result["error"]
+        turns.append(
+            SpecialistTurnRecord(
+                id=f"turn-{index}",
+                sequence=index + 1,
+                tool_name="artifact.create_asset",
+                arguments={"project_id": "project-assets"},
+                reason="Create the next planned core asset.",
+                status=SpecialistTurnStatus.COMPLETED,
+                result=persisted,
+            )
+        )
+
+    work_order = WorkOrder(
+        id="work-order-many-assets",
+        parent_run_id="run-assets",
+        sender="production-manager",
+        recipient_role="asset-worker",
+        objective="Create planned core assets.",
+        why_now="The asset plan is current.",
+        specialist_turns=turns,
+    )
+    raw_bytes = len(json.dumps(raw_results, ensure_ascii=False).encode())
+    persisted_bytes = len(work_order.model_dump_json().encode())
+    history_json = json.dumps(
+        specialist_tool_history_for_trace(work_order),
+        ensure_ascii=False,
+    )
+
+    assert marker not in work_order.model_dump_json()
+    assert marker not in history_json
+    assert persisted_bytes < raw_bytes / 20
+    assert len(history_json.encode()) < raw_bytes / 20
+
+    explicit_project_read: dict[str, JsonValue] = {
+        "tool_id": "project.get",
+        "status": "SUCCEEDED",
+        "output": aggregate,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": None,
+    }
+    assert (
+        _specialist_tool_result_for_persistence(
+            "project.get",
+            explicit_project_read,
+        )
+        is explicit_project_read
+    )
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "replace_fields"),
+    [
+        ("artifact.create_asset_plan", {}),
+        (
+            "artifact.replace_asset_plan",
+            {"base_version_id": "asset-plan-version-1"},
+        ),
+    ],
+)
+def test_asset_plan_invalid_arguments_persist_compact_stable_node_feedback(
+    tmp_path: Path,
+    tool_name: str,
+    replace_fields: dict[str, JsonValue],
+) -> None:
+    service = ShortDramaService(
+        database_path=tmp_path / tool_name / "short-drama.sqlite3",
+        workspace_root=tmp_path / tool_name / "workspace",
+    )
+    candidate_marker = "FULL_ASSET_PLAN_BODY_MUST_NOT_REACH_WORKER_"
+    full_candidate_marker = candidate_marker + ("x" * 8_000)
+    arguments: dict[str, JsonValue] = {
+        "project_id": "project-assets",
+        "request": {
+            "asset_plan": {
+                "project_id": "project-assets",
+                "script_version_id": "script-version-1",
+                "bible_version_id": "bible-version-1",
+                "production_spec_document_id": "production-spec-1",
+                "production_spec_version_id": "production-spec-version-1",
+                "storyboard_document_id": "storyboard-1",
+                "storyboard_version_id": "storyboard-version-1",
+                "items": [
+                    {
+                        "id": "asset-item-hero",
+                        "disposition": "ANCHOR",
+                        "asset_kind": "CHARACTER",
+                        "name": "男主角",
+                        "rationale": "跨镜头稳定主角身份。",
+                        "work_items": [
+                            {
+                                "id": "work-hero-master",
+                                "operation": "GENERATE",
+                                "output_role": "character_master",
+                                "final_prompt": full_candidate_marker,
+                                "size": "1344x768",
+                                "review_purpose": "CANONICAL_MASTER",
+                                "unexpected_full_candidate_field": (
+                                    full_candidate_marker
+                                ),
+                            }
+                        ],
+                    }
+                ],
+                "notes": [full_candidate_marker],
+            },
+            "origin": "AGENT",
+            **replace_fields,
+        },
+    }
+
+    invalid = service.tool_registry.invoke(tool_name, arguments)
+    assert invalid.status.value == "INVALID_ARGUMENTS"
+    raw_result = invalid.model_dump(mode="json")
+    assert candidate_marker in json.dumps(arguments, ensure_ascii=False)
+
+    persisted = _specialist_tool_result_for_persistence(
+        tool_name,
+        raw_result,
+        arguments=arguments,
+    )
+    persisted_json = json.dumps(persisted, ensure_ascii=False)
+    assert candidate_marker not in persisted_json
+    error = persisted["error"]
+    assert isinstance(error, dict)
+    feedback = json.loads(str(error["message"]))
+    assert feedback["kind"] == "ASSET_PLAN_INPUT_VALIDATION"
+    assert "artifact.retry_asset_plan_attempt" in feedback["instruction"]
+    assert len(feedback["issues"]) == 1
+    issue = feedback["issues"][0]
+    assert issue["item_id"] == "asset-item-hero"
+    assert issue["work_item_id"] == "work-hero-master"
+    assert issue["loc"][-1] == "unexpected_full_candidate_field"
+    assert issue["offending_node"] == {
+        "item": {
+            "id": "asset-item-hero",
+            "disposition": "ANCHOR",
+            "asset_kind": "CHARACTER",
+            "brief": None,
+        },
+        "work_item": {
+            "id": "work-hero-master",
+            "operation": "GENERATE",
+            "output_role": "character_master",
+            "review_purpose": "CANONICAL_MASTER",
+            "reference_pack_intent": None,
+            "ordered_references": None,
+            "text_plate_intent": None,
+            "dependency_ids": None,
+        },
+    }
+
+    work_order = WorkOrder(
+        id=f"work-order-{tool_name}",
+        parent_run_id="agent-run-assets",
+        sender="production-manager",
+        recipient_role="asset-planner",
+        objective="Persist the complete AssetPlan.",
+        why_now="The exact sources are current.",
+        specialist_turns=[
+            SpecialistTurnRecord(
+                id=f"turn-{tool_name}",
+                sequence=1,
+                tool_name=tool_name,
+                arguments=arguments,
+                reason="Persist the complete candidate.",
+                status=SpecialistTurnStatus.COMPLETED,
+                result=persisted,
+            )
+        ],
+    )
+    working_set = _specialist_working_set(
+        work_order,
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset({tool_name}),
+    ).model_dump(mode="json")
+    working_set_json = json.dumps(working_set, ensure_ascii=False)
+    assert candidate_marker not in working_set_json
+    handoff_error = working_set["latest_handoff"]["result"]["error"]  # type: ignore[index]
+    assert isinstance(handoff_error, dict)
+    handoff_feedback = json.loads(str(handoff_error["message"]))
+    assert handoff_feedback["issues"][0]["item_id"] == "asset-item-hero"
+    assert handoff_feedback["issues"][0]["work_item_id"] == (
+        "work-hero-master"
+    )
+
+
+@pytest.mark.parametrize("status", ["SUCCEEDED", "FAILED"])
+def test_external_compilation_handoff_exposes_exact_attempt_ref(status: str) -> None:
+    order = WorkOrder(
+        id="prompt-order", parent_run_id="prompt-run", sender="leader",
+        recipient_role="compiler", objective="Compile and save the current unit.",
+        why_now="Its inputs are current.",
+        specialist_turns=[SpecialistTurnRecord(
+            id="exact-compile-attempt", sequence=1, tool_name="route.compile_h3_prompt",
+            arguments={"project_id": "prompt-project", "request": {"generation_unit_id": "unit-1"}},
+            reason="Compile the exact unit.", status=SpecialistTurnStatus.COMPLETED,
+            result={"tool_id": "route.compile_h3_prompt", "status": status,
+                    "output": {"compiled_prompt": "exact output"} if status == "SUCCEEDED" else None,
+                    "artifact_refs": [], "warnings": [], "error": None},
+        )],
+    )
+    working_set = _specialist_working_set(order, [], project_id="prompt-project")
+    assert working_set.latest_handoff is not None
+    reference = ToolAttemptRef.model_validate(working_set.latest_handoff["attempt_ref"])
+    assert reference.attempt_id == "exact-compile-attempt"
+    assert reference.work_order_id == order.id
+    assert reference.outcome_status == status
+    if status == "SUCCEEDED":
+        assert "exact output" in json.dumps(working_set.latest_handoff)
+
+
+@pytest.mark.parametrize("saved_unit", ["unit-1", "unit-2"])
+def test_video_working_set_retires_consumed_drafts_and_only_the_saved_unit_context(saved_unit: str) -> None:
+    plan_ref = {"project_id": "p", "artifact_type": "generation_plan", "artifact_id": "gp", "version": 3}
+    route_ref = {"project_id": "p", "artifact_type": "h3_route_plan", "artifact_id": "rp", "version": 1}
+    target: dict[str, JsonValue] = {"generation_plan_document_id": "gp", "generation_plan_version_id": "gp-v3", "generation_unit_id": "unit-1"}
+    turns: list[SpecialistTurnRecord] = []
+
+    def add(tool: str, arguments: dict[str, JsonValue], output: dict[str, JsonValue], *, refs: list[JsonValue] | None = None) -> None:
+        turns.append(SpecialistTurnRecord(
+            id=f"turn-{len(turns) + 1}", sequence=len(turns) + 1, tool_name=tool,
+            arguments=arguments, reason="Continue the scoped preparation.", status=SpecialistTurnStatus.COMPLETED,
+            result={"tool_id": tool, "status": "SUCCEEDED", "output": output,
+                    "artifact_refs": refs or [], "warnings": [], "error": None},
+        ))
+
+    add("route.get_generation_plan", {"project_id": "p", "version_id": "gp-v3"},
+        {"generation_plan": {"generation_intent": "FULL_PLAN_BODY"},
+         "document": {"id": "gp"}, "version": {"id": "gp-v3", "payload": {"generation_intent": "FULL_PLAN_BODY"}}}, refs=[plan_ref])
+    add("route.get_generation_unit_context", {"project_id": "p", "request": target},
+        {"source_context": {"visual": "CURRENT_UNIT_SOURCE"}}, refs=[plan_ref])
+    failed_ref: dict[str, JsonValue] = {
+        "project_id": "p", "agent_run_id": "r", "work_order_id": "w", "attempt_id": "old-attempt",
+        "tool_name": "route.compile_h3_prompt", "turn_status": "COMPLETED", "outcome_status": "FAILED",
+        "has_arguments": True, "has_result": True,
+    }
+    add("agent.get_tool_attempt", {"project_id": "p", "attempt_ref": failed_ref, "payload": "BOTH"},
+        {"attempt_ref": failed_ref, "arguments": {"source_prompt": "CONSUMED_OLD_DRAFT"},
+         "result": {"error": {"message": "CONSUMED_OLD_DRAFT"}}})
+    add("route.compile_h3_prompt", {"project_id": "p", "request": {**target, "source_prompt": "CONSUMED_OLD_DRAFT"}},
+        {"compiled_prompt": "EXACT_CURRENT_PROMPT", "source_prompt": "CONSUMED_OLD_DRAFT", "media_inputs": [], **target})
+
+    def working_set() -> SpecialistWorkingSet:
+        return _specialist_working_set(WorkOrder(
+            id="w", parent_run_id="r", sender="leader", recipient_role="compiler",
+            objective="Prepare the current generation plan.", why_now="Sources are ready.", specialist_turns=turns,
+        ), [], project_id="p", read_tool_ids=frozenset({"route.get_generation_plan", "route.get_generation_unit_context"}))
+
+    compiled = working_set().model_dump_json()
+    assert "EXACT_CURRENT_PROMPT" in compiled
+    assert "CONSUMED_OLD_DRAFT" not in compiled
+    assert "FULL_PLAN_BODY" not in compiled
+    add("route.plan_h3", {"project_id": "p", "request": {
+        "generation_plan_version_id": "gp-v3", "unit_ids": [saved_unit],
+        "shot_directives": [{"generation_unit_id": saved_unit, "prompt_override": "EXACT_CURRENT_PROMPT"}],
+    }}, {"plan": {"id": "rp", "decisions": [{"prompt": "EXACT_CURRENT_PROMPT"}]}}, refs=[route_ref])
+    saved = working_set().model_dump_json()
+    assert "EXACT_CURRENT_PROMPT" not in saved
+    assert "CONSUMED_OLD_DRAFT" not in saved
+    assert ("CURRENT_UNIT_SOURCE" in saved) == (saved_unit != "unit-1")
+    assert "h3_route_plan" in saved
+    assert "CONSUMED_OLD_DRAFT" in "".join(turn.model_dump_json() for turn in turns)
+
+
+@pytest.mark.parametrize("operation", ["route.plan_h3", "route.compile_h3_prompt"])
+@pytest.mark.parametrize("target_version", ["gp-v3", "gp-v4"])
+def test_video_write_preserves_other_loaded_successful_compilations(
+    operation: str, target_version: str,
+) -> None:
+    turns: list[SpecialistTurnRecord] = []
+    for unit in ["unit-1", "unit-2"]:
+        reference = ToolAttemptRef(
+            project_id="p", agent_run_id="r", work_order_id="source-compiler",
+            attempt_id=f"compile-{unit}", tool_name="route.compile_h3_prompt",
+            turn_status="COMPLETED", outcome_status="SUCCEEDED",
+            has_arguments=True, has_result=True,
+        ).model_dump(mode="json")
+        turns.append(SpecialistTurnRecord(
+            id=f"read-{unit}", sequence=len(turns) + 1, tool_name="agent.get_tool_attempt",
+            arguments={"attempt_ref": reference, "payload": "RESULT"},
+            reason="Read the successful output from the prior Worker.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={"tool_id": "agent.get_tool_attempt", "status": "SUCCEEDED", "output": {
+                "attempt_ref": reference, "arguments": None,
+                "result": {"tool_id": "route.compile_h3_prompt", "status": "SUCCEEDED", "output": {
+                    "generation_plan_version_id": "gp-v3", "generation_unit_id": unit,
+                    "candidate_id": f"reference:{unit}", "compiled_prompt": f"EXACT_PROMPT_{unit}",
+                    "source_prompt": f"RETIRED_SOURCE_{unit}",
+                    "media_inputs": [{"asset_version_id": f"approved-{unit}"}],
+                }},
+            }},
+        ))
+    order = WorkOrder(
+        id="route-writer", parent_run_id="r", sender="leader", recipient_role="route-writer",
+        objective="Save two independently compiled units.", why_now="Both outputs are ready.",
+        specialist_turns=turns,
+    )
+    raw_reads = order.model_dump_json()
+    before = _specialist_working_set(order, [], project_id="p").model_dump_json()
+    assert "EXACT_PROMPT_unit-1" in before and "EXACT_PROMPT_unit-2" in before
+    assert "RETIRED_SOURCE_" not in before
+    assert "approved-unit-1" in before and "approved-unit-2" in before
+    assert order.model_dump_json() == raw_reads
+    request: dict[str, JsonValue] = {"generation_plan_version_id": target_version}
+    if operation == "route.plan_h3":
+        request["unit_ids"] = ["unit-1"]
+    else:
+        request["generation_unit_id"] = "unit-1"
+    order.specialist_turns.append(SpecialistTurnRecord(
+        id="consume-unit-1", sequence=3, tool_name=operation,
+        arguments={"project_id": "p", "request": request},
+        reason="Save or supersede only the first selected unit.",
+        status=SpecialistTurnStatus.COMPLETED,
+        result={"tool_id": operation, "status": "SUCCEEDED", "output": {"new_result": "saved"},
+                "artifact_refs": [{"project_id": "p", "artifact_type": "h3_route_plan",
+                                   "artifact_id": "route-1", "version": 1}]},
+    ))
+    after = _specialist_working_set(order, [], project_id="p").model_dump_json()
+    assert ("EXACT_PROMPT_unit-1" in after) == (target_version != "gp-v3")
+    assert "EXACT_PROMPT_unit-2" in after
+    assert "approved-unit-2" in after
+    assert "RETIRED_SOURCE_" not in after
+    assert "RETIRED_SOURCE_" in order.model_dump_json()
+
+
+def test_successful_compile_lookup_preserves_explicit_arguments_and_failed_drafts() -> None:
+    raw: dict[str, JsonValue] = {"tool_id": "agent.get_tool_attempt", "status": "SUCCEEDED", "output": {
+        "attempt_ref": {"tool_name": "route.compile_h3_prompt"},
+        "arguments": {"request": {"source_prompt": "EXPLICITLY_REQUESTED_ARGUMENT"}},
+        "result": {"status": "SUCCEEDED", "output": {
+            "source_prompt": "REDUNDANT_RESULT_SOURCE", "compiled_prompt": "EXACT_OUTPUT",
+        }},
+    }}
+    original = json.dumps(raw)
+    projected = json.dumps(_compact_specialist_tool_result("agent.get_tool_attempt", raw))
+    assert "EXPLICITLY_REQUESTED_ARGUMENT" in projected and "EXACT_OUTPUT" in projected
+    assert "REDUNDANT_RESULT_SOURCE" not in projected
+    assert json.dumps(raw) == original
+    failed: dict[str, JsonValue] = {"tool_id": "agent.get_tool_attempt", "status": "SUCCEEDED", "output": {
+        "attempt_ref": {"tool_name": "route.compile_h3_prompt"},
+        "result": {"status": "FAILED", "error": {"message": "COMPLETE_FAILED_DRAFT"}},
+    }}
+    assert _compact_specialist_tool_result("agent.get_tool_attempt", failed) == failed
+
+
+def test_asset_plan_attempt_drops_consumed_planning_context_body() -> None:
+    marker = "CONSUMED_ASSET_PLANNING_CONTEXT_MUST_NOT_REPLAY_" + ("x" * 20_000)
+    attempt_result: dict[str, JsonValue] = {
+        "tool_id": "artifact.create_asset_plan",
+        "status": "INVALID_ARGUMENTS",
+        "output": None,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {
+            "kind": "ASSET_PLAN_INPUT_VALIDATION",
+            "message": json.dumps(
+                {
+                    "kind": "ASSET_PLAN_INPUT_VALIDATION",
+                    "issues": [
+                        {
+                            "item_id": "asset-item-hero",
+                            "work_item_id": "work-hero-master",
+                            "msg": "repair one field",
+                        }
+                    ],
+                }
+            ),
+        },
+    }
+    working_set = _specialist_working_set(
+        WorkOrder(
+            id="work-order-consumed-asset-context",
+            parent_run_id="agent-run-assets",
+            sender="production-manager",
+            recipient_role="asset-planner",
+            objective="Create the AssetPlan.",
+            why_now="The storyboard is ready.",
+            specialist_turns=[
+                SpecialistTurnRecord(
+                    id="turn-read-planning-context",
+                    sequence=1,
+                    tool_name="artifact.get_asset_planning_context",
+                    arguments={"project_id": "project-assets"},
+                    reason="Read exact upstream truth once.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "artifact.get_asset_planning_context",
+                        "status": "SUCCEEDED",
+                        "output": {"storyboard": {"body": marker}},
+                        "artifact_refs": [],
+                        "warnings": [],
+                        "error": None,
+                    },
+                ),
+                SpecialistTurnRecord(
+                    id="turn-create-candidate",
+                    sequence=2,
+                    tool_name="artifact.create_asset_plan",
+                    arguments={
+                        "project_id": "project-assets",
+                        "request": {"asset_plan": {"items": []}},
+                    },
+                    reason="Persist the complete candidate.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result=attempt_result,
+                ),
+            ],
+        ),
+        [],
+        project_id="project-assets",
+        read_tool_ids=frozenset({"artifact.get_asset_planning_context"}),
+        write_tool_ids=frozenset({"artifact.create_asset_plan"}),
+    ).model_dump(mode="json")
+
+    assert working_set["read_observations"] == []
+    assert marker not in json.dumps(working_set, ensure_ascii=False)
+    assert working_set["latest_handoff"]["attempt_ref"]["attempt_id"] == (  # type: ignore[index]
+        "turn-create-candidate"
+    )
+
+
+def test_specialist_working_set_folds_old_turns_and_progress_by_entity() -> None:
+    artifact_ref: dict[str, JsonValue] = {
+        "project_id": "project-assets",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-character-v3",
+        "version": 3,
+    }
+
+    def build_working_set(cycles: int) -> dict[str, JsonValue]:
+        turns: list[SpecialistTurnRecord] = []
+        progress_entries: list[WorkOrderProgressEntry] = []
+        sequence = 0
+        for index in range(cycles):
+            old_marker = f"HISTORICAL_BODY_{index:04d}_MUST_NOT_REPLAY"
+            sequence += 1
+            turns.append(
+                SpecialistTurnRecord(
+                    id=f"turn-image-{index}",
+                    sequence=sequence,
+                    tool_name="image.advance",
+                    arguments={
+                        "project_id": "project-assets",
+                        "task_id": "image-task-character",
+                    },
+                    reason="Advance the current image task.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "image.advance",
+                        "status": "SUCCEEDED",
+                        "output": {
+                            "task": {
+                                "id": "image-task-character",
+                                "project_id": "project-assets",
+                                "asset_id": "asset-character",
+                                "output_version_id": "asset-character-v3",
+                                "operation": "EDIT",
+                                "status": "SUCCEEDED",
+                                "request": {"prompt": old_marker * 20},
+                                "attempt": index + 1,
+                                "updated_at": f"2026-09-06T00:{index:02d}:00Z",
+                            }
+                        },
+                        "artifact_refs": [artifact_ref],
+                        "warnings": [],
+                        "error": None,
+                    },
+                )
+            )
+            sequence += 1
+            turns.append(
+                SpecialistTurnRecord(
+                    id=f"turn-asset-{index}",
+                    sequence=sequence,
+                    tool_name="artifact.review_version",
+                    arguments={
+                        "project_id": "project-assets",
+                        "asset_id": "asset-character",
+                        "version_id": "asset-character-v3",
+                    },
+                    reason="Record the current asset decision.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "artifact.review_version",
+                        "status": "SUCCEEDED",
+                        "output": {
+                            "asset": {
+                                "id": "asset-character",
+                                "project_id": "project-assets",
+                                "kind": "CHARACTER",
+                                "name": "Lin Yi",
+                                "current_version_id": "asset-character-v3",
+                                "approved_version_id": "asset-character-v3",
+                            },
+                            "version": {
+                                "id": "asset-character-v3",
+                                "version": 3,
+                                "descriptor": old_marker * 20,
+                                "approval_status": "APPROVED",
+                                "review_notes": "Identity is production-ready.",
+                            },
+                        },
+                        "artifact_refs": [artifact_ref],
+                        "warnings": [],
+                        "error": None,
+                    },
+                )
+            )
+            sequence += 1
+            turns.append(
+                SpecialistTurnRecord(
+                    id=f"turn-review-{index}",
+                    sequence=sequence,
+                    tool_name="qa.inspect_asset_version",
+                    arguments={
+                        "project_id": "project-assets",
+                        "asset_id": "asset-character",
+                        "version_id": "asset-character-v3",
+                    },
+                    reason="Inspect the current approved candidate.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "qa.inspect_asset_version",
+                        "status": "SUCCEEDED",
+                        "output": {
+                            "recommended": True,
+                            "score": 4.8,
+                            "issues": [],
+                            "summary": f"LATEST_REVIEW_{index:04d}",
+                            "evidence_references": [
+                                {
+                                    "source_project_id": "project-assets",
+                                    "asset_version_id": "asset-character-v3",
+                                }
+                            ],
+                        },
+                        "artifact_refs": [artifact_ref],
+                        "warnings": [],
+                        "error": None,
+                    },
+                )
+            )
+            progress_entries.append(
+                WorkOrderProgressEntry(
+                    id=f"progress-{index}",
+                    work_order_id="work-order-assets",
+                    sequence=index + 1,
+                    author="asset-worker",
+                    summary=f"PROGRESS_{index:04d}_{old_marker * 20}",
+                    artifact_refs=[ArtifactRef.model_validate(artifact_ref)],
+                )
+            )
+
+        work_order = WorkOrder(
+            id="work-order-assets",
+            parent_run_id="run-assets",
+            sender="production-manager",
+            recipient_role="asset-worker",
+            objective="Finish the current character asset.",
+            why_now="The asset plan selected this character.",
+            specialist_turns=turns,
+        )
+        return _specialist_working_set(
+            work_order,
+            progress_entries,
+        ).model_dump(mode="json")
+
+    small = build_working_set(2)
+    large = build_working_set(80)
+    small_json = json.dumps(small, ensure_ascii=False)
+    large_json = json.dumps(large, ensure_ascii=False)
+
+    assert large["total_tool_turns"] == 240
+    assert len(large_json.encode()) < len(small_json.encode()) + 1500
+    assert "HISTORICAL_BODY_0000_MUST_NOT_REPLAY" not in large_json
+    assert "PROGRESS_0000" not in large_json
+    assert "LATEST_REVIEW_0079" in large_json
+    assert "PROGRESS_0079" in large_json
+    assert large["latest_handoff"]["sequence"] == 240  # type: ignore[index]
+    entity_state = {
+        (item["kind"], item["id"]): item["state"]
+        for item in large["entities"]  # type: ignore[union-attr]
+    }
+    assert entity_state[("image_task", "asset-character")]["status"] == (
+        "SUCCEEDED"
+    )
+    assert entity_state[("asset", "asset-character")][
+        "approved_version_id"
+    ] == "asset-character-v3"
+    assert entity_state[("asset_version", "asset-character-v3")][
+        "approval_status"
+    ] == "APPROVED"
+    assert entity_state[("asset_review", "asset-character-v3")][
+        "recommended"
+    ] is True
+    assert large["artifact_refs"] == [artifact_ref]
+
+
+def test_specialist_working_set_keeps_distinct_view_findings_without_replaying_reads() -> None:
+    def build(cycles: int) -> dict[str, JsonValue]:
+        turns: list[SpecialistTurnRecord] = []
+        for cycle in range(cycles):
+            for view in ("front", "profile", "back"):
+                sequence = len(turns) + 1
+                turns.append(
+                    SpecialistTurnRecord(
+                        id=f"inspection-{sequence}",
+                        sequence=sequence,
+                        tool_name="qa.inspect_asset_version",
+                        arguments={
+                            "project_id": "project-assets",
+                            "asset_id": "one-character",
+                            "version_id": f"version-{view}",
+                        },
+                        reason="Compare the selected views of the same character.",
+                        status=SpecialistTurnStatus.COMPLETED,
+                        result={
+                            "tool_id": "qa.inspect_asset_version",
+                            "status": "SUCCEEDED",
+                            "output": {
+                                "recommended": view != "front",
+                                "summary": f"{view} finding {cycle}",
+                                "issues": [],
+                            },
+                            "artifact_refs": [],
+                        },
+                    )
+                )
+        work_order = WorkOrder(
+            id="work-views",
+            parent_run_id="run-assets",
+            sender="production-manager",
+            recipient_role="asset-verifier",
+            objective="Inspect three versions belonging to one character.",
+            why_now="All three candidates are ready.",
+            specialist_turns=turns,
+        )
+        return _specialist_working_set(
+            work_order,
+            [],
+            read_tool_ids=frozenset({"qa.inspect_asset_version"}),
+        ).model_dump(mode="json")
+
+    small, repeated = build(1), build(80)
+    reviews = {
+        item["id"]: item["state"]
+        for item in repeated["entities"]  # type: ignore[union-attr]
+        if item["kind"] == "asset_review"
+    }
+    assert set(reviews) == {"version-front", "version-profile", "version-back"}
+    assert reviews["version-front"]["recommended"] is False
+    assert reviews["version-profile"]["recommended"] is True
+    assert reviews["version-back"]["recommended"] is True
+    for view in ("front", "profile", "back"):
+        assert reviews[f"version-{view}"]["summary"] == f"{view} finding 79"
+    assert len(json.dumps(repeated)) < len(json.dumps(small)) + 1000
+
+
+def test_inspection_working_set_keeps_confirmed_absence_for_each_take() -> None:
+    order = WorkOrder(
+        id="work-inspection-coverage", parent_run_id="run-video", sender="manager",
+        recipient_role="video-reviewer", objective="Find missing Take observations.",
+        why_now="All existing videos are available.",
+        specialist_turns=[SpecialistTurnRecord(
+            id=f"read-{index}", sequence=index, tool_name="video.get_take_inspection",
+            arguments={"take_id": take_id}, reason="Read existing evidence.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={"tool_id": "video.get_take_inspection", "status": "SUCCEEDED",
+                    "output": {"take": {"id": take_id}, "report": None}},
+        ) for index, take_id in enumerate(("take-a", "take-b"), 1)],
+    )
+    observed = _specialist_working_set(order, [])
+    assert {entity.id for entity in observed.entities} == {"take-a", "take-b"}
+    assert all(entity.state["inspection_available"] is False for entity in observed.entities)
+    order.specialist_turns.append(SpecialistTurnRecord(
+        id="new-report", sequence=3, tool_name="video.inspect_take",
+        arguments={"take_id": "take-a"}, reason="Observe the missing Take.",
+        status=SpecialistTurnStatus.COMPLETED,
+        result={"tool_id": "video.inspect_take", "status": "SUCCEEDED", "output": {"report": {
+            "id": "report-a", "project_id": "project-video", "take_id": "take-a",
+            "semantic_status": "COMPLETE", "technical_checks": [], "observations": [],
+            "samples": [], "summary": "New observation replaces confirmed absence.",
+        }}},
+    ))
+    after = _specialist_working_set(order, [])
+    assert [entity.id for entity in after.entities] == ["take-b"]
+    assert after.latest_handoff is not None and "report-a" in json.dumps(after.latest_handoff)
+
+
+def test_h3_run_list_is_a_scoped_index_with_exact_read_paths() -> None:
+    raw: dict[str, JsonValue] = {
+        "tool_id": "route.list_h3_runs", "status": "SUCCEEDED", "output": {"runs": [
+            {"id": f"run-{index}", "task_id": f"task-{index}", "project_id": "project-1",
+             "generation_unit_id": f"group-{index}", "prompt": "exact prompt " * 2000,
+             "media_inputs": [{"source": {"local_path": "/large/reference.png"}}],
+             "uploaded_inputs": [], "pricing": {},
+             "request": {"content": [{"type": "text", "text": "exact prompt " * 2000}]},
+             "latest_remote_task": {"id": f"remote-{index}", "status": "succeeded", "error": None}}
+            for index in range(14)
+        ]},
+    }
+    before = json.dumps(raw)
+    projected = _compact_specialist_tool_result("route.list_h3_runs", raw)
+    assert json.dumps(raw) == before
+    assert "exact prompt" not in json.dumps(projected)
+    assert "large/reference.png" not in json.dumps(projected)
+    output = projected["output"]
+    assert isinstance(output, dict)
+    assert output["details_tool"] == "route.get_h3_run" and output["task_state_tool"] == "task.get"
+    runs = output["runs"]
+    assert isinstance(runs, list) and len(runs) == 14
+    assert isinstance(runs[0], dict) and runs[0]["task_id"] == "task-0"
+    assert runs[0]["remote"] == {"id": "remote-0", "status": "succeeded", "error": None}
+    assert runs[0]["prompt_characters"] == len("exact prompt " * 2000)
+    assert len(json.dumps(projected)) < 12000
+
+
+def test_specialist_working_set_retains_each_take_inspection_without_replaying_frames() -> None:
+    def build(cycles: int) -> SpecialistWorkingSet:
+        turns: list[SpecialistTurnRecord] = []
+        for cycle in range(cycles):
+            for take_id in ("take-a", "take-b"):
+                sequence = len(turns) + 1
+                report_id = f"report-{take_id}-{sequence}"
+                turns.append(SpecialistTurnRecord(
+                    id=f"turn-{sequence}", sequence=sequence,
+                    tool_name="video.inspect_take", arguments={"take_id": take_id},
+                    reason="Inspect the two existing Takes.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "video.inspect_take", "status": "SUCCEEDED",
+                        "output": {"report": {
+                            "id": report_id, "project_id": "project-video", "take_id": take_id,
+                            "semantic_status": "COMPLETE", "technical_checks": [],
+                            "observations": [{"description": f"{take_id} visible evidence"}],
+                            "issues": [], "summary": f"{take_id} finding {cycle}",
+                            "samples": [{
+                                "source_take_id": take_id, "timestamp_seconds": index / 2,
+                                "image_path": f"/raw/frames/{report_id}/frame-{index}.jpg",
+                            } for index in range(24)],
+                        }},
+                        "artifact_refs": [{
+                            "project_id": "project-video", "artifact_type": "video_inspection",
+                            "artifact_id": report_id, "version": None,
+                        }],
+                    },
+                ))
+        order = WorkOrder(
+            id="work-video-review", parent_run_id="run-video", sender="manager",
+            recipient_role="video-reviewer", objective="Report both Take observations.",
+            why_now="Both videos have been recovered.", specialist_turns=turns,
+        )
+        before = order.model_dump_json()
+        result = _specialist_working_set(
+            order, [], project_id="project-video",
+        )
+        assert order.model_dump_json() == before
+        assert "/raw/frames/" in before
+        assert "/raw/frames/" not in result.model_dump_json()
+        return result
+
+    small, repeated = build(1), build(40)
+    assert repeated.latest_handoff is not None
+    handoff = repeated.latest_handoff["result"]
+    assert isinstance(handoff, dict) and isinstance(handoff["output"], dict)
+    latest = handoff["output"]["report"]
+    assert isinstance(latest, dict)
+    facts = {entity.id: entity.state for entity in repeated.entities if entity.kind == "video_inspection"}
+    assert set(facts) == {"take-a"}
+    assert facts["take-a"]["summary"] == "take-a finding 39"
+    assert latest["take_id"] == "take-b" and latest["summary"] == "take-b finding 39"
+    assert facts["take-a"]["sample_count"] == latest["sample_count"] == 24
+    assert {ref.artifact_id for ref in repeated.artifact_refs} == {"report-take-a-79", "report-take-b-80"}
+    assert len(repeated.model_dump_json()) < len(small.model_dump_json()) + 1000
+
+
+def test_specialist_working_set_retains_take_selection_and_replacement_after_restart() -> None:
+    order = WorkOrder(
+        id="work-editor", parent_run_id="run-editor", sender="manager",
+        recipient_role="editor", objective="Select all existing groups and assemble.",
+        why_now="The source media is available.",
+    )
+
+    def append(tool: str, arguments: dict[str, JsonValue], output: dict[str, JsonValue]) -> None:
+        sequence = len(order.specialist_turns) + 1
+        order.specialist_turns.append(SpecialistTurnRecord(
+            id=f"turn-{sequence}", sequence=sequence, tool_name=tool,
+            arguments=arguments, reason="Continue the current editing decision.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={"tool_id": tool, "status": "SUCCEEDED", "output": output},
+        ))
+
+    for take_id, shots in (("take-a", ["shot-a1", "shot-a2"]), ("take-b", ["shot-b"]), ("take-c", ["shot-a2"])):
+        append("task.get", {"task_id": f"task-{take_id}"}, {"takes": [{
+            "id": take_id, "task_id": f"task-{take_id}", "shot_id": shots[0],
+            "shot_windows": [{"shot_id": shot, "source_in_seconds": index * 2, "source_out_seconds": (index + 1) * 2}
+                             for index, shot in enumerate(shots)],
+            "is_selected": False, "selected_shot_ids": [], "media_path": f"/{take_id}.mp4",
+        }]})
+    # Legacy successful selection responses contain only a project summary.
+    for _ in range(3):
+        append("video.select_take", {"take_id": "take-a"}, {"project": {"id": "project-video"}})
+        append("video.select_take", {"take_id": "take-b"}, {"project": {"id": "project-video"}})
+
+    def facts() -> dict[str, dict[str, JsonValue]]:
+        before = order.model_dump_json()
+        restored = WorkOrder.model_validate_json(before)
+        state = _specialist_working_set(restored, [], project_id="project-video",
+                                        read_tool_ids=frozenset({"task.get"}), write_tool_ids=frozenset({"video.select_take"}))
+        assert restored.model_dump_json() == before
+        return {item.id: item.state for item in state.entities if item.kind == "take"}
+
+    selected = facts()
+    assert selected["take-a"]["selected_shot_ids"] == ["shot-a1", "shot-a2"]
+    assert selected["take-b"]["selected_shot_ids"] == ["shot-b"]
+    assert selected["take-a"]["is_selected"] is selected["take-b"]["is_selected"] is True
+    assert selected["take-c"]["is_selected"] is False
+    append("video.select_take", {"take_id": "take-c"}, {"project": {"id": "project-video"}})
+    replaced = facts()
+    assert replaced["take-a"]["selected_shot_ids"] == ["shot-a1"]
+    assert replaced["take-b"]["selected_shot_ids"] == ["shot-b"]
+    assert replaced["take-c"]["selected_shot_ids"] == ["shot-a2"]
+    # Current response snapshots override earlier cached Take reads, including deselection.
+    append("video.select_take", {"take_id": "take-a"}, {"take_selection": [
+        {"id": "take-a", "is_selected": True, "selected_shot_ids": ["shot-a1", "shot-a2"]},
+        {"id": "take-c", "is_selected": False, "selected_shot_ids": []},
+    ]})
+    replaced = facts()
+    assert replaced["take-a"]["selected_shot_ids"] == ["shot-a1", "shot-a2"]
+    assert replaced["take-c"]["selected_shot_ids"] == []
+    assert replaced["take-c"]["is_selected"] is False
+    assert replaced["take-c"]["media_path"] == "/take-c.mp4"
+
+
+def test_specialist_working_set_retains_approval_for_each_view_after_restart() -> None:
+    turns: list[SpecialistTurnRecord] = []
+
+    def append_reviews(cycle: int) -> None:
+        for view, status in (("front", "APPROVED"), ("profile", "REJECTED"), ("back", "APPROVED")):
+            sequence = len(turns) + 1
+            turns.append(
+                SpecialistTurnRecord(
+                    id=f"review-{sequence}",
+                    sequence=sequence,
+                    tool_name="artifact.review_version",
+                    arguments={
+                        "project_id": "project-assets",
+                        "asset_id": "one-character",
+                        "version_id": f"version-{view}",
+                    },
+                    reason="Record the decision for this exact supplemental view.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "artifact.review_version",
+                        "status": "SUCCEEDED",
+                        "output": {
+                            "asset": {"id": "one-character", "approved_version_id": "canonical-face"},
+                            "version": {
+                                "id": f"version-{view}",
+                                "approval_status": status,
+                                "width": 344,
+                                "height": 976,
+                                "review_notes": f"{view} decision {cycle}",
+                            },
+                        },
+                        "artifact_refs": [{
+                            "project_id": "project-assets",
+                            "artifact_type": "asset_version",
+                            "artifact_id": f"version-{view}",
+                        }],
+                    },
+                )
+            )
+
+    def rebuilt() -> dict[str, JsonValue]:
+        work_order = WorkOrder(
+            id="work-views",
+            parent_run_id="run-assets",
+            sender="production-manager",
+            recipient_role="asset-verifier",
+            objective="Review all views of one character.",
+            why_now="Candidates are ready.",
+            specialist_turns=turns,
+        )
+        restored = WorkOrder.model_validate_json(work_order.model_dump_json())
+        return _specialist_working_set(
+            restored, [], write_tool_ids=frozenset({"artifact.review_version"})
+        ).model_dump(mode="json")
+
+    append_reviews(0)
+    first = rebuilt()
+    for cycle in range(1, 80):
+        append_reviews(cycle)
+    repeated = rebuilt()
+    versions = {
+        entity["id"]: entity["state"]
+        for entity in repeated["entities"]  # type: ignore[union-attr]
+        if entity["kind"] == "asset_version"
+    }
+    assert set(versions) == {"version-front", "version-profile", "version-back"}
+    assert versions["version-front"]["approval_status"] == "APPROVED"
+    assert versions["version-profile"]["approval_status"] == "REJECTED"
+    assert versions["version-back"]["approval_status"] == "APPROVED"
+    assert all(value["width"] == 344 for value in versions.values())
+    assert all(value["review_notes"].endswith("decision 79") for value in versions.values())
+    assert {ref["artifact_id"] for ref in repeated["artifact_refs"]} == set(versions)  # type: ignore[union-attr]
+    assert len(json.dumps(repeated)) < len(json.dumps(first)) + 1000
+
+
+def test_specialist_working_set_keeps_independent_reference_facts_after_shot_write() -> None:
+    pack: dict[str, JsonValue] = {
+        "id": "pack-carrier", "subject_asset_id": "asset-carrier",
+        "entries": [{
+            "id": "entry-text", "asset_version_id": "version-text",
+            "role": "PROP_STATE", "tags": ["ExactCase", "红烧肉八元"],
+            "angle": "NOT_APPLICABLE", "framing": "DETAIL",
+        }],
+    }
+    first_plan: dict[str, JsonValue] = {
+        "shot_id": "shot-one", "requirements": [], "planning_notes": "old one",
+    }
+    second_plan: dict[str, JsonValue] = {
+        "shot_id": "shot-two", "requirements": [], "planning_notes": "keep two",
+    }
+    new_plan: dict[str, JsonValue] = {
+        "shot_id": "shot-one",
+        "requirements": [{"id": "requirement-one", "required_tags": ["红烧肉八元"]}],
+        "planning_notes": "saved one",
+    }
+    turns = [
+        SpecialistTurnRecord(
+            id="read-scope", sequence=1, tool_name="artifact.get_asset_work_context",
+            arguments={"project_id": "project-assets"}, reason="Read the selected scope.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.get_asset_work_context", "status": "SUCCEEDED",
+                "output": {
+                    "reference_packs": [pack],
+                    "shot_reference_plans": [first_plan, second_plan],
+                    "storyboard": {"description": "STALE_SCOPE_BODY_MUST_NOT_REPLAY" * 100},
+                },
+                "artifact_refs": [{
+                    "project_id": "project-assets", "artifact_type": "shot",
+                    "artifact_id": "shot-one", "version": 1,
+                }],
+            },
+        ),
+        SpecialistTurnRecord(
+            id="write-one", sequence=2, tool_name="shot.update_reference_plan",
+            arguments={"project_id": "project-assets", "shot_id": "shot-one"},
+            reason="Save the first shot without changing the other facts.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "shot.update_reference_plan", "status": "SUCCEEDED",
+                "output": {"reference_plan": new_plan, "shot_id": "shot-one", "shot_revision": 2},
+                "artifact_refs": [{
+                    "project_id": "project-assets", "artifact_type": "shot",
+                    "artifact_id": "shot-one", "version": 2,
+                }],
+            },
+        ),
+        SpecialistTurnRecord(
+            id="preview-one", sequence=3, tool_name="shot.preview_reference_plan",
+            arguments={"project_id": "project-assets", "shot_id": "shot-one"},
+            reason="Verify the saved selection.", status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "shot.preview_reference_plan", "status": "SUCCEEDED",
+                "output": {"shot_id": "shot-one", "missing_requirement_ids": []},
+                "artifact_refs": [],
+            },
+        ),
+        SpecialistTurnRecord(
+            id="preview-two", sequence=4, tool_name="shot.preview_reference_plan",
+            arguments={"project_id": "project-assets", "shot_id": "shot-two"},
+            reason="Verify the other shot without losing the first result.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "shot.preview_reference_plan", "status": "SUCCEEDED",
+                "output": {"shot_id": "shot-two", "missing_requirement_ids": ["missing-two"]},
+                "artifact_refs": [],
+            },
+        ),
+    ]
+
+    def rebuild() -> SpecialistWorkingSet:
+        work_order = WorkOrder(
+            id="work-reference-continuation", parent_run_id="run-assets",
+            sender="production-manager", recipient_role="asset-worker",
+            objective="Bind two shots using the same approved pack.",
+            why_now="Approved media are ready.", specialist_turns=turns,
+        )
+        restored = WorkOrder.model_validate_json(work_order.model_dump_json())
+        return _specialist_working_set(
+            restored, [], read_tool_ids=frozenset({
+                "artifact.get_asset_work_context", "shot.preview_reference_plan",
+            }), write_tool_ids=frozenset({
+                "shot.update_reference_plan", "artifact.add_reference_entry", "shot.patch_storyboard",
+            }),
+        )
+
+    current = rebuild()
+    assert not current.read_observations
+    assert "STALE_SCOPE_BODY_MUST_NOT_REPLAY" not in current.model_dump_json()
+    facts = {(entity.kind, entity.id): entity.state for entity in current.entities}
+    assert facts[("reference_pack", "pack-carrier")] == pack
+    assert facts[("shot_reference_plan", "shot-one")] == new_plan
+    assert facts[("shot_reference_plan", "shot-two")] == second_plan
+    assert facts[("reference_plan_preview", "shot-one")]["missing_requirement_ids"] == []
+    assert facts[("reference_plan_preview", "shot-two")]["missing_requirement_ids"] == ["missing-two"]
+
+    turns.append(SpecialistTurnRecord(
+        id="change-first-reference-plan", sequence=len(turns) + 1,
+        tool_name="shot.update_reference_plan",
+        arguments={"project_id": "project-assets", "shot_id": "shot-one"},
+        reason="Changing one shot invalidates only its preview.",
+        status=SpecialistTurnStatus.COMPLETED,
+        result={
+            "tool_id": "shot.update_reference_plan", "status": "SUCCEEDED",
+            "output": {"reference_plan": new_plan},
+            "artifact_refs": [{
+                "project_id": "project-assets", "artifact_type": "shot",
+                "artifact_id": "shot-one", "version": 3,
+            }],
+        },
+    ))
+    assert {entity.id for entity in rebuild().entities if entity.kind == "reference_plan_preview"} == {"shot-two"}
+
+    updated_pack: dict[str, JsonValue] = {**pack, "entries": [{
+        "id": "entry-text", "asset_version_id": "version-text",
+        "role": "PROP_STATE", "tags": ["CorrectedTag"],
+        "angle": "NOT_APPLICABLE", "framing": "DETAIL",
+    }]}
+    turns.append(SpecialistTurnRecord(
+        id="replace-pack", sequence=len(turns) + 1, tool_name="artifact.add_reference_entry",
+        arguments={"project_id": "project-assets"}, reason="Record a changed pack.",
+        status=SpecialistTurnStatus.COMPLETED,
+        result={
+            "tool_id": "artifact.add_reference_entry", "status": "SUCCEEDED",
+            "output": {"pack": updated_pack},
+            "artifact_refs": [{
+                "project_id": "project-assets", "artifact_type": "reference_pack",
+                "artifact_id": "pack-carrier",
+            }],
+        },
+    ))
+    changed = rebuild()
+    pack_facts = [entity for entity in changed.entities if entity.kind == "reference_pack"]
+    assert len(pack_facts) == 1
+    assert pack_facts[0].state == updated_pack
+    assert not any(entity.kind == "reference_plan_preview" for entity in changed.entities)
+    turns.append(SpecialistTurnRecord(
+        id="change-shot-without-reference-body", sequence=len(turns) + 1, tool_name="shot.patch_storyboard",
+        arguments={"project_id": "project-assets"}, reason="A different write invalidates this shot.",
+        status=SpecialistTurnStatus.COMPLETED,
+        result={
+            "tool_id": "shot.patch_storyboard", "status": "SUCCEEDED", "output": {},
+            "artifact_refs": [{
+                "project_id": "project-assets", "artifact_type": "shot",
+                "artifact_id": "shot-one", "version": 4,
+            }],
+        },
+    ))
+    assert {entity.id for entity in rebuild().entities if entity.kind == "shot_reference_plan"} == {"shot-two"}
+
+
+def test_specialist_working_set_keeps_latest_successful_read_per_tool() -> None:
+    def build_working_set(cycles: int) -> dict[str, JsonValue]:
+        turns: list[SpecialistTurnRecord] = []
+        sequence = 0
+        for index in range(cycles):
+            sequence += 1
+            turns.append(
+                SpecialistTurnRecord(
+                    id=f"turn-plan-{index}",
+                    sequence=sequence,
+                    tool_name="artifact.get_asset_plan",
+                    arguments={
+                        "project_id": "project-assets",
+                        "version_id": "asset-plan-v1",
+                    },
+                    reason="Read the current asset plan.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "artifact.get_asset_plan",
+                        "status": "SUCCEEDED",
+                        "output": {
+                            "asset_plan": {
+                                "id": "asset-plan-v1",
+                                "items": [
+                                    {
+                                        "id": "character-anchor",
+                                        "prompt": f"LATEST_PLAN_{index:04d}",
+                                    }
+                                ],
+                            }
+                        },
+                        "artifact_refs": [],
+                        "warnings": [],
+                        "error": None,
+                    },
+                )
+            )
+            sequence += 1
+            turns.append(
+                SpecialistTurnRecord(
+                    id=f"turn-capability-{index}",
+                    sequence=sequence,
+                    tool_name="image.capability",
+                    arguments={},
+                    reason="Read current image capability.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "image.capability",
+                        "status": "SUCCEEDED",
+                        "output": {
+                            "provider": "AZURE_OPENAI",
+                            "model": "gpt-image-2",
+                            "can_generate": True,
+                            "size": {"allowed": ["1536x864"]},
+                        },
+                        "artifact_refs": [],
+                        "warnings": [],
+                        "error": None,
+                    },
+                )
+            )
+        return _specialist_working_set(
+            WorkOrder(
+                id="work-order-read-whiteboard",
+                parent_run_id="run-assets",
+                sender="production-manager",
+                recipient_role="asset-worker",
+                objective="Execute the current asset plan.",
+                why_now="The canonical storyboard is ready.",
+                specialist_turns=turns,
+            ),
+            [],
+            read_tool_ids=frozenset(
+                {"artifact.get_asset_plan", "image.capability"}
+            ),
+        ).model_dump(mode="json")
+
+    small = build_working_set(2)
+    large = build_working_set(80)
+    large_json = json.dumps(large, ensure_ascii=False)
+
+    assert large["latest_handoff"]["request"]["tool_name"] == (  # type: ignore[index]
+        "image.capability"
+    )
+    assert [
+        item["tool_name"] for item in large["read_observations"]  # type: ignore[union-attr]
+    ] == ["artifact.get_asset_plan"]
+    assert "LATEST_PLAN_0079" in large_json
+    assert "LATEST_PLAN_0000" not in large_json
+    assert len(large_json.encode()) < len(
+        json.dumps(small, ensure_ascii=False).encode()
+    ) + 1500
+
+
+@pytest.mark.parametrize(
+    "write_tool_name",
+    ["artifact.patch_asset_plan", "artifact.replace_asset_plan"],
+)
+def test_specialist_working_set_drops_read_body_superseded_by_artifact_version(
+    write_tool_name: str,
+) -> None:
+    old_ref: dict[str, JsonValue] = {
+        "project_id": "project-assets",
+        "artifact_type": "asset_plan",
+        "artifact_id": "asset-plan-document",
+        "version": 1,
+    }
+    new_ref: dict[str, JsonValue] = {**old_ref, "version": 2}
+    common_envelope: dict[str, JsonValue] = {
+        "status": "SUCCEEDED",
+        "warnings": [],
+        "error": None,
+    }
+    turns = [
+        SpecialistTurnRecord(
+            id="turn-full-plan-v1",
+            sequence=1,
+            tool_name="artifact.get_asset_plan",
+            arguments={"project_id": "project-assets"},
+            reason="Read the exact current AssetPlan.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                **common_envelope,
+                "tool_id": "artifact.get_asset_plan",
+                "output": {
+                    "asset_plan": {
+                        "items": [
+                            {
+                                "id": "character",
+                                "brief": (
+                                    "STALE_COMPLETE_PLAN_BODY_MUST_BE_DROPPED" * 100
+                                ),
+                            }
+                        ]
+                    }
+                },
+                "artifact_refs": [old_ref],
+            },
+        ),
+        SpecialistTurnRecord(
+            id="turn-write-plan-v2",
+            sequence=2,
+            tool_name=write_tool_name,
+            arguments={
+                "project_id": "project-assets",
+                "request": {"base_version_id": "asset-plan-version-1"},
+            },
+            reason="Persist the new AssetPlan version.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                **common_envelope,
+                "tool_id": write_tool_name,
+                "output": {
+                    "project_id": "project-assets",
+                    "asset_plan_identity": {
+                        "document_id": "asset-plan-document",
+                        "version_id": "asset-plan-version-2",
+                        "version": 2,
+                    },
+                },
+                "artifact_refs": [new_ref],
+            },
+        ),
+        SpecialistTurnRecord(
+            id="turn-plan-index-v2",
+            sequence=3,
+            tool_name="artifact.get_asset_plan_index",
+            arguments={"project_id": "project-assets"},
+            reason="Read the current lightweight inventory.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                **common_envelope,
+                "tool_id": "artifact.get_asset_plan_index",
+                "output": {
+                    "asset_plan_identity": {
+                        "document_id": "asset-plan-document",
+                        "version_id": "asset-plan-version-2",
+                        "version": 2,
+                    },
+                    "items": [{"id": "character", "name": "Lin Yi"}],
+                },
+                "artifact_refs": [new_ref],
+            },
+        ),
+        SpecialistTurnRecord(
+            id="turn-work-slice-v2",
+            sequence=4,
+            tool_name="artifact.get_asset_work_context",
+            arguments={
+                "project_id": "project-assets",
+                "scope": {
+                    "mode": "WORK_ITEM",
+                    "work_item_ids": ["character-front"],
+                },
+            },
+            reason="Read the exact bounded work context.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                **common_envelope,
+                "tool_id": "artifact.get_asset_work_context",
+                "output": {
+                    "asset_plan_identity": {
+                        "document_id": "asset-plan-document",
+                        "version_id": "asset-plan-version-2",
+                        "version": 2,
+                    },
+                    "items": [{"id": "character", "work_items": []}],
+                },
+                "artifact_refs": [new_ref],
+            },
+        ),
+    ]
+
+    working_set = _specialist_working_set(
+        WorkOrder(
+            id=f"work-order-{write_tool_name}",
+            parent_run_id="run-assets",
+            sender="production-manager",
+            recipient_role="asset-worker",
+            objective="Continue from the current AssetPlan version.",
+            why_now="The prior version has been superseded.",
+            specialist_turns=turns,
+        ),
+        [],
+        read_tool_ids=frozenset(
+            {
+                "artifact.get_asset_plan",
+                "artifact.get_asset_plan_index",
+                "artifact.get_asset_work_context",
+            }
+        ),
+        write_tool_ids=frozenset({write_tool_name}),
+    ).model_dump(mode="json")
+    working_set_json = json.dumps(working_set, ensure_ascii=False)
+
+    assert "STALE_COMPLETE_PLAN_BODY_MUST_BE_DROPPED" not in working_set_json
+    assert [
+        item["tool_name"]
+        for item in working_set["read_observations"]  # type: ignore[union-attr]
+    ] == ["artifact.get_asset_plan_index"]
+    checkpoint_by_tool = {
+        item["tool_name"]: item
+        for item in working_set["tool_checkpoints"]  # type: ignore[union-attr]
+    }
+    assert checkpoint_by_tool["artifact.get_asset_plan"]["artifact_refs"] == [
+        old_ref
+    ]
+    assert checkpoint_by_tool[write_tool_name]["artifact_refs"] == [new_ref]
+    assert working_set["artifact_refs"] == [new_ref]
+    assert working_set["latest_handoff"]["request"]["tool_name"] == (  # type: ignore[index]
+        "artifact.get_asset_work_context"
+    )
+
+
+def test_specialist_working_set_keeps_best_unresolved_write_repair_base() -> None:
+    complete_snapshot: dict[str, JsonValue] = {
+        "project_id": "project-assets",
+        "request": {
+            "base_version_id": "asset-plan-v1",
+            "asset_plan": {
+                "id": "asset-plan-v2",
+                "items": [
+                    {
+                        "id": "item-calculator",
+                        "work_items": [
+                            {
+                                "id": "work-calculator",
+                                "served_clip_group_ids": ["clip-group-7"],
+                                "prompt": "CORRECTION_BASE_MUST_REMAIN_EXACT",
+                            }
+                        ],
+                    }
+                ],
+            },
+        },
+    }
+    turns = [
+        SpecialistTurnRecord(
+            id="turn-domain-conflict",
+            sequence=1,
+            tool_name="artifact.replace_asset_plan",
+            arguments=complete_snapshot,
+            reason="Replace the complete asset plan snapshot.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.replace_asset_plan",
+                "status": "FAILED",
+                "output": None,
+                "artifact_refs": [],
+                "warnings": [],
+                "error": {
+                    "kind": "WorkflowConflictError",
+                    "message": "The calculator item omits clip-group-7.",
+                },
+            },
+        ),
+        SpecialistTurnRecord(
+            id="turn-malformed-retry",
+            sequence=2,
+            tool_name="artifact.replace_asset_plan",
+            arguments={
+                "project_id": "project-assets",
+                "retry_from_persisted_failed_request": {"source_sequence": 1},
+            },
+            reason="Retry the prior replacement.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.replace_asset_plan",
+                "status": "INVALID_ARGUMENTS",
+                "output": None,
+                "artifact_refs": [],
+                "warnings": [],
+                "error": {
+                    "kind": "ValidationError",
+                    "message": "request is required and retry wrapper is forbidden.",
+                },
+            },
+        ),
+    ]
+    work_order = WorkOrder(
+        id="work-order-repair",
+        parent_run_id="run-assets",
+        sender="production-manager",
+        recipient_role="asset-worker",
+        objective="Replace the current asset plan.",
+        why_now="The current plan is stale.",
+        specialist_turns=turns,
+    )
+
+    working_set = _specialist_working_set(
+        work_order,
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset({"artifact.replace_asset_plan"}),
+    ).model_dump(mode="json")
+    working_set_json = json.dumps(working_set, ensure_ascii=False)
+
+    assert working_set["latest_handoff"]["sequence"] == 2  # type: ignore[index]
+    assert working_set["repair_tool_schema_ids"] == [
+        "artifact.replace_asset_plan"
+    ]
+    assert len(working_set["pending_tool_repairs"]) == 1
+    repair = working_set["pending_tool_repairs"][0]  # type: ignore[index]
+    assert repair["source_sequence"] == 1
+    assert repair["attempt_ref"]["attempt_id"] == "turn-domain-conflict"
+    assert repair["request_identifiers"] == {
+        "project_id": "project-assets",
+        "request": {"base_version_id": "asset-plan-v1"},
+    }
+    assert repair["error"]["kind"] == "WorkflowConflictError"
+    assert "CORRECTION_BASE_MUST_REMAIN_EXACT" not in working_set_json
+    assert working_set["latest_handoff"]["attempt_ref"]["attempt_id"] == (  # type: ignore[index]
+        "turn-malformed-retry"
+    )
+    assert working_set["latest_handoff"]["request"]["arguments"] == {  # type: ignore[index]
+        "project_id": "project-assets"
+    }
+
+    work_order.specialist_turns.append(
+        SpecialistTurnRecord(
+            id="turn-corrected",
+            sequence=3,
+            tool_name="artifact.replace_asset_plan",
+            arguments=complete_snapshot,
+            reason="Submit the corrected complete snapshot.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.replace_asset_plan",
+                "status": "SUCCEEDED",
+                "output": {"version_id": "asset-plan-v2"},
+                "artifact_refs": [],
+                "warnings": [],
+                "error": None,
+            },
+        )
+    )
+    resolved = _specialist_working_set(
+        work_order,
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset({"artifact.replace_asset_plan"}),
+    ).model_dump(mode="json")
+
+    assert resolved["pending_tool_repairs"] == []
+    assert resolved["repair_tool_schema_ids"] == []
+
+
+def test_specialist_working_set_successful_retry_resolves_source_lineage() -> None:
+    work_order_id = "work-order-successful-asset-plan-retry"
+    source_ref: dict[str, JsonValue] = {
+        "project_id": "project-assets",
+        "agent_run_id": "run-assets",
+        "work_order_id": work_order_id,
+        "attempt_id": "turn-failed-create",
+        "tool_name": "artifact.create_asset_plan",
+        "turn_status": "COMPLETED",
+        "outcome_status": "INVALID_ARGUMENTS",
+        "has_arguments": True,
+        "has_result": True,
+    }
+    turns = [
+        SpecialistTurnRecord(
+            id="turn-failed-create",
+            sequence=1,
+            tool_name="artifact.create_asset_plan",
+            arguments={
+                "project_id": "project-assets",
+                "request": {"asset_plan": {"marker": "FULL_DRAFT"}},
+            },
+            reason="Create the complete AssetPlan candidate.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.create_asset_plan",
+                "status": "INVALID_ARGUMENTS",
+                "output": None,
+                "artifact_refs": [],
+                "warnings": [],
+                "error": {"kind": "ValidationError", "message": "bad prompt"},
+            },
+        ),
+        SpecialistTurnRecord(
+            id="turn-successful-retry",
+            sequence=2,
+            tool_name="artifact.retry_asset_plan_attempt",
+            arguments={
+                "project_id": "project-assets",
+                "attempt_ref": source_ref,
+                "patches": [
+                    {
+                        "item_id": "item-hero",
+                        "work_item_id": "work-hero-master",
+                        "op": "replace",
+                        "path": "/final_prompt",
+                        "value": "fixed",
+                    }
+                ],
+            },
+            reason="Patch only the invalid prompt and retry.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.retry_asset_plan_attempt",
+                "status": "SUCCEEDED",
+                "output": {"operation": "CREATE"},
+                "artifact_refs": [],
+                "warnings": [],
+                "error": None,
+            },
+        ),
+    ]
+
+    working_set = _specialist_working_set(
+        WorkOrder(
+            id=work_order_id,
+            parent_run_id="run-assets",
+            sender="production-manager",
+            recipient_role="asset-worker",
+            objective="Repair the failed AssetPlan candidate.",
+            why_now="A compact retry can preserve the exact draft.",
+            specialist_turns=turns,
+        ),
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset(
+            {
+                "artifact.create_asset_plan",
+                "artifact.retry_asset_plan_attempt",
+            }
+        ),
+    ).model_dump(mode="json")
+
+    assert working_set["pending_tool_repairs"] == []
+    assert working_set["repair_tool_schema_ids"] == []
+
+
+def test_specialist_working_set_failed_retry_keeps_only_latest_lineage_tip() -> None:
+    work_order_id = "work-order-chained-asset-plan-retry"
+
+    def attempt_ref(
+        *,
+        attempt_id: str,
+        tool_name: str,
+        outcome_status: str,
+    ) -> dict[str, JsonValue]:
+        return {
+            "project_id": "project-assets",
+            "agent_run_id": "run-assets",
+            "work_order_id": work_order_id,
+            "attempt_id": attempt_id,
+            "tool_name": tool_name,
+            "turn_status": "COMPLETED",
+            "outcome_status": outcome_status,
+            "has_arguments": True,
+            "has_result": True,
+        }
+
+    source_ref = attempt_ref(
+        attempt_id="turn-failed-create",
+        tool_name="artifact.create_asset_plan",
+        outcome_status="INVALID_ARGUMENTS",
+    )
+    first_retry_ref = attempt_ref(
+        attempt_id="turn-first-failed-retry",
+        tool_name="artifact.retry_asset_plan_attempt",
+        outcome_status="FAILED",
+    )
+    failed_result: dict[str, JsonValue] = {
+        "tool_id": "artifact.retry_asset_plan_attempt",
+        "status": "FAILED",
+        "output": None,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {"kind": "ProductionManagerError", "message": "still invalid"},
+    }
+    turns = [
+        SpecialistTurnRecord(
+            id="turn-failed-create",
+            sequence=1,
+            tool_name="artifact.create_asset_plan",
+            arguments={
+                "project_id": "project-assets",
+                "request": {"asset_plan": {"marker": "FULL_DRAFT"}},
+            },
+            reason="Create the complete AssetPlan candidate.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                **failed_result,
+                "tool_id": "artifact.create_asset_plan",
+                "status": "INVALID_ARGUMENTS",
+            },
+        ),
+        SpecialistTurnRecord(
+            id="turn-first-failed-retry",
+            sequence=2,
+            tool_name="artifact.retry_asset_plan_attempt",
+            arguments={
+                "project_id": "project-assets",
+                "attempt_ref": source_ref,
+                "patches": [{"op": "replace", "path": "/notes", "value": []}],
+            },
+            reason="Apply the first local correction.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result=failed_result,
+        ),
+        SpecialistTurnRecord(
+            id="turn-latest-failed-retry",
+            sequence=3,
+            tool_name="artifact.retry_asset_plan_attempt",
+            arguments={
+                "project_id": "project-assets",
+                "attempt_ref": first_retry_ref,
+                "patches": [{"op": "replace", "path": "/notes", "value": []}],
+            },
+            reason="Apply the next local correction.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result=failed_result,
+        ),
+        SpecialistTurnRecord(
+            id="turn-read-after-retry",
+            sequence=4,
+            tool_name="artifact.get_asset_plan_index",
+            arguments={"project_id": "project-assets"},
+            reason="Inspect the current persisted plan identity.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.get_asset_plan_index",
+                "status": "SUCCEEDED",
+                "output": {"items": []},
+                "artifact_refs": [],
+                "warnings": [],
+                "error": None,
+            },
+        ),
+    ]
+
+    working_set = _specialist_working_set(
+        WorkOrder(
+            id=work_order_id,
+            parent_run_id="run-assets",
+            sender="production-manager",
+            recipient_role="asset-worker",
+            objective="Repair the failed AssetPlan candidate.",
+            why_now="Each retry supersedes its exact ancestor candidate.",
+            specialist_turns=turns,
+        ),
+        [],
+        project_id="project-assets",
+        read_tool_ids=frozenset({"artifact.get_asset_plan_index"}),
+        write_tool_ids=frozenset(
+            {
+                "artifact.create_asset_plan",
+                "artifact.retry_asset_plan_attempt",
+            }
+        ),
+    ).model_dump(mode="json")
+
+    assert working_set["repair_tool_schema_ids"] == [
+        "artifact.retry_asset_plan_attempt"
+    ]
+    assert len(working_set["pending_tool_repairs"]) == 1
+    repair = working_set["pending_tool_repairs"][0]  # type: ignore[index]
+    assert repair["attempt_ref"]["attempt_id"] == "turn-latest-failed-retry"
+    assert "turn-failed-create" not in json.dumps(working_set)
+    assert repair["source_sequence"] == 3
+
+
+def test_specialist_working_set_drops_loaded_repair_after_alternative_write() -> None:
+    failed_arguments: dict[str, JsonValue] = {
+        "project_id": "project-assets",
+        "request": {
+            "base_version_id": "asset-plan-v1",
+            "asset_plan": {"marker": "FAILED_FULL_BODY_MUST_NOT_REPLAY"},
+        },
+    }
+    attempt_ref: dict[str, JsonValue] = {
+        "project_id": "project-assets",
+        "agent_run_id": "run-assets",
+        "work_order_id": "work-order-alternative-repair",
+        "attempt_id": "turn-failed-replace",
+        "tool_name": "artifact.replace_asset_plan",
+        "turn_status": "COMPLETED",
+        "outcome_status": "FAILED",
+        "has_arguments": True,
+        "has_result": True,
+    }
+    failed_result: dict[str, JsonValue] = {
+        "tool_id": "artifact.replace_asset_plan",
+        "status": "FAILED",
+        "output": None,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {
+            "kind": "WorkflowConflictError",
+            "message": "Use a targeted patch for the current version.",
+        },
+    }
+    turns = [
+        SpecialistTurnRecord(
+            id="turn-failed-replace",
+            sequence=1,
+            tool_name="artifact.replace_asset_plan",
+            arguments=failed_arguments,
+            reason="Try a complete replacement.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result=failed_result,
+        ),
+        SpecialistTurnRecord(
+            id="turn-load-repair",
+            sequence=2,
+            tool_name="agent.get_tool_attempt",
+            arguments={"attempt_ref": attempt_ref, "payload": "BOTH"},
+            reason="Load the exact failed candidate once.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "agent.get_tool_attempt",
+                "status": "SUCCEEDED",
+                "output": {
+                    "attempt_ref": attempt_ref,
+                    "reason": "Try a complete replacement.",
+                    "arguments": failed_arguments,
+                    "result": failed_result,
+                },
+                "artifact_refs": [],
+                "warnings": [],
+                "error": None,
+            },
+        ),
+        SpecialistTurnRecord(
+            id="turn-successful-patch",
+            sequence=3,
+            tool_name="artifact.patch_asset_plan",
+            arguments={
+                "project_id": "project-assets",
+                "request": {"base_version_id": "asset-plan-v1"},
+            },
+            reason="Apply the semantic repair with a targeted patch.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.patch_asset_plan",
+                "status": "SUCCEEDED",
+                "output": {"version_id": "asset-plan-v2"},
+                "artifact_refs": [],
+                "warnings": [],
+                "error": None,
+            },
+        ),
+    ]
+    working_set = _specialist_working_set(
+        WorkOrder(
+            id="work-order-alternative-repair",
+            parent_run_id="run-assets",
+            sender="production-manager",
+            recipient_role="asset-worker",
+            objective="Repair the current AssetPlan.",
+            why_now="The complete replacement was rejected.",
+            specialist_turns=turns,
+        ),
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset(
+            {"artifact.replace_asset_plan", "artifact.patch_asset_plan"}
+        ),
+    ).model_dump(mode="json")
+
+    assert working_set["pending_tool_repairs"] == []
+    assert working_set["repair_tool_schema_ids"] == []
+    assert "FAILED_FULL_BODY_MUST_NOT_REPLAY" not in json.dumps(
+        working_set,
+        ensure_ascii=False,
+    )
+    assert working_set["latest_handoff"]["request"]["arguments"] == {  # type: ignore[index]
+        "project_id": "project-assets",
+        "request": {"base_version_id": "asset-plan-v1"},
+    }
+    assert "output" not in working_set["latest_handoff"]["result"]  # type: ignore[operator,index]
+
+
+def test_specialist_working_set_keeps_multiple_selected_attempts_until_write() -> None:
+    def attempt_ref(name: str, tool_name: str) -> ToolAttemptRef:
+        return ToolAttemptRef(
+            project_id="project-assets",
+            agent_run_id="run-assets",
+            work_order_id=f"source-{name}",
+            attempt_id=f"attempt-{name}",
+            tool_name=tool_name,
+            turn_status=SpecialistTurnStatus.COMPLETED,
+            outcome_status=ToolCallStatus.FAILED.value,
+            has_arguments=True,
+            has_result=True,
+        )
+
+    first_ref = attempt_ref("first", "artifact.patch_asset_plan")
+    second_ref = attempt_ref("second", "artifact.retry_asset_plan_attempt")
+
+    def lookup_turn(
+        *,
+        sequence: int,
+        ref: ToolAttemptRef,
+        marker: str,
+    ) -> SpecialistTurnRecord:
+        return SpecialistTurnRecord(
+            id=f"lookup-{sequence}",
+            sequence=sequence,
+            tool_name="agent.get_tool_attempt",
+            arguments={
+                "attempt_ref": ref.model_dump(mode="json"),
+                "payload": "BOTH",
+            },
+            reason="Load one explicitly handed repair candidate.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "agent.get_tool_attempt",
+                "status": ToolCallStatus.SUCCEEDED.value,
+                "output": {
+                    "attempt_ref": ref.model_dump(mode="json"),
+                    "arguments": {"marker": marker},
+                    "result": {"status": ToolCallStatus.FAILED.value},
+                },
+                "artifact_refs": [],
+                "warnings": [],
+                "error": None,
+            },
+        )
+
+    work_order = WorkOrder(
+        id="work-order-attempt-whiteboard",
+        parent_run_id="run-assets",
+        sender="production-manager",
+        recipient_role="asset-worker",
+        objective="Repair two related failed attempts.",
+        why_now="Both exact outcomes are needed for one semantic correction.",
+        specialist_turns=[
+            lookup_turn(sequence=1, ref=first_ref, marker="FIRST_EXACT"),
+            lookup_turn(sequence=2, ref=second_ref, marker="SECOND_EXACT"),
+        ],
+    )
+    working_set = _specialist_working_set(
+        work_order,
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset({"artifact.patch_asset_plan"}),
+    ).model_dump(mode="json")
+
+    assert "SECOND_EXACT" in json.dumps(working_set["latest_handoff"])
+    observations = working_set["tool_attempt_observations"]
+    assert len(observations) == 1  # type: ignore[arg-type]
+    assert observations[0]["attempt_ref"]["attempt_id"] == "attempt-first"  # type: ignore[index]
+    assert "FIRST_EXACT" in json.dumps(observations)
+
+    # Re-reading an already selected attempt replaces its identity slot instead
+    # of growing history, while the other selected payload remains available.
+    work_order.specialist_turns.append(
+        lookup_turn(sequence=3, ref=first_ref, marker="FIRST_EXACT_REFRESHED")
+    )
+    repeated = _specialist_working_set(
+        work_order,
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset({"artifact.patch_asset_plan"}),
+    ).model_dump(mode="json")
+    assert "FIRST_EXACT_REFRESHED" in json.dumps(repeated["latest_handoff"])
+    repeated_observations = repeated["tool_attempt_observations"]
+    assert len(repeated_observations) == 1  # type: ignore[arg-type]
+    assert repeated_observations[0]["attempt_ref"]["attempt_id"] == (  # type: ignore[index]
+        "attempt-second"
+    )
+    assert "SECOND_EXACT" in json.dumps(repeated_observations)
+
+    # Any subsequent write consumes the explicitly loaded candidates. If it
+    # fails, that persisted write is now the addressable repair base.
+    work_order.specialist_turns.append(
+        SpecialistTurnRecord(
+            id="attempt-local-patch",
+            sequence=4,
+            tool_name="artifact.patch_asset_plan",
+            arguments={"project_id": "project-assets", "request": {}},
+            reason="Apply the combined correction.",
+            status=SpecialistTurnStatus.COMPLETED,
+            result={
+                "tool_id": "artifact.patch_asset_plan",
+                "status": ToolCallStatus.FAILED.value,
+                "output": None,
+                "artifact_refs": [],
+                "warnings": [],
+                "error": {"kind": "Error", "message": "Repair this write."},
+            },
+        )
+    )
+    after_write = _specialist_working_set(
+        work_order,
+        [],
+        project_id="project-assets",
+        write_tool_ids=frozenset({"artifact.patch_asset_plan"}),
+    ).model_dump(mode="json")
+    assert after_write["tool_attempt_observations"] == []
+    assert "FIRST_EXACT" not in json.dumps(after_write)
+    assert "SECOND_EXACT" not in json.dumps(after_write)
+
+
 def test_specialist_history_replays_only_latest_exact_project_read() -> None:
     def project_result(marker: str) -> dict[str, JsonValue]:
         return {
@@ -483,7 +2711,7 @@ def test_specialist_history_replays_only_latest_exact_project_read() -> None:
         ],
     )
 
-    history = _specialist_tool_history(work_order)
+    history = specialist_tool_history_for_trace(work_order)
     serialized = json.dumps(history, ensure_ascii=False)
 
     assert "OLD_PROJECT_EXACT_PROSE" not in serialized
@@ -665,7 +2893,7 @@ def test_specialist_history_keeps_only_latest_exact_production_document_read() -
         ],
     )
 
-    history = _specialist_tool_history(work_order)
+    history = specialist_tool_history_for_trace(work_order)
     serialized = json.dumps(history, ensure_ascii=False)
 
     assert "HISTORICAL_DOCUMENT_PROSE" not in serialized
@@ -956,6 +3184,7 @@ def _start_pending_delegation(
                         title="Delegate current task",
                         kind=ActionKind.DELEGATION,
                         production_skill_role=ProductionSkillRole.DIRECTOR,
+                        production_prompt_stage=ProductionPromptStage.STORYBOARD,
                         assigned_agent="scene-director",
                         instructions="Review the current scene staging.",
                         arguments=delegation_arguments,
@@ -1072,94 +3301,38 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
     assert run.snapshot.run.execution_target == ProductionExecutionTarget.REAL_H3
     assert run.snapshot.run.render_export is False
     planner_context = json.loads(client.inputs[0])["context"]
+    output_contracts = json.loads(client.inputs[0])["output_contracts"]
     assert planner_context["unattended"] is False
-    assert planner_context["execution_target"] == "REAL_H3"
+    assert planner_context["video_execution_target"] == "REAL_H3"
+    assert "execution_target" not in planner_context
     assert planner_context["render_export"] is False
-    assert "你可以选择、跳过、重排、并行或替换步骤" in client.instructions[0]
-    assert "用户已明确给出的值、事实和选择直接采用" in client.instructions[0]
-    assert "AgentRun objective 是本次运行的最新用户目标" in (
-        client.instructions[0]
+    assert output_contracts["plan"]["title"] == "AgentPlanProposal"
+    assert (
+        output_contracts["tool_schema_request"]["title"]
+        == "AgentToolSchemaRequest"
     )
-    assert "不得仅因历史 brief 已完成就声称本次目标完成" in (
-        client.instructions[0]
-    )
-    assert "该运行的任务范围就不包含剧本修订" in client.instructions[0]
-    assert "应在 STORYBOARD_PLAN 范围内重编新草稿" in (
-        client.instructions[0]
-    )
-    assert "OUTSIDE_ACCEPTED_RANGE 只是诊断" in client.instructions[0]
-    assert "mismatch_resolution 也不能覆盖" in client.instructions[0]
-    assert "context.unattended=true" in client.instructions[0]
-    assert "用户明确要求在某个工件或内容节点确认、审阅或选择时" in (
-        client.instructions[0]
-    )
-    assert "MiniMax Design 的 drama-series、ad-tvc、mv 是项目级主 Workflow" in (
-        client.instructions[0]
-    )
-    assert "MiniMax-H3 方法是可组合的任务级表达方法" in client.instructions[0]
-    assert "计划执行器不会替步骤解析未来输出或做跨步骤模板插值" in (
-        client.instructions[0]
-    )
-    assert "待结果落盘并进入下一次重规划" in client.instructions[0]
-    assert "同一 Planner WorkOrder" in client.instructions[0]
-    assert "shot.append_storyboard_ledger_segment" in client.instructions[0]
-    assert "shot.complete_storyboard_ledger" in client.instructions[0]
-    assert "shot.append_storyboard_outline_segment" in client.instructions[0]
-    assert "shot.complete_storyboard_outline" in client.instructions[0]
-    assert "artifact.get_production_document" in client.instructions[0]
-    assert "不能凭进度摘要重建账本" in client.instructions[0]
-    assert "若其中没有当前精确 ScriptVersion" in client.instructions[0]
-    assert "必须先请求 project.get" in client.instructions[0]
-    assert "completes_scene=true" in client.instructions[0]
-    assert "4–15 秒整数执行边界" in client.instructions[0]
-    assert "在首次封结 ledger 之前" in client.instructions[0]
-    assert "allocated_duration_seconds 之和精确为 4–15 秒整数" in (
-        client.instructions[0]
-    )
-    assert "不得先封存账本" in client.instructions[0]
-    assert "同一 WorkOrder 内重新 begin 一个草稿分支" in (
-        client.instructions[0]
-    )
-    assert "不得仅为获取 begin 生成的 ID 就结束 WorkOrder" in (
-        client.instructions[0]
-    )
-    assert "不用 continuity 文本逐字相等" in client.instructions[0]
-    assert "ProductionSpec.duration_contract" in client.instructions[0]
-    assert "DURATION_RECONCILIATION" in client.instructions[0]
-    assert "OUTSIDE_ACCEPTED_RANGE 或 UNRESOLVED" in client.instructions[0]
-    assert "SOURCE_LED 或 AUDIO_LED 契约下的 OUTSIDE_ACCEPTED_RANGE" in (
-        client.instructions[0]
-    )
-    assert "本身不触发该 handoff" in client.instructions[0]
-    assert "time_origin_seconds + duration_seconds" in client.instructions[0]
-    assert "不把两者差值误判成 TARGET_LED 剧情缺陷" in client.instructions[0]
-    assert "revision_origin=PRODUCTION_CONSTRAINT" in client.instructions[0]
-    assert "不得把 bible_version 塞入不支持的 evidence_refs" in (
-        client.instructions[0]
-    )
-    assert "ASSET_REVIEWER 职责的 Worker" in client.instructions[0]
-    assert "asset.plan.current" in client.instructions[0]
-    assert "artifact.create_asset_plan 或 artifact.replace_asset_plan" in (
-        client.instructions[0]
-    )
-    assert "anchor/text-only/reuse 取舍" in client.instructions[0]
-    assert "Provider 调用只选当前 Shot/ClipGroup 的最少充分子集" in (
-        client.instructions[0]
-    )
-    assert "Subject reference" in client.instructions[0]
-    assert "Picture/keyframe" in client.instructions[0]
-    assert "每条 finding 显式给出 repair_scope" in client.instructions[0]
-    assert "片段边界只是运行检查点" in client.instructions[0]
-    assert "不设片段数量、大小或重试次数" in client.instructions[0]
-    assert "在一次模型回答中输出全片账本" in client.instructions[0]
-    assert "REVISION_VERIFIER" in client.instructions[0]
-    assert "STORY_REPAIR" not in client.instructions[0]
-    assert "FINAL_COLD_READ" not in client.instructions[0]
-    assert "REVIEW_ROUTER" not in client.instructions[0]
-    assert "CRITIC" not in client.instructions[0]
-    assert "审核问题分派的通用职责" not in client.instructions[0]
-    assert "当前制片技能：AI 短剧（本地格式适配）" in client.instructions[0]
-    assert "共享端到端制片流程" in client.instructions[0]
+    instructions = client.instructions[0]
+    assert "根据 ContextPack 中真实已有的内容、任务结果和依赖制定最小可执行计划" in instructions
+    assert "当前 objective 表示这次交付" in instructions
+    assert "不得用关键词匹配代替语义判断" in instructions
+    assert "分工按真实职责和依赖" in instructions
+    assert "artifact.get_asset_planning_context" in instructions
+    assert "artifact.get_asset_plan_index" in instructions
+    assert "artifact.get_asset_work_context" in instructions
+    assert "execution_contract 是对当前内容" in instructions
+    assert "不是版本号门禁" in instructions
+    assert "不得自称该切片可执行" in instructions
+    assert "不再叠加 project.get 和完整资产计划" in instructions
+    assert "不在 Manager 内重复一套全流程手册" in instructions
+    assert "video_execution_target 只选择视频生成执行器" in instructions
+    assert "图片能力必须由 image.capability 的实际结果独立判断" in instructions
+    assert "不创造未来的 document/version/work-item ID" in instructions
+    assert "available_tools 只是紧凑目录" in instructions
+    assert "当前制片技能：AI 短剧（本地格式适配）" in instructions
+    assert "精简可用阶段线索" in instructions
+    assert "shot.append_storyboard_ledger_segment" not in instructions
+    assert "REFERENCE_GENERATE" not in instructions
+    assert "CRITIC" not in instructions
     assert project.id in client.inputs[0]
 
 
@@ -1174,7 +3347,7 @@ def test_language_planner_semantically_selects_and_persists_method_skills(
     response = json.dumps(
         {
             "summary": "Use an explicit commercial-film method for the current objective.",
-            "selected_method_skill_ids": ["method.minimax_h3.brand_promo_video"],
+            "selected_method_skill_ids": ["method.brand_promo"],
             "method_selection_rationale": (
                 "The objective needs product claims translated into visible proof."
             ),
@@ -1211,10 +3384,10 @@ def test_language_planner_semantically_selects_and_persists_method_skills(
 
     assert run.snapshot.current_plan is not None
     assert run.snapshot.current_plan.selected_method_skill_ids == [
-        "method.minimax_h3.brand_promo_video"
+        "method.brand_promo"
     ]
     assert run.snapshot.current_plan.method_selection_rationale is not None
-    assert "method.minimax_h3.brand_promo_video" in run.snapshot.run.active_skill_ids
+    assert "method.brand_promo" in run.snapshot.run.active_skill_ids
     planner_payload = json.loads(client.inputs[0])
     assert {
         item["id"] for item in planner_payload["available_production_methods"]
@@ -1237,6 +3410,82 @@ def test_language_planner_semantically_selects_and_persists_method_skills(
         for item in planner_payload["available_production_methods"]
     )
     assert "不得用关键词匹配代替语义判断" in client.instructions[0]
+
+
+def test_language_planner_repairs_unknown_method_skill_before_persisting(
+    tmp_path: Path,
+) -> None:
+    project_service = _service(tmp_path)
+    project = project_service.initialize_fixture().document.project
+    available_method_ids = {
+        descriptor.id for descriptor in production_method_skill_catalog()
+    }
+    corrected_method_id = "method.brand_promo"
+    assert corrected_method_id in available_method_ids
+    assert "format.ai-short-drama" not in available_method_ids
+
+    def planner_response(method_skill_ids: list[str]) -> str:
+        return json.dumps(
+            {
+                "summary": "Select a registered production method before continuing.",
+                "selected_method_skill_ids": method_skill_ids,
+                "method_selection_rationale": (
+                    "Use the available method catalog rather than a format Skill ID."
+                ),
+                "steps": [
+                    {
+                        "id": "inspect-project",
+                        "title": "Inspect current project",
+                        "kind": "TOOL_CALL",
+                        "assigned_agent": "production-manager",
+                        "tool_name": "project.get",
+                        "instructions": "Read the canonical project.",
+                        "arguments": {"project_id": project.id},
+                        "depends_on": [],
+                        "artifact_refs": [],
+                    }
+                ],
+                "goal_complete": False,
+            }
+        )
+
+    client = SequencedLanguageClient(
+        [
+            planner_response(["format.ai-short-drama"]),
+            planner_response([corrected_method_id]),
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(objective="Inspect the project with a known method."),
+    )
+
+    assert len(client.inputs) == 2
+    first_payload, corrected_payload = [
+        json.loads(value) for value in client.inputs
+    ]
+    assert "plan_validation_feedback" not in first_payload
+    feedback = corrected_payload["plan_validation_feedback"]
+    assert feedback["kind"] == "UNKNOWN_PRODUCTION_METHOD_SKILL"
+    assert set(feedback["available_method_skill_ids"]) == available_method_ids
+    assert "format.ai-short-drama" not in feedback["available_method_skill_ids"]
+
+    current_plan = run.snapshot.current_plan
+    assert current_plan is not None
+    assert current_plan.selected_method_skill_ids == [corrected_method_id]
+    assert (
+        len(service.agent_runtime.store.list_plan_revisions(run.snapshot.run.id))
+        == 1
+    )
 
 
 def test_language_planner_repairs_unresolved_plan_artifact_refs_before_persisting(
@@ -1349,6 +3598,114 @@ def test_language_planner_repairs_unresolved_plan_artifact_refs_before_persistin
     boundary = adjacent[0]
     assert isinstance(boundary, dict)
     assert boundary["artifact_refs"] == [canonical_ref]
+
+
+def test_language_planner_repairs_unavailable_inherited_decision_ids_before_persisting(
+    tmp_path: Path,
+) -> None:
+    client = SequencedLanguageClient([])
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project = service.initialize_fixture().document.project
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Delegate the next bounded scene decision.",
+            initial_plan=AgentPlanProposal(
+                summary="Persist one checkpoint before delegation.",
+                steps=[
+                    PlanStep(
+                        id="checkpoint",
+                        title="Record current state",
+                        kind=ActionKind.CHECKPOINT,
+                        assigned_agent="production-manager",
+                        instructions="Record the current state.",
+                    )
+                ],
+            ),
+        ),
+    )
+    visible_decision = service.agent_runtime.remember_decision(
+        project_id=project.id,
+        run_id=run.snapshot.run.id,
+        statement="Keep the story inside the school canteen.",
+        rationale="The user requested a tightly connected single-location story.",
+    )
+
+    def delegation_plan(decision_ids: list[str]) -> str:
+        return json.dumps(
+            {
+                "summary": "Delegate one bounded scene decision.",
+                "steps": [
+                    {
+                        "id": "write-scene",
+                        "title": "Write the next scene",
+                        "kind": "DELEGATION",
+                        "production_skill_role": "WRITER",
+                        "assigned_agent": "scene-writer",
+                        "instructions": "Write the next bounded scene.",
+                        "arguments": {
+                            "why_now": "The location decision is confirmed.",
+                            "inherited_decision_ids": decision_ids,
+                        },
+                        "depends_on": [],
+                        "artifact_refs": [],
+                    }
+                ],
+                "goal_complete": False,
+            }
+        )
+
+    client.responses.extend(
+        [
+            delegation_plan(
+                [f"{visible_decision.id}:decision-invented", "decision-unknown"]
+            ),
+            delegation_plan([visible_decision.id]),
+        ]
+    )
+
+    advanced = service.advance_agent_run(
+        run.snapshot.run.id,
+        AgentRunAdvanceRequest(max_actions=1),
+    )
+
+    assert len(client.inputs) == 2
+    first_payload, corrected_payload = [
+        json.loads(value) for value in client.inputs
+    ]
+    assert "plan_validation_feedback" not in first_payload
+    feedback = corrected_payload["plan_validation_feedback"]
+    assert feedback["kind"] == "UNAVAILABLE_DECISION_ID"
+    assert feedback["available_decision_ids"] == [visible_decision.id]
+    assert {
+        issue["path"] for issue in feedback["issues"]
+    } == {
+        "steps[0].arguments.inherited_decision_ids[0]",
+        "steps[0].arguments.inherited_decision_ids[1]",
+    }
+    assert {issue["received"] for issue in feedback["issues"]} == {
+        f"{visible_decision.id}:decision-invented",
+        "decision-unknown",
+    }
+    assert "concatenate" in feedback["instruction"]
+
+    current_plan = advanced.run.snapshot.current_plan
+    assert current_plan is not None
+    assert current_plan.revision == 2
+    assert current_plan.steps[0].arguments["inherited_decision_ids"] == [
+        visible_decision.id
+    ]
+    assert all(
+        action.error_kind != "InvalidContextManifest"
+        for action in advanced.run.snapshot.actions
+    )
 
 
 def test_language_planner_repairs_invalid_plan_contract_before_persisting(
@@ -1474,11 +3831,13 @@ def test_language_planner_loads_only_explicitly_requested_tool_schema(
     assert all(
         "input_schema" not in descriptor
         and "output_schema" not in descriptor
+        and "description" not in descriptor
         for descriptor in first_payload["available_tools"]
     )
     assert set(second_payload["tool_schemas"]) == {"project.get"}
+    assert "description" in second_payload["tool_schemas"]["project.get"]
     assert "input_schema" in second_payload["tool_schemas"]["project.get"]
-    assert "output_schema" in second_payload["tool_schemas"]["project.get"]
+    assert "output_schema" not in second_payload["tool_schemas"]["project.get"]
 
 
 def test_language_planner_rejects_unknown_tool_schema_request(
@@ -1745,41 +4104,19 @@ def test_configured_specialist_agent_completes_work_order_round_trip(
     assert response.run.snapshot.actions[0].status.value == "SUCCEEDED"
     assert response.run.snapshot.run.status == AgentRunStatus.RUNNING
     assert response.run.context.decisions[0].statement == "Preserve the eyeline."
-    assert "对应角色的 Production Skill" in client.instructions[0]
-    assert "用户已明确给出的值、事实和选择直接采用" in client.instructions[0]
-    assert "tool_name、reason、arguments" in client.instructions[0]
-    assert "context.unattended=true" in client.instructions[0]
-    assert "只有确实需要暂停时才返回 PARTIAL" in client.instructions[0]
-    assert "你不得建议 SCRIPT repair" in client.instructions[0]
-    assert "将其仅视为可制作性证据" in client.instructions[0]
-    assert "本 WorkOrder 不得返回 SCRIPT repair" in client.instructions[0]
-    assert "不得执行或暗示 SCRIPT revision" in client.instructions[0]
-    assert "begin、ledger 增量、ledger 完成、outline 增量" in (
-        client.instructions[0]
-    )
-    assert "不要仅因为 begin 产生了新 ID" in (
-        client.instructions[0]
-    )
-    assert "不要设固定字数、条数、场次数或调用次数" in (
-        client.instructions[0]
-    )
-    assert "artifact.get_production_document" in client.instructions[0]
-    assert "不能凭 Tool 进度摘要" in client.instructions[0]
-    assert "第一个 Tool 请求必须是 project.get" in client.instructions[0]
-    assert "completes_scene=true" in client.instructions[0]
-    assert "4–15 秒整数的未来 H3 生成单元" in client.instructions[0]
-    assert "在首次封结 ledger 前" in client.instructions[0]
-    assert "allocated_duration_seconds 之和精确为 4–15 秒整数" in (
-        client.instructions[0]
-    )
-    assert "不得先封存账本" in client.instructions[0]
-    assert "本 WorkOrder 内再请求一次 shot.begin_storyboard_draft" in (
-        client.instructions[0]
-    )
-    assert "不得仅为重启草稿返回 Leader" in client.instructions[0]
-    assert "Tool 结果会回到你手上" in client.instructions[0]
-    assert "无需逐字复制" in client.instructions[0]
-    assert "REVISION_VERIFIER，必须先用" in client.instructions[0]
+    instructions = client.instructions[0]
+    assert "完成 WorkOrder 指定的目标与工件" in instructions
+    assert "按当前角色和阶段使用必要方法" in instructions
+    assert "不读取未来阶段的整套手册" in instructions
+    assert "tool_name、reason、arguments" in instructions
+    assert "working_set 是当前可重建工作集，不是历史对话" in instructions
+    assert "不叠加 project.get、整份上游工件和当前任务切片" in instructions
+    assert "agent.get_tool_attempt" in instructions
+    assert "后续写入尝试消费为止" in instructions
+    assert "只修正交接结构，不把它当成创作意见" in instructions
+    assert "导演的通用职责" in instructions
+    assert "shot.append_storyboard_ledger_segment" not in instructions
+    assert "第一个 Tool 请求必须是 project.get" not in instructions
     specialist_context = json.loads(client.inputs[0])["context"]
     assert specialist_context["unattended"] is False
     assert "scene-director" in client.inputs[0]
@@ -1844,14 +4181,19 @@ def test_language_specialist_receives_append_only_work_order_progress(
     assert response.result.status == AgentResultStatus.COMPLETED
     assert len(client.inputs) == 2
     first_payload, second_payload = [json.loads(value) for value in client.inputs]
-    progress_entries = first_payload["progress_entries"]
-    assert [entry["sequence"] for entry in progress_entries] == [1, 2, 3]
-    assert [entry["summary"] for entry in progress_entries] == [
-        "WorkOrder created: Review the current scene staging.",
-        "Loaded the current staging and marked the eyeline for review.",
-        "Specialist work started or resumed.",
-    ]
-    assert second_payload["progress_entries"] == progress_entries
+    assert "progress_entries" not in first_payload
+    assert "tool_history" not in first_payload
+    progress = first_payload["working_set"]["progress"]
+    assert progress["total_events"] == 3
+    assert progress["lifecycle"]["sequence"] == 3
+    assert progress["lifecycle"]["summary"] == (
+        "Specialist work started or resumed."
+    )
+    assert progress["worker_handoff"]["sequence"] == 2
+    assert progress["worker_handoff"]["summary"] == (
+        "Loaded the current staging and marked the eyeline for review."
+    )
+    assert second_payload["working_set"]["progress"] == progress
     assert first_payload["tool_schemas"] == {}
     assert set(first_payload["response_schemas"]) == {
         "final_result",
@@ -1860,27 +4202,42 @@ def test_language_specialist_receives_append_only_work_order_progress(
     }
     assert list(
         first_payload["response_schemas"]["tool_request"]["properties"]
-    ) == ["tool_name", "reason", "arguments"]
+    ) == ["tool_name", "reason", "arguments", "working_notes"]
     artifact_ref_schema = first_payload["response_schemas"]["final_result"]["$defs"][
         "ArtifactRef"
     ]
     assert artifact_ref_schema["additionalProperties"] is False
+    next_owner_schema = first_payload["response_schemas"]["final_result"][
+        "properties"
+    ]["next_owner"]
+    assert next_owner_schema["anyOf"][0]["enum"] == [
+        WorkOrderNextOwner.LEADER_REPLAN.value,
+        WorkOrderNextOwner.USER_INPUT.value,
+    ]
     assert client.max_output_token_requests == [20000, 20000]
     assert all(
         "input_schema" not in descriptor
         and "output_schema" not in descriptor
+        and "description" not in descriptor
         for descriptor in first_payload["available_tools"]
     )
     assert set(second_payload["tool_schemas"]) == {"project.get"}
+    assert "description" in second_payload["tool_schemas"]["project.get"]
+    assert "input_schema" in second_payload["tool_schemas"]["project.get"]
+    assert "output_schema" not in second_payload["tool_schemas"]["project.get"]
     persisted_progress = service.list_agent_work_order_progress(work_order_id).entries
     assert [entry.summary for entry in persisted_progress[:3]] == [
-        item["summary"] for item in progress_entries
+        "WorkOrder created: Review the current scene staging.",
+        "Loaded the current staging and marked the eyeline for review.",
+        "Specialist work started or resumed.",
     ]
     assert [entry.sequence for entry in persisted_progress] == [1, 2, 3, 4]
 
 
+@pytest.mark.parametrize("failure_kind", ["multiple_json", "completed_questions"])
 def test_invalid_specialist_response_protocol_returns_to_same_worker(
     tmp_path: Path,
+    failure_kind: str,
 ) -> None:
     corrected_result = {
         "status": "COMPLETED",
@@ -1894,6 +4251,13 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
         "evidence_refs": [],
         "recommended_next_actions": [],
     }
+    invalid_response = (
+        json.dumps(corrected_result) + "\n" + json.dumps({"extra": True})
+        if failure_kind == "multiple_json" else json.dumps({
+            **corrected_result, "unresolved_questions": ["Unverified audio remains"],
+        })
+    )
+    marker = "extra" if failure_kind == "multiple_json" else "Unverified audio remains"
     client = SequencedLanguageClient(
         [
             json.dumps(
@@ -1902,7 +4266,7 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
                     "rationale": "Load the exact read contract before deciding.",
                 }
             ),
-            json.dumps(corrected_result) + "\n" + json.dumps({"extra": True}),
+            invalid_response,
             json.dumps(corrected_result),
         ]
     )
@@ -1935,7 +4299,7 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
         "tool_request",
         "tool_schema_request",
     }
-    assert "extra" in failed.pending_protocol_feedback.rejected_response
+    assert marker in failed.pending_protocol_feedback.rejected_response
     action = service.agent_runtime_store.get_action(action_id)
     assert action is not None
     assert action.status == ActionStatus.RUNNING
@@ -1959,9 +4323,11 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
     assert len(client.inputs) == 3
     correction_payload = json.loads(client.inputs[2])
     assert set(correction_payload["tool_schemas"]) == {"project.get"}
+    assert "input_schema" in correction_payload["tool_schemas"]["project.get"]
+    assert "output_schema" not in correction_payload["tool_schemas"]["project.get"]
     protocol_feedback = correction_payload["response_protocol_feedback"]
     assert protocol_feedback["loaded_tool_schema_ids"] == ["project.get"]
-    assert "extra" in protocol_feedback["rejected_response"]
+    assert marker in protocol_feedback["rejected_response"]
     assert "不是剧情、创意或任务拆分意见" in client.instructions[2]
     progress = service.list_agent_work_order_progress(work_order_id).entries
     validator_entries = [
@@ -1969,6 +4335,72 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
     ]
     assert len(validator_entries) == 2
     assert "same Worker" in validator_entries[-1].summary
+
+
+@pytest.mark.parametrize(
+    "specialist_next_owner",
+    [
+        WorkOrderNextOwner.WORKER_DECISION,
+        WorkOrderNextOwner.WORKER_TOOL,
+    ],
+)
+def test_specialist_cannot_claim_manager_owned_worker_state(
+    tmp_path: Path,
+    specialist_next_owner: WorkOrderNextOwner,
+) -> None:
+    client = SequencedLanguageClient(
+        [
+            json.dumps(
+                {
+                    "status": "PARTIAL",
+                    "concise_summary": "Continue inside the Worker runtime.",
+                    "unresolved_questions": [],
+                    "recommended_next_actions": ["Continue the same work."],
+                    "next_owner": specialist_next_owner.value,
+                }
+            ),
+            json.dumps(
+                {
+                    "status": "COMPLETED",
+                    "concise_summary": "The specialist returned a valid handoff.",
+                }
+            ),
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project_id = service.initialize_fixture().document.project.id
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    _run_id, work_order_id, _action_id = _start_pending_delegation(
+        service,
+        project_id,
+    )
+
+    partial = service.execute_agent_work_order(work_order_id)
+
+    assert partial.result.status == AgentResultStatus.PARTIAL
+    persisted = service.agent_runtime_store.get_work_order(work_order_id)
+    assert persisted is not None
+    assert persisted.next_owner == WorkOrderNextOwner.WORKER_DECISION
+    assert persisted.pending_protocol_feedback is not None
+    ownership_issues = persisted.pending_protocol_feedback.validation_issues[
+        "agent_result"
+    ]
+    assert ownership_issues[0]["type"] == "ValueError"
+    assert "Manager-owned states" in str(ownership_issues[0]["msg"])
+
+    completed = service.execute_agent_work_order(work_order_id)
+
+    assert completed.result.status == AgentResultStatus.COMPLETED
+    corrected = service.agent_runtime_store.get_work_order(work_order_id)
+    assert corrected is not None
+    assert corrected.status == DelegationStatus.COMPLETED
+    assert corrected.pending_protocol_feedback is None
 
 
 def test_specialist_accepts_top_level_json_field_continuation(
@@ -2121,6 +4553,61 @@ def test_plan_can_be_replaced_with_a_new_parallel_graph(tmp_path: Path) -> None:
         "story-check",
         "staging-check",
     }
+
+
+def test_confirmed_user_decisions_survive_restart_and_automatic_replanning(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document.project
+    interim = AgentPlanProposal(
+        summary="Continue the available work before the next planning decision.",
+        steps=[
+            PlanStep(
+                id="continue",
+                title="Continue available work",
+                kind=ActionKind.CHECKPOINT,
+                assigned_agent="production-manager",
+                instructions="Keep the completed work and return to planning.",
+            )
+        ],
+    )
+    run_id = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(objective="Finish available assets.", initial_plan=interim),
+    ).snapshot.run.id
+    statement = "Set the filtered character views aside and continue other assets."
+    request = AgentRunReplanRequest(
+        reason="The user changed the scope of this experiment.",
+        proposed_plan=interim,
+        confirmed_decisions=[statement, statement, "  "],
+    )
+    service.replan_agent_run(run_id, request)
+    service.replan_agent_run(run_id, request)
+
+    client = SequencedLanguageClient(
+        [json.dumps({"summary": "Available work is finished.", "goal_complete": True, "steps": []})]
+    )
+    restarted = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    restarted.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    remembered = restarted.production_manager.runtime.store.list_decisions(
+        project.id, run_id=run_id
+    )
+    assert sum(item.statement == statement for item in remembered) == 1
+    assert all(item.statement != request.reason for item in remembered)
+
+    result = restarted.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=2))
+
+    assert result.run.snapshot.run.status == AgentRunStatus.COMPLETED
+    context = json.loads(client.inputs[0])["context"]
+    assert statement in [item["statement"] for item in context["decisions"]]
+    assert request.reason not in [item["statement"] for item in context["decisions"]]
 
 
 def test_external_replan_rejects_unresolved_artifact_ref_before_persisting(
@@ -2414,6 +4901,45 @@ def test_replan_can_explicitly_carry_work_order_into_the_current_plan(
     assert settled.run.snapshot.run.status == AgentRunStatus.COMPLETED
 
 
+def test_replan_supersedes_work_order_that_already_returned_to_leader(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    run_id, work_order_id, action_id = _start_pending_delegation(
+        service,
+        project_id,
+    )
+    returned = service.agent_runtime.store.get_work_order(work_order_id)
+    assert returned is not None
+    returned.status = DelegationStatus.NEEDS_ATTENTION
+    returned.next_owner = WorkOrderNextOwner.LEADER_REPLAN
+    service.agent_runtime.store.save_work_order(returned)
+
+    replanned = service.replan_agent_run(
+        run_id,
+        AgentRunReplanRequest(
+            reason="Create a focused replacement from the returned handoff.",
+            proposed_plan=AgentPlanProposal(
+                summary="The replacement has taken ownership of the remaining repair.",
+                carried_work_order_ids=[work_order_id],
+                goal_complete=True,
+            ),
+        ),
+    )
+
+    current_plan = replanned.snapshot.current_plan
+    assert current_plan is not None
+    assert current_plan.carried_work_order_ids == []
+    superseded = service.agent_runtime.store.get_work_order(work_order_id)
+    assert superseded is not None
+    assert superseded.status == DelegationStatus.CANCELLED
+    assert superseded.superseded_by_plan_revision_id == current_plan.id
+    cancelled_action = service.agent_runtime.store.get_action(action_id)
+    assert cancelled_action is not None
+    assert cancelled_action.status == ActionStatus.CANCELLED
+
+
 def test_carried_work_order_waits_without_replanning_after_current_steps_finish(
     tmp_path: Path,
 ) -> None:
@@ -2465,6 +4991,36 @@ def test_carried_work_order_waits_without_replanning_after_current_steps_finish(
     assert waiting.run.snapshot.current_plan.id == plan.id
     assert service.agent_runtime.store.get_work_order(work_order_id) is not None
     assert client.inputs == []
+
+
+def test_carried_work_order_return_to_leader_automatically_replans(tmp_path: Path) -> None:
+    client = SequencedLanguageClient([json.dumps({
+        "summary": "The Leader has consumed the returned review.", "steps": [], "goal_complete": True,
+    })])
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3", workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project_id = service.initialize_fixture().document.project.id
+    service.update_language_provider_config(LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1"))
+    run_id, work_order_id, _action_id = _start_pending_delegation(service, project_id)
+    carried = service.replan_agent_run(run_id, AgentRunReplanRequest(
+        reason="Keep the active Worker.", proposed_plan=AgentPlanProposal(
+            summary="Continue the existing review.", carried_work_order_ids=[work_order_id], goal_complete=True,
+        ),
+    ))
+    old_plan = carried.snapshot.current_plan
+    assert old_plan is not None
+    service.submit_agent_work_order_result(work_order_id, AgentWorkOrderResultRequest(
+        status=AgentResultStatus.PARTIAL, concise_summary="The review has findings for the Leader.",
+        next_owner=WorkOrderNextOwner.LEADER_REPLAN,
+    ))
+    advanced = service.advance_agent_run(run_id, AgentRunAdvanceRequest())
+    assert len(client.inputs) == 1
+    assert advanced.run.snapshot.current_plan is not None
+    assert advanced.run.snapshot.current_plan.id != old_plan.id
+    assert advanced.run.snapshot.current_plan.carried_work_order_ids == []
+    assert advanced.run.snapshot.run.status == AgentRunStatus.COMPLETED
 
 
 def test_stale_handoff_still_rejects_cross_project_artifact_refs(
@@ -2553,7 +5109,7 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
             objective="Ask the scene director to review one shot.",
             initial_plan=AgentPlanProposal(
                 summary="Delegate one bounded review.",
-                selected_method_skill_ids=["method.minimax_h3.brand_promo_video"],
+                selected_method_skill_ids=["method.brand_promo"],
                 method_selection_rationale=(
                     "Use visible product proof and claim-to-shot reasoning."
                 ),
@@ -2564,6 +5120,7 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
                         title="Director review",
                         kind=ActionKind.DELEGATION,
                         production_skill_role=ProductionSkillRole.DIRECTOR,
+                        production_prompt_stage=ProductionPromptStage.STORYBOARD,
                         assigned_agent="specialist-alpha",
                         instructions="Review this shot's staging without changing other shots.",
                         arguments={
@@ -2597,16 +5154,25 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
         work_order.work_order.production_skill_role
         == ProductionSkillRole.DIRECTOR
     )
+    assert (
+        work_order.work_order.production_prompt_stage
+        == ProductionPromptStage.STORYBOARD
+    )
+    assert "当前制片阶段：STORYBOARD" in work_order.system_prompt
+    assert work_order.work_order.context_manifest is not None
+    assert (
+        work_order.work_order.context_manifest.production_prompt_stage
+        == ProductionPromptStage.STORYBOARD
+    )
     assert work_order.work_order.constraints == ["Preserve the accepted ending."]
     assert "当前制片技能：AI 短剧（本地格式适配）" in work_order.system_prompt
     assert "导演的通用职责" in work_order.system_prompt
-    assert "MiniMax-H3：品牌宣传短片" in work_order.system_prompt
+    assert "品牌宣传片" in work_order.system_prompt
     assert "导演动效语言" in work_order.system_prompt
     assert "把已批准的文本意图转成可见的表演、调度、构图、动作、声音与时间设计" in (
         work_order.system_prompt
     )
     assert work_order.context.artifacts[0].ref.artifact_id == shot.id
-    assert work_order.work_order.context_manifest is not None
     assert work_order.work_order.context_manifest.selected_skill_ids == (
         work_order.context.active_skill_ids
     )
@@ -2616,7 +5182,7 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
         ["format.ai-short-drama"],
     )
     snapshotted_work_order = service.get_agent_work_order(work_order_id)
-    assert "method.minimax_h3.brand_promo_video" in (
+    assert "method.brand_promo" in (
         snapshotted_work_order.context.active_skill_ids
     )
     assert "导演动效语言" in (
@@ -2823,6 +5389,77 @@ def test_partial_work_order_result_can_be_completed_without_orphaning_the_plan(
                 concise_summary="Duplicate completion must not overwrite the result.",
             ),
         )
+
+
+def test_agent_run_view_summarizes_pending_work_order_without_trace_growth(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    run_id, work_order_id, _action_id = _start_pending_delegation(
+        service,
+        project_id,
+    )
+    initial = service.get_agent_run(run_id)
+    initial_json = initial.model_dump_json()
+
+    stored = service.agent_runtime_store.get_work_order(work_order_id)
+    assert stored is not None
+    stored.production_prompt_stage = ProductionPromptStage.STORYBOARD
+    for index in range(120):
+        stored.specialist_turns.append(
+            SpecialistTurnRecord(
+                id=f"turn-public-view-{index}",
+                sequence=index + 1,
+                tool_name="image.advance",
+                arguments={
+                    "project_id": project_id,
+                    "task_id": "image-task-current",
+                },
+                reason="Advance the current durable image task.",
+                status=SpecialistTurnStatus.COMPLETED,
+                result={
+                    "tool_id": "image.advance",
+                    "status": "SUCCEEDED",
+                    "output": {
+                        "task": {
+                            "id": "image-task-current",
+                            "status": "RUNNING",
+                            "provider_payload": (
+                                f"PUBLIC_RUN_VIEW_MUST_NOT_REPLAY_{index:03d}" * 100
+                            ),
+                        }
+                    },
+                    "artifact_refs": [],
+                    "warnings": [],
+                    "error": None,
+                },
+            )
+        )
+    service.agent_runtime_store.save_work_order(stored)
+
+    public_view = service.get_agent_run(run_id)
+    public_json = public_view.model_dump_json()
+    pending = public_view.snapshot.pending_work_orders[0]
+
+    assert pending.id == work_order_id
+    assert pending.status == stored.status
+    assert pending.next_owner == stored.next_owner
+    assert pending.production_prompt_stage == ProductionPromptStage.STORYBOARD
+    assert pending.specialist_turn_count == 120
+    assert pending.latest_specialist_tool_name == "image.advance"
+    assert pending.latest_specialist_turn_status == SpecialistTurnStatus.COMPLETED
+    assert "specialist_turns" not in public_json
+    assert "PUBLIC_RUN_VIEW_MUST_NOT_REPLAY" not in public_json
+    assert len(public_json.encode()) < len(initial_json.encode()) + 1000
+
+    # The explicit WorkOrder endpoint and runtime store remain lossless for
+    # restart recovery and detailed trace inspection.
+    complete_view = service.get_agent_work_order(work_order_id)
+    assert len(complete_view.work_order.specialist_turns) == 120
+    assert "PUBLIC_RUN_VIEW_MUST_NOT_REPLAY_000" in (
+        complete_view.work_order.model_dump_json()
+    )
 
 
 def test_agent_runtime_http_endpoints_are_inspectable(tmp_path: Path) -> None:
@@ -3082,9 +5719,11 @@ def test_completed_bounded_plan_replans_from_the_latest_context(
     assert advanced.run.snapshot.current_plan.revision == 2
     assert len(advanced.executed_action_ids) == 2
     planner_payload = json.loads(client.inputs[0])
-    recent = planner_payload["context"]["recent_actions"]
+    model_context = planner_payload["context"]
+    recent = model_context["recent_actions"]
     assert recent[-1]["status"] == "SUCCEEDED"
-    assert recent[-1]["artifact_refs"][0]["artifact_id"] == project.id
+    action_ref_id = recent[-1]["artifact_ref_ids"][0]
+    assert model_context["artifact_index"][action_ref_id]["artifact_id"] == project.id
     assert any("latest ContextPack" in note for note in advanced.notes)
 
 
@@ -3463,14 +6102,23 @@ def test_builtin_specialist_can_call_shared_tools_before_returning_result(
         tool["id"] for tool in first_payload["available_tools"]
     }
     final_payload = json.loads(client.inputs[-1])
-    assert len(final_payload["tool_history"]) == 6
+    assert "tool_history" not in final_payload
+    assert final_payload["working_set"]["total_tool_turns"] == 6
+    assert len(final_payload["working_set"]["tool_checkpoints"]) == 1
+    assert final_payload["working_set"]["tool_checkpoints"][0][
+        "tool_name"
+    ] == "project.get"
+    assert final_payload["working_set"]["latest_handoff"]["result"][
+        "status"
+    ] == "SUCCEEDED"
     assert [
-        len(json.loads(value)["tool_history"]) for value in client.inputs
+        json.loads(value)["working_set"]["total_tool_turns"]
+        for value in client.inputs
     ] == list(range(7))
-    assert all(
-        item["result"]["status"] == "SUCCEEDED"
-        for item in final_payload["tool_history"]
-    )
+    payload_sizes = [len(value.encode()) for value in client.inputs]
+    # Once the first exact project handoff exists, replaying the same entity does
+    # not append another copy on every stateless Worker decision.
+    assert payload_sizes[-1] < payload_sizes[1] + 1500
     assert all(
         "tool_calls_remaining" not in json.loads(value) for value in client.inputs
     )
@@ -3481,6 +6129,326 @@ def test_builtin_specialist_can_call_shared_tools_before_returning_result(
     assert experiences[0].summary == response.result.concise_summary
     assert "scene-director" in experiences[0].tags
     assert project.production_profile.value in experiences[0].tags
+
+
+def test_builtin_specialist_receives_independent_read_observations_together(
+    tmp_path: Path,
+) -> None:
+    client = SequencedLanguageClient([])
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project = service.initialize_fixture().document.project
+    client.responses = [
+        json.dumps(
+            {
+                "tool_name": "project.get",
+                "arguments": {"project_id": project.id},
+                "reason": "Read the canonical project before asset execution.",
+            }
+        ),
+        json.dumps(
+            {
+                "tool_name": "image.capability",
+                "arguments": {},
+                "reason": "Read the current image provider capability.",
+            }
+        ),
+        """{
+          "status": "COMPLETED",
+          "concise_summary": "The project evidence and image capability are both available.",
+          "created_artifacts": [],
+          "updated_artifacts": [],
+          "findings": [],
+          "decisions": ["Continue from the combined read observations."],
+          "assumptions": [],
+          "unresolved_questions": [],
+          "evidence_refs": [],
+          "recommended_next_actions": []
+        }""",
+    ]
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Confirm the asset worker can combine independent reads.",
+            initial_plan=AgentPlanProposal(
+                summary="Delegate one grounded asset decision.",
+                goal_complete=True,
+                steps=[
+                    PlanStep(
+                        id="delegate",
+                        title="Delegate asset decision",
+                        kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.ASSET_REVIEWER,
+                        assigned_agent="asset-worker",
+                        instructions="Read project truth and image capability together.",
+                    )
+                ],
+            ),
+        ),
+    )
+    waiting = service.advance_agent_run(
+        run.snapshot.run.id,
+        AgentRunAdvanceRequest(),
+    )
+
+    work_order_id = waiting.created_work_order_ids[0]
+    while True:
+        response = service.execute_agent_work_order(work_order_id)
+        if response.result.status == AgentResultStatus.COMPLETED:
+            break
+
+    assert len(client.inputs) == 3
+    final_payload = json.loads(client.inputs[-1])
+    working_set = final_payload["working_set"]
+    assert working_set["latest_handoff"]["request"]["tool_name"] == (
+        "image.capability"
+    )
+    assert [
+        item["tool_name"] for item in working_set["read_observations"]
+    ] == ["project.get"]
+    project_observation = working_set["read_observations"][0]
+    assert project_observation["result"]["status"] == "SUCCEEDED"
+    assert project_observation["result"]["output"]["document"]["project"][
+        "id"
+    ] == project.id
+    assert "不得仅因某个观察" in client.instructions[-1]
+
+
+def test_builtin_specialist_preloads_source_schemas_for_attempt_handoff(
+    tmp_path: Path,
+) -> None:
+    client = SequencedLanguageClient(
+        [
+            json.dumps(
+                {
+                    "status": "COMPLETED",
+                    "concise_summary": "The handed repair contracts are available.",
+                    "created_artifacts": [],
+                    "updated_artifacts": [],
+                    "findings": [],
+                    "decisions": ["Continue with the exact source Tool contracts."],
+                    "assumptions": [],
+                    "unresolved_questions": [],
+                    "evidence_refs": [],
+                    "recommended_next_actions": [],
+                }
+            )
+        ]
+    )
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project_id = service.initialize_fixture().document.project.id
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    run = service.agent_runtime.create_run(
+        project_id=project_id,
+        objective="Repair two handed asset-plan Tool attempts.",
+        root_agent="production-manager",
+    )
+
+    refs: list[ToolAttemptRef] = []
+    for index, tool_name in enumerate(
+        ("artifact.patch_asset_plan", "artifact.retry_asset_plan_attempt"),
+        start=1,
+    ):
+        source = service.agent_runtime.create_work_order(
+            run.id,
+            sender="production-manager",
+            recipient_role="asset-planner",
+            production_skill_role=ProductionSkillRole.ASSET_REVIEWER,
+            production_prompt_stage=ProductionPromptStage.ASSETS,
+            objective="Persist one failed repair attempt.",
+            why_now="The repair Worker needs its exact contract.",
+        )
+        attempt_id = f"source-attempt-{index}"
+        source.specialist_turns.append(
+            SpecialistTurnRecord(
+                id=attempt_id,
+                sequence=1,
+                tool_name=tool_name,
+                arguments={
+                    "project_id": project_id,
+                    "marker": f"SOURCE_BODY_MUST_STAY_LAZY_{index}",
+                },
+                reason="Try the source repair.",
+                status=SpecialistTurnStatus.COMPLETED,
+                result={
+                    "tool_id": tool_name,
+                    "status": ToolCallStatus.FAILED.value,
+                    "output": None,
+                    "artifact_refs": [],
+                    "warnings": [],
+                    "error": {"kind": "Error", "message": "Needs repair."},
+                },
+            )
+        )
+        source.status = DelegationStatus.NEEDS_ATTENTION
+        source.next_owner = WorkOrderNextOwner.LEADER_REPLAN
+        service.agent_runtime.store.save_work_order(source)
+        refs.append(
+            ToolAttemptRef(
+                project_id=project_id,
+                agent_run_id=run.id,
+                work_order_id=source.id,
+                attempt_id=attempt_id,
+                tool_name=tool_name,
+                turn_status=SpecialistTurnStatus.COMPLETED,
+                outcome_status=ToolCallStatus.FAILED.value,
+                has_arguments=True,
+                has_result=True,
+            )
+        )
+
+    repair = service.agent_runtime.create_work_order(
+        run.id,
+        sender="production-manager",
+        recipient_role="asset-plan-repairer",
+        production_skill_role=ProductionSkillRole.ASSET_REVIEWER,
+        production_prompt_stage=ProductionPromptStage.ASSETS,
+        objective="Use the handed attempts to repair the AssetPlan.",
+        why_now="Both failures describe the remaining local correction.",
+        tool_attempt_refs=refs,
+    )
+
+    response = service.execute_agent_work_order(repair.id)
+
+    assert response.result.status == AgentResultStatus.COMPLETED
+    first_payload = json.loads(client.inputs[0])
+    assert set(first_payload["tool_schemas"]) == {
+        "agent.get_tool_attempt",
+        "artifact.patch_asset_plan",
+        "artifact.retry_asset_plan_attempt",
+    }
+    assert "artifact.create_asset_plan" not in first_payload["tool_schemas"]
+    assert "artifact.replace_asset_plan" not in first_payload["tool_schemas"]
+    for schema in first_payload["tool_schemas"].values():
+        assert "description" in schema
+        assert "input_schema" in schema
+        assert "output_schema" not in schema
+    serialized = json.dumps(first_payload, ensure_ascii=False)
+    assert "SOURCE_BODY_MUST_STAY_LAZY" not in serialized
+
+
+def test_builtin_specialist_corrects_tool_contract_in_same_work_order(
+    tmp_path: Path,
+) -> None:
+    client = SequencedLanguageClient([])
+    service = ShortDramaService(
+        database_path=tmp_path / "app-data" / "short-drama.sqlite3",
+        workspace_root=tmp_path / "workspace",
+        language_provider_factory=lambda _key, _url: client,
+    )
+    project = service.initialize_fixture().document.project
+    client.responses = [
+        json.dumps(
+            {
+                "tool_name": "project.get",
+                "arguments": {
+                    "project_id": project.id,
+                    "retry_from_persisted_failed_request": True,
+                },
+                "reason": "Attempt the canonical read with a malformed wrapper.",
+            }
+        ),
+        json.dumps(
+            {
+                "tool_name": "project.get",
+                "arguments": {"project_id": project.id},
+                "reason": "Reuse the exact request and remove only the invalid field.",
+            }
+        ),
+        json.dumps(
+            {
+                "status": "COMPLETED",
+                "concise_summary": "The same Worker corrected its Tool request.",
+                "created_artifacts": [],
+                "updated_artifacts": [],
+                "findings": [],
+                "decisions": ["Continue from the successful canonical read."],
+                "assumptions": [],
+                "unresolved_questions": [],
+                "evidence_refs": [],
+                "recommended_next_actions": [],
+            }
+        ),
+    ]
+    service.update_language_provider_config(
+        LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
+    )
+    run = service.create_agent_run(
+        project.id,
+        AgentRunCreateRequest(
+            objective="Correct a local Tool contract without changing scope.",
+            initial_plan=AgentPlanProposal(
+                summary="Delegate one canonical read.",
+                goal_complete=True,
+                steps=[
+                    PlanStep(
+                        id="delegate",
+                        title="Read canonical project",
+                        kind=ActionKind.DELEGATION,
+                        production_skill_role=ProductionSkillRole.ASSET_REVIEWER,
+                        assigned_agent="asset-worker",
+                        instructions="Read the project and correct local Tool usage.",
+                    )
+                ],
+            ),
+        ),
+    )
+    waiting = service.advance_agent_run(
+        run.snapshot.run.id,
+        AgentRunAdvanceRequest(),
+    )
+    work_order_id = waiting.created_work_order_ids[0]
+
+    while True:
+        response = service.execute_agent_work_order(work_order_id)
+        if response.result.status == AgentResultStatus.COMPLETED:
+            break
+
+    assert len(client.inputs) == 3
+    correction_payload = json.loads(client.inputs[1])
+    correction_set = correction_payload["working_set"]
+    assert correction_set["repair_tool_schema_ids"] == ["project.get"]
+    assert correction_set["pending_tool_repairs"] == []
+    assert correction_set["latest_handoff"]["request"]["arguments"] == {
+        "project_id": project.id,
+    }
+    assert correction_set["latest_handoff"]["attempt_ref"]["tool_name"] == (
+        "project.get"
+    )
+    assert correction_set["latest_handoff"]["result"]["status"] == (
+        "INVALID_ARGUMENTS"
+    )
+    assert set(correction_payload["tool_schemas"]) == {
+        "agent.get_tool_attempt",
+        "project.get",
+    }
+    assert "input_schema" in correction_payload["tool_schemas"]["project.get"]
+    assert "output_schema" not in correction_payload["tool_schemas"]["project.get"]
+    assert "后续写入尝试消费为止" in client.instructions[1]
+
+    final_payload = json.loads(client.inputs[2])
+    assert final_payload["working_set"]["repair_tool_schema_ids"] == []
+    assert final_payload["working_set"]["pending_tool_repairs"] == []
+    stored = service.agent_runtime.store.get_work_order(work_order_id)
+    assert stored is not None
+    assert stored.status == DelegationStatus.COMPLETED
+    assert stored.next_owner is None
+    assert [turn.result["status"] for turn in stored.specialist_turns if turn.result] == [
+        "INVALID_ARGUMENTS",
+        "SUCCEEDED",
+    ]
 
 
 def test_specialist_cannot_bypass_parent_execution_target(tmp_path: Path) -> None:
@@ -3824,7 +6792,7 @@ def test_current_run_target_does_not_inherit_an_older_run_target(
     assert current.context.decisions[0].run_id == current.snapshot.run.id
     assert current.context.decisions[0].statement == "Render export: yes"
     assert any(
-        decision.statement == "Execution target: MOCK"
+        decision.statement == "Video execution target: MOCK"
         and decision.run_id == current.snapshot.run.id
         for decision in current.context.decisions
     )
@@ -4500,10 +7468,14 @@ def test_semantic_replan_receives_pending_verifier_evidence_before_context_cutof
 
     assert client.inputs
     planner_payload = json.loads(client.inputs[-1])
+    model_context = planner_payload["context"]
     planning_artifact = next(
         item
-        for item in planner_payload["context"]["artifacts"]
-        if item["ref"]["artifact_type"] == "content_planning_job"
+        for item in model_context["artifacts"]
+        if model_context["artifact_index"][item["artifact_ref_id"]][
+            "artifact_type"
+        ]
+        == "content_planning_job"
     )
     summary = planning_artifact["summary"]
     assert len(summary) <= 3000

@@ -7,6 +7,7 @@ import json
 import re
 import shutil
 import subprocess
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -291,6 +292,29 @@ def _format_ass_time(seconds: float) -> str:
 
 def _escape_ass_text(text: str) -> str:
     return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
+
+
+def _wrap_ass_text(text: str) -> str:
+    """Explicitly wrap CJK text even when libass lacks Unicode line breaking.
+
+    The current 1080px ASS layout has 820px between its side margins and a
+    48px font em. Seventeen full-width columns fit without relying on shaping
+    libraries to find word boundaries in Chinese. Preserve every character.
+    """
+    lines: list[str] = []
+    for paragraph in text.split("\n"):
+        current = ""
+        columns = 0.0
+        for character in paragraph:
+            width = (0.0 if unicodedata.combining(character) else
+                     1.0 if unicodedata.east_asian_width(character) in {"W", "F"} else 0.6)
+            if current and columns + width > 17:
+                lines.append(current)
+                current, columns = "", 0.0
+            current += character
+            columns += width
+        lines.append(current)
+    return _escape_ass_text("\n".join(lines))
 
 
 def _filter_path(path: Path) -> str:
@@ -668,7 +692,7 @@ Style: Default,PingFang SC,48,&H00FFFFFF,&H000000FF,&H00101010,&H66000000,-1,0,0
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
         events = [
-            f"Dialogue: 0,{_format_ass_time(cue.start_seconds)},{_format_ass_time(cue.end_seconds)},Default,{cue.speaker or ''},0,0,0,,{_escape_ass_text(cue.text)}"
+            f"Dialogue: 0,{_format_ass_time(cue.start_seconds)},{_format_ass_time(cue.end_seconds)},Default,{cue.speaker or ''},0,0,0,,{_wrap_ass_text(cue.text)}"
             for cue in manifest.subtitle_cues
         ]
         return header + "\n".join(events) + ("\n" if events else "")

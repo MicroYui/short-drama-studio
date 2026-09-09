@@ -197,8 +197,8 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
     assert "中性柔光" not in character_prompt
     assert "禁止：" not in character_prompt
     assert "当前制片技能：AI 短剧（本地格式适配）。" in character_prompt
-    assert "资产审核的通用职责：" in character_prompt
-    assert "资产审核的当前格式补充：" not in character_prompt
+    assert "资产制作的通用职责：" in character_prompt
+    assert "资产制作的当前格式补充：" not in character_prompt
     assert "类型创作原则：" not in character_prompt
     location_need = next(
         item
@@ -212,7 +212,7 @@ def test_coverage_tool_requests_only_views_missing_from_current_master(
     )
     assert "项目 Style：" in location_prompt
     assert "禁止：" not in location_prompt
-    assert "资产审核的通用职责：" in location_prompt
+    assert "资产制作的通用职责：" in location_prompt
     assert all(
         need.lineage_root_version_id
         == next(

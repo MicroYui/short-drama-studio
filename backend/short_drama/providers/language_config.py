@@ -1,4 +1,4 @@
-"""Local URL and credential configuration for GPT-5.6-sol."""
+"""Local URL and credential configuration for 语言模型."""
 
 from __future__ import annotations
 

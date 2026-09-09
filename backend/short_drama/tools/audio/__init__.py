@@ -25,6 +25,7 @@ from short_drama.tools.contracts import (
     ToolSpec,
 )
 from short_drama.tools.registry import ToolRegistry
+from short_drama.subtitle_alignment import NativeSubtitleAlignmentRequest, NativeSubtitleAlignmentResponse
 from short_drama.voice_models import (
     VoiceReferenceMutationResponse,
     VoiceReferenceUpdateRequest,
@@ -32,6 +33,10 @@ from short_drama.voice_models import (
 
 
 class AudioToolService(Protocol):
+    def align_current_native_subtitles(
+        self, project_id: str, request: NativeSubtitleAlignmentRequest,
+    ) -> NativeSubtitleAlignmentResponse: ...
+
     def bind_master_audio(
         self,
         project_id: str,
@@ -67,6 +72,11 @@ class AudioToolService(Protocol):
 class AudioInspectManifestInput(ToolModel):
     project_id: str
     request: AudioInspectionRequest
+
+
+class AudioAlignNativeSubtitlesInput(ToolModel):
+    project_id: str
+    request: NativeSubtitleAlignmentRequest
 
 
 class AudioVoiceReferenceUpdateInput(ToolModel):
@@ -112,6 +122,29 @@ def _production_document_refs(
 
 
 def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
+    def align_subtitles(request: AudioAlignNativeSubtitlesInput) -> ToolExecution[NativeSubtitleAlignmentResponse]:
+        result = service.align_current_native_subtitles(request.project_id, request.request)
+        return ToolExecution(output=result, artifact_refs=(ArtifactRef(
+            project_id=request.project_id, artifact_type="timeline_manifest",
+            artifact_id=result.manifest.id, version=result.manifest.version,
+        ), ArtifactRef.model_validate(result.alignment_document_ref.model_dump()),
+           ArtifactRef.model_validate(result.alignment_version_ref.model_dump())), warnings=tuple(result.warnings))
+
+    registry.register(ToolSpec(
+        id="audio.align_subtitles", version=1, category=ToolCategory.AUDIO,
+        description=(
+            "Align existing script subtitles to native Take audio using local ASR token timestamps. "
+            "Creates a new TimelineManifest with corrected cue times and an observation report; "
+            "video/audio windows and subtitle text stay unchanged. Review ASR differences and warnings. "
+            "The versioned alignment document contains complete cue changes, ASR observations and media invariants; "
+            "read it with artifact.get_production_document when handing off to another Worker. "
+            "Use the returned manifest for checks and export with rebuild_manifest=false."
+        ),
+        effect=ToolEffect.EXTERNAL, idempotent=False,
+        input_model=AudioAlignNativeSubtitlesInput, output_model=NativeSubtitleAlignmentResponse,
+        handler=align_subtitles, tags=frozenset({"audio", "subtitles", "timing", "timeline"}),
+    ))
+
     def bind_master(
         request: AudioBindMasterInput,
     ) -> ToolExecution[MasterAudioBindingResponse]:

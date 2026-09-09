@@ -24,6 +24,7 @@ from short_drama.models import (
     ProjectDocument,
     ShotPlan,
     ShotTimelineBeat,
+    ScriptLine,
     VideoGenerationRoute,
 )
 from short_drama.production_profiles import production_skill
@@ -32,6 +33,7 @@ from short_drama.providers.h3_media_bindings import (
     resolve_h3_media_bindings,
 )
 from short_drama.style_context import declared_style_value
+from short_drama.studio_references import assert_current_script_structure
 
 if TYPE_CHECKING:
     from short_drama.production_contracts import GenerationUnit
@@ -62,6 +64,7 @@ def compile_h3_prompt_ir(
 ) -> str:
     """Compile one provider-neutral shot into the official H3 prompt shape."""
 
+    assert_current_script_structure(document, shot)
     duration = duration_seconds or math.ceil(shot.duration_seconds)
     inputs = list(media_inputs or [])
     if route == VideoGenerationRoute.REFERENCE:
@@ -239,7 +242,7 @@ def validate_h3_prompt_ir(
             raise ValueError(
                 f"H3 prompt changed or omitted locked dialogue for {line.speaker}"
             )
-        if line.speaker not in stripped:
+        if not _contains_locked_speaker(stripped, line, document, media_inputs or []):
             raise ValueError(f"H3 prompt changed or omitted locked speaker {line.speaker}")
 
     if route == VideoGenerationRoute.REFERENCE:
@@ -257,7 +260,11 @@ def validate_h3_prompt_ir(
                 )
             binding = f"@{reference.alias} = {reference.prompt_label}"
             if reference.media.reference_alias is not None and binding not in stripped:
-                raise ValueError(f"H3 Ref2VA prompt omitted semantic binding {binding}")
+                raise ValueError(
+                    f"H3 Ref2VA prompt omitted semantic binding {binding}; "
+                    f"source upload is {reference.provider_label}. Copy the binding exactly; "
+                    "a reusable subject label and its uploaded picture label are distinct."
+                )
 
     if "[Shot 2]" in stripped:
         raise ValueError("One ShotPlan cannot compile undeclared additional editorial shots")
@@ -333,6 +340,18 @@ def validate_h3_generation_unit_prompt_ir(
         if version.id == document.project.current_script_version_id
     )
     line_by_id = {line.id: line for line in script.lines}
+    markers = [
+        _generation_unit_window_marker(
+            index, window.source_in_seconds, window.duration_seconds
+        )
+        for index, window in enumerate(unit.shot_windows, start=1)
+    ]
+    marker_positions = [stripped.find(marker) for marker in markers]
+    if all(position >= 0 for position in marker_positions) and (
+        marker_positions != sorted(marker_positions)
+    ):
+        raise ValueError("H3 generation-unit prompt reordered editorial shot windows")
+    soundscape_start = stripped.find("overall_soundscape:")
     for index, window in enumerate(unit.shot_windows, start=1):
         shot = shot_by_id.get(window.shot_id)
         if shot is None:
@@ -346,10 +365,13 @@ def validate_h3_generation_unit_prompt_ir(
         )
         if marker not in stripped:
             raise ValueError(f"H3 generation-unit prompt omitted locked window {marker}")
+        segment_end = marker_positions[index] if index < len(markers) else soundscape_start
+        segment = stripped[marker_positions[index - 1] : segment_end]
         for line_id in shot.dialogue_line_ids:
             line = line_by_id.get(line_id)
             if line is not None and (
-                line.spoken_text not in stripped or line.speaker not in stripped
+                line.spoken_text not in segment
+                or not _contains_locked_speaker(segment, line, document, media_inputs or [])
             ):
                 raise ValueError(
                     f"H3 generation-unit prompt changed or omitted dialogue for {line.speaker}"
@@ -358,7 +380,10 @@ def validate_h3_generation_unit_prompt_ir(
     if route == VideoGenerationRoute.REFERENCE:
         references = resolve_h3_media_bindings(document, media_inputs or [], [])
         for reference in references:
-            if reference.provider_label not in stripped:
+            if (
+                reference.provider_label not in stripped
+                or reference.prompt_label not in stripped
+            ):
                 raise ValueError(
                     "H3 Ref2VA generation-unit prompt omitted reference label "
                     f"{reference.provider_label}"
@@ -368,13 +393,38 @@ def validate_h3_generation_unit_prompt_ir(
             ):
                 raise ValueError(
                     "H3 Ref2VA generation-unit prompt omitted semantic binding "
-                    f"@{reference.alias}"
+                    f"@{reference.alias} = {reference.prompt_label}; "
+                    f"source upload is {reference.provider_label}. Copy the binding exactly; "
+                    "a reusable subject label and its uploaded picture label are distinct."
                 )
     return [
         "official MiniMax-H3 prompt field order preserved",
         f"{len(unit.shot_windows)} editorial shot window(s) preserved in order",
         f"locked 9:16 ratio and {duration_seconds}-second provider duration preserved",
     ]
+
+
+def _contains_locked_speaker(
+    text: str,
+    line: ScriptLine,
+    document: ProjectDocument,
+    media_inputs: list[H3MediaInput],
+) -> bool:
+    if line.speaker in text:
+        return True
+    if line.speaker_character_id is None:
+        return False
+    # English prose may address the character by its canonical reference label.
+    # Resolve that label through typed asset bindings instead of guessing translations.
+    speaker_assets = {
+        asset.id for asset in document.assets
+        if asset.kind == AssetKind.CHARACTER
+        and asset.bible_entity_id == line.speaker_character_id
+    }
+    return any(
+        reference.subject_asset_id in speaker_assets and reference.prompt_label in text
+        for reference in resolve_h3_media_bindings(document, media_inputs, [])
+    )
 
 
 def prompt_schema_for_route(route: VideoGenerationRoute) -> dict[str, object]:
@@ -860,6 +910,7 @@ def _timeline_reference_cues(
             item
             for item in references
             if item.subject_asset_id == cue.subject_asset_id
+            and (cue.asset_version_id is None or cue.asset_version_id == item.media.asset_version_id)
             and set(cue.required_tags).issubset(item.tags)
         ]
         if matches:

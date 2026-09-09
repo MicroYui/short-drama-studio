@@ -1,0 +1,55 @@
+{
+  "id": "method.lyric_video",
+  "label": "歌词音乐视频",
+  "description": "适合需要歌词贴字 MV 的项目，重点处理歌词时序、空间字幕、人物/场景参考和多镜连续性。",
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "REVISION_VERIFIER",
+    "DIRECTOR",
+    "ASSET_REVIEWER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_source_sections": {
+    "CONCEPT": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::核心原则",
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 2：Creative Contract"
+    ],
+    "WRITER": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::1.3.0 歌词锁定与歌词先行补全"
+    ],
+    "PLANNER": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::1.2 目标时长与多镜头拆解架构",
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::1.3 音乐窗口",
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 3：参考图分工与场景采样",
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 6：BGM 连续性与多镜头自然衔接系统"
+    ],
+    "REVISION_VERIFIER": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 7：审查清单（Checklist）"
+    ],
+    "DIRECTOR": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::视觉与剪辑语言",
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::文字包装规则",
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::6.2 多镜头自然衔接系统（Natural Stitching Protocol）"
+    ],
+    "ASSET_REVIEWER": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 3：参考图分工与场景采样"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 5：Prompt 结构模板"
+    ],
+    "EPISODE_REVIEWER": [
+      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 7：审查清单（Checklist）"
+    ]
+  },
+  "provenance": "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER",
+  "upstream_sources": [
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/music-video-subtitle-generator/SKILL.cn.md",
+    "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/music-video-subtitle-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub User]"
+  ],
+  "user_overridable": true
+}

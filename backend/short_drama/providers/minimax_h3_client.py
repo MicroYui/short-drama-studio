@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
+import math
 import mimetypes
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from statistics import median
 from typing import Protocol, cast
 
 import requests
+from PIL import Image
 from pydantic import ValidationError
 from requests import Response, Session
 
@@ -21,6 +25,41 @@ from short_drama.h3_models import (
     H3RemoteTask,
     H3VideoRequest,
 )
+
+
+# The encoded bytes changed from the previous unadapted Data URI cache.
+H3_LOCAL_INPUT_ENCODING_PROFILE = "acedata-h3-image-padding-v1"
+
+
+def h3_image_transport_size(width: int, height: int) -> tuple[int, int]:
+    """Fit the provider's [0.4, 2.5] input aspect range by adding canvas only."""
+    return max(width, math.ceil(height * 0.4)), max(height, math.ceil(width / 2.5))
+
+
+def _image_transport_bytes(raw: bytes, mime_type: str) -> tuple[bytes, str]:
+    with Image.open(BytesIO(raw)) as source:
+        target_size = h3_image_transport_size(source.width, source.height)
+        if target_size == source.size:
+            return raw, mime_type
+        has_alpha = "A" in source.getbands() or "transparency" in source.info
+        pixels = source.convert("RGBA" if has_alpha else "RGB")
+        if has_alpha:
+            color = (0, 0, 0, 0)
+        else:
+            corners = [
+                cast(tuple[int, int, int], pixels.getpixel(position))
+                for position in (
+                    (0, 0), (pixels.width - 1, 0),
+                    (0, pixels.height - 1), (pixels.width - 1, pixels.height - 1),
+                )
+            ]
+            color = tuple(int(median(point[channel] for point in corners)) for channel in range(3))
+        canvas = Image.new(pixels.mode, target_size, color)
+        offset = ((canvas.width - pixels.width) // 2, (canvas.height - pixels.height) // 2)
+        canvas.paste(pixels, offset)
+        encoded = BytesIO()
+        canvas.save(encoded, format="PNG")
+        return encoded.getvalue(), "image/png"
 
 
 class H3ClientError(RuntimeError):
@@ -190,14 +229,22 @@ class MiniMaxH3Client:
             raise H3TransientError("AceData MiniMax cancel response was not valid") from exc
 
     def upload_file(self, path: Path) -> str:
-        """Encode a local input using AceData's documented Data URI form."""
+        """Encode local media, padding out-of-range images without editing the source."""
         if not path.is_file():
             raise H3DefiniteRequestError(400, "LOCAL_FILE_MISSING", str(path))
         mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         try:
-            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+            raw = path.read_bytes()
         except OSError as exc:
             raise H3TransientError("AceData local input could not be read") from exc
+        if mime_type.startswith("image/"):
+            try:
+                raw, mime_type = _image_transport_bytes(raw, mime_type)
+            except (OSError, ValueError) as exc:
+                raise H3DefiniteRequestError(
+                    400, "LOCAL_IMAGE_INVALID", f"H3 reference image could not be decoded: {path}"
+                ) from exc
+        encoded = base64.b64encode(raw).decode("ascii")
         reference = f"data:{mime_type};base64,{encoded}"
         if len(reference.encode("utf-8")) > 64 * 1024 * 1024:
             raise H3DefiniteRequestError(

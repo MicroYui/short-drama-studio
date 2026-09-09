@@ -11,7 +11,7 @@ from functools import lru_cache
 from itertools import combinations
 from pathlib import Path
 from statistics import median
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, runtime_checkable
 from uuid import uuid4
 
 import imageio_ffmpeg
@@ -49,6 +49,24 @@ class AudioSemanticResult:
     voice_embedding: tuple[float, ...] | None = None
     detected_language: str | None = None
     confidence: float | None = None
+
+
+@dataclass(frozen=True)
+class TimedAudioCharacter:
+    text: str
+    start_seconds: float
+    end_seconds: float
+
+
+@dataclass(frozen=True)
+class TimedAudioTranscript:
+    transcript_text: str
+    characters: tuple[TimedAudioCharacter, ...]
+
+
+@runtime_checkable
+class AudioTimingService(Protocol):
+    def transcribe_timed(self, *, audio_path: Path, language: str) -> TimedAudioTranscript: ...
 
 
 @dataclass(frozen=True)
@@ -211,6 +229,61 @@ class TransformersAudioSemanticService:
             )
         decoded = processor.batch_decode(generated, skip_special_tokens=True)
         return str(decoded[0]) if decoded else ""
+
+    def transcribe_timed(self, *, audio_path: Path, language: str) -> TimedAudioTranscript:
+        """Use Whisper attention timestamps, which retain leading silence offsets.
+
+        Predicted segment timestamp tokens can reset after a long silent opening;
+        they are not used as the subtitle clock. Keep the original ASR text and
+        normalized character positions for a separate script alignment step.
+        """
+        import torch
+
+        audio, sample_rate = _read_pcm_wav(audio_path)
+        if sample_rate != 16000 or audio.size == 0:
+            raise AudioSemanticError("Timed transcription requires non-empty 16 kHz audio")
+        processor, network = self._load_transcriber()
+        inputs = processor(audio, sampling_rate=16000, return_tensors="pt", return_attention_mask=True)
+        with torch.inference_mode():
+            generated = network.generate(
+                inputs.input_features.to(self._device()), attention_mask=inputs.attention_mask.to(self._device()),
+                language="zh" if language.lower().startswith("zh") else language, task="transcribe",
+                return_timestamps=True, return_token_timestamps=True, return_dict_in_generate=True,
+                # Reserve decoder positions for Whisper's language/task prefix,
+                # matching the existing short native-audio transcription path.
+                max_new_tokens=256,
+            )
+        token_ids = cast(list[int], generated["sequences"][0].tolist())
+        timestamps = cast(list[float], generated["token_timestamps"][0].tolist())
+        timestamp_begin = int(processor.tokenizer.convert_tokens_to_ids("<|0.00|>"))
+        special_ids = set(cast(list[int], processor.tokenizer.all_special_ids))
+        characters: list[TimedAudioCharacter] = []
+        pending: list[int] = []
+        pending_start = 0.0
+        duration = audio.size / sample_rate
+        for index, token_id in enumerate(token_ids):
+            if token_id in special_ids or token_id >= timestamp_begin:
+                continue
+            if not pending:
+                pending_start = timestamps[index]
+            pending.append(token_id)
+            text = str(processor.decode(pending, skip_special_tokens=True))
+            if "\ufffd" in text:
+                continue
+            normalized = normalize_dialogue_text(text)
+            end = min(duration, timestamps[index + 1] if index + 1 < len(timestamps) else duration)
+            end = max(pending_start, end)
+            for char_index, character in enumerate(normalized):
+                characters.append(TimedAudioCharacter(
+                    text=character,
+                    start_seconds=pending_start + (end - pending_start) * char_index / len(normalized),
+                    end_seconds=pending_start + (end - pending_start) * (char_index + 1) / len(normalized),
+                ))
+            pending.clear()
+        return TimedAudioTranscript(
+            transcript_text=str(processor.batch_decode(generated["sequences"], skip_special_tokens=True)[0]),
+            characters=tuple(characters),
+        )
 
     def _speaker_embedding(self, audio: np.ndarray) -> tuple[float, ...] | None:
         loaded = self._load_speaker_model()
@@ -475,13 +548,13 @@ class AudioInspector:
         checks: list[TechnicalCheck] = []
         issues: list[QaIssue] = []
         try:
-            _extract_audio(
+            extract_audio_window(
                 source=Path(clip.media_path).expanduser().resolve(),
                 destination=destination,
                 start_seconds=clip.source_in_seconds,
                 duration_seconds=clip.duration_seconds,
             )
-            metrics = _signal_metrics(destination)
+            metrics = measure_audio_signal(destination)
         except MediaGenerationError as exc:
             issue = QaIssue(
                 code="AUDIO_STREAM_UNAVAILABLE",
@@ -611,13 +684,13 @@ class AudioInspector:
         )
         duration = max(0.05, local_end - local_start)
         try:
-            _extract_audio(
+            extract_audio_window(
                 source=Path(clip.media_path).expanduser().resolve(),
                 destination=destination,
                 start_seconds=clip.source_in_seconds + local_start,
                 duration_seconds=duration,
             )
-            segment_metrics = _signal_metrics(destination)
+            segment_metrics = measure_audio_signal(destination)
         except MediaGenerationError as exc:
             issue = QaIssue(
                 code="DIALOGUE_WINDOW_UNAVAILABLE",
@@ -641,7 +714,7 @@ class AudioInspector:
             )
 
         cue_duration = max(0.001, cue.end_seconds - cue.start_seconds)
-        normalized_expected = _normalize_dialogue(line.spoken_text)
+        normalized_expected = normalize_dialogue_text(line.spoken_text)
         characters_per_second = len(normalized_expected) / cue_duration
         if characters_per_second > 12.0:
             issues.append(
@@ -710,7 +783,7 @@ class AudioInspector:
 
         transcript = result.transcript_text if result is not None else None
         normalized_transcript = (
-            _normalize_dialogue(transcript) if transcript is not None else None
+            normalize_dialogue_text(transcript) if transcript is not None else None
         )
         exact_match: bool | None = None
         character_error_rate: float | None = None
@@ -800,7 +873,7 @@ def _run_ffmpeg(args: list[str]) -> None:
         raise MediaGenerationError(detail)
 
 
-def _extract_audio(
+def extract_audio_window(
     *,
     source: Path,
     destination: Path,
@@ -850,7 +923,7 @@ def _read_pcm_wav(path: Path) -> tuple[np.ndarray, int]:
     return raw / 32768.0, sample_rate
 
 
-def _signal_metrics(path: Path) -> AudioSignalMetrics:
+def measure_audio_signal(path: Path) -> AudioSignalMetrics:
     audio, sample_rate = _read_pcm_wav(path)
     duration = audio.size / sample_rate
     if audio.size == 0:
@@ -963,7 +1036,7 @@ def _traditional_to_simplified_converter() -> Any:
     return cast(Any, OpenCC)("t2s")
 
 
-def _normalize_dialogue(value: str) -> str:
+def normalize_dialogue_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).lower()
     simplified = str(_traditional_to_simplified_converter().convert(normalized))
     return "".join(character for character in simplified if character.isalnum())
@@ -988,6 +1061,26 @@ def _character_error_rate(expected: str, actual: str) -> float:
     return previous[-1] / len(expected)
 
 
+def continuous_audio_groups(clips: list[TimelineAudioClip]) -> list[TimelineAudioClip]:
+    """Join adjacent windows of the same source for speech that crosses a cut."""
+    groups: list[TimelineAudioClip] = []
+    for clip in sorted(clips, key=lambda item: item.start_seconds):
+        previous = groups[-1] if groups else None
+        if (previous is not None and previous.media_path == clip.media_path
+            and previous.take_id == clip.take_id and previous.asset_version_id == clip.asset_version_id
+            and previous.role == clip.role and previous.gain_db == clip.gain_db
+            and abs(previous.start_seconds + previous.duration_seconds - clip.start_seconds) < 0.001
+            and abs(previous.source_in_seconds + previous.duration_seconds - clip.source_in_seconds) < 0.001):
+            duration = previous.duration_seconds + clip.duration_seconds
+            groups[-1] = previous.model_copy(update={
+                "duration_seconds": duration,
+                "source_out_seconds": previous.source_in_seconds + duration,
+            })
+        else:
+            groups.append(clip.model_copy(deep=True))
+    return groups
+
+
 def _clip_for_cue(
     clips: list[TimelineAudioClip],
     cue_start: float,
@@ -1000,6 +1093,12 @@ def _clip_for_cue(
         if cue_start >= clip.start_seconds - epsilon
         and cue_end <= clip.start_seconds + clip.duration_seconds + epsilon
     ]
+    if not matches:
+        matches = [
+            clip for clip in continuous_audio_groups(clips)
+            if cue_start >= clip.start_seconds - epsilon
+            and cue_end <= clip.start_seconds + clip.duration_seconds + epsilon
+        ]
     if not matches:
         return None
     return min(matches, key=lambda item: item.duration_seconds)
@@ -1217,6 +1316,6 @@ def _unavailable_dialogue_check(
         cue_start_seconds=cue.start_seconds,
         cue_end_seconds=cue.end_seconds,
         transcription_status=status,
-        normalized_expected=_normalize_dialogue(line.spoken_text),
+        normalized_expected=normalize_dialogue_text(line.spoken_text),
         issues=[issue],
     )

@@ -14,6 +14,7 @@ from short_drama.models import (
     TakeComparisonResponse,
     VideoInspectionRequest,
     VideoInspectionResponse,
+    VideoInspectionLookupResponse,
 )
 from short_drama.tools.contracts import (
     ArtifactRef,
@@ -36,6 +37,10 @@ class VideoToolService(Protocol):
         take_id: str,
         request: VideoInspectionRequest,
     ) -> VideoInspectionResponse: ...
+
+    def get_take_video_inspection(
+        self, take_id: str, report_id: str | None = None,
+    ) -> VideoInspectionLookupResponse: ...
 
     def compare_takes(
         self,
@@ -66,6 +71,11 @@ class VideoInspectTakeInput(ToolModel):
     request: VideoInspectionRequest
 
 
+class VideoGetTakeInspectionInput(ToolModel):
+    take_id: str
+    report_id: str | None = None
+
+
 class VideoCompareTakesInput(ToolModel):
     project_id: str
     request: TakeComparisonRequest
@@ -78,6 +88,30 @@ class VideoLocalReworkInput(ToolModel):
 
 
 def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
+    def get_inspection(request: VideoGetTakeInspectionInput) -> ToolExecution[VideoInspectionLookupResponse]:
+        result = service.get_take_video_inspection(request.take_id, request.report_id)
+        refs = [ArtifactRef(
+            project_id=result.take.project_id, artifact_type="take", artifact_id=result.take.id,
+        )]
+        if result.report is not None:
+            refs.append(ArtifactRef(
+                project_id=result.take.project_id, artifact_type="video_inspection",
+                artifact_id=result.report.id,
+            ))
+        return ToolExecution(output=result, artifact_refs=tuple(refs))
+
+    registry.register(ToolSpec(
+        id="video.get_take_inspection", version=1, category=ToolCategory.VIDEO,
+        description=(
+            "Read a Take and its latest persisted video inspection, or an exact report_id. "
+            "A null report means no saved observation exists. Reuses evidence without "
+            "sampling media, calling a model, changing QA or generating video."
+        ),
+        effect=ToolEffect.READ, idempotent=True,
+        input_model=VideoGetTakeInspectionInput, output_model=VideoInspectionLookupResponse,
+        handler=get_inspection, tags=frozenset({"inspection", "take", "read"}),
+    ))
+
     def enqueue(request: VideoEnqueueInput) -> ToolExecution[ProjectAggregate]:
         project = service.enqueue(request.project_id, request.request)
         return ToolExecution(

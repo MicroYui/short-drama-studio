@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 import { logger } from '../logger'
-import { fileHasAudio } from './ffmpeg-utils'
+import { fileHasAudio } from './audio-probe'
 import type { ExportClip } from './timeline'
 
 const SAMPLE_RATE = 48000
@@ -62,6 +62,7 @@ export async function mixAudioToPcm(
   clips: ExportClip[],
   totalDuration: number,
   ffmpegPath: string,
+  strict = false,
 ): Promise<{ pcmBuffer: Buffer; sampleRate: number; channels: number }> {
   // Collect audio sources from ORIGINAL clips
   const audioProbeCache = new Map<string, boolean>()
@@ -70,7 +71,10 @@ export async function mixAudioToPcm(
   for (const c of clips) {
     if (c.muted || c.volume <= 0) continue
     const fp = c.path
-    if (!fp || !fs.existsSync(fp)) continue
+    if (!fp || !fs.existsSync(fp)) {
+      if (strict && (c.type === 'audio' || c.type === 'video')) throw new Error(`声音素材不可读取：${fp}`)
+      continue
+    }
 
     if (c.type === 'audio') {
       audioSources.push({
@@ -124,6 +128,7 @@ export async function mixAudioToPcm(
       }
       logger.info( `[Export] Audio ${i + 1}: mixed ${numPcmSamples} samples (${(numPcmSamples / SAMPLE_RATE / NUM_CHANNELS).toFixed(2)}s) at offset frame ${startFrame}`)
     } catch (err: any) {
+      if (strict) throw err
       logger.warn( `[Export] Failed to extract audio from ${src.filePath}: ${err.message}`)
     }
   }

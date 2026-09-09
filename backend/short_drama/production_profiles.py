@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from functools import lru_cache
 
 from short_drama.models import ProductionProfile
+from short_drama.skill_ids import canonical_method_skill_id, canonical_skill_ids
 from short_drama.skills.loader import (
     load_narrative_skills,
     load_production_method_skills,
@@ -25,6 +26,7 @@ from short_drama.skills.models import (
     CompiledProductionPrompt,
     NarrativeSkillDescriptor,
     ProductionMethodSkillDescriptor,
+    ProductionPromptStage,
     ProductionSkill,
     ProductionSkillRole,
 )
@@ -40,7 +42,10 @@ _ROLE_LABELS = {
     ProductionSkillRole.FINAL_COLD_READ: "最终冷读",
     ProductionSkillRole.REVIEW_ROUTER: "审核问题分派",
     ProductionSkillRole.DIRECTOR: "导演",
-    ProductionSkillRole.ASSET_REVIEWER: "资产审核",
+    ProductionSkillRole.ASSET_PLANNER: "资产规划",
+    ProductionSkillRole.ASSET_BUILDER: "资产制作",
+    ProductionSkillRole.ASSET_VERIFIER: "资产验收",
+    ProductionSkillRole.ASSET_REVIEWER: "旧版资产职责",
     ProductionSkillRole.ROUTE_PLANNER: "生成路线规划",
     ProductionSkillRole.VIDEO_PROMPT_COMPILER: "视频提示词编译",
     ProductionSkillRole.EPISODE_REVIEWER: "成片审核",
@@ -112,6 +117,7 @@ def narrative_skill_catalog() -> tuple[NarrativeSkillDescriptor, ...]:
 def production_method_skill(skill_id: str) -> ComposableProductionSkill:
     """Resolve one Agent-selected production method by its open, file-backed id."""
 
+    skill_id = canonical_method_skill_id(skill_id)
     for skill in _production_method_skill_library():
         if skill.id == skill_id:
             return skill
@@ -173,7 +179,7 @@ def _resolve_production_method_skills(
     roles: Sequence[ProductionSkillRole],
 ) -> tuple[tuple[str, ...], tuple[ComposableProductionSkill, ...]]:
     resolved_roles = tuple(dict.fromkeys(roles))
-    resolved_skill_ids = tuple(dict.fromkeys(skill_ids))
+    resolved_skill_ids = tuple(dict.fromkeys(canonical_skill_ids(skill_ids)))
     selected_skills: list[ComposableProductionSkill] = []
     for skill_id in resolved_skill_ids:
         try:
@@ -211,22 +217,29 @@ def _render_production_method_skill_prompt(
     selected_skills: Sequence[ComposableProductionSkill],
     *,
     roles: Sequence[ProductionSkillRole],
+    stage: ProductionPromptStage | None = None,
 ) -> str:
     resolved_roles = tuple(dict.fromkeys(roles))
     parts: list[str] = []
+    shared_prefixes: dict[str, str] = {}
+    shared_suffixes: dict[str, str] = {}
     for selected_skill in selected_skills:
+        if selected_skill.shared_prefix is not None:
+            shared_prefixes.setdefault(*selected_skill.shared_prefix)
+        if selected_skill.shared_suffix is not None:
+            shared_suffixes.setdefault(*selected_skill.shared_suffix)
         sections = [
             f"Agent 已根据当前项目完整语义选择制片方法技能“{selected_skill.label}”"
-            f"（{selected_skill.id}）：{selected_skill.constitution}"
+            f"（{selected_skill.id}）：{selected_skill.description}"
         ]
         sections.extend(
-            f"{_ROLE_LABELS[role]}的制片方法补充："
-            f"{selected_skill.role_prompts[role]}"
+            f"{_ROLE_LABELS[role]}的制片方法补充：{role_prompt}"
             for role in resolved_roles
-            if selected_skill.supports(role)
+            if (role_prompt := selected_skill.prompt_for(role, stage=stage))
+            is not None
         )
         parts.append("\n".join(sections))
-    return "\n\n".join(parts)
+    return "\n\n".join([*shared_prefixes.values(), *parts, *shared_suffixes.values()])
 
 
 def compile_narrative_skill_prompt(
@@ -247,6 +260,7 @@ def compile_production_method_skill_prompt(
     skill_ids: Sequence[str],
     *,
     roles: Sequence[ProductionSkillRole],
+    stage: ProductionPromptStage | None = None,
 ) -> str:
     """Compile only Agent-selected production methods for requested roles."""
 
@@ -254,7 +268,11 @@ def compile_production_method_skill_prompt(
         skill_ids,
         roles=roles,
     )
-    return _render_production_method_skill_prompt(selected_skills, roles=roles)
+    return _render_production_method_skill_prompt(
+        selected_skills,
+        roles=roles,
+        stage=stage,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -271,6 +289,7 @@ def compile_production_prompt(
     include_constitution: bool = True,
     additional_skill_ids: Sequence[str] = (),
     method_skill_ids: Sequence[str] = (),
+    stage: ProductionPromptStage | None = None,
 ) -> CompiledProductionPrompt:
     """Compose shared roles, one format, and Agent-selected production methods.
 
@@ -300,12 +319,17 @@ def compile_production_prompt(
         ProductionSkillRole.FINAL_COLD_READ: skill.final_cold_read,
         ProductionSkillRole.REVIEW_ROUTER: skill.review_router,
         ProductionSkillRole.DIRECTOR: skill.director,
+        ProductionSkillRole.ASSET_PLANNER: skill.asset_planner,
+        ProductionSkillRole.ASSET_BUILDER: skill.asset_builder,
+        ProductionSkillRole.ASSET_VERIFIER: skill.asset_verifier,
         ProductionSkillRole.ASSET_REVIEWER: skill.asset_reviewer,
         ProductionSkillRole.ROUTE_PLANNER: skill.route_planner,
         ProductionSkillRole.VIDEO_PROMPT_COMPILER: skill.video_prompt_compiler,
         ProductionSkillRole.EPISODE_REVIEWER: skill.episode_reviewer,
     }
     parts = [f"当前制片技能：{skill.label}。"]
+    if stage is not None:
+        parts.append(f"当前制片阶段：{stage.value}。只装载该阶段与当前角色需要的方法。")
     parts.extend(
         f"{_ROLE_LABELS[role]}的通用职责：{shared_role_prompt(role)}"
         for role in resolved_roles
@@ -314,12 +338,10 @@ def compile_production_prompt(
         parts.append(f"类型创作原则：{skill.constitution}")
     if ProductionSkillRole.PLANNER in resolved_roles:
         parts.append(
-            "共享端到端制片流程（根据当前目标、已有工件与证据跳过、合并、重排或并行，"
-            "不得将其视为固定状态机）：" + production_workflow()
-        )
-        parts.append(
-            "当前类型在共享流程上的详细制作方法（可按任务需要取用，不是第二套固定流程）：\n"
-            + skill.playbook
+            "制作规划只安排当前目标与依赖；完整端到端文档与类型 "
+            "playbook 仅在需要跨阶段重规划时按需读取，不进入每个 Worker "
+            "prompt。精简可用阶段线索："
+            + " → ".join(skill.recommended_playbook)
         )
     parts.extend(
         f"{_ROLE_LABELS[role]}的当前格式补充：{policy_by_role[role]}"
@@ -329,6 +351,7 @@ def compile_production_prompt(
     method_prompt = _render_production_method_skill_prompt(
         selected_method_skills,
         roles=resolved_roles,
+        stage=stage,
     )
     if method_prompt:
         parts.append(method_prompt)
@@ -344,6 +367,7 @@ def compile_production_prompt(
         text="\n\n".join(parts),
         selected_skill_ids=resolved_skill_ids,
         selected_method_skill_ids=resolved_method_skill_ids,
+        stage=stage,
     )
 
 
@@ -351,6 +375,7 @@ __all__ = [
     "CompiledProductionPrompt",
     "NarrativeSkillDescriptor",
     "ProductionMethodSkillDescriptor",
+    "ProductionPromptStage",
     "ProductionSkill",
     "ProductionSkillRole",
     "compile_narrative_skill_prompt",

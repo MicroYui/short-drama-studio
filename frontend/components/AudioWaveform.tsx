@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { Music } from 'lucide-react'
 import { logger } from '../lib/logger'
+import { backendFetch } from '../lib/backend'
 
 interface AudioClipInfo {
   url: string
@@ -20,15 +21,6 @@ export const waveformCache = new Map<string, Float32Array>()
 const pendingDecodes = new Set<string>()
 
 // Convert a base64 string to an ArrayBuffer
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64)
-  const bytes = new Uint8Array(binaryString.length)
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i)
-  }
-  return bytes.buffer
-}
-
 // Decode audio file and extract amplitude envelope
 export async function computeWaveform(url: string, buckets: number = 800): Promise<Float32Array> {
   if (waveformCache.has(url)) return waveformCache.get(url)!
@@ -44,9 +36,16 @@ export async function computeWaveform(url: string, buckets: number = 800): Promi
   try {
     let arrayBuffer: ArrayBuffer
 
-    if (url.startsWith('file://') && (window as any).electronAPI?.readLocalFile) {
-      const { data } = await (window as any).electronAPI.readLocalFile({ filePath: url })
-      arrayBuffer = base64ToArrayBuffer(data)
+    if (url.startsWith('file://') && window.electronAPI) {
+      // Registered old-project media may live outside the new application's data directory.
+      const pathname = decodeURIComponent(new URL(url).pathname).replace(/^\/([A-Za-z]:\/)/, '$1')
+      const response = await backendFetch(`/api/short-drama/studio/media?path=${encodeURIComponent(pathname)}`)
+      if (!response.ok) throw new Error('无法读取项目声音素材')
+      arrayBuffer = await response.arrayBuffer()
+    } else if (url.startsWith('/__studio_backend/')) {
+      const response = await backendFetch(url.slice('/__studio_backend'.length))
+      if (!response.ok) throw new Error('无法读取项目声音素材')
+      arrayBuffer = await response.arrayBuffer()
     } else {
       const response = await fetch(url)
       arrayBuffer = await response.arrayBuffer()

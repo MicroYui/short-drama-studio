@@ -40,6 +40,7 @@ from short_drama.reference_planner import (
     ReplacementShotDraft,
     parse_director_advice,
     preview_reference_plan,
+    role_is_compatible,
 )
 from short_drama.service import (
     ShortDramaService,
@@ -86,6 +87,17 @@ def _client(service: ShortDramaService) -> TestClient:
     app.include_router(short_drama_router)
     app.dependency_overrides[get_short_drama_service] = lambda: service
     return TestClient(app)
+
+
+def test_character_reference_sheet_role_is_compatible_with_character() -> None:
+    assert role_is_compatible(
+        AssetKind.CHARACTER,
+        ReferenceRole.CHARACTER_REFERENCE_SHEET,
+    )
+    assert not role_is_compatible(
+        AssetKind.LOCATION,
+        ReferenceRole.CHARACTER_REFERENCE_SHEET,
+    )
 
 
 def _approve_image(

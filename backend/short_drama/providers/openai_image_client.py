@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 from typing import cast
+from urllib.parse import urlsplit
 
 import requests
+from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 from requests import Response, Session
 
 from short_drama.image_models import ImageOperation, ImageProviderRequest, ImageUsage
+from short_drama.models import ImageReferenceAuthority, ImageReferenceRole
 from short_drama.providers.image_provider import (
     ImageProviderDefiniteError,
     ImageProviderInput,
@@ -17,6 +21,11 @@ from short_drama.providers.image_provider import (
     ImageProviderSubmissionUnknown,
 )
 from short_drama.providers.openai_image_endpoint import resolve_image_endpoint
+
+
+_MAX_EDIT_IMAGE_BYTES = 20 * 1024 * 1024
+_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+_DEFINITE_TRANSIENT_STATUS_CODES = frozenset({408, 409, 429})
 
 
 class OpenAIImageClient:
@@ -95,8 +104,13 @@ class OpenAIImageClient:
     ) -> ImageProviderResult:
         if request.operation == ImageOperation.GENERATE and inputs:
             raise ValueError("Image generation does not accept edit inputs")
-        if request.operation == ImageOperation.EDIT and not inputs:
-            raise ValueError("Image editing requires at least one input image")
+        if request.operation in {
+            ImageOperation.REFERENCE_GENERATE,
+            ImageOperation.EDIT,
+        } and not inputs:
+            raise ValueError(
+                f"{request.operation.value} requires at least one input image"
+            )
         visual_input_ids = [
             item.asset_version_id
             for item in inputs
@@ -121,7 +135,10 @@ class OpenAIImageClient:
             )
 
         provider_prompt = request.prompt
-        if request.operation == ImageOperation.EDIT and request.reference_inputs:
+        if request.operation in {
+            ImageOperation.REFERENCE_GENERATE,
+            ImageOperation.EDIT,
+        } and request.reference_inputs:
             reference_lines: list[str] = []
             for index, reference in enumerate(request.reference_inputs, start=1):
                 alias = (
@@ -129,8 +146,15 @@ class OpenAIImageClient:
                     if reference.subject_alias is not None
                     else ""
                 )
+                semantic_rule = self._reference_semantic_rule(
+                    reference.reference_role,
+                    reference.reference_authority,
+                )
                 reference_lines.append(
-                    f"参考图{index}{alias}：{reference.purpose}"
+                    f"参考图{index}{alias}"
+                    f"（角色：{reference.reference_role.value}；"
+                    f"权威级别：{reference.reference_authority.value}）："
+                    f"{reference.purpose}。{semantic_rule}"
                 )
             provider_prompt = (
                 f"{request.prompt}\n\n有序参考图职责（按上传顺序）：\n"
@@ -147,12 +171,15 @@ class OpenAIImageClient:
             "output_format": request.output_format.value,
         }
         endpoint = self.endpoint.generation_url
-        masked_request: tuple[
+        edit_request: tuple[
             dict[str, str],
             dict[str, str],
             list[tuple[str, tuple[str, bytes, str]]],
         ] | None = None
-        if request.operation == ImageOperation.EDIT:
+        if request.operation in {
+            ImageOperation.REFERENCE_GENERATE,
+            ImageOperation.EDIT,
+        }:
             endpoint = self.endpoint.edit_url
             payload["input_fidelity"] = "high"
             mask = next(
@@ -173,18 +200,14 @@ class OpenAIImageClient:
             if request.mask_version_id is not None:
                 if mask is None:
                     raise ValueError("Image edit mask input is missing")
-                masked_request = self._masked_edit_request_parts(
-                    payload,
-                    visual_inputs,
-                    mask,
-                )
-            else:
-                payload["images"] = [
-                    {"image_url": item.image_url} for item in visual_inputs
-                ]
+            edit_request = self._edit_request_parts(
+                payload,
+                visual_inputs,
+                mask,
+            )
 
         try:
-            if masked_request is None:
+            if edit_request is None:
                 response = self.session.post(
                     endpoint,
                     headers=self._headers(),
@@ -192,7 +215,7 @@ class OpenAIImageClient:
                     timeout=self.timeout_seconds,
                 )
             else:
-                headers, form, files = masked_request
+                headers, form, files = edit_request
                 response = self.session.post(
                     endpoint,
                     headers=headers,
@@ -206,6 +229,35 @@ class OpenAIImageClient:
             ) from exc
         self._raise_error(response, ambiguous_server_error=True)
         return self._parse_result(response, request)
+
+    @staticmethod
+    def _reference_semantic_rule(
+        role: ImageReferenceRole,
+        authority: ImageReferenceAuthority,
+    ) -> str:
+        if (
+            role == ImageReferenceRole.SUBJECT_IDENTITY
+            and authority == ImageReferenceAuthority.AUTHORITATIVE
+        ):
+            return (
+                "这是同一人物的权威身份基准；必须保留面部几何、肤色、"
+                "发型、年龄感和身体比例，不得改成另一人。"
+            )
+        if role == ImageReferenceRole.LAYOUT_GUIDE:
+            return (
+                "只使用版式、分区和构图关系；不得复制其中的人物身份、"
+                "服装或画面风格。"
+            )
+        if role == ImageReferenceRole.STYLE:
+            return (
+                "只提取材质、色彩、光线和媒介风格；不得复制其中的人物"
+                "身份或具体主体。"
+            )
+        if authority == ImageReferenceAuthority.AUTHORITATIVE:
+            return "这是用户确认的视觉事实，不得擅自替换或反转其声明内容。"
+        if authority == ImageReferenceAuthority.GUIDE_ONLY:
+            return "只用于已声明的辅助职责，不得扩展为身份或内容事实。"
+        return "只在其已声明的职责范围内作为辅助参考。"
 
     def _parse_result(
         self,
@@ -271,11 +323,11 @@ class OpenAIImageClient:
             return {"api-key": self.api_key}
         return {"Authorization": f"Bearer {self.api_key}"}
 
-    def _masked_edit_request_parts(
+    def _edit_request_parts(
         self,
         payload: dict[str, object],
         inputs: list[ImageProviderInput],
-        mask: ImageProviderInput,
+        mask: ImageProviderInput | None,
     ) -> tuple[
         dict[str, str],
         dict[str, str],
@@ -283,49 +335,141 @@ class OpenAIImageClient:
     ]:
         files: list[tuple[str, tuple[str, bytes, str]]] = []
         for index, item in enumerate(inputs, start=1):
-            image_bytes, mime_type = self._decode_data_image(item.image_url)
-            suffix = {"image/png": "png", "image/jpeg": "jpg"}.get(mime_type)
-            if suffix is None:
-                raise ValueError("Masked edit inputs must be local PNG or JPEG images")
+            image_bytes, mime_type, suffix = self._prepare_image_file(item.image_url)
             files.append(
                 ("image[]", (f"input-{index}.{suffix}", image_bytes, mime_type))
             )
-        mask_bytes, mask_mime = self._decode_data_image(mask.image_url)
-        if mask_mime != "image/png":
-            raise ValueError("Image edit mask must be a PNG image")
-        files.append(("mask", ("mask.png", mask_bytes, "image/png")))
+        if mask is not None:
+            mask_bytes, mask_mime, _ = self._prepare_image_file(
+                mask.image_url,
+                require_png=True,
+            )
+            files.append(("mask", ("mask.png", mask_bytes, mask_mime)))
         form = {
             key: str(value).lower() if isinstance(value, bool) else str(value)
             for key, value in payload.items()
         }
         return self._auth_headers(), form, files
 
+    def _prepare_image_file(
+        self,
+        value: str,
+        *,
+        require_png: bool = False,
+    ) -> tuple[bytes, str, str]:
+        if value.startswith("data:"):
+            image_bytes = self._decode_data_image(value)
+        elif urlsplit(value).scheme.lower() in {"http", "https"}:
+            image_bytes = self._download_image(value)
+        else:
+            raise ValueError(
+                "Image edit inputs must be base64 data URLs or HTTP(S) URLs"
+            )
+        return self._normalize_image(image_bytes, require_png=require_png)
+
     @staticmethod
-    def _decode_data_image(value: str) -> tuple[bytes, str]:
+    def _decode_data_image(value: str) -> bytes:
         try:
             header, encoded = value.split(",", maxsplit=1)
         except ValueError as exc:
-            raise ValueError(
-                "Masked edits require locally cached data-URL image inputs"
-            ) from exc
+            raise ValueError("Image edit input contains an invalid data URL") from exc
         if not header.startswith("data:image/") or ";base64" not in header:
-            raise ValueError(
-                "Masked edits require locally cached data-URL image inputs"
-            )
-        mime_type = header.removeprefix("data:").split(";", maxsplit=1)[0]
+            raise ValueError("Image edit input contains an invalid data URL")
         try:
-            return base64.b64decode(encoded, validate=True), mime_type
+            image_bytes = base64.b64decode(encoded, validate=True)
         except ValueError as exc:
-            raise ValueError("Masked edit input contains invalid base64") from exc
+            raise ValueError("Image edit input contains invalid base64") from exc
+        if len(image_bytes) > _MAX_EDIT_IMAGE_BYTES:
+            raise ValueError("Image edit input exceeds the 20 MiB size limit")
+        return image_bytes
+
+    def _download_image(self, url: str) -> bytes:
+        try:
+            response = self.session.get(
+                url,
+                stream=True,
+                timeout=min(self.timeout_seconds, 30.0),
+            )
+        except requests.RequestException as exc:
+            raise ValueError("Image edit input could not be downloaded") from exc
+        try:
+            if response.status_code >= 400:
+                raise ValueError(
+                    f"Image edit input download failed with HTTP {response.status_code}"
+                )
+            raw_content_length = response.headers.get("Content-Length")
+            if raw_content_length is not None:
+                try:
+                    content_length = int(raw_content_length)
+                except ValueError:
+                    content_length = 0
+                if content_length > _MAX_EDIT_IMAGE_BYTES:
+                    raise ValueError("Image edit input exceeds the 20 MiB size limit")
+
+            image_bytes = bytearray()
+            for chunk in response.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES):
+                if not chunk:
+                    continue
+                image_bytes.extend(chunk)
+                if len(image_bytes) > _MAX_EDIT_IMAGE_BYTES:
+                    raise ValueError("Image edit input exceeds the 20 MiB size limit")
+            return bytes(image_bytes)
+        finally:
+            response.close()
+
+    @staticmethod
+    def _normalize_image(
+        image_bytes: bytes,
+        *,
+        require_png: bool,
+    ) -> tuple[bytes, str, str]:
+        try:
+            with Image.open(BytesIO(image_bytes)) as opened:
+                opened.load()
+                image_format = opened.format
+                if image_format == "WEBP":
+                    normalized = BytesIO()
+                    opened.save(
+                        normalized,
+                        format="PNG",
+                        optimize=False,
+                        compress_level=9,
+                    )
+                    png_bytes = normalized.getvalue()
+                    if len(png_bytes) > _MAX_EDIT_IMAGE_BYTES:
+                        raise ValueError(
+                            "Normalized image edit input exceeds the 20 MiB size limit"
+                        )
+                    return png_bytes, "image/png", "png"
+        except (OSError, UnidentifiedImageError) as exc:
+            raise ValueError("Image edit input is not a valid PNG, JPEG, or WebP") from exc
+
+        if image_format == "PNG":
+            return image_bytes, "image/png", "png"
+        if image_format == "JPEG" and not require_png:
+            return image_bytes, "image/jpeg", "jpg"
+        if require_png:
+            raise ValueError("Image edit mask must be a PNG image")
+        raise ValueError("Image edit input is not a valid PNG, JPEG, or WebP")
 
     @staticmethod
     def _raise_error(response: Response, *, ambiguous_server_error: bool) -> None:
         if response.status_code < 400:
             return
         code, message = OpenAIImageClient._error_details(response)
-        if response.status_code >= 500 and ambiguous_server_error:
+        if ambiguous_server_error and (
+            response.status_code == 408 or response.status_code >= 500
+        ):
             raise ImageProviderSubmissionUnknown(message)
-        raise ImageProviderDefiniteError(response.status_code, code, message)
+        raise ImageProviderDefiniteError(
+            response.status_code,
+            code,
+            message,
+            same_request_retryable=(
+                response.status_code in _DEFINITE_TRANSIENT_STATUS_CODES
+                or (response.status_code >= 500 and not ambiguous_server_error)
+            ),
+        )
 
     @staticmethod
     def _error_details(response: Response) -> tuple[str, str]:

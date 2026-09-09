@@ -3,11 +3,13 @@ import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import path from 'path'
+import { execFileSync } from 'node:child_process'
 
 export default defineConfig({
   plugins: [
+    { name: 'studio-export-runtime', buildStart() { execFileSync(process.execPath, ['scripts/build-studio-runtime.mjs'], { stdio: 'inherit' }) } },
     react(),
-    electron([
+    ...(process.env.STUDIO_WEB_PREVIEW === '1' ? [] : [electron([
       {
         entry: 'electron/main.ts',
         onstart(options) {
@@ -46,7 +48,7 @@ export default defineConfig({
         }
       }
     ]),
-    renderer()
+    renderer()])
   ],
   resolve: {
     alias: {
@@ -54,6 +56,17 @@ export default defineConfig({
     }
   },
   base: './',  // Use relative paths for Electron file:// protocol
+  server: {
+    host: '127.0.0.1',
+    watch: { ignored: ['**/output/**'] },
+    proxy: {
+      '/__studio_backend': {
+        target: process.env.STUDIO_BACKEND_URL || 'http://127.0.0.1:8018',
+        rewrite: (url) => url.replace(/^\/__studio_backend/, ''),
+        headers: process.env.STUDIO_BACKEND_TOKEN ? { Authorization: `Bearer ${process.env.STUDIO_BACKEND_TOKEN}` } : {},
+      },
+    },
+  },
   build: {
     outDir: 'dist'
   }

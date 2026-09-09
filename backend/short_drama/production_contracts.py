@@ -9,6 +9,7 @@ choices remain the responsibility of the active Agent and its loaded Skills.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from decimal import Decimal
 from enum import StrEnum
 from typing import cast
@@ -17,12 +18,16 @@ from pydantic import Field, JsonValue, model_validator
 
 from short_drama.image_models import AssetReviewPurpose
 from short_drama.models import (
+    ApprovalStatus,
+    AssetVersion,
     AssetKind,
+    AssetMediaType,
     AssetLayoutProfile,
     AssetReferenceStrategy,
     AssetSheetInputPolicy,
     AssetStandardView,
     CoreAssetBrief,
+    CreativeInputImage,
     DomainModel,
     DurationAlignment,
     DurationAuthority,
@@ -32,16 +37,24 @@ from short_drama.models import (
     DurationMismatchResolution,
     DurationTargetOrigin,
     GenerationUnitShotWindow,
+    Freshness,
+    ImageReferenceAuthority,
+    ImageReferenceRole,
+    OriginType,
     ProductionDocument,
     ProductionDocumentArtifactRef,
     ProductionDocumentOrigin,
     ProductionDocumentVersion,
+    ProjectBibleVersion,
     ProjectOutputSlot,
     ProjectOutputSlotRevision,
     ReferenceAngle,
     ReferenceFraming,
+    ReferencePack,
+    ReferencePlanEntry,
     ReferenceRole,
     ShotPlan,
+    ScriptVersion,
 )
 
 
@@ -180,7 +193,8 @@ class ClipGroup(DomainModel):
     id: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=500)
     shot_ids: list[str] = Field(min_length=1)
-    duration_seconds: int = Field(ge=4, le=15)
+    # Authored timing can change independently of a provider's render limits.
+    duration_seconds: float = Field(gt=0.0, allow_inf_nan=False)
     generation_intent: str = Field(min_length=1, max_length=4000)
     transition_intent: str | None = Field(default=None, min_length=1, max_length=2000)
     continuity_in: list[str] = Field(default_factory=list[str])
@@ -324,7 +338,7 @@ class StoryboardClipGroupDraft(DomainModel):
         duration = _duration_total(
             [item.duration_seconds for item in self.shots]
         )
-        if duration != Decimal(self.clip_group.duration_seconds):
+        if duration != Decimal(str(self.clip_group.duration_seconds)):
             raise ValueError(
                 "Storyboard draft ClipGroup duration must equal its Shot durations"
             )
@@ -1634,7 +1648,7 @@ class StoryboardContent(DomainModel):
                     for shot_id in group.shot_ids
                 ]
             )
-            if actual_duration != Decimal(group.duration_seconds):
+            if actual_duration != Decimal(str(group.duration_seconds)):
                 raise ValueError(
                     f"Clip group {group.id} duration must equal its shot durations"
                 )
@@ -1658,7 +1672,9 @@ class AssetPlanOperation(StrEnum):
     """Provider-neutral work that may realize one asset-plan output."""
 
     GENERATE = "GENERATE"
+    REFERENCE_GENERATE = "REFERENCE_GENERATE"
     EDIT = "EDIT"
+    TEXT_PLATE = "TEXT_PLATE"
     COMPOSE = "COMPOSE"
     IMPORT = "IMPORT"
 
@@ -1668,6 +1684,10 @@ class AssetPlanReference(DomainModel):
 
     role: str = Field(min_length=1, max_length=200)
     purpose: str = Field(min_length=1, max_length=1000)
+    reference_role: ImageReferenceRole = ImageReferenceRole.SUPPORTING_VISUAL
+    reference_authority: ImageReferenceAuthority = (
+        ImageReferenceAuthority.SUPPORTING
+    )
     source_work_item_id: str | None = Field(default=None, min_length=1, max_length=200)
     asset_id: str | None = Field(default=None, min_length=1, max_length=200)
     asset_version_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -1690,7 +1710,15 @@ class AssetPlanReference(DomainModel):
 class AssetPlanReferencePackIntent(DomainModel):
     """How one completed image should enter the subject's ReferencePack."""
 
-    subject_item_id: str = Field(min_length=1, max_length=200)
+    subject_item_id: str = Field(
+        min_length=1,
+        max_length=200,
+        description=(
+            "稳定 AssetPlan item ID；通过该 item 的 completed_asset_id 映射到 "
+            "ReferencePack.subject_asset_id。首次完成 canonical work 时，在同一个 "
+            "patch 中填写主体 item 和 work 的 completed_*；不把 item ID 直接作为 Asset ID。"
+        ),
+    )
     role: ReferenceRole = Field(
         description=(
             "完成图像进入 ReferencePack 时承担的角色。当所属工作项使用 "
@@ -1765,6 +1793,42 @@ class AssetPlanComposeIntent(DomainModel):
         return self
 
 
+class AssetPlanTextPlateIntent(DomainModel):
+    """Exact local rendering payload for image.compose_text_plate."""
+
+    background_color: str = Field(min_length=1, max_length=64)
+    foreground_color: str = Field(min_length=1, max_length=64)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
+    layout_description: str = Field(min_length=1, max_length=2000)
+    parent_version_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_exact_copy(self) -> AssetPlanTextPlateIntent:
+        if self.layout_description != self.layout_description.strip():
+            raise ValueError("AssetPlan text-plate layout_description must be trimmed")
+        if self.title is not None and (
+            self.title != self.title.strip()
+            or "\n" in self.title
+            or "\r" in self.title
+        ):
+            raise ValueError("AssetPlan text-plate title must be one trimmed line")
+        normalized = [line.strip() for line in self.exact_lines if line.strip()]
+        if normalized != self.exact_lines:
+            raise ValueError(
+                "AssetPlan text-plate exact_lines must be trimmed and non-empty"
+            )
+        if any("\n" in line or "\r" in line for line in self.exact_lines):
+            raise ValueError(
+                "AssetPlan text-plate exact_lines must contain one visible line each"
+            )
+        if self.title is None and not self.exact_lines:
+            raise ValueError(
+                "AssetPlan text plate requires a title or at least one exact line"
+            )
+        return self
+
+
 class AssetPlanWorkItem(DomainModel):
     """A stable, dependency-aware execution instruction authored by the Agent."""
 
@@ -1772,6 +1836,15 @@ class AssetPlanWorkItem(DomainModel):
     operation: AssetPlanOperation
     output_role: str = Field(min_length=1, max_length=200)
     output_view: AssetStandardView | None = None
+    output_layout_profile: AssetLayoutProfile | None = Field(
+        default=None,
+        description=(
+            "本 work-item 产物自身的布局。它与父 AssetPlan item brief 中的"
+            "总体呈现布局独立；普通生成、参考生成和编辑未声明时按 "
+            "LIGHTWEIGHT_SINGLE 执行，COMPOSE 未声明时使用 compose_intent "
+            "的 layout_profile。"
+        ),
+    )
     final_prompt: str = Field(min_length=1, max_length=12000)
     size: str = Field(min_length=1, max_length=80)
     review_purpose: AssetReviewPurpose = Field(
@@ -1792,10 +1865,23 @@ class AssetPlanWorkItem(DomainModel):
     )
     import_intent: AssetPlanImportIntent | None = None
     compose_intent: AssetPlanComposeIntent | None = None
+    text_plate_intent: AssetPlanTextPlateIntent | None = None
     ordered_references: list[AssetPlanReference] = Field(
         default_factory=list[AssetPlanReference]
     )
     dependency_ids: list[str] = Field(default_factory=list[str])
+    candidate_asset_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="已实际生成的候选所属 Asset；不表示已经审核或可供下游依赖使用。",
+    )
+    candidate_asset_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="候选媒体的精确版本。Builder 落盘后用局部 patch 记录，供后续验收和恢复复用。",
+    )
     completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
     completed_asset_version_id: str | None = Field(
         default=None,
@@ -1803,10 +1889,29 @@ class AssetPlanWorkItem(DomainModel):
         max_length=200,
     )
 
+    def resolved_output_layout_profile(self) -> AssetLayoutProfile:
+        """Resolve this output's layout without inheriting the parent item brief."""
+
+        if self.output_layout_profile is not None:
+            return self.output_layout_profile
+        if self.operation == AssetPlanOperation.COMPOSE:
+            assert self.compose_intent is not None
+            return (
+                self.compose_intent.layout_profile
+                or AssetLayoutProfile.LIGHTWEIGHT_SINGLE
+            )
+        return AssetLayoutProfile.LIGHTWEIGHT_SINGLE
+
     @model_validator(mode="after")
     def validate_work_item(self) -> AssetPlanWorkItem:
         if len(self.dependency_ids) != len(set(self.dependency_ids)):
             raise ValueError("Asset-plan work-item dependencies must be unique")
+        if (self.candidate_asset_id is None) != (
+            self.candidate_asset_version_id is None
+        ):
+            raise ValueError(
+                "Candidate asset-plan work-item asset and version IDs must be supplied together"
+            )
         if (self.completed_asset_id is None) != (
             self.completed_asset_version_id is None
         ):
@@ -1839,19 +1944,106 @@ class AssetPlanWorkItem(DomainModel):
                     "ReferencePack role"
                 )
         if self.operation == AssetPlanOperation.IMPORT:
-            if self.import_intent is None or self.compose_intent is not None:
+            if (
+                self.import_intent is None
+                or self.compose_intent is not None
+                or self.text_plate_intent is not None
+            ):
                 raise ValueError(
                     "An IMPORT AssetPlan work item requires only import_intent"
                 )
         elif self.operation == AssetPlanOperation.COMPOSE:
-            if self.compose_intent is None or self.import_intent is not None:
+            if (
+                self.compose_intent is None
+                or self.import_intent is not None
+                or self.text_plate_intent is not None
+            ):
                 raise ValueError(
                     "A COMPOSE AssetPlan work item requires only compose_intent"
                 )
-        elif self.import_intent is not None or self.compose_intent is not None:
+            if (
+                self.output_layout_profile is not None
+                and self.output_layout_profile
+                != (
+                    self.compose_intent.layout_profile
+                    or AssetLayoutProfile.LIGHTWEIGHT_SINGLE
+                )
+            ):
+                raise ValueError(
+                    "A COMPOSE AssetPlan work item output layout must match its "
+                    "compose_intent layout"
+                )
+        elif self.operation == AssetPlanOperation.TEXT_PLATE:
+            if (
+                self.text_plate_intent is None
+                or self.import_intent is not None
+                or self.compose_intent is not None
+            ):
+                raise ValueError(
+                    "A TEXT_PLATE AssetPlan work item requires only text_plate_intent"
+                )
+            if self.ordered_references:
+                raise ValueError(
+                    "A TEXT_PLATE AssetPlan work item cannot declare image references"
+                )
+        elif (
+            self.import_intent is not None
+            or self.compose_intent is not None
+            or self.text_plate_intent is not None
+        ):
             raise ValueError(
-                "Only IMPORT or COMPOSE AssetPlan work items accept operation payloads"
+                "Only IMPORT, COMPOSE or TEXT_PLATE AssetPlan work items accept "
+                "operation payloads"
             )
+        if (
+            self.operation == AssetPlanOperation.GENERATE
+            and self.ordered_references
+        ):
+            raise ValueError(
+                "A GENERATE AssetPlan work item cannot declare image references; "
+                "use REFERENCE_GENERATE"
+            )
+        if (
+            self.operation == AssetPlanOperation.REFERENCE_GENERATE
+            and not self.ordered_references
+        ):
+            raise ValueError(
+                "A REFERENCE_GENERATE AssetPlan work item requires image references"
+            )
+        if self.operation == AssetPlanOperation.EDIT and not self.ordered_references:
+            raise ValueError("An EDIT AssetPlan work item requires image references")
+        if self.operation != AssetPlanOperation.COMPOSE:
+            if (
+                self.output_layout_profile
+                in {
+                    AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
+                    AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+                }
+                and self.output_view
+                not in {
+                    AssetStandardView.CHARACTER_SHEET,
+                    AssetStandardView.CANONICAL_MASTER,
+                }
+            ):
+                raise ValueError(
+                    "A directly generated character-sheet layout requires a "
+                    "CHARACTER_SHEET or CANONICAL_MASTER output view; individual "
+                    "character views must use an individual output layout"
+                )
+            if (
+                self.output_layout_profile
+                == AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2
+                and self.output_view
+                not in {
+                    AssetStandardView.SCENE_MASTER,
+                    AssetStandardView.CANONICAL_MASTER,
+                }
+            ):
+                raise ValueError(
+                    "A directly generated scene-coverage layout requires a "
+                    "SCENE_MASTER or CANONICAL_MASTER output view; individual scene "
+                    "views must use an individual output layout"
+                )
         return self
 
 
@@ -1879,11 +2071,21 @@ class AssetPlanItem(DomainModel):
     work_items: list[AssetPlanWorkItem] = Field(
         default_factory=list[AssetPlanWorkItem]
     )
-    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    completed_asset_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description=(
+            "此 item 的已批准 canonical 主体 Asset，供 ReferencePack 主体映射使用。"
+            "首次完成 canonical work 时可与该 work 一起原子写入；这不表示其他 work "
+            "已完成，item 整体完成仍要求其全部 work 完成。"
+        ),
+    )
     completed_asset_version_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=200,
+        description="主体已批准且 CURRENT 的 canonical AssetVersion，与 completed_asset_id 成对填写。",
     )
 
     @model_validator(mode="after")
@@ -1951,6 +2153,7 @@ class AssetPlanContent(DomainModel):
             ReferenceRole.CHARACTER_BODY: {AssetKind.CHARACTER},
             ReferenceRole.CHARACTER_PROFILE: {AssetKind.CHARACTER},
             ReferenceRole.CHARACTER_BACK: {AssetKind.CHARACTER},
+            ReferenceRole.CHARACTER_REFERENCE_SHEET: {AssetKind.CHARACTER},
             ReferenceRole.LOCATION_MASTER: {AssetKind.LOCATION},
             ReferenceRole.LOCATION_REVERSE: {AssetKind.LOCATION},
             ReferenceRole.LOCATION_INTERACTION: {AssetKind.LOCATION},
@@ -2181,6 +2384,896 @@ class AssetPlanCreateRequest(DomainModel):
 
 class AssetPlanReplaceRequest(AssetPlanCreateRequest):
     base_version_id: str = Field(min_length=1)
+    removed_item_ids: list[str] = Field(
+        default_factory=list[str],
+        description=(
+            "完整替换快照中有意移除的旧 AssetPlan item ID。"
+            "未在此处明确声明的旧 item 必须继续出现在 asset_plan.items 中；"
+            "移除 item 时其 work item 随之移除，无需重复声明。"
+        ),
+    )
+    removed_work_item_ids: list[str] = Field(
+        default_factory=list[str],
+        description=(
+            "完整替换快照中，从仍保留的 item 里有意移除的旧 "
+            "work-item ID。未明确声明的旧 work item 必须继续出现。"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_declared_removals(self) -> AssetPlanReplaceRequest:
+        for field_name in ("removed_item_ids", "removed_work_item_ids"):
+            values = getattr(self, field_name)
+            if len(values) != len(set(values)):
+                raise ValueError(f"AssetPlan replacement {field_name} must be unique")
+        return self
+
+
+class AssetPlanWorkItemPatch(DomainModel):
+    """Targeted work-item changes inside one stable AssetPlan item."""
+
+    item_id: str = Field(min_length=1, max_length=200)
+    upsert_work_items: list[AssetPlanWorkItem] = Field(
+        default_factory=list[AssetPlanWorkItem]
+    )
+    removed_work_item_ids: list[str] = Field(default_factory=list[str])
+
+    @model_validator(mode="after")
+    def validate_patch(self) -> AssetPlanWorkItemPatch:
+        upsert_ids = [item.id for item in self.upsert_work_items]
+        if len(upsert_ids) != len(set(upsert_ids)):
+            raise ValueError("An AssetPlan patch may upsert each work item only once")
+        if len(self.removed_work_item_ids) != len(set(self.removed_work_item_ids)):
+            raise ValueError("An AssetPlan patch may remove each work item only once")
+        overlap = set(upsert_ids) & set(self.removed_work_item_ids)
+        if overlap:
+            raise ValueError(
+                "An AssetPlan patch cannot upsert and remove the same work item: "
+                + ", ".join(sorted(overlap))
+            )
+        if not self.upsert_work_items and not self.removed_work_item_ids:
+            raise ValueError("An AssetPlan work-item patch must contain a semantic change")
+        return self
+
+
+class AssetPlanFieldPatchOperation(StrEnum):
+    """RFC 6902 operations supported against a stable AssetPlan entity."""
+
+    ADD = "add"
+    REMOVE = "remove"
+    REPLACE = "replace"
+    TEST = "test"
+
+
+class AssetPlanFieldPatch(DomainModel):
+    """One compact field change selected by stable item/work-item identity."""
+
+    item_id: str | None = Field(default=None, min_length=1, max_length=200)
+    work_item_id: str | None = Field(default=None, min_length=1, max_length=200)
+    op: AssetPlanFieldPatchOperation
+    path: str = Field(max_length=1000)
+    value: JsonValue = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> AssetPlanFieldPatch:
+        if self.work_item_id is not None and self.item_id is None:
+            raise ValueError(
+                "AssetPlan field patch work_item_id requires its parent item_id"
+            )
+        if not self.path:
+            if (
+                self.op != AssetPlanFieldPatchOperation.REMOVE
+                or self.item_id is None
+            ):
+                raise ValueError(
+                    "An empty AssetPlan field patch path is only valid for removing "
+                    "one stable-ID item or work item"
+                )
+            return self
+        if not self.path.startswith("/"):
+            raise ValueError("AssetPlan field patch path must be an RFC 6901 pointer")
+        if (
+            self.op
+            in {
+                AssetPlanFieldPatchOperation.ADD,
+                AssetPlanFieldPatchOperation.REPLACE,
+                AssetPlanFieldPatchOperation.TEST,
+            }
+            and "value" not in self.model_fields_set
+        ):
+            raise ValueError(
+                f"AssetPlan field patch operation {self.op.value} requires value"
+            )
+        return self
+
+
+class AssetPlanPatchRequest(DomainModel):
+    """Local AssetPlan changes merged against one exact current version.
+
+    Existing item and work-item IDs are replaced in place. New IDs are appended in
+    request order. The service validates the fully merged AssetPlan, so a local patch
+    cannot bypass dependency, source-version, media, or completion semantics.
+    """
+
+    base_version_id: str = Field(min_length=1)
+    upsert_items: list[AssetPlanItem] = Field(default_factory=list[AssetPlanItem])
+    work_item_patches: list[AssetPlanWorkItemPatch] = Field(
+        default_factory=list[AssetPlanWorkItemPatch]
+    )
+    field_patches: list[AssetPlanFieldPatch] = Field(
+        default_factory=list[AssetPlanFieldPatch],
+        description=(
+            "Atomic RFC 6902 field changes resolved by stable item/work-item IDs. "
+            "Use this for broad corrections that would otherwise retransmit full items."
+        ),
+    )
+    removed_item_ids: list[str] = Field(default_factory=list[str])
+    notes: list[str] | None = None
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+
+    @model_validator(mode="after")
+    def validate_patch(self) -> AssetPlanPatchRequest:
+        upsert_item_ids = [item.id for item in self.upsert_items]
+        work_patch_item_ids = [item.item_id for item in self.work_item_patches]
+        for label, values in (
+            ("upsert item", upsert_item_ids),
+            ("work-item patch target", work_patch_item_ids),
+            ("removed item", self.removed_item_ids),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"An AssetPlan patch repeats a {label} ID")
+        conflicting_item_ids = (
+            set(upsert_item_ids) & set(work_patch_item_ids)
+        ) | (set(upsert_item_ids) & set(self.removed_item_ids)) | (
+            set(work_patch_item_ids) & set(self.removed_item_ids)
+        )
+        if conflicting_item_ids:
+            raise ValueError(
+                "An AssetPlan patch must choose one operation per item: "
+                + ", ".join(sorted(conflicting_item_ids))
+            )
+        if (
+            not self.upsert_items
+            and not self.work_item_patches
+            and not self.field_patches
+            and not self.removed_item_ids
+            and self.notes is None
+        ):
+            raise ValueError("AssetPlan patch must contain a semantic change")
+        if self.field_patches and (
+            self.upsert_items or self.work_item_patches or self.removed_item_ids
+        ):
+            raise ValueError(
+                "AssetPlan field_patches cannot be mixed with full item/work-item upserts"
+            )
+        return self
+
+
+class AssetPlanReferencePackOverride(DomainModel):
+    """Explicit supplemental semantics when the current work item is ambiguous."""
+
+    work_item_id: str = Field(min_length=1, max_length=200)
+    role: ReferenceRole
+    angle: ReferenceAngle
+    framing: ReferenceFraming
+    tags: list[str] = Field(default_factory=list[str], max_length=32)
+
+    @model_validator(mode="after")
+    def validate_tags(self) -> AssetPlanReferencePackOverride:
+        normalized = [item.strip() for item in self.tags if item.strip()]
+        if normalized != self.tags or len(normalized) != len(set(normalized)):
+            raise ValueError(
+                "AssetPlan reference-pack override tags must be trimmed and unique"
+            )
+        return self
+
+
+class AssetPlanSubjectReconcileIntent(DomainModel):
+    """Agent-selected canonical root and supplemental work for one subject."""
+
+    item_id: str = Field(min_length=1, max_length=200)
+    canonical_work_item_id: str = Field(min_length=1, max_length=200)
+    supplemental_work_item_ids: list[str] = Field(default_factory=list[str])
+    pack_overrides: list[AssetPlanReferencePackOverride] = Field(
+        default_factory=list[AssetPlanReferencePackOverride]
+    )
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> AssetPlanSubjectReconcileIntent:
+        if self.canonical_work_item_id in self.supplemental_work_item_ids:
+            raise ValueError(
+                "AssetPlan canonical work item cannot also be supplemental"
+            )
+        if len(self.supplemental_work_item_ids) != len(
+            set(self.supplemental_work_item_ids)
+        ):
+            raise ValueError("AssetPlan subject repeats a supplemental work-item ID")
+        override_ids = [item.work_item_id for item in self.pack_overrides]
+        if len(override_ids) != len(set(override_ids)):
+            raise ValueError("AssetPlan subject repeats a pack override work-item ID")
+        if set(override_ids) - set(self.supplemental_work_item_ids):
+            raise ValueError(
+                "AssetPlan pack overrides must target selected supplemental work items"
+            )
+        return self
+
+
+class AssetPlanWorkExecutionOverride(DomainModel):
+    """Exact execution fields to change on one existing AssetPlan work item."""
+
+    item_id: str = Field(min_length=1, max_length=200)
+    work_item_id: str = Field(min_length=1, max_length=200)
+    size: str | None = Field(default=None, min_length=1, max_length=80)
+    output_layout_profile: AssetLayoutProfile | None = None
+
+    @model_validator(mode="after")
+    def validate_change(self) -> AssetPlanWorkExecutionOverride:
+        if self.size is None and self.output_layout_profile is None:
+            raise ValueError(
+                "AssetPlan work execution override must change size or output layout"
+            )
+        return self
+
+
+class AssetPlanAppliedWorkExecutionOverride(DomainModel):
+    """Persisted execution truth returned after applying one work override."""
+
+    item_id: str = Field(min_length=1, max_length=200)
+    work_item_id: str = Field(min_length=1, max_length=200)
+    size: str = Field(min_length=1, max_length=80)
+    output_layout_profile: AssetLayoutProfile
+    compose_target_size: str | None = Field(default=None, min_length=1, max_length=80)
+    compose_layout_profile: AssetLayoutProfile | None = None
+
+
+class AssetPlanPhysicalMasterCreateIntent(DomainModel):
+    """Agent-authored missing physical carrier master."""
+
+    work_item_id: str = Field(min_length=1, max_length=200)
+    output_role: str = Field(min_length=1, max_length=200)
+    output_view: AssetStandardView
+    final_prompt: str = Field(min_length=1, max_length=12000)
+    size: str = Field(min_length=1, max_length=80)
+
+
+class AssetPlanTextPlateSpec(DomainModel):
+    """One independent exact-copy plate selected by the Agent."""
+
+    item_id: str = Field(min_length=1, max_length=200)
+    work_item_id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=240)
+    rationale: str = Field(min_length=1, max_length=4000)
+    serves_shot_ids: list[str] = Field(default_factory=list[str])
+    serves_clip_group_ids: list[str] = Field(default_factory=list[str])
+    output_role: str = Field(min_length=1, max_length=200)
+    size: str = Field(min_length=1, max_length=80)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
+    layout_description: str = Field(min_length=1, max_length=2000)
+    background_color: str = Field(default="#FFFFFF", min_length=1, max_length=64)
+    foreground_color: str = Field(default="#111111", min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_text(self) -> AssetPlanTextPlateSpec:
+        if self.title is None and not self.exact_lines:
+            raise ValueError(
+                "AssetPlan text plate requires a title or at least one exact line"
+            )
+        if self.title is not None and self.title in self.exact_lines:
+            raise ValueError(
+                "AssetPlan text-plate title must not repeat inside exact_lines"
+            )
+        for label, values in (
+            ("shot", self.serves_shot_ids),
+            ("clip-group", self.serves_clip_group_ids),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"AssetPlan text plate repeats a {label} ID")
+        return self
+
+
+class AssetPlanTextSurfaceIntent(DomainModel):
+    """Split one physical carrier from its independent exact-copy plates."""
+
+    carrier_item_id: str = Field(min_length=1, max_length=200)
+    carrier_master_work_item_id: str | None = Field(
+        default=None, min_length=1, max_length=200
+    )
+    create_carrier_master: AssetPlanPhysicalMasterCreateIntent | None = None
+    remove_text_work_item_ids: list[str] = Field(default_factory=list[str])
+    plates: list[AssetPlanTextPlateSpec] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_carrier(self) -> AssetPlanTextSurfaceIntent:
+        if (self.carrier_master_work_item_id is None) == (
+            self.create_carrier_master is None
+        ):
+            raise ValueError(
+                "AssetPlan text surface must select one existing carrier master or "
+                "author one new carrier master"
+            )
+        if len(self.remove_text_work_item_ids) != len(
+            set(self.remove_text_work_item_ids)
+        ):
+            raise ValueError("AssetPlan text surface repeats a removed work-item ID")
+        plate_item_ids = [item.item_id for item in self.plates]
+        plate_work_ids = [item.work_item_id for item in self.plates]
+        if len(plate_item_ids) != len(set(plate_item_ids)):
+            raise ValueError("AssetPlan text surface repeats a plate item ID")
+        if len(plate_work_ids) != len(set(plate_work_ids)):
+            raise ValueError("AssetPlan text surface repeats a plate work-item ID")
+        return self
+
+
+class AssetPlanExecutionReconcileRequest(DomainModel):
+    """Semantic decisions compiled into one executable AssetPlan revision."""
+
+    base_version_id: str = Field(min_length=1)
+    subjects: list[AssetPlanSubjectReconcileIntent] = Field(
+        default_factory=list[AssetPlanSubjectReconcileIntent]
+    )
+    text_surfaces: list[AssetPlanTextSurfaceIntent] = Field(
+        default_factory=list[AssetPlanTextSurfaceIntent]
+    )
+    execution_overrides: list[AssetPlanWorkExecutionOverride] = Field(
+        default_factory=list[AssetPlanWorkExecutionOverride],
+        description=(
+            "按精确 item/work-item 身份修改任意基础或补充任务的执行字段。"
+            "COMPOSE 的 size/layout 会同步到 compose_intent，不需要 Agent "
+            "重复提交底层联动字段。"
+        ),
+    )
+    notes: list[str] | None = None
+    source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
+        default_factory=list[ProductionDocumentArtifactRef]
+    )
+    origin: ProductionDocumentOrigin
+
+    @model_validator(mode="after")
+    def validate_reconcile_request(self) -> AssetPlanExecutionReconcileRequest:
+        if (
+            not self.subjects
+            and not self.text_surfaces
+            and not self.execution_overrides
+        ):
+            raise ValueError(
+                "AssetPlan execution reconciliation requires a semantic change"
+            )
+        for label, values in (
+            ("subject item", [item.item_id for item in self.subjects]),
+            (
+                "text carrier item",
+                [item.carrier_item_id for item in self.text_surfaces],
+            ),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"AssetPlan reconciliation repeats a {label} ID")
+        override_targets = [
+            (item.item_id, item.work_item_id)
+            for item in self.execution_overrides
+        ]
+        if len(override_targets) != len(set(override_targets)):
+            raise ValueError(
+                "AssetPlan reconciliation repeats a work execution override target"
+            )
+        return self
+
+
+def _asset_plan_json_pointer_tokens(path: str) -> list[str]:
+    return [
+        part.replace("~1", "/").replace("~0", "~")
+        for part in path[1:].split("/")
+    ]
+
+
+def _asset_plan_json_pointer_index(
+    token: str,
+    *,
+    length: int,
+    allow_append: bool,
+) -> int:
+    if token == "-" and allow_append:
+        return length
+    try:
+        index = int(token)
+    except ValueError as exc:
+        raise ValueError(
+            f"AssetPlan JSON patch list index is not an integer: {token!r}"
+        ) from exc
+    upper_bound = length if allow_append else length - 1
+    if index < 0 or index > upper_bound:
+        raise ValueError(
+            f"AssetPlan JSON patch list index {index} is outside 0..{upper_bound}"
+        )
+    return index
+
+
+def _apply_asset_plan_json_pointer_patch(
+    target: dict[str, JsonValue],
+    patch: AssetPlanFieldPatch,
+) -> None:
+    tokens = _asset_plan_json_pointer_tokens(patch.path)
+    parent: dict[str, JsonValue] | list[JsonValue] = target
+    for token in tokens[:-1]:
+        if isinstance(parent, dict):
+            child = parent.get(token)
+        else:
+            child = parent[
+                _asset_plan_json_pointer_index(
+                    token,
+                    length=len(parent),
+                    allow_append=False,
+                )
+            ]
+        if not isinstance(child, (dict, list)):
+            raise ValueError(
+                "AssetPlan JSON patch path does not resolve to a container: "
+                + repr(patch.path)
+            )
+        parent = child
+
+    token = tokens[-1]
+    if isinstance(parent, dict):
+        exists = token in parent
+        current = parent.get(token)
+        if patch.op == AssetPlanFieldPatchOperation.TEST:
+            if not exists or current != patch.value:
+                raise ValueError(f"AssetPlan JSON patch test failed at {patch.path!r}")
+            return
+        if patch.op == AssetPlanFieldPatchOperation.REMOVE:
+            if not exists:
+                raise ValueError(
+                    f"AssetPlan JSON patch remove target does not exist: {patch.path!r}"
+                )
+            del parent[token]
+            return
+        if patch.op == AssetPlanFieldPatchOperation.REPLACE and not exists:
+            raise ValueError(
+                f"AssetPlan JSON patch replace target does not exist: {patch.path!r}"
+            )
+        parent[token] = deepcopy(patch.value)
+        return
+
+    index = _asset_plan_json_pointer_index(
+        token,
+        length=len(parent),
+        allow_append=patch.op == AssetPlanFieldPatchOperation.ADD,
+    )
+    if patch.op == AssetPlanFieldPatchOperation.TEST:
+        if parent[index] != patch.value:
+            raise ValueError(f"AssetPlan JSON patch test failed at {patch.path!r}")
+    elif patch.op == AssetPlanFieldPatchOperation.REMOVE:
+        parent.pop(index)
+    elif patch.op == AssetPlanFieldPatchOperation.REPLACE:
+        parent[index] = deepcopy(patch.value)
+    else:
+        parent.insert(index, deepcopy(patch.value))
+
+
+def apply_asset_plan_field_patches(
+    asset_plan: AssetPlanContent,
+    patches: list[AssetPlanFieldPatch],
+) -> AssetPlanContent:
+    """Apply one atomic stable-ID field patch set and validate its structure."""
+
+    payload = cast(
+        dict[str, JsonValue],
+        deepcopy(asset_plan.model_dump(mode="json")),
+    )
+    raw_items = payload.get("items")
+    if not isinstance(raw_items, list):
+        raise ValueError("AssetPlan payload has no items array")
+    for patch in patches:
+        if not patch.path:
+            matching_item_indexes = [
+                index
+                for index, item in enumerate(raw_items)
+                if isinstance(item, dict) and item.get("id") == patch.item_id
+            ]
+            if len(matching_item_indexes) != 1:
+                raise ValueError(
+                    "AssetPlan field patch removal item selector must resolve exactly once: "
+                    + str(patch.item_id)
+                )
+            if patch.work_item_id is None:
+                raw_items.pop(matching_item_indexes[0])
+                continue
+            selected_item = raw_items[matching_item_indexes[0]]
+            if not isinstance(selected_item, dict):
+                raise ValueError("AssetPlan field patch selected item is not an object")
+            raw_work_items = selected_item.get("work_items")
+            if not isinstance(raw_work_items, list):
+                raise ValueError(
+                    f"AssetPlan item {patch.item_id} has no work_items array"
+                )
+            matching_work_indexes = [
+                index
+                for index, item in enumerate(raw_work_items)
+                if isinstance(item, dict)
+                and item.get("id") == patch.work_item_id
+            ]
+            if len(matching_work_indexes) != 1:
+                raise ValueError(
+                    "AssetPlan field patch removal work-item selector must resolve "
+                    f"exactly once: {patch.item_id}/{patch.work_item_id}"
+                )
+            raw_work_items.pop(matching_work_indexes[0])
+            continue
+        target = payload
+        if patch.item_id is not None:
+            matching_items = [
+                item
+                for item in raw_items
+                if isinstance(item, dict) and item.get("id") == patch.item_id
+            ]
+            if len(matching_items) != 1:
+                raise ValueError(
+                    "AssetPlan field patch item selector must resolve exactly once: "
+                    + patch.item_id
+                )
+            target = cast(dict[str, JsonValue], matching_items[0])
+            if patch.work_item_id is not None:
+                raw_work_items = target.get("work_items")
+                if not isinstance(raw_work_items, list):
+                    raise ValueError(
+                        f"AssetPlan item {patch.item_id} has no work_items array"
+                    )
+                matching_work_items = [
+                    item
+                    for item in raw_work_items
+                    if isinstance(item, dict)
+                    and item.get("id") == patch.work_item_id
+                ]
+                if len(matching_work_items) != 1:
+                    raise ValueError(
+                        "AssetPlan field patch work-item selector must resolve exactly once: "
+                        f"{patch.item_id}/{patch.work_item_id}"
+                    )
+                target = cast(dict[str, JsonValue], matching_work_items[0])
+        _apply_asset_plan_json_pointer_patch(target, patch)
+    return AssetPlanContent.model_validate(payload)
+
+
+class AssetPlanExecutionStatus(StrEnum):
+    """Compact execution state derived from exact AssetPlan completion truth."""
+
+    NOT_REQUIRED = "NOT_REQUIRED"
+    READY = "READY"
+    BLOCKED = "BLOCKED"
+    IN_PROGRESS = "IN_PROGRESS"
+    CANDIDATE_AVAILABLE = "CANDIDATE_AVAILABLE"
+    COMPLETED = "COMPLETED"
+
+
+class AssetWorkContextVersion(DomainModel):
+    """Payload-free identity for one exact versioned production document."""
+
+    document_id: str = Field(min_length=1)
+    version_id: str = Field(min_length=1)
+    version: int = Field(ge=1)
+
+
+class AssetPlanPatchSummaryResponse(DomainModel):
+    """Lightweight acknowledgement for an atomically persisted AssetPlan patch."""
+
+    project_id: str = Field(min_length=1)
+    asset_plan_identity: AssetWorkContextVersion
+    base_version_id: str = Field(min_length=1)
+    upserted_item_ids: list[str] = Field(default_factory=list[str])
+    work_item_patch_item_ids: list[str] = Field(default_factory=list[str])
+    upserted_work_item_ids: list[str] = Field(default_factory=list[str])
+    removed_item_ids: list[str] = Field(default_factory=list[str])
+    removed_work_item_ids: list[str] = Field(default_factory=list[str])
+    notes_updated: bool
+
+
+class AssetPlanMutationOperation(StrEnum):
+    """Kind of full AssetPlan mutation acknowledged by a lightweight Tool result."""
+
+    CREATE = "CREATE"
+    REPLACE = "REPLACE"
+
+
+class AssetPlanMutationSummaryResponse(DomainModel):
+    """Lightweight acknowledgement for a full AssetPlan create or replacement."""
+
+    project_id: str = Field(min_length=1)
+    operation: AssetPlanMutationOperation
+    asset_plan_identity: AssetWorkContextVersion
+    base_version_id: str | None = Field(default=None, min_length=1)
+    item_count: int = Field(ge=0)
+    work_item_count: int = Field(ge=0)
+
+
+class AssetPlanExecutionReconcileSummary(DomainModel):
+    """Compact acknowledgement for one semantic execution-contract revision."""
+
+    project_id: str = Field(min_length=1)
+    base_version_id: str = Field(min_length=1)
+    asset_plan_identity: AssetWorkContextVersion
+    canonicalized_item_ids: list[str] = Field(default_factory=list[str])
+    canonical_work_item_ids: list[str] = Field(default_factory=list[str])
+    supplemental_work_item_ids: list[str] = Field(default_factory=list[str])
+    created_text_plate_item_ids: list[str] = Field(default_factory=list[str])
+    removed_text_work_item_ids: list[str] = Field(default_factory=list[str])
+    created_physical_master_work_item_ids: list[str] = Field(
+        default_factory=list[str]
+    )
+    normalized_layout_item_ids: list[str] = Field(default_factory=list[str])
+    applied_execution_overrides: list[AssetPlanAppliedWorkExecutionOverride] = Field(
+        default_factory=list[AssetPlanAppliedWorkExecutionOverride]
+    )
+
+
+class AssetPlanWorkItemIndex(DomainModel):
+    """Payload-light work identity used by a Leader to group and delegate work."""
+
+    id: str = Field(min_length=1, max_length=200)
+    operation: AssetPlanOperation
+    output_role: str = Field(min_length=1, max_length=200)
+    output_view: AssetStandardView | None = None
+    output_layout_profile: AssetLayoutProfile
+    size: str = Field(min_length=1, max_length=80)
+    review_purpose: AssetReviewPurpose
+    status: AssetPlanExecutionStatus
+    dependency_ids: list[str] = Field(default_factory=list[str])
+    reference_pack_subject_item_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+    candidate_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    candidate_asset_version_id: str | None = Field(default=None, min_length=1, max_length=200)
+    candidate_approval_status: ApprovalStatus | None = None
+    candidate_freshness: Freshness | None = None
+    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    completed_asset_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+
+
+class AssetPlanItemIndex(DomainModel):
+    """Payload-light item identity and execution summary for Leader delegation."""
+
+    id: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=240)
+    asset_kind: AssetKind
+    disposition: AssetPlanDisposition
+    layout_profile: AssetLayoutProfile | None = None
+    status: AssetPlanExecutionStatus
+    bible_entity_id: str | None = Field(default=None, min_length=1, max_length=200)
+    serves_shot_ids: list[str] = Field(default_factory=list[str])
+    serves_clip_group_ids: list[str] = Field(default_factory=list[str])
+    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    completed_asset_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+    work_items: list[AssetPlanWorkItemIndex] = Field(
+        default_factory=list[AssetPlanWorkItemIndex]
+    )
+
+
+class AssetPlanExecutionContractIssueCode(StrEnum):
+    """Current executable-semantics facts that need Agent reconciliation."""
+
+    OUTPUT_LAYOUT_WORK_SIZE_CONFLICT = "OUTPUT_LAYOUT_WORK_SIZE_CONFLICT"
+    CANONICAL_ROOT_REQUIRES_RECONCILIATION = (
+        "CANONICAL_ROOT_REQUIRES_RECONCILIATION"
+    )
+    SUPPLEMENTAL_LINEAGE_REQUIRES_RECONCILIATION = (
+        "SUPPLEMENTAL_LINEAGE_REQUIRES_RECONCILIATION"
+    )
+    TEXT_SURFACE_REQUIRES_SEPARATION = "TEXT_SURFACE_REQUIRES_SEPARATION"
+
+
+class AssetPlanExecutionContractIssue(DomainModel):
+    """One compact factual mismatch, without prescribing a creative choice."""
+
+    code: AssetPlanExecutionContractIssueCode
+    item_id: str = Field(min_length=1, max_length=200)
+    work_item_ids: list[str] = Field(default_factory=list[str])
+    detail: str = Field(min_length=1, max_length=1200)
+
+
+class AssetPlanExecutionContractReview(DomainModel):
+    """Whether the stored plan matches the currently executable asset semantics."""
+
+    needs_reconciliation: bool
+    issues: list[AssetPlanExecutionContractIssue] = Field(
+        default_factory=list[AssetPlanExecutionContractIssue]
+    )
+
+    @model_validator(mode="after")
+    def validate_review(self) -> AssetPlanExecutionContractReview:
+        if self.needs_reconciliation != bool(self.issues):
+            raise ValueError(
+                "AssetPlan execution-contract review must derive its status from issues"
+            )
+        return self
+
+
+class AssetPlanIndexResponse(DomainModel):
+    """Compact AssetPlan inventory without briefs, prompts, references, or media."""
+
+    project_id: str = Field(min_length=1)
+    asset_plan_identity: AssetWorkContextVersion
+    script_version_id: str = Field(min_length=1)
+    bible_version_id: str = Field(min_length=1)
+    production_spec_identity: AssetWorkContextVersion
+    storyboard_identity: AssetWorkContextVersion
+    execution_contract: AssetPlanExecutionContractReview
+    items: list[AssetPlanItemIndex] = Field(default_factory=list[AssetPlanItemIndex])
+
+
+class AssetPlanningSourceIntake(DomainModel):
+    """User-declared image plus only its exact current/approved versions."""
+
+    input_index: int = Field(ge=1)
+    declared_input: CreativeInputImage
+    asset_id: str = Field(min_length=1)
+    asset_name: str = Field(min_length=1)
+    current_version_id: str = Field(min_length=1)
+    approved_version_id: str | None = Field(default=None, min_length=1)
+    exact_versions: list[AssetVersion] = Field(min_length=1, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_exact_versions(self) -> AssetPlanningSourceIntake:
+        version_ids = [version.id for version in self.exact_versions]
+        if len(version_ids) != len(set(version_ids)):
+            raise ValueError("Asset planning source versions must be unique")
+        required_ids = {self.current_version_id}
+        if self.approved_version_id is not None:
+            required_ids.add(self.approved_version_id)
+        if set(version_ids) != required_ids:
+            raise ValueError(
+                "Asset planning source versions must contain exactly the current and "
+                "approved versions"
+            )
+        return self
+
+
+class AssetPlanningExistingAssetIndex(DomainModel):
+    """Payload-light identity for an asset that may be reused by a new plan."""
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    asset_kind: AssetKind
+    bible_entity_id: str | None = Field(default=None, min_length=1, max_length=200)
+    current_version_id: str = Field(min_length=1)
+    current_version: int = Field(ge=1)
+    approved_version_id: str | None = Field(default=None, min_length=1)
+    approved_version: int | None = Field(default=None, ge=1)
+    is_source_intake: bool = False
+
+
+class AssetPlanningContextResponse(DomainModel):
+    """Deduplicated exact truth needed to author or globally replan AssetPlan."""
+
+    project_id: str = Field(min_length=1)
+    original_user_brief: str
+    script: ScriptVersion
+    bible: ProjectBibleVersion
+    production_spec_identity: AssetWorkContextVersion
+    production_spec: ProductionSpecContent
+    storyboard_identity: AssetWorkContextVersion
+    storyboard: StoryboardContent
+    source_intake: list[AssetPlanningSourceIntake] = Field(
+        default_factory=list[AssetPlanningSourceIntake]
+    )
+    existing_assets: list[AssetPlanningExistingAssetIndex] = Field(
+        default_factory=list[AssetPlanningExistingAssetIndex]
+    )
+    existing_asset_plan_index: AssetPlanIndexResponse | None = None
+
+
+class AssetWorkSourceIntake(DomainModel):
+    """One user-declared source image and its exact imported media version."""
+
+    input_index: int = Field(ge=1)
+    declared_input: CreativeInputImage
+    asset_id: str = Field(min_length=1)
+    asset_name: str = Field(min_length=1)
+    version: AssetVersion
+
+
+class AssetWorkStoryboardSlice(DomainModel):
+    """Exact Storyboard records needed by selected AssetPlan work only."""
+
+    identity: AssetWorkContextVersion
+    title: str = Field(min_length=1, max_length=240)
+    script_version_id: str = Field(min_length=1)
+    bible_version_id: str = Field(min_length=1)
+    scene_nodes: list[StoryboardSceneNode] = Field(
+        default_factory=list[StoryboardSceneNode]
+    )
+    shots: list[ShotPlan] = Field(default_factory=list[ShotPlan])
+    clip_groups: list[ClipGroup] = Field(default_factory=list[ClipGroup])
+    source_duration_seconds: float = Field(gt=0.0)
+
+
+class AssetPlanItemSlice(DomainModel):
+    """Exact item metadata plus only the work items selected for this task."""
+
+    id: str = Field(min_length=1, max_length=200)
+    disposition: AssetPlanDisposition
+    asset_kind: AssetKind
+    name: str = Field(min_length=1, max_length=240)
+    bible_entity_id: str | None = Field(default=None, min_length=1, max_length=200)
+    serves_shot_ids: list[str] = Field(default_factory=list[str])
+    serves_clip_group_ids: list[str] = Field(default_factory=list[str])
+    brief: CoreAssetBrief | None = None
+    rationale: str = Field(min_length=1, max_length=4000)
+    work_items: list[AssetPlanWorkItem] = Field(
+        default_factory=list[AssetPlanWorkItem]
+    )
+    omitted_work_item_ids: list[str] = Field(default_factory=list[str])
+    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    completed_asset_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+    )
+
+
+class AssetWorkMediaVersion(DomainModel):
+    """Current media and review facts for a version selected by the task slice."""
+
+    asset_id: str
+    asset_version_id: str
+    version: int
+    origin_type: OriginType
+    descriptor: str
+    media_type: AssetMediaType
+    local_path: str | None = None
+    external_url: str | None = None
+    mime_type: str | None = None
+    width: int | None = None
+    height: int | None = None
+    parent_version_id: str | None = None
+    image_task_id: str | None = None
+    approval_status: ApprovalStatus
+    review_notes: str | None = None
+    freshness: Freshness
+
+
+class AssetWorkContextResponse(DomainModel):
+    """Task-sized exact context for planning or executing selected assets."""
+
+    project_id: str = Field(min_length=1)
+    original_user_brief: str
+    asset_plan_identity: AssetWorkContextVersion
+    asset_plan_items: list[AssetPlanItemSlice] = Field(min_length=1)
+    requested_item_ids: list[str] = Field(default_factory=list[str])
+    requested_work_item_ids: list[str] = Field(default_factory=list[str])
+    dependency_work_item_ids: list[str] = Field(default_factory=list[str])
+    media_versions: list[AssetWorkMediaVersion] = Field(
+        default_factory=list[AssetWorkMediaVersion],
+        description="所选工作及依赖明确引用的候选、完成版本和输入版本的当前媒体与审核事实；不包含无关历史版本。",
+    )
+    reference_packs: list[ReferencePack] = Field(
+        default_factory=list[ReferencePack],
+        description=(
+            "所选媒体作为主体或成员涉及的ReferencePack只读投影；只含当前可用条目，"
+            "保留实际role、tags、angle、framing、lineage和description，不从计划意图猜测。"
+        ),
+    )
+    shot_reference_plans: list[ReferencePlanEntry] = Field(
+        default_factory=list[ReferencePlanEntry],
+        description="显式请求的Shot当前已保存的引用计划，供逐镜合并更新；不展开其他镜头。",
+    )
+    production_spec_identity: AssetWorkContextVersion
+    production_spec: ProductionSpecContent
+    storyboard: AssetWorkStoryboardSlice
+    source_intake: list[AssetWorkSourceIntake] = Field(
+        default_factory=list[AssetWorkSourceIntake]
+    )
 
 
 class StoryboardShotReplacement(DomainModel):
@@ -2288,6 +3381,23 @@ class AssetPlanReadResponse(DomainModel):
 
 class AssetPlanMutationResponse(AssetPlanReadResponse):
     pass
+
+
+class AssetPlanExecutionReconcileMutationResponse(AssetPlanMutationResponse):
+    """Persisted AssetPlan plus the compiler's exact reconciliation outcome."""
+
+    canonicalized_item_ids: list[str] = Field(default_factory=list[str])
+    canonical_work_item_ids: list[str] = Field(default_factory=list[str])
+    supplemental_work_item_ids: list[str] = Field(default_factory=list[str])
+    created_text_plate_item_ids: list[str] = Field(default_factory=list[str])
+    removed_text_work_item_ids: list[str] = Field(default_factory=list[str])
+    created_physical_master_work_item_ids: list[str] = Field(
+        default_factory=list[str]
+    )
+    normalized_layout_item_ids: list[str] = Field(default_factory=list[str])
+    applied_execution_overrides: list[AssetPlanAppliedWorkExecutionOverride] = Field(
+        default_factory=list[AssetPlanAppliedWorkExecutionOverride]
+    )
 
 
 class GenerationPlanReadResponse(DomainModel):
@@ -2498,6 +3608,7 @@ def compile_generation_plan(
     production_spec: ProductionSpecContent,
     production_spec_document_id: str,
     production_spec_version_id: str,
+    shot_revisions: dict[str, int] | None = None,
 ) -> GenerationPlanContent:
     """Compile ClipGroups into source-window-preserving generation units."""
 
@@ -2513,6 +3624,8 @@ def compile_generation_plan(
         raise ValueError("Production spec and storyboard bible versions must match")
 
     shot_by_id = {item.id: item for item in storyboard.shots}
+    if shot_revisions is not None and set(shot_revisions) != set(shot_by_id):
+        raise ValueError("GenerationPlan shot revisions must cover the complete Storyboard")
     preference = production_spec.provider_preference
     units: list[GenerationUnit] = []
     for group in storyboard.clip_groups:
@@ -2524,7 +3637,9 @@ def compile_generation_plan(
             windows.append(
                 GenerationUnitShotWindow(
                     shot_id=shot.id,
-                    shot_revision=shot.revision,
+                    shot_revision=(
+                        shot.revision if shot_revisions is None else shot_revisions[shot.id]
+                    ),
                     source_in_seconds=cursor,
                     source_out_seconds=source_out,
                     duration_seconds=shot.duration_seconds,

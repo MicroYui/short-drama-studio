@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from functools import lru_cache
 
-from short_drama.h3_models import H3MediaInput
+from short_drama.h3_models import H3MediaInput, H3VideoRequest
 from short_drama.models import AssetKind, ProjectDocument, ShotPlan, VideoGenerationRoute
+from short_drama.production_contracts import GenerationUnit, ProductionSpecContent
 from short_drama.production_profiles import (
+    ProductionPromptStage,
     ProductionSkillRole,
     compile_production_prompt,
     production_skill,
@@ -15,6 +18,7 @@ from short_drama.production_profiles import (
 from short_drama.skills.loader import load_provider_prompt_skills
 from short_drama.providers.h3_prompt_skill import (
     prompt_schema_for_route,
+    validate_h3_generation_unit_prompt_ir,
     validate_h3_prompt_ir,
 )
 from short_drama.providers.h3_media_bindings import resolve_h3_media_bindings
@@ -116,7 +120,7 @@ def _explicit_shot_asset_ids(
             add(interaction.target_asset_id)
         for binding in plan.bindings:
             add(version_to_asset_id.get(binding.target_id))
-    for beat in shot.timeline_beats:
+    for beat in [shot, *shot.timeline_beats]:
         for cue in beat.references:
             add(cue.subject_asset_id)
     for media in media_inputs:
@@ -129,6 +133,8 @@ def _visible_bible_payload(
     document: ProjectDocument,
     shot: ShotPlan,
     media_inputs: list[H3MediaInput],
+    *,
+    related_shots: Sequence[ShotPlan] = (),
 ) -> tuple[list[str], dict[str, object]]:
     bible = next(
         version
@@ -136,6 +142,9 @@ def _visible_bible_payload(
         if version.id == document.project.current_bible_version_id
     )
     explicit_asset_ids = set(_explicit_shot_asset_ids(document, shot, media_inputs))
+    for related in related_shots:
+        explicit_asset_ids.update(_explicit_shot_asset_ids(document, related, []))
+    visible_shot_ids = {shot.id, *(item.id for item in related_shots)}
     selected_assets = [
         asset for asset in document.assets if asset.id in explicit_asset_ids
     ]
@@ -197,7 +206,7 @@ def _visible_bible_payload(
                 "states": [
                     state.model_dump(mode="json")
                     for state in prop.states
-                    if state.shot_id == shot.id
+                    if state.shot_id in visible_shot_ids
                 ],
             }
             for prop in visible_props
@@ -224,6 +233,7 @@ def _route_media_bindings(
             "provider_label": resolved.provider_label,
             "prompt_label": resolved.prompt_label,
             "reference_alias": f"@{resolved.alias}",
+            "required_binding": f"@{resolved.alias} = {resolved.prompt_label}",
             "subject": resolved.subject,
             "subject_asset_id": resolved.subject_asset_id,
             "reference_tags": list(resolved.tags),
@@ -272,6 +282,70 @@ def _previous_shot_terminal_state(
     }
 
 
+def _compiler_instructions(
+    document: ProjectDocument,
+    *,
+    method_skill_ids: Sequence[str],
+) -> str:
+    skill = production_skill(document.project.production_profile)
+    skill_prompt = compile_production_prompt(
+        document.project.production_profile,
+        roles=(ProductionSkillRole.VIDEO_PROMPT_COMPILER,),
+        include_constitution=False,
+        stage=ProductionPromptStage.VISUAL_GEN,
+        method_skill_ids=method_skill_ids,
+    )
+    return (
+        f"你是 MiniMax-H3 的模型专属 Prompt Compiler，当前制作类型为{skill.medium}。\n"
+        "制作类型策略只用于忠实编译已经锁定的镜头，不得在此阶段改写导演意图："
+        f"{skill_prompt.text}\n{_h3_prompt_skill_instructions()}"
+        "\n当前 Provider API 的 required_prompt_schema 是最终输出格式。"
+        "已选 Method 的逐镜叙事、参考绑定和声音连续性用于编译既定内容；"
+        "Design Hub 的中文固定首尾句、画布字段和示例摄影风格不属于当前 API 协议，"
+        "不得与官方 H3 Prompt IR 拼接，或覆盖项目已声明的视觉/声音方向。"
+        "\nmodel_lock 来自本次明确调用的 H3 适配器，是实际目标模型；"
+        "GenerationUnit 中可空的 provider/model/resolution 是上游偏好，不替代该目标。"
+        "operation_scope 是当前 Tool 调用范围：只编译文本，没有媒体上传、提交或生成。"
+        "ProductionSpec 的 user_constraints 保留当时的记录：其中创作约束仍须遵守，"
+        "而描述当时停在哪个工序的阶段备注不能替代当前 Tool 的调用范围。"
+        "不得把准备最终 Prompt 误认为已经调用 H3。"
+        "\n以约4500至6000字符为表达预算，最终上限仍为7000字符；不得靠截断来达标。"
+        "每条独有事实只表达一次：主体映射使用短定义，共用空间、摄影和声音只集中说明一次，"
+        "逐镜段落只补充该镜的动作、变化、时间与原文对白。retention_analysis 用简短结论，"
+        "不展开解释性推理、重复禁止事项或在每镜重写全部身份定义。"
+        "官方字段是必要格式，不是要删除的解释包装：保留全部字段标题，压缩的是正文。"
+        "英文叙述以约600至800词为目标，不用冗长的电影化修辞扩写已给事实。"
+        "subject_definitions 只需短身份名、全部语义别名及对应图片；summary 一句；"
+        "retention_analysis 集中说明保留与不复制的范围，不重复主体定义；"
+        "overall_soundscape 只补充共享声音，不再逐字重复各镜已写的对白和动作声。"
+        "每镜对白在对应时间窗内逐字保留，发话标注同时保留 locked_dialogue.speaker 原名；"
+        "例如 Lin Yi（林一） says: <d>[Chinese] 原文对白</d>。"
+        "英文译名不能独自代替原说话人身份，尤其是媒体资产没有 Bible entity 关联时。"
+        "若提供 source_prompt，它是本次待修订的完整草稿；结合 compiler_feedback 修改它，"
+        "超长草稿本身不是最终 H3 请求，最终输出仍必须通过7000字符限制。"
+        "compiler_feedback 是调用方针对上次结果的修订意见，应落实到表达方式；"
+        "它不能覆盖锁定的事实、对白、镜头边界或有序媒体。"
+    )
+
+
+def _h3_compilation_target() -> dict[str, object]:
+    return {
+        "model_lock": {
+            "provider": "minimax",
+            "model": H3VideoRequest.model_fields["model"].default,
+            "resolution": H3VideoRequest.model_fields["resolution"].default,
+        },
+        "operation_scope": {
+            "current_tool": "route.compile_h3_prompt",
+            "action": "Compile the supplied canonical facts into H3 prompt text only.",
+            "language_compilation_requested": True,
+            "h3_upload_or_submit": False,
+            "media_generation": False,
+            "upstream_content_mutation": False,
+        },
+    }
+
+
 def build_language_prompt_input(
     document: ProjectDocument,
     shot: ShotPlan,
@@ -280,18 +354,10 @@ def build_language_prompt_input(
     duration_seconds: int,
     source_prompt: str,
     media_inputs: list[H3MediaInput] | None = None,
+    method_skill_ids: Sequence[str] = (),
+    revision_instructions: str | None = None,
 ) -> tuple[str, str]:
-    skill = production_skill(document.project.production_profile)
-    skill_prompt = compile_production_prompt(
-        document.project.production_profile,
-        roles=(ProductionSkillRole.VIDEO_PROMPT_COMPILER,),
-        include_constitution=False,
-    )
-    instructions = (
-        f"你是 MiniMax-H3 的模型专属 Prompt Compiler，当前制作类型为{skill.medium}。\n"
-        "制作类型策略只用于忠实编译已经锁定的镜头，不得在此阶段改写导演意图："
-        f"{skill_prompt.text}\n{_h3_prompt_skill_instructions()}"
-    )
+    instructions = _compiler_instructions(document, method_skill_ids=method_skill_ids)
     script = next(
         version
         for version in document.script_versions
@@ -323,6 +389,7 @@ def build_language_prompt_input(
     route_media = _route_media_bindings(document, resolved_media_inputs)
     payload = {
         "task": "在不改变任何锁定事实的前提下，把 source_prompt 编译为 required_prompt_schema 指定的 MiniMax-H3 Prompt IR。",
+        **_h3_compilation_target(),
         "production_profile": document.project.production_profile.value,
         "route": route.value,
         "required_prompt_schema": prompt_schema_for_route(route),
@@ -367,7 +434,132 @@ def build_language_prompt_input(
         "visible_assets": visible_asset_names,
         "visible_asset_bible_for_disambiguation_only": visible_bible,
     }
+    if revision_instructions is not None:
+        payload["compiler_feedback"] = revision_instructions
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def build_generation_unit_language_prompt_input(
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    *,
+    route: VideoGenerationRoute,
+    duration_seconds: int,
+    production_spec: ProductionSpecContent,
+    media_inputs: list[H3MediaInput],
+    method_skill_ids: Sequence[str] = (),
+    source_prompt: str | None = None,
+    revision_instructions: str | None = None,
+) -> tuple[str, str]:
+    """Read one complete clip from canonical facts, without replaying other stages.
+
+    Source facts are not a provider request and need not fit its 7000-character
+    output limit. Each editorial window retains its dialogue and local roster.
+    """
+
+    shot_by_id = {shot.id: shot for shot in shots}
+    if set(shot_by_id) != set(unit.shot_ids):
+        raise ValueError("Prompt compilation requires every shot in the generation unit")
+    ordered_shots = [shot_by_id[window.shot_id] for window in unit.shot_windows]
+    script = next(
+        version
+        for version in document.script_versions
+        if version.id == document.project.current_script_version_id
+    )
+    line_by_id = {line.id: line for line in script.lines}
+    visible_names, visible_bible = _visible_bible_payload(
+        document, ordered_shots[0], media_inputs, related_shots=ordered_shots[1:]
+    )
+    locked_shots: list[dict[str, object]] = []
+    for index, window in enumerate(unit.shot_windows, start=1):
+        shot = shot_by_id[window.shot_id]
+        locked_shots.append(
+            {
+                "required_timing_marker": (
+                    f"[Shot {index}] [{window.source_in_seconds:.2f}-"
+                    f"{window.source_out_seconds:.2f} seconds]"
+                ),
+                "source_window": window.model_dump(mode="json"),
+                "locked_shot": shot.model_dump(
+                    mode="json",
+                    exclude={
+                        "approval_status", "freshness", "merge_candidate", "local_rework_risk"
+                    },
+                ),
+                "locked_dialogue": [
+                    line_by_id[line_id].model_dump(
+                        mode="json",
+                        include={
+                            "id", "speaker", "speaker_character_id", "spoken_text", "audio_kind"
+                        },
+                    )
+                    for line_id in shot.dialogue_line_ids
+                    if line_id in line_by_id
+                ],
+                "visible_asset_ids": _explicit_shot_asset_ids(document, shot, []),
+                "structured_action_plan": _structured_action_plan(document, shot),
+            }
+        )
+    bindings = _route_media_bindings(document, media_inputs)
+    for binding in bindings:
+        binding.pop("review_notes", None)
+    payload: dict[str, object] = {
+        "task": "将当前完整镜头组忠实编译为一次 H3 音视频请求；每个 locked_shots 条目形成一个独立、按顺序承接的自然叙事段落。",
+        **_h3_compilation_target(),
+        "route": route.value,
+        "required_prompt_schema": prompt_schema_for_route(route),
+        "duration_seconds": duration_seconds,
+        "aspect_ratio": production_spec.aspect_ratio,
+        "production_direction": production_spec.model_dump(
+            mode="json",
+            include={"production_mode", "language", "visual", "audio", "user_constraints"},
+        ),
+        "locked_generation_unit": unit.model_dump(mode="json", exclude={"shot_windows"}),
+        "locked_shots": locked_shots,
+        "previous_clip_terminal_state": _previous_shot_terminal_state(document, ordered_shots[0]),
+        "route_media_bindings": bindings,
+        "visible_assets": visible_names,
+        "visible_asset_bible_for_disambiguation_only": visible_bible,
+        "production_rules": {
+            "timing": "每段原样保留 required_timing_marker；组内节拍加上 source_window 的起点后才是片段绝对时间。不得移动、合并、增删镜头或逐字台词。",
+            "references": "按 route_media_bindings 的实际顺序绑定全部参考；每镜可见范围以该镜 visible_asset_ids 和 locked_shot 为准。当前组的完整参考包不表示所有主体每镜都在场。",
+            "audio": "落实已声明的逐镜对白、声线、环境声和动作声；未准备独立音轨不代表静音。BGM、配音替换和字幕按制作方向与用户要求决定，不因有对白而自动另配音或烧字幕。",
+            "output": "输出不超过7000字符的官方 H3 Prompt IR；删除重复表达但保留全部事实。无法忠实容纳时明确报告冲突，不截断台词或私自改分镜。",
+        },
+    }
+    if source_prompt is not None:
+        payload["source_prompt"] = source_prompt
+    if revision_instructions is not None:
+        payload["compiler_feedback"] = revision_instructions
+    return (
+        _compiler_instructions(document, method_skill_ids=method_skill_ids),
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    )
+
+
+def validate_language_generation_unit_prompt(
+    prompt: str,
+    document: ProjectDocument,
+    unit: GenerationUnit,
+    shots: list[ShotPlan],
+    *,
+    route: VideoGenerationRoute,
+    duration_seconds: int,
+    media_inputs: list[H3MediaInput],
+) -> list[str]:
+    try:
+        return validate_h3_generation_unit_prompt_ir(
+            prompt,
+            document,
+            unit,
+            shots,
+            route=route,
+            duration_seconds=duration_seconds,
+            media_inputs=media_inputs,
+        )
+    except ValueError as exc:
+        raise LanguagePromptValidationError(str(exc)) from exc
 
 
 def validate_language_prompt(
@@ -389,4 +581,4 @@ def validate_language_prompt(
             media_inputs=media_inputs,
         )
     except ValueError as exc:
-        raise LanguagePromptValidationError(f"GPT-5.6-sol {exc}") from exc
+        raise LanguagePromptValidationError(f"语言模型 {exc}") from exc

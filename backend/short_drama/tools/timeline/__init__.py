@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 
-from short_drama.models import ExportRecord, ExportRequest, TimelineManifest
+from pydantic import Field
+
+from short_drama.models import ExportRecord, TimelineManifest
 from short_drama.tools.contracts import (
     ArtifactRef,
     ToolCategory,
@@ -23,6 +25,8 @@ class TimelineToolService(Protocol):
         self,
         project_id: str,
         rebuild_manifest: bool = True,
+        *,
+        expected_manifest_id: str | None = None,
     ) -> ExportRecord: ...
 
 
@@ -30,9 +34,14 @@ class TimelineRebuildInput(ToolModel):
     project_id: str
 
 
+class CurrentTimelineExportRequest(ToolModel):
+    manifest_id: str | None = Field(default=None, min_length=1)
+    rebuild_manifest: Literal[False] = False
+
+
 class TimelineExportInput(ToolModel):
     project_id: str
-    request: ExportRequest
+    request: CurrentTimelineExportRequest
 
 
 def register_tools(registry: ToolRegistry, service: TimelineToolService) -> None:
@@ -69,6 +78,7 @@ def register_tools(registry: ToolRegistry, service: TimelineToolService) -> None
         result = service.export_project(
             request.project_id,
             request.request.rebuild_manifest,
+            expected_manifest_id=request.request.manifest_id,
         )
         return ToolExecution(
             output=result,
@@ -84,9 +94,13 @@ def register_tools(registry: ToolRegistry, service: TimelineToolService) -> None
     registry.register(
         ToolSpec(
             id="timeline.export",
-            version=1,
+            version=2,
             category=ToolCategory.TIMELINE,
-            description="Render the current project timeline to an export artifact.",
+            description=(
+                "Render an existing current timeline to clean and subtitled video files without rebuilding it. "
+                "Pass manifest_id to pin the exact version you reviewed. Subtitle edits and audio windows are preserved. "
+                "Rebuild is a separate timeline.rebuild operation and would discard authored cue timing."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=TimelineExportInput,

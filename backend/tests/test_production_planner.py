@@ -10,6 +10,7 @@ from short_drama.hierarchical_script import compose_scene_screenplay
 from short_drama.models import (
     AudioKind,
     CreateProjectRequest,
+    CreativeInputImage,
     DurationAlignment,
     DurationAuthority,
     DurationFidelityPolicy,
@@ -1026,6 +1027,46 @@ def test_story_orientation_distinguishes_declared_and_working_duration() -> None
     assert "根据内容不确定性、媒介用途、来源保真与当前 Method" in instructions
     assert "不按固定百分比或全局默认自动造容差" in instructions
     assert "可根据题材合并、省略或改名" in instructions
+
+
+def test_story_prompts_keep_user_images_as_semantic_source_intake() -> None:
+    request = CreateProjectRequest(
+        source_mode=SourceMode.IMAGE_SEEDED,
+        input_text="这张照片就是男主角，请以他为主人公写校园短剧。",
+        target_duration_seconds=120,
+        input_images=[
+            CreativeInputImage(
+                external_url="https://example.test/hero.png",
+                descriptor="用户指定的男主角身份照片",
+            )
+        ],
+    )
+
+    orientation_instructions, orientation_input = _story_orientation_prompt(
+        request,
+        build_story_source_contract(request),
+    )
+    outline_instructions, outline_input = _outline_prompt(request)
+    orientation_payload = json.loads(orientation_input)
+    outline_payload = json.loads(outline_input)
+
+    expected_image = {
+        "source_intake_id": "user-image-1",
+        "declared_purpose": "用户指定的男主角身份照片",
+        "filename": None,
+        "url": "https://example.test/hero.png",
+    }
+    assert orientation_payload["source_intake_images"] == [expected_image]
+    assert outline_payload["source_intake_images"] == [expected_image]
+    assert orientation_payload["source_intake_usage_contract"] == (
+        outline_payload["source_intake_usage_contract"]
+    )
+    usage = orientation_payload["source_intake_usage_contract"]
+    assert usage["original_media_remains_visual_evidence"] is True
+    assert "权威身份锁" in usage["explicit_user_assignment"]
+    assert "不得默认绑定所有" in usage["unassigned_media"]
+    assert "source_intake_images" in orientation_instructions
+    assert "不得重新发明一张脸" in outline_instructions
 
 
 def test_fallback_duration_contract_respects_target_origin_and_locked_source() -> None:

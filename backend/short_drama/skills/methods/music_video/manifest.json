@@ -1,0 +1,92 @@
+{
+  "id": "method.music_video",
+  "label": "音乐视频",
+  "description": "适合以最终主音乐为时间权威的 MV 项目，覆盖方向、音乐、制作计划、角色/场景锚点、分镜、H3 Prompt 和后期。",
+  "roles": [
+    "CONCEPT",
+    "WRITER",
+    "PLANNER",
+    "REVISION_VERIFIER",
+    "DIRECTOR",
+    "ASSET_REVIEWER",
+    "VIDEO_PROMPT_COMPILER",
+    "EPISODE_REVIEWER"
+  ],
+  "shared_role_prompt": "../../shared/official_task_method_role.md",
+  "shared_role_footer": "../../shared/official_task_method_footer.md",
+  "role_references": {
+    "WRITER": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/script-writing.md"
+    ]
+  },
+  "role_source_sections": {
+    "CONCEPT": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/workflow.md::Principle",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/creative-and-plan.md::Stage 1 — 确定 MV 方向",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::Style Anchor",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::视觉类型底盘",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::类型 × 风格组合",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::色彩弧与视觉母题",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::长 MV 展开与音画响应"
+    ],
+    "PLANNER": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/workflow.md::Stages",
+      "../../sources/minimax_design/3.0.11/workflows/mv/workflow.md::Artifact Handoff",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/creative-and-plan.md::Stage 3 — 制作计划",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/music.md::目标时长与结构",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/music.md::本地整数秒定稿",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/music.md::实际成歌反推与唯一时间轴",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::输入与时间权威",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::镜头密度、空间与表演",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::一份或两份画布分镜",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::用户可见分镜格式"
+    ],
+    "REVISION_VERIFIER": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::反模式",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::派单前 Gate",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::输入完整性",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::主音乐与片段声音",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::动态字体与准确文字"
+    ],
+    "DIRECTOR": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::职责边界",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::镜头密度、空间与表演",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::分镜导演规则",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::色彩弧与视觉母题",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::长 MV 展开与音画响应",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/typography-packaging.md::歌词/内容—空间字体合同",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/typography-packaging.md::字体运动机制",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/typography-packaging.md::音乐与歌词同步"
+    ],
+    "ASSET_REVIEWER": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/assets.md::Stage 目标与默认路径",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/assets.md::人物锚点",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/assets.md::场景策略",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/assets.md::Work Items、Gate 与交接"
+    ],
+    "VIDEO_PROMPT_COMPILER": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::唯一职责",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::编译来源与固定插入地图",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::固定六段骨架",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::逐镜编译硬合同",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::稳定编译顺序",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::长度与完整性",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::固定模型、音乐切片与 Stage 结构",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::Reference 绑定"
+    ],
+    "EPISODE_REVIEWER": [
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::输入完整性",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::时间线",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::主音乐与片段声音",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::动态字体与准确文字",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::Work Item 与画布交付",
+      "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::自动执行与交付"
+    ]
+  },
+  "provenance": "OFFICIAL_ORIGINAL_WITH_ADAPTER",
+  "upstream_sources": [
+    "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/mv",
+    "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared"
+  ],
+  "user_overridable": true
+}

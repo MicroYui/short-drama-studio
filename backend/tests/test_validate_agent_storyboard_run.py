@@ -590,6 +590,8 @@ def test_argument_validation_keeps_heartbeat_separate_from_deadline(
     ("status", "next_owner"),
     [
         ("PENDING", "WORKER_DECISION"),
+        ("IN_PROGRESS", "WORKER_DECISION"),
+        ("IN_PROGRESS", "WORKER_TOOL"),
         ("NEEDS_ATTENTION", "WORKER_TOOL"),
         ("NEEDS_ATTENTION", "LEADER_REPLAN"),
     ],

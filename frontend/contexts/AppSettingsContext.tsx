@@ -61,6 +61,15 @@ interface AppSettingsContextValue {
 
 const AppSettingsContext = createContext<AppSettingsContextValue | null>(null)
 
+// The short-drama editor reuses editing components without activating LTX providers.
+export function EditingSettingsProvider({ children }: { children: ReactNode }) {
+  return <AppSettingsContext.Provider value={{ settings: DEFAULT_APP_SETTINGS, isLoaded: true,
+    runtimePolicyLoaded: true, updateSettings: () => {}, refreshSettings: async () => {},
+    saveLtxApiKey: async () => {}, saveFalApiKey: async () => {}, saveGeminiApiKey: async () => {},
+    forceApiGenerations: false, shouldVideoGenerateWithLtxApi: false,
+    shouldImageGenerateWithFalApi: false, cudaAvailable: false }}>{children}</AppSettingsContext.Provider>
+}
+
 function toBackendProcessStatus(value: unknown): BackendProcessStatus | null {
   if (!value || typeof value !== 'object') {
     return null

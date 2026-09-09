@@ -13,16 +13,16 @@ export function createWindow(): BrowserWindow {
     : path.join(app.getAppPath(), 'dist-electron', 'preload.js')
 
   // App icon — use .ico on Windows, .png elsewhere
-  const iconExt = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
-  const iconPath = path.join(getCurrentDir(), 'resources', iconExt)
+  const iconExt = process.platform === 'win32' ? 'studio-icon.ico' : 'studio-icon.png'
+  const iconPath = path.join(isDev ? getCurrentDir() : app.getAppPath(), 'resources', iconExt)
   logger.info(`[icon] Loading app icon from: ${iconPath} | exists: ${fs.existsSync(iconPath)}`)
   const appIcon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : undefined
 
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1200,
-    minHeight: 700,
+    minWidth: 880,
+    minHeight: 660,
     icon: appIcon,
     webPreferences: {
       preload: preloadPath,
@@ -30,7 +30,7 @@ export function createWindow(): BrowserWindow {
       nodeIntegration: false,
       webSecurity: isDev ? false : true,
     },
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#f5f6f8',
     titleBarStyle: 'default',
     title: 'Short Drama Studio',
     show: false,

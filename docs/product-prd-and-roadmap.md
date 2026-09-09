@@ -1,30 +1,30 @@
 # AI Agent 视频制片桌面产品 PRD 与里程碑
 
 > 状态：当前产品定义
-> 更新日期：2026-09-05
+> 更新日期：2026-09-09
 > 适用范围：单用户、本地桌面软件
 
-本文是当前产品形态、复用边界和实施顺序的权威说明。历史调研和阶段实验仍保留，但与本文冲突时，以本文为准。
+本文是当前产品形态、复用边界和实施顺序的权威说明。2026-09-09 用户允许在有依据时调整四个页面；最新推荐为“剧本 / 镜头 / 成片”三个内容入口，镜头内同时呈现分镜设计和视频结果，项目资产始终可见。用户已授权按推荐方案实施；正式页面、后端保存、Agent 与 LTX 编辑已接通，实际结果见产品交付清单。历史调研和阶段实验继续保留，与本文冲突时以本文为准。修改与保留项见 [产品改版记录](product-redesign-notes.md)。
 
 ## 1. 一句话产品定义
 
-这是一个运行在用户电脑上的 AI Agent 视频制片工作台：用户可以只给一句话，也可以提供剧本、图片、视频或声音；Agent 负责完成剧本、分镜、核心资产、视频与音频生成和初步剪辑，用户随后可在语义节点画布和专业时间线上继续查看、拖动、修改、局部重做并导出成片。
+这是一个运行在用户电脑上的 AI Agent 视频制片工作台：用户用一句话说明本次要得到什么，也可以提供剧本、图片、视频或声音；Agent 自行判断所需工作与完成边界，结果在剧本、镜头和成片中逐步出现，项目资产可统一查看与就地引用。右侧 Agent 持续展示实际动作，用户随时对具体内容提出修改。镜头和成片可进入复用的 LTX 编辑器。
 
 产品最终组合三类成熟能力：
 
-- 学习 MiniMax Design 的 Agent 制片方法、Workflow、语义节点画布和 ComfyUI 执行体验；
+- 整理和吸收 MiniMax Design、MiniMax-H3 及本地实验中的有效制片方法；ComfyUI 保留为可选高级媒体执行能力；
 - 使用当前自建 Agent Harness 补齐 MiniMax Design 未开源的 Agent Team、Tools、资产编排和工件交接；
 - 复用 LTX Desktop 已有且不依赖 LTX 模型的桌面应用、媒体管理、时间线、多轨剪辑、Take 切换与 FFmpeg 导出。
 
 ## 2. 目标用户和核心价值
 
-首版面向愿意在本机完成 AI 视频创作的个人用户，重点是短剧、漫剧、广告、MV 和其他多镜头视频。用户不需要先理解模型、工作流或节点连接方式。
+首版面向愿意在本机完成 AI 视频创作的个人用户，重点是短剧、漫剧、广告、MV 和其他多镜头视频。用户围绕具体内容创作，不需要先学习工作流搭建。
 
 核心价值是：
 
 1. 从自然语言目标到可播放成片形成同一个项目，而不是散落的提示词和媒体文件；
 2. 角色、场景、道具、声音、分镜和镜头结果都是可复用、可替换的结构化工件；
-3. Agent 可以自主完成全流程，也可以只在用户指定的节点停下确认；
+3. Agent 自行理解目标，要求完整剧本时完成剧本即结束，要求完整视频时才推进到成片；目标完成不是一处等待审批的暂停点；
 4. 用户可以在生成后继续像普通剪辑软件一样修改，而不必重新开始整条流程；
 5. 修改剧本、资产、镜头或时间线时，只重新处理实际受影响的部分。
 
@@ -32,11 +32,13 @@
 
 ### 3.1 三种自然入口
 
-- **一句话开始**：Agent 自主确定内容方案并逐步形成完整项目；
+- **一句话开始**：Agent 自主确定本次交付物和所需工作，完成用户要求的内容；
 - **带素材开始**：用户上传人物、场景、商品、音乐、视频或参考资料，Agent 识别其用途并继续制片；
 - **从现有项目继续**：用户打开已有剧本、分镜、素材或时间线，要求局部修改、补镜头或重新剪辑。
 
 三种入口进入相同的 ProjectDocument 和 AgentRun，不建立彼此割裂的产品模式。
+
+用户上传的图片不会按文件名或默认规则全局绑定。用户明确“这就是主角”时，Agent 必须把它作为权威身份事实，以同一人的方式派生侧面、背面、全身或标准角色卡；已经是完整标准卡的图可直接复用。图片也可仅承担服饰、风格、场景、道具、版式或构图职责；未分配且对当前近期工作无帮助的素材可以暂不使用。这些由 Agent 基于完整对话和项目工件判断，不使用正则、关键词路由或固定素材流程。
 
 ### 3.2 从创意到成片
 
@@ -53,15 +55,17 @@
   → 导出完整视频
 ```
 
-这是 Agent 根据项目状态动态组织的制片过程，不是要求所有项目机械走完的固定节点图。
+这是用户要求完整视频时的一条可能路径。用户要求“生成完整剧本”，Agent 生成剧本后结束任务并回复，不自动生成分镜、图片或视频；下一条消息可以继续制片，也可以只修一场。目标和完成条件由 Agent 理解完整语义、已有项目与新消息来判断，不用关键词路由或固定页面顺序实现，也不要求用户预先选择停止阶段。
 
 ### 3.3 用户参与原则
 
 1. 用户明确提供的内容和选择直接采用，不重复确认；
 2. 用户明确要求不交互，或明确交由 Agent 决定时，Agent 自主完成并在 Trace 中记录关键选择；
-3. 用户明确要求确认剧本、分镜、资产或其他节点时，只在对应语义节点停下；
+3. 用户明确要求确认剧本、分镜、资产或其他内容时，只在对应位置停下；
 4. 其余情况由 Agent 判断。只有缺失信息会实质改变作品或执行路线，而且无法从现有工件推断时才询问用户；
 5. 不使用正则、关键词路由、固定确认次数、创意重试次数或审批门实现上述逻辑。
+
+用户在进行中的任务里定向修改内容时，Agent 读取当前内容，完成局部修改，说明已修改什么、实际影响哪些结果和下一步动作。原目标仍为完整视频且修改没有缩小任务范围时，自行继续相关更新；用户明确只改文稿、停止制作或改变目标时，以新意图为准。不得把每一次局部修改都当作取消原目标，也不得越过用户本次要求继续生产。
 
 ### 3.4 时长与内容密度
 
@@ -77,22 +81,76 @@ MiniMax-H3 的 4–15 秒只约束单次 `ClipGroup / GenerationUnit`，不等�
 
 ## 4. 最终产品界面
 
-最终工作区可以采用 MiniMax Design 类似的组织方式：
+### 4.1 三个内容入口与同一镜头的设计、结果
 
-- 左侧：项目、素材库、Skills、工作流和可复用核心资产；
-- 中间：剧本、分镜、角色、场景、图片、视频、音频和成片组成的语义节点画布；
-- 右侧：Main Agent 对话、当前任务、Trace 和需要用户决定的内容；
-- 下方或独立工作区：LTX 多轨时间线、预览、裁切、拆分、拖动、换 Take、字幕、音频和导出；
-- 高级入口：从某个媒体节点展开对应的 ComfyUI 图，编辑模型、参数和局部处理链。
+用户已经取消画布、节点和连线。最初四页方案在本轮被允许重新设计；推荐把分镜与镜头合并为同一镜头工作区，Agent 常驻右侧。页面用于看成果和干预，不要求用户逐页点击推进。
 
-语义画布负责表达“这部作品由哪些工件组成以及它们如何派生”；ComfyUI 负责“某个媒体任务如何执行”；LTX 时间线负责“最终视频如何剪辑和交付”。三者不是同一张图。
+| 页面 | 主要内容 | 主要动作 |
+| --- | --- | --- |
+| 剧本 | 故事、场次目录、完整文稿与对白 | 写作、续写、直接修改、导入文本、管理人物与场景参考 |
+| 镜头 | 按场次排列的同一组镜号；每镜包含分镜设计、逐时段描述、引用资产、视频结果与状态 | 修改设计或让 Agent 修改、查看实际视频、导入/生成/替换、剪辑；可整体阅读分镜表 |
+| 成片 | 连续视频、完整时间线、字幕与声音 | 整片剪辑、播放、导出视频与制作记录 |
+
+分镜设计回答“准备怎么拍”，视频结果回答“拍出了什么”。两者是同一个叙事镜头的计划与结果，因此不再分成两份相似的顶层列表。宽屏可并列，窄屏在同一镜头详情内切换，镜号与选择保持不变。没有分镜图时仍可展示完整文字分镜，不用角色参考照片冒充分镜图。
+
+真实案例是21条叙事镜头对应12段原始视频；界面沿用21个镜号，来源片段及裁切范围放在详情。[真实数据解释](storyboard-shot-and-asset-explainer.md)说明镜头内时间、生成片段内时间和成片时间的区别，不能把它们混用。
+
+镜头正文以可操作的 `@` 引用绑定具体资产、媒体文件、取用用途和作用时段。用户悬停即可预览这处实际使用的图片；进入“编辑分镜”后可就地改选，也可编辑文案，在光标处输入 `@` 选择资产。Agent 默认建立引用，人物姓名不靠染色冒充绑定。正文、镜头资产条与生成输入维护同一关系，Provider 图片编号由实际媒体顺序编译；局部更换不会隐式替换项目设定或其他镜头。正文引用及产品回写已实现，旧案例的逐句语义仍以原始记录为准，详见 [镜头文案与资产引用](shot-asset-reference-interaction.md)。
+
+### 4.2 镜头与成片的剪辑
+
+两处均复用 LTX 非模型编辑能力，但展示不同范围：“剪辑镜头”只显示当前镜头的画面、关联声音与字幕，时间从 0 秒开始；“剪辑成片”展开整集。单镜头编辑明确保存或取消，保存时将局部变化合并到同一集当前时间线，并按采用时长变化顺移后续镜头、声音和字幕。不能把整集定位到一段当作单镜头工作区。重复使用时先选择本次修改的位置。
+
+中央展开编辑器，右侧 Agent 和作用范围保留；返回恢复先前页面位置。裁切、拆分、拖动、速度、音量、字幕、多轨和导出复用上游实现，通过项目适配层持久化。拆分或重复使用的镜头按实际时间线条目定位，不每次刷新后重建用户时间线。
+
+### 4.3 直接编辑当前内容
+
+镜头分镜默认只读，点击“编辑分镜”进入草稿，再“保存分镜”或“取消”；草稿切换镜头或页面仍保留。景别、叙事目的、运镜、逐段动作/情绪/声音、对白引用、资产和衔接都在此编辑。Agent 只读取已保存内容，支持“保存并交给 Agent”。
+
+设计时长表示拍摄意图，本镜素材时长表示可用范围，成片采用时长表示实际裁切与变速后的占用；修改设计不伪造视频已经变化，裁切不改写分镜。没有视频也能完整阅读和保存分镜。详见 [镜头编辑与时长](shot-editing-and-timing.md)。
+
+用户明确不做版本管理。修改保存当前内容，不设置版本列表、采用新版、历史比较、分支或恢复旧版流程；常规撤销/重做保留。
+
+共享素材修改后，各处引用读取当前内容；已生成的视频不会随参考图片变化自动重生成，是否重做由当前目标决定。现有 ArtifactRef/version、媒体来源和实验文件只作底层兼容与运行记录，不能重新变成用户必须管理的版本系统。
+
+### 4.4 实时内容与制作任务
+
+右侧显示 Agent 正在做什么、处理哪个场次或镜头、最近完成内容和需要用户补充的问题。每个完整场次、分镜或媒体保存后，中央对应部分自动刷新。
+
+基本体验是“场次完成即出现”；有真实文本增量时展示生成中的草稿，完成解析和保存后进入正文。更新不抢走正在编辑的内容和滚动位置，也不以任务运行遮住整个页面。正文和任务摘要消费同一运行事件，未知总量不虚构百分比。
+
+### 4.5 范围、并行与多集
+
+沿用此前已讨论的范围和多集规则：
+
+- 一个项目可包含多集，项目共享人物、场景、道具和声音，各集有独立剧本、分镜、镜头与剪辑；单片默认一集。
+- 进入当前集后，下一条消息默认针对该集；选中场次、分镜、镜头或片段成为可见引用，用户明确表达的范围优先。
+- 切换阶段、集或设置不改变已发出的任务；各集保留草稿、引用和编辑位置。
+- 允许用户与 Agent 并行工作，默认保留用户已生效修改。无冲突的局部更新直接写入，同一处冲突时先读取当前内容处理，不静默覆盖或建立永久候选版本。
+- 内容页、媒体详情、Agent 与 LTX 都读写同一项目内容，模型只读本次任务所需事实。
+
+### 4.6 Trace 与发布会材料
+
+用户再次明确要求保留 Trace，用于后续产品发布会 PPT。右侧任务摘要常显，详细动作、工具调用、输入上下文、耗时和供应商实际用量按需展开。
+
+记录实际模型、推理强度和调用参数，未提供的用量标为未提供。保留从剧本、分镜、素材到视频、剪辑与成片的对应关系，也保留用户补图、开发修复和失败续跑。产品内容直接修改不删除既有实验记录，不改写旧实验使用的模型名称。
+
+### 4.7 项目资产与配套入口
+
+固定的“项目资产”入口统一展示人物、场景、道具、声音和所需但未生成的内容；可查看全项目、本集或当前镜头使用的资产。卡片显示主图、名称、当前状态和引用位置，详情展开身份图、多视图、场景角度、声音和其他具体文件。多个视角属于一个资产，不是内容版本。
+
+“全部文件”是同一资产工作区的媒体查看方式，展示图片、视频、音频及其所属对象；不将29张图片写成29个人物/场景。跨项目素材库收进导入来源。各内容页保留可点击的资产缩略条，能看到名称、缺项与“查看全部”，引用标签不是另一份资产状态。
+
+创作方法和设置继续保留；导出收进成片页，制作记录收进右侧任务详情。ComfyUI 从相关媒体的高级操作进入。
+
+[产品页面方案](product-interface-spec.md)给出完整布局、目标完成边界、实时体验、资产总览和 LTX 入口。用户已明确允许调整原四页设计；三个内容入口已按用户授权实施；本轮镜头编辑与时长规则以最新修订为准。
 
 ## 5. 产品架构
 
 ```text
-MiniMax Design 式 Agent 对话与语义画布
+剧本 / 镜头（分镜设计 + 视频结果）/ 成片 + 项目资产 + 常驻 Agent
   ↕
-ProjectDocument + versioned Artifacts（唯一内容真相）
+ProjectDocument + 当前内容与素材引用（唯一内容真相）
   ↕
 AgentRun / Production Manager / PlanningRun / WorkOrder / Tools
   ↕
@@ -113,21 +171,26 @@ LTX 时间线、多轨编辑、定向修改与 FFmpeg 导出
 - `PlanningRun`：由 AgentRun 拥有的顺序内容规划游标；
 - `PlanRevision + WorkOrder + AgentResult`：任务分解、委派和工件交接；
 - `ContextManifest + ArtifactRef`：为 Worker 提供最小且精确的上下文；
+- 核心资产采用独立 `ASSET_PLANNER → ASSET_BUILDER → ASSET_VERIFIER` 责任链：Planner 只形成或修订全局 AssetPlan 后结束；Leader 再按 index 中的稳定 work-item ID 委派切片化 Builder；实际媒体产生后另派 Verifier 验收。Builder/Verifier 不读取完整 AssetPlan，跨切片问题交回新的 Planner WorkOrder；旧 `ASSET_REVIEWER` 只兼容存量运行；
 - `ProductionSpec + Storyboard + AssetPlan + GenerationPlan`：使用版本化 ProductionDocument 承载制作决策、完整分镜、核心资产计划和 Provider 无关的生成单元；
 - `DurationContract + DurationFitAssessment`：在故事、剧本审阅、制作规格和分镜账本之间传递同一时长权威与自然表演判断；
 - `ProjectOutputSlot`：用稳定逻辑名称交接当前产物，换绑时保留历史 ArtifactRef；
 - `ProductionBoardView`：从权威状态派生的用户可见进度和工件视图；
 - Typed Tool Registry：资产、图片、视频、音频、时间线和修改能力。
 
+Artifact handoff 只交接 Worker 当前需要的权威工件、精确领域结果、`ArtifactRef` 和 output slot。Tool API 为方便界面返回的完整 `ProjectAggregate` 不是 Agent 交接工件，不应在每次 mutation 后整包回灌给模型，也不应在每个 SpecialistTurn 中重复持久化项目全量历史。当前存储仍使用 ProjectDocument 与既有版本化工件合同，迁移时兼容读取。产品只呈现当前有效内容；Trace 单独保留制作过程，Agent 按需读取本次任务所需内容，不因记录完整而回放全部历史。
+
 ### 5.2 媒体执行层
 
 Provider 和 ComfyUI 都是 Agent 可调用的执行器，不拥有项目总状态。
 
-- 当前图片能力可生成或编辑角色、场景、道具、关键帧及标准参考板；
+- 当前图片合同支持 `GENERATE`、使用多张精确参考产生首版资产的 `REFERENCE_GENERATE`，以及从已有 base 派生视图或状态的 `EDIT`；Azure GPT Image 2 路径保持有序多参考与高输入保真；
+- 资产方法已包含 MiniMax Design `drama-series` 的 16:9 双区角色卡、16:9 场景四向卡、道具 base-first 和确定性文字板；四视图、轻量参考或不建卡由 Agent 根据跨镜复用和连续性判断；
+- 实际图片返回后需要进行可见证据的语义审图；通过或由 Agent 明确接受的版本才进入对应 `ReferencePack`，Shot 再按真正需要选取最少充分参考。Provider 请求成功不等于资产已批准；
 - MiniMax-H3 负责当前真实视频生成路线；
 - 音频能力负责对白、音乐、音效、分析和时间对齐；
-- ComfyUI 后续作为版本化 `WorkflowArtifact` 接入，用于本地模型、图像/视频工作流、超分、插帧、修帧、抠像和用户自定义节点图；
-- 每次执行结果都登记为 ProjectDocument 可解析的资产版本或 Take。
+- 可选 ComfyUI 已接入独立服务的 HTTP 适配层，工作流、精确输入和输出登记在项目中；本机 18188 服务已通过真实图片处理、结果回收和记录导出验收，具体节点与模型能力由外部服务提供；
+- 每次执行结果都登记为 ProjectDocument 可解析的素材或 Take，并更新当前使用的内容；既有来源信息保留在记录中。
 
 Storyboard 中的 Shot 是叙事和编辑边界，ClipGroup / GenerationUnit 是 Provider 执行边界。Agent 可以把连续动作的多个 Shot 组合成一次 H3 生成，但 Task、Take 和时间线仍保留每个 Shot 在生成媒体中的 source window，以支持后续裁切和局部修改。
 
@@ -141,31 +204,31 @@ LTX Desktop 是已经存在的桌面与编辑底座，最终负责：
 - 字幕、画面和多源音频混合；
 - FFmpeg 导出。
 
-短剧 Agent 的 `TimelineManifest` 与 LTX 编辑器项目模型需要建立双向适配：Agent 可创建初始时间线，用户编辑后也要把有效修改同步回项目工件，后续 Agent 才能在最新版本上继续工作。
+短剧 Agent 的初始 `TimelineManifest` 已投影为当前 `EditorialTimeline`。StudioEditor 复用 LTX 组件，用户与 Agent 通过相同后端接口保存有效修改；预览和 FFmpeg 导出读取这份时间线。单镜头局部保存会合并回本集，不覆盖其他镜头。
 
-## 6. 唯一真相与三个视图
+## 6. 唯一内容真相与编辑视图
 
-`ProjectDocument + versioned Artifacts` 始终是内容真相。未来的 `EditorialTimeline` 也是其中一个版本化项目工件，而不是独立数据库。其他界面只保存各自必要的表现信息：
+ProjectDocument 及其内容、素材引用、当前编辑时间线是唯一内容真相。内容页面和 LTX 通过适配器读取与修改同一份当前内容，ComfyUI 仅接收执行输入并回写结果。
 
-| 视图 | 表达内容 | 不负责的内容 |
+| 视图 | 表达内容 | 保存方式 |
 | --- | --- | --- |
-| 语义节点画布 | 工件、派生关系、状态、空间布局 | 不充当 Agent 或 Provider 状态机 |
-| ComfyUI 图 | 一个媒体工作流的节点、参数、连接和执行结果 | 不管理完整剧本、项目和最终时间线 |
-| LTX 时间线 | 最终剪辑、多轨和交付状态 | 不替代剧本、资产和 AgentRun |
+| 内容页面 | 剧本、分镜、实际镜头和成片 | 按对象读取和局部修改 ProjectDocument；页面只额外保存位置与选择 |
+| LTX 编辑器 | 单镜头局部编辑和整集多轨编辑两个入口 | 当前 EditorialTimeline 后端持久化，前端模型为编辑投影 |
+| 可选 ComfyUI | 某项媒体处理的图、参数与执行结果 | WorkflowArtifact 与结果引用回到项目，不另建内容状态 |
 
-这样可以同时学习 MiniMax Design 的节点体验和 LTX 的专业剪辑体验，又不会产生三套互相冲突的项目状态。
+当前代码已有 versioned Artifacts，先保持旧记录可读；不扩建版本管理系统。内部更新计数或时间只用于并发写入、运行恢复和准确记录。Agent 提交具体对象或字段的变化，避免晚到的全项目快照覆盖用户编辑。Trace 保存调用及产物记录，不承担一套内容分支系统。
 
 ## 7. 复用、迁移与自研边界
 
-截至 2026-09-04，公开源码能够确认的边界如下。
+公开来源的调研基线为 2026-09-04；接入状态按 2026-09-09 的当前代码和交付记录更新。
 
 | 来源 | 当前事实 | 采用方式 |
 | --- | --- | --- |
-| [LTX Desktop](https://github.com/Lightricks/LTX-Desktop) | 完整桌面应用、生成与编辑代码公开，Apache-2.0；当前仓库仍保留这些代码，但产品入口只挂载 ShortDramaStudio | 仅复用应用壳、媒体、编辑交互与导出；不启用 LTX 模型 Provider，重点衔接 ProjectDocument、Agent 产物与编辑器状态 |
-| [MiniMax Design ComfyUI Plugin](https://github.com/MiniMax-AI/minimax-desgin-plugin) | 公开 `frontend/` 与 `backend/`，基于 ComfyUI，GPL-3.0 | PoC 后按独立本地组件移植，尽量保持上游目录与适配层分离 |
-| MiniMax Design 外层语义画布 | 未发现官方公开源码 | 学习交互和数据组织，在现有 ProductionBoard/Artifacts 上实现等价产品，不复制安装包私有前端代码 |
+| [LTX Desktop](https://github.com/Lightricks/LTX-Desktop) | 应用与编辑代码保留，Apache-2.0；产品入口已切换为 StudioWorkspace，StudioEditor 复用其编辑组件 | 已接通 ProjectDocument、后端时间线、实际播放和 FFmpeg 导出；不启用 LTX 模型 Provider |
+| [MiniMax Design ComfyUI Plugin](https://github.com/MiniMax-AI/minimax-desgin-plugin) | 公开 `frontend/` 与 `backend/`，基于 ComfyUI，GPL-3.0；源码副本用于本地研究与验收 | 通过 HTTP 复用本机 MiniMax 管理的 18188 服务，真实工作流已验收；应用包不捆绑插件 |
+| MiniMax Design 外层语义画布 | 未发现官方公开源码；已取消产品画布方向 | 保留历史调研，不作为当前实现项，不复制安装包私有前端代码 |
 | MiniMax Design Main Agent / Team Engine / Hub Gateway | 未公开 | 由当前 AgentRun、ProductionManager、WorkOrder、TeamExecutor 和 Tool Registry 实现 |
-| MiniMax Design 3.0.11 Workflow Markdown | 本机包中可读取；80 个 active workflow 文件已按版本复制到仓库 | 作为成熟制片方法直接装载并做薄适配；正式对外分发前确认其再分发条款 |
+| MiniMax Design 3.0.11 Workflow Markdown | 本机包中可读取；80 个 active workflow 文件已按版本复制到仓库 | 整理有效制片方法，保留来源查阅，按当前任务加载相关片段；正式对外分发前确认再分发条款 |
 | [MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3) Skills 与模型代码 | 官方仓库公开 | 已接入 Prompt Skill 和 8 个任务 Method；继续保留上游原文，适配本地工件和 Tools |
 | [Mini-Agent](https://github.com/MiniMax-AI/Mini-Agent) | MIT 开源的通用单 Agent 示例，不是 Design Agent Team | 可选择性吸收 Tool loop、上下文摘要和会话记录方法；不替换当前更完整的 AgentRun |
 | MiniMax 核心资产 Tools | Workflow 描述了方法，但未公开 Design Tool 实现 | 复用当前结构化资产与图片 Tools，根据 Workflow 补齐缺失合同 |
@@ -173,18 +236,18 @@ LTX Desktop 是已经存在的桌面与编辑底座，最终负责：
 因此，“直接抄 MiniMax Design”应准确拆成：
 
 1. 开源 ComfyUI 插件可以直接迁移；
-2. 已获得的 Workflow Markdown 可以直接作为 Agent 方法使用；
-3. 外层语义画布只能学习产品行为后实现，因为目前没有找到对应开源源码；
-4. Agent Team、核心资产编排和 Hub Tools 必须由本项目实现，但应尽量照着成熟 Workflow 的工件与调用语义做，不重新发明另一套制片方法；
+2. 已获得的 Workflow Markdown 可作为方法来源，整理后与本地有效经验一同按需使用；
+3. 外层语义画布已从当前产品范围移除；
+4. Agent Team、核心资产编排和 Hub Tools 必须由本项目实现，保留成熟制片知识，并将本地工件和 Tool 适配与方法正文分开；
 5. LTX 中不依赖其模型的编辑能力直接复用，本项目主要编写数据适配、Agent 编辑入口和修改后的反向同步。
 
-“直接复用”不等于当前已经连通。LTX 编辑器目前仍以自己的前端 Project 模型和 `localStorage` 保存项目；Short Drama 使用 SQLite、ProjectDocument 和较简单的顺序 TimelineManifest。两者之间尚无真实转换和回写层。
+当前产品已连通 LTX 编辑组件与 Short Drama 后端。保留的上游 Home/GenSpace/VideoEditor 路径仍有自己的 Project/localStorage 实现，但产品入口不使用那套存储；StudioEditor 的保存、Agent 编辑及导出均回到 SQLite 中的 ProjectDocument。可选 ComfyUI 的真实服务验收与编辑链路分别保留记录。
 
 ### 7.1 上游代码的接入方式
 
 - 成熟开源代码优先以独立上游目录或组件保留，记录版本和 License；
 - 对上游的修改尽量放在桥接层，不在复制进来后立即大规模重写；
-- MiniMax Workflow 原文和本地角色适配器分开，便于以后更新上游内容；
+- MiniMax 原文、翻译、本地经验与实际加载片段明确归属；上游原文保留查阅，不把整套原文默认塞入所有角色；
 - 不从 MiniMax Design 安装包复制没有公开授权的闭源 JavaScript 来代替产品开发；
 - 普通工程测试用于确认接口、保存、恢复、播放和导出正常，不建设额外审批、对抗或盲审体系。
 
@@ -195,11 +258,11 @@ LTX Desktop 是已经存在的桌面与编辑底座，最终负责：
 | MiniMax Design active Workflows | 80 个文件，676,646 bytes | 与本机 3.0.11 包一致；包含 3 个活动项目 Workflow 与 `_shared`，未复制 65 个 `_disabled` 文件 |
 | MiniMax-H3 任务 Skills | 8 个 Skill、31 个文件，360,229 bytes | 已映射为 8 个任务 Method |
 | 当前活动 Method adapter | 11 个 | 3 个 Design Project Workflow + 8 个 H3 Task Method |
-| MiniMax Design ComfyUI Plugin | 尚未复制 | 官方仓库约 4,440 个 tracked files，包含前端、Python 后端、蓝图和 Hub 嵌入桥；安排在几分钟成片 PoC 后 |
+| MiniMax Design ComfyUI Plugin | 源码副本位于 `output/product-delivery/upstream/minimax-desgin-plugin/` | 不随应用分发；本机现有服务已完成实际输入绑定、节点执行和项目结果回收 |
 | Mini-Agent | 尚未复制 | 只在发现当前 Runtime 的具体缺口时选择性吸收，不整套替换 |
 | Design 外层画布、Team Engine、Hub Gateway 和通用 Tools | 无可复制公开源码 | 只能根据公开行为、Workflow 与当前可观察合同自行实现 |
 
-PoC 后可直接引入的 ComfyUI 部分包括图编辑器、ComfyUI Python 后端、公开蓝图、Workflow Draft、可执行快照、运行登记和结果回写结构。其中指向 Design 私有网关的 H3 API 节点不能原样工作，需要改为当前 H3 Provider、ArtifactRef 和 ProjectDocument 桥。
+当前高级入口支持导入 ComfyUI API 格式工作流、选择精确项目素材、上传并提交、保存任务编号、回收媒体及重启续接。已有 HTTP 契约检查之外，本机 18188 服务已完成真实三节点图片处理，上传与输出均核对，详情见 [可选 ComfyUI 实际接入](comfyui-local-integration.md)。图编辑和节点执行由独立服务负责。指向 Design 私有网关的节点不能假定可用，当前 H3 生成仍走已有 Provider。
 
 本机 Design 编译包可以观察到大量 Tool 合同和 Clip Studio/3D Director 方法，但没有对应公开源代码和开放许可；它们只作为 Tool 语义参考，不作为可直接复制的实现。H3 的 `Context-IR` 同样未包含在 H3 开源发布中，因此多阶段理解和资产编排仍由本项目 Agent 层承担。
 
@@ -219,21 +282,25 @@ PoC 后可直接引入的 ComfyUI 部分包括图编辑器、ComfyUI Python 后�
 - Leader/Worker/Verifier 责任以及单机 WorkOrder 执行；
 - Tool Catalog、按需 Tool Schema、ContextManifest 和 Artifact handoff；
 - 结构化角色、场景、道具资产及多视图参考板；
+- `image.capability`、`qa.analyze_source_image`、确定性 `image.compose_text_plate`，以及图片生成、多参考首版、派生编辑、语义审图和审图证据交接合同；
 - 图片、视频、音频、H3 路由、Take、时间线和导出 Tools；
+- 原生音轨字幕时间对齐、版本化对齐报告、锁定当前时间线的Agent导出，以及中文长字幕烧录换行；
 - ProductionBoardView、可恢复任务和自然语言局部修改影响计划；
 - ProjectDocument 和版本化 Artifacts 作为统一项目状态。
+- StudioWorkspace 的剧本、镜头、成片与项目资产页面，多集共享素材、各集独立内容、增量更新与人工修改保护。
+- Astra/xhigh 的统一语言配置、按任务去重的方法加载、真实调用 Trace 和制作过程包导出。
+- 后端当前 EditorialTimeline、单镜头局部保存、成片实时预览、LTX 多轨编辑与实际 FFmpeg 导出；镜头分镜默认只读，明确编辑、保存和取消。
+- 本地 macOS arm64 桌面包、案例启动、设置、创作方法、素材导入和实际媒体操作。
 
-### 8.3 尚未完成
+2026-09-08 已完成校园短剧的131秒真实后端制片案例：12个H3 Take覆盖21个Shot，保留原生音轨，20条字幕对齐后导出1080×1920、30 fps视频，并实际从头播放到结尾。该案例包含用户补图、确认和开发者修复续跑，完整记录见 [成片与Agent后期记录](50-complete-film-agent-case-trace.md)。输出规格经过缩放与帧率转换，原始H3素材为768×1344、24 fps。
 
-- 在新的 Agent Runtime 上从一句话独立完成剧本、分镜、核心资产、真实视频、音频和几分钟完整成片的一次连续 PoC；
-- MiniMax Design ComfyUI 开源前后端的实际移植与 WorkflowArtifact 桥接；
-- MiniMax Design 式语义节点画布；
-- 恢复 LTX Home、GenSpace 和 VideoEditor 的产品入口；当前 `frontend/App.tsx` 只显示 ShortDramaStudio；
-- 在 ProjectDocument 内建立版本化 `EditorialTimeline`，覆盖真实多轨、trim、speed、transition、text、opacity、color 和 Take 选择；
-- `ProjectDocument / EditorialTimeline` 与 LTX 编辑器项目模型的完整双向同步，并将持久化真相从前端 `localStorage` 收回后端；
-- 将 LTX 编辑器的 trim、split、move、Take 切换和捕获帧等非模型操作包装成 Agent 可调用的编辑 Tools；需要新媒体的 Retake/Extend 意图由 H3 路线重新生成；
-- 让最终导出消费 EditorialTimeline，并逐步补齐编辑器预览与 FFmpeg 导出在转场、多层画面、透明度、颜色和文本上的差异；
-- 用户安装、模型配置和一体化桌面交付体验。
+### 8.3 验收结论与交付边界
+
+- 可选 ComfyUI 已通过本机现有 18188 服务实跑；默认 8188 和另建的隔离环境不可用不再构成交付阻塞。服务需要独立保持运行，其具体模型和自定义节点不包含在 Studio 应用包内。
+- 当前交付为本机 macOS arm64 开发包，未签名、公证或公开发布；Windows/Linux 未在本机验收。公开分发时仍需处理 NOTICES 中已列明的 Workflow 资料再分发边界。
+- 独立稳定性重复验证按用户要求暂缓。现有 131 秒案例包含用户供图与开发修复，不作为一次无人干预成功证据。
+
+当前必要实现及验收证据见 [产品交付清单](product-delivery-checklist.md)。本地产品、原生桌面、实际媒体、语言 Agent 和可选工作流均有对应检查，发布范围仍受上述本地开发包边界约束。
 
 ## 9. Agent 能力范围
 
@@ -251,31 +318,39 @@ Agent 应能够自主选择完成整个项目或只完成其中一部分：
 
 Skill 描述成熟制作方法，Tool 提供可执行能力，Agent 根据当前项目决定何时组合二者。Skill 不等于 Tool 白名单，也不等于固定状态机。
 
-## 10. 产品里程碑
+### 9.1 Skills 与语言模型的目标调整
 
-这些里程碑描述产品逐步形成的可见结果，不是审批门，也不要求额外盲审或对抗评测。
+用户指定语言 Agent 使用 GPT-6 Astra（model 为 gpt-6-astra），推理强度 xhigh；Leader、Worker 与其他语言角色共享有效配置来源。图像、视频、语音 Provider 不随语言模型名称一起替换。已统一配置并用真实请求验证 Astra/xhigh，原有实验 Trace 保持原模型记录。
+
+重构已将运行职责、制片方法、体裁补充、Provider 编译和上游来源分开；保留故事因果、时长、空间连续性、参考资产、视频提示、声音字幕与编辑方法。按当前任务加载和去重，明确哪些文本真正进入模型输入。具体代码事实、迁移清单、提示词草案与普通验证见 [Agent 重构方案](agent-skills-and-model-redesign.md)。
+
+## 10. 产品里程碑
 
 | 里程碑 | 当前状态 | 主要结果 |
 | --- | --- | --- |
-| 产品形态与复用边界 | 本轮完成 | PRD、AGENTS 北极星、MiniMax/LTX/自研边界统一 |
-| Agent 内容制片 | 版本化后端合同已补齐，待 Agent 完整 PoC | 一句话或已有素材形成完整剧本、ProductionSpec、Storyboard/ClipGroup、GenerationPlan 和可修改工件 |
-| 分镜到生成单元 | 本轮后端主链已实现 | ClipGroup 编译为 GenerationUnit，一个 H3 task/take 可覆盖多个 Shot，并按 source window 进入时间线 |
-| 核心资产与媒体准备 | 版本化 AssetPlan 与媒体合同已补齐，待 Agent 完整 PoC | Agent 自主决定 anchor / text-only / reuse，生成或接收角色、场景、道具参考，并精确绑定到镜头 |
-| 几分钟完整视频 PoC | 下一项主工作 | Agent 独立完成剧本、分镜、资产、视频、音频、时间线和可播放导出 |
-| ComfyUI 本地执行层 | PoC 后 | 移植开源插件，Agent 可选择、绑定、编辑和运行 WorkflowArtifact，结果回写项目 |
-| 语义节点画布 | ComfyUI 桥接后 | 用户查看剧本、资产、镜头、任务和派生关系，并可从任一节点继续对话或局部重做 |
-| LTX 编辑器完整衔接 | 编辑与生成代码保留，但当前未挂载 | 建立 EditorialTimeline 和后端持久化桥；Agent 产物进入时间线，用户拖动、裁切、多轨编辑和换 Take，媒体重做请求回到 H3 Agent 路线，修改同步回项目 |
-| 一体化本地桌面产品 | 最终目标 | Agent、语义画布、ComfyUI 和 LTX 编辑体验统一，可安装并完成完整视频项目 |
+| 产品页面设计 | 已实现并完成桌面与窄屏检查 | 剧本 / 镜头 / 成片，项目资产总览，明确编辑保存，常驻 Agent 与实时任务；镜头和成片复用 LTX |
+| Agent 内容与核心资产 | 当前校园案例已贯通 | 保存剧本、分镜、核心素材和对应引用，保留用户供图与开发修复记录 |
+| 真实视频与后期 PoC | 已完成 131 秒案例并实际播放 | 12 个 H3 Take 覆盖 21 个 Shot，保留原生音轨，20 条字幕对齐后导出 |
+| Skills / Astra 配置 | 已实现并验证真实调用 | 可读的方法体系、去重注入、统一 xhigh 与真实调用记录 |
+| 产品内容页面 | 正式页面已接通 | 就地导入生成、逐场刷新、范围、并行编辑及当前内容保存 |
+| LTX 编辑完整衔接 | 已验证保存、播放与实际导出 | 单镜头局部剪辑保存后同步整集，采用时长变化顺移后续内容；预览与导出共用后端时间线 |
+| 高级媒体与桌面交付 | macOS 本地包、独立 ComfyUI 实跑已验收 | 素材库、创作方法、设置、真实工作流与结果回收、桌面启动和完整视频交付 |
 
-## 11. 下一步实施顺序
+## 11. 实施顺序与剩余工作
 
-1. 用 Fake Provider 和本地媒体回归验证 ProductionSpec → Storyboard → AssetPlan → GenerationPlan → H3 Route/Task/Take → Timeline 的后端闭环；
-2. 让 Agent 在不人工代调 Tool 的情况下独立产生和修改核心资产计划与媒体，并观察真实 Trace；
-3. 用户明确授权后，运行一次几分钟完整视频 PoC；遇到代码 Bug 就修复，效果问题记录到对应 Workflow、Artifact 或 Provider 输入层；
-4. PoC 跑通后，引入 MiniMax Design ComfyUI Plugin 开源代码，先完成独立进程、WorkflowArtifact、输入绑定、运行和结果回写；
-5. 再实现语义节点画布，直接消费现有 ProjectDocument、ProductionBoardView 和 Artifact 派生关系；
-6. 建立版本化 EditorialTimeline 与 LTX 编辑器状态的双向桥接，恢复完整剪辑体验，并让需要重生成的局部修改返回 H3 Agent 路线，最终导出逐步与编辑预览一致；
-7. 最后处理安装、模型管理、项目迁移和整体界面一致性。
+核心资产、真实 H3 生成和 131 秒完整视频案例已经完成；已有模型输入、usage、动作、请求和修复记录继续保留，供发布会 PPT 使用。用户已授权按推荐方案完整实现并验收，独立稳定性复跑继续暂缓。
+
+以下顺序已用于实施和验收，逐项结果见 [产品交付清单](product-delivery-checklist.md)：
+
+1. 收敛 Skills/角色提示词并统一 gpt-6-astra / xhigh；补齐真实模型、推理强度与用量记录。
+2. 补齐多集当前内容、引用、后端保存与运行事件，兼容原有案例。
+3. 实现内容页面、就地素材导入/生成、右侧 Agent、范围与逐场实时更新。
+4. 接通 LTX 镜头定位/整集编辑，共用后端时间线，并完成实际播放和 FFmpeg 导出。
+5. 整合素材库导入、方法、设置与高级 ComfyUI 入口，完成项目迁移、本地桌面交付，以及已有素材的真实工作流与 Trace 导出验证。
+
+最后一项外部服务验收已通过：复用本机 MiniMax 管理的 ComfyUI，核对了精确输入、实际节点输出、项目素材回收与制作记录。未安装新依赖、模型或重跑原案例。后续新增工作流应按所需节点和模型验证，独立稳定性重复实验仍按用户要求暂缓。
+
+各部分使用普通测试与实际功能检查，发现缺陷就修复；不把独立稳定性实验重新加成页面整合的前置条件。
 
 ## 12. 当前不做
 
@@ -283,8 +358,9 @@ Skill 描述成熟制作方法，Tool 提供可执行能力，Agent 根据当前
 - 预算上限或基于预算的强制路线；
 - 固定关键词路由、正则分发或固定次数工作流；
 - 新的质量门、审批门、对抗评测、盲审系统或为了流程完整而设置的 Critic 循环；
-- 在几分钟成片 PoC 前重写大规模前端；
-- 让语义画布、ComfyUI 或 LTX 时间线成为第二份项目真相。
+- 产品语义画布、节点连线及内容历史版本管理；
+- 为单镜头再造独立剪辑器、嵌套工程或额外合并流程；
+- 让内容页面、ComfyUI 或 LTX 前端成为第二份项目内容真相。
 
 ## 13. 已确认与仍待处理的产品决定
 
@@ -296,16 +372,21 @@ Skill 描述成熟制作方法，Tool 提供可执行能力，Agent 根据当前
 
 ### 13.2 MiniMax Design ComfyUI Plugin 的发布方式
 
-该开源插件采用 GPL-3.0，而 LTX Desktop 是 Apache-2.0。研发阶段可以直接验证和集成，但正式分发前需要决定组合方式并履行相应的源码、License 和 Notices 要求。
-
-建议：把它作为独立本地进程和独立前端组件接入，通过本地 HTTP/WebSocket 与主应用通信，尽量保持上游代码、修改和 License 边界清楚。
+当前采用独立服务方式，通过 HTTP 与主应用通信；插件源码保留在本地研究目录，不捆绑到 Studio 应用。已有接入边界及来源记录见根目录 NOTICES.md。今后若改成随应用分发插件或其修改版，再按实际分发内容处理源码、License 和 Notices。
 
 ## 14. 相关详细资料
 
+- [产品内容页面方案](product-interface-spec.md)
+- [七条修改、保留内容与 Trace 用途](product-redesign-notes.md)
+- [Skills、角色提示词与 Astra xhigh 重构方案](agent-skills-and-model-redesign.md)
 - [MiniMax Design、Agent Team 与 H3 Skills 蓝图](43-minimax-design-agent-team-product-blueprint.md)
 - [Agent / Skill / Tool 运行时迁移](40-agent-skill-tool-runtime-migration.md)
 - [Agent Tool / Artifact 就绪度核对](44-agent-tool-artifact-readiness-audit.md)
 - [从完整分镜到 H3 生成单元的后端闭环](45-storyboard-generation-unit-backend-closure.md)
+- [视频生成：成熟实现参考与片段级执行交接](47-video-generation-reuse-and-execution.md)
+- [校园短剧：真实 Agent 的 H3 调用前准备实验](48-pre-h3-agent-case-trace.md)
+- [校园短剧：真实 H3 执行与 Agent 运行记录](49-real-h3-agent-case-trace.md)
+- [校园短剧：131秒完整成片与Agent后期记录](50-complete-film-agent-case-trace.md)
 - [当前项目总览](project-overview.md)
 - [MiniMax Design Plugin for ComfyUI](https://github.com/MiniMax-AI/minimax-desgin-plugin)
 - [MiniMax-H3](https://github.com/MiniMax-AI/MiniMax-H3)

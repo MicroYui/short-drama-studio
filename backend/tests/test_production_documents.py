@@ -19,16 +19,18 @@ from short_drama.deps import get_short_drama_service
 from short_drama.models import (
     ProductionDocumentArtifactRef,
     ProductionDocumentCreateRequest,
-    ProductionDocumentListResponse,
-    ProductionDocumentMutationResponse,
     ProductionDocumentOrigin,
-    ProductionDocumentReadResponse,
     ProductionDocumentReviseRequest,
     ProjectDocument,
 )
 from short_drama.production_manager import AgentRunCreateRequest
 from short_drama.service import ShortDramaService, WorkflowConflictError
 from short_drama.tools import ToolCallStatus
+from short_drama.tools.artifact_views import (
+    ProductionArtifactMutationSummaryResponse,
+    ProductionDocumentCompactListResponse,
+    ProductionDocumentCompactReadResponse,
+)
 
 
 def _service(tmp_path: Path) -> ShortDramaService:
@@ -283,7 +285,11 @@ def test_artifact_tools_return_parseable_version_refs_for_full_crud(
     )
     assert created_result.status == ToolCallStatus.SUCCEEDED
     assert created_result.output is not None
-    created = ProductionDocumentMutationResponse.model_validate(created_result.output)
+    created = ProductionArtifactMutationSummaryResponse.model_validate(
+        created_result.output
+    )
+    assert "versions" not in created_result.output["document"]
+    assert "payload" not in created_result.output["version"]
     assert {
         (item.artifact_type, item.artifact_id, item.version)
         for item in created_result.artifact_refs
@@ -321,8 +327,16 @@ def test_artifact_tools_return_parseable_version_refs_for_full_crud(
     )
     assert get_result.status == ToolCallStatus.SUCCEEDED
     assert get_result.output is not None
-    read = ProductionDocumentReadResponse.model_validate(get_result.output)
+    read = ProductionDocumentCompactReadResponse.model_validate(get_result.output)
     assert read.version.version == 1
+    assert read.document.current_version == 2
+    assert (
+        read.document.current_version_id
+        == revised_result.artifact_refs[-1].artifact_id
+    )
+    serialized = json.dumps(get_result.output, ensure_ascii=False)
+    assert serialized.count("产品单次充电可使用 8 小时") == 1
+    assert "versions" not in get_result.output["document"]
     assert get_result.artifact_refs[-1].version == 1
 
     list_result = service.tool_registry.invoke(
@@ -331,8 +345,9 @@ def test_artifact_tools_return_parseable_version_refs_for_full_crud(
     )
     assert list_result.status == ToolCallStatus.SUCCEEDED
     assert list_result.output is not None
-    listed = ProductionDocumentListResponse.model_validate(list_result.output)
+    listed = ProductionDocumentCompactListResponse.model_validate(list_result.output)
     assert len(listed.documents) == 1
+    assert "versions" not in json.dumps(list_result.output)
     assert list_result.artifact_refs[-1].version == 2
 
 

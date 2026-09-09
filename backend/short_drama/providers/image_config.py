@@ -8,6 +8,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
+from short_drama.image_capabilities import (
+    ImageProviderCapabilityResponse,
+    build_image_provider_capability,
+)
 from short_drama.image_models import (
     ImagePricingSnapshot,
     ImageProviderConfigResponse,
@@ -61,6 +65,11 @@ class ImageProviderConfigStore:
             can_generate=bool(key),
             pricing=self.pricing_snapshot(),
         )
+
+    def capability_snapshot(self) -> ImageProviderCapabilityResponse:
+        """Return local capabilities without exposing secrets or calling Provider."""
+
+        return build_image_provider_capability(self.response())
 
     def update(self, request: ImageProviderConfigUpdate) -> ImageProviderConfigResponse:
         current_key = self._saved_key()
