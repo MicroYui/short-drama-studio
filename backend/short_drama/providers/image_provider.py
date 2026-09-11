@@ -8,6 +8,7 @@ from pydantic import Field
 
 from short_drama.image_models import ImageProviderRequest, ImageUsage
 from short_drama.models import (
+    AssetTextPlate,
     DomainModel,
     ImageReferenceAuthority,
     ImageReferenceRole,
@@ -48,6 +49,7 @@ class ImageProviderInput(DomainModel):
     reference_authority: ImageReferenceAuthority = (
         ImageReferenceAuthority.SUPPORTING
     )
+    text_plate: AssetTextPlate | None = None
 
 
 class ImageProviderResult(DomainModel):

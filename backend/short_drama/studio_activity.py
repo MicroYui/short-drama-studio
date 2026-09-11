@@ -19,6 +19,9 @@ def current_activity(service: ShortDramaService, project_id: str, after: int = 0
     run_id = jobs[0].run_id if jobs else None
     if run_id is not None:
         store = service.agent_runtime.store
+        run = store.get_run(run_id)
+        if run is not None:
+            jobs[0] = jobs[0].model_copy(update={"current_goal": run.goal_summary})
         work_orders = store.list_work_orders(run_id)
         document = service.repository.get_project(project_id)
         review = ReviewScope()

@@ -21,6 +21,7 @@ from short_drama.h3_models import (
     H3UploadedInput,
 )
 from short_drama.media import H3MediaIngestor, MediaGenerationError
+from short_drama.h3_output_validation import aspect_matches, expected_output_aspect, ratio_value
 from short_drama.generation_plan_state import validate_generation_units_current
 from short_drama.production_contracts import GenerationPlanContent
 from short_drama.models import (
@@ -46,8 +47,10 @@ from short_drama.providers.minimax_h3_client import (
     H3TransientError,
     MiniMaxH3Client,
 )
-from short_drama.providers.minimax_h3_compiler import compile_h3_request
+from short_drama.providers.minimax_h3_compiler import H3CapabilityError, compile_h3_request, validate_h3_audio_durations
+from short_drama.providers.h3_dialogue_spans import assert_complete_dialogue_request
 from short_drama.repository import ShortDramaRepository
+from short_drama.studio_trace import record_trace
 from short_drama.worker import InvalidTaskTransition, utc_now
 
 
@@ -88,15 +91,40 @@ class PersistentH3Worker:
             task = self._require_h3_task(task_id)
             if task.status != initial_status:
                 return task
+            previous = (task.status, task.error_code, task.error_message)
             if task.status == TaskStatus.QUEUED:
-                return self._prepare(task)
-            if task.status == TaskStatus.SUBMITTING:
-                return self._submit(task)
-            if task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}:
-                return self._poll(task)
-            raise InvalidTaskTransition(
-                f"Task {task.id} cannot advance from {task.status.value}"
-            )
+                result = self._prepare(task)
+            elif task.status == TaskStatus.SUBMITTING:
+                self._trace_task(task, operation="submit")
+                result = self._submit(task)
+            elif task.status in {TaskStatus.ACKNOWLEDGED, TaskStatus.RUNNING}:
+                result = self._poll(task)
+            else:
+                raise InvalidTaskTransition(
+                    f"Task {task.id} cannot advance from {task.status.value}"
+                )
+            if (result.status, result.error_code, result.error_message) != previous:
+                self._trace_task(result, operation="update")
+            return result
+
+    def _trace_task(self, task: GenerationTask, *, operation: str) -> None:
+        """Expose persisted media progress in the same Studio job as the caller."""
+        run = self._require_run(task.id)
+        usage = run.latest_remote_task.usage if run.latest_remote_task is not None else None
+        record_trace("provider.video_generation", {
+            "task_id": task.id, "project_id": task.project_id,
+            "generation_unit_id": task.generation_unit_id, "shot_id": task.shot_id,
+            "provider": task.provider, "model": run.request.model if run.request else "MiniMax-H3",
+            "route": task.route.value, "operation": operation,
+            "status": task.status.value, "provider_task_id": task.provider_task_id,
+            "duration_seconds": task.requested_duration_seconds,
+            "resolution": run.request.resolution if run.request else task.resolution,
+            "aspect_ratio": run.request.ratio if run.request else run.aspect_ratio,
+            "input_count": len(run.media_inputs),
+            "submitted_at": task.submitted_at, "finished_at": task.finished_at,
+            "error_code": task.error_code, "error_message": task.error_message,
+            "usage": usage.model_dump(mode="json") if usage is not None else None,
+        })
 
     def _advance_lock(self, request_fingerprint: str) -> threading.Lock:
         with self._advance_locks_guard:
@@ -236,8 +264,9 @@ class PersistentH3Worker:
             return "The selected MiniMax task uses a different resolution"
         if remote.duration not in {None, int(task.requested_duration_seconds)}:
             return "The selected MiniMax task uses a different duration"
-        expected_ratio = None if run.request is None else run.request.ratio
-        if remote.ratio is not None and remote.ratio != expected_ratio:
+        expected_ratio, _aspect_note = expected_output_aspect(run)
+        remote_ratio = ratio_value(remote.ratio)
+        if expected_ratio is not None and remote_ratio is not None and not aspect_matches(remote_ratio, expected_ratio):
             return "The selected MiniMax task uses a different aspect ratio"
         if remote.task_type not in {None, "generation"}:
             return "The selected MiniMax task is not a generation task"
@@ -280,6 +309,12 @@ class PersistentH3Worker:
                 "The shot plan changed after this H3 task was compiled: "
                 + ", ".join(stale_shots)
             )
+        try:
+            assert_complete_dialogue_request(document, [
+                shot for shot in document.shots if shot.id in expected_revisions
+            ])
+        except ValueError as exc:
+            return str(exc)
         if task.input_script_version_id != document.project.current_script_version_id:
             return "The script changed after this H3 task was compiled"
         if task.input_bible_version_id != document.project.current_bible_version_id:
@@ -374,6 +409,10 @@ class PersistentH3Worker:
                 )
             except AssetReferenceTruthError as exc:
                 return str(exc)
+        try:
+            validate_h3_audio_durations(document, provider_run.media_inputs)
+        except H3CapabilityError as exc:
+            return str(exc)
         return None
 
     @staticmethod
@@ -437,6 +476,8 @@ class PersistentH3Worker:
 
         request = compile_h3_request(
             route=task.route,
+            resolution=task.resolution,
+            aspect_ratio=run.aspect_ratio,
             prompt=run.prompt,
             duration_seconds=int(task.requested_duration_seconds),
             media_inputs=run.media_inputs,
@@ -625,8 +666,11 @@ class PersistentH3Worker:
         except (H3TransientError, MediaGenerationError) as exc:
             return self._mark_output_missing(task, run, "H3_OUTPUT_MISSING", str(exc), now)
 
-        aspect_ok = media.height > media.width and abs(media.width / media.height - 9 / 16) < 0.04
-        resolution_ok = 700 <= min(media.width, media.height) <= 820
+        expected_ratio, aspect_note = expected_output_aspect(run)
+        dimensions_ok = media.width > 0 and media.height > 0
+        aspect_ok = dimensions_ok and (
+            expected_ratio is None or aspect_matches(media.width / media.height, expected_ratio)
+        )
         duration_ok = abs(media.duration_seconds - task.requested_duration_seconds) <= 0.75
         required_window_end = max(
             (item.source_out_seconds for item in task.shot_windows),
@@ -638,7 +682,7 @@ class PersistentH3Worker:
         )
         technical_passed = (
             aspect_ok
-            and resolution_ok
+            and dimensions_ok
             and duration_ok
             and windows_covered
             and media.audio_present
@@ -649,17 +693,17 @@ class PersistentH3Worker:
                 QaIssue(
                     code="H3_ASPECT_RATIO",
                     severity="ERROR",
-                    message=f"Expected portrait 9:16, got {media.width}x{media.height}",
+                    message=f"{aspect_note}; got {media.width}x{media.height}",
                     repair_layer="PROVIDER_RETRY",
                     category=QaFailureCategory.TECHNICAL_MEDIA,
                 )
             )
-        if not resolution_ok:
+        if not dimensions_ok:
             issues.append(
                 QaIssue(
-                    code="H3_RESOLUTION",
+                    code="H3_DIMENSIONS",
                     severity="ERROR",
-                    message=f"Expected a 768P-class source, got {media.width}x{media.height}",
+                    message=f"Expected positive decoded video dimensions, got {media.width}x{media.height}",
                     repair_layer="PROVIDER_RETRY",
                     category=QaFailureCategory.TECHNICAL_MEDIA,
                 )
@@ -711,6 +755,8 @@ class PersistentH3Worker:
             issues=issues,
             checks=[
                 f"source={media.width}x{media.height}",
+                aspect_note,
+                f"resolution={run.request.resolution if run.request is not None else task.resolution}; exact pixel mapping=UNVERIFIED (provider does not specify it)",
                 f"duration={media.duration_seconds:.3f}s",
                 f"fps={media.fps:.3f}",
                 f"audio={'present' if media.audio_present else 'missing'}",
@@ -758,8 +804,9 @@ class PersistentH3Worker:
         run.latest_remote_task = remote
         run.output_url = url
         run.downloaded_path = str(destination.resolve())
-        run.estimated_cost_usd = self._estimate_cost(run, remote)
-        run.estimated_cost_credits = self._estimate_billing_credits(run, remote)
+        pricing_matches = task.resolution == run.pricing.billing_resolution
+        run.estimated_cost_usd = self._estimate_cost(run, remote) if pricing_matches else None
+        run.estimated_cost_credits = self._estimate_billing_credits(run, remote) if pricing_matches else None
         run.last_error_code = None
         run.last_error_message = None
         run.updated_at = now

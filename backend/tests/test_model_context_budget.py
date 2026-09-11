@@ -133,10 +133,13 @@ def test_leader_plan_body_is_budgeted_but_goal_and_schemas_are_preserved(tmp_pat
     assert actual['goal'] == payload['goal'] and actual['tool_schemas'] == payload['tool_schemas']
     step = actual['current_plan']['steps'][0]
     assert step['id'] == 'change-shot' and step['instructions'] == '修改这个镜头'
-    read = step['arguments']['read']
-    read['arguments']['pointer'] += '/draft'
-    read['arguments']['limit'] = 10
-    recovered = service.tool_registry.invoke(read['tool_name'], read['arguments'])
+    read = actual['context_read']
+    marker = step['arguments']
+    recovered = service.tool_registry.invoke(read['tool_name'], {
+        'project_id': read['project_id'], 'run_id': read['run_id'],
+        'snapshot_id': marker['context_ref'], 'pointer': marker['pointer'] + '/draft',
+        'offset': 0, 'limit': 10,
+    })
     assert recovered.status.value == 'SUCCEEDED'
     assert recovered.output is not None and recovered.output['content'] == ('场景完整描述。' * 2)[:10]
 

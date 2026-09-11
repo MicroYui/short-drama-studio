@@ -1,0 +1,689 @@
+{
+  "source": "Read-only extraction from quality-e2e-2026-09-12. Full selected Shot and source identity are exact; unrelated output bodies omitted.",
+  "cases": [
+    {
+      "work_order_id": "work-order-8724a4e7ae7741e9bd7530e4636335c5",
+      "missing_shot_call": "model-f105d519a684",
+      "shot_id": "shot-yqq-08",
+      "turns": [
+        {
+          "id": "specialist-turn-3be7d6937ef041f4a0f1cb3aadac5ac8",
+          "sequence": 14,
+          "tool_name": "artifact.get_asset_work_context",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "scope": {
+              "mode": "WORK_ITEM",
+              "work_item_ids": [
+                "wi-yqq-s08-xulan-seated-closeup"
+              ]
+            },
+            "shot_ids": [
+              "shot-yqq-08"
+            ]
+          },
+          "reason": "第8镜近景图片已完成实图检查；写入采用结果与镜头引用前，读取当前工作项、实际参考包和第8镜正文，保留并行修改。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_plan_index",
+                "artifact_id": "production-document-9bf5a748eb3a",
+                "version": 11
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "shot",
+                "artifact_id": "shot-yqq-08",
+                "version": 1
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "clip_group",
+                "artifact_id": "clip-yqq-g03",
+                "version": 6
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset",
+                "artifact_id": "asset-4024e0462bfc",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-d42fba8ad6bb",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset",
+                "artifact_id": "asset-85d4f6cc7d52",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-3a8b4ea6267b",
+                "version": 2
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-07155ca88530",
+                "version": 4
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-d42fba8ad6bb",
+                "version": 2
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-85d4f6cc7d52",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-4024e0462bfc",
+                "version": null
+              }
+            ],
+            "output": {
+              "storyboard": {
+                "shots": [
+                  {
+                    "id": "shot-yqq-08",
+                    "project_id": "project-5b8286dc63e6",
+                    "sequence": 10,
+                    "scene_id": "scene-5441e73077d5",
+                    "duration_seconds": 5.0,
+                    "narrative_purpose": "许岚明确愿意一起补错，但不接受一人认责。观众站在她克制且不回避自身职责的处境里。",
+                    "visual": "许岚坐在会议桌东侧，浅米白长袖衬衫，画面偏右，稳定看向画左的赵衡。她不再推纸，也不指着对方；双手已退到自己一侧，右手空着，左手边的笔帽留在桌上。报价单、情况说明及裸笔维持上一镜位置，画面主读她的脸而不要求文件细字同时清楚。",
+                    "framing": "9:16胸上近景，给画左视线留空；下沿可带桌边，不强迫赵衡入画。",
+                    "camera": "摄影机位于桌西南、对话轴南侧，眼平固定看向许岚；柔和东窗天光及中性顶光不变。不环绕、不越轴。",
+                    "audio_intent": "仅许岚画内说完整原句：“出了错可以一起补，责任也得一起认。”普通话，正常音量；前半句提出合作，后半句坚定收住。赵衡画外安静听，不替她发声。低连续室内底噪，无强调胜负的音乐。",
+                    "dialogue_line_ids": [
+                      "line-yqq-06"
+                    ],
+                    "references": [],
+                    "timeline_beats": [
+                      {
+                        "start_seconds": 0.0,
+                        "end_seconds": 4.5,
+                        "visual": "许岚的面部保持清楚，朝画左看赵衡，不寻找镜头。",
+                        "framing": "胸上近景",
+                        "camera": "西南侧眼平固定",
+                        "action": "手留在自己桌边不动，面对赵衡说完原句。",
+                        "performance": "先平稳说“出了错可以一起补”，句逗略停，再说“责任也得一起认”；不挑眉讥讽，不提高嗓门。",
+                        "emotion": "愿意合作，也明确守住责任边界。",
+                        "dialogue_line_ids": [
+                          "line-yqq-06"
+                        ],
+                        "sound": "许岚画内完整对白：“出了错可以一起补，责任也得一起认。”赵衡不出声。",
+                        "references": []
+                      },
+                      {
+                        "start_seconds": 4.5,
+                        "end_seconds": 5.0,
+                        "visual": "许岚说完后仍看着赵衡。",
+                        "framing": "同一近景",
+                        "camera": "固定不变",
+                        "action": "闭嘴等回应，不伸手拿笔。",
+                        "performance": "嘴角不露胜利笑，呼吸稳定，目光不回避。",
+                        "emotion": null,
+                        "dialogue_line_ids": [],
+                        "sound": "短暂室内静默和自然呼吸。",
+                        "references": []
+                      }
+                    ],
+                    "continuity": {
+                      "character_positions": "许岚固定东座面西，赵衡固定西座面东且本镜画外；南侧轴线。",
+                      "eyeline": "许岚看画左的赵衡，视线高度对应对坐者眼睛；不低头准备签字。",
+                      "prop_state_in": "说明南中朝赵，双栏空白；裸笔复核旁尖北尾南。报价北中朝赵，赵左手压北缘，既有红改与确认签名不变。帽在东缘南部许左手边。",
+                      "prop_state_out": "全部文件、笔及帽的位置和签名状态不变。许岚双手均空。",
+                      "action_in": "许岚听完赵衡的追问，手已从放笔位置退回。",
+                      "action_out": "许岚说完第六句，仍等赵衡回应。"
+                    },
+                    "transition_out": "直切赵衡反应，不把下一镜的松手提早到许岚对白中。",
+                    "merge_candidate": false,
+                    "local_rework_risk": "只校正语气和视线；若口型提前结束，优先按实际语音调整本镜尾部，不改原句。",
+                    "approval_status": "DRAFT",
+                    "freshness": "CURRENT",
+                    "revision": 1
+                  }
+                ],
+                "identity": {
+                  "document_id": "production-document-4e543fd40d4a",
+                  "version_id": "production-document-version-0b577c62b1de",
+                  "version": 6
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "specialist-turn-e20e6967a715442ca4801160b5771e2e",
+          "sequence": 15,
+          "tool_name": "artifact.add_reference_entry",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "request": {
+              "subject_asset_id": "asset-85d4f6cc7d52",
+              "asset_version_id": "asset-version-07155ca88530",
+              "role": "CHARACTER_FACE",
+              "lineage_root_version_id": "asset-version-3a8b4ea6267b",
+              "angle": "THREE_QUARTER_LEFT",
+              "framing": "CLOSE_UP",
+              "tags": [
+                "shot-yqq-08",
+                "clip-yqq-g03",
+                "east-seat",
+                "southwest-camera",
+                "look-screen-left",
+                "chest-up",
+                "no-visible-props"
+              ],
+              "description": "主体别名：许岚。第8镜专用900×1600原生9:16胸上近景，实际由本项目1440×2560坐姿候选本地裁切，不放大或重绘。用于COMPOSITION/SUPPORTING：许岚略偏画右、闭唇看画左画外、克制坚定的表情基调、米白衬衫肩胸及局部会议室色光；0–4.5秒说完整第六句，4.5–5秒闭嘴等回应时均可作静态视觉依据，不将闭唇状态锁死为全段表演。已实际对照身份母图检查椭圆脸、眉眼鼻唇、年龄感、侧分齐肩黑发和米白衬衫，面部与双眼清楚，无明显变形。灰框隔断、浅墙、画右窗框及柔光与会议室母图无明确矛盾。身份权威仍为asset-version-3a8b4ea6267b，本图不替换canonical。画左留空略紧但可用；局部背景不能独立证明完整东座/西南机位及桌椅几何。手、纸笔、笔帽及赵衡在画外，不贡献其状态，也不是推纸、签字或扣帽初态；未验证对白、口型或动态表演。",
+              "priority": 80
+            }
+          },
+          "reason": "第8镜裁后近景已通过实际图像检查并采用；将其作为许岚的镜头专用补充参考加入现有参考包，保留原身份母图。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-85d4f6cc7d52",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack_entry",
+                "artifact_id": "reference-entry-89e858424708",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-07155ca88530",
+                "version": null
+              }
+            ],
+            "output": {}
+          }
+        },
+        {
+          "id": "specialist-turn-00c04160ed124ea389fef5025663a941",
+          "sequence": 16,
+          "tool_name": "artifact.patch_asset_plan",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "request": {
+              "base_version_id": "production-document-version-bb0fafff1c33",
+              "field_patches": [
+                {
+                  "work_item_id": "wi-yqq-s08-xulan-seated-closeup",
+                  "op": "replace",
+                  "path": "/completed_asset_id",
+                  "value": "asset-85d4f6cc7d52"
+                },
+                {
+                  "work_item_id": "wi-yqq-s08-xulan-seated-closeup",
+                  "op": "replace",
+                  "path": "/completed_asset_version_id",
+                  "value": "asset-version-07155ca88530"
+                }
+              ],
+              "source_artifact_refs": [
+                {
+                  "project_id": "project-5b8286dc63e6",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-07155ca88530",
+                  "version": 4
+                },
+                {
+                  "project_id": "project-5b8286dc63e6",
+                  "artifact_type": "reference_pack_entry",
+                  "artifact_id": "reference-entry-89e858424708"
+                }
+              ],
+              "origin": "AGENT"
+            }
+          },
+          "reason": "第8镜裁后图片已完成实图检查并加入许岚参考包；仅登记本工作项的已采用结果，保留身份母图及其他并行工作。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_plan",
+                "artifact_id": "production-document-9bf5a748eb3a",
+                "version": 12
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_plan_index",
+                "artifact_id": "production-document-9bf5a748eb3a",
+                "version": 12
+              }
+            ],
+            "output": {}
+          }
+        },
+        {
+          "id": "specialist-turn-3ff81f0387784c1eb0ce89e3e5fdb385",
+          "sequence": 17,
+          "tool_name": "artifact.read_current",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "shot_id": "shot-yqq-08"
+          },
+          "reason": "第8镜近景图片已完成实图检查并采用；读取该镜最新正文和逐时段内容，保留并行修改后补齐精确媒体引用。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [],
+            "output": {
+              "content": {
+                "shot": {
+                  "id": "shot-yqq-08",
+                  "project_id": "project-5b8286dc63e6",
+                  "sequence": 10,
+                  "scene_id": "scene-5441e73077d5",
+                  "duration_seconds": 5.0,
+                  "narrative_purpose": "许岚明确愿意一起补错，但不接受一人认责。观众站在她克制且不回避自身职责的处境里。",
+                  "visual": "许岚坐在会议桌东侧，浅米白长袖衬衫，画面偏右，稳定看向画左的赵衡。她不再推纸，也不指着对方；双手已退到自己一侧，右手空着，左手边的笔帽留在桌上。报价单、情况说明及裸笔维持上一镜位置，画面主读她的脸而不要求文件细字同时清楚。",
+                  "framing": "9:16胸上近景，给画左视线留空；下沿可带桌边，不强迫赵衡入画。",
+                  "camera": "摄影机位于桌西南、对话轴南侧，眼平固定看向许岚；柔和东窗天光及中性顶光不变。不环绕、不越轴。",
+                  "audio_intent": "仅许岚画内说完整原句：“出了错可以一起补，责任也得一起认。”普通话，正常音量；前半句提出合作，后半句坚定收住。赵衡画外安静听，不替她发声。低连续室内底噪，无强调胜负的音乐。",
+                  "dialogue_line_ids": [
+                    "line-yqq-06"
+                  ],
+                  "references": [],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0.0,
+                      "end_seconds": 4.5,
+                      "visual": "许岚的面部保持清楚，朝画左看赵衡，不寻找镜头。",
+                      "framing": "胸上近景",
+                      "camera": "西南侧眼平固定",
+                      "action": "手留在自己桌边不动，面对赵衡说完原句。",
+                      "performance": "先平稳说“出了错可以一起补”，句逗略停，再说“责任也得一起认”；不挑眉讥讽，不提高嗓门。",
+                      "emotion": "愿意合作，也明确守住责任边界。",
+                      "dialogue_line_ids": [
+                        "line-yqq-06"
+                      ],
+                      "sound": "许岚画内完整对白：“出了错可以一起补，责任也得一起认。”赵衡不出声。",
+                      "references": []
+                    },
+                    {
+                      "start_seconds": 4.5,
+                      "end_seconds": 5.0,
+                      "visual": "许岚说完后仍看着赵衡。",
+                      "framing": "同一近景",
+                      "camera": "固定不变",
+                      "action": "闭嘴等回应，不伸手拿笔。",
+                      "performance": "嘴角不露胜利笑，呼吸稳定，目光不回避。",
+                      "emotion": null,
+                      "dialogue_line_ids": [],
+                      "sound": "短暂室内静默和自然呼吸。",
+                      "references": []
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "许岚固定东座面西，赵衡固定西座面东且本镜画外；南侧轴线。",
+                    "eyeline": "许岚看画左的赵衡，视线高度对应对坐者眼睛；不低头准备签字。",
+                    "prop_state_in": "说明南中朝赵，双栏空白；裸笔复核旁尖北尾南。报价北中朝赵，赵左手压北缘，既有红改与确认签名不变。帽在东缘南部许左手边。",
+                    "prop_state_out": "全部文件、笔及帽的位置和签名状态不变。许岚双手均空。",
+                    "action_in": "许岚听完赵衡的追问，手已从放笔位置退回。",
+                    "action_out": "许岚说完第六句，仍等赵衡回应。"
+                  },
+                  "transition_out": "直切赵衡反应，不把下一镜的松手提早到许岚对白中。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "只校正语气和视线；若口型提前结束，优先按实际语音调整本镜尾部，不改原句。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT",
+                  "revision": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "work_order_id": "work-order-dee3dc5119354dd5bf58c538226772ae",
+      "missing_shot_call": "model-bc6f42a85345",
+      "shot_id": "shot-yqq-12-reaction",
+      "turns": [
+        {
+          "id": "specialist-turn-83b27091d35b45588050390dffd305e4",
+          "sequence": 21,
+          "tool_name": "artifact.get_asset_work_context",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "scope": {
+              "mode": "WORK_ITEM",
+              "work_item_ids": [
+                "wi-yqq-s12-zhaoheng-wait-closeup"
+              ]
+            },
+            "shot_ids": [
+              "shot-yqq-12-reaction"
+            ]
+          },
+          "reason": "赵衡等待近景已完成真实图片检查并采用。读取本工作项和反应镜头的当前内容，补登记参考包及0–1.5秒精确图片引用，保留并行修改和原身份母图。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_plan_index",
+                "artifact_id": "production-document-9bf5a748eb3a",
+                "version": 13
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "shot",
+                "artifact_id": "shot-yqq-12-reaction",
+                "version": 1
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "clip_group",
+                "artifact_id": "clip-yqq-g05",
+                "version": 6
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset",
+                "artifact_id": "asset-4024e0462bfc",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-d42fba8ad6bb",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset",
+                "artifact_id": "asset-5f4d7485e6b8",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-6a56e078129b",
+                "version": 2
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-89add4b760e5",
+                "version": 5
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-d42fba8ad6bb",
+                "version": 2
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-5f4d7485e6b8",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-4024e0462bfc",
+                "version": null
+              }
+            ],
+            "output": {
+              "storyboard": {
+                "shots": [
+                  {
+                    "id": "shot-yqq-12-reaction",
+                    "project_id": "project-5b8286dc63e6",
+                    "sequence": 17,
+                    "scene_id": "scene-5441e73077d5",
+                    "duration_seconds": 1.5,
+                    "narrative_purpose": "赵衡不再催促，让许岚在画外完成经办签字。",
+                    "visual": "@赵衡坐西侧，脸居画左，安静看向画右下方南中部的说明。他闭嘴等待，双手留自己一侧，不提前伸手收纸。许岚和纸面不入画；承接书写声，随后声止表示许岚完成并抬笔。",
+                    "framing": "9:16胸上近景，赵衡面部清楚，给画右下视线留空。",
+                    "camera": "南偏东固定反角，保持东窗光和南侧主轴。",
+                    "audio_intent": "无人说话。前约1.2秒延续许岚画外书写声，随后停止，室内底声连续。",
+                    "dialogue_line_ids": [],
+                    "references": [],
+                    "timeline_beats": [
+                      {
+                        "start_seconds": 0.0,
+                        "end_seconds": 1.5,
+                        "visual": "@赵衡向画右下看许岚签字，不再催。",
+                        "framing": "胸上近景。",
+                        "camera": "南偏东固定。",
+                        "action": "赵双手留身前画外，闭口等待。画外许岚继续完成经办签字，声止后右手抬笔退至东侧纸外、左手离开纸边。",
+                        "performance": "下颌放松，眼神不催促，不点头指挥。",
+                        "emotion": null,
+                        "dialogue_line_ids": [],
+                        "sound": "连续书写声约1.2秒后停止，无新增词句。",
+                        "references": []
+                      }
+                    ],
+                    "continuity": {
+                      "character_positions": "赵西画左，许东画外，两人原座不变。",
+                      "eyeline": "赵看画右下南中说明，不看门外。",
+                      "prop_state_in": "说明南中标题西，许右手正在经办签写，左指稳纸；复核已签。报价北中与独立帽未动。",
+                      "prop_state_out": "设计上经办已写完，许右手持裸笔抬离纸面并退东侧，左手离纸；说明仍标题西。完整双签下一镜才可见。",
+                      "action_in": "许正在画外签经办，赵不干预。",
+                      "action_out": "书写声止，赵仍未收纸，等待准确完成状态的插入镜。"
+                    },
+                    "transition_out": "声止后直切准确双签静态结果，不以对白解释。",
+                    "merge_candidate": false,
+                    "local_rework_risk": "本镜可观察的是赵衡等待；许岚画外完成签字是设计意图，不能冒充实际动态检查。赵不得提前收纸或增加对白。",
+                    "approval_status": "DRAFT",
+                    "freshness": "CURRENT",
+                    "revision": 1
+                  }
+                ],
+                "identity": {
+                  "document_id": "production-document-4e543fd40d4a",
+                  "version_id": "production-document-version-0b577c62b1de",
+                  "version": 6
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "specialist-turn-cfda3a3c44ce42b9bb5a68b01ad7914a",
+          "sequence": 22,
+          "tool_name": "artifact.add_reference_entry",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "request": {
+              "subject_asset_id": "asset-5f4d7485e6b8",
+              "asset_version_id": "asset-version-89add4b760e5",
+              "role": "CHARACTER_FACE",
+              "lineage_root_version_id": "asset-version-6a56e078129b",
+              "angle": "THREE_QUARTER_RIGHT",
+              "framing": "CLOSE_UP",
+              "tags": [
+                "shot-yqq-12-reaction",
+                "clip-yqq-g05",
+                "west-seat",
+                "southeast-camera",
+                "look-screen-right-down",
+                "chest-up",
+                "no-visible-props"
+              ],
+              "description": "《一起签》许岚签经办期间，赵衡在西座闭口等待的胸上近景。实际955×1696 PNG，由asset-version-14dae6fccc44原像素本地裁切，未放大、未重绘。已对照唯一身份母图asset-version-6a56e078129b及会议室asset-version-d42fba8ad6bb检查：完整头顶至上胸，面部清楚且略偏画左，轻转画右、看向画右下；方圆脸、眉眼鼻口、年龄感、侧分黑短发及浅蓝首扣解开衬衫相符，下颌肩颈放松。局部浅灰偏暖墙面与东窗柔光相容，无第三人、手、桌面或纸笔。主体别名赵衡，仅为shot-yqq-12-reaction的0–1.5秒提供COMPOSITION构图、视线和静态等待状态参考，不替换canonical母图，也不是签字完成证据或硬首帧。局部背景不能独立证明完整机位坐标；画外书写、声音及动态连续性仍需实际视频验证。",
+              "priority": 90
+            }
+          },
+          "reason": "赵衡等待近景已完成真实图片检查并采用；把该精确裁图登记为反应镜补充参考，保留原身份母图。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-5f4d7485e6b8",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "reference_pack_entry",
+                "artifact_id": "reference-entry-c56e893044d2",
+                "version": null
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-89add4b760e5",
+                "version": null
+              }
+            ],
+            "output": {}
+          }
+        },
+        {
+          "id": "specialist-turn-9c4f391dae844a63ab9266db7bcfbf7e",
+          "sequence": 23,
+          "tool_name": "artifact.patch_asset_plan",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "request": {
+              "base_version_id": "production-document-version-c0bef6de0283",
+              "field_patches": [
+                {
+                  "work_item_id": "wi-yqq-s12-zhaoheng-wait-closeup",
+                  "op": "replace",
+                  "path": "/completed_asset_id",
+                  "value": "asset-5f4d7485e6b8"
+                },
+                {
+                  "work_item_id": "wi-yqq-s12-zhaoheng-wait-closeup",
+                  "op": "replace",
+                  "path": "/completed_asset_version_id",
+                  "value": "asset-version-89add4b760e5"
+                }
+              ],
+              "source_artifact_refs": [
+                {
+                  "project_id": "project-5b8286dc63e6",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-89add4b760e5",
+                  "version": 5
+                },
+                {
+                  "project_id": "project-5b8286dc63e6",
+                  "artifact_type": "reference_pack_entry",
+                  "artifact_id": "reference-entry-c56e893044d2"
+                }
+              ],
+              "origin": "AGENT"
+            }
+          },
+          "reason": "赵衡等待近景已完成真实图片检查并登记参考包；仅回写本工作项的采用结果，保留身份母图及其他工作项。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_plan",
+                "artifact_id": "production-document-9bf5a748eb3a",
+                "version": 14
+              },
+              {
+                "project_id": "project-5b8286dc63e6",
+                "artifact_type": "asset_plan_index",
+                "artifact_id": "production-document-9bf5a748eb3a",
+                "version": 14
+              }
+            ],
+            "output": {}
+          }
+        },
+        {
+          "id": "specialist-turn-59c1cceb6dc1444ab65610255dffc725",
+          "sequence": 24,
+          "tool_name": "artifact.read_current",
+          "arguments": {
+            "project_id": "project-5b8286dc63e6",
+            "shot_id": "shot-yqq-12-reaction"
+          },
+          "reason": "等待近景已采用并保存，现仅取得反应镜头的完整当前字段，以原文不变方式补入0–1.5秒精确构图引用，避免凭摘要重写镜头。",
+          "status": "COMPLETED",
+          "result": {
+            "status": "SUCCEEDED",
+            "artifact_refs": [],
+            "output": {
+              "content": {
+                "shot": {
+                  "id": "shot-yqq-12-reaction",
+                  "project_id": "project-5b8286dc63e6",
+                  "sequence": 17,
+                  "scene_id": "scene-5441e73077d5",
+                  "duration_seconds": 1.5,
+                  "narrative_purpose": "赵衡不再催促，让许岚在画外完成经办签字。",
+                  "visual": "@赵衡坐西侧，脸居画左，安静看向画右下方南中部的说明。他闭嘴等待，双手留自己一侧，不提前伸手收纸。许岚和纸面不入画；承接书写声，随后声止表示许岚完成并抬笔。",
+                  "framing": "9:16胸上近景，赵衡面部清楚，给画右下视线留空。",
+                  "camera": "南偏东固定反角，保持东窗光和南侧主轴。",
+                  "audio_intent": "无人说话。前约1.2秒延续许岚画外书写声，随后停止，室内底声连续。",
+                  "dialogue_line_ids": [],
+                  "references": [],
+                  "timeline_beats": [
+                    {
+                      "start_seconds": 0.0,
+                      "end_seconds": 1.5,
+                      "visual": "@赵衡向画右下看许岚签字，不再催。",
+                      "framing": "胸上近景。",
+                      "camera": "南偏东固定。",
+                      "action": "赵双手留身前画外，闭口等待。画外许岚继续完成经办签字，声止后右手抬笔退至东侧纸外、左手离开纸边。",
+                      "performance": "下颌放松，眼神不催促，不点头指挥。",
+                      "emotion": null,
+                      "dialogue_line_ids": [],
+                      "sound": "连续书写声约1.2秒后停止，无新增词句。",
+                      "references": []
+                    }
+                  ],
+                  "continuity": {
+                    "character_positions": "赵西画左，许东画外，两人原座不变。",
+                    "eyeline": "赵看画右下南中说明，不看门外。",
+                    "prop_state_in": "说明南中标题西，许右手正在经办签写，左指稳纸；复核已签。报价北中与独立帽未动。",
+                    "prop_state_out": "设计上经办已写完，许右手持裸笔抬离纸面并退东侧，左手离纸；说明仍标题西。完整双签下一镜才可见。",
+                    "action_in": "许正在画外签经办，赵不干预。",
+                    "action_out": "书写声止，赵仍未收纸，等待准确完成状态的插入镜。"
+                  },
+                  "transition_out": "声止后直切准确双签静态结果，不以对白解释。",
+                  "merge_candidate": false,
+                  "local_rework_risk": "本镜可观察的是赵衡等待；许岚画外完成签字是设计意图，不能冒充实际动态检查。赵不得提前收纸或增加对白。",
+                  "approval_status": "DRAFT",
+                  "freshness": "CURRENT",
+                  "revision": 1
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

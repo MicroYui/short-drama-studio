@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+import re
 import shutil
 import subprocess
 import threading
@@ -25,8 +26,10 @@ from PIL import (
 
 from short_drama.image_models import (
     AssetBriefUpdateRequest,
+    AssetBatchCreateRequest,
     AssetCreateRequest,
     AssetImportLocalRequest,
+    AssetImageCropRequest,
     AssetReferenceSheetComposeRequest,
     AssetTextPlateComposeRequest,
     AssetImportUrlRequest,
@@ -52,6 +55,7 @@ from short_drama.models import (
     Asset,
     AssetDerivationReference,
     AssetKind,
+    AssetImageCrop,
     AssetLayoutProfile,
     AssetMediaType,
     AssetPresentationMode,
@@ -68,8 +72,10 @@ from short_drama.models import (
     ImageReferenceAuthority,
     OriginType,
     ProjectDocument,
+    TextPlateAppendedTextBlock,
 )
 from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
+from short_drama.image_regions import read_image_region
 from short_drama.providers.image_config import ImageProviderConfigStore
 from short_drama.providers.image_provider import (
     ImageProvider,
@@ -226,6 +232,10 @@ class AssetWorkbench:
             self._validate_layout_output_size(layout_profile, size)
 
     def create_asset(self, project_id: str, request: AssetCreateRequest) -> AssetVersion:
+        assets = self.create_assets(project_id, AssetBatchCreateRequest(assets=[request]))
+        return assets[0].versions[0]
+
+    def _validate_asset_create(self, request: AssetCreateRequest) -> None:
         self._validate_asset_strategy(
             request.kind,
             request.brief.reference_strategy if request.brief is not None else None,
@@ -240,42 +250,45 @@ class AssetWorkbench:
                 request.brief.reference_strategy,
                 request.brief.requested_views,
             )
+
+    def create_assets(self, project_id: str, request: AssetBatchCreateRequest) -> list[Asset]:
+        # Validate the entire batch before constructing or saving any object.
+        # The same rules serve both the single and multiple-object interfaces.
+        for item in request.assets:
+            self._validate_asset_create(item)
         with self._lock:
             document = self._require_project(project_id)
             now = utc_now()
-            asset_id = f"asset-{uuid4().hex[:12]}"
-            version = AssetVersion(
-                id=f"asset-version-{uuid4().hex[:12]}",
-                version=1,
-                origin_type=OriginType.MANUAL,
-                descriptor=request.descriptor.strip(),
-                media_type=AssetMediaType.TEXT_REFERENCE,
-                approval_status=ApprovalStatus.DRAFT,
-                freshness=Freshness.CURRENT,
-                source=AssetSourceRecord(
-                    source_type=OriginType.MANUAL,
-                    source_label="用户创建的资产说明",
+            assets: list[Asset] = []
+            for item in request.assets:
+                version = AssetVersion(
+                    id=f"asset-version-{uuid4().hex[:12]}",
+                    version=1,
+                    origin_type=OriginType.MANUAL,
+                    descriptor=item.descriptor.strip(),
+                    media_type=AssetMediaType.TEXT_REFERENCE,
+                    approval_status=ApprovalStatus.DRAFT,
+                    freshness=Freshness.CURRENT,
+                    source=AssetSourceRecord(
+                        source_type=OriginType.MANUAL,
+                        source_label="用户创建的资产说明",
+                        created_at=now,
+                    ),
                     created_at=now,
-                ),
-                created_at=now,
-            )
-            asset = Asset(
-                id=asset_id,
-                project_id=project_id,
-                kind=request.kind,
-                name=request.name.strip(),
-                brief=(
-                    request.brief.model_copy(deep=True)
-                    if request.brief is not None
-                    else None
-                ),
-                current_version_id=version.id,
-                versions=[version],
-            )
-            document.assets.append(asset)
+                )
+                assets.append(Asset(
+                    id=f"asset-{uuid4().hex[:12]}", project_id=project_id,
+                    kind=item.kind, name=item.name.strip(),
+                    brief=item.brief.model_copy(deep=True) if item.brief is not None else None,
+                    current_version_id=version.id, versions=[version],
+                ))
+            document.assets.extend(assets)
             document.project.updated_at = now
             self.repository.save_project(document)
-            return version
+            # save_project merges current edits and normalizes shared episode
+            # assets to their root project. Return those actually saved values.
+            saved = {asset.id: asset for asset in document.assets}
+            return [saved[asset.id] for asset in assets]
 
     def update_asset_brief(
         self,
@@ -400,6 +413,90 @@ class AssetWorkbench:
             )
             self._append_version(document, asset, version)
             return version
+
+    def crop_image(
+        self, project_id: str, asset_id: str, request: AssetImageCropRequest,
+    ) -> AssetVersion:
+        """Register a lossless local crop without replacing its source or canonical master."""
+
+        with self._lock:
+            document = self._require_project(project_id)
+            target = self._require_asset(document, asset_id)
+            source_asset, source = self._find_version(document, request.source_asset_version_id)
+            if source.media_type != AssetMediaType.IMAGE or source.local_path is None:
+                raise AssetWorkbenchConflict("image.crop requires a locally cached image AssetVersion")
+            if source.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED} or source.freshness != Freshness.CURRENT:
+                raise AssetWorkbenchConflict(f"Crop source is not current usable media: {source.id}")
+            source_path = Path(source.local_path).expanduser().resolve()
+            if not source_path.is_file() or source_path.stat().st_size == 0:
+                raise AssetWorkbenchConflict(f"Crop source file is missing or empty: {source.id}")
+            source_stat = source_path.stat()
+            expected_current_id = target.current_version_id
+            output_number = self._next_version_number(target)
+            output_id = f"asset-version-{uuid4().hex[:12]}"
+            parent_id = source.id if source_asset.id == target.id else None
+
+        directory = self._asset_directory(project_id, asset_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = directory / f".{output_id}-crop.png"
+        destination = directory / f"v{output_number}-{output_id}-crop.png"
+        try:
+            try:
+                cropped, source_size, box = read_image_region(source_path, request.region)
+                with cropped:
+                    if cropped.width < 2 or cropped.height < 2:
+                        raise ValueError("Crop region must cover at least 2 pixels in each dimension")
+                    if cropped.mode not in {"RGB", "RGBA", "L", "LA"}:
+                        cropped = cropped.convert("RGBA" if "transparency" in cropped.info else "RGB")
+                    cropped.save(temporary, format="PNG")
+                    width, height = cropped.size
+            except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                raise AssetWorkbenchConflict(f"Cannot crop {source.id}: {exc}") from exc
+            with self._lock:
+                document = self._require_project(project_id)
+                target = self._require_asset(document, asset_id)
+                _source_asset, current_source = self._find_version(document, source.id)
+                current_stat = source_path.stat() if source_path.is_file() else None
+                if (
+                    target.current_version_id != expected_current_id
+                    or self._next_version_number(target) != output_number
+                    or current_source.local_path != source.local_path
+                    or current_source.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+                    or current_source.freshness != Freshness.CURRENT
+                    or current_stat is None
+                    or (current_stat.st_size, current_stat.st_mtime_ns) != (source_stat.st_size, source_stat.st_mtime_ns)
+                ):
+                    raise AssetWorkbenchConflict("Asset or crop source changed during local processing; re-read that asset")
+                temporary.replace(destination)
+                now = utc_now()
+                version = AssetVersion(
+                    id=output_id, version=output_number, origin_type=OriginType.LOCAL_DERIVED,
+                    descriptor=request.descriptor.strip(), media_type=AssetMediaType.IMAGE,
+                    local_path=str(destination), mime_type="image/png", width=width, height=height,
+                    file_size_bytes=destination.stat().st_size, parent_version_id=parent_id,
+                    image_crop=AssetImageCrop(
+                        source_asset_version_id=source.id, source_width=source_size[0],
+                        source_height=source_size[1], box_pixels=box,
+                    ),
+                    derivation_references=[AssetDerivationReference(
+                        asset_version_id=source.id, source_project_id=project_id,
+                        reference_role=request.reference_role,
+                        reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+                        purpose="原图中的精确局部像素；仅承担本次声明的参考职责。",
+                        subject_alias=source_asset.name,
+                    )],
+                    source=AssetSourceRecord(
+                        source_type=OriginType.LOCAL_DERIVED, source_label="本地图像裁切",
+                        provider="local", model="pillow-crop-v1", created_at=now,
+                    ),
+                    approval_status=ApprovalStatus.DRAFT, freshness=Freshness.CURRENT, created_at=now,
+                )
+                self._append_version(document, target, version)
+                return version
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            destination.unlink(missing_ok=True)
+            raise
 
     def compose_reference_sheet(
         self,
@@ -617,16 +714,21 @@ class AssetWorkbench:
         with self._lock:
             document = self._require_project(project_id)
             target = self._require_asset(document, asset_id)
-            self._validate_text_plate_contract(target, request)
+            plate, base = self.resolve_text_plate_content(document, request, asset_id=asset_id)
+            self.validate_text_plate_contract(target.kind, target.brief, plate, asset_id=target.id)
             parent_id = self._resolve_parent(target, request.parent_version_id)
+            base_state = self._text_plate_file_state(base) if base is not None else None
             expected_current_version_id = target.current_version_id
             output_number = self._next_version_number(target)
             output_version_id = f"asset-version-{uuid4().hex[:12]}"
 
         try:
-            background = ImageColor.getrgb(request.background_color)
-            foreground = ImageColor.getrgb(request.foreground_color)
-            ImageColor.getrgb(request.stroke_color)
+            background = ImageColor.getrgb(plate.background_color)
+            foreground = ImageColor.getrgb(plate.foreground_color)
+            ImageColor.getrgb(plate.stroke_color)
+            for element in [*plate.text_blocks, *plate.lines, *plate.append_text_blocks]:
+                if element.color is not None:
+                    ImageColor.getrgb(element.color)
         except ValueError as exc:
             raise AssetWorkbenchConflict(
                 "Text plate colors must be recognized image colors"
@@ -637,8 +739,13 @@ class AssetWorkbench:
             )
 
         font_source, font_family = self._text_plate_font(
-            request.required_visible_text()
+            [block.text for block in request.append_text_blocks] if base is not None else request.required_visible_text()
         )
+        if base is None:
+            plate.font_family = font_family
+        else:
+            for block in plate.append_text_blocks[-len(request.append_text_blocks):]:
+                block.font_family = font_family
         output_directory = self._asset_directory(project_id, asset_id)
         output_directory.mkdir(parents=True, exist_ok=True)
         temporary_path = output_directory / f".{output_version_id}-text-plate.png"
@@ -646,11 +753,10 @@ class AssetWorkbench:
             f"v{output_number}-{output_version_id}-text-plate.png"
         )
         try:
-            width, height = self._render_text_plate(
-                request,
-                font_source=font_source,
-                destination=temporary_path,
-            )
+            if base is None:
+                width, height = self._render_text_plate(request, font_source=font_source, destination=temporary_path)
+            else:
+                width, height = self._append_text_plate(base, plate, request, font_source=font_source, destination=temporary_path)
             with self._lock:
                 document = self._require_project(project_id)
                 target = self._require_asset(document, asset_id)
@@ -661,7 +767,12 @@ class AssetWorkbench:
                     raise AssetWorkbenchConflict(
                         "Target asset changed while the text plate was being composed; retry"
                     )
-                self._validate_text_plate_contract(target, request)
+                self.validate_text_plate_contract(target.kind, target.brief, plate, asset_id=target.id)
+                if base is not None:
+                    _current_plate, current_base = self.resolve_text_plate_content(document, request, asset_id=asset_id)
+                    if (current_base is None or current_base.text_plate != base.text_plate
+                            or self._text_plate_file_state(current_base) != base_state):
+                        raise AssetWorkbenchConflict(f"base_version_id={base.id} changed during local composition; re-read this source")
                 if parent_id is not None:
                     self._require_asset_version(target, parent_id)
                 temporary_path.replace(output_path)
@@ -678,23 +789,16 @@ class AssetWorkbench:
                     height=height,
                     file_size_bytes=output_path.stat().st_size,
                     parent_version_id=parent_id,
-                    text_plate=AssetTextPlate(
-                        size=request.size,
-                        background_color=request.background_color,
-                        foreground_color=request.foreground_color,
-                        content_box=request.content_box,
-                        text_align=request.text_align,
-                        vertical_align=request.vertical_align,
-                        stroke_width=request.stroke_width,
-                        stroke_color=request.stroke_color,
-                        title=request.title,
-                        exact_lines=list(request.exact_lines),
-                        layout_description=request.layout_description,
-                        font_family=font_family,
-                    ),
+                    text_plate=plate,
+                    derivation_references=[] if base is None else [AssetDerivationReference(
+                        asset_version_id=base.id, source_project_id=project_id,
+                        reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+                        purpose="实际复制此字版 PNG 的全部既有像素，仅追加本次明确文字。",
+                    )],
                     source=AssetSourceRecord(
                         source_type=OriginType.LOCAL_DERIVED,
-                        source_label="本地确定性精确文字图版",
+                        source_label="本地确定性精确文字图版" if base is None else "本地字版复制与文字追加",
+                        provider_asset_id=None if base is None else base.id,
                         provider="local",
                         model="pillow-text-plate-v1",
                         prompt=request.layout_description,
@@ -704,7 +808,14 @@ class AssetWorkbench:
                     freshness=Freshness.CURRENT,
                     created_at=now,
                 )
-                self._append_version(document, target, version)
+                if base is not None or (version.text_plate and version.text_plate.purpose == "PHYSICAL_SURFACE_CONTENT"):
+                    # A flat surface candidate must not replace the physical carrier's
+                    # current/canonical image or rewrite its material/space brief.
+                    target.versions.append(version)
+                    document.project.updated_at = now
+                    self.repository.save_project(document)
+                else:
+                    self._append_version(document, target, version)
                 return version
         except Exception:
             temporary_path.unlink(missing_ok=True)
@@ -1578,6 +1689,7 @@ class AssetWorkbench:
                     subject_alias=reference.subject_alias,
                     reference_role=reference.reference_role,
                     reference_authority=reference.reference_authority,
+                    text_plate=version.text_plate.model_copy(deep=True) if version.text_plate is not None else None,
                 )
             )
         return result
@@ -1953,33 +2065,183 @@ class AssetWorkbench:
             regions.append((left, top, right, bottom))
         return regions
 
+    def resolve_text_plate_content(
+        self, document: ProjectDocument, request: AssetTextPlateComposeRequest, *, asset_id: str | None = None,
+    ) -> tuple[AssetTextPlate, AssetVersion | None]:
+        """Resolve saved wording/layout before validation; no drawing or provider IO."""
+        if request.base_version_id is None:
+            target = self._require_asset(document, asset_id) if asset_id is not None else None
+            purpose = ("PHYSICAL_SURFACE_CONTENT" if target is not None and target.brief is not None
+                and target.brief.presentation_mode == AssetPresentationMode.PHYSICAL_MASTER else "SCREEN_CONTENT")
+            return AssetTextPlate.model_validate({
+                **request.model_dump(exclude={"base_version_id", "append_text_blocks", "parent_version_id", "descriptor"}),
+                "purpose": purpose, "font_family": "resolved during rendering",
+            }), None
+        try:
+            _owner, source = self._find_version(document, request.base_version_id)
+        except AssetWorkbenchNotFound as exc:
+            raise AssetWorkbenchConflict(f"/request/base_version_id={request.base_version_id}: no such version in this project") from exc
+        if (source.text_plate is None or source.media_type != AssetMediaType.IMAGE
+                or source.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+                or source.freshness != Freshness.CURRENT):
+            raise AssetWorkbenchConflict(f"/request/base_version_id={source.id} must be an existing usable TextPlate image, including a usable DRAFT; choose a current non-rejected plate, not a photograph")
+        self._text_plate_file_state(source)
+        plate = source.text_plate.model_copy(deep=True)
+        if asset_id is not None:
+            target = self._require_asset(document, asset_id)
+            plate.purpose = ("PHYSICAL_SURFACE_CONTENT" if target.brief is not None
+                and target.brief.presentation_mode == AssetPresentationMode.PHYSICAL_MASTER else "SCREEN_CONTENT")
+        if len(plate.append_text_blocks) + len(request.append_text_blocks) > 64:
+            raise AssetWorkbenchConflict("/request/append_text_blocks: this plate would exceed 64 accumulated additions")
+        plate.append_text_blocks.extend(TextPlateAppendedTextBlock(
+            **block.model_dump(), font_family="resolved during rendering",
+        ) for block in request.append_text_blocks)
+        plate.content_state = request.content_state.model_copy(deep=True) if request.content_state is not None else None
+        plate.layout_description = request.layout_description
+        return plate, source.model_copy(deep=True)
+
     @staticmethod
-    def _validate_text_plate_contract(
-        asset: Asset,
-        request: AssetTextPlateComposeRequest,
+    def _text_plate_file_state(version: AssetVersion) -> tuple[str, int, int]:
+        if version.local_path is None:
+            raise AssetWorkbenchConflict(f"/request/base_version_id={version.id} has no local PNG; select an existing local TextPlate")
+        path = Path(version.local_path)
+        try:
+            stat = path.stat()
+            if not path.is_file() or stat.st_size <= 0:
+                raise OSError("not a non-empty file")
+        except OSError as exc:
+            raise AssetWorkbenchConflict(f"/request/base_version_id={version.id}: local PNG is missing or empty at {path}") from exc
+        return str(path), stat.st_size, stat.st_mtime_ns
+
+    @staticmethod
+    def _append_text_plate(
+        base: AssetVersion, plate: AssetTextPlate, request: AssetTextPlateComposeRequest,
+        *, font_source: str, destination: Path,
+    ) -> tuple[int, int]:
+        assert base.local_path is not None
+        try:
+            with Image.open(base.local_path) as source:
+                if source.format != "PNG":
+                    raise AssetWorkbenchConflict(f"/request/base_version_id={base.id}: expected an actual PNG, received {source.format}")
+                source.load()
+                expected = tuple(int(part) for part in plate.size.split("x"))
+                if source.size != expected or (base.width is not None and base.width != source.width) or (base.height is not None and base.height != source.height):
+                    raise AssetWorkbenchConflict(f"/request/base_version_id={base.id}: actual PNG size {source.size} does not match saved TextPlate size {plate.size}; re-read or repair this source")
+                rgb = source.mode == "RGB"
+                with source.convert("RGBA") as original, Image.new("RGBA", source.size, (0, 0, 0, 0)) as additions:
+                    drawing = AssetTextPlateComposeRequest(
+                        size=plate.size, text_blocks=request.append_text_blocks,
+                        foreground_color=plate.foreground_color, stroke_width=plate.stroke_width, stroke_color=plate.stroke_color,
+                        layout_description=request.layout_description, descriptor=request.descriptor,
+                    )
+                    AssetWorkbench._draw_text_plate_elements(additions, drawing, font_source, text_field="append_text_blocks")
+                    with Image.alpha_composite(original, additions) as composed:
+                        if rgb:
+                            with composed.convert("RGB") as result:
+                                result.save(destination, format="PNG")
+                        else:
+                            composed.save(destination, format="PNG")
+                return source.size
+        except (OSError, UnidentifiedImageError) as exc:
+            raise AssetWorkbenchConflict(f"/request/base_version_id={base.id}: cannot decode the actual PNG: {exc}") from exc
+
+    @staticmethod
+    def validate_text_plate_contract(
+        asset_kind: AssetKind,
+        brief: CoreAssetBrief | None,
+        request: AssetTextPlateComposeRequest | AssetTextPlate,
+        *,
+        asset_id: str,
     ) -> None:
-        brief = asset.brief
-        if (
-            brief is None
-            or brief.presentation_mode
-            != AssetPresentationMode.SCREEN_CONTENT_PLATE
+        if brief is None or not (
+            brief.presentation_mode == AssetPresentationMode.SCREEN_CONTENT_PLATE
+            or asset_kind == AssetKind.PROP and brief.presentation_mode == AssetPresentationMode.PHYSICAL_MASTER
         ):
             raise AssetWorkbenchConflict(
-                "Deterministic text plates require a SCREEN_CONTENT_PLATE asset brief"
+                "Text plates require SCREEN_CONTENT_PLATE or a PHYSICAL_MASTER PROP with required_visible_text; "
+                "a physical prop's plate is a surface-content candidate, not a replacement photograph"
             )
         if not brief.required_visible_text:
             raise AssetWorkbenchConflict(
-                "SCREEN_CONTENT_PLATE brief must declare required_visible_text"
+                "Text plate asset brief must declare required_visible_text; preserve the physical carrier's presentation_mode"
             )
-        # The brief owns the wording; title/body containers own its line layout.
-        # Reflowing the same ordered characters must not require changing the brief.
+        # Fixed asset copy remains authoritative. A state can declare additions
+        # without changing earlier candidates or the physical carrier's brief.
         received = request.required_visible_text()
-        if "".join(received) != "".join(brief.required_visible_text):
+        state = request.content_state
+        expected = brief.required_visible_text if state is None else state.required_visible_text
+        expected_wording = AssetWorkbench.text_plate_wording(expected)
+        if state is not None:
+            cursor = 0
+            state_entries = [AssetWorkbench.text_plate_wording([entry]) for entry in expected]
+            for index, fixed_text in enumerate(brief.required_visible_text):
+                fixed_wording = AssetWorkbench.text_plate_wording([fixed_text])
+                try:
+                    start = state_entries.index(fixed_wording, cursor)
+                except ValueError:
+                    raise AssetWorkbenchConflict(
+                        f"asset_id={asset_id}: /request/content_state/required_visible_text must preserve "
+                        f"brief.required_visible_text/{index}={fixed_text!r} as an unchanged entry in order. "
+                        "Declare only this candidate's state additions around the fixed text; do not rewrite "
+                        "the shared brief or remove fixed wording to create a later state."
+                    ) from None
+                cursor = start + 1
+        if AssetWorkbench.text_plate_wording(received) != expected_wording:
+            expected_source = "brief.required_visible_text" if state is None else "/request/content_state/required_visible_text"
             raise AssetWorkbenchConflict(
-                "Text plate title and exact_lines must exactly match required_visible_text "
-                f"in wording; line segmentation may differ. Expected {brief.required_visible_text!r}; "
-                f"received {received!r}"
+                f"asset_id={asset_id}: /request/text_blocks or /request/title + /request/exact_lines "
+                f"must exactly match {expected_source} in ordered words and numbers. "
+                "Blank rows, trailing label colons and trailing decorative rules may differ; internal punctuation, names, amounts and signs may not. "
+                f"Expected {str(expected)[:700]}; received {str(received)[:700]}. "
+                "Correct this request. For a narrative state with additional visible text, explicitly provide "
+                "content_state.name and its complete required_visible_text, preserving fixed brief wording. "
+                "Keep the shared brief and earlier candidates unchanged."
             )
+
+    @staticmethod
+    def text_plate_wording(lines: Sequence[str]) -> str:
+        """Tolerate only line-edge layout decoration; body punctuation is content."""
+        normalized: list[str] = []
+        for line in lines:
+            value = re.sub(r"[_＿─━]{2,}$", "", line.strip()).rstrip()
+            if value.endswith((":", "：")):
+                value = value[:-1].rstrip()
+            normalized.append(value)
+        return "".join(normalized)
+
+    @staticmethod
+    def _draw_text_plate_elements(sheet: Image.Image, request: AssetTextPlateComposeRequest, font_source: str, *, text_field: str = "text_blocks") -> None:
+        draw = ImageDraw.Draw(sheet)
+        width, height = sheet.size
+        for index, block in enumerate(request.text_blocks):
+            x, y, box_width, box_height = block.content_box
+            left, top = round(x * width), round(y * height)
+            right, bottom = round((x + box_width) * width), round((y + box_height) * height)
+            font = ImageFont.truetype(font_source, block.font_size)
+            bounds = draw.textbbox((0, 0), block.text, font=font, stroke_width=request.stroke_width)
+            ink_width, ink_height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+            if ink_width > right - left or ink_height > bottom - top:
+                raise AssetWorkbenchConflict(
+                    f"/request/{text_field}/{index}: text {block.text!r} needs {ink_width}x{ink_height} pixels "
+                    f"at font_size={block.font_size}; content_box provides {right-left}x{bottom-top}. "
+                    "Enlarge this content_box, reduce this font_size, or split the same words into ordered blocks. "
+                    "No text was clipped and no asset version was saved."
+                )
+            free_x, free_y = right - left - ink_width, bottom - top - ink_height
+            offset_x = 0 if block.text_align == "left" else free_x if block.text_align == "right" else free_x // 2
+            offset_y = 0 if block.vertical_align == "top" else free_y if block.vertical_align == "bottom" else free_y // 2
+            draw.text((left + offset_x - bounds[0], top + offset_y - bounds[1]), block.text, font=font,
+                fill=block.color or request.foreground_color, stroke_width=request.stroke_width,
+                stroke_fill=request.stroke_color)
+        for index, line in enumerate(request.lines):
+            start = (round(line.start[0] * (width - 1)), round(line.start[1] * (height - 1)))
+            end = (round(line.end[0] * (width - 1)), round(line.end[1] * (height - 1)))
+            margin = line.width // 2
+            if min(start[0], end[0]) < margin or min(start[1], end[1]) < margin or max(start[0], end[0]) >= width - margin or max(start[1], end[1]) >= height - margin:
+                raise AssetWorkbenchConflict(
+                    f"/request/lines/{index}: stroke width={line.width} extends beyond the canvas; move the endpoints inward or reduce width."
+                )
+            draw.line([start, end], fill=line.color or request.foreground_color, width=line.width)
 
     @staticmethod
     def _text_plate_font(visible_text: list[str]) -> tuple[str, str]:
@@ -2019,6 +2281,13 @@ class AssetWorkbench:
         assert isinstance(rgba, tuple) and len(rgba) == 4
         sheet = Image.new("RGBA" if rgba[3] < 255 else "RGB", (width, height), request.background_color)
         draw = ImageDraw.Draw(sheet)
+        if request.text_blocks:
+            try:
+                AssetWorkbench._draw_text_plate_elements(sheet, request, font_source)
+                sheet.save(destination, format="PNG", optimize=False, compress_level=9)
+            finally:
+                sheet.close()
+            return width, height
         selected: tuple[
             ImageFont.FreeTypeFont,
             ImageFont.FreeTypeFont | None,
@@ -2046,7 +2315,7 @@ class AssetWorkbench:
                     continue
                 for line in request.exact_lines:
                     bounds = draw.textbbox((0, 0), line, font=body_font)
-                    line_heights.append(max(1, int(bounds[3] - bounds[1])))
+                    line_heights.append(body_size if not line else max(1, int(bounds[3] - bounds[1])))
                 line_spacing = max(8, body_size // 2)
                 body_height = sum(line_heights) + line_spacing * max(
                     0, len(line_heights) - 1
@@ -2120,6 +2389,7 @@ class AssetWorkbench:
                 cursor_y += line_height
                 if index != len(request.exact_lines) - 1:
                     cursor_y += line_spacing
+            AssetWorkbench._draw_text_plate_elements(sheet, request, font_source)
             sheet.save(destination, format="PNG", optimize=False, compress_level=9)
         except OSError as exc:
             destination.unlink(missing_ok=True)

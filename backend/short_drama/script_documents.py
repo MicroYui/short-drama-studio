@@ -10,7 +10,7 @@ typed product logic.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -166,6 +166,10 @@ class EpisodeScenePatch(DomainModel):
     prop_ids: list[str] = Field(default_factory=list[str])
     continuity_in: SceneContinuitySummary
     continuity_out: SceneContinuitySummary
+    state_source: Literal["OUTLINE", "SCREENPLAY"] = Field(default="OUTLINE", description=(
+        "Whether summary and continuity were copied from a plan or authored from the actual screenplay. "
+        "Historical patches without this field remain OUTLINE and must not be treated as fulfilled events."
+    ))
     lines: list[PlannedDialogueLine] = Field(
         default_factory=list[PlannedDialogueLine],
         max_length=500,

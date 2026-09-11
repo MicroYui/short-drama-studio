@@ -8,10 +8,12 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
+from short_drama.agent_runtime.context_markers import context_marker, context_read_contract
 from short_drama.agent_runtime.store import AgentRuntimeStore
 from short_drama.agent_runtime.token_budget import ContextBudget, count_text_tokens
 from short_drama.studio_trace import record_trace
 from short_drama.agent_runtime.execution_control import execution_boundary
+from short_drama.agent_runtime.input_references import project_visible_artifact_refs
 from short_drama.providers.openai_compatible_language_client import LanguageProviderClient, LanguageProviderContextWindowError
 
 
@@ -67,7 +69,7 @@ def _candidates(payload: dict[str, JsonValue]) -> list[str]:
                 paths.extend(f"/current_plan/steps/{index}/{key}" for key in ("arguments", "instructions") if key in step)
     working = payload.get("working_set")
     if isinstance(working, dict):
-        for key in ("read_observations", "tool_attempt_observations", "entities", "tool_checkpoints", "artifact_refs"):
+        for key in ("read_observations", "tool_attempt_observations", "completion_handoffs", "entities", "tool_checkpoints", "artifact_refs"):
             values = working.get(key)
             if isinstance(values, list):
                 if key in {"entities", "tool_checkpoints", "artifact_refs"}:
@@ -106,6 +108,13 @@ class ModelInputCompiler:
                 payload: dict[str, JsonValue], max_output_tokens: int,
                 force_compact: bool = False) -> PreparedModelInput:
         prepared = deepcopy(payload)
+        read_contract = context_read_contract(project_id=project_id, run_id=run_id)
+        working = prepared.get("working_set")
+        if isinstance(working, dict) and working.get("context_read") == read_contract:
+            # Keep one API explanation outside the sections that may be
+            # externalized. Only move our own generated contract, not user data.
+            working.pop("context_read")
+            prepared["context_read"] = read_contract
         instruction_tokens = count_text_tokens(instructions)
         original_text = json_text(prepared)
         original_tokens = instruction_tokens + count_text_tokens(original_text)
@@ -120,7 +129,7 @@ class ModelInputCompiler:
         count = 0
         snapshot_id: str | None = None
         if current_tokens > threshold or force_compact:
-            collection_fallbacks = {"/working_set/read_observations", "/working_set/tool_attempt_observations"}
+            collection_fallbacks = {"/working_set/read_observations", "/working_set/tool_attempt_observations", "/working_set/completion_handoffs"}
             candidates = sorted(
                 ((count_text_tokens(json_text(pointer_value(prepared, path))), path) for path in _candidates(prepared)),
                 key=lambda item: (item[1] in collection_fallbacks, -item[0]),
@@ -137,16 +146,7 @@ class ModelInputCompiler:
                     self.store.save_context_snapshot(snapshot_id, run_id, payload)
                     record_trace("context.offloaded", {"snapshot_id": snapshot_id, "run_id": run_id, "payload": payload})
                 value = pointer_value(prepared, path)
-                marker: dict[str, JsonValue] = {
-                    "context_ref": snapshot_id,
-                    "pointer": path,
-                    "estimated_tokens": size,
-                    "read": {"tool_name": "agent.read_context", "arguments": {
-                        "project_id": project_id, "run_id": run_id, "snapshot_id": snapshot_id,
-                        "pointer": path, "offset": 0, "limit": 6000,
-                    }},
-                    "note": "Exact saved observation; read the required fields before relying on them. Refresh canonical content before editing.",
-                }
+                marker = context_marker(snapshot_id, path, estimated_tokens=size)
                 if isinstance(value, dict):
                     marker["keys"] = cast(JsonValue, list(value)[:24])
                     for key in ("id", "kind", "tool_name", "status", "source_sequence"):
@@ -157,9 +157,14 @@ class ModelInputCompiler:
                 if count_text_tokens(json_text(marker)) >= size:
                     continue
                 _replace(prepared, path, marker)
+                prepared["context_read"] = read_contract
                 count += 1
                 current_tokens = instruction_tokens + count_text_tokens(json_text(prepared))
+        # Only share references that remain visible after offloading. Persisted
+        # snapshots retain the original complete Tool envelopes and bodies.
+        prepared = project_visible_artifact_refs(prepared)
         text = json_text(prepared)
+        current_tokens = instruction_tokens + count_text_tokens(text)
         record_trace("context.prepared", {
             "run_id": run_id, "window_tokens": self.budget.window_tokens,
             "compact_at_tokens": self.budget.compact_at_tokens, "target_tokens": target,

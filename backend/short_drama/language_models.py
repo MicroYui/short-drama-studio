@@ -51,12 +51,22 @@ class H3GenerationUnitContextResponse(DomainModel):
     selection_guidance: str = (
         "Candidates are an inventory, not a request. Choose the route and the "
         "smallest sufficient ordered subset for this unit. Source locators come "
-        "from approved current AssetVersions; copy them without guessing. "
+        "from current usable AssetVersions explicitly selected for the task; copy them without guessing. "
+        "SUBJECT_IDENTITY/SCENE_IDENTITY/PROP_IDENTITY images transfer reusable content. "
+        "COMPOSITION/LAYOUT_GUIDE reference_image inputs are soft Picture anchors for staging, "
+        "visible state or shot order, not extra people or hard first/last frames. "
+        "For reliable starting composition, derive and inspect a complete scene frame with the "
+        "existing image tools, then choose FRAME_FIRST with only that first_frame image. "
+        "H3 cannot mix hard first/last-frame roles with reference media. "
+        "Use video.extract_frame for a real Take frame when continuity benefits; source defects "
+        "must be corrected before propagating it. No keyframe count or extra review round is mandatory. "
         "Read the next unit separately; full project and prior-stage reads are unnecessary."
     )
 
 
 class LanguagePromptCompileRequest(DomainModel):
+    resolution: str | None = None
+    aspect_ratio: str | None = None
     shot_id: str | None = Field(default=None, min_length=1)
     generation_plan_document_id: str | None = Field(default=None, min_length=1)
     generation_plan_version_id: str | None = Field(default=None, min_length=1)
@@ -99,6 +109,8 @@ class LanguagePromptCompileRequest(DomainModel):
 
 
 class LanguagePromptCompileResponse(DomainModel):
+    resolution: str = "768P"
+    aspect_ratio: str | None = None
     candidate_id: str | None = None
     provider: str = "openai-compatible"
     model: str = LANGUAGE_MODEL

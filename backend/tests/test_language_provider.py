@@ -817,7 +817,9 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
         "transition_out": "硬切",
     }
     assert payload["actual_previous_media_boundary"] is None
-    assert payload["production_rules"] == {
+    assert "dialogue_spans" in payload["production_rules"]["dialogue"]
+    assert "speaker_id" in payload["production_rules"]["dialogue"]
+    assert {key: value for key, value in payload["production_rules"].items() if key != "dialogue"} == {
         "route_selected_upstream": True,
         "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
         "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
@@ -1039,6 +1041,7 @@ def test_language_prompt_binds_route_media_descriptors() -> None:
             "subject": "林夏定妆",
             "subject_asset_id": linxia.id,
             "reference_tags": [],
+            "image_reference_role": None,
             "purpose": "identity, wardrobe, object appearance, or location geometry",
             "asset_version_id": version.id,
             "asset_name": "林夏定妆",

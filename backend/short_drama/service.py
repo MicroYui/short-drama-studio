@@ -68,6 +68,7 @@ from short_drama.agent_runtime import (
     WorkOrderProgressEntry,
 )
 from short_drama.audio_inspection import AudioInspector, AudioSemanticService, AudioTimingService
+from short_drama.native_transcription import NativeTranscriptionRequest, NativeTranscriptionResponse, transcribe_editorial_native
 from short_drama.subtitle_alignment import (
     NativeSubtitleAlignmentRequest, NativeSubtitleAlignmentResponse, align_native_subtitles,
 )
@@ -82,6 +83,7 @@ from short_drama.change_executor import (
     SemanticChangeApplyResponse,
     prepare_semantic_change,
 )
+from short_drama.timeline_dialogue import planned_dialogue_cues
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
@@ -138,7 +140,10 @@ from short_drama.image_capabilities import ImageProviderCapabilityResponse
 from short_drama.image_models import (
     AssetBriefUpdateRequest,
     AssetCreateRequest,
+    AssetBatchCreateRequest,
+    AssetBatchMutationResponse,
     AssetImportLocalRequest,
+    AssetImageCropRequest,
     AssetImportUrlRequest,
     AssetMutationResponse,
     AssetReferenceSheetCellRequest,
@@ -166,6 +171,8 @@ from short_drama.language_models import (
     LanguageProviderConfigUpdate,
 )
 from short_drama.h3_group_operation import H3GroupOperationRequest, H3GroupOperationResponse
+from short_drama.media_frame_asset import TakeFrameAssetRequest, TakeFrameAssetResponse
+from short_drama.providers.h3_output_format import h3_prompt_document, resolve_h3_output_format
 from short_drama.hierarchical_script import (
     SceneUpstreamReplanTarget,
     assemble_written_scenes,
@@ -195,7 +202,6 @@ from short_drama.models import (
     AssetDerivationReference,
     AssetKind,
     AssetLayoutProfile,
-    AssetPresentationMode,
     AssetVersion,
     AssetMediaType,
     CapabilitySnapshot,
@@ -481,6 +487,7 @@ from short_drama.reference_planner import (
     usable_reference_pack_entries,
 )
 from short_drama.providers.h3_config import H3ProviderConfigStore
+from short_drama.providers.h3_dialogue_spans import assert_complete_dialogue_request
 from short_drama.providers.h3_language_prompt import (
     LanguagePromptValidationError,
     apply_language_prompt_section_repair,
@@ -499,6 +506,7 @@ from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
     build_h3_prompt,
     compile_h3_request,
+    validate_h3_audio_durations,
     validate_h3_inputs,
     validate_h3_probe,
 )
@@ -736,6 +744,16 @@ def _log_image_task_transition(
         status=task.status.value,
         error_kind=task.error_code,
     )
+    if previous is None or (previous.status, previous.error_code) != (task.status, task.error_code):
+        record_trace("provider.image_generation", {
+            "task_id": task.id, "project_id": task.project_id, "asset_id": task.asset_id,
+            "provider": task.provider, "model": task.model, "operation": task.operation.value,
+            "status": task.status.value, "provider_task_id": task.provider_request_id,
+            "output_version_id": task.output_version_id, "output_path": task.output_path,
+            "submitted_at": task.submitted_at, "finished_at": task.finished_at,
+            "error_code": task.error_code, "error_message": task.error_message,
+            "usage": task.usage.model_dump(mode="json") if task.usage is not None else None,
+        })
 
 
 class ShortDramaService:
@@ -867,7 +885,7 @@ class ShortDramaService:
         self,
         run_id: str,
         request: AgentRunAdvanceRequest,
-        *, advance_workers: bool = True,
+        *, advance_workers: bool = True, allow_replanning: bool = True,
     ) -> AgentAdvanceResponse:
         run = self.agent_runtime.store.get_run(run_id)
         if run is None:
@@ -909,7 +927,7 @@ class ShortDramaService:
                     ],
                 )
             request = request.model_copy(update={"max_actions": 1})
-        return self.production_manager.advance(run_id, request)
+        return self.production_manager.advance(run_id, request, allow_replanning=allow_replanning)
 
     def advance_agent_team(self, run_id: str, *, continue_until_handoff: bool = False,
                            wait_for_completion: bool = True, blocked_work_order_ids: set[str] | None = None) -> TeamExecutionBatch:
@@ -6401,12 +6419,15 @@ class ShortDramaService:
                 STORYBOARD_DOCUMENT_KIND,
             )
             current_version = self._production_document_version(production_document)
-            if request.base_version_id != current_version.id:
-                raise WorkflowConflictError(
-                    "Storyboard patch is based on a stale ProductionDocument version"
-                )
             current = self._parse_storyboard(current_version)
             try:
+                if request.base_version_id != current_version.id:
+                    from short_drama.storyboard_patch import validate_storyboard_patch_base
+
+                    base = self._parse_storyboard(self._production_document_version(
+                        production_document, request.base_version_id,
+                    ))
+                    validate_storyboard_patch_base(base, current, request)
                 storyboard = apply_storyboard_patch(current, request)
             except ValueError as exc:
                 raise WorkflowConflictError(str(exc)) from exc
@@ -6418,7 +6439,7 @@ class ShortDramaService:
             result = self._revise_production_document_locked(
                 document,
                 production_document_id=production_document.id,
-                base_version_id=request.base_version_id,
+                base_version_id=current_version.id,
                 payload=production_document_payload(storyboard),
                 source_artifact_refs=self._merge_production_document_refs(
                     self._storyboard_source_refs(document, storyboard),
@@ -7108,6 +7129,12 @@ class ShortDramaService:
                                 work_item.import_intent.source_asset_id,
                                 work_item.import_intent.source_asset_version_id,
                             )
+                        )
+                    if work_item.text_plate_intent is not None and work_item.text_plate_intent.base_version_id is not None:
+                        base_id = work_item.text_plate_intent.base_version_id
+                        selected_source_versions.update(
+                            (asset.id, version.id) for asset in document.assets for version in asset.versions
+                            if version.id == base_id
                         )
 
             source_intake: list[AssetWorkSourceIntake] = []
@@ -9295,6 +9322,24 @@ class ShortDramaService:
             }
         )
         if unknown_shot_ids:
+            latest_storyboard = self._parse_storyboard(
+                self._production_document_version(storyboard_document)
+            )
+            if (
+                storyboard_version.id != storyboard_document.current_version_id
+                and set(unknown_shot_ids).issubset({shot.id for shot in latest_storyboard.shots})
+            ):
+                raise WorkflowConflictError(
+                    "AssetPlan references shots that exist in the current Storyboard, "
+                    f"but its storyboard_version_id is {storyboard_version.id}: "
+                    + ", ".join(unknown_shot_ids)
+                    + ". To use that current source, include a plan-level field_patches "
+                    "operation in the same artifact.patch_asset_plan request: "
+                    + json.dumps({"op": "replace", "path": "/storyboard_version_id",
+                                  "value": storyboard_document.current_version_id})
+                    + ". source_artifact_refs records provenance; it does not replace "
+                    "the AssetPlan source fields. Retain the other intended changes."
+                )
             raise WorkflowConflictError(
                 "AssetPlan references unknown Storyboard shots: "
                 + ", ".join(unknown_shot_ids)
@@ -9440,7 +9485,6 @@ class ShortDramaService:
             for item in asset_plan.items
             for work_item in item.work_items
         ]
-        work_index = {work_item.id: index for index, work_item in enumerate(work_order)}
         canonical_work_by_item: dict[str, AssetPlanWorkItem] = {}
         for item in asset_plan.items:
             canonical_work = [
@@ -9533,15 +9577,9 @@ class ShortDramaService:
                     elif work_item.operation == AssetPlanOperation.TEXT_PLATE:
                         intent = work_item.text_plate_intent
                         assert intent is not None
-                        AssetTextPlateComposeRequest(
+                        intent.to_compose_request(
                             size=work_item.size,
-                            background_color=intent.background_color,
-                            foreground_color=intent.foreground_color,
-                            title=intent.title,
-                            exact_lines=list(intent.exact_lines),
-                            layout_description=intent.layout_description,
                             descriptor="AssetPlan execution-contract preflight",
-                            parent_version_id=intent.parent_version_id,
                         )
                 except ValueError as exc:
                     raise WorkflowConflictError(
@@ -9602,13 +9640,10 @@ class ShortDramaService:
                     )
                 continue
             canonical_work = canonical_work_by_item.get(subject_item_id)
-            if (
-                canonical_work is None
-                or work_index[canonical_work.id] >= work_index[work_item.id]
-            ):
+            if canonical_work is None:
                 raise WorkflowConflictError(
                     f"Supplemental AssetPlan work item {work_item.id} requires one "
-                    f"earlier canonical work item for subject {subject_item_id}"
+                    f"canonical work item for subject {subject_item_id}"
                 )
             if (
                 lineage_root is None
@@ -9617,6 +9652,11 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     f"Supplemental AssetPlan work item {work_item.id} must use "
                     f"canonical work item {canonical_work.id} as its lineage root"
+                )
+            if canonical_work.id not in work_item.dependency_ids:
+                raise WorkflowConflictError(
+                    f"Supplemental AssetPlan work item {work_item.id} must declare "
+                    f"canonical work item {canonical_work.id} as a dependency"
                 )
 
         text_plate_brief_mismatches: list[JsonValue] = []
@@ -9631,81 +9671,29 @@ class ShortDramaService:
                 ):
                     continue
                 intent = work_item.text_plate_intent
-                if len(set(intent.exact_lines)) != len(intent.exact_lines):
-                    raise WorkflowConflictError(
-                        f"TEXT_PLATE AssetPlan work item {work_item.id} cannot repeat "
-                        "exact_lines"
+                request = intent.to_compose_request(size=work_item.size, descriptor="AssetPlan text-plate preflight")
+                try:
+                    plate, _base = self.asset_workbench.resolve_text_plate_content(project_document, request,
+                        asset_id=work_item.completed_asset_id or work_item.candidate_asset_id or item.completed_asset_id)
+                    self.asset_workbench.validate_text_plate_contract(
+                        item.asset_kind, item.brief, plate, asset_id=item.id,
                     )
-                if intent.title is not None and intent.title in intent.exact_lines:
-                    raise WorkflowConflictError(
-                        f"TEXT_PLATE AssetPlan work item {work_item.id} cannot repeat "
-                        "its title inside exact_lines"
-                    )
-                expected_text = (
-                    ([intent.title] if intent.title is not None else [])
-                    + list(intent.exact_lines)
-                )
-                if (
-                    item.brief is not None
-                    and item.brief.presentation_mode
-                    == AssetPresentationMode.SCREEN_CONTENT_PLATE
-                    and item.brief.required_visible_text == expected_text
-                ):
-                    continue
-                mismatch: dict[str, JsonValue] = {
-                    "item_id": item.id,
-                    "work_item_id": work_item.id,
-                    "expected_presentation_mode": (
-                        AssetPresentationMode.SCREEN_CONTENT_PLATE.value
-                    ),
-                    "actual_presentation_mode": (
-                        None
-                        if item.brief is None
-                        or item.brief.presentation_mode is None
-                        else item.brief.presentation_mode.value
-                    ),
-                    "expected_required_visible_text": cast(
-                        JsonValue,
-                        expected_text,
-                    ),
-                    "actual_required_visible_text": (
-                        []
-                        if item.brief is None
-                        else cast(
-                            JsonValue,
-                            item.brief.required_visible_text,
-                        )
-                    ),
-                }
-                if item.brief is not None:
-                    suggested_patches: list[JsonValue] = [
-                        {
-                            "item_id": item.id,
-                            "op": "add",
-                            "path": "/brief/presentation_mode",
-                            "value": (
-                                AssetPresentationMode.SCREEN_CONTENT_PLATE.value
-                            ),
-                        },
-                        {
-                            "item_id": item.id,
-                            "op": "add",
-                            "path": "/brief/required_visible_text",
-                            "value": cast(JsonValue, expected_text),
-                        },
-                    ]
-                    mismatch["suggested_patches"] = suggested_patches
+                except AssetWorkbenchConflict as exc:
+                    mismatch: dict[str, JsonValue] = {
+                        "item_id": item.id,
+                        "work_item_id": work_item.id,
+                        "field": "/text_plate_intent",
+                        "error": str(exc),
+                        "actual_required_visible_text": [] if item.brief is None else cast(JsonValue, item.brief.required_visible_text),
+                        "rendered_visible_text": cast(JsonValue, request.required_visible_text()),
+                        "repair_instruction": "Correct this work item's text_plate_intent. Declare content_state for this candidate's explicit additions while preserving fixed brief wording; keep the physical carrier and other states unchanged.",
+                    }
+                    text_plate_brief_mismatches.append(mismatch)
                 else:
-                    mismatch["repair_instruction"] = (
-                        "The item has no brief container, so nested brief patches "
-                        "cannot be applied safely. Inspect only this item before "
-                        "adding a complete CoreAssetBrief."
-                    )
-                text_plate_brief_mismatches.append(mismatch)
+                    continue
         if text_plate_brief_mismatches:
             raise WorkflowConflictError(
-                "TEXT_PLATE AssetPlan work items do not exactly match their "
-                "SCREEN_CONTENT_PLATE briefs: "
+                "TEXT_PLATE AssetPlan work items do not match their text-plate contracts: "
                 + json.dumps(
                     text_plate_brief_mismatches,
                     ensure_ascii=False,
@@ -9818,20 +9806,18 @@ class ShortDramaService:
                             f"TEXT_PLATE AssetPlan work item {work_item.id} cannot use "
                             "image references"
                         )
-                    expected_text = (
-                        ([intent.title] if intent.title is not None else [])
-                        + list(intent.exact_lines)
-                    )
-                    if (
-                        item.brief is None
-                        or item.brief.presentation_mode
-                        != AssetPresentationMode.SCREEN_CONTENT_PLATE
-                        or item.brief.required_visible_text != expected_text
-                    ):
-                        raise WorkflowConflictError(
-                            f"TEXT_PLATE AssetPlan work item {work_item.id} must exactly "
-                            "match its SCREEN_CONTENT_PLATE brief"
+                    try:
+                        plate, _base = self.asset_workbench.resolve_text_plate_content(project_document,
+                            intent.to_compose_request(size=work_item.size, descriptor="AssetPlan text-plate preflight"),
+                            asset_id=work_item.completed_asset_id or work_item.candidate_asset_id or item.completed_asset_id)
+                        self.asset_workbench.validate_text_plate_contract(
+                            item.asset_kind, item.brief, plate,
+                            asset_id=item.id,
                         )
+                    except AssetWorkbenchConflict as exc:
+                        raise WorkflowConflictError(
+                            f"TEXT_PLATE AssetPlan work item {work_item.id}: {exc}"
+                        ) from exc
                 elif (
                     work_item.import_intent is not None
                     or work_item.compose_intent is not None
@@ -9855,17 +9841,35 @@ class ShortDramaService:
                 if (
                     completed is not None
                     and work_item.operation == AssetPlanOperation.TEXT_PLATE
-                    and (
-                        completed[0].brief is None
-                        or completed[0].brief.presentation_mode
-                        != AssetPresentationMode.SCREEN_CONTENT_PLATE
-                        or completed[1].text_plate is None
-                    )
                 ):
-                    raise WorkflowConflictError(
-                        f"Completed TEXT_PLATE work item {work_item.id} must reference "
-                        "a deterministic screen-content plate version"
-                    )
+                    plate = completed[1].text_plate
+                    if plate is None:
+                        raise WorkflowConflictError(
+                            f"Completed TEXT_PLATE work item {work_item.id} must reference "
+                            "a deterministic text-plate version"
+                        )
+                    assert work_item.text_plate_intent is not None
+                    try:
+                        intended, base = self.asset_workbench.resolve_text_plate_content(project_document,
+                            work_item.text_plate_intent.to_compose_request(size=work_item.size, descriptor="AssetPlan completed text plate"),
+                            asset_id=completed[0].id)
+                        self.asset_workbench.validate_text_plate_contract(
+                            completed[0].kind, completed[0].brief, plate, asset_id=completed[0].id,
+                        )
+                    except AssetWorkbenchConflict as exc:
+                        raise WorkflowConflictError(f"Completed TEXT_PLATE work item {work_item.id}: {exc}") from exc
+                    if (
+                        plate.content_state != intended.content_state
+                        or self.asset_workbench.text_plate_wording(plate.required_visible_text())
+                        != self.asset_workbench.text_plate_wording(intended.required_visible_text())
+                    ):
+                        raise WorkflowConflictError(
+                            f"Completed TEXT_PLATE work item {work_item.id} references AssetVersion {completed[1].id} "
+                            "with different content_state or exact visible wording; select this work's matching candidate, "
+                            "keeping other narrative states unchanged."
+                        )
+                    if base is not None and not any(ref.asset_version_id == base.id for ref in completed[1].derivation_references):
+                        raise WorkflowConflictError(f"Completed TEXT_PLATE work item {work_item.id} did not use base_version_id={base.id}; select the actual appended candidate")
                 for reference in work_item.ordered_references:
                     validate_asset_version(
                         reference.asset_id,
@@ -10723,6 +10727,15 @@ class ShortDramaService:
             raise ProviderOperationError(str(exc)) from exc
         return self.language_config.response()
 
+    @staticmethod
+    def _h3_output_format(*, route: VideoGenerationRoute, resolution: str = "768P",
+                          aspect_ratio: str | None = None, default_aspect_ratio: str = "9:16") -> tuple[str, str | None]:
+        try:
+            return resolve_h3_output_format(route=route, resolution=resolution, aspect_ratio=aspect_ratio,
+                                            default_aspect_ratio=default_aspect_ratio)
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
     def compile_h3_prompt_with_language_model(
         self,
         project_id: str,
@@ -10740,6 +10753,9 @@ class ShortDramaService:
             raise ArtifactNotFoundError(request.shot_id)
         duration = request.duration_seconds or math.ceil(shot.duration_seconds)
         media_inputs = self._resolve_approved_asset_inputs(document, request.media_inputs)
+        resolution, aspect_ratio = self._h3_output_format(route=request.route, resolution=request.resolution or "768P",
+            aspect_ratio=request.aspect_ratio, default_aspect_ratio=document.project.aspect_ratio)
+        document = h3_prompt_document(document, route=request.route, aspect_ratio=aspect_ratio)
         source_prompt = request.source_prompt.strip() if request.source_prompt is not None else None
         if source_prompt == "":
             raise WorkflowConflictError("H3 source prompt is empty")
@@ -10760,6 +10776,7 @@ class ShortDramaService:
         instructions, input_text = build_language_prompt_input(
             document,
             shot,
+            resolution=resolution, aspect_ratio=aspect_ratio,
             route=request.route,
             duration_seconds=duration,
             source_prompt=source_prompt,
@@ -10788,6 +10805,7 @@ class ShortDramaService:
             raise ProviderOperationError(f"{exc}{detail}") from exc
         return LanguagePromptCompileResponse(
             shot_id=shot.id,
+            resolution=resolution, aspect_ratio=aspect_ratio,
             shot_ids=[shot.id],
             method_skill_ids=list(request.method_skill_ids),
             media_inputs=media_inputs,
@@ -10901,11 +10919,6 @@ class ShortDramaService:
                     spec_document, generation_plan.production_spec_version_id
                 )
             )
-            if spec.aspect_ratio != "9:16":
-                raise WorkflowConflictError(
-                    "The current H3 generation-unit pipeline supports a 9:16 "
-                    "ProductionSpec; other aspect ratios need a provider adapter update"
-                )
             return document, generation_plan, unit, shots, spec
 
     def prepare_h3_group(
@@ -10960,6 +10973,9 @@ class ShortDramaService:
     ) -> LanguagePromptCompileResponse:
         document, _plan, unit, shots, spec = self._h3_generation_unit_sources(project_id, request)
         duration = math.ceil(unit.requested_duration_seconds)
+        resolution, aspect_ratio = self._h3_output_format(route=request.route, resolution=request.resolution or unit.resolution or "768P",
+            aspect_ratio=request.aspect_ratio, default_aspect_ratio=spec.aspect_ratio)
+        document = h3_prompt_document(document, route=request.route, aspect_ratio=aspect_ratio)
         if request.duration_seconds not in {None, duration}:
             raise WorkflowConflictError("Prompt duration must match the generation unit")
         media_inputs = self._resolve_approved_asset_inputs(document, request.media_inputs)
@@ -10978,6 +10994,7 @@ class ShortDramaService:
             document,
             unit,
             shots,
+            resolution=resolution, aspect_ratio=aspect_ratio,
             route=request.route,
             duration_seconds=duration,
             production_spec=spec,
@@ -11017,6 +11034,7 @@ class ShortDramaService:
             ) from exc
         return LanguagePromptCompileResponse(
             generation_plan_document_id=request.generation_plan_document_id,
+            resolution=resolution, aspect_ratio=aspect_ratio,
             candidate_id=f"{request.route.value.lower().replace('_', '-')}:{unit.id}",
             generation_plan_version_id=request.generation_plan_version_id,
             generation_unit_id=unit.id,
@@ -11278,6 +11296,27 @@ class ShortDramaService:
             request,
         )
 
+        generation_task = (
+            self.repository.get_image_task(version.image_task_id)
+            if version.image_task_id is not None else None
+        )
+        if generation_task is not None and (
+            generation_task.project_id != project_id
+            or generation_task.asset_id != asset_id
+            or generation_task.output_version_id != version.id
+        ):
+            raise WorkflowConflictError(f"ImageTask does not describe inspected candidate: {version.id}")
+
+        region_versions = {version.id: version, **{item.version.id: item.version for item in inspection_references}}
+        for region in request.regions:
+            region_id = region.asset_version_id or version.id
+            if region_id not in region_versions:
+                raise WorkflowConflictError(
+                    f"regions.asset_version_id is not a candidate or declared inspection reference: {region_id}"
+                )
+            if region_versions[region_id].local_path is None:
+                raise WorkflowConflictError(f"Inspection region requires a locally cached image: {region_id}")
+
         client = self._require_language_client()
         try:
             return inspect_asset_image(
@@ -11287,9 +11326,29 @@ class ShortDramaService:
                 client=client,
                 shot=shot,
                 inspection_references=inspection_references,
+                generation_task=generation_task,
+                request=request,
             )
         except (LanguageProviderError, ValueError) as exc:
             raise ProviderOperationError(str(exc)) from exc
+
+    def asset_version_artifact_refs(
+        self,
+        project_id: str,
+        version_ids: list[str],
+    ) -> list[ArtifactRef]:
+        """Describe the requested immutable versions without selecting current media."""
+
+        document = self._require_project_document(project_id)
+        return [
+            ArtifactRef(
+                project_id=project_id,
+                artifact_type="asset_version",
+                artifact_id=version_id,
+                version=self._find_asset_version(document, version_id)[1].version,
+            )
+            for version_id in dict.fromkeys(version_ids)
+        ]
 
     def asset_inspection_reference_version_refs(
         self,
@@ -11346,7 +11405,7 @@ class ShortDramaService:
                 project_id=document.project.id,
                 reference_role=self._default_image_reference_role(reference_asset.kind),
                 reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
-                purpose="Agent 显式选择的当前已批准母版。",
+                purpose="Agent 显式选择的当前可用参考；DRAFT 不表示已审批，也不阻止本次可见内容比对。",
                 subject_alias=reference_asset.name,
                 source=AssetInspectionReferenceSource.EXPLICIT_CANONICAL,
                 normative_for_declared_role=True,
@@ -11986,6 +12045,7 @@ class ShortDramaService:
         try:
             plan = build_h3_production_route_plan(
                 document=document,
+                resolution=request.resolution, aspect_ratio=request.aspect_ratio,
                 tasks=self.repository.list_tasks(project_id),
                 takes=takes,
                 evidence=self.repository.list_route_evidence(project_id),
@@ -12023,7 +12083,7 @@ class ShortDramaService:
                     else None
                 ),
             )
-        except RoutePlanningError as exc:
+        except (RoutePlanningError, ValueError) as exc:
             raise WorkflowConflictError(str(exc)) from exc
         with self._lock:
             # Independent groups may compile concurrently. Reserve the final
@@ -12276,6 +12336,7 @@ class ShortDramaService:
                 document=document,
                 shot_id=decision.shot_id,
                 route=decision.route,
+                resolution=decision.resolution, aspect_ratio=decision.aspect_ratio,
                 duration_seconds=decision.duration_seconds,
                 prompt=decision.prompt,
                 media_inputs=media_inputs,
@@ -12382,6 +12443,10 @@ class ShortDramaService:
                     )
                     try:
                         from short_drama.studio_references import assert_generation_references
+                        assert_complete_dialogue_request(document, [
+                            self._require_shot_in_document(document, covered_id)
+                            for covered_id in decision.shot_ids or [decision.shot_id]
+                        ])
                         for covered_id in decision.shot_ids or [decision.shot_id]:
                             assert_generation_references(document, self._require_shot_in_document(document, covered_id), media_inputs)
                         validate_h3_probe(
@@ -12488,6 +12553,7 @@ class ShortDramaService:
                         document=document,
                         shot_id=shot.id,
                         route=decision.route,
+                        resolution=decision.resolution, aspect_ratio=decision.aspect_ratio,
                         duration_seconds=decision.duration_seconds,
                         prompt=decision.prompt,
                         media_inputs=media_inputs,
@@ -12839,6 +12905,16 @@ class ShortDramaService:
         except AssetWorkbenchConflict as exc:
             raise WorkflowConflictError(str(exc)) from exc
 
+    def create_assets(self, project_id: str, request: AssetBatchCreateRequest) -> AssetBatchMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        try:
+            assets = self.asset_workbench.create_assets(project_id, request)
+            return AssetBatchMutationResponse(assets=assets, created_asset_ids=[asset.id for asset in assets])
+        except AssetWorkbenchNotFound as exc:
+            raise ProjectNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
     def update_asset_brief(
         self,
         project_id: str,
@@ -12906,6 +12982,18 @@ class ShortDramaService:
     ) -> AssetMutationResponse:
         try:
             version = self.asset_workbench.import_url(project_id, asset_id, request)
+            return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def crop_asset_image(
+        self, project_id: str, asset_id: str, request: AssetImageCropRequest,
+    ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        try:
+            version = self.asset_workbench.crop_image(project_id, asset_id, request)
             return self._asset_mutation_response(project_id, version.id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
@@ -13274,6 +13362,9 @@ class ShortDramaService:
         try:
             compiled = compile_h3_request(
                 route=request.route,
+                resolution=request.resolution, aspect_ratio=self._h3_output_format(route=request.route,
+                    resolution=request.resolution, aspect_ratio=request.aspect_ratio,
+                    default_aspect_ratio=_document.project.aspect_ratio)[1],
                 prompt=prompt,
                 duration_seconds=duration,
                 media_inputs=media_inputs,
@@ -13304,6 +13395,9 @@ class ShortDramaService:
                 document=document,
                 shot_id=shot.id,
                 route=request.route,
+                resolution=request.resolution, aspect_ratio=self._h3_output_format(route=request.route,
+                    resolution=request.resolution, aspect_ratio=request.aspect_ratio,
+                    default_aspect_ratio=document.project.aspect_ratio)[1],
                 duration_seconds=duration,
                 prompt=prompt,
                 media_inputs=media_inputs,
@@ -13520,6 +13614,7 @@ class ShortDramaService:
                     document=document,
                     shot_id=task.shot_id,
                     route=run.route,
+                    resolution=task.resolution, aspect_ratio=run.aspect_ratio,
                     duration_seconds=int(task.requested_duration_seconds),
                     prompt=run.prompt,
                     media_inputs=run.media_inputs,
@@ -13698,6 +13793,17 @@ class ShortDramaService:
             document.project.updated_at = now
             self.repository.save_project(document)
             return self._aggregate(document)
+
+    def extract_take_frame(
+        self, project_id: str, request: TakeFrameAssetRequest,
+    ) -> TakeFrameAssetResponse:
+        from short_drama.media_frame_asset import extract_take_frame
+
+        self._require_project_mutation_allowed(project_id)
+        try:
+            return extract_take_frame(self, project_id, request, mutation_lock=self._lock)
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
 
     def get_take_video_inspection(
         self,
@@ -13942,6 +14048,16 @@ class ShortDramaService:
             report=report,
             project=self.get_project(project_id),
         )
+
+    def transcribe_current_native_audio(
+        self, project_id: str, request: NativeTranscriptionRequest,
+    ) -> NativeTranscriptionResponse:
+        with self._lock:
+            document = self._require_project_document(project_id).model_copy(deep=True)
+        timing_service = self.audio_semantic_service
+        if not isinstance(timing_service, AudioTimingService):
+            raise WorkflowConflictError("Configured audio service does not provide native speech timestamps")
+        return transcribe_editorial_native(self, document=document, request=request, timing_service=timing_service)
 
     def align_current_native_subtitles(
         self, project_id: str, request: NativeSubtitleAlignmentRequest,
@@ -14849,9 +14965,9 @@ class ShortDramaService:
             video_clips: list[TimelineVideoClip] = []
             audio_clips: list[TimelineAudioClip] = []
             subtitle_cues: list[SubtitleCue] = []
-            line_by_id = {line.id: line for line in current_script.lines}
             cursor = 0.0
-            for shot in sorted(timeline_shots, key=lambda item: item.sequence):
+            ordered_shots = sorted(timeline_shots, key=lambda item: item.sequence)
+            for shot in ordered_shots:
                 take = selected_by_shot[shot.id]
                 source_task = source_task_by_shot[shot.id]
                 source_window = take.source_window_for_shot(shot.id)
@@ -14904,31 +15020,16 @@ class ShortDramaService:
                             ),
                         )
                     )
-                    lines = [
-                        line_by_id[line_id]
-                        for line_id in shot.dialogue_line_ids
-                        if line_id in line_by_id
-                    ]
-                    if lines:
-                        usable_duration = max(0.5, clip_duration - 1.0)
-                        cue_duration = usable_duration / len(lines)
-                        for index, line in enumerate(lines):
-                            cue_start = cursor + 0.5 + cue_duration * index
-                            cue_end = min(
-                                cursor + clip_duration - 0.25,
-                                cue_start + cue_duration,
-                            )
-                            subtitle_cues.append(
-                                SubtitleCue(
-                                    id=f"subtitle-{shot.id}-{line.id}",
-                                    script_line_id=line.id,
-                                    start_seconds=cue_start,
-                                    end_seconds=cue_end,
-                                    text=line.subtitle_text,
-                                    speaker=line.speaker,
-                                )
-                            )
                 cursor += clip_duration
+            if master_audio is None:
+                caption_groups = (
+                    self._parse_storyboard(self._production_document_version(
+                        self._production_document(document, storyboard_document_id), storyboard_version_id,
+                    )).clip_groups if storyboard_document_id is not None else []
+                )
+                subtitle_cues = planned_dialogue_cues(
+                    ordered_shots, video_clips, current_script.lines, clip_groups=caption_groups,
+                )
             if master_audio is not None:
                 _, master_version, binding, audio_path = master_audio
                 if master_audio_controls_duration:
@@ -14970,6 +15071,24 @@ class ShortDramaService:
                     )
             else:
                 timeline_duration = cursor
+            from short_drama.export_dimensions import source_output_dimensions
+
+            previous_manifest = max(document.manifests, key=lambda item: item.version, default=None)
+            if previous_manifest is not None and not previous_manifest.output_spec.follow_source_dimensions:
+                output_spec = previous_manifest.output_spec.model_copy(deep=True)
+            else:
+                used_take_ids = {item.take_id for item in video_clips}
+                width, height = source_output_dimensions(
+                    [(take.width, take.height) for take in selected_by_shot.values()
+                     if take.id in used_take_ids],
+                    document.project.aspect_ratio,
+                )
+                output_spec = (
+                    previous_manifest.output_spec.model_copy(deep=True)
+                    if previous_manifest is not None else OutputSpec()
+                )
+                output_spec.width, output_spec.height = width, height
+                output_spec.follow_source_dimensions = True
             manifest = TimelineManifest(
                 id=f"{project_id}-manifest-v{version}",
                 project_id=project_id,
@@ -14979,7 +15098,7 @@ class ShortDramaService:
                 video_clips=video_clips,
                 audio_clips=audio_clips,
                 subtitle_cues=subtitle_cues,
-                output_spec=OutputSpec(),
+                output_spec=output_spec,
                 duration_seconds=timeline_duration,
                 approval_status=ApprovalStatus.DRAFT,
                 freshness=Freshness.CURRENT,
@@ -15069,15 +15188,22 @@ class ShortDramaService:
         shot = next((item for item in document.shots if item.id == request.shot_id), None)
         if shot is None:
             raise ArtifactNotFoundError(request.shot_id)
+        try:
+            assert_complete_dialogue_request(document, [shot])
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
         if (
             request.regression_case_id is not None
             and known_regression_case(request.regression_case_id) is None
         ):
             raise ArtifactNotFoundError(request.regression_case_id)
+        _resolution, aspect_ratio = self._h3_output_format(route=request.route, resolution=request.resolution,
+            aspect_ratio=request.aspect_ratio, default_aspect_ratio=document.project.aspect_ratio)
         prompt = (
             request.prompt_override.strip()
             if request.prompt_override is not None
-            else build_h3_prompt(document, shot)
+            else build_h3_prompt(document, shot, route=request.route, duration_seconds=request.duration_seconds,
+                media_inputs=request.media_inputs, aspect_ratio=aspect_ratio)
         )
         duration = request.duration_seconds or math.ceil(shot.duration_seconds)
         media_inputs = self._resolve_approved_asset_inputs(
@@ -15140,6 +15266,10 @@ class ShortDramaService:
                     f"Approved asset version {version.id} has no usable media source"
                 )
             resolved.append(media.model_copy(update={"source": source}))
+        try:
+            validate_h3_audio_durations(document, resolved)
+        except H3CapabilityError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
         return resolved
 
     def _h3_candidate_request_fingerprint(
@@ -15163,6 +15293,8 @@ class ShortDramaService:
         clip_group_id: str | None = None,
         output_slot_id: str | None = None,
         shot_windows: list[GenerationUnitShotWindow] | None = None,
+        resolution: str = "768P",
+        aspect_ratio: str | None = None,
     ) -> str:
         """Return the stable identity of one exact H3 candidate request."""
 
@@ -15173,7 +15305,7 @@ class ShortDramaService:
             "project_id": document.project.id,
             "shot_id": shot_id,
             "route": route.value,
-            "resolution": "768P",
+            "resolution": resolution,
             "duration": duration_seconds,
             "prompt": prompt,
             "media_inputs": [
@@ -15193,6 +15325,11 @@ class ShortDramaService:
             "regression_case_id": regression_case_id,
             "attempt": attempt,
         }
+        _resolution, ratio = self._h3_output_format(route=route, resolution=resolution, aspect_ratio=aspect_ratio)
+        if ratio not in {None, "9:16", "adaptive"}:
+            normalized_request["aspect_ratio"] = ratio
+        elif ratio == "adaptive" and route == VideoGenerationRoute.REFERENCE:
+            normalized_request["aspect_ratio"] = ratio
         if generation_unit_id is not None:
             normalized_request.update(
                 {
@@ -15241,6 +15378,8 @@ class ShortDramaService:
         clip_group_id: str | None = None,
         output_slot_id: str | None = None,
         shot_windows: list[GenerationUnitShotWindow] | None = None,
+        resolution: str = "768P",
+        aspect_ratio: str | None = None,
     ) -> tuple[GenerationTask, H3ProviderRun, RouteEvidence]:
         now = utc_now()
         task_id = f"task-{uuid4().hex}"
@@ -15265,6 +15404,7 @@ class ShortDramaService:
             clip_group_id=clip_group_id,
             output_slot_id=output_slot_id,
             shot_windows=shot_windows,
+            resolution=resolution, aspect_ratio=aspect_ratio,
         )
         copied_windows = [
             item.model_copy(deep=True) for item in (shot_windows or [])
@@ -15282,7 +15422,7 @@ class ShortDramaService:
             provider="minimax",
             model="MiniMax-H3",
             route=route,
-            resolution="768P",
+            resolution=resolution,
             provider_run_id=run_id,
             request_fingerprint=fingerprint,
             input_script_version_id=document.project.current_script_version_id,
@@ -15305,6 +15445,7 @@ class ShortDramaService:
             updated_at=now,
         )
         run = H3ProviderRun(
+            aspect_ratio=aspect_ratio,
             id=run_id,
             task_id=task_id,
             project_id=document.project.id,
@@ -15338,7 +15479,7 @@ class ShortDramaService:
             provider="minimax",
             model="MiniMax-H3",
             route=route,
-            resolution="768P",
+            resolution=resolution,
             purpose=purpose,
             status=EvidenceStatus.AWAITING_OUTPUT,
             created_at=now,

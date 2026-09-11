@@ -12,11 +12,13 @@ from __future__ import annotations
 from copy import deepcopy
 from decimal import Decimal
 from enum import StrEnum
-from typing import cast
+from graphlib import CycleError, TopologicalSorter
+from typing import Literal, cast
 
 from pydantic import Field, JsonValue, model_validator
 
-from short_drama.image_models import AssetReviewPurpose
+from short_drama.dialogue_sequence import ordered_dialogue_line_ids
+from short_drama.image_models import AssetReviewPurpose, AssetTextPlateComposeRequest
 from short_drama.models import (
     ApprovalStatus,
     AssetVersion,
@@ -26,6 +28,7 @@ from short_drama.models import (
     AssetReferenceStrategy,
     AssetSheetInputPolicy,
     AssetStandardView,
+    AssetTextPlateContentState,
     CoreAssetBrief,
     CreativeInputImage,
     DomainModel,
@@ -55,6 +58,8 @@ from short_drama.models import (
     ReferenceRole,
     ShotPlan,
     ScriptVersion,
+    TextPlateLine,
+    TextPlateTextBlock,
 )
 
 
@@ -192,7 +197,11 @@ class ClipGroup(DomainModel):
 
     id: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=500)
-    shot_ids: list[str] = Field(min_length=1)
+    shot_ids: list[str] = Field(min_length=1, description=(
+        "Shots rendered in one request, in order. The same dialogue line ID may "
+        "continue across adjacent Shots in this group as one utterance; it cannot "
+        "continue across a group boundary or a Shot without that line."
+    ))
     # Authored timing can change independently of a provider's render limits.
     duration_seconds: float = Field(gt=0.0, allow_inf_nan=False)
     generation_intent: str = Field(min_length=1, max_length=4000)
@@ -328,12 +337,12 @@ class StoryboardClipGroupDraft(DomainModel):
                 "One draft ClipGroup must stay inside one script scene; "
                 "the WorkOrder may still span multiple scenes"
             )
-        shot_line_ids = [
-            line_id for shot in self.shots for line_id in shot.dialogue_line_ids
-        ]
+        shot_line_ids = ordered_dialogue_line_ids(self.shots, clip_groups=[self.clip_group])
         if shot_line_ids != self.source_range.script_line_ids:
             raise ValueError(
-                "Storyboard draft Shots must preserve the group's source lines in order"
+                "Storyboard draft Shots must preserve the group's source lines in order; "
+                "one line may continue across adjacent Shots in this ClipGroup, "
+                "but non-contiguous repeated occurrences are not one utterance"
             )
         duration = _duration_total(
             [item.duration_seconds for item in self.shots]
@@ -691,6 +700,13 @@ class StoryboardDraftContent(DomainModel):
         source_metadata_deferred = not self.script_line_ids and all(
             not node.source_line_ids for node in self.scene_nodes
         )
+        committed_line_ids = [line_id for group in self.committed_groups
+                              for line_id in group.source_range.script_line_ids]
+        if len(committed_line_ids) != len(set(committed_line_ids)):
+            raise ValueError(
+                "Storyboard draft dialogue line IDs cannot repeat across ClipGroups; "
+                "a continuous utterance must stay in one generated request"
+            )
         nodes_by_id = {item.id: item for item in self.scene_nodes}
         node_order = {item.id: item.sequence for item in self.scene_nodes}
 
@@ -1299,9 +1315,7 @@ def assemble_storyboard_draft(draft: StoryboardDraftContent) -> StoryboardConten
         shots,
         clip_groups,
     )
-    dialogue_line_ids = [
-        line_id for shot in shots for line_id in shot.dialogue_line_ids
-    ]
+    dialogue_line_ids = ordered_dialogue_line_ids(shots, clip_groups=clip_groups)
     if dialogue_line_ids != draft.script_line_ids:
         raise ValueError(
             "Storyboard draft is incomplete: all source lines must be covered in order"
@@ -1362,19 +1376,8 @@ class StoryboardContent(DomainModel):
                 "Storyboard shots must be stored in contiguous sequence order"
             )
 
-        dialogue_line_ids = [
-            line_id for shot in self.shots for line_id in shot.dialogue_line_ids
-        ]
-        if len(dialogue_line_ids) != len(set(dialogue_line_ids)):
-            raise ValueError(
-                "Storyboard dialogue line IDs must be assigned exactly once"
-            )
         if len(self.script_line_ids) != len(set(self.script_line_ids)):
             raise ValueError("Storyboard source script line IDs must be unique")
-        if dialogue_line_ids != self.script_line_ids:
-            raise ValueError(
-                "Storyboard shots must preserve every source script line in order"
-            )
 
         group_ids = [item.id for item in self.clip_groups]
         if len(group_ids) != len(set(group_ids)):
@@ -1385,6 +1388,18 @@ class StoryboardContent(DomainModel):
         if grouped_shot_ids != shot_ids:
             raise ValueError(
                 "Storyboard clip groups must cover every shot exactly once and in order"
+            )
+
+        dialogue_line_ids = ordered_dialogue_line_ids(self.shots, clip_groups=self.clip_groups)
+        if len(dialogue_line_ids) != len(set(dialogue_line_ids)):
+            raise ValueError(
+                "Storyboard dialogue line IDs must be assigned exactly once per utterance; "
+                "only adjacent Shots in one ClipGroup may continue the same line. "
+                "Cross-group or non-contiguous repeated occurrences are invalid"
+            )
+        if dialogue_line_ids != self.script_line_ids:
+            raise ValueError(
+                "Storyboard shots must preserve every source script line in order"
             )
 
         if self.scene_nodes:
@@ -1448,11 +1463,10 @@ class StoryboardContent(DomainModel):
                     raise ValueError(
                         "Storyboard scene node must preserve ClipGroup-to-Shot order"
                     )
-                node_dialogue_line_ids = [
-                    line_id
-                    for shot_id in node.shot_ids
-                    for line_id in shot_by_id[shot_id].dialogue_line_ids
-                ]
+                node_dialogue_line_ids = ordered_dialogue_line_ids(
+                    [shot_by_id[shot_id] for shot_id in node.shot_ids],
+                    clip_groups=[group_by_id[group_id] for group_id in node.clip_group_ids],
+                )
                 if node_dialogue_line_ids != node.source_line_ids:
                     raise ValueError(
                         "Storyboard scene-node Shots must cover its source lines in order"
@@ -1623,37 +1637,36 @@ class AssetPlanComposeIntent(DomainModel):
 class AssetPlanTextPlateIntent(DomainModel):
     """Exact local rendering payload for image.compose_text_plate."""
 
-    background_color: str = Field(min_length=1, max_length=64)
-    foreground_color: str = Field(min_length=1, max_length=64)
+    background_color: str = Field(default="#F5F1E8", min_length=1, max_length=64)
+    foreground_color: str = Field(default="#171717", min_length=1, max_length=64)
+    base_version_id: str | None = Field(default=None, min_length=1, max_length=200)
+    append_text_blocks: list[TextPlateTextBlock] = Field(default_factory=list[TextPlateTextBlock], max_length=64)
+    content_state: AssetTextPlateContentState | None = None
+    content_box: tuple[float, float, float, float] = (0, 0, 1, 1)
+    text_align: Literal["left", "center", "right"] = "left"
+    vertical_align: Literal["top", "center", "bottom"] = "center"
+    stroke_width: int = Field(default=0, ge=0, le=16)
+    stroke_color: str = "#000000"
     title: str | None = Field(default=None, min_length=1, max_length=500)
     exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
+    text_blocks: list[TextPlateTextBlock] = Field(default_factory=list[TextPlateTextBlock], max_length=64)
+    lines: list[TextPlateLine] = Field(default_factory=list[TextPlateLine], max_length=64)
     layout_description: str = Field(min_length=1, max_length=2000)
     parent_version_id: str | None = Field(default=None, min_length=1, max_length=200)
 
     @model_validator(mode="after")
     def validate_exact_copy(self) -> AssetPlanTextPlateIntent:
-        if self.layout_description != self.layout_description.strip():
-            raise ValueError("AssetPlan text-plate layout_description must be trimmed")
-        if self.title is not None and (
-            self.title != self.title.strip()
-            or "\n" in self.title
-            or "\r" in self.title
-        ):
-            raise ValueError("AssetPlan text-plate title must be one trimmed line")
-        normalized = [line.strip() for line in self.exact_lines if line.strip()]
-        if normalized != self.exact_lines:
-            raise ValueError(
-                "AssetPlan text-plate exact_lines must be trimmed and non-empty"
-            )
-        if any("\n" in line or "\r" in line for line in self.exact_lines):
-            raise ValueError(
-                "AssetPlan text-plate exact_lines must contain one visible line each"
-            )
-        if self.title is None and not self.exact_lines:
-            raise ValueError(
-                "AssetPlan text plate requires a title or at least one exact line"
-            )
+        request = self.to_compose_request(size="256x256", descriptor="Validate planned text plate")
+        self.exact_lines = request.exact_lines
         return self
+
+    def to_compose_request(self, *, size: str, descriptor: str) -> AssetTextPlateComposeRequest:
+        payload = self.model_dump(include=set(AssetPlanTextPlateIntent.model_fields),
+            exclude_unset=self.base_version_id is not None)
+        if self.base_version_id is None:
+            payload["size"] = size
+        payload["descriptor"] = descriptor
+        return AssetTextPlateComposeRequest.model_validate(payload)
 
 
 class AssetPlanWorkItem(DomainModel):
@@ -1696,24 +1709,33 @@ class AssetPlanWorkItem(DomainModel):
     ordered_references: list[AssetPlanReference] = Field(
         default_factory=list[AssetPlanReference]
     )
-    dependency_ids: list[str] = Field(default_factory=list[str])
+    dependency_ids: list[str] = Field(
+        default_factory=list[str],
+        description=(
+            "所依赖的全局 work-item ID；允许引用清单中排在后面的工作项，"
+            "但不能引用自身、缺失项或形成循环。列表展示顺序不决定执行顺序。"
+            "依赖本身不注入参考图，实际图像输入仍由 ordered_references 等明确选择。"
+        ),
+    )
     candidate_asset_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=200,
-        description="已实际生成的候选所属 Asset；记录候选不会自动将它选为完成结果。",
+        description="已有媒体候选所属 Asset，可来自生成、导入或本地派生；记录候选不等于选作完成结果。",
     )
     candidate_asset_version_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=200,
-        description="候选媒体的精确版本。Builder 落盘后用局部 patch 记录，供后续选择和恢复复用。",
+        description="已有候选的精确媒体版本，供后续选择和恢复复用；已有文件或QA记录不自动填写 completed_*。",
     )
-    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
+    completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200,
+        description="已明确选作本工作完成结果的 Asset；与 completed_asset_version_id 成对填写。")
     completed_asset_version_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=200,
+        description="已选用且 CURRENT 的可用媒体版本，可为 DRAFT；无需为登记额外批准，不代表其他工作已完成。",
     )
 
     def resolved_output_layout_profile(self) -> AssetLayoutProfile:
@@ -1879,7 +1901,11 @@ class AssetPlanItem(DomainModel):
     """One explicit anchor, text-only, or reuse decision in an AssetPlan."""
 
     id: str = Field(min_length=1, max_length=200)
-    disposition: AssetPlanDisposition
+    disposition: AssetPlanDisposition = Field(description=(
+        "ANCHOR：尚需准备或选定完成媒体，可登记已有 work-item candidate_*，不意味着重新生成。"
+        "REUSE_EXISTING：已明确选定可用媒体，必须填 item 的 completed_asset_id 和 completed_asset_version_id。"
+        "TEXT_ONLY：只保留文字，不含 work_items 或完成媒体。"
+    ))
     asset_kind: AssetKind
     name: str = Field(min_length=1, max_length=240)
     bible_entity_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -1904,7 +1930,7 @@ class AssetPlanItem(DomainModel):
         min_length=1,
         max_length=200,
         description=(
-            "此 item 的已批准 canonical 主体 Asset，供 ReferencePack 主体映射使用。"
+            "此 item 已选作 canonical 主体媒体的 Asset，供 ReferencePack 主体映射使用；可选用当前可用 DRAFT。"
             "首次完成 canonical work 时可与该 work 一起原子写入；这不表示其他 work "
             "已完成，item 整体完成仍要求其全部 work 完成。"
         ),
@@ -1913,7 +1939,7 @@ class AssetPlanItem(DomainModel):
         default=None,
         min_length=1,
         max_length=200,
-        description="主体已批准且 CURRENT 的 canonical AssetVersion，与 completed_asset_id 成对填写。",
+        description="已明确选用、CURRENT 且可用的主体 canonical AssetVersion，与 completed_asset_id 成对填写；不要求额外批准。",
     )
 
     @model_validator(mode="after")
@@ -1941,7 +1967,10 @@ class AssetPlanItem(DomainModel):
             and self.completed_asset_id is None
         ):
             raise ValueError(
-                "A reuse-existing AssetPlan item requires an exact completed asset version"
+                f"A reuse-existing AssetPlan item {self.id} requires an exact completed asset version: "
+                "set completed_asset_id and completed_asset_version_id only when that media is selected as complete. "
+                "For existing candidates awaiting selection, use ANCHOR with work-item candidate_*; "
+                "this does not require regenerating the media."
             )
         return self
 
@@ -1995,17 +2024,12 @@ class AssetPlanContent(DomainModel):
             ReferenceRole.PROP_IN_HAND: {AssetKind.PROP},
             ReferenceRole.PROP_STATE: {AssetKind.PROP},
         }
-        preceding_work_item_ids: set[str] = set()
         for work_item in work_items:
             for dependency_id in work_item.dependency_ids:
                 if dependency_id not in known_work_item_ids:
                     raise ValueError(
                         f"Asset-plan work item {work_item.id} references unknown dependency "
                         f"{dependency_id}"
-                    )
-                if dependency_id not in preceding_work_item_ids:
-                    raise ValueError(
-                        f"Asset-plan work item {work_item.id} dependencies must precede it"
                     )
             for reference in work_item.ordered_references:
                 source_work_item_id = reference.source_work_item_id
@@ -2015,10 +2039,6 @@ class AssetPlanContent(DomainModel):
                     raise ValueError(
                         f"Asset-plan work item {work_item.id} references unknown work item "
                         f"{source_work_item_id}"
-                    )
-                if source_work_item_id not in preceding_work_item_ids:
-                    raise ValueError(
-                        f"Asset-plan work item {work_item.id} references must precede it"
                     )
                 if source_work_item_id not in work_item.dependency_ids:
                     raise ValueError(
@@ -2034,11 +2054,6 @@ class AssetPlanContent(DomainModel):
                         raise ValueError(
                             f"Asset-plan compose work item {work_item.id} references "
                             f"unknown work item {source_work_item_id}"
-                        )
-                    if source_work_item_id not in preceding_work_item_ids:
-                        raise ValueError(
-                            f"Asset-plan compose work item {work_item.id} source work "
-                            "items must precede it"
                         )
                     if source_work_item_id not in work_item.dependency_ids:
                         raise ValueError(
@@ -2066,17 +2081,21 @@ class AssetPlanContent(DomainModel):
                             f"Asset-plan work item {work_item.id} lineage root references "
                             f"unknown work item {source_work_item_id}"
                         )
-                    if source_work_item_id not in preceding_work_item_ids:
-                        raise ValueError(
-                            f"Asset-plan work item {work_item.id} lineage-root work item "
-                            "must precede it"
-                        )
                     if source_work_item_id not in work_item.dependency_ids:
                         raise ValueError(
                             f"Asset-plan work item {work_item.id} must declare lineage-root "
                             f"work item {source_work_item_id} as a dependency"
                         )
-            preceding_work_item_ids.add(work_item.id)
+
+        # Items are grouped for presentation, while dependencies span all items.
+        # Validate the graph without rewriting the user's authored item order.
+        dependency_graph = {
+            work_item.id: set(work_item.dependency_ids) for work_item in work_items
+        }
+        try:
+            TopologicalSorter(dependency_graph).prepare()
+        except CycleError as exc:
+            raise ValueError(f"Asset-plan dependency cycle: {exc.args[1]}") from exc
 
         for item in self.items:
             if (
@@ -2402,9 +2421,21 @@ class AssetPlanReferencePackOverride(DomainModel):
 class AssetPlanSubjectReconcileIntent(DomainModel):
     """Agent-selected canonical root and supplemental work for one subject."""
 
-    item_id: str = Field(min_length=1, max_length=200)
-    canonical_work_item_id: str = Field(min_length=1, max_length=200)
-    supplemental_work_item_ids: list[str] = Field(default_factory=list[str])
+    item_id: str = Field(
+        min_length=1, max_length=200,
+        description="本次协调的已有父 item；只协调其自身 work_items，不跨 item 搬移工作项。",
+    )
+    canonical_work_item_id: str = Field(
+        min_length=1, max_length=200,
+        description="属于本 item 的主体母版 work-item ID。",
+    )
+    supplemental_work_item_ids: list[str] = Field(
+        default_factory=list[str],
+        description=(
+            "属于同一 item 的补充 work-item ID。跨 item 的已有引用关系可用 "
+            "artifact.patch_asset_plan_fields 明确修改；本协调不合并父项。"
+        ),
+    )
     pack_overrides: list[AssetPlanReferencePackOverride] = Field(
         default_factory=list[AssetPlanReferencePackOverride]
     )
@@ -2467,7 +2498,7 @@ class AssetPlanPhysicalMasterCreateIntent(DomainModel):
     size: str = Field(min_length=1, max_length=80)
 
 
-class AssetPlanTextPlateSpec(DomainModel):
+class AssetPlanTextPlateSpec(AssetPlanTextPlateIntent):
     """One independent exact-copy plate selected by the Agent."""
 
     item_id: str = Field(min_length=1, max_length=200)
@@ -2478,22 +2509,11 @@ class AssetPlanTextPlateSpec(DomainModel):
     serves_clip_group_ids: list[str] = Field(default_factory=list[str])
     output_role: str = Field(min_length=1, max_length=200)
     size: str = Field(min_length=1, max_length=80)
-    title: str | None = Field(default=None, min_length=1, max_length=500)
-    exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
-    layout_description: str = Field(min_length=1, max_length=2000)
     background_color: str = Field(default="#FFFFFF", min_length=1, max_length=64)
     foreground_color: str = Field(default="#111111", min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def validate_text(self) -> AssetPlanTextPlateSpec:
-        if self.title is None and not self.exact_lines:
-            raise ValueError(
-                "AssetPlan text plate requires a title or at least one exact line"
-            )
-        if self.title is not None and self.title in self.exact_lines:
-            raise ValueError(
-                "AssetPlan text-plate title must not repeat inside exact_lines"
-            )
         for label, values in (
             ("shot", self.serves_shot_ids),
             ("clip-group", self.serves_clip_group_ids),
@@ -3158,16 +3178,67 @@ class StoryboardShotReplacement(DomainModel):
         return self
 
 
+class StoryboardShotSplice(DomainModel):
+    """Replace a local shot range, or insert at a stable shot boundary."""
+
+    shot_ids: list[str] = Field(default_factory=list[str], description=(
+        "已读分镜中连续、按顺序的原镜头ID。只传本次拆分/合并/删除的区间；"
+        "shots替换该区间。空列表表示纯插入。"
+    ))
+    shots: list[ShotPlan] = Field(default_factory=list[ShotPlan], description=(
+        "本次区间的完整新镜头；可保留原ID，新增镜头使用新ID，空列表表示删除。"
+        "sequence/revision由服务计算，不必重写后续镜头。对白归属、逐时段及引用仍须完整。"
+    ))
+    after_shot_id: str | None = Field(default=None, min_length=1, description=(
+        "只用于纯插入：插入到此已有镜头之后；省略表示片首。"
+        "默认归入此镜头的原生成组（片首归入首组）。"
+    ))
+
+    @model_validator(mode="after")
+    def validate_splice(self) -> StoryboardShotSplice:
+        if not self.shot_ids and not self.shots:
+            raise ValueError("A shot splice must replace, insert, or delete shots")
+        if self.shot_ids and self.after_shot_id is not None:
+            raise ValueError("after_shot_id is only used for a pure insertion")
+        if len(self.shot_ids) != len(set(self.shot_ids)):
+            raise ValueError("Shot splice source IDs must be unique")
+        if len(self.shots) != len({shot.id for shot in self.shots}):
+            raise ValueError("Shot splice output IDs must be unique")
+        return self
+
+
+class StoryboardClipGroupSplice(DomainModel):
+    """Change only a contiguous range of existing generation groups."""
+
+    clip_group_ids: list[str] = Field(min_length=1, description=(
+        "按现有顺序列出要重新划分的连续旧组ID。未列出的组保持原样。"
+    ))
+    clip_groups: list[ClipGroup] = Field(default_factory=list[ClipGroup], description=(
+        "这些旧组替换成的新组，可沿用原组ID或添加新ID；只含本次涉及的镜头。"
+        "duration_seconds在结构编辑时按当前镜头重新计算。"
+    ))
+
+    @model_validator(mode="after")
+    def validate_splice(self) -> StoryboardClipGroupSplice:
+        if len(self.clip_group_ids) != len(set(self.clip_group_ids)):
+            raise ValueError("Clip-group splice source IDs must be unique")
+        if len(self.clip_groups) != len({group.id for group in self.clip_groups}):
+            raise ValueError("Clip-group splice output IDs must be unique")
+        return self
+
+
 class StoryboardPatchRequest(DomainModel):
-    """Targeted shot revisions; structural rewrites use StoryboardReplaceRequest."""
+    """Edit selected content or local shot/group structure without rewriting the film."""
 
     base_version_id: str = Field(min_length=1)
     replacements: list[StoryboardShotReplacement] = Field(
         default_factory=list[StoryboardShotReplacement]
     )
+    shot_splices: list[StoryboardShotSplice] = Field(default_factory=list[StoryboardShotSplice])
+    clip_group_splices: list[StoryboardClipGroupSplice] = Field(default_factory=list[StoryboardClipGroupSplice])
     clip_groups: list[ClipGroup] | None = Field(default=None, description=(
         "按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。"
-        "增加、删除或重排分组使用完整 StoryboardReplaceRequest。"
+        "局部增加、删除或重分组用clip_group_splices；同组拆镜默认自动更新成员和时长。"
     ))
     scene_nodes: list[StoryboardSceneNode] | None = Field(default=None, description=(
         "按稳定场次 ID 更新已读的场次摘要与衔接，未传入场次保留。"
@@ -3195,7 +3266,7 @@ class StoryboardPatchRequest(DomainModel):
         scene_ids = [scene.id for scene in self.scene_nodes or []]
         if len(scene_ids) != len(set(scene_ids)):
             raise ValueError("A storyboard patch may replace each scene only once")
-        if not self.replacements and all(
+        if not self.replacements and not self.shot_splices and not self.clip_group_splices and all(
             item is None
             for item in (
                 self.clip_groups,
@@ -3423,77 +3494,10 @@ def apply_storyboard_patch(
     current: StoryboardContent,
     request: StoryboardPatchRequest,
 ) -> StoryboardContent:
-    """Apply a targeted patch while preserving stable shot identities."""
+    """Apply a local edit to the existing canonical storyboard."""
+    from short_drama.storyboard_patch import apply_local_storyboard_patch
 
-    replacements = {item.shot_id: item for item in request.replacements}
-    known_shot_ids = {item.id for item in current.shots}
-    unknown_shot_ids = set(replacements) - known_shot_ids
-    if unknown_shot_ids:
-        unknown = ", ".join(sorted(unknown_shot_ids))
-        raise ValueError(f"Storyboard patch references unknown shots: {unknown}")
-
-    next_shots: list[ShotPlan] = []
-    for shot in current.shots:
-        replacement = replacements.get(shot.id)
-        if replacement is None:
-            next_shots.append(shot)
-            continue
-        if replacement.expected_revision != shot.revision:
-            raise ValueError(
-                f"Storyboard shot {shot.id} revision changed from "
-                f"{replacement.expected_revision} to {shot.revision}"
-            )
-        candidate = replacement.replacement.model_copy(
-            update={"revision": shot.revision}
-        )
-        changed = candidate.model_dump(mode="json") != shot.model_dump(mode="json")
-        next_shots.append(
-            candidate.model_copy(
-                update={"revision": shot.revision + 1 if changed else shot.revision}
-            )
-        )
-
-    group_replacements = {group.id: group for group in request.clip_groups or []}
-    unknown_group_ids = set(group_replacements) - {group.id for group in current.clip_groups}
-    if unknown_group_ids:
-        raise ValueError("Storyboard patch references unknown clip groups: " + ", ".join(sorted(unknown_group_ids)))
-    next_clip_groups = [group_replacements.get(group.id, group) for group in current.clip_groups]
-    scene_replacements = {scene.id: scene for scene in request.scene_nodes or []}
-    unknown_scene_ids = set(scene_replacements) - {scene.id for scene in current.scene_nodes}
-    if unknown_scene_ids:
-        raise ValueError("Storyboard patch references unknown scenes: " + ", ".join(sorted(unknown_scene_ids)))
-    source_scene_nodes = [scene_replacements.get(scene.id, scene) for scene in current.scene_nodes]
-    next_scene_nodes = (
-        populate_storyboard_scene_nodes(
-            source_scene_nodes,
-            next_shots,
-            next_clip_groups,
-        )
-        if current.scene_nodes
-        else []
-    )
-
-    return StoryboardContent(
-        project_id=current.project_id,
-        title=request.title if request.title is not None else current.title,
-        script_version_id=request.script_version_id or current.script_version_id,
-        bible_version_id=request.bible_version_id or current.bible_version_id,
-        production_spec_document_id=request.production_spec_document_id or current.production_spec_document_id,
-        production_spec_version_id=request.production_spec_version_id or current.production_spec_version_id,
-        script_line_ids=current.script_line_ids,
-        scene_nodes=next_scene_nodes,
-        shots=next_shots,
-        clip_groups=next_clip_groups,
-        computed_duration_seconds=sum(
-            item.duration_seconds for item in next_shots
-        ),
-        timing_notes=(
-            request.timing_notes
-            if request.timing_notes is not None
-            else current.timing_notes
-        ),
-        notes=request.notes if request.notes is not None else current.notes,
-    )
+    return apply_local_storyboard_patch(current, request)
 
 
 def compile_generation_plan(

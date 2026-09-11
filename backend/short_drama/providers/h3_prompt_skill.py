@@ -9,6 +9,8 @@ only the model adapter at the final prompt boundary.
 from __future__ import annotations
 
 import math
+import re
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from short_drama.h3_models import (
@@ -30,10 +32,16 @@ from short_drama.models import (
 from short_drama.production_profiles import production_skill
 from short_drama.providers.h3_media_bindings import (
     ResolvedH3MediaBinding,
+    is_h3_composition_reference,
     resolve_h3_media_bindings,
 )
 from short_drama.style_context import declared_style_value
 from short_drama.studio_references import assert_current_script_structure
+from short_drama.providers.h3_output_format import h3_prompt_document
+from short_drama.providers.h3_dialogue_spans import (
+    H3RequestDialogueSpan, assert_complete_dialogue_request, generation_unit_dialogue_spans,
+    request_speaker_ids, shot_dialogue_spans,
+)
 
 if TYPE_CHECKING:
     from short_drama.production_contracts import GenerationUnit
@@ -65,6 +73,7 @@ def compile_h3_prompt_ir(
     """Compile one provider-neutral shot into the official H3 prompt shape."""
 
     assert_current_script_structure(document, shot)
+    assert_complete_dialogue_request(document, [shot])
     duration = duration_seconds or math.ceil(shot.duration_seconds)
     inputs = list(media_inputs or [])
     if route == VideoGenerationRoute.REFERENCE:
@@ -116,6 +125,7 @@ def compile_h3_generation_unit_prompt_ir(
         raise ValueError("Generation-unit windows reference an unknown editorial shot")
     if len({shot.id for shot in ordered_shots}) != len(ordered_shots):
         raise ValueError("Generation-unit editorial shots must be unique")
+    assert_complete_dialogue_request(document, ordered_shots)
 
     inputs = list(media_inputs or [])
     description = _generation_unit_timeline_description(
@@ -143,7 +153,7 @@ def compile_h3_generation_unit_prompt_ir(
             f"{instruction}"
             f"subject_definitions: {definitions}\n\n"
             "summary: Ref2VA generation for one "
-            f"{duration}-second 9:16 video containing {len(ordered_shots)} ordered "
+            f"{duration}-second {document.project.aspect_ratio} video containing {len(ordered_shots)} ordered "
             "editorial shots.\n\n"
             f"retention_analysis: {retention}\n\n"
             f"detailed_description: {description}\n\n"
@@ -173,6 +183,8 @@ def validate_h3_prompt_ir(
 ) -> list[str]:
     """Validate official structure plus the project's locked dialogue facts."""
 
+    document = h3_prompt_document(document, route=route)
+    assert_complete_dialogue_request(document, [shot])
     stripped = prompt.strip()
     if not stripped:
         raise ValueError("H3 prompt is empty")
@@ -180,8 +192,8 @@ def validate_h3_prompt_ir(
         raise ValueError(f"H3 prompt exceeds 7000 characters: {len(stripped)} supplied, {len(stripped) - 7000} over the provider limit")
     if "```" in stripped:
         raise ValueError("H3 prompt contains Markdown fencing")
-    if "9:16" not in stripped:
-        raise ValueError("H3 prompt omitted the locked 9:16 ratio")
+    if document.project.aspect_ratio != "adaptive" and document.project.aspect_ratio not in stripped:
+        raise ValueError(f"H3 prompt omitted the locked {document.project.aspect_ratio} ratio")
 
     fields = _REFERENCE_FIELDS if route == VideoGenerationRoute.REFERENCE else _BASE_FIELDS
     positions = [stripped.find(field) for field in fields]
@@ -268,31 +280,15 @@ def validate_h3_prompt_ir(
 
     if "[Shot 2]" in stripped:
         raise ValueError("One ShotPlan cannot compile undeclared additional editorial shots")
-    beat_markers = [
-        _beat_time_marker(beat.start_seconds, beat.end_seconds)
-        for beat in shot.timeline_beats
-    ]
-    for index, (beat, marker) in enumerate(zip(shot.timeline_beats, beat_markers, strict=True)):
-        marker = _beat_time_marker(beat.start_seconds, beat.end_seconds)
-        marker_position = stripped.find(marker)
-        if marker_position < 0:
-            raise ValueError(f"H3 prompt omitted locked timeline range {marker}")
-        next_position = (
-            stripped.find(beat_markers[index + 1], marker_position + len(marker))
-            if index + 1 < len(beat_markers)
-            else len(stripped)
-        )
-        segment = stripped[marker_position:next_position]
-        for line_id in beat.dialogue_line_ids:
-            line = line_by_id.get(line_id)
-            if line is not None and line.spoken_text not in segment:
-                raise ValueError(
-                    f"H3 prompt moved dialogue for {line.speaker} outside its locked time range"
-                )
+    narrative_field = fields[-3]
+    narrative = stripped[stripped.index(narrative_field) + len(narrative_field):stripped.index("overall_soundscape:")]
+    _validate_dialogue_spans(narrative, shot, line_by_id, document, media_inputs or [])
+    _reject_dialogue_outside_narrative(stripped, narrative)
+    _validate_request_voice_ids(narrative, document, [shot])
 
     return [
         "official MiniMax-H3 prompt field order preserved",
-        f"locked 9:16 ratio and {duration_seconds}-second duration preserved",
+        f"locked {document.project.aspect_ratio} ratio and {duration_seconds}-second duration preserved",
         (
             f"{len(locked_lines)} locked dialogue line(s) preserved verbatim"
             if locked_lines
@@ -313,6 +309,7 @@ def validate_h3_generation_unit_prompt_ir(
 ) -> list[str]:
     """Validate a multi-shot prompt without applying creative-content gates."""
 
+    document = h3_prompt_document(document, route=route)
     stripped = prompt.strip()
     if not stripped:
         raise ValueError("H3 generation-unit prompt is empty")
@@ -320,8 +317,8 @@ def validate_h3_generation_unit_prompt_ir(
         raise ValueError(f"H3 generation-unit prompt exceeds 7000 characters: {len(stripped)} supplied, {len(stripped) - 7000} over the provider limit")
     if "```" in stripped:
         raise ValueError("H3 generation-unit prompt contains Markdown fencing")
-    if "9:16" not in stripped:
-        raise ValueError("H3 generation-unit prompt omitted the locked 9:16 ratio")
+    if document.project.aspect_ratio != "adaptive" and document.project.aspect_ratio not in stripped:
+        raise ValueError(f"H3 generation-unit prompt omitted the locked {document.project.aspect_ratio} ratio")
     fields = _REFERENCE_FIELDS if route == VideoGenerationRoute.REFERENCE else _BASE_FIELDS
     positions = [stripped.find(field) for field in fields]
     if any(position < 0 for position in positions) or positions != sorted(positions):
@@ -333,6 +330,8 @@ def validate_h3_generation_unit_prompt_ir(
     if expected_alignment and not stripped.startswith(expected_alignment):
         raise ValueError("H3 generation-unit prompt omitted its frame-alignment line")
 
+    assert_complete_dialogue_request(document, shots)
+    spans = generation_unit_dialogue_spans(unit, shots)
     shot_by_id = {shot.id: shot for shot in shots}
     script = next(
         version
@@ -352,6 +351,7 @@ def validate_h3_generation_unit_prompt_ir(
     ):
         raise ValueError("H3 generation-unit prompt reordered editorial shot windows")
     soundscape_start = stripped.find("overall_soundscape:")
+    shot_segments: list[str] = []
     for index, window in enumerate(unit.shot_windows, start=1):
         shot = shot_by_id.get(window.shot_id)
         if shot is None:
@@ -367,15 +367,26 @@ def validate_h3_generation_unit_prompt_ir(
             raise ValueError(f"H3 generation-unit prompt omitted locked window {marker}")
         segment_end = marker_positions[index] if index < len(markers) else soundscape_start
         segment = stripped[marker_positions[index - 1] : segment_end]
-        for line_id in shot.dialogue_line_ids:
-            line = line_by_id.get(line_id)
-            if line is not None and (
-                line.spoken_text not in segment
-                or not _contains_locked_speaker(segment, line, document, media_inputs or [])
-            ):
-                raise ValueError(
-                    f"H3 generation-unit prompt changed or omitted dialogue for {line.speaker}"
-                )
+        shot_segments.append(segment)
+        for span in spans:
+            if span.parts[0].shot_id != shot.id:
+                continue
+            line = line_by_id.get(span.line_id)
+            if line is not None and (line.spoken_text not in segment
+                    or not _contains_locked_speaker(segment, line, document, media_inputs or [])):
+                raise ValueError(f"H3 generation-unit prompt changed or omitted dialogue for {line.speaker}")
+        _validate_dialogue_spans(
+            segment, shot, line_by_id, document, media_inputs or [],
+            offset_seconds=window.source_in_seconds,
+            require_beat_markers=False,
+            request_spans=spans,
+        )
+
+    _reject_dialogue_outside_narrative(stripped, "\n".join(shot_segments))
+    _validate_request_voice_ids(
+        "\n".join(shot_segments), document, [shot_by_id[window.shot_id] for window in unit.shot_windows],
+        line_ids=[span.line_id for span in spans],
+    )
 
     if route == VideoGenerationRoute.REFERENCE:
         references = resolve_h3_media_bindings(document, media_inputs or [], [])
@@ -400,8 +411,104 @@ def validate_h3_generation_unit_prompt_ir(
     return [
         "official MiniMax-H3 prompt field order preserved",
         f"{len(unit.shot_windows)} editorial shot window(s) preserved in order",
-        f"locked 9:16 ratio and {duration_seconds}-second provider duration preserved",
+        f"locked {document.project.aspect_ratio} ratio and {duration_seconds}-second provider duration preserved",
     ]
+
+
+_DIALOGUE_TAG = re.compile(r"<d>\s*(?:\[[^\]\n]+\]\s*)?(.*?)\s*</d>", re.DOTALL)
+_EXPLICIT_VOICE_SPEECH = re.compile(
+    r"[\[(](S[1-9]\d*)[\])]\s+says(?:\s+in\s+[^:;\n<>()\[\]]+)?\s*:\s*$"
+)
+
+
+def _validate_request_voice_ids(narrative: str, document: ProjectDocument, shots: list[ShotPlan],
+                                *, line_ids: Sequence[str] | None = None) -> None:
+    """Check explicit voice annotations; keep legacy prose without them readable.
+
+    Stable numbering need not start at S1 in an existing prompt. Check its
+    one-to-one voice assignment, rather than renumbering authored prose.
+    """
+
+    assignments = request_speaker_ids(document, shots)
+    ordered_ids = (line_ids if line_ids is not None else
+                   [span.line_id for shot in shots for span in shot_dialogue_spans(shot)])
+    expected = [assignments[line_id] for line_id in ordered_ids if line_id in assignments]
+    actual_to_expected: dict[str, str] = {}
+    expected_to_actual: dict[str, str] = {}
+    previous_end = 0
+    for match, voice in zip(_DIALOGUE_TAG.finditer(narrative), expected, strict=True):
+        # Only a direct speech annotation establishes ownership. A nearby S2
+        # may identify a silent listener in otherwise valid natural prose.
+        annotation = _EXPLICIT_VOICE_SPEECH.search(narrative[previous_end:match.start()])
+        previous_end = match.end()
+        if annotation is None:
+            continue
+        label = annotation.group(1)
+        if (actual_to_expected.setdefault(label, voice) != voice
+                or expected_to_actual.setdefault(voice, label) != label):
+            raise ValueError(f"H3 prompt uses conflicting speaker ID {label} for locked dialogue")
+
+
+def _reject_dialogue_outside_narrative(prompt: str, narrative: str) -> None:
+    if len(_DIALOGUE_TAG.findall(prompt)) != len(_DIALOGUE_TAG.findall(narrative)):
+        raise ValueError("H3 prompt repeats or moves dialogue outside its declared narrative or shot windows")
+
+
+def _validate_dialogue_spans(
+    narrative: str,
+    shot: ShotPlan,
+    line_by_id: dict[str, ScriptLine],
+    document: ProjectDocument,
+    media_inputs: list[H3MediaInput],
+    *,
+    offset_seconds: float = 0.0,
+    require_beat_markers: bool = True,
+    request_spans: Sequence[H3RequestDialogueSpan] | None = None,
+) -> None:
+    spans = (shot_dialogue_spans(shot) if request_spans is None else [
+        # Local starting parts retain existing beat-position checks. The full
+        # utterance belongs here once, even when its end is in a later Shot.
+        part for span in request_spans if (part := span.parts[0]).shot_id == shot.id
+    ])
+    ids = ([span.line_id for span in shot_dialogue_spans(shot)] if request_spans is None else
+           [span.line_id for span in request_spans if span.parts[0].shot_id == shot.id])
+    expected = [line_by_id[line_id].spoken_text for line_id in ids if line_id in line_by_id]
+    actual = [value.strip() for value in _DIALOGUE_TAG.findall(narrative)]
+    if actual != expected:
+        raise ValueError(
+            "H3 prompt changed, repeated, reordered, or omitted locked dialogue utterances; "
+            "a continuous line spanning beats or adjacent shots must appear in one <d> block only"
+        )
+    for line_id in ids:
+        if line_id in line_by_id and not _contains_locked_speaker(narrative, line_by_id[line_id], document, media_inputs):
+            raise ValueError(f"H3 prompt changed or omitted locked speaker {line_by_id[line_id].speaker}")
+    markers = [
+        _beat_time_marker(offset_seconds + beat.start_seconds, offset_seconds + beat.end_seconds)
+        for beat in shot.timeline_beats
+    ]
+    positions = [narrative.find(marker) for marker in markers]
+    # Existing group prose may describe beat timing inside its required Shot N
+    # window without repeating every exact beat marker. Validate explicit ranges
+    # when all are present; do not invent a new group-format requirement here.
+    if not require_beat_markers and any(position < 0 for position in positions):
+        return
+    for marker, position in zip(markers, positions, strict=True):
+        if position < 0:
+            raise ValueError(f"H3 prompt omitted locked timeline range {marker}")
+    if positions != sorted(positions):
+        raise ValueError("H3 prompt reordered locked timeline ranges")
+    for index, start in enumerate(positions):
+        end = positions[index + 1] if index + 1 < len(positions) else len(narrative)
+        segment = narrative[start:end]
+        starting_lines = [
+            line_by_id[line_id] for line_id, span in zip(ids, spans, strict=True)
+            if span.beat_indices and span.beat_indices[0] == index and line_id in line_by_id
+        ]
+        if [value.strip() for value in _DIALOGUE_TAG.findall(segment)] != [line.spoken_text for line in starting_lines]:
+            raise ValueError("H3 prompt moved dialogue outside its locked time range; continuation beats must not restart it")
+        for line in starting_lines:
+            if not _contains_locked_speaker(segment, line, document, media_inputs):
+                raise ValueError(f"H3 prompt changed or omitted locked speaker {line.speaker}")
 
 
 def _contains_locked_speaker(
@@ -436,11 +543,14 @@ def prompt_schema_for_route(route: VideoGenerationRoute) -> dict[str, object]:
             "fields_in_order": list(_REFERENCE_FIELDS),
             "rewrite_language": "English, except original dialogue and visible text",
             "reference_binding": (
-                "For REFERENCE_IMAGE, preserve @semantic_alias = <Subject N> and define "
+                "Follow each supplied prompt_label. For reusable subject REFERENCE_IMAGE, preserve @semantic_alias = <Subject N> and define "
                 "that reusable visible content as extracted from its uploaded <Picture N> "
                 "source or sources. Bindings with the same <Subject N> are multiple assets "
                 "for one subject, not separate subjects, and every source <Picture N> remains "
-                "traceable. Concrete first, key, and last frames keep <Picture N>. Preserve "
+                "traceable. COMPOSITION/LAYOUT_GUIDE images keep <Picture N> as soft shot-planning "
+                "anchors, with the declared visible subjects, staging, state and applicable shot/time. "
+                "A sheet guides the shot sequence, never split-screen output. These reference_image "
+                "anchors do not impose hard first/last-frame constraints. Preserve "
                 "supplied <Video N> and <Audio N> mappings."
             ),
         }
@@ -542,7 +652,7 @@ def _compile_reference_prompt(
     return (
         f"subject_definitions: {definitions}\n\n"
         "summary: Ref2VA generation for a "
-        f"{duration}-second 9:16 {skill.label} shot. Only the declared "
+        f"{duration}-second {document.project.aspect_ratio} {skill.label} shot. Only the declared "
         "subjects and reference relationships are used.\n\n"
         f"retention_analysis: {retention}\n\n"
         f"detailed_description: [Shot 1] {timeline}\n\n"
@@ -614,7 +724,7 @@ def _generation_unit_timeline_description(
         if (value := declared_style_value(raw_value)) is not None
     ]
     opening = (
-        f"Generate one {duration}-second 9:16 vertical video containing "
+        f"Generate one {duration}-second {document.project.aspect_ratio} video containing "
         f"{len(shots)} editorial shots in exactly the declared order. "
         f"Generation intent: {unit.generation_intent}. "
         "Opening continuity: "
@@ -630,8 +740,11 @@ def _generation_unit_timeline_description(
     )
     if style_fields:
         opening += "Project style: " + "; ".join(style_fields) + ". "
+        opening += "The requested output shape takes precedence over format mentions in style notes. "
 
     parts = [opening]
+    speaker_ids = request_speaker_ids(document, shots)
+    dialogue_spans = generation_unit_dialogue_spans(unit, shots)
     for index, (window, shot) in enumerate(
         zip(unit.shot_windows, shots, strict=True),
         start=1,
@@ -669,14 +782,18 @@ def _generation_unit_timeline_description(
                     document,
                     shot,
                     beat,
+                    beat_index=beat_index,
                     offset_seconds=window.source_in_seconds,
                     references=references,
+                    speaker_ids=speaker_ids,
+                    dialogue_spans=dialogue_spans,
                 )
-                for beat in shot.timeline_beats
+                for beat_index, beat in enumerate(shot.timeline_beats)
                 if beat.start_seconds < window.duration_seconds
             )
         else:
-            dialogue = _dialogue_description(document, shot)
+            dialogue = _request_dialogue_description(document, shot, dialogue_spans,
+                                                       beat_index=None, speaker_ids=speaker_ids)
             segment.append(
                 dialogue
                 if dialogue
@@ -734,8 +851,11 @@ def _generation_unit_beat_description(
     shot: ShotPlan,
     beat: ShotTimelineBeat,
     *,
+    beat_index: int,
     offset_seconds: float,
     references: list[ResolvedH3MediaBinding],
+    speaker_ids: dict[str, str],
+    dialogue_spans: Sequence[H3RequestDialogueSpan],
 ) -> str:
     parts = [
         _beat_time_marker(
@@ -751,9 +871,10 @@ def _generation_unit_beat_description(
         parts.append(f"Performance: {beat.performance}.")
     if beat.emotion is not None:
         parts.append(f"Emotion or atmosphere: {beat.emotion}.")
-    dialogue = _dialogue_description(document, shot, beat.dialogue_line_ids)
+    dialogue = _request_dialogue_description(document, shot, dialogue_spans,
+                                               beat_index=beat_index, speaker_ids=speaker_ids)
     if dialogue:
-        parts.append(f"Dialogue in this range only: {dialogue}")
+        parts.append(dialogue)
     if beat.sound is not None:
         parts.append(f"Sound in this range: {beat.sound}.")
     reference_text = _timeline_reference_cues(document, beat, references)
@@ -789,7 +910,8 @@ def _timeline_description(
         )
         if (value := declared_style_value(raw_value)) is not None
     ]
-    opening = f"Compose the shot for a 9:16 vertical frame over {duration} seconds."
+    opening = f"Compose the shot for a {document.project.aspect_ratio} frame over {duration} seconds."
+    opening += " The requested output shape takes precedence over format mentions in style notes."
     if style_fields:
         opening = (
             "Follow the project's declared style: "
@@ -828,6 +950,7 @@ def _timeline_description(
     action_constraints = _structured_action_constraints(document, shot)
     if action_constraints:
         parts.append(action_constraints)
+    speaker_ids = request_speaker_ids(document, [shot])
     if shot.timeline_beats:
         parts.append(
             "The following ranges are continuous phases inside this single editorial shot; "
@@ -839,6 +962,7 @@ def _timeline_description(
                 shot,
                 beat_index=index,
                 references=references or [],
+                speaker_ids=speaker_ids,
             )
             for index in range(len(shot.timeline_beats))
         )
@@ -848,7 +972,7 @@ def _timeline_description(
                 "declared end state as a clean trimming handle without adding action or dialogue."
             )
     else:
-        dialogue = _dialogue_description(document, shot)
+        dialogue = _dialogue_description(document, shot, speaker_ids=speaker_ids)
         if dialogue:
             parts.append(dialogue)
         else:
@@ -874,6 +998,7 @@ def _timeline_beat_description(
     *,
     beat_index: int,
     references: list[ResolvedH3MediaBinding],
+    speaker_ids: dict[str, str],
 ) -> str:
     beat: ShotTimelineBeat = shot.timeline_beats[beat_index]
     parts = [
@@ -887,9 +1012,9 @@ def _timeline_beat_description(
         parts.append(f"Performance: {beat.performance}.")
     if beat.emotion is not None:
         parts.append(f"Emotion or atmosphere: {beat.emotion}.")
-    dialogue = _dialogue_description(document, shot, beat.dialogue_line_ids)
+    dialogue = _beat_dialogue_description(document, shot, beat_index, speaker_ids=speaker_ids)
     if dialogue:
-        parts.append(f"Dialogue in this range only: {dialogue}")
+        parts.append(dialogue)
     if beat.sound is not None:
         parts.append(f"Sound in this range: {beat.sound}.")
     reference_text = _timeline_reference_cues(document, beat, references)
@@ -924,10 +1049,64 @@ def _timeline_reference_cues(
     return "; ".join(rendered)
 
 
+def _request_dialogue_description(
+    document: ProjectDocument, shot: ShotPlan, spans: Sequence[H3RequestDialogueSpan],
+    *, beat_index: int | None, speaker_ids: dict[str, str],
+) -> str:
+    parts: list[str] = []
+    for index, span in enumerate(spans, start=1):
+        part = next((item for item in span.parts if item.shot_id == shot.id), None)
+        if part is None or (beat_index is not None and beat_index not in part.beat_indices):
+            continue
+        begins_part = beat_index is None or beat_index == part.beat_indices[0]
+        if part is span.parts[0] and begins_part:
+            dialogue = _dialogue_description(document, shot, [span.line_id], speaker_ids=speaker_ids)
+            if dialogue:
+                parts.append(f"Utterance {index}, once within {span.start_seconds:.2f} "
+                             f"to {span.end_seconds:.2f} seconds: {dialogue}")
+        else:
+            crossing = "<scenetrans> " if begins_part and part is not span.parts[0] else ""
+            parts.append(f"{crossing}Continuation of utterance {index}; finish by {span.end_seconds:.2f} "
+                         "seconds without restarting or repeating it.")
+        if part is not span.parts[-1] and (beat_index is None or beat_index == part.beat_indices[-1]):
+            parts.append(f"<scenetrans> Utterance {index} continues seamlessly across the cut "
+                         "into the next shot with the same voice; the visual cut does not stop the audio.")
+    return " ".join(parts)
+
+
+def _beat_dialogue_description(
+    document: ProjectDocument,
+    shot: ShotPlan,
+    beat_index: int,
+    *,
+    offset_seconds: float = 0.0,
+    speaker_ids: dict[str, str],
+) -> str:
+    parts: list[str] = []
+    for index, span in enumerate(shot_dialogue_spans(shot), start=1):
+        if not span.beat_indices or beat_index not in span.beat_indices:
+            continue
+        if beat_index == span.beat_indices[0]:
+            dialogue = _dialogue_description(document, shot, [span.line_id], speaker_ids=speaker_ids)
+            if dialogue:
+                parts.append(
+                    f"Utterance {index}, once within {offset_seconds + span.start_seconds:.2f} "
+                    f"to {offset_seconds + span.end_seconds:.2f} seconds: {dialogue}"
+                )
+        else:
+            parts.append(
+                f"Continuation of utterance {index}; finish by {offset_seconds + span.end_seconds:.2f} "
+                "seconds without restarting or repeating it."
+            )
+    return " ".join(parts)
+
+
 def _dialogue_description(
     document: ProjectDocument,
     shot: ShotPlan,
     line_ids: list[str] | None = None,
+    *,
+    speaker_ids: dict[str, str],
 ) -> str:
     script = next(
         version
@@ -940,16 +1119,9 @@ def _dialogue_description(
         for line_id in (shot.dialogue_line_ids if line_ids is None else line_ids)
         if line_id in line_by_id
     ]
-    speaker_ids: dict[str, str] = {}
     rendered: list[str] = []
     for line in lines:
-        # Display names remain presentation text. Only a typed character binding may
-        # assert that separate lines share one speaker identity.
-        speaker_key = line.speaker_character_id or line.id
-        speaker_id = speaker_ids.setdefault(
-            speaker_key,
-            f"S{len(speaker_ids) + 1}",
-        )
+        speaker_id = speaker_ids[line.id]
         if line.audio_kind == AudioKind.VOICEOVER:
             rendered.append(
                 f"The voice identified as {line.speaker} ({speaker_id}) says in an off-screen "
@@ -1038,7 +1210,7 @@ def _reference_definitions(
             rendered.append(
                 f"@{reference.alias} = {reference.prompt_label}; "
                 f"{reference.prompt_label} defines {reference.subject}: "
-                f"{reference.descriptor}."
+                f"{reference.descriptor}. Purpose: {reference.purpose}."
             )
             continue
         if reference.prompt_label in rendered_subjects:
@@ -1113,10 +1285,19 @@ def _is_reusable_image_subject(reference: ResolvedH3MediaBinding) -> bool:
     return (
         reference.media.kind == H3MediaKind.IMAGE
         and reference.media.role == H3MediaRole.REFERENCE_IMAGE
+        and not is_h3_composition_reference(reference.media)
     )
 
 
 def _retention_sentence(reference: ResolvedH3MediaBinding) -> str:
+    if is_h3_composition_reference(reference.media):
+        return (
+            f"@{reference.alias} ({reference.provider_label}) is a soft composition anchor: "
+            f"{reference.purpose}. Transfer only the declared staging, camera projection and "
+            "visible state at its relevant shot/time; identities remain bound to their declared "
+            "subject references. Do not reproduce sheet panels, labels or unintended people. "
+            "This reference image is not a hard first or last frame."
+        )
     if reference.video_guide is not None:
         if reference.video_guide.kind == H3VideoGuideKind.CAMERA_PREVIS:
             return (

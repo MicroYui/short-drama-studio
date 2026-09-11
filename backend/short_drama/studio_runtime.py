@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import Future
+from contextvars import copy_context
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, cast
 from uuid import uuid4
@@ -10,10 +12,12 @@ from uuid import uuid4
 from pydantic import JsonValue
 
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_control
+from short_drama.agent_runtime.plan_graph import PlanGraph
 from short_drama.agent_runtime.models import ActionKind, ActionStatus, AgentRunStatus, DelegationStatus, WorkOrderNextOwner
 from short_drama.models import ProductionExecutionTarget
 from short_drama.production_manager import (
     AgentRunAdvanceRequest, AgentRunCreateRequest, AgentRunReplanRequest, AgentUserInputRequest,
+    AgentPlanProposal, CompletionPlanningInput,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderTransportError, is_language_transport_error
 from short_drama.studio_models import StudioActivity, StudioJob, StudioJobControl, StudioMessage, StudioChangeSet, StudioScope
@@ -37,6 +41,7 @@ class StudioAgentRunner:
         self.threads: dict[str, threading.Thread] = {}
         self._wakeups: dict[str, threading.Event] = {}
         self._processing_messages: dict[str, int] = {}
+        self._completion_planning: dict[str, tuple[CompletionPlanningInput, Future[AgentPlanProposal]]] = {}
         self.retry_delays = retry_delays
 
     def activity(self, project_id: str, after: int = 0) -> StudioActivity:
@@ -307,18 +312,78 @@ class StudioAgentRunner:
         if scope.editor_selection is not None or scope.kind == "film":
             self.service.agent_runtime.store.remember_tool_schema_ids(run_id, ["timeline.read_editorial"])
 
+    def _collect_completion_plan(self, job_id: str, *, apply: bool = True) -> bool:
+        """Return whether a slow Leader supplement is still running."""
+        pending = self._completion_planning.get(job_id)
+        if pending is None:
+            return False
+        prepared, future = pending
+        if not future.done():
+            return True
+        self._completion_planning.pop(job_id, None)
+        try:
+            proposal = future.result()
+            if apply:
+                self.service.production_manager.apply_completion_plan(prepared, proposal)
+        except ExecutionYielded:
+            if apply:
+                raise
+        except Exception as exc:
+            # An optional early plan must not stop already-running production or
+            # repeatedly request the same supplement. Normal handoffs still replan.
+            record_trace("agent.completion_planning", {"run_id": prepared.run_id,
+                "status": "FAILED", "error": str(exc),
+                "completed_work_order_ids": cast(list[JsonValue], prepared.completed_work_order_ids),
+                "trigger": "FAILED_PLAN" if prepared.failed_plan_state else "LOCAL_PLAN_COMPLETED" if prepared.local_plan_completed else "WORKER_COMPLETED"})
+            if apply and (prepared.local_plan_completed or prepared.failed_plan_state):
+                # Required continuation uses the existing bounded retry/error
+                # path, not a new request on every scheduler tick.
+                raise
+        return False
+
+    def _start_completion_plan(self, job_id: str, run_id: str) -> bool:
+        if job_id in self._completion_planning:
+            return True
+        prepared = self.service.production_manager.prepare_completion_planning(
+            run_id, include_local_plan_completion=True, include_failed_plan=True,
+        )
+        if prepared is None:
+            return False
+        future: Future[AgentPlanProposal] = Future()
+        self._completion_planning[job_id] = (prepared, future)
+
+        def decide() -> None:
+            future.set_running_or_notify_cancel()
+            try:
+                future.set_result(self.service.production_manager.plan_after_completions(prepared))
+            except ExecutionYielded as exc:
+                # Cooperative control derives from BaseException. Complete the
+                # Future so pause/input can drain it instead of waiting forever.
+                future.set_exception(exc)
+            except Exception as exc:
+                future.set_exception(exc)
+            finally:
+                self._wakeups[job_id].set()
+
+        threading.Thread(target=copy_context().run, args=(decide,),
+                         name=f"leader-supplement-{run_id}", daemon=True).start()
+        return True
+
     def _advance_until_handoff(self, job_id: str, run_id: str) -> None:
         published_actions: dict[str, str] = {}
         while True:
             # Started operations finish and persist before pause/input is
             # acknowledged. Their next boundary sees the same control callback.
-            if self._yield_reason(job_id) is not None and self.service.team_executor.has_active_work(run_id):
+            if self._yield_reason(job_id) is not None and (
+                self.service.team_executor.has_active_work(run_id) or job_id in self._completion_planning
+            ):
                 batch = self.service.team_executor.collect_finished_work(run_id)
                 for failure in batch.advances:
                     if failure.error_message:
                         record_trace("worker.error", {"work_order_id": failure.work_order_id,
                             "error": failure.error_message, "error_kind": failure.error_kind})
-                if batch.active_work_order_ids:
+                planning_active = self._collect_completion_plan(job_id, apply=False)
+                if batch.active_work_order_ids or planning_active:
                     self._wakeups[job_id].wait(0.05)
                     self._wakeups[job_id].clear()
                     continue
@@ -326,6 +391,7 @@ class StudioAgentRunner:
                 self._save_state(job_id, "paused")
                 return
             self._apply_messages(job_id, run_id)
+            planning_active = self._collect_completion_plan(job_id)
             review = self._review_scope(self._job(job_id))
             advance_request = AgentRunAdvanceRequest(max_actions=1,
                 review_blocked_step_ids=sorted(review.step_ids) if review.pending_count else None)
@@ -358,12 +424,16 @@ class StudioAgentRunner:
                 return
             waiting = next((action for action in view.snapshot.actions
                 if action.kind == ActionKind.USER_INPUT and action.status == ActionStatus.RUNNING), None)
-            # Advance every ready Agent-authored step before draining Workers.
-            # A retained media poll may run for a long time; it must not starve
-            # independent reads or edits that prepare the next parallel task.
-            if any(step.id not in review.step_ids for step in view.ready_steps):
-                self.service.advance_agent_run(run_id, advance_request, advance_workers=False)
-                continue
+            # Execute a bounded slice of already-authored steps, then give
+            # retained Workers a dispatch/collection turn. Replanning inside
+            # the last Tool could return another ready read indefinitely and
+            # prevent the Worker scheduler below from ever being reached.
+            failed_plan = view.snapshot.current_plan is not None and any(
+                action.status == ActionStatus.FAILED and PlanGraph(view.snapshot.current_plan).owns_action(action)
+                for action in view.snapshot.actions)
+            if not failed_plan and any(step.id not in review.step_ids for step in view.ready_steps):
+                self.service.advance_agent_run(run_id, advance_request, advance_workers=False,
+                                               allow_replanning=False)
             # Each Worker continues its own persisted turns. A slow media
             # observation must not hold its siblings at every decision boundary.
             batch = self.service.advance_agent_team(run_id, continue_until_handoff=True, wait_for_completion=False,
@@ -383,9 +453,14 @@ class StudioAgentRunner:
                 if waiting:
                     record_trace("chat.assistant", {"text": waiting.input_summary, "needs_input": True, "run_id": run_id})
                 return
-            if failures or batch.advances or not (
+            # Collect and dispatch independent Workers while the Leader thinks.
+            # A saved Worker completion or completed nonempty local plan opens
+            # planning. A Worker's intermediate Tool/poll alone does not.
+            if not planning_active and not waiting and not review.pending_count:
+                planning_active = self._start_completion_plan(job_id, run_id)
+            if not planning_active and (failures or batch.advances or not (
                 batch.selected_work_order_ids or batch.active_work_order_ids or batch.waiting_work_order_ids
-            ):
+            )):
                 advanced = self.service.advance_agent_run(run_id, advance_request, advance_workers=False)
                 snapshot = advanced.run.snapshot
                 workers = self.service.agent_runtime.store.list_work_orders(run_id)

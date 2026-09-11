@@ -860,8 +860,7 @@ def test_retry_asset_plan_attempt_reconstructs_chained_failed_retry_lineage(
     assert second_retry.error is not None
     assert full_candidate_marker not in second_retry.error.message
     prefix = (
-        "TEXT_PLATE AssetPlan work items do not exactly match their "
-        "SCREEN_CONTENT_PLATE briefs: "
+        "TEXT_PLATE AssetPlan work items do not match their text-plate contracts: "
     )
     assert second_retry.error.message.startswith(prefix)
     mismatches = json.loads(second_retry.error.message.removeprefix(prefix))
@@ -869,10 +868,16 @@ def test_retry_asset_plan_attempt_reconstructs_chained_failed_retry_lineage(
     mismatch = mismatches[0]
     assert mismatch["item_id"] == "asset-plan-text-plate-chain"
     assert mismatch["work_item_id"] == "work-text-plate-chain"
-    suggested_patches = mismatch["suggested_patches"]
-    assert [patch["path"] for patch in suggested_patches] == [
-        "/brief/presentation_mode",
-        "/brief/required_visible_text",
+    assert mismatch["field"] == "/text_plate_intent"
+    assert "suggested_patches" not in mismatch
+    # This fixture has deliberately removed its new item's brief fields.
+    # The caller supplies that missing authoring intent; an error must not
+    # suggest rewriting an existing carrier's brief to fit a new state.
+    author_patches = [
+        {"item_id": "asset-plan-text-plate-chain", "op": "add",
+         "path": "/brief/presentation_mode", "value": "SCREEN_CONTENT_PLATE"},
+        {"item_id": "asset-plan-text-plate-chain", "op": "add",
+         "path": "/brief/required_visible_text", "value": ["正确新文案"]},
     ]
 
     repair = service.agent_runtime.store.get_work_order(repair_id)
@@ -908,7 +913,7 @@ def test_retry_asset_plan_attempt_reconstructs_chained_failed_retry_lineage(
         {
             "project_id": project_id,
             "attempt_ref": second_retry_ref.model_dump(mode="json"),
-            "patches": suggested_patches,
+            "patches": author_patches,
         },
         agent_run_id=run_id,
         work_order_id=repair_id,
@@ -927,8 +932,8 @@ def test_retry_asset_plan_attempt_reconstructs_chained_failed_retry_lineage(
     assert persisted_text_item.brief.required_visible_text == ["正确新文案"]
 
 
-def test_asset_plan_contract_rejects_forward_or_undeclared_work_refs() -> None:
-    with pytest.raises(ValidationError, match="dependencies must precede"):
+def test_asset_plan_contract_rejects_cyclic_or_undeclared_work_refs() -> None:
+    with pytest.raises(ValidationError, match="dependency cycle"):
         AssetPlanContent(
             project_id="project",
             script_version_id="script",
@@ -980,6 +985,7 @@ def test_asset_plan_contract_rejects_forward_or_undeclared_work_refs() -> None:
                             final_prompt="generate",
                             size="1344x768",
                             review_purpose=AssetReviewPurpose.CANONICAL_MASTER,
+                            dependency_ids=["derived"],
                         ),
                     ],
                 )
@@ -1824,6 +1830,114 @@ def test_patch_asset_plan_applies_compact_fields_across_items_atomically(
     )
 
 
+def test_patch_asset_plan_accepts_later_cross_asset_dependency_and_keeps_order(
+    tmp_path: Path,
+) -> None:
+    """A character coverage image may depend on a later listed prop master."""
+    name = "cross-asset-dependency"
+    service = _service(tmp_path, name)
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    prop = plan.items[1]
+    prop.work_items = [AssetPlanWorkItem(
+        id="work-prop-master",
+        operation=AssetPlanOperation.GENERATE,
+        output_role="prop_master",
+        final_prompt="已有录音笔的精确主图。",
+        size="1344x768",
+        review_purpose=AssetReviewPurpose.CANONICAL_MASTER,
+        completed_asset_id=prop.completed_asset_id,
+        completed_asset_version_id=prop.completed_asset_version_id,
+    )]
+    created = service.create_asset_plan(project_id, AssetPlanCreateRequest(
+        asset_plan=plan, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    derived = plan.items[0].work_items[1].model_copy(deep=True)
+    derived.dependency_ids.append("work-prop-master")
+    derived.ordered_references.append(AssetPlanReference(
+        role="prop_identity",
+        purpose="镜头中保持同一录音笔。",
+        source_work_item_id="work-prop-master",
+    ))
+    result = service.tool_registry.invoke("artifact.patch_asset_plan", {
+        "project_id": project_id,
+        "request": {
+            "base_version_id": created.version.id,
+            "work_item_patches": [{
+                "item_id": plan.items[0].id,
+                "upsert_work_items": [derived.model_dump(mode="json")],
+            }],
+            "origin": "AGENT",
+        },
+    })
+    assert result.status == ToolCallStatus.SUCCEEDED, result.error
+    reopened = _service(tmp_path, name)
+    persisted = reopened.get_asset_plan(project_id).asset_plan
+    assert [item.id for item in persisted.items] == [item.id for item in plan.items]
+    assert [work.id for item in persisted.items for work in item.work_items] == [
+        "work-linxia-master", "work-linxia-derived", "work-prop-master",
+    ]
+    index = reopened.get_asset_plan_index(project_id)
+    assert index.items[0].work_items[1].status.value == "READY"
+    assert not index.execution_contract.needs_reconciliation
+    context = reopened.tool_registry.invoke("artifact.get_asset_work_context", {
+        "project_id": project_id,
+        "scope": {"mode": "WORK_ITEM", "work_item_ids": [derived.id]},
+    })
+    assert context.status == ToolCallStatus.SUCCEEDED
+    assert context.output is not None
+    assert set(context.output["dependency_work_item_ids"]) == {
+        "work-linxia-master", "work-prop-master",
+    }
+    assert {ref.artifact_id for ref in context.artifact_refs
+            if ref.artifact_type == "asset_version"} >= {
+        prop.completed_asset_version_id, plan.items[0].completed_asset_version_id,
+    }
+    assert reopened.repository.list_tasks(project_id) == []
+    assert reopened.repository.list_image_tasks(project_id) == []
+
+
+@pytest.mark.parametrize("defect", ["self_cycle", "cross_cycle", "unknown", "undeclared"])
+def test_patch_asset_plan_rejects_invalid_dependency_without_partial_write(
+    tmp_path: Path, defect: str,
+) -> None:
+    service = _service(tmp_path, defect)
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    created = service.create_asset_plan(project_id, AssetPlanCreateRequest(
+        asset_plan=plan, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    derived = plan.items[0].work_items[1].model_copy(deep=True)
+    if defect == "self_cycle":
+        derived.dependency_ids.append(derived.id)
+    elif defect == "cross_cycle":
+        derived = plan.items[0].work_items[0].model_copy(deep=True)
+        derived.dependency_ids = ["work-linxia-derived"]
+    elif defect == "unknown":
+        derived.dependency_ids.append("missing-work")
+    else:
+        derived.dependency_ids = []
+    rejected = service.tool_registry.invoke("artifact.patch_asset_plan", {
+        "project_id": project_id,
+        "request": {
+            "base_version_id": created.version.id,
+            "work_item_patches": [{
+                "item_id": plan.items[0].id,
+                "upsert_work_items": [derived.model_dump(mode="json")],
+            }],
+            "origin": "AGENT",
+        },
+    })
+    assert rejected.status == ToolCallStatus.FAILED
+    assert rejected.error is not None
+    expected = {"self_cycle": "dependency cycle", "cross_cycle": "dependency cycle",
+                "unknown": "unknown dependency", "undeclared": "as a dependency"}
+    assert expected[defect] in rejected.error.message
+    current = service.get_asset_plan(project_id)
+    assert current.version.id == created.version.id
+    assert current.asset_plan == plan
+
+
 def test_patch_asset_plan_revalidates_merged_dependency_graph_atomically(
     tmp_path: Path,
 ) -> None:
@@ -2281,7 +2395,7 @@ def test_asset_work_context_rejects_legacy_or_mixed_selectors(
     assert call.error.kind == "ValidationError"
 
 
-def test_asset_plan_rejects_supplemental_work_before_a_stable_canonical(
+def test_asset_plan_requires_stable_canonical_lineage(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path, "asset-plan-canonical-first")
@@ -2315,7 +2429,7 @@ def test_asset_plan_rejects_supplemental_work_before_a_stable_canonical(
 
     with pytest.raises(
         WorkflowConflictError,
-        match="requires one earlier canonical work item",
+        match="must use canonical work item .* as its lineage root",
     ):
         service.create_asset_plan(
             project_id,
@@ -3106,7 +3220,7 @@ def test_asset_plan_service_rejects_bypassed_disposition_and_pack_subject_confli
         )
 
 
-def test_asset_plan_service_aggregates_all_text_plate_brief_mismatches(
+def test_asset_plan_service_aggregates_all_text_plate_contract_mismatches(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path, "text-plate-brief-mismatches")
@@ -3159,8 +3273,7 @@ def test_asset_plan_service_aggregates_all_text_plate_brief_mismatches(
         service._validate_asset_plan(document, mismatched_plan)
 
     prefix = (
-        "TEXT_PLATE AssetPlan work items do not exactly match their "
-        "SCREEN_CONTENT_PLATE briefs: "
+        "TEXT_PLATE AssetPlan work items do not match their text-plate contracts: "
     )
     message = str(exc_info.value)
     assert message.startswith(prefix)
@@ -3173,36 +3286,16 @@ def test_asset_plan_service_aggregates_all_text_plate_brief_mismatches(
         "work-text-plate-1",
         "work-text-plate-2",
     ]
-    assert [item["suggested_patches"] for item in mismatches] == [
-        [
-            {
-                "item_id": "asset-plan-text-plate-1",
-                "op": "add",
-                "path": "/brief/presentation_mode",
-                "value": "SCREEN_CONTENT_PLATE",
-            },
-            {
-                "item_id": "asset-plan-text-plate-1",
-                "op": "add",
-                "path": "/brief/required_visible_text",
-                "value": ["实际文案 1"],
-            },
-        ],
-        [
-            {
-                "item_id": "asset-plan-text-plate-2",
-                "op": "add",
-                "path": "/brief/presentation_mode",
-                "value": "SCREEN_CONTENT_PLATE",
-            },
-            {
-                "item_id": "asset-plan-text-plate-2",
-                "op": "add",
-                "path": "/brief/required_visible_text",
-                "value": ["实际文案 2"],
-            },
-        ],
+    assert [item["actual_required_visible_text"] for item in mismatches] == [
+        ["需要文案 1"], ["需要文案 2"],
     ]
+    assert [item["rendered_visible_text"] for item in mismatches] == [
+        ["实际文案 1"], ["实际文案 2"],
+    ]
+    for item in mismatches:
+        assert item["field"] == "/text_plate_intent"
+        assert "must exactly match brief.required_visible_text" in item["error"]
+        assert "suggested_patches" not in item
 
 
 def test_asset_plan_rejects_duplicate_text_plate_copy(tmp_path: Path) -> None:
@@ -3242,7 +3335,7 @@ def test_asset_plan_rejects_duplicate_text_plate_copy(tmp_path: Path) -> None:
 
     with pytest.raises(
         WorkflowConflictError,
-        match="cannot repeat its title inside exact_lines",
+        match="must exactly match brief.required_visible_text",
     ):
         service._validate_asset_plan(
             service.get_project(project_id).document,

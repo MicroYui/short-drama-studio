@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from short_drama.models import (
     ApprovalStatus,
     Asset,
@@ -28,8 +30,8 @@ def resolve_current_asset_media(
     subject is declared, its current canonical image, valid ReferencePack entries
     and exact images explicitly selected in shot prose can be used. Selecting a
     current draft image does not require a second approval or imply a QA pass.
-    Audio and video remain tied
-    to the owning asset's current canonical version.
+    Audio uses the owner's currently selected usable version, including a draft.
+    Video keeps its existing canonical-version rule.
     """
 
     version_owner: tuple[Asset, AssetVersion] | None = None
@@ -46,6 +48,20 @@ def resolve_current_asset_media(
             f"Unknown AssetVersion {asset_version_id}"
         )
     owner, version = version_owner
+    if version.media_type == AssetMediaType.AUDIO:
+        if version.id != (owner.current_version_id or owner.approved_version_id):
+            raise AssetReferenceTruthError(
+                f"Audio AssetVersion {asset_version_id} is not its asset's currently selected media"
+            )
+        if version.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED} or version.freshness != Freshness.CURRENT:
+            raise AssetReferenceTruthError(f"Audio AssetVersion {asset_version_id} is not current usable media")
+        if version.local_path is None and version.external_url is None:
+            raise AssetReferenceTruthError(f"Audio AssetVersion {asset_version_id} has no usable media")
+        if version.local_path is not None and not Path(version.local_path).expanduser().is_file():
+            raise AssetReferenceTruthError(f"Audio AssetVersion {asset_version_id} file is missing: {version.local_path}")
+        if subject_asset_id is not None and not any(asset.id == subject_asset_id for asset in document.assets):
+            raise AssetReferenceTruthError(f"Unknown subject Asset {subject_asset_id}")
+        return owner, version
     explicit_image_choice = (
         version.media_type == AssetMediaType.IMAGE
         and (subject_asset_id is None or subject_asset_id == owner.id)

@@ -16,7 +16,7 @@ from short_drama.models import (
 from short_drama.production_contracts import StoryboardPatchRequest, StoryboardShotReplacement
 from short_drama.studio_models import (
     StudioEpisodeCreate, StudioEpisodes, StudioMutationResult,
-    StudioRename, StudioSceneSave, StudioShotSave, StudioTimelineSave, StudioProjectCreate,
+    StudioRename, StudioRelatedSceneUpdate, StudioSceneEdit, StudioSceneSave, StudioShotSave, StudioTimelineSave, StudioProjectCreate,
     StudioPreferences,
 )
 from short_drama.studio_references import project_legacy_references, sync_shot_references
@@ -194,6 +194,30 @@ class StudioWorkspaceService:
         with self.lock:
             document = self._document(project_id)
             script = next(item for item in document.script_versions if item.id == document.project.current_script_version_id)
+            edits: list[StudioSceneEdit | StudioRelatedSceneUpdate] = [request, *request.related_scene_updates]
+            existing_ids = [edit.scene_id for edit in edits if edit.scene_id is not None]
+            if len(existing_ids) != len(set(existing_ids)):
+                raise ValueError("同一次保存不能重复修改同一场次。")
+            line_owners = {line_id: scene.id for scene in script.structured_scenes for line_id in scene.line_ids}
+            # Validate every related scene before touching any current content or
+            # media state. A stale payoff must not leave its setup half revised.
+            for edit in edits:
+                scene = next((item for item in script.structured_scenes if item.id == edit.scene_id), None)
+                if edit.scene_id is not None and scene is None:
+                    raise KeyError(edit.scene_id)
+                if scene is not None and edit.expected_text is not None and scene.screenplay_text != edit.expected_text:
+                    raise StudioContentConflict(f"场次 {scene.id} 已更新；关联修改均未保存，请读取最新内容后合并。")
+                scene_shot_ids = {shot.id for shot in document.shots if scene is not None and shot.scene_id == scene.id}
+                if edit.affected_shot_ids is not None and set(edit.affected_shot_ids) - scene_shot_ids:
+                    raise ValueError("受影响镜头必须属于当前修改的场次。")
+                if edit.lines is not None:
+                    for line in edit.lines:
+                        if line.spoken_text and line.spoken_text not in edit.screenplay_text:
+                            raise ValueError("结构化台词必须逐字来自当前场次正文")
+                        if line.id in line_owners and line_owners[line.id] != edit.scene_id:
+                            raise ValueError("结构化台词 ID 必须属于唯一场次，不能覆盖其他场次的台词。")
+                    if len({line.id for line in edit.lines}) != len(edit.lines):
+                        raise ValueError("同一场次的结构化台词 ID 不能重复。")
             # The UI edits current content; existing Agent inputs keep a stable
             # internal reference so writing one scene cannot invalidate its work.
             previous = script
@@ -201,42 +225,60 @@ class StudioWorkspaceService:
             script.version = max(item.version for item in document.script_versions) + 1
             script.id = f"{project_id}-script-v{script.version}"
             script.parent_version_id = previous.id
-            script.change_reason = "当前场次编辑"
+            script.change_reason = "当前场次编辑" + "".join(
+                f"；{edit.scene_id}：{edit.reason}" for edit in request.related_scene_updates
+            )
             script.created_at = datetime.now(UTC).isoformat()
             script.review_report = None
             script.review_disposition = None
             script.final_cold_read_report = None
-            scene = next((item for item in script.structured_scenes if item.id == request.scene_id), None)
-            if request.scene_id is not None and scene is None:
-                raise KeyError(request.scene_id)
-            if scene is not None and request.expected_text is not None and scene.screenplay_text != request.expected_text:
-                raise StudioContentConflict("此场次已更新；你的编辑仍保留，请读取最新内容后合并。")
-            scene_shots = [shot for shot in document.shots if scene is not None and shot.scene_id == scene.id]
-            if request.affected_shot_ids is not None and set(request.affected_shot_ids) - {shot.id for shot in scene_shots}:
-                raise ValueError("受影响镜头必须属于当前修改的场次。")
-            previous_lines = {line.id: line for line in script.lines if scene is not None and line.id in scene.line_ids}
-            if scene is None:
-                scene = StructuredScene(id=f"scene-{uuid4().hex[:12]}", heading=request.heading, summary="", line_ids=[])
-                script.structured_scenes.append(scene)
-            scene.heading = request.heading
-            changed_text = scene.screenplay_text != request.screenplay_text
-            scene.screenplay_text = request.screenplay_text
-            if request.summary is not None:
-                scene.summary = request.summary
-            if request.target_duration_seconds is not None:
-                scene.target_duration_seconds = request.target_duration_seconds
-            if request.narrative_purpose is not None:
-                scene.narrative_purpose = request.narrative_purpose
-            if request.lines is not None:
-                for line in request.lines:
-                    if line.spoken_text and line.spoken_text not in request.screenplay_text:
-                        raise ValueError("结构化台词必须逐字来自当前场次正文")
-                replaced_ids = set(scene.line_ids)
-                script.lines = [line for line in script.lines if line.id not in replaced_ids] + request.lines
-                scene.line_ids = [line.id for line in request.lines]
-                script.structure_stale_scene_ids = [item for item in script.structure_stale_scene_ids if item != scene.id]
-            elif changed_text and scene.id not in script.structure_stale_scene_ids:
-                script.structure_stale_scene_ids.append(scene.id)
+            changed_scene_ids: list[str] = []
+            affected: set[str] = set()
+            for edit in edits:
+                scene = next((item for item in script.structured_scenes if item.id == edit.scene_id), None)
+                previous_scene = None if scene is None else scene.model_copy(deep=True)
+                scene_shots = [shot for shot in document.shots if scene is not None and shot.scene_id == scene.id]
+                previous_lines = {line.id: line for line in script.lines if scene is not None and line.id in scene.line_ids}
+                if scene is None:
+                    scene = StructuredScene(id=f"scene-{uuid4().hex[:12]}", heading=edit.heading, summary="", line_ids=[])
+                    script.structured_scenes.append(scene)
+                was_structure_stale = scene.id in script.structure_stale_scene_ids
+                scene.heading = edit.heading
+                changed_text = scene.screenplay_text != edit.screenplay_text
+                scene.screenplay_text = edit.screenplay_text
+                if edit.summary is not None:
+                    scene.summary = edit.summary
+                if edit.target_duration_seconds is not None:
+                    scene.target_duration_seconds = edit.target_duration_seconds
+                if edit.narrative_purpose is not None:
+                    scene.narrative_purpose = edit.narrative_purpose
+                if "entry_state" in edit.model_fields_set:
+                    scene.entry_state = edit.entry_state
+                if "exit_state" in edit.model_fields_set:
+                    scene.exit_state = edit.exit_state
+                changed_lines: set[str] = set()
+                if edit.lines is not None:
+                    next_lines = {line.id: line for line in edit.lines}
+                    changed_lines = {line_id for line_id in previous_lines.keys() | next_lines.keys()
+                                     if previous_lines.get(line_id) != next_lines.get(line_id)}
+                    replaced_ids = set(scene.line_ids)
+                    script.lines = [line for line in script.lines if line.id not in replaced_ids] + edit.lines
+                    scene.line_ids = [line.id for line in edit.lines]
+                    script.structure_stale_scene_ids = [item for item in script.structure_stale_scene_ids if item != scene.id]
+                elif changed_text and scene.id not in script.structure_stale_scene_ids:
+                    script.structure_stale_scene_ids.append(scene.id)
+                if scene != previous_scene or changed_lines or (
+                    was_structure_stale and scene.id not in script.structure_stale_scene_ids
+                ):
+                    changed_scene_ids.append(scene.id)
+                    affected.update(edit.affected_shot_ids if edit.affected_shot_ids is not None
+                                    else (shot.id for shot in scene_shots))
+                    affected.update(shot.id for shot in scene_shots if changed_lines.intersection(shot.dialogue_line_ids))
+            scene_line_ids = [line_id for scene in script.structured_scenes for line_id in scene.line_ids]
+            if len(scene_line_ids) != len(set(scene_line_ids)):
+                raise ValueError("结构化台词 ID 必须属于唯一场次，不能覆盖其他场次的台词。")
+            if not changed_scene_ids and script.structure_stale_scene_ids == previous.structure_stale_scene_ids:
+                return StudioMutationResult(project=self.service.get_project(project_id), notices=["当前场次内容未变化。"])
             script.order_lines_by_scenes()
             script.screenplay_text = "\n\n".join(f"{item.heading}\n{item.screenplay_text}" for item in script.structured_scenes)
             script.original_text = script.screenplay_text
@@ -245,12 +287,6 @@ class StudioWorkspaceService:
             script.approval_status = ApprovalStatus.APPROVED
             document.script_versions.append(script)
             document.project.current_script_version_id = script.id
-            affected = set(request.affected_shot_ids) if request.affected_shot_ids is not None else {shot.id for shot in scene_shots}
-            if request.lines is not None:
-                next_lines = {line.id: line for line in request.lines}
-                changed_lines = {line_id for line_id in previous_lines.keys() | next_lines.keys()
-                                 if previous_lines.get(line_id) != next_lines.get(line_id)}
-                affected.update(shot.id for shot in scene_shots if changed_lines.intersection(shot.dialogue_line_ids))
             for shot in document.shots:
                 if shot.id in affected:
                     shot.freshness = Freshness.STALE
@@ -258,7 +294,9 @@ class StudioWorkspaceService:
             self.service.repository.mark_takes_stale(project_id, sorted(affected))
             document.project.updated_at = datetime.now(UTC).isoformat()
             self.service.repository.save_project(document)
-            return StudioMutationResult(project=self.service.get_project(project_id), notices=["剧本已保存；相关镜头保留。下一次制作前由 Agent 按当前正文同步台词与分镜。"])
+            return StudioMutationResult(project=self.service.get_project(project_id),
+                changed_scene_ids=changed_scene_ids, changed_shot_ids=sorted(affected),
+                notices=["剧本及本次明确关联的场次已保存；相关镜头保留。下一次制作前由 Agent 按当前正文同步台词与分镜。"])
 
     def save_shot(self, project_id: str, shot_id: str, request: StudioShotSave) -> StudioMutationResult:
         with self.lock:

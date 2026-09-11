@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from short_drama.asset_plan_reconciler import (
+    AssetPlanReconcileError,
     assess_asset_plan_execution_contract,
     reconcile_asset_plan_execution_contract,
 )
@@ -251,6 +254,38 @@ def _reconcile_request(base_version_id: str) -> AssetPlanExecutionReconcileReque
         ],
         origin=ProductionDocumentOrigin.AGENT,
     )
+
+
+@pytest.mark.parametrize(
+    ("work_id", "error_code", "owner"),
+    [
+        ("work-admission-letter-text", "WORK_ITEM_OUTSIDE_SUBJECT", "prop-admission-letter"),
+        ("work-does-not-exist", "UNKNOWN_WORK_ITEM", None),
+    ],
+)
+def test_subject_selection_distinguishes_other_parent_from_missing_work(
+    work_id: str, error_code: str, owner: str | None,
+) -> None:
+    plan = _legacy_plan()
+    before = plan.model_dump(mode="json")
+    request = AssetPlanExecutionReconcileRequest(
+        base_version_id="version-legacy",
+        origin=ProductionDocumentOrigin.AGENT,
+        subjects=[AssetPlanSubjectReconcileIntent(
+            item_id="character-linyi",
+            canonical_work_item_id="work-linyi-face",
+            supplemental_work_item_ids=["work-linyi-profile", "work-linyi-sheet", work_id],
+        )],
+    )
+    with pytest.raises(AssetPlanReconcileError) as caught:
+        reconcile_asset_plan_execution_contract(plan, request)
+    message = str(caught.value)
+    assert error_code in message
+    assert "character-linyi" in message
+    assert work_id in message
+    if owner is not None:
+        assert owner in message
+    assert plan.model_dump(mode="json") == before
 
 
 def test_compiler_migrates_legacy_character_and_text_surface_contracts() -> None:

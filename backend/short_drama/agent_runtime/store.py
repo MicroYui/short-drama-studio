@@ -262,11 +262,11 @@ class AgentRuntimeStore:
             return selected
 
     @staticmethod
-    def _retain_tool_schema_ids(
+    def _retain_accumulated_ids(
         connection: sqlite3.Connection, table: str, record: AgentRun | WorkOrder,
     ) -> None:
-        # A caller may have loaded its lifecycle object before discovery finished.
-        # These monotonically accumulated IDs must survive that later save.
+        # A caller may have loaded its lifecycle object before discovery or an
+        # incremental plan finished. Keep those monotonic IDs on a later save.
         row = connection.execute(
             f"SELECT record_json FROM {table} WHERE id = ?", (record.id,),
         ).fetchone()
@@ -278,11 +278,17 @@ class AgentRuntimeStore:
                     *[item for item in previous if isinstance(item, str)],
                     *record.loaded_tool_schema_ids,
                 ]))
+            consumed = stored.get("completion_planned_work_order_ids")
+            if isinstance(record, AgentRun) and isinstance(consumed, list):
+                record.completion_planned_work_order_ids = list(dict.fromkeys([
+                    *[item for item in consumed if isinstance(item, str)],
+                    *record.completion_planned_work_order_ids,
+                ]))
 
     def save_run(self, run: AgentRun) -> None:
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            self._retain_tool_schema_ids(connection, "agent_runs", run)
+            self._retain_accumulated_ids(connection, "agent_runs", run)
             cursor = connection.execute(
                 """
                 UPDATE agent_runs
@@ -354,15 +360,26 @@ class AgentRuntimeStore:
                 ).fetchall()
         return [AgentRun.model_validate_json(cast(str, row["record_json"])) for row in rows]
 
-    def append_plan_revision(self, revision: PlanRevision, updated_run: AgentRun) -> None:
-        """Persist a new plan and update the run's current-plan pointer atomically."""
+    def append_plan_revision(
+        self, revision: PlanRevision, updated_run: AgentRun, *,
+        updated_work_orders: Sequence[WorkOrder] = (),
+    ) -> None:
+        """Commit the plan, run pointer and carried WorkOrder ownership together."""
 
         if revision.run_id != updated_run.id:
             raise ValueError("Plan revision and run ids do not match")
         if updated_run.current_plan_revision_id != revision.id:
             raise ValueError("Run must point to the plan revision being appended")
+        if len({order.id for order in updated_work_orders}) != len(updated_work_orders):
+            raise ValueError("Updated work order ids must be unique")
+        for order in updated_work_orders:
+            if order.parent_run_id != updated_run.id:
+                raise ValueError("Updated work order must belong to the plan run")
+            if order.active_plan_revision_id != revision.id:
+                raise ValueError("Updated work order must point to the appended plan")
 
         with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT MAX(revision) AS latest FROM agent_plan_revisions WHERE run_id = ?",
                 (revision.run_id,),
@@ -373,6 +390,18 @@ class AgentRuntimeStore:
                 raise ValueError(
                     f"Expected plan revision {latest + 1}, got {revision.revision}"
                 )
+            if revision.inherited_action_ids:
+                placeholders = ", ".join("?" for _ in revision.inherited_action_ids)
+                rows = connection.execute(
+                    f"SELECT id, run_id, plan_step_id FROM agent_actions WHERE id IN ({placeholders})",
+                    revision.inherited_action_ids,
+                ).fetchall()
+                step_ids = {step.id for step in revision.steps}
+                if len(rows) != len(revision.inherited_action_ids) or any(
+                    row["run_id"] != revision.run_id or row["plan_step_id"] not in step_ids
+                    for row in rows
+                ):
+                    raise ValueError("Inherited actions must exist in this run and target retained plan steps")
 
             connection.execute(
                 """
@@ -388,6 +417,7 @@ class AgentRuntimeStore:
                     revision.model_dump_json(),
                 ),
             )
+            self._retain_accumulated_ids(connection, "agent_runs", updated_run)
             cursor = connection.execute(
                 """
                 UPDATE agent_runs
@@ -403,6 +433,19 @@ class AgentRuntimeStore:
             )
             if cursor.rowcount == 0:
                 raise KeyError(f"Unknown agent run: {updated_run.id}")
+            for order in updated_work_orders:
+                self._retain_accumulated_ids(connection, "agent_work_orders", order)
+                cursor = connection.execute(
+                    """
+                    UPDATE agent_work_orders
+                    SET status = ?, updated_at = ?, record_json = ?
+                    WHERE id = ? AND parent_run_id = ?
+                    """,
+                    (order.status.value, _timestamp(order.updated_at), order.model_dump_json(),
+                     order.id, order.parent_run_id),
+                )
+                if cursor.rowcount != 1:
+                    raise KeyError(f"Unknown work order for appended plan: {order.id}")
 
     def list_plan_revisions(self, run_id: str) -> list[PlanRevision]:
         with self._lock, self._connection() as connection:
@@ -672,7 +715,7 @@ class AgentRuntimeStore:
             raise KeyError(f"Unknown agent run: {work_order.parent_run_id}")
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            self._retain_tool_schema_ids(connection, "agent_work_orders", work_order)
+            self._retain_accumulated_ids(connection, "agent_work_orders", work_order)
             connection.execute(
                 """
                 INSERT INTO agent_work_orders(

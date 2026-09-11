@@ -24,6 +24,7 @@ from short_drama.agent_runtime.models import (
     WorkOrderNextOwner,
 )
 from short_drama.agent_runtime.store import AgentRuntimeStore
+from short_drama.agent_runtime.leader_context import saved_tool_result_ref
 
 
 DEFAULT_CONTEXT_CHARACTER_BUDGET = 24_000
@@ -715,7 +716,15 @@ class ContextCompiler:
             limit=experience_limit,
         )
 
-        candidates: list[ArtifactRef] = list(requested_artifact_refs)
+        actions = self._store.list_actions(run.id)
+        # Newly read/written objects must not be crowded out by the first 16
+        # older memory refs. Keep the newest observed version per object here;
+        # explicitly requested immutable refs still take precedence.
+        recent_refs: dict[tuple[str, str, str], ArtifactRef] = {}
+        for action in reversed(actions):
+            for ref in action.artifact_refs:
+                recent_refs.setdefault((ref.project_id, ref.artifact_type, ref.artifact_id), ref)
+        candidates: list[ArtifactRef] = [*requested_artifact_refs, *recent_refs.values()]
         if run_memory is not None:
             candidates.extend(run_memory.artifact_refs)
         if project_memory is not None:
@@ -756,7 +765,6 @@ class ContextCompiler:
             else:
                 artifacts.append(_leader_artifact_summary(summary))
 
-        actions = self._store.list_actions(run.id)
         selected_actions = (
             actions[-recent_action_limit:] if recent_action_limit > 0 else []
         )
@@ -767,6 +775,8 @@ class ContextCompiler:
                 kind=action.kind,
                 status=action.status,
                 summary=action.output_summary or action.input_summary,
+                tool_result_ref=(None if action.tool_result_context_ref is None else
+                    saved_tool_result_ref(run.project_id, run.id, action.tool_result_context_ref)),
                 artifact_refs=action.artifact_refs,
                 agent_result=_agent_result_digest(
                     None

@@ -710,7 +710,8 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             version=2,
             category=ToolCategory.SHOT,
             description=(
-                "当分镜结构需要整体重构时，基于明确的当前版本写入一份新版本。"
+                "整体重写全片分镜；局部拆镜、插入、删除或重分组使用shot.patch_storyboard，无需重输全片。"
+                "确需整体重构时，基于明确的当前版本写入一份新版本。"
                 "旧分镜与旧镜头引用继续可读，供 Agent 追溯和比较。"
                 "成功时只返回新版本身份与结构摘要。"
             ),
@@ -738,8 +739,11 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             version=2,
             category=ToolCategory.SHOT,
             description=(
-                "只修改 Agent 明确选中的镜头或 ClipGroup，并通过 expected_revision"
-                " 保护其他已确认镜头；未修改镜头保持原修订号。"
+                "局部改镜头、拆镜/合并/插入/删除、重分组；只传选中内容，不重输全片。"
+                "replacements改正文；shot_splices以原shot_ids替换为局部shots，空shots删除，"
+                "空shot_ids用after_shot_id插入。原组自动更新成员/时长；"
+                "需改变组边界时用clip_group_splices只替换相关旧组。镜号/新修订号由代码计算。"
+                "base_version_id指向已读分镜；相关内容或插入边界已变时报冲突，无关人工修改保留。"
                 "上游剧本正在修改时也可保存局部内容，并保留实际来源；生成前再同步所用输入。"
                 "核对新剧本或制作说明后，可只更新对应的 script_version_id、bible_version_id、"
                 "production_spec_document_id/version_id 和 scene_nodes；不必重写全片镜头。"

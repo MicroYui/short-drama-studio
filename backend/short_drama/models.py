@@ -1426,9 +1426,76 @@ class AssetReferenceSheet(DomainModel):
         return self
 
 
+class TextPlateTextBlock(DomainModel):
+    """One exact visible line positioned in a normalized canvas region."""
+
+    text: str = Field(min_length=1, max_length=2000)
+    content_box: tuple[float, float, float, float] = Field(description="Normalized canvas x/y/width/height. No implicit margins; all ink must fit this box.")
+    font_size: int = Field(default=48, ge=8, le=512, description="Actual font size in output pixels. Overflow returns an error; text is not silently clipped or shrunk.")
+    text_align: Literal["left", "center", "right"] = "left"
+    vertical_align: Literal["top", "center", "bottom"] = "top"
+    color: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        if not value.strip() or "\n" in value or "\r" in value:
+            raise ValueError("Use one non-empty visible line per text block; use another block for the next line")
+        return value.strip()
+
+    @field_validator("content_box")
+    @classmethod
+    def validate_box(cls, value: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        x, y, width, height = value
+        if not all(0 <= part <= 1 for part in value) or width <= 0 or height <= 0 or x + width > 1 or y + height > 1:
+            raise ValueError("content_box x/y/width/height must stay inside the normalized canvas")
+        return value
+
+
+class TextPlateLine(DomainModel):
+    """A rule or signature line; geometry is not part of required visible wording."""
+
+    start: tuple[float, float] = Field(description="Normalized canvas start x/y.")
+    end: tuple[float, float] = Field(description="Normalized canvas end x/y.")
+    width: int = Field(default=2, ge=1, le=32, description="Stroke width in output pixels.")
+    color: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_position(cls, value: tuple[float, float]) -> tuple[float, float]:
+        if not all(0 <= part <= 1 for part in value):
+            raise ValueError("Line endpoint x/y must stay inside the normalized canvas")
+        return value
+
+
+class AssetTextPlateContentState(DomainModel):
+    """Explicit narrative state and exact copy for this candidate only."""
+
+    name: str = Field(min_length=1, max_length=500, description="This candidate's explicit narrative state; never inferred from descriptor or layout instructions.")
+    required_visible_text: list[str] = Field(min_length=1, max_length=64,
+        description="Complete ordered visible wording for this state. Preserve each fixed brief text entry as an unchanged entry in order; add state text as separate entries. Rendering blocks may reflow this same wording.")
+
+    @model_validator(mode="after")
+    def validate_text(self) -> AssetTextPlateContentState:
+        if not self.name.strip() or self.name != self.name.strip():
+            raise ValueError("Text plate content_state.name must be trimmed and non-empty")
+        if any(not item.strip() or item != item.strip() or "\n" in item or "\r" in item
+               for item in self.required_visible_text):
+            raise ValueError("Text plate content_state.required_visible_text entries must be trimmed, non-empty single lines; blank rows belong in the layout")
+        return self
+
+
+class TextPlateAppendedTextBlock(TextPlateTextBlock):
+    """Actually drawn local addition; the original plate pixels are retained."""
+
+    font_family: str = Field(min_length=1, max_length=200)
+
+
 class AssetTextPlate(DomainModel):
     """Exact text and deterministic layout metadata for a local text plate."""
 
+    purpose: Literal["SCREEN_CONTENT", "PHYSICAL_SURFACE_CONTENT"] = "SCREEN_CONTENT"
+    content_state: AssetTextPlateContentState | None = None
     size: str = Field(min_length=1, max_length=80)
     background_color: str = Field(min_length=1, max_length=64)
     foreground_color: str = Field(min_length=1, max_length=64)
@@ -1439,8 +1506,19 @@ class AssetTextPlate(DomainModel):
     stroke_color: str = "#000000"
     title: str | None = Field(default=None, min_length=1, max_length=500)
     exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
+    text_blocks: list[TextPlateTextBlock] = Field(default_factory=list[TextPlateTextBlock], max_length=64)
+    append_text_blocks: list[TextPlateAppendedTextBlock] = Field(
+        default_factory=list[TextPlateAppendedTextBlock], max_length=64,
+        description="Accumulated additions drawn over the original plate PNG. Original title, exact_lines, text_blocks and lines retain their actual layout.",
+    )
+    lines: list[TextPlateLine] = Field(default_factory=list[TextPlateLine], max_length=64)
     layout_description: str = Field(min_length=1, max_length=2000)
     font_family: str = Field(min_length=1, max_length=200)
+
+    def required_visible_text(self) -> list[str]:
+        original = ([block.text for block in self.text_blocks] if self.text_blocks else
+            ([self.title] if self.title is not None else []) + [line for line in self.exact_lines if line])
+        return [*original, *(block.text for block in self.append_text_blocks)]
 
 
 class AssetSourceRecord(DomainModel):
@@ -1472,6 +1550,15 @@ class AssetDerivationReference(DomainModel):
     subject_alias: str | None = Field(default=None, min_length=1, max_length=120)
 
 
+class AssetImageCrop(DomainModel):
+    """Actual pixels selected from an EXIF-oriented local source; never regenerated."""
+
+    source_asset_version_id: str
+    source_width: int = Field(gt=0)
+    source_height: int = Field(gt=0)
+    box_pixels: tuple[int, int, int, int]
+
+
 class AssetVersion(DomainModel):
     id: str
     version: int
@@ -1492,6 +1579,7 @@ class AssetVersion(DomainModel):
         max_length=16,
     )
     reference_sheet: AssetReferenceSheet | None = None
+    image_crop: AssetImageCrop | None = None
     text_plate: AssetTextPlate | None = None
     source: AssetSourceRecord | None = None
     approval_status: ApprovalStatus
@@ -1569,6 +1657,11 @@ class ShotReferenceCue(DomainModel):
     alias: str = Field(min_length=1, max_length=80)
     required_tags: list[str] = Field(default_factory=list[str], max_length=12)
     purpose: str = Field(min_length=1, max_length=500)
+    image_reference_role: ImageReferenceRole | None = Field(default=None, description=(
+        "图片实际提供的视觉依据。COMPOSITION 为本镜构图、站位或状态画面；"
+        "LAYOUT_GUIDE 为分镜顺序或布局参考，均不代表角色身份卡，也不是硬首尾帧。"
+        "身份、服装、场景、道具按实际用途填写；省略兼容已有引用。"
+    ))
 
     usage: Literal["GENERATION", "EDITORIAL"] = Field(
         default="GENERATION",
@@ -1616,7 +1709,10 @@ class ShotTimelineBeat(DomainModel):
     action: str = Field(min_length=1, max_length=800)
     performance: str | None = Field(default=None, min_length=1, max_length=500)
     emotion: str | None = Field(default=None, min_length=1, max_length=300)
-    dialogue_line_ids: list[str] = Field(default_factory=list[str], max_length=40)
+    dialogue_line_ids: list[str] = Field(default_factory=list[str], max_length=40,
+        description=("Exact script line IDs audible during this beat. Repeat one ID on "
+            "adjacent beats or adjacent Shots in the same ClipGroup when the same "
+            "utterance continues across their boundary; do not repeat the spoken text."))
     sound: str | None = Field(default=None, min_length=1, max_length=500)
     references: list[ShotReferenceCue] = Field(
         default_factory=list[ShotReferenceCue],
@@ -1649,7 +1745,14 @@ class ShotPlan(DomainModel):
     framing: str
     camera: str
     audio_intent: str
-    dialogue_line_ids: list[str]
+    dialogue_line_ids: list[str] = Field(description=(
+        "Script line IDs in audible order, folding a line continued across adjacent "
+        "beats. A line may also continue as the next Shot's first line within the "
+        "same ClipGroup/request; cover its actual time in both Shots' timeline_beats. "
+        "Keep that same ID on both Shots and their audible beats; audio_intent prose "
+        "alone does not declare coverage. Do not create a new ScriptLine for a continuation. "
+        "Source line IDs still count once per continuous utterance."
+    ))
     references: list[ShotReferenceCue] = Field(default_factory=list[ShotReferenceCue], max_length=24)
     timeline_beats: list[ShotTimelineBeat] = Field(
         default_factory=list[ShotTimelineBeat],
@@ -1898,6 +2001,10 @@ class SubtitleCue(DomainModel):
 class OutputSpec(DomainModel):
     width: int = 1080
     height: int = 1920
+    follow_source_dimensions: bool = Field(default=False, description=(
+        "New automatic manifests follow selected Take dimensions on rebuild. "
+        "False preserves an explicitly chosen or historical output size."
+    ))
     fps: int = 30
     video_codec: str = "h264"
     profile: str = "high"

@@ -7,7 +7,7 @@ from short_drama.skill_ids import SkillIds
 from typing import Literal
 from pydantic import Field, JsonValue, model_validator
 
-from short_drama.models import DomainModel, ProjectAggregate, ProjectRecord, ShotPlan, ScriptLine
+from short_drama.models import DomainModel, ProjectAggregate, ProjectRecord, ShotPlan, ScriptLine, SceneContinuitySummary
 
 
 class StudioEpisodeCreate(DomainModel):
@@ -19,19 +19,46 @@ class StudioEpisodes(DomainModel):
     episodes: list[ProjectRecord]
 
 
-class StudioSceneSave(DomainModel):
-    scene_id: str | None = None
+class StudioSceneContent(DomainModel):
     heading: str = Field(min_length=1, max_length=240)
     screenplay_text: str = Field(max_length=50000)
-    expected_text: str | None = None
     lines: list[ScriptLine] | None = None
     summary: str | None = None
     target_duration_seconds: float | None = Field(default=None, gt=0)
     narrative_purpose: str | None = None
+    entry_state: SceneContinuitySummary | None = Field(default=None, description=(
+        "Relevant state established by the current screenplay at scene entry, not an unfulfilled outline. "
+        "Omit to preserve; explicitly null to remove an obsolete state summary."
+    ))
+    exit_state: SceneContinuitySummary | None = Field(default=None, description=(
+        "Relevant facts, prop/character states and open threads actually established by this scene's text. "
+        "Omit to preserve; explicitly null to remove an obsolete state summary."
+    ))
     affected_shot_ids: list[str] | None = Field(default=None, description=(
         "After reading current shots, identify which shots need a visual update for this scene edit. "
         "Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. "
         "Shots using changed structured dialogue are always included."
+    ))
+
+
+class StudioSceneEdit(StudioSceneContent):
+    scene_id: str | None = None
+    expected_text: str | None = None
+
+
+class StudioRelatedSceneUpdate(StudioSceneContent):
+    scene_id: str
+    expected_text: str = Field(description="Exact current body read from this related scene; protects concurrent edits.")
+    reason: str = Field(min_length=1, max_length=1000, description=(
+        "Concrete semantic connection to the main edit, such as a setup/payoff, shared fact or prop state."
+    ))
+
+
+class StudioSceneSave(StudioSceneEdit):
+    related_scene_updates: list[StudioRelatedSceneUpdate] = Field(default_factory=list[StudioRelatedSceneUpdate], description=(
+        "Optional narrowly related scene edits saved atomically with this scene. Use only when the current "
+        "change affects an earlier setup, later payoff or established fact. Read each current body first; "
+        "update its summary/purpose/state when affected. Do not include unchanged or unrelated scenes."
     ))
 
 
@@ -82,12 +109,29 @@ class EditorialSubtitleChange(DomainModel):
     remove: bool = False
 
 
+class EditorialSubtitleCreate(DomainModel):
+    id: str = Field(min_length=1, max_length=200, description="New cue ID, unique in the selected timeline. Use subtitles to edit or remove an existing ID.")
+    text: str = Field(min_length=1)
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0, allow_inf_nan=False)
+    style: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    track_index: int | None = Field(default=None, ge=0, description="Existing subtitle track index. Omit to use an enabled subtitle track or create one without changing other tracks.")
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> EditorialSubtitleCreate:
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("end_seconds must be after start_seconds.")
+        return self
+
+
 class StudioEditorialEdit(DomainModel):
     expected_revision: int = Field(ge=0)
     timeline_id: str | None = Field(default=None, min_length=1,
         description="Exact saved timeline from editor_selection/read_editorial. Omit only for unambiguous IDs on the current active timeline; duplicate IDs across timelines require this field. Explicit targets preserve the active selection.")
     clips: list[EditorialClipChange] = Field(default_factory=list[EditorialClipChange], max_length=200)
     subtitles: list[EditorialSubtitleChange] = Field(default_factory=list[EditorialSubtitleChange], max_length=200)
+    add_subtitles: list[EditorialSubtitleCreate] = Field(default_factory=list[EditorialSubtitleCreate], max_length=200,
+        description="Create captions without reading/writing the full project. Times use FILM coordinates unless shot_id selects SHOT_LOCAL; local cues must fit the edited shot use. Spoken captions should come from actual audio.transcribe_native results, with only supported recognition corrections, not unheard script lines.")
     keep_linked_audio: bool = True
     shot_id: str | None = None
     anchor_clip_id: str | None = None
@@ -96,6 +140,11 @@ class StudioEditorialEdit(DomainModel):
     def validate_edit_scope(self) -> StudioEditorialEdit:
         if self.anchor_clip_id and not self.shot_id:
             raise ValueError("anchor_clip_id requires shot_id; FILM edits use timeline_id without either field.")
+        added_ids = [cue.id for cue in self.add_subtitles]
+        if len(set(added_ids)) != len(added_ids):
+            raise ValueError("add_subtitles IDs must be unique within this request.")
+        if set(added_ids).intersection(cue.id for cue in self.subtitles):
+            raise ValueError("A subtitle ID cannot be both added and edited/removed in one request.")
         return self
 
 
@@ -112,6 +161,8 @@ class StudioAssetOverlay(DomainModel):
 class StudioMutationResult(DomainModel):
     project: ProjectAggregate
     notices: list[str] = Field(default_factory=list[str])
+    changed_scene_ids: list[str] = Field(default_factory=list[str])
+    changed_shot_ids: list[str] = Field(default_factory=list[str])
 
 
 class StudioTextChangeInput(DomainModel):
@@ -231,6 +282,10 @@ class StudioScope(DomainModel):
     kind: Literal["episode", "scene", "shot", "asset", "film"] = "episode"
     id: str | None = None
     label: str = "当前集"
+    asset_version_id: str | None = Field(default=None, min_length=1,
+        description="Exact media file selected from project assets; does not adopt it or replace the asset's current file.")
+    take_id: str | None = Field(default=None, min_length=1,
+        description="Exact generated source video selected for viewing or this request; does not adopt the Take.")
     editor_selection: StudioEditorSelection | None = Field(default=None,
         description="Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow.")
 
@@ -254,6 +309,10 @@ class StudioJob(DomainModel):
     run_id: str | None = None
     status: Literal["queued", "running", "retrying", "pausing", "paused", "waiting_user", "completed", "failed"] = "queued"
     objective: str
+    current_goal: str | None = Field(
+        default=None,
+        description="活动视图从当前 AgentRun 读取的有效目标；原始 objective 保留用于制作记录。",
+    )
     scope: StudioScope
     pending_messages: list[StudioMessage] = Field(default_factory=list[StudioMessage])
     error: str | None = None
@@ -328,10 +387,18 @@ class StudioEditorial(DomainModel):
 
 class StudioExportRequest(DomainModel):
     expected_revision: int = Field(ge=1)
-    width: int = Field(default=1280, ge=256, le=3840)
-    height: int = Field(default=720, ge=256, le=3840)
+    width: int | None = Field(default=None, ge=256,
+        description="Explicit output width. Omit width and height together to retain actual selected video detail in the project aspect ratio.")
+    height: int | None = Field(default=None, ge=256,
+        description="Explicit output height; supply together with width, or omit both to follow selected source media.")
     fps: int = Field(default=24, ge=12, le=60)
     subtitles: bool = True
+
+    @model_validator(mode="after")
+    def paired_output_dimensions(self) -> "StudioExportRequest":
+        if (self.width is None) != (self.height is None):
+            raise ValueError("Supply width and height together, or omit both to follow the selected media.")
+        return self
 
 
 class StudioExport(DomainModel):

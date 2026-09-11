@@ -566,7 +566,7 @@ def test_asset_review_compares_candidate_with_approved_canonical_images(tmp_path
             "version_id": canonical.id,
             "reference_role": "SUBJECT_IDENTITY",
             "reference_authority": "AUTHORITATIVE",
-            "purpose": "当前已批准母版，用于审核候选的连续性。",
+            "purpose": "当前明确选择的可用参考，用于审核候选的连续性。",
             "subject_alias": character.name,
             "approval_status": "APPROVED",
             "is_current_canonical_master": False,
@@ -622,12 +622,20 @@ def test_asset_version_semantic_inspection_is_agent_callable_before_review(
         "issues": [],
         "summary": "The prop is coherent across the reference views.",
         "evidence_references": [],
+        "candidate_output_layout": None,
+        "review_focus": None,
+        "region_evidence": [],
+        "crop_suggestion": None,
     }
     assert {item.artifact_type for item in result.artifact_refs} == {
         "asset",
         "asset_version",
     }
     assert len(language.image_urls) == 1
+    assert {
+        item.artifact_id: item.version for item in result.artifact_refs
+        if item.artifact_type == "asset_version"
+    } == {imported.version.id: imported.version.version}
     current = service.get_project(project.document.project.id)
     current_asset = next(item for item in current.document.assets if item.id == asset.id)
     current_version = next(
@@ -699,6 +707,11 @@ def test_source_image_analysis_preserves_explicit_user_identity_assignment(
         "asset",
         "asset_version",
     }
+
+    assert {
+        item.artifact_id: item.version for item in result.artifact_refs
+        if item.artifact_type == "asset_version"
+    } == {imported.version.id: imported.version.version}
 
 
 @pytest.mark.parametrize(
@@ -822,8 +835,14 @@ def test_asset_inspection_automatically_compares_authoritative_derivation_source
     assert any(
         ref.artifact_type == "asset_version"
         and ref.artifact_id == source.version.id
+        and ref.version == source.version.version
         for ref in result.artifact_refs
     )
+    assert next(
+        ref.version for ref in result.artifact_refs
+        if ref.artifact_type == "asset_version"
+        and ref.artifact_id == candidate.version.id
+    ) == candidate.version.version
     assert result.output is not None
     assert result.output["evidence_references"] == [
         {

@@ -1,0 +1,449 @@
+{
+  "source_note": "2026-09-12 read-only incident excerpt. Exact result state_image_map, result references and receiving task_inputs; unrelated delivery fields omitted. No provider calls or runtime writes.",
+  "result": {
+    "id": "agent-result-ccef01f5b6124dc083772e9601b181ad",
+    "work_order_id": "work-order-12f15f76ccb84cf1b6346a8ab5374c03",
+    "status": "COMPLETED",
+    "concise_summary": "三项纸笔道具已完成：6张摄影参考、4张准确文字图版均已保存并检查。黑笔有效设定已按正文修正；情况说明的双空白、仅复核签字、双签状态分开保存，报价单保留既有红改与赵衡确认签名。本单未修改剧本、人物或场景，未创建或提交视频任务。",
+    "created_artifacts": [
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-c10cf71df108",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-f4936a914dc3",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-318e8d7fb28c",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-a9fb492dce6b",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-9d931209f7ec",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-1156f46e26af",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-5464dab394be",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-3adcb6b5365e",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-974420be0033",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-d99209b73470",
+        "version": null
+      }
+    ],
+    "updated_artifacts": [
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset",
+        "artifact_id": "asset-d4a1234d0350",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset",
+        "artifact_id": "asset-08b6047a6a38",
+        "version": null
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset",
+        "artifact_id": "asset-797c99b1531c",
+        "version": null
+      }
+    ],
+    "findings": [
+      "三项既有道具对象内已具备可用的实际PNG文件，无需另建重复载体或借用其他项目素材。",
+      "情况说明三种签字状态与报价单原有确认签名已明确分离，不能以资产最新版本自动代替开场状态。",
+      "初版空白字版签栏过高，以及早期双签字版相对前态漂移的问题，均已通过本地精确排版修正。",
+      "报价单摄影图的红字笔触感偏弱属轻微外观限制；准确文案、红线划改和既有手写确认签名均可读。"
+    ],
+    "decisions": [
+      "采用state_image_map列出的10张图片服务本轮准备；保留现有DRAFT状态，不将Provider成功自动解释为canonical。",
+      "不采用asset-version-c5d4310c5e2d和asset-version-f6ad4643e596；保留历史，不作为后续输入。",
+      "不为不妨碍用途的轻微版面偏移或红字规整外观重复付费生成。",
+      "文字图版负责准确文案和位置，摄影图负责纸张与可见签字状态；两者均不冒充视频或不存在的后期修复能力。"
+    ],
+    "created_at": "2026-09-11T20:42:37.448165Z",
+    "deliverable": {
+      "state_image_map": [
+        {
+          "asset_id": "asset-08b6047a6a38",
+          "state": "情况说明：经办、复核双空白",
+          "use_window": "开场至赵衡签复核之前，包括许岚停笔和要求共同担责。",
+          "photographic_version_id": "asset-version-a9fb492dce6b",
+          "text_plate_version_id": "asset-version-318e8d7fb28c",
+          "provider_task_id": "image-task-0e94c71363fc",
+          "source_version_ids": [
+            "asset-version-318e8d7fb28c"
+          ],
+          "reference_purpose": "摄影图提供纸张、版面与双空白状态；字版提供准确中文和版面底稿。",
+          "selection": "采用；两栏均无姓名或墨迹。"
+        },
+        {
+          "asset_id": "asset-08b6047a6a38",
+          "state": "情况说明：仅赵衡签复核，经办空白",
+          "use_window": "赵衡完成复核签字之后、许岚签经办之前。",
+          "photographic_version_id": "asset-version-1156f46e26af",
+          "text_plate_version_id": "asset-version-9d931209f7ec",
+          "provider_task_id": "image-task-dee1c06e5877",
+          "source_version_ids": [
+            "asset-version-a9fb492dce6b",
+            "asset-version-9d931209f7ec"
+          ],
+          "reference_purpose": "沿双空白摄影前态派生，仅下方复核栏增加黑墨手写赵衡；字版限定姓名和栏位。",
+          "selection": "采用；经办仍空白，未出现许岚签名。"
+        },
+        {
+          "asset_id": "asset-08b6047a6a38",
+          "state": "情况说明：经办许岚、复核赵衡，两栏签全",
+          "use_window": "许岚完成经办签字之后及结尾。",
+          "photographic_version_id": "asset-version-3adcb6b5365e",
+          "text_plate_version_id": "asset-version-5464dab394be",
+          "provider_task_id": "image-task-529c3acf4989",
+          "source_version_ids": [
+            "asset-version-1156f46e26af",
+            "asset-version-5464dab394be"
+          ],
+          "reference_purpose": "沿单签摄影前态增加上方经办许岚，保留既有复核赵衡及纸张版面。",
+          "selection": "采用；姓名没有互换或重复。此单纸参考不等于结尾两纸叠放构图已完成。"
+        },
+        {
+          "asset_id": "asset-797c99b1531c",
+          "state": "报价单：既有红色修改、右下角赵衡确认签名",
+          "use_window": "从开场到结尾保持不变；不在本纸新增签字。",
+          "photographic_version_id": "asset-version-d99209b73470",
+          "text_plate_version_id": "asset-version-974420be0033",
+          "provider_task_id": "image-task-e3a44b391845",
+          "source_version_ids": [
+            "asset-version-974420be0033",
+            "asset-version-1156f46e26af"
+          ],
+          "reference_purpose": "报价字版决定本纸文案和布局；情况说明单签图只贡献纸张、黑墨笔迹质感，不贡献其标题、双签栏或剧情状态。",
+          "selection": "采用；原报价有红线划改，调整报价为红字，确认栏赵衡为可读的黑墨手写。"
+        },
+        {
+          "asset_id": "asset-d4a1234d0350",
+          "state": "黑色签字笔：闭帽",
+          "use_window": "开场横放经办栏时，以及结尾重新扣帽后。",
+          "photographic_version_id": "asset-version-c10cf71df108",
+          "provider_task_id": "image-task-9b7964f8105d",
+          "source_version_ids": [],
+          "reference_purpose": "从零建立同一支普通无品牌黑色带帽笔的外形及闭帽状态。",
+          "selection": "采用；笔尖不外露，笔尾不套帽，无按动按钮、第二支笔或额外笔帽。"
+        },
+        {
+          "asset_id": "asset-d4a1234d0350",
+          "state": "黑色签字笔：无帽笔与唯一分离笔帽",
+          "use_window": "许岚拔帽后至结尾扣帽前，包括停笔、放在复核栏旁及双方先后签字。",
+          "photographic_version_id": "asset-version-f4936a914dc3",
+          "provider_task_id": "image-task-83d1ce12d176",
+          "source_version_ids": [
+            "asset-version-c10cf71df108"
+          ],
+          "reference_purpose": "从闭帽母图派生同笔开帽状态；独立笔帽的具体许岚侧位置仍由镜头构图表达。",
+          "selection": "采用；笔尖露出、笔尾裸露，只有一个分离笔帽，外形与闭帽参考相符。"
+        }
+      ]
+    },
+    "completion_receipts": [
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-c10cf71df108",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-d4a1234d0350/v2-asset-version-c10cf71df108.png",
+            "size_bytes": 2186317,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-f4936a914dc3",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-d4a1234d0350/v3-asset-version-f4936a914dc3.png",
+            "size_bytes": 2163356,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-318e8d7fb28c",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-08b6047a6a38/v3-asset-version-318e8d7fb28c-text-plate.png",
+            "size_bytes": 47657,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-a9fb492dce6b",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-08b6047a6a38/v4-asset-version-a9fb492dce6b.png",
+            "size_bytes": 2993419,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-9d931209f7ec",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-08b6047a6a38/v5-asset-version-9d931209f7ec-text-plate.png",
+            "size_bytes": 53162,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-1156f46e26af",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-08b6047a6a38/v6-asset-version-1156f46e26af.png",
+            "size_bytes": 2964266,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-5464dab394be",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-08b6047a6a38/v8-asset-version-5464dab394be-text-plate.png",
+            "size_bytes": 57355,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-3adcb6b5365e",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-08b6047a6a38/v9-asset-version-3adcb6b5365e.png",
+            "size_bytes": 2931297,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-974420be0033",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-797c99b1531c/v2-asset-version-974420be0033-text-plate.png",
+            "size_bytes": 54158,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_version",
+          "artifact_id": "asset-version-d99209b73470",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT"
+        },
+        "files": [
+          {
+            "path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/assets/asset-797c99b1531c/v3-asset-version-d99209b73470.png",
+            "size_bytes": 2946120,
+            "availability": "LOCAL_FILE"
+          }
+        ]
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset",
+          "artifact_id": "asset-d4a1234d0350",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset",
+          "artifact_id": "asset-08b6047a6a38",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      },
+      {
+        "artifact_ref": {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset",
+          "artifact_id": "asset-797c99b1531c",
+          "version": null
+        },
+        "record_verified": true,
+        "current_state": {},
+        "files": []
+      }
+    ]
+  },
+  "task_inputs": {
+    "scope": "当前五组镜头的剩余图片准备与实际依赖整合",
+    "existing_prop_media_to_preserve": {
+      "statement_asset_id": "asset-08b6047a6a38",
+      "statement_blank_photo": "asset-version-a9fb492dce6b",
+      "statement_blank_text_plate": "asset-version-318e8d7fb28c",
+      "statement_review_signed_photo": "asset-version-1156f46e26af",
+      "statement_review_signed_text_plate": "asset-version-9d931209f7ec",
+      "statement_both_signed_photo": "asset-version-3adcb6b5365e",
+      "statement_both_signed_text_plate": "asset-version-5464dab394be",
+      "quotation_asset_id": "asset-797c99b1531c",
+      "quotation_photo": "asset-version-d99209b73470",
+      "quotation_text_plate": "asset-version-974420be0033",
+      "pen_asset_id": "asset-d4a1234d0350",
+      "pen_capped_photo": "asset-version-c10cf71df108",
+      "pen_uncapped_photo": "asset-version-f4936a914dc3"
+    },
+    "completed_closeups": {
+      "shot-yqq-08": "asset-version-07155ca88530",
+      "shot-yqq-12-reaction": "asset-version-89add4b760e5"
+    },
+    "planning_focus": [
+      "开场推纸、拔帽和既有确认签名证据",
+      "按住报价单、移说明、把笔放到空复核栏旁",
+      "共同担责的回应与赵衡松开报价单",
+      "开始签复核、许岚等待、单签结果和递笔",
+      "开始签经办、赵衡等待、双签结果、收纸与扣帽"
+    ]
+  }
+}

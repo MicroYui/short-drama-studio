@@ -83,6 +83,20 @@
             "title": "Summary",
             "type": "string"
           },
+          "tool_result_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Result Ref"
+          },
           "work_order_id": {
             "anyOf": [
               {
@@ -260,6 +274,17 @@
               }
             ],
             "title": "Tool Name"
+          },
+          "tool_result_context_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Result Context Ref"
           },
           "updated_at": {
             "format": "date-time",
@@ -470,7 +495,6 @@
             "items": {
               "$ref": "#/components/schemas/PlanStep"
             },
-            "maxItems": 48,
             "title": "Steps",
             "type": "array"
           },
@@ -815,6 +839,13 @@
               }
             ],
             "title": "Completed At"
+          },
+          "completion_planned_work_order_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Completion Planned Work Order Ids",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",
@@ -2388,6 +2419,54 @@
         "title": "AssetDerivationReference",
         "type": "object"
       },
+      "AssetImageCrop": {
+        "additionalProperties": false,
+        "description": "Actual pixels selected from an EXIF-oriented local source; never regenerated.",
+        "properties": {
+          "box_pixels": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Box Pixels",
+            "type": "array"
+          },
+          "source_asset_version_id": {
+            "title": "Source Asset Version Id",
+            "type": "string"
+          },
+          "source_height": {
+            "exclusiveMinimum": 0.0,
+            "title": "Source Height",
+            "type": "integer"
+          },
+          "source_width": {
+            "exclusiveMinimum": 0.0,
+            "title": "Source Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_asset_version_id",
+          "source_width",
+          "source_height",
+          "box_pixels"
+        ],
+        "title": "AssetImageCrop",
+        "type": "object"
+      },
       "AssetImportLocalRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2865,6 +2944,15 @@
         "additionalProperties": false,
         "description": "Exact text and deterministic layout metadata for a local text plate.",
         "properties": {
+          "append_text_blocks": {
+            "description": "Accumulated additions drawn over the original plate PNG. Original title, exact_lines, text_blocks and lines retain their actual layout.",
+            "items": {
+              "$ref": "#/components/schemas/TextPlateAppendedTextBlock"
+            },
+            "maxItems": 64,
+            "title": "Append Text Blocks",
+            "type": "array"
+          },
           "background_color": {
             "maxLength": 64,
             "minLength": 1,
@@ -2897,6 +2985,16 @@
             "title": "Content Box",
             "type": "array"
           },
+          "content_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetTextPlateContentState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "exact_lines": {
             "items": {
               "type": "string"
@@ -2921,6 +3019,23 @@
             "maxLength": 2000,
             "minLength": 1,
             "title": "Layout Description",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/TextPlateLine"
+            },
+            "maxItems": 64,
+            "title": "Lines",
+            "type": "array"
+          },
+          "purpose": {
+            "default": "SCREEN_CONTENT",
+            "enum": [
+              "SCREEN_CONTENT",
+              "PHYSICAL_SURFACE_CONTENT"
+            ],
+            "title": "Purpose",
             "type": "string"
           },
           "size": {
@@ -2948,6 +3063,14 @@
             ],
             "title": "Text Align",
             "type": "string"
+          },
+          "text_blocks": {
+            "items": {
+              "$ref": "#/components/schemas/TextPlateTextBlock"
+            },
+            "maxItems": 64,
+            "title": "Text Blocks",
+            "type": "array"
           },
           "title": {
             "anyOf": [
@@ -2981,6 +3104,35 @@
           "font_family"
         ],
         "title": "AssetTextPlate",
+        "type": "object"
+      },
+      "AssetTextPlateContentState": {
+        "additionalProperties": false,
+        "description": "Explicit narrative state and exact copy for this candidate only.",
+        "properties": {
+          "name": {
+            "description": "This candidate's explicit narrative state; never inferred from descriptor or layout instructions.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "required_visible_text": {
+            "description": "Complete ordered visible wording for this state. Preserve each fixed brief text entry as an unchanged entry in order; add state text as separate entries. Rendering blocks may reflow this same wording.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Required Visible Text",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "required_visible_text"
+        ],
+        "title": "AssetTextPlateContentState",
         "type": "object"
       },
       "AssetVersion": {
@@ -3056,6 +3208,16 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "image_crop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetImageCrop"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "image_task_id": {
             "anyOf": [
@@ -4297,6 +4459,7 @@
             "type": "array"
           },
           "shot_ids": {
+            "description": "Shots rendered in one request, in order. The same dialogue line ID may continue across adjacent Shots in this group as one utterance; it cannot continue across a group boundary or a Shot without that line.",
             "items": {
               "type": "string"
             },
@@ -8679,6 +8842,11 @@
             "title": "Model",
             "type": "string"
           },
+          "output_format_guidance": {
+            "default": "DIRECT requires a fixed aspect ratio. REFERENCE accepts fixed/adaptive ratio. FRAME_FIRST/FRAME_LAST/FRAME_FIRST_LAST use omitted/adaptive ratio and the actual frame shape; prepare the intended frame shape before submission. Default resolution is 768P; 2K is optional. Resolution labels do not specify exact output pixels in the current AceData API.",
+            "title": "Output Format Guidance",
+            "type": "string"
+          },
           "project_id": {
             "anyOf": [
               {
@@ -8709,8 +8877,22 @@
             "title": "Risks",
             "type": "array"
           },
+          "supported_aspect_ratios": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Aspect Ratios",
+            "type": "array"
+          },
+          "supported_resolutions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Resolutions",
+            "type": "array"
+          },
           "version": {
-            "default": "2026-08-17.1",
+            "default": "2026-09-12.1",
             "title": "Version",
             "type": "string"
           }
@@ -8874,6 +9056,17 @@
               }
             ],
             "title": "Binding Purpose"
+          },
+          "image_reference_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageReferenceRole"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The image's visual purpose, separate from the H3 transport role. COMPOSITION or LAYOUT_GUIDE keeps a concrete Picture anchor in REFERENCE mode; it is soft guidance and does not become a hard first_frame/last_frame input. Omit for legacy reusable subject references."
           },
           "kind": {
             "$ref": "#/components/schemas/H3MediaKind"
@@ -9085,6 +9278,17 @@
       "H3ProbeRequest": {
         "additionalProperties": false,
         "properties": {
+          "aspect_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect Ratio"
+          },
           "duration_seconds": {
             "anyOf": [
               {
@@ -9145,6 +9349,11 @@
               }
             ],
             "title": "Regression Case Id"
+          },
+          "resolution": {
+            "default": "768P",
+            "title": "Resolution",
+            "type": "string"
           },
           "route": {
             "$ref": "#/components/schemas/VideoGenerationRoute",
@@ -9295,15 +9504,28 @@
             "type": "array"
           },
           "estimated_cost_credits": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Estimated Cost Credits",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Credits"
           },
           "estimated_cost_usd": {
-            "minimum": 0.0,
-            "title": "Estimated Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "estimated_new_h3_seconds": {
             "minimum": 0.0,
@@ -9455,7 +9677,6 @@
           "input_bible_version_id",
           "decisions",
           "estimated_new_h3_seconds",
-          "estimated_cost_usd",
           "created_at",
           "updated_at"
         ],
@@ -9482,6 +9703,17 @@
       "H3ProductionRoutePlanRequest": {
         "additionalProperties": false,
         "properties": {
+          "aspect_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect Ratio"
+          },
           "candidate_count": {
             "default": 1,
             "description": "Number of candidates the calling Agent requests in this action.",
@@ -9519,6 +9751,17 @@
               }
             ],
             "title": "Generation Plan Version Id"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
           },
           "shot_directives": {
             "items": {
@@ -9615,6 +9858,20 @@
             "default": "768P",
             "title": "Resolution",
             "type": "string"
+          },
+          "supported_aspect_ratios": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Aspect Ratios",
+            "type": "array"
+          },
+          "supported_resolutions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Resolutions",
+            "type": "array"
           }
         },
         "required": [
@@ -9653,6 +9910,17 @@
       "H3ProviderRun": {
         "additionalProperties": false,
         "properties": {
+          "aspect_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect Ratio"
+          },
           "clip_group_id": {
             "anyOf": [
               {
@@ -10507,6 +10775,17 @@
           "action": {
             "$ref": "#/components/schemas/H3ShotRouteAction"
           },
+          "aspect_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect Ratio"
+          },
           "asset_preparations": {
             "items": {
               "$ref": "#/components/schemas/H3RouteAssetPreparation"
@@ -10661,6 +10940,11 @@
             },
             "title": "Reference Selection Candidate Ids",
             "type": "array"
+          },
+          "resolution": {
+            "default": "768P",
+            "title": "Resolution",
+            "type": "string"
           },
           "reuse_take_id": {
             "anyOf": [
@@ -12852,7 +13136,8 @@
           },
           "operation": {
             "$ref": "#/components/schemas/ImageOperation",
-            "default": "GENERATE"
+            "default": "GENERATE",
+            "description": "GENERATE: no reference images or target parent. REFERENCE_GENERATE: ordered reference images with parent_version_id omitted; it can create another candidate in an existing Asset. EDIT: ordered reference images plus an explicit target parent_version_id. A planned REFERENCE_GENERATE does not itself select a parent; when the actual task explicitly derives from a target version, use EDIT."
           },
           "output_format": {
             "$ref": "#/components/schemas/ImageOutputFormat",
@@ -12867,6 +13152,7 @@
                 "type": "null"
               }
             ],
+            "description": "Explicit target AssetVersion lineage for EDIT; requires operation=EDIT. Omit for GENERATE and REFERENCE_GENERATE. A reference, dependency, primary input, or existing target Asset does not automatically become this parent.",
             "title": "Parent Version Id"
           },
           "primary_input_version_id": {
@@ -13977,6 +14263,17 @@
       "LanguagePromptCompileRequest": {
         "additionalProperties": false,
         "properties": {
+          "aspect_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect Ratio"
+          },
           "duration_seconds": {
             "anyOf": [
               {
@@ -14041,6 +14338,17 @@
             "title": "Method Skill Ids",
             "type": "array"
           },
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
           "revision_instructions": {
             "anyOf": [
               {
@@ -14091,6 +14399,17 @@
       "LanguagePromptCompileResponse": {
         "additionalProperties": false,
         "properties": {
+          "aspect_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect Ratio"
+          },
           "candidate_id": {
             "anyOf": [
               {
@@ -14170,6 +14489,11 @@
           "reasoning_effort": {
             "default": "xhigh",
             "title": "Reasoning Effort",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "768P",
+            "title": "Resolution",
             "type": "string"
           },
           "route": {
@@ -15506,6 +15830,12 @@
             "title": "Crf",
             "type": "integer"
           },
+          "follow_source_dimensions": {
+            "default": false,
+            "description": "New automatic manifests follow selected Take dimensions on rebuild. False preserves an explicitly chosen or historical output size.",
+            "title": "Follow Source Dimensions",
+            "type": "boolean"
+          },
           "fps": {
             "default": 30,
             "title": "Fps",
@@ -15565,6 +15895,13 @@
             "minLength": 1,
             "title": "Id",
             "type": "string"
+          },
+          "inherited_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inherited Action Ids",
+            "type": "array"
           },
           "method_selection_rationale": {
             "anyOf": [
@@ -19349,7 +19686,7 @@
           },
           "timeline_beats": {
             "items": {
-              "$ref": "#/components/schemas/ShotTimelineBeat"
+              "$ref": "#/components/schemas/ShotTimelineBeat-Input"
             },
             "maxItems": 24,
             "title": "Timeline Beats",
@@ -19473,7 +19810,7 @@
           },
           "timeline_beats": {
             "items": {
-              "$ref": "#/components/schemas/ShotTimelineBeat"
+              "$ref": "#/components/schemas/ShotTimelineBeat-Output"
             },
             "maxItems": 24,
             "title": "Timeline Beats",
@@ -21247,6 +21584,7 @@
             "$ref": "#/components/schemas/ContinuityState"
           },
           "dialogue_line_ids": {
+            "description": "Script line IDs in audible order, folding a line continued across adjacent beats. A line may also continue as the next Shot's first line within the same ClipGroup/request; cover its actual time in both Shots' timeline_beats. Keep that same ID on both Shots and their audible beats; audio_intent prose alone does not declare coverage. Do not create a new ScriptLine for a continuation. Source line IDs still count once per continuous utterance.",
             "items": {
               "type": "string"
             },
@@ -21316,7 +21654,7 @@
           },
           "timeline_beats": {
             "items": {
-              "$ref": "#/components/schemas/ShotTimelineBeat"
+              "$ref": "#/components/schemas/ShotTimelineBeat-Input"
             },
             "maxItems": 24,
             "title": "Timeline Beats",
@@ -21370,6 +21708,7 @@
             "$ref": "#/components/schemas/ContinuityState"
           },
           "dialogue_line_ids": {
+            "description": "Script line IDs in audible order, folding a line continued across adjacent beats. A line may also continue as the next Shot's first line within the same ClipGroup/request; cover its actual time in both Shots' timeline_beats. Keep that same ID on both Shots and their audible beats; audio_intent prose alone does not declare coverage. Do not create a new ScriptLine for a continuation. Source line IDs still count once per continuous utterance.",
             "items": {
               "type": "string"
             },
@@ -21439,7 +21778,7 @@
           },
           "timeline_beats": {
             "items": {
-              "$ref": "#/components/schemas/ShotTimelineBeat"
+              "$ref": "#/components/schemas/ShotTimelineBeat-Output"
             },
             "maxItems": 24,
             "title": "Timeline Beats",
@@ -21603,7 +21942,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/ShotTimelineBeat"
+                  "$ref": "#/components/schemas/ShotTimelineBeat-Input"
                 },
                 "type": "array"
               },
@@ -21769,7 +22108,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/ShotTimelineBeat"
+                  "$ref": "#/components/schemas/ShotTimelineBeat-Output"
                 },
                 "type": "array"
               },
@@ -21855,6 +22194,17 @@
               }
             ],
             "title": "Id"
+          },
+          "image_reference_role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageReferenceRole"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "图片实际提供的视觉依据。COMPOSITION 为本镜构图、站位或状态画面；LAYOUT_GUIDE 为分镜顺序或布局参考，均不代表角色身份卡，也不是硬首尾帧。身份、服装、场景、道具按实际用途填写；省略兼容已有引用。"
           },
           "purpose": {
             "maxLength": 500,
@@ -22015,7 +22365,7 @@
         "title": "ShotReferencePlanUpdateRequest",
         "type": "object"
       },
-      "ShotTimelineBeat": {
+      "ShotTimelineBeat-Input": {
         "additionalProperties": false,
         "description": "One observable camera/action/performance phase inside an editorial shot.",
         "properties": {
@@ -22032,6 +22382,113 @@
             "type": "string"
           },
           "dialogue_line_ids": {
+            "description": "Exact script line IDs audible during this beat. Repeat one ID on adjacent beats or adjacent Shots in the same ClipGroup when the same utterance continues across their boundary; do not repeat the spoken text.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Dialogue Line Ids",
+            "type": "array"
+          },
+          "emotion": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emotion"
+          },
+          "end_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "framing": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Framing",
+            "type": "string"
+          },
+          "performance": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performance"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ShotReferenceCue"
+            },
+            "maxItems": 12,
+            "title": "References",
+            "type": "array"
+          },
+          "sound": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sound"
+          },
+          "start_seconds": {
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "visual": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Visual",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_seconds",
+          "end_seconds",
+          "visual",
+          "framing",
+          "camera",
+          "action"
+        ],
+        "title": "ShotTimelineBeat",
+        "type": "object"
+      },
+      "ShotTimelineBeat-Output": {
+        "additionalProperties": false,
+        "description": "One observable camera/action/performance phase inside an editorial shot.",
+        "properties": {
+          "action": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "camera": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Camera",
+            "type": "string"
+          },
+          "dialogue_line_ids": {
+            "description": "Exact script line IDs audible during this beat. Repeat one ID on adjacent beats or adjacent Shots in the same ClipGroup when the same utterance continues across their boundary; do not repeat the spoken text.",
             "items": {
               "type": "string"
             },
@@ -23988,6 +24445,34 @@
         "title": "StoryboardClipGroupOutline",
         "type": "object"
       },
+      "StoryboardClipGroupSplice": {
+        "additionalProperties": false,
+        "description": "Change only a contiguous range of existing generation groups.",
+        "properties": {
+          "clip_group_ids": {
+            "description": "按现有顺序列出要重新划分的连续旧组ID。未列出的组保持原样。",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Clip Group Ids",
+            "type": "array"
+          },
+          "clip_groups": {
+            "description": "这些旧组替换成的新组，可沿用原组ID或添加新ID；只含本次涉及的镜头。duration_seconds在结构编辑时按当前镜头重新计算。",
+            "items": {
+              "$ref": "#/components/schemas/ClipGroup"
+            },
+            "title": "Clip Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clip_group_ids"
+        ],
+        "title": "StoryboardClipGroupSplice",
+        "type": "object"
+      },
       "StoryboardContent-Input": {
         "additionalProperties": false,
         "description": "Complete structured storyboard and its provider-independent clip groups.",
@@ -25140,7 +25625,7 @@
       },
       "StoryboardPatchRequest": {
         "additionalProperties": false,
-        "description": "Targeted shot revisions; structural rewrites use StoryboardReplaceRequest.",
+        "description": "Edit selected content or local shot/group structure without rewriting the film.",
         "properties": {
           "base_version_id": {
             "minLength": 1,
@@ -25159,6 +25644,13 @@
             ],
             "title": "Bible Version Id"
           },
+          "clip_group_splices": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardClipGroupSplice"
+            },
+            "title": "Clip Group Splices",
+            "type": "array"
+          },
           "clip_groups": {
             "anyOf": [
               {
@@ -25171,7 +25663,7 @@
                 "type": "null"
               }
             ],
-            "description": "按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。增加、删除或重排分组使用完整 StoryboardReplaceRequest。",
+            "description": "按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。局部增加、删除或重分组用clip_group_splices；同组拆镜默认自动更新成员和时长。",
             "title": "Clip Groups"
           },
           "notes": {
@@ -25248,6 +25740,13 @@
               }
             ],
             "title": "Script Version Id"
+          },
+          "shot_splices": {
+            "items": {
+              "$ref": "#/components/schemas/StoryboardShotSplice"
+            },
+            "title": "Shot Splices",
+            "type": "array"
           },
           "source_artifact_refs": {
             "items": {
@@ -25483,6 +25982,43 @@
           "replacement"
         ],
         "title": "StoryboardShotReplacement",
+        "type": "object"
+      },
+      "StoryboardShotSplice": {
+        "additionalProperties": false,
+        "description": "Replace a local shot range, or insert at a stable shot boundary.",
+        "properties": {
+          "after_shot_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "只用于纯插入：插入到此已有镜头之后；省略表示片首。默认归入此镜头的原生成组（片首归入首组）。",
+            "title": "After Shot Id"
+          },
+          "shot_ids": {
+            "description": "已读分镜中连续、按顺序的原镜头ID。只传本次拆分/合并/删除的区间；shots替换该区间。空列表表示纯插入。",
+            "items": {
+              "type": "string"
+            },
+            "title": "Shot Ids",
+            "type": "array"
+          },
+          "shots": {
+            "description": "本次区间的完整新镜头；可保留原ID，新增镜头使用新ID，空列表表示删除。sequence/revision由服务计算，不必重写后续镜头。对白归属、逐时段及引用仍须完整。",
+            "items": {
+              "$ref": "#/components/schemas/ShotPlan-Input"
+            },
+            "title": "Shots",
+            "type": "array"
+          }
+        },
+        "title": "StoryboardShotSplice",
         "type": "object"
       },
       "StoryboardSourceRange": {
@@ -26635,11 +27171,17 @@
             "type": "integer"
           },
           "height": {
-            "default": 720,
-            "maximum": 3840.0,
-            "minimum": 256.0,
-            "title": "Height",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explicit output height; supply together with width, or omit both to follow selected source media.",
+            "title": "Height"
           },
           "subtitles": {
             "default": true,
@@ -26647,11 +27189,17 @@
             "type": "boolean"
           },
           "width": {
-            "default": 1280,
-            "maximum": 3840.0,
-            "minimum": 256.0,
-            "title": "Width",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explicit output width. Omit width and height together to retain actual selected video detail in the project aspect ratio.",
+            "title": "Width"
           }
         },
         "required": [
@@ -26666,6 +27214,18 @@
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "current_goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "活动视图从当前 AgentRun 读取的有效目标；原始 objective 保留用于制作记录。",
+            "title": "Current Goal"
           },
           "error": {
             "anyOf": [
@@ -26903,6 +27463,20 @@
       "StudioMutationResult": {
         "additionalProperties": false,
         "properties": {
+          "changed_scene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Scene Ids",
+            "type": "array"
+          },
+          "changed_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Shot Ids",
+            "type": "array"
+          },
           "notices": {
             "items": {
               "type": "string"
@@ -26973,6 +27547,132 @@
         "title": "StudioProjectCreate",
         "type": "object"
       },
+      "StudioRelatedSceneUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_shot_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "After reading current shots, identify which shots need a visual update for this scene edit. Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. Shots using changed structured dialogue are always included.",
+            "title": "Affected Shot Ids"
+          },
+          "entry_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneContinuitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Relevant state established by the current screenplay at scene entry, not an unfulfilled outline. Omit to preserve; explicitly null to remove an obsolete state summary."
+          },
+          "exit_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneContinuitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Relevant facts, prop/character states and open threads actually established by this scene's text. Omit to preserve; explicitly null to remove an obsolete state summary."
+          },
+          "expected_text": {
+            "description": "Exact current body read from this related scene; protects concurrent edits.",
+            "title": "Expected Text",
+            "type": "string"
+          },
+          "heading": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Heading",
+            "type": "string"
+          },
+          "lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ScriptLine"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lines"
+          },
+          "narrative_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narrative Purpose"
+          },
+          "reason": {
+            "description": "Concrete semantic connection to the main edit, such as a setup/payoff, shared fact or prop state.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "screenplay_text": {
+            "maxLength": 50000,
+            "title": "Screenplay Text",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "target_duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration Seconds"
+          }
+        },
+        "required": [
+          "heading",
+          "screenplay_text",
+          "scene_id",
+          "expected_text",
+          "reason"
+        ],
+        "title": "StudioRelatedSceneUpdate",
+        "type": "object"
+      },
       "StudioRename": {
         "additionalProperties": false,
         "properties": {
@@ -27006,6 +27706,28 @@
             ],
             "description": "After reading current shots, identify which shots need a visual update for this scene edit. Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. Shots using changed structured dialogue are always included.",
             "title": "Affected Shot Ids"
+          },
+          "entry_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneContinuitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Relevant state established by the current screenplay at scene entry, not an unfulfilled outline. Omit to preserve; explicitly null to remove an obsolete state summary."
+          },
+          "exit_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SceneContinuitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Relevant facts, prop/character states and open threads actually established by this scene's text. Omit to preserve; explicitly null to remove an obsolete state summary."
           },
           "expected_text": {
             "anyOf": [
@@ -27048,6 +27770,14 @@
               }
             ],
             "title": "Narrative Purpose"
+          },
+          "related_scene_updates": {
+            "description": "Optional narrowly related scene edits saved atomically with this scene. Use only when the current change affects an earlier setup, later payoff or established fact. Read each current body first; update its summary/purpose/state when affected. Do not include unchanged or unrelated scenes.",
+            "items": {
+              "$ref": "#/components/schemas/StudioRelatedSceneUpdate"
+            },
+            "title": "Related Scene Updates",
+            "type": "array"
           },
           "scene_id": {
             "anyOf": [
@@ -27099,6 +27829,19 @@
       "StudioScope-Input": {
         "additionalProperties": false,
         "properties": {
+          "asset_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact media file selected from project assets; does not adopt it or replace the asset's current file.",
+            "title": "Asset Version Id"
+          },
           "editor_selection": {
             "anyOf": [
               {
@@ -27137,6 +27880,19 @@
             "default": "当前集",
             "title": "Label",
             "type": "string"
+          },
+          "take_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact generated source video selected for viewing or this request; does not adopt the Take.",
+            "title": "Take Id"
           }
         },
         "title": "StudioScope",
@@ -27145,6 +27901,19 @@
       "StudioScope-Output": {
         "additionalProperties": false,
         "properties": {
+          "asset_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact media file selected from project assets; does not adopt it or replace the asset's current file.",
+            "title": "Asset Version Id"
+          },
           "editor_selection": {
             "anyOf": [
               {
@@ -27183,6 +27952,19 @@
             "default": "当前集",
             "title": "Label",
             "type": "string"
+          },
+          "take_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact generated source video selected for viewing or this request; does not adopt the Take.",
+            "title": "Take Id"
           }
         },
         "title": "StudioScope",
@@ -28231,6 +29013,214 @@
         "title": "TakeComparisonResponse",
         "type": "object"
       },
+      "TakeFrameAssetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional existing REFERENCE asset to receive the frame; omit to create one.",
+            "title": "Asset Id"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "description": {
+            "description": "Why this actual frame is useful; extraction itself does not inspect its identity or quality.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shot Id"
+          },
+          "take_id": {
+            "minLength": 1,
+            "title": "Take Id",
+            "type": "string"
+          },
+          "time_seconds": {
+            "description": "Source-video seconds by default; with shot_id, seconds from that Take's shot window; with clip_id, seconds from that exact current film-use clip, including speed/reverse. The window end selects its last available frame.",
+            "minimum": 0.0,
+            "title": "Time Seconds",
+            "type": "number"
+          },
+          "timeline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Id"
+          }
+        },
+        "required": [
+          "take_id",
+          "time_seconds",
+          "description"
+        ],
+        "title": "TakeFrameAssetRequest",
+        "type": "object"
+      },
+      "TakeFrameAssetResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "asset_version_id": {
+            "title": "Asset Version Id",
+            "type": "string"
+          },
+          "clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Id"
+          },
+          "coordinate_space": {
+            "enum": [
+              "SOURCE",
+              "SHOT_LOCAL",
+              "CLIP_LOCAL"
+            ],
+            "title": "Coordinate Space",
+            "type": "string"
+          },
+          "h3_media_input": {
+            "$ref": "#/components/schemas/H3MediaInput"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "image_reference_input": {
+            "$ref": "#/components/schemas/ImageReferenceInput"
+          },
+          "local_path": {
+            "title": "Local Path",
+            "type": "string"
+          },
+          "notes": {
+            "default": "Full-resolution underlying video frame, without editorial overlays, crop, flips or grading. Use image.enqueue EDIT/REFERENCE_GENERATE with image_reference_input to derive a target composition, or use h3_media_input as a soft REFERENCE composition anchor. For hard FRAME_FIRST, explicitly choose that route and only its first_frame input. A copied frame also retains source defects; it has not passed visual review.",
+            "title": "Notes",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "requested_time_seconds": {
+            "title": "Requested Time Seconds",
+            "type": "number"
+          },
+          "reused": {
+            "default": false,
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "review_status": {
+            "const": "NOT_REVIEWED",
+            "default": "NOT_REVIEWED",
+            "title": "Review Status",
+            "type": "string"
+          },
+          "source_take_id": {
+            "title": "Source Take Id",
+            "type": "string"
+          },
+          "source_time_seconds": {
+            "title": "Source Time Seconds",
+            "type": "number"
+          },
+          "source_window_end_seconds": {
+            "title": "Source Window End Seconds",
+            "type": "number"
+          },
+          "source_window_start_seconds": {
+            "title": "Source Window Start Seconds",
+            "type": "number"
+          },
+          "timeline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeline Id"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "asset_id",
+          "asset_version_id",
+          "local_path",
+          "width",
+          "height",
+          "source_take_id",
+          "coordinate_space",
+          "requested_time_seconds",
+          "source_time_seconds",
+          "source_window_start_seconds",
+          "source_window_end_seconds",
+          "image_reference_input",
+          "h3_media_input"
+        ],
+        "title": "TakeFrameAssetResponse",
+        "type": "object"
+      },
       "TargetResolution": {
         "description": "Desired output resolution for a local generation. The backend corrects it to the\nnearest valid size (snapped down to a multiple of 32, never above the source).",
         "properties": {
@@ -28481,6 +29471,236 @@
           "expected_size_gb"
         ],
         "title": "TextEncoderRecommendationResponse",
+        "type": "object"
+      },
+      "TextPlateAppendedTextBlock": {
+        "additionalProperties": false,
+        "description": "Actually drawn local addition; the original plate pixels are retained.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "content_box": {
+            "description": "Normalized canvas x/y/width/height. No implicit margins; all ink must fit this box.",
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Content Box",
+            "type": "array"
+          },
+          "font_family": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Font Family",
+            "type": "string"
+          },
+          "font_size": {
+            "default": 48,
+            "description": "Actual font size in output pixels. Overflow returns an error; text is not silently clipped or shrunk.",
+            "maximum": 512.0,
+            "minimum": 8.0,
+            "title": "Font Size",
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "text_align": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right"
+            ],
+            "title": "Text Align",
+            "type": "string"
+          },
+          "vertical_align": {
+            "default": "top",
+            "enum": [
+              "top",
+              "center",
+              "bottom"
+            ],
+            "title": "Vertical Align",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "content_box",
+          "font_family"
+        ],
+        "title": "TextPlateAppendedTextBlock",
+        "type": "object"
+      },
+      "TextPlateLine": {
+        "additionalProperties": false,
+        "description": "A rule or signature line; geometry is not part of required visible wording.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "end": {
+            "description": "Normalized canvas end x/y.",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "End",
+            "type": "array"
+          },
+          "start": {
+            "description": "Normalized canvas start x/y.",
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Start",
+            "type": "array"
+          },
+          "width": {
+            "default": 2,
+            "description": "Stroke width in output pixels.",
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TextPlateLine",
+        "type": "object"
+      },
+      "TextPlateTextBlock": {
+        "additionalProperties": false,
+        "description": "One exact visible line positioned in a normalized canvas region.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "content_box": {
+            "description": "Normalized canvas x/y/width/height. No implicit margins; all ink must fit this box.",
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Content Box",
+            "type": "array"
+          },
+          "font_size": {
+            "default": 48,
+            "description": "Actual font size in output pixels. Overflow returns an error; text is not silently clipped or shrunk.",
+            "maximum": 512.0,
+            "minimum": 8.0,
+            "title": "Font Size",
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "text_align": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right"
+            ],
+            "title": "Text Align",
+            "type": "string"
+          },
+          "vertical_align": {
+            "default": "top",
+            "enum": [
+              "top",
+              "center",
+              "bottom"
+            ],
+            "title": "Vertical Align",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "content_box"
+        ],
+        "title": "TextPlateTextBlock",
         "type": "object"
       },
       "TimedTextLock": {
@@ -33428,6 +34648,68 @@
           }
         },
         "summary": "Compare Takes",
+        "tags": [
+          "short-drama"
+        ]
+      }
+    },
+    "/api/short-drama/projects/{project_id}/agent-tools/extract-frame": {
+      "post": {
+        "operationId": "extract_take_frame_api_short_drama_projects__project_id__agent_tools_extract_frame_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeFrameAssetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakeFrameAssetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Extract Take Frame",
         "tags": [
           "short-drama"
         ]

@@ -1,0 +1,2814 @@
+{
+  "source_work_order_id": "work-order-5aa6b485cec14f60acdf9803f9d69ee1",
+  "source_model_call_id": "model-8c5e2af16a10",
+  "source_trace_file": "20260911T214133535572-320f4ba1-model.input.json",
+  "note": "Exact current v10 and pinned v6 Shot bodies and source identities from turns 1 and 4; unrelated output fields omitted. Original Trace unchanged.",
+  "turns": [
+    {
+      "id": "specialist-turn-cbf19705b28849c2a2c4a51f3cb66158",
+      "sequence": 1,
+      "tool_name": "artifact.get_asset_planning_context",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6"
+      },
+      "reason": "读取当前正文、五组镜头和资产轻量目录，按现行纸向与剧情状态规划剩余图片，不沿用过期占位。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.get_asset_planning_context",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "project",
+            "artifact_id": "project-5b8286dc63e6",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "script_version",
+            "artifact_id": "project-5b8286dc63e6-script-v3",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "bible_version",
+            "artifact_id": "project-5b8286dc63e6-bible-v1",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "production_spec",
+            "artifact_id": "production-document-b113c8894d6d",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "production_document",
+            "artifact_id": "production-document-b113c8894d6d",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "production_document_version",
+            "artifact_id": "production-document-version-8ad7797db7d1",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "storyboard",
+            "artifact_id": "production-document-4e543fd40d4a",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "production_document",
+            "artifact_id": "production-document-4e543fd40d4a",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "production_document_version",
+            "artifact_id": "production-document-version-2275fa97b356",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-01",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-02",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-03",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-03-evidence",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-04",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-05",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-06",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-06-evidence",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-07",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-08",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-09",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-10",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-10-reaction",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-10-result",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-11",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-12",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-12-reaction",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-12-result",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-13",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-14",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g01",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g02",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g03",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g04",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g05",
+            "version": 10
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_plan",
+            "artifact_id": "production-document-9bf5a748eb3a",
+            "version": 14
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-85d4f6cc7d52",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-07155ca88530",
+            "version": 4
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3a8b4ea6267b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-5f4d7485e6b8",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-89add4b760e5",
+            "version": 5
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-6a56e078129b",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-4024e0462bfc",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d42fba8ad6bb",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-08b6047a6a38",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3adcb6b5365e",
+            "version": 9
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-797c99b1531c",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d99209b73470",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset",
+            "artifact_id": "asset-d4a1234d0350",
+            "version": null
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f4936a914dc3",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "output": {
+          "storyboard": {
+            "shots": [
+              {
+                "id": "shot-yqq-01",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 1,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.5,
+                "narrative_purpose": "观众在开头直接看见主管把责任和笔一起推向经办人。",
+                "visual": "小会议室南端看向北侧磨砂隔断。赵衡浅蓝衬衫坐画左，许岚米白衬衫坐画右，隔浅橡木桌对坐。桌面只有两张叠放的A4纸与一支盖好帽的黑笔；情况说明在上，报价单在下露一点红改边缘。赵衡左手推上层说明向许岚，下面报价单随叠纸轻移；右手把盖帽笔横放在空白经办栏上。许岚低头看笔，不接话。",
+                "framing": "9:16紧凑双人中景，两张脸位于上半部，推纸和放笔位于下中部；不切掉关键手。",
+                "camera": "桌南端稍高于坐姿眼平的固定机位，轻俯保留桌面。西在画左、东在画右，不越轴。东窗光方向连续。",
+                "audio_intent": "赵衡画内普通话：报价出错了。说明你签一下，就说你没核对。语气惯常催办而非怒吼，约0.3—5.0秒自然说完；许岚不张嘴。低空调底声、纸摩擦、笔落纸声，无旁白。",
+                "dialogue_line_ids": [
+                  "line-yqq-01"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.2,
+                    "visual": "赵衡左、许岚右；叠纸由桌中区移近东侧许岚，报价单仍在说明下。",
+                    "framing": "双人中景含桌面。",
+                    "camera": "固定南侧机位。",
+                    "action": "赵衡左手贴住情况说明近西缘，推向许岚；右手持盖好帽的笔，待纸停下后横放经办空栏，右手松开。",
+                    "performance": "赵衡边做边发话；许岚视线随纸移下，身体仍坐直。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-01"
+                    ],
+                    "sound": "本镜对白开始，纸摩擦后轻微落笔声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 2.2,
+                    "end_seconds": 5.5,
+                    "visual": "纸和盖帽笔停在许岚面前，两栏仍空白，赵衡手已撤离纸。",
+                    "framing": "保持双人关系，不靠快切强化压迫。",
+                    "camera": "固定。",
+                    "action": "赵衡收回双手并说完同一句话；许岚看经办栏，右手稍近纸缘但尚未拿笔。",
+                    "performance": "赵衡视线看向画右的许岚；许岚保持闭口，短暂吸气。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-01"
+                    ],
+                    "sound": "同一句对白连续完成，仅发声一次；尾部约半秒留给许岚接收要求。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡固定桌西侧画左，许岚桌东侧画右；全程坐着。",
+                  "eyeline": "赵看画右许；许先看赵后看下方经办栏。",
+                  "prop_state_in": "双空白说明在上、已有红改和赵衡确认签名的报价单在下，叠纸近桌中；黑笔帽盖在笔尖，由赵右手持。",
+                  "prop_state_out": "叠纸在东侧许面前、页首朝西便于许阅读；盖好帽的笔横放说明经办栏；两栏仍空。",
+                  "action_in": "赵准备把说明推向许。",
+                  "action_out": "赵手撤回，许右手在纸缘附近，未接笔。"
+                },
+                "transition_out": "按许岚低头视线切近手与脸，纸笔位置连续。",
+                "merge_candidate": false,
+                "local_rework_risk": "推纸时须始终只有两张；若生成难以保持上下叠纸，保留同机位纸已到达的可用段，不删放笔与催签因果。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-02",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 2,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 3.0,
+                "narrative_purpose": "让许岚的停笔成为主动选择，并建立之后一直留在手边的笔帽。",
+                "visual": "许岚近景带双手。她右手拿起盖帽黑笔，左手拔下笔帽并放在东侧桌缘、自己左手边的南侧小空位。右手转成书写握姿，裸笔尖停在经办空栏上方，不接触纸。她的视线转向露在说明下面的报价单边。",
+                "framing": "9:16许岚胸上及手部的紧中近景；脸在画右上，笔尖、经办空栏及落帽点在下半部。",
+                "camera": "南偏西看东侧许岚的固定机位，仍在主轴南侧；许看画左或低头。浅蓝袖仅可在远左缘虚化，不要求赵脸入画。",
+                "audio_intent": "无对白。保留拔帽轻响、帽接触桌面的轻声与室内底声，不加入心声或解释性旁白。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.7,
+                    "visual": "米白袖口和同一支盖帽黑笔清楚。",
+                    "framing": "近景带手。",
+                    "camera": "固定。",
+                    "action": "许右手拿起笔杆，左拇指食指握帽拔离笔尖；左手把帽横放东侧桌缘靠南的自己左手边，松开。",
+                    "performance": "她不急于签字，眼睛跟随笔尖。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻微拔帽和帽落桌声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.7,
+                    "end_seconds": 3.0,
+                    "visual": "裸笔尖悬在空白经办栏上方；同一笔帽静置许左手边。",
+                    "framing": "保持脸、笔尖、纸面的关系。",
+                    "camera": "固定。",
+                    "action": "右手调整书写握姿后停住，笔尖不落纸；左手转向下层报价单可抽出的北侧边。",
+                    "performance": "视线从空栏移到露出的报价单，嘴闭合，做出不独签的选择。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "呼吸和底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许坐东侧未移动座位；赵坐西侧画外。",
+                  "eyeline": "许低头看经办栏，末段看下层报价单。",
+                  "prop_state_in": "说明双空白，报价单在其下，笔盖好帽横置经办栏。",
+                  "prop_state_out": "黑笔由许右手持、裸笔尖未落纸；笔帽单独留东侧桌缘南部许左手边，不在笔尾；两纸仍叠放。",
+                  "action_in": "许右手尚未拿笔。",
+                  "action_out": "许右手持裸笔悬停，左手触到报价单北侧边。"
+                },
+                "transition_out": "切到桌面动作覆盖，接许左手抽纸；不重复拔帽。",
+                "merge_candidate": false,
+                "local_rework_risk": "必须分清许右手持笔、左手拔帽；检查停笔后说明仍双空白。笔帽不能自行变到笔尾。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-03",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 3,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "许岚抽出在场报价单并转给赵衡，建立旧确认签名的实物来源。",
+                "visual": "@许岚左手从双空白的@情况说明下面抽出@报价单，沿桌面带到北侧中区，平转半圈至标题端朝东、版面朝西侧赵衡。纸停稳后松手撤回，红改和旧确认区无遮挡。本镜看清抽纸、转向、松手，不承担运动中准确姓名精读。说明仍在东侧朝许；许右手持裸笔在画外，独立笔帽不动。",
+                "framing": "9:16桌面中近景，覆盖两纸分开的路径；米白左袖从画右进入。",
+                "camera": "南侧高斜俯固定，画左西、画右东。东窗柔光不变，不追字、不镜像纸面。",
+                "audio_intent": "许岚画外说当前完整原句：“这版是你改的。我还问过你，能不能发。”只发声一次。设计发声窗口从本镜0秒开始，连续经过0—2.1秒和2.1—2.5秒两个beat，再跨切至紧随的旧确认静态镜0—1.5秒，在该镜末结束，总计4秒。本镜、续接镜及三个承载发声的beat均引用同一line-yqq-02，表示同一次发声的连续承载，不是多次念整句。编译与剪辑不能强塞进本镜2.5秒，不能在证据镜重新起句；句内自然停顿不另起对白。赵衡不发声，纸声低于对白。此为设计配时，实际语音起止待验证。",
+                "dialogue_line_ids": [
+                  "line-yqq-02"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.1,
+                    "visual": "@报价单从东侧说明下抽离并转向西座赵衡；情况说明双栏仍空。",
+                    "framing": "桌面中近景，纸的移动路径可见。",
+                    "camera": "南侧固定斜俯。",
+                    "action": "许左手捏报价单北侧空白边，向北中部抽出，再沿桌面转半圈至标题端朝东；右手画外持裸笔。",
+                    "performance": "平稳出示，不甩纸。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-02"
+                    ],
+                    "sound": "许岚画外开始第二句，连续普通话配低纸摩擦声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 2.1,
+                    "end_seconds": 2.5,
+                    "visual": "@报价单停在北中部朝赵，旧红改和确认区无遮挡；说明留在东侧。",
+                    "framing": "维持动作覆盖，不要求精读姓名。",
+                    "camera": "固定。",
+                    "action": "许左手松纸并撤向东侧；报价停稳，赵尚未按纸。",
+                    "performance": "画外语气克制，不添加解释。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-02"
+                    ],
+                    "sound": "同一句继续并跨入下一静态镜，不重新起句。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西仍坐着，只见必要袖口和手；主轴南侧。",
+                  "eyeline": "许看纸再看赵；赵的识别反应在证据插入后出现。",
+                  "prop_state_in": "说明双空白压在报价上，两纸东侧朝许；许右手裸笔，帽独立在东缘南部许左手边。",
+                  "prop_state_out": "报价北中标题东，旧红改旧确认不变；说明东侧标题西双空白。许左手已离纸、右手持裸笔，帽不动。",
+                  "action_in": "许左手已触下层报价单北边。",
+                  "action_out": "抽出、转向、松手完成；赵还未按报价。"
+                },
+                "transition_out": "纸停稳后直切同一道具的独立静态旧确认证据；第二句声音连续跨切。",
+                "merge_candidate": false,
+                "local_rework_risk": "真实动作需检查只抽一张、转向及松手；准确旧签名由下一静态镜承担。不使用运动跟踪贴字、透视合成或遮挡恢复。4秒原句的声桥待实际声音检查。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 3
+              },
+              {
+                "id": "shot-yqq-03-evidence",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 4,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "让观众看清既有红改和“确认：赵衡”，证明主管确认过这版报价。",
+                "visual": "@报价单的独立全画幅静态证据插入，使用同一道具版式的实际准确图片，同时容纳中部红改及右下“确认：赵衡”。黑色姓名开场已存在，不出现新书写。无手、笔或移动背景，不把图版贴到前镜运动纸面。",
+                "framing": "9:16静态画面，紧裁中部红改至右下确认区；确认文字足够大，1.5秒全程无遮挡，字幕避开证据区。",
+                "camera": "中性正俯纸面插入，画面上方对应桌东；实物标题端仍朝东。改变观看方向而非转动纸张，不暗示换座；静帧不推拉。",
+                "audio_intent": "承接前镜许岚画外同一条line-yqq-02的尾部，切入时已在发声，本镜不重新开口念整句。设计续接窗口为本镜0—1.5秒，接在前镜0—2.5秒之后，总计一次连续4秒发声，并在本镜1.5秒处结束；预计“能不能发。”落在本段，具体字词切点待实际语音验证。本镜dialogue_line_ids及0—1.5秒beat均保留line-yqq-02，与前镜共享来源，表示同一次发声的续接而非第二份对白。无新发言、无书写声；静态证据画面承接同一声音，不要求画内人物对嘴。",
+                "dialogue_line_ids": [
+                  "line-yqq-02"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@报价单中部旧红改及右下“确认：赵衡”准确静止可读。",
+                    "framing": "全画幅静态证据插入，确认区不被字幕挡住。",
+                    "camera": "正俯中性，画面上方为桌东，不运动。",
+                    "action": "保持旧签名与红改，不增加墨迹，无手或笔。",
+                    "performance": "人物画外；许岚只接完原第二句。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-02"
+                    ],
+                    "sound": "前镜许岚第二句连续尾部，室内底声不断；不重新发声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西均在原座，双方不入静态镜。",
+                  "eyeline": "中性证据镜；下一镜赵衡低头识别，不改变人物轴线。",
+                  "prop_state_in": "报价北中标题东，旧红改旧确认不变，许左手已松开；说明东侧双空白。",
+                  "prop_state_out": "全部状态不变；赵尚未按报价，许右手持裸笔，帽东缘南部。",
+                  "action_in": "报价已转向赵并停稳。",
+                  "action_out": "旧确认看清后，切赵衡看纸、按纸与反问。"
+                },
+                "transition_out": "直切赵衡识别并按住北缘，恢复南侧主轴赵左许右。",
+                "merge_candidate": false,
+                "local_rework_risk": "需检查实际图片的版式、红改、中文、旧签名、字高及裁切。图片以EDITORIAL用途作独立全画幅插入，不送视频模型重绘，不依赖跟踪或动态合成。本单未绑定具体媒体，不声称图像已验收。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-04",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 5,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 4.5,
+                "narrative_purpose": "看见自己的确认签名后，赵衡用按纸与反问试图把责任推回许岚。",
+                "visual": "赵衡西侧坐姿中近景，面孔居画左，目光落到画面下方的报价单，再抬向画右的许岚。浅蓝袖口的左手向北侧中区伸出，压住报价单北缘而不盖住原确认签名。画内只有赵衡的脸与手；许岚在画外，不要求她同时表演。",
+                "framing": "9:16，南偏东机位拍赵衡胸口以上及左手压纸的桌面下缘；脸和手同为可读层次，不用极浅景深。",
+                "camera": "固定，保持在东西人物轴线南侧；人物视线朝画右。东侧高窗的柔光与前镜一致。",
+                "audio_intent": "赵衡画内普通话原句：我说能发，你就不再看一遍？先看纸再反问，不吼叫。许岚不发声。低室内底噪，按纸轻响，不配转折重音。",
+                "dialogue_line_ids": [
+                  "line-yqq-03"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.0,
+                    "visual": "赵衡读到自己签名，左手落到报价单北缘。",
+                    "framing": "中近景带桌面",
+                    "camera": "固定南偏东角度",
+                    "action": "眼睛先向下，左手伸出接触纸的北缘并停住，手指不遮右下确认区。",
+                    "performance": "下颌微紧，只停一下，不表演惊慌。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "指腹压纸的轻响，室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.0,
+                    "end_seconds": 4.5,
+                    "visual": "赵衡按着报价单，看向画右的许岚。",
+                    "framing": "同一中近景",
+                    "camera": "不移动、不反向越轴",
+                    "action": "左手保持压纸，右手不碰笔；抬眼说完反问，末尾等待回答。",
+                    "performance": "维护体面，句中“能发”稍重，尾部不是吼叫。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-03"
+                    ],
+                    "sound": "赵衡：我说能发，你就不再看一遍？对白约2.9秒，末尾留约0.6秒。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西许东，均坐着；赵画左，许在画右外。",
+                  "eyeline": "赵先看北侧报价单的原确认签名，再朝画右的许岚看；许岚画外看赵。",
+                  "prop_state_in": "报价北侧中区朝赵；说明东侧朝许，双空白；许右手持裸笔，帽在她左手边。",
+                  "prop_state_out": "赵左手按报价单北缘；报价原签名、红改不变。说明、裸笔与笔帽未变。",
+                  "action_in": "赵尚未接触报价单。",
+                  "action_out": "赵左手保持压纸，反问完等许岚，不取笔。"
+                },
+                "transition_out": "按反问后的停顿切许岚；室内底噪连续。",
+                "merge_candidate": false,
+                "local_rework_risk": "按纸若遮证据，可调整手接触的边缘，不改既有签名、不把签名移到其他角。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-05",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 6,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.5,
+                "narrative_purpose": "许岚承认自己的经办责任，同时把说明摆成双方共同面对的文件，不先给自己签字。",
+                "visual": "许岚东侧中近景，浅米白衬衫，面孔在画右，看向画左的赵衡。她先停一下并轻点头，用左手将情况说明从东侧移至桌南侧中区，转成便于赵衡阅读和落笔的方向；右手仍握裸笔，笔尖离纸。赵衡只可见背景西侧的浅蓝左袖和按报价单的手，不抢表情中心。",
+                "framing": "9:16，南偏西拍许岚，腰上带桌面交接区；下部看清一纸被移中，不必读正文细字。",
+                "camera": "固定，同主轴南侧反打；许岚看画左。东窗柔光保持从她东后侧进入，面部用中性室内光补清。",
+                "audio_intent": "许岚画内原句：我的经办，我签。你的复核，也别空着。克制清楚，句间有停顿；赵衡安静。纸轻擦桌面的声响，不另加旁白。",
+                "dialogue_line_ids": [
+                  "line-yqq-04"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.8,
+                    "visual": "许岚握笔悬停，听完后轻点一次头。",
+                    "framing": "中近景带双手",
+                    "camera": "固定",
+                    "action": "右手笔尖远离纸面，左手接触说明靠近自己的边缘。",
+                    "performance": "停一下再点头，承认自己的部分，不露胜利笑容。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻呼吸与室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.8,
+                    "end_seconds": 5.5,
+                    "visual": "情况说明被许岚左手移到南侧中区，纸面转向西侧赵衡；北侧报价单仍被赵左手按着。",
+                    "framing": "同机位，面部与移纸同框",
+                    "camera": "固定不追手",
+                    "action": "边说边用左手平移并转动说明约半圈：字头朝东、底边朝西，南侧中区与北侧报价单分开放置。左手松开后收回，右手持裸笔不落笔。",
+                    "performance": "先看赵说“我的经办，我签”，目光短落双栏，随后看赵说“你的复核，也别空着”。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-04"
+                    ],
+                    "sound": "许岚：我的经办，我签。你的复核，也别空着。约4.2秒，句间自然停顿。纸擦声不盖对白。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东侧画右，赵西侧画左外；不换座。",
+                  "eyeline": "许先看画左赵衡，移纸时短看说明，后重新看赵。",
+                  "prop_state_in": "说明在东侧朝许双空白；赵左手压北侧报价；许右手持裸笔，帽在东侧桌缘南部。",
+                  "prop_state_out": "说明在南侧中区朝赵、双空白；与北侧报价分开不叠压。许仍右手持裸笔；赵左手仍按报价；帽不动。",
+                  "action_in": "许未点头、未移动说明。",
+                  "action_out": "说明置中且转好，许左手退出，右手准备放笔。"
+                },
+                "transition_out": "按许岚右手向中间伸的起势切桌面插入镜，保留动作方向。",
+                "merge_candidate": false,
+                "local_rework_risk": "不能因翻转说明而镜像印字；若手遮挡，优先只保留平移终态与可读纸面，不把报价单一起拖动。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-06",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 7,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.0,
+                "narrative_purpose": "许岚把裸笔放到复核栏旁并真正松手，交出选择；准确的双空白证据紧接下一镜。",
+                "visual": "@许岚右手从东侧进入，把同一支裸笔放到南中部@情况说明的复核栏旁空白纸边，笔杆接触纸面后才松开，手退回东侧。说明标题端朝东，两栏仍空；黑色笔尾不套帽。北中部报价仍被赵衡左手压住北缘，独立帽留桌东缘南部。本镜看接触、松手和笔留在原处，不要求运动中精读印字。",
+                "framing": "9:16南侧桌面中近景，米白右袖、手、裸笔与说明下半页同框；准确栏名与空线由下一静态插入单独展示。",
+                "camera": "南侧固定斜俯，画左西、画右东；纸沿前镜标题朝东，不为读字镜像或转纸。",
+                "audio_intent": "无对白。轻放笔声、衣袖轻擦声和低连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.3,
+                    "visual": "@许岚右手把裸笔放到@情况说明复核栏旁的空白纸边。",
+                    "framing": "手、笔、说明下半页的中近景。",
+                    "camera": "南侧固定斜俯。",
+                    "action": "许右手持笔由东侧进入，笔杆轻触空白纸边后松开手指。笔尖朝北、笔尾朝南，不压签字线，不落笔写字。",
+                    "performance": "平稳交出选择，不摔笔。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "一次轻放笔声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.3,
+                    "end_seconds": 2.0,
+                    "visual": "@情况说明旁裸笔静止，许岚右手撤出，赵衡没有伸手接。",
+                    "framing": "保持动作覆盖，不追读纸面文字。",
+                    "camera": "固定。",
+                    "action": "许右手退回东侧自己桌边；笔原位不动，两栏不增加墨迹，赵左手仍压北侧报价单。",
+                    "performance": "人物不发声。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "室内底声，纸笔声已停。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西，均坐着。只需许右手米白袖与远处赵左手浅蓝袖，主轴南侧。",
+                  "eyeline": "两人面部不入画；赵看说明与刚放下的笔，许随后看赵。",
+                  "prop_state_in": "说明南中标题东、双空白，许右手持裸笔；报价北中标题东，赵左手压北缘。帽在东缘南部许左手边。",
+                  "prop_state_out": "裸笔放复核旁空白纸边，尖北尾南，许已松手撤回。说明仍双空白；报价旧红改旧确认不变，赵仍按其北缘；帽不动。",
+                  "action_in": "许右手向中区伸出持有的裸笔。",
+                  "action_out": "放笔、松手、撤手完成，赵尚未取笔。"
+                },
+                "transition_out": "直切同一道具的独立双空白静态证据，不重复放笔，不改变纸向或笔的所在位置。",
+                "merge_candidate": false,
+                "local_rework_risk": "实际动作须检查接触、松手、唯一裸笔及帽的位置。准确栏名和双空白由下一静态镜承担，不安排运动跟踪、透视贴字或手部遮挡恢复。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-06-evidence",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 8,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "准确看清上经办、下复核都还空着：许岚没有先签，也没有替赵衡签。",
+                "visual": "@情况说明下半页的独立全画幅静态证据插入，采用同一道具版式的实际准确图片。上方“经办：”后为空线，下方“复核：”后也为空线，没有任何姓名或新增墨迹。紧裁两栏和必要白纸边，不包含栏外裸笔、手、报价单或移动背景；这些物件仍留在上一镜既定位置。",
+                "framing": "9:16静态插入，双栏居中占画面宽度约四分之三，栏名和空线全程1.5秒无遮挡，无字幕盖住证据。",
+                "camera": "中性正俯纸面插入，画面上方对应桌东，实物标题端仍朝东；只改变观看方向，不转实物、不镜像、不暗示换座。静帧不推拉。",
+                "audio_intent": "无对白，无书写声，仅连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@情况说明上经办、下复核两栏均准确为空，双栏静止可读。",
+                    "framing": "全画幅静态双栏插入，文字与空线无遮挡。",
+                    "camera": "正俯中性，画面上方为桌东，不运动。",
+                    "action": "保持双空白，不出现新姓名、笔迹、手或逐笔动画。栏外裸笔与其他桌面物件未移动，只在裁切外。",
+                    "performance": "双方画外安静。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "低连续室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西仍在原座，均不入静态镜。",
+                  "eyeline": "中性证据插入；下一镜赵从说明抬眼看许，不改变人物轴线。",
+                  "prop_state_in": "说明南中标题东、双空白；裸笔复核旁尖北尾南。赵左手压北中报价北缘；帽东缘南部。",
+                  "prop_state_out": "全部状态不变，赵仍未取笔，许双手已空。",
+                  "action_in": "许已放笔松手，纸与笔都停稳。",
+                  "action_out": "双空白看清后接赵衡不取笔的追问。"
+                },
+                "transition_out": "回到南偏东拍赵衡的反角，赵画左看画右许岚，先抬眼再追问。",
+                "merge_candidate": false,
+                "local_rework_risk": "需检查实际双空白图片的版式、中文字形、空线、字高、裁切和停留。usage=EDITORIAL，作独立全画幅静态插入，不送视频模型重绘，不贴到运动纸面。本单未绑定具体媒体，不声称图片已验收。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-07",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 9,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "赵衡不拿笔，转而测试许岚是否会放弃分清责任。",
+                "visual": "@赵衡西侧中近景，先从桌面抬眼，看向画右许岚。左手仍压北侧报价单，右手留在自己一侧，明确没有去拿南侧中区的裸笔。",
+                "framing": "9:16中近景，赵面孔居画左，右手停在身前的桌边可见，不强塞许岚正脸。",
+                "camera": "沿赵衡看旧确认并按纸时的南偏东机位固定拍摄，主轴南侧、东窗光向不变，不使用已顺移的旧镜号定位。",
+                "audio_intent": "赵衡画内原句：非得分这么清？短、压着不满，不提高音量。许岚无声听完，下一镜再回答。",
+                "dialogue_line_ids": [
+                  "line-yqq-05"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.4,
+                    "visual": "@赵衡没有拿笔，抬眼看许岚。",
+                    "framing": "中近景。",
+                    "camera": "南偏东固定。",
+                    "action": "双手保持原位，仅视线由南侧说明抬到画右。",
+                    "performance": "嘴唇收紧后开口，不瞪眼。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.4,
+                    "end_seconds": 2.5,
+                    "visual": "@赵衡盯住许岚，问完仍等她退让。",
+                    "framing": "同一中近景。",
+                    "camera": "固定。",
+                    "action": "说话期间不取笔，尾句结束保持视线。",
+                    "performance": "原句自然说约1.6秒，末尾留半秒等待。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-05"
+                    ],
+                    "sound": "赵衡：非得分这么清？",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西画左，许东画右外，全程就坐。",
+                  "eyeline": "赵自说明抬眼看画右许岚，许画外看赵。",
+                  "prop_state_in": "说明南中标题东双空白，裸笔在复核旁；赵左手压北中报价北缘；帽在许左手边。",
+                  "prop_state_out": "所有纸、笔、帽位置和签名状态不变，赵未拿笔。",
+                  "action_in": "赵看刚放下的裸笔与说明。",
+                  "action_out": "赵问完抬眼等许岚答话，左手仍压报价。"
+                },
+                "transition_out": "答话前切许岚，保持赵看右、许看左的互补视线。",
+                "merge_candidate": false,
+                "local_rework_risk": "若无故新增伸手取笔会提前让步；只修右手与表演，不改对白或座位。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-08",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 10,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.0,
+                "narrative_purpose": "许岚明确愿意一起补错，但不接受一人认责。观众站在她克制且不回避自身职责的处境里。",
+                "visual": "许岚坐在会议桌东侧，浅米白长袖衬衫，画面偏右，稳定看向画左的赵衡。她不再推纸，也不指着对方；双手已退到自己一侧，右手空着，左手边的笔帽留在桌上。报价单、情况说明及裸笔维持上一镜位置，画面主读她的脸而不要求文件细字同时清楚。",
+                "framing": "9:16胸上近景，给画左视线留空；下沿可带桌边，不强迫赵衡入画。",
+                "camera": "摄影机位于桌西南、对话轴南侧，眼平固定看向许岚；柔和东窗天光及中性顶光不变。不环绕、不越轴。",
+                "audio_intent": "仅许岚画内说完整原句：“出了错可以一起补，责任也得一起认。”普通话，正常音量；前半句提出合作，后半句坚定收住。赵衡画外安静听，不替她发声。低连续室内底噪，无强调胜负的音乐。",
+                "dialogue_line_ids": [
+                  "line-yqq-06"
+                ],
+                "references": [
+                  {
+                    "subject_asset_id": "asset-85d4f6cc7d52",
+                    "id": "cue-yqq-s08-xulan-identity",
+                    "asset_version_id": "asset-version-3a8b4ea6267b",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 2,
+                    "alias": "许岚",
+                    "required_tags": [
+                      "身份参考"
+                    ],
+                    "purpose": "第8镜0–5秒全程的SUBJECT_IDENTITY/AUTHORITATIVE。固定许岚的面容、成年年龄感、侧分齐肩黑发及米白衬衫；同一文件同时贡献服装，不重复发送。中性背景站姿不贡献会议室、座位或开镜构图，不作硬首帧。",
+                    "image_reference_role": "SUBJECT_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-4024e0462bfc",
+                    "id": "cue-yqq-s08-room-space",
+                    "asset_version_id": "asset-version-d42fba8ad6bb",
+                    "field": "camera",
+                    "text_start": 5,
+                    "text_end": 8,
+                    "alias": "公司小会议室",
+                    "required_tags": [
+                      "SCENE_MASTER"
+                    ],
+                    "purpose": "第8镜0–5秒全程的SCENE_IDENTITY/AUTHORITATIVE。贡献同一会议室材质、东西对坐位置、东窗柔光与南侧轴线；许岚东座、赵衡西座且画外。原图为南侧朝北空景，不镜像冒充西南近景，不将空桌状态或完整房间构图强加给本镜。",
+                    "image_reference_role": "SCENE_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-85d4f6cc7d52",
+                    "id": "cue-yqq-s08-xulan-closeup",
+                    "asset_version_id": "asset-version-07155ca88530",
+                    "field": null,
+                    "text_start": null,
+                    "text_end": null,
+                    "alias": "许岚东座胸上近景",
+                    "required_tags": [
+                      "shot-yqq-08",
+                      "chest-up"
+                    ],
+                    "purpose": "第8镜0–5秒的COMPOSITION/SUPPORTING：原生900×1600竖幅胸上近景，许岚略偏画右、看画左画外，面部清楚，米白衬衫及局部会议室色光连续。0–4.5秒说完整原句，4.5–5秒闭嘴等回应；静态闭唇不锁死动态口型。仅补构图、视线与克制表情基调，不替换身份母图，不作硬首帧，不贡献画外手、纸笔或赵衡的状态。",
+                    "image_reference_role": "COMPOSITION",
+                    "usage": "GENERATION"
+                  }
+                ],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 4.5,
+                    "visual": "许岚的面部保持清楚，朝画左看赵衡，不寻找镜头。",
+                    "framing": "胸上近景",
+                    "camera": "西南侧眼平固定",
+                    "action": "手留在自己桌边不动，面对赵衡说完原句。",
+                    "performance": "先平稳说“出了错可以一起补”，句逗略停，再说“责任也得一起认”；不挑眉讥讽，不提高嗓门。",
+                    "emotion": "愿意合作，也明确守住责任边界。",
+                    "dialogue_line_ids": [
+                      "line-yqq-06"
+                    ],
+                    "sound": "许岚画内完整对白：“出了错可以一起补，责任也得一起认。”赵衡不出声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 4.5,
+                    "end_seconds": 5.0,
+                    "visual": "许岚说完后仍看着赵衡。",
+                    "framing": "同一近景",
+                    "camera": "固定不变",
+                    "action": "闭嘴等回应，不伸手拿笔。",
+                    "performance": "嘴角不露胜利笑，呼吸稳定，目光不回避。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "短暂室内静默和自然呼吸。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许岚固定东座面西，赵衡固定西座面东且本镜画外；南侧轴线。",
+                  "eyeline": "许岚看画左的赵衡，视线高度对应对坐者眼睛；不低头准备签字。",
+                  "prop_state_in": "说明南中朝赵，双栏空白；裸笔复核旁尖北尾南。报价北中朝赵，赵左手压北缘，既有红改与确认签名不变。帽在东缘南部许左手边。",
+                  "prop_state_out": "全部文件、笔及帽的位置和签名状态不变。许岚双手均空。",
+                  "action_in": "许岚听完赵衡的追问，手已从放笔位置退回。",
+                  "action_out": "许岚说完第六句，仍等赵衡回应。"
+                },
+                "transition_out": "直切赵衡反应，不把下一镜的松手提早到许岚对白中。",
+                "merge_candidate": false,
+                "local_rework_risk": "只校正语气和视线；若口型提前结束，优先按实际语音调整本镜尾部，不改原句。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-09",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 11,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.0,
+                "narrative_purpose": "让赵衡的让步有可见过程：想反驳却没说出话，重新看空栏和自己确认过的报价单，再松开控制证据的左手。",
+                "visual": "赵衡坐西侧、浅蓝长袖衬衫，画面偏左，先看画右的许岚。较高的中近景同时容纳他的脸、前臂和桌面南北两份文件：南中的情况说明两栏仍空，北中的报价单红改与既有确认签名不变；赵左掌只压报价北缘，不遮住右下角签名。他依次垂眼看说明、转眼看报价，最后抬起左掌并收回一点。裸笔始终未动。",
+                "framing": "9:16较高机位中近景，赵衡脸为主、桌面双纸与左手为次；能读左手离纸的结果，不要求同时读正文细字。",
+                "camera": "摄影机位于桌东南、对话轴南侧，略高于眼平向西北俯看；固定，保留画右视线空位。东窗光方向不变。",
+                "audio_intent": "没有新对白；赵衡只张嘴吸一口气而不发出词句。保留极轻衣袖、手离纸声音与连续室内底噪，不用夸张叹气或音乐替代反应。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.8,
+                    "visual": "赵衡看着许岚，左手仍压报价单。",
+                    "framing": "脸与桌面同框中近景",
+                    "camera": "东南侧略高固定",
+                    "action": "张了张嘴，没有接话，随后合上嘴。",
+                    "performance": "原本要反驳的气息收住，下颌轻微放松；不摇头笑、不夸张认输。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻吸气但无词句。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.8,
+                    "end_seconds": 2.0,
+                    "visual": "他的视线落向南中部情况说明的两处空白栏。",
+                    "framing": "同一中近景",
+                    "camera": "固定",
+                    "action": "低头看情况说明；左右手都不取笔。",
+                    "performance": "看清空栏后短停，避免目光一扫即过。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 2.0,
+                    "end_seconds": 3.2,
+                    "visual": "赵衡再看北中部被自己压住的报价单。",
+                    "framing": "同一中近景",
+                    "camera": "固定",
+                    "action": "眼睛和下巴小幅转向报价单原确认签名所在位置，左掌仍压北缘。",
+                    "performance": "意识到自己的记录也在场，目光停住，不另加表情宣言。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "无对白。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 3.2,
+                    "end_seconds": 5.0,
+                    "visual": "左掌松开报价单北缘，纸仍平放原处。",
+                    "framing": "脸和左手均在画内",
+                    "camera": "固定",
+                    "action": "左指放松，左掌离纸，再撤回西侧自己桌缘几厘米；右手仍空，裸笔留在复核栏旁。",
+                    "performance": "肩背不再前顶，动作比前面的按纸缓和。最后短停给观众看清纸已不受压。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻微衣袖与纸面接触声收束。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡西侧面东、画左；许岚东側面西且画外。机位在南侧不跨轴。",
+                  "eyeline": "赵衡起初看画右许岚，随后向桌面南中空栏、再向北中报价单看；不是看门外或第三人。",
+                  "prop_state_in": "双纸都朝赵衡。说明南中双空白，裸笔复核旁尖北尾南。报价北中，赵左掌压北缘；报价既有签名不变。帽仍东缘南部。",
+                  "prop_state_out": "赵左手已离报价单并退向西侧；报价单留北中不移动。说明双栏仍空，裸笔未拿起，帽未动。",
+                  "action_in": "赵衡听完许岚的话，欲言又止。",
+                  "action_out": "赵衡松开报价单，停在准备自主拿笔的前一刻。"
+                },
+                "transition_out": "在左手离纸后切到取笔签复核的桌面动作，下一镜不能恢复压纸状态。",
+                "merge_candidate": false,
+                "local_rework_risk": "主要风险是目光顺序含混或左手仍压纸。实际媒体须检查镜尾左手已离开；计划终态不是已生成证据。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-10",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 12,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "看清赵衡自主拿笔，并实际在复核栏开始落笔；完整姓名的准确结果由后面的独立证据镜承担。",
+                "visual": "@赵衡的浅蓝袖口从西侧进入。@情况说明在南中部，标题端朝东供赵衡阅读，上经办、下复核均为空。赵右手拿起复核栏旁的@黑色带帽签字笔，左指稳住说明上部空白边，右手将裸笔尖落到复核线起笔区并开始书写。只看取笔、真实接触与短段手腕运动，不要求本镜连续写完准确的两个汉字。北中部报价单和东缘南部的独立笔帽不动。",
+                "framing": "9:16南侧桌面中近景，保留浅蓝袖、右手持笔与落笔所属栏位。笔尖接触可见，不把完整姓名成字过程作为微距识读对象。",
+                "camera": "南侧斜俯固定，西在画左、东在画右。东窗光连续；不追笔、不镜像纸面。",
+                "audio_intent": "无对白。取笔轻响后开始自然书写摩擦声；书写声跨切到许岚等待反应，不口述姓名。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.9,
+                    "visual": "@情况说明双栏空白，裸笔在复核旁，浅蓝袖自画左伸入。",
+                    "framing": "桌面中近景含两栏及赵双手。",
+                    "camera": "南侧固定斜俯。",
+                    "action": "赵衡右手捏笔杆拿起并调整握姿；左指只稳说明上部空白边，不重新按报价单。",
+                    "performance": "决定已形成，动作平稳。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻微取笔声与室内底声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.9,
+                    "end_seconds": 2.5,
+                    "visual": "@赵衡右手的裸笔尖接触@情况说明下方复核栏，上方经办未被触碰。",
+                    "framing": "保持袖口、笔尖接触点和复核栏的关系；不要求逐笔辨认完整姓名。",
+                    "camera": "同一固定机位。",
+                    "action": "右手在复核起笔区落笔并作短段自然签写，左指稳纸。切点仍在书写中；不展示写完状态，不移动或转动纸张。",
+                    "performance": "自然签字，不犹豫摆拍。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "细微书写声持续到下一反应镜。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西许东；本镜只需赵衡浅蓝袖和双手，南侧轴线。",
+                  "eyeline": "赵低头看复核起笔区；许画外看他的签字。",
+                  "prop_state_in": "说明南中标题东，经办空、复核空；报价北中标题东，旧红改和旧确认不变。裸笔复核旁，帽独立留许左手边。赵已松开报价。",
+                  "prop_state_out": "赵右手持裸笔在复核栏书写中，左指稳说明边；经办仍空。纸向、报价及笔帽均未变。",
+                  "action_in": "赵已经松开报价单，准备自主取笔。",
+                  "action_out": "赵实际开始签复核，在未展示完整字形时切至许岚等待。"
+                },
+                "transition_out": "直切许岚等待反应，连续书写声说明动作仍在进行，不在切点重复取笔或落笔。",
+                "merge_candidate": false,
+                "local_rework_risk": "需实际视频核对持笔者、落笔栏位与接触，不能用静态图证明动态成功。完整姓名准确性由独立静态结果镜承担；不使用笔画动画、跟踪贴字或手部遮挡恢复兜底。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-10-reaction",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 13,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.0,
+                "narrative_purpose": "让赵衡在画外继续完成签字，并让观众看见许岚等待责任落到纸上的反应。",
+                "visual": "@许岚坐东侧，脸居画右，目光向左下方桌面南中的说明。她闭口等待，没有伸手催笔，也没有提前庆祝。赵衡和文件不入画；书写声延续后停止，表示赵在画外完成复核签字并抬笔。",
+                "framing": "9:16许岚胸上近景，不带需要读字的纸面，给画左下视线留空间。",
+                "camera": "沿南偏西拍许岚的固定反角，不跨北侧，不改变东窗光。",
+                "audio_intent": "无人说话。前约1.6秒承接赵衡画外书写声，随后自然停止，留短暂室内安静。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.0,
+                    "visual": "@许岚安静看向画左下的签字位置，双手留自己一侧画外。",
+                    "framing": "胸上近景，脸清楚。",
+                    "camera": "南偏西固定。",
+                    "action": "许岚不说话、不取笔，目光保持在说明上。画外赵衡继续签复核，声止后右手抬笔、左手松开说明。",
+                    "performance": "耐心等对方完成选择，嘴角保持中性。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "连续书写声约1.6秒后停止；不增加词句或夸张叹气。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东侧面西，赵西侧画外，全程坐着。",
+                  "eyeline": "许看画左下南中说明，不看镜头、不看门外。",
+                  "prop_state_in": "赵右手正签复核，左指稳说明；说明标题东，经办空。报价北中原签不变；帽在东缘南部。",
+                  "prop_state_out": "设计上赵已完成复核并抬笔，裸笔仍在赵右手西侧纸外；左手离纸。说明仍南中标题东、经办空。完成字形在下一镜才可见。",
+                  "action_in": "承接赵衡正在书写的动作和声音。",
+                  "action_out": "书写声停止，许岚仍等待，下一镜给出真实准确的完成状态。"
+                },
+                "transition_out": "声止后切准确的仅复核签字结果，不用字幕或旁白解释。",
+                "merge_candidate": false,
+                "local_rework_risk": "本镜只能观察许岚的反应；画外动作是设计，不是已经验证的赵衡视频。不得让她对嘴或提前伸手接笔。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-10-result",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 14,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "准确证明先签下的是复核赵衡，而经办依然空白。",
+                "visual": "@情况说明的下半页作为独立全画幅静态证据插入：版面上方“经办：”后仍是空线，下方“复核：赵衡”准确完整。使用同一道具版式的已检查实际图片，保留纸面质感；画面无手、无笔、无移动背景。本镜展示完成结果，不展示签名逐笔生成。",
+                "framing": "9:16完整静态画面；双栏居中占画面宽度约四分之三，姓名有充分字高和行距，全程1.5秒无遮挡、无字幕覆盖。",
+                "camera": "中性正俯纸面插入，画面上方对应实际桌东，纸标题端仍朝东；通过插入镜的观看方向正读版面，不旋转实物、不暗示人物换座。静帧不推拉。",
+                "audio_intent": "无对白、无继续书写声，仅连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@情况说明仅复核赵衡已签、经办空白，准确双栏静止可读。",
+                    "framing": "全画幅静态证据插入，两栏大字且无遮挡。",
+                    "camera": "正俯中性插入；画面上方为桌东，无摄影机或图版运动。",
+                    "action": "保持已经完成的单签状态，不出现手、笔、逐笔动画或任何新墨迹变化。",
+                    "performance": "人物画外，无新增表演要求。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "低室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "双方仍在原座，均不入本静态证据镜。",
+                  "eyeline": "此为中性文件插入，不代替任一人物的正反打。",
+                  "prop_state_in": "说明南中标题东，复核赵衡已完成、经办空；赵右手持裸笔在纸西侧外，左手离纸。",
+                  "prop_state_out": "同一说明同一方向，仍仅复核有赵衡。笔仍赵右手，报价和东侧笔帽未动。",
+                  "action_in": "赵已经完成签字并抬笔。",
+                  "action_out": "单签结果看清后，接赵持笔向许岚递出的关系镜。"
+                },
+                "transition_out": "直切南侧双人交笔镜，恢复赵左许右；不再次签字。",
+                "merge_candidate": false,
+                "local_rework_risk": "须准备并实际检查准确单签静态图。该图作为EDITORIAL全画幅替代画面，不贴到运动纸面，不需要跟踪、透视拟合、遮挡恢复或笔画动画。当前未绑定图片，不声称已完成合成或视频验收。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-11",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 15,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 3.0,
+                "narrative_purpose": "赵衡主动承担递交，并把书写权交回许岚；许岚先确认他的态度，再接笔。",
+                "visual": "南侧双人中景，赵衡在画左，许岚在画右，两人仍坐着。赵衡右手将裸笔递过桌面南中部，笔尾朝许岚、笔尖朝自己并稍向下。许岚先看他的脸，再看笔，用右手接住可握的后半段。她接稳后赵衡才松开。情况说明仍朝赵，复核已签、经办未签；报价单在北中部，帽仍在许左手边。",
+                "framing": "9:16双人坐姿关系中景，脸和桌面交笔区同时可读；无需把两张整页都塞入画面。",
+                "camera": "南侧固定眼平略高机位，维持西左东右。人物不前后换位，东窗光不反转。",
+                "audio_intent": "赵衡画内用自然普通话完整说“说明我来交。”，音量比开头收敛，不增加道歉或催促。许岚不说话，不替他对嘴。",
+                "dialogue_line_ids": [
+                  "line-yqq-07"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "赵衡持笔伸向许岚，两人视线短暂相遇。",
+                    "framing": "双人中景，交笔区在两人之间下方。",
+                    "camera": "南侧固定。",
+                    "action": "赵衡右手捏笔杆中部偏笔尖处，笔尾朝东，向许岚递出并稳定停住；许岚先抬眼看他，再将视线落到笔上，右手开始伸出。",
+                    "performance": "赵衡对许岚说“说明我来交。”，语气落地，没有命令意味。许岚看他一眼，不笑、不点头庆祝。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-07"
+                    ],
+                    "sound": "唯一对白为赵衡“说明我来交。”，室内底噪连续。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.5,
+                    "end_seconds": 3.0,
+                    "visual": "两人的右手短暂同时接触同一支裸笔，随后持有者变为许岚。",
+                    "framing": "保留双方脸与交笔手，不另切手部极近景。",
+                    "camera": "同一固定机位。",
+                    "action": "许岚右手握住裸笔后半段，接稳；赵衡确认接触后才张开手指松开并收回西侧。许岚将笔收至自己面前、尖离纸。她左手仍空，未转纸未签字。",
+                    "performance": "赵衡不再催；许岚从确认转为准备履行经办职责。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "对白结束后仅衣袖和轻微接笔声，不新增语气词。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡西侧画左，许岚东侧画右，全程坐姿，镜头在轴线南侧。",
+                  "eyeline": "赵看右侧许；许先看左侧赵的脸，再下看交笔区，接稳后看说明。",
+                  "prop_state_in": "说明南中部朝赵，仅复核赵衡已签。报价北中部朝赵，原签红改不变。赵右手持裸笔，帽在桌东缘南部许左手边。",
+                  "prop_state_out": "许岚右手持裸笔，赵右手已松开收回。说明仍朝赵、仅复核已签；报价和帽未动，许左手空。",
+                  "action_in": "赵衡签毕，准备向东递出笔。",
+                  "action_out": "许岚接稳笔，赵衡收回手；下一镜许岚才转说明、签经办。"
+                },
+                "transition_out": "接许岚低头动作切到桌面签字覆盖，不提前出现经办签名。",
+                "merge_candidate": false,
+                "local_rework_risk": "双手交笔需实查接触、松手和唯一持有状态；不能让笔瞬移或套帽。若实际交接遮挡，用本镜连续动作的可用区间与后镜已接稳状态衔接，不改先后因果。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-12",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 16,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "许岚在赵衡先签之后开始履行经办责任；看清转纸、落笔者及所属栏位，不要求连续精确成字。",
+                "visual": "@许岚右手持同一支裸笔，左手把南中部的@情况说明单独转半圈，标题端朝西、版面朝向东座的自己。纸停稳后左指压空白边，右手裸笔尖接触版面上方经办栏并开始签写。复核赵衡已经存在，经办此时才开始增加笔迹。北中部报价单与东缘南部独立笔帽不动。本镜不展示完整姓名逐笔写成。",
+                "framing": "9:16南侧桌面中近景，米白袖、双手、纸的转向和经办落笔位置可见；不以微距同时要求两个完整姓名精确成字。",
+                "camera": "南偏东固定斜俯，画左西、画右东，保持东窗光；转的是说明实物，不镜像印字。",
+                "audio_intent": "无对白。先有纸擦声，纸停稳后开始书写声；书写声接到赵衡等待镜。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.3,
+                    "visual": "@情况说明仅复核赵衡已签；@许岚右手持裸笔在纸外，左手转纸。",
+                    "framing": "桌面中近景含单张说明轮廓和双手。",
+                    "camera": "南偏东斜俯固定。",
+                    "action": "许左手接触说明东南空白边，沿桌面转半圈，使标题端朝西、版面朝自己；纸仍留南中部。左指稳住不遮栏位的边缘。右手等纸停稳，报价单和帽均不随动。",
+                    "performance": "平稳，不抢笔、不甩纸。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "纸面摩擦声，无对白。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.3,
+                    "end_seconds": 2.5,
+                    "visual": "@许岚右手笔尖落到@情况说明上方经办栏起笔区，复核已有签名保持不变。",
+                    "framing": "保留米白袖、裸笔尖接触和所属栏位。",
+                    "camera": "同一固定斜俯，不追笔。",
+                    "action": "右手在经办起笔区实际落笔并作短段自然签写；左指稳纸。仍在书写时切镜，不要求本镜完成两个准确汉字，不接触复核栏或报价单。",
+                    "performance": "确定地履行自己的职责，不做胜利表情。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "自然书写声持续至下一镜。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东、赵西均坐着；只需许岚米白袖与双手，机位在南侧。",
+                  "eyeline": "许低头看经办起笔区；赵画外看她签字。",
+                  "prop_state_in": "说明南中标题东，仅复核赵衡已签；报价北中标题东，旧红改旧确认不变。许右手裸笔，帽独立留东缘南部左手边。",
+                  "prop_state_out": "说明南中标题西，许右手正在经办栏签写、左指稳纸；复核原签不变。报价与帽均未动。",
+                  "action_in": "许已接稳笔，赵已松手收回。",
+                  "action_out": "转纸停稳后实际开始签经办，在完整字形尚未呈现时切赵衡等待。"
+                },
+                "transition_out": "书写声跨切赵衡安静等待，不重复转纸或落笔。",
+                "merge_candidate": false,
+                "local_rework_risk": "实际视频需核对转纸终向、持笔者、落笔栏位和接触。准确完整双签由独立静态结果镜承担；不用运动跟踪、透视贴字、遮挡恢复或签字笔画动画兜底。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 3
+              },
+              {
+                "id": "shot-yqq-12-reaction",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 17,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "赵衡不再催促，让许岚在画外完成经办签字。",
+                "visual": "@赵衡坐西侧，脸居画左，安静看向画右下方南中部的说明。他闭嘴等待，双手留自己一侧，不提前伸手收纸。许岚和纸面不入画；承接书写声，随后声止表示许岚完成并抬笔。",
+                "framing": "9:16胸上近景，赵衡面部清楚，给画右下视线留空。",
+                "camera": "南偏东固定反角，保持东窗光和南侧主轴。",
+                "audio_intent": "无人说话。前约1.2秒延续许岚画外书写声，随后停止，室内底声连续。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@赵衡向画右下看许岚签字，不再催。",
+                    "framing": "胸上近景。",
+                    "camera": "南偏东固定。",
+                    "action": "赵双手留身前画外，闭口等待。画外许岚继续完成经办签字，声止后右手抬笔退至东侧纸外、左手离开纸边。",
+                    "performance": "下颌放松，眼神不催促，不点头指挥。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "连续书写声约1.2秒后停止，无新增词句。",
+                    "references": [
+                      {
+                        "subject_asset_id": "asset-5f4d7485e6b8",
+                        "id": "shot-yqq-12-reaction-beat-0-ref-0",
+                        "asset_version_id": "asset-version-89add4b760e5",
+                        "field": "visual",
+                        "text_start": 0,
+                        "text_end": 3,
+                        "alias": "赵衡",
+                        "required_tags": [
+                          "shot-yqq-12-reaction",
+                          "west-seat",
+                          "look-screen-right-down",
+                          "chest-up"
+                        ],
+                        "purpose": "用于本镜0–1.5秒赵衡西座闭口等待的胸上近景构图、画右下视线与静态表情。实际955×1696原像素裁图，保留已采用身份、浅蓝衬衫及局部会议室柔光；不替换身份母图，不是硬首帧，不提供画外签字完成、纸笔状态或声音证据。",
+                        "image_reference_role": "COMPOSITION",
+                        "usage": "GENERATION"
+                      }
+                    ]
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西画左，许东画外，两人原座不变。",
+                  "eyeline": "赵看画右下南中说明，不看门外。",
+                  "prop_state_in": "说明南中标题西，许右手正在经办签写，左指稳纸；复核已签。报价北中与独立帽未动。",
+                  "prop_state_out": "设计上经办已写完，许右手持裸笔抬离纸面并退东侧，左手离纸；说明仍标题西。完整双签下一镜才可见。",
+                  "action_in": "许正在画外签经办，赵不干预。",
+                  "action_out": "书写声止，赵仍未收纸，等待准确完成状态的插入镜。"
+                },
+                "transition_out": "声止后直切准确双签静态结果，不以对白解释。",
+                "merge_candidate": false,
+                "local_rework_risk": "本镜可观察的是赵衡等待；许岚画外完成签字是设计意图，不能冒充实际动态检查。赵不得提前收纸或增加对白。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-12-result",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 18,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "准确读到经办许岚、复核赵衡，完成双方依次留名的回报。",
+                "visual": "@情况说明下半页的独立全画幅静态证据插入：版面上方准确为“经办：许岚”，下方准确为“复核：赵衡”。使用同一道具版式的实际准确图片，不出现手、笔或移动背景；这是签完的结果，不是逐笔动画。",
+                "framing": "9:16静态画面，双栏居中占宽约四分之三，姓名字高与行距充分，全程1.5秒无遮挡、无字幕覆盖。",
+                "camera": "中性正俯插入，画面上方对应实际桌西，说明标题端仍朝西；只改变观看方向，不旋转实物，不暗示换座。静帧不推拉。",
+                "audio_intent": "无对白，无继续书写声，只有低连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@情况说明准确双签静止可读：上经办许岚，下复核赵衡。",
+                    "framing": "全画幅静态双栏插入，无遮挡。",
+                    "camera": "正俯中性，画面上方为桌西，不运动。",
+                    "action": "保持已经完成的双签，不增加笔迹，不出现手、笔或运动背景。",
+                    "performance": "人物均画外。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "连续室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西原座不变，均不入静态镜。",
+                  "eyeline": "中性文件证据镜，不作为人物反打。",
+                  "prop_state_in": "说明南中标题西，双签完成；许右手裸笔退至东侧、左手离纸。报价北中标题东，帽东缘南部。",
+                  "prop_state_out": "同一说明双签齐全、标题西，未收纸；报价、笔帽与许持笔状态不变。",
+                  "action_in": "许已签毕并抬笔，让开纸面。",
+                  "action_out": "两栏看清后赵衡才伸手叠齐收纸。"
+                },
+                "transition_out": "直切南侧收纸动作镜，恢复画左西、画右东；不重复签字，不重置纸向。",
+                "merge_candidate": false,
+                "local_rework_risk": "需制作并实际检查准确双签图片。作为EDITORIAL全画幅独立插入，不贴到运动纸面，不依赖跟踪、透视贴合、遮挡恢复或笔画动画。本单未绑定具体媒体，不声称图像或视频已通过检查。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-13",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 19,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 3.5,
+                "narrative_purpose": "赵衡实际收走两张纸，用行动兑现“说明我来交”；准确双签已经由前一独立证据镜展示，本镜专注叠纸与收至自己面前的结果。",
+                "visual": "@赵衡的浅蓝袖口从画左进入，左手先稳住北中部@报价单西侧空白边，右手捏住南中部已签全的@情况说明西侧空白边，把说明提起少许向北移到报价单上。两手将两张纸轻轻对齐，再把整叠沿桌面收到自己西侧面前。说明保持在上、标题端朝西，报价在下、标题端朝东，两纸不旋转或翻面。说明双签及报价旧红改旧确认保持原状态，本镜不承担运动中姓名精读。@许岚双手已退至东侧，右手仍持裸笔；独立帽还在原桌边。",
+                "framing": "9:16桌面中近景，起始包括南、北两张纸及赵衡双手，西侧收纸落点始终在画内；可带许岚米白袖边，不要求双方脸同时入画。",
+                "camera": "桌南侧较高固定斜俯，画左西、画右东；东窗光不变。不追纸摇移，不为正读文字改变纸向。",
+                "audio_intent": "无对白。纸张提起、叠齐、滑动的自然声配低连续室内底声，不用音效宣告问题解决。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.8,
+                    "visual": "南中部@情况说明双签齐全、标题朝西；北中部@报价单标题朝东、旧红改旧确认不变。@赵衡双手从西侧伸入。",
+                    "framing": "桌面中近景包含两纸轮廓、双手及移动路径。",
+                    "camera": "南侧固定斜俯。",
+                    "action": "赵左手稳住报价单西侧空白边，右手捏说明西侧边，略抬说明向北平移，放到报价单上。两手不交叉，许岚不碰纸。说明在上、报价在下，各自标题方向不变。",
+                    "performance": "动作比开场推纸轻，不夺纸、不催促。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻纸响，无新台词。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.8,
+                    "end_seconds": 3.0,
+                    "visual": "@情况说明在上，@报价单在下仅露一条边，始终只有两张纸。",
+                    "framing": "保留纸叠与西侧落点，不追读签名字形。",
+                    "camera": "同一固定机位。",
+                    "action": "赵双手从空白边将两纸对齐，再沿桌面向西收至自己面前。纸叠停稳后手指放松，说明标题仍朝西，报价标题仍朝东。",
+                    "performance": "以收纸兑现承担递交，不敲桌、不再发话。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "叠齐和滑动声自然收束。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 3.0,
+                    "end_seconds": 3.5,
+                    "visual": "两纸在@赵衡西侧面前叠齐静止，说明在上；许岚右手仍在东侧持裸笔。",
+                    "framing": "收纸落点明确，短停显示行动已完成。",
+                    "camera": "固定。",
+                    "action": "赵双手松缓停在纸边，不再移动纸。许岚尚未取帽。",
+                    "performance": "安静接受共同记录责任，不宣告报价后果已经解决。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "纸声已止，仅连续室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡固定西侧画左，许岚固定东侧画右，全程坐着；只露本镜需要的袖口和手。",
+                  "eyeline": "赵低头看正收的两张纸，许看收纸过程；二人均不说话。",
+                  "prop_state_in": "说明南中标题西、经办许岚和复核赵衡均已签；报价北中标题东、旧红改旧确认不变。许右手持裸笔，两手已离纸；帽在东缘南部许左手边。",
+                  "prop_state_out": "两纸叠齐收于西侧赵衡面前，说明在上标题西、报价在下标题东；所有既有签名状态不变。许右手裸笔，帽仍在原桌边。",
+                  "action_in": "双签已由前镜展示，许已让开纸面，赵才伸手。",
+                  "action_out": "赵收紙完成停住；许岚下一镜才取帽。"
+                },
+                "transition_out": "纸叠静止后直切许岚面部与手同框的扣帽镜；不重复收纸，不再重置纸向。",
+                "merge_candidate": false,
+                "local_rework_risk": "实际视频需核对只存在两纸、说明在上、标题仍西、收纸落点及手物接触。双签精读由前镜独立静态图承担，不把图版贴到本镜运动纸面，不依赖跟踪、透视合成或遮挡恢复。出现影响因果的增纸、穿模或状态倒置时，仅重制受影响动作覆盖；保存分镜不代表动作已验证。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-14",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 20,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "扣帽与放松回收许岚开场停笔的紧绷，单篇安静结束。",
+                "visual": "@许岚仍坐桌东侧，右手握同一支裸笔，左手从自己左手边、桌东缘南部拾起一直留在那里的笔帽，对准笔尖扣回。扣帽声后，她仍持着已盖好的笔，肩膀自然落下一点，目光从桌上纸叠回到对面赵衡，嘴角不作胜利笑。@公司小会议室保持东窗柔光和中性顶光；西侧两纸已经收好，不再发生新动作。",
+                "framing": "9:16中近景，同时保留许岚清楚的面部、肩膀和桌缘双手，扣帽接触不被裁掉；赵衡可以完全画外。",
+                "camera": "南偏西拍东侧许岚，固定在对话轴南侧；许岚看向画左赵衡。手部位于下半画面，不推近裁手，东窗光不变。",
+                "audio_intent": "无人说话。一次轻扣帽声、自然缓出的一口气和连续室内底声；不用旁白解释双签，不加胜利音效。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.7,
+                    "visual": "@许岚右手持裸笔，左手伸向桌东缘南部原位置的独立帽；面容、发型和米白衬衫不变。",
+                    "framing": "面部与双手同框的竖屏中近景。",
+                    "camera": "南偏西固定机位。",
+                    "action": "左手拾起笔帽，将帽口对准右手持有的笔尖，双手靠合把帽扣到笔尖。笔帽来自桌上，不从笔尾取下。右手始终持笔，不中途换手。",
+                    "performance": "低头看帽口对准，扣好后才准备抬眼。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻取帽声后一次扣帽轻响，室内底声连续。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.7,
+                    "end_seconds": 2.5,
+                    "visual": "@许岚右手持已盖帽的黑笔，左手松开帽，肩膀放松。画外赵衡面前纸叠状态不变。",
+                    "framing": "保持脸、肩与双手同框，不转为大笑特写。",
+                    "camera": "固定至结束。",
+                    "action": "左手离帽，右手把盖好帽的笔降低少许但仍握着；肩膀自然落下，目光抬向画左赵衡。不起身、不索纸。",
+                    "performance": "轻缓呼气，闭嘴安静结束；平静来自责任边界被承认，不代表客户或损失问题已经解决。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "自然呼气，底声在成片末端短收，不另增片尾时长。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许岚仍东侧朝西，赵衡仍西侧画外；两人未换座、未离场。",
+                  "eyeline": "许先低头看帽口与笔尖，扣好后抬眼看画左赵衡；赵画外不发声。",
+                  "prop_state_in": "双签说明在上标题西、报价在下标题东，两纸已叠齐收于赵衡西侧面前。许右手裸笔；唯一帽在东缘南部许左手边。",
+                  "prop_state_out": "两纸及所有签名状态不变。同一帽已盖住笔尖，许右手握盖好帽的笔，左手松开；桌面不残留重复笔帽。",
+                  "action_in": "赵衡已经收好纸，许岚此时才开始取帽。",
+                  "action_out": "扣帽完成，肩膀放松，两人原座安静结束。"
+                },
+                "transition_out": "以许岚安静松肩的稳定尾段结束，不额外加黑场片尾或悬念对白；若需片名，在既有画面内安排且不遮关键动作，不增加59秒设计时长。",
+                "merge_candidate": false,
+                "local_rework_risk": "实际视频须检查帽从原桌边拾起、帽口与笔尖真实接触闭合、右手连续持笔及无重复帽。不能用只拍脸掩盖扣帽失败，也不能把本分镜终态当作真实视频观察。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              }
+            ]
+          },
+          "storyboard_identity": {
+            "document_id": "production-document-4e543fd40d4a",
+            "version_id": "production-document-version-2275fa97b356",
+            "version": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "specialist-turn-eac17193a0fe465c945686f8e138443c",
+      "sequence": 4,
+      "tool_name": "artifact.get_asset_work_context",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "scope": {
+          "mode": "ITEM",
+          "item_ids": [
+            "item-yqq-external-statement-blank",
+            "item-yqq-external-statement-review-signed",
+            "item-yqq-external-statement-both-signed",
+            "item-yqq-external-quotation",
+            "item-yqq-external-pen-states",
+            "item-yqq-g01-preparation-slice",
+            "item-yqq-g02-preparation-slice",
+            "item-yqq-g03-preparation-slice",
+            "item-yqq-g04-preparation-slice",
+            "item-yqq-g05-preparation-slice"
+          ]
+        },
+        "shot_ids": [],
+        "clip_group_ids": []
+      },
+      "reason": "读取将被局部修改的五项纸笔占位及五组准备切片，保留当前内容和晚到登记；同时取得这些对象可获得的真实媒体与参考包记录。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.get_asset_work_context",
+        "status": "SUCCEEDED",
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_plan_index",
+            "artifact_id": "production-document-9bf5a748eb3a",
+            "version": 14
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-01",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-02",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-03",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-03-evidence",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-04",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-05",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-06",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-06-evidence",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-07",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-08",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-09",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-10",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-10-reaction",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-10-result",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-11",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-12",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-12-reaction",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-12-result",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-13",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-14",
+            "version": 1
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g01",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g02",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g03",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g04",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "clip_group",
+            "artifact_id": "clip-yqq-g05",
+            "version": 6
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "output": {
+          "storyboard": {
+            "identity": {
+              "document_id": "production-document-4e543fd40d4a",
+              "version_id": "production-document-version-0b577c62b1de",
+              "version": 6
+            },
+            "shots": [
+              {
+                "id": "shot-yqq-01",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 1,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.5,
+                "narrative_purpose": "观众在开头直接看见主管把责任和笔一起推向经办人。",
+                "visual": "小会议室南端看向北侧磨砂隔断。赵衡浅蓝衬衫坐画左，许岚米白衬衫坐画右，隔浅橡木桌对坐。桌面只有两张叠放的A4纸与一支盖好帽的黑笔；情况说明在上，报价单在下露一点红改边缘。赵衡左手推上层说明向许岚，下面报价单随叠纸轻移；右手把盖帽笔横放在空白经办栏上。许岚低头看笔，不接话。",
+                "framing": "9:16紧凑双人中景，两张脸位于上半部，推纸和放笔位于下中部；不切掉关键手。",
+                "camera": "桌南端稍高于坐姿眼平的固定机位，轻俯保留桌面。西在画左、东在画右，不越轴。东窗光方向连续。",
+                "audio_intent": "赵衡画内普通话：报价出错了。说明你签一下，就说你没核对。语气惯常催办而非怒吼，约0.3—5.0秒自然说完；许岚不张嘴。低空调底声、纸摩擦、笔落纸声，无旁白。",
+                "dialogue_line_ids": [
+                  "line-yqq-01"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.2,
+                    "visual": "赵衡左、许岚右；叠纸由桌中区移近东侧许岚，报价单仍在说明下。",
+                    "framing": "双人中景含桌面。",
+                    "camera": "固定南侧机位。",
+                    "action": "赵衡左手贴住情况说明近西缘，推向许岚；右手持盖好帽的笔，待纸停下后横放经办空栏，右手松开。",
+                    "performance": "赵衡边做边发话；许岚视线随纸移下，身体仍坐直。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-01"
+                    ],
+                    "sound": "本镜对白开始，纸摩擦后轻微落笔声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 2.2,
+                    "end_seconds": 5.5,
+                    "visual": "纸和盖帽笔停在许岚面前，两栏仍空白，赵衡手已撤离纸。",
+                    "framing": "保持双人关系，不靠快切强化压迫。",
+                    "camera": "固定。",
+                    "action": "赵衡收回双手并说完同一句话；许岚看经办栏，右手稍近纸缘但尚未拿笔。",
+                    "performance": "赵衡视线看向画右的许岚；许岚保持闭口，短暂吸气。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-01"
+                    ],
+                    "sound": "同一句对白连续完成，仅发声一次；尾部约半秒留给许岚接收要求。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡固定桌西侧画左，许岚桌东侧画右；全程坐着。",
+                  "eyeline": "赵看画右许；许先看赵后看下方经办栏。",
+                  "prop_state_in": "双空白说明在上、已有红改和赵衡确认签名的报价单在下，叠纸近桌中；黑笔帽盖在笔尖，由赵右手持。",
+                  "prop_state_out": "叠纸在东侧许面前、页首朝西便于许阅读；盖好帽的笔横放说明经办栏；两栏仍空。",
+                  "action_in": "赵准备把说明推向许。",
+                  "action_out": "赵手撤回，许右手在纸缘附近，未接笔。"
+                },
+                "transition_out": "按许岚低头视线切近手与脸，纸笔位置连续。",
+                "merge_candidate": false,
+                "local_rework_risk": "推纸时须始终只有两张；若生成难以保持上下叠纸，保留同机位纸已到达的可用段，不删放笔与催签因果。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-02",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 2,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 3.0,
+                "narrative_purpose": "让许岚的停笔成为主动选择，并建立之后一直留在手边的笔帽。",
+                "visual": "许岚近景带双手。她右手拿起盖帽黑笔，左手拔下笔帽并放在东侧桌缘、自己左手边的南侧小空位。右手转成书写握姿，裸笔尖停在经办空栏上方，不接触纸。她的视线转向露在说明下面的报价单边。",
+                "framing": "9:16许岚胸上及手部的紧中近景；脸在画右上，笔尖、经办空栏及落帽点在下半部。",
+                "camera": "南偏西看东侧许岚的固定机位，仍在主轴南侧；许看画左或低头。浅蓝袖仅可在远左缘虚化，不要求赵脸入画。",
+                "audio_intent": "无对白。保留拔帽轻响、帽接触桌面的轻声与室内底声，不加入心声或解释性旁白。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.7,
+                    "visual": "米白袖口和同一支盖帽黑笔清楚。",
+                    "framing": "近景带手。",
+                    "camera": "固定。",
+                    "action": "许右手拿起笔杆，左拇指食指握帽拔离笔尖；左手把帽横放东侧桌缘靠南的自己左手边，松开。",
+                    "performance": "她不急于签字，眼睛跟随笔尖。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻微拔帽和帽落桌声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.7,
+                    "end_seconds": 3.0,
+                    "visual": "裸笔尖悬在空白经办栏上方；同一笔帽静置许左手边。",
+                    "framing": "保持脸、笔尖、纸面的关系。",
+                    "camera": "固定。",
+                    "action": "右手调整书写握姿后停住，笔尖不落纸；左手转向下层报价单可抽出的北侧边。",
+                    "performance": "视线从空栏移到露出的报价单，嘴闭合，做出不独签的选择。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "呼吸和底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许坐东侧未移动座位；赵坐西侧画外。",
+                  "eyeline": "许低头看经办栏，末段看下层报价单。",
+                  "prop_state_in": "说明双空白，报价单在其下，笔盖好帽横置经办栏。",
+                  "prop_state_out": "黑笔由许右手持、裸笔尖未落纸；笔帽单独留东侧桌缘南部许左手边，不在笔尾；两纸仍叠放。",
+                  "action_in": "许右手尚未拿笔。",
+                  "action_out": "许右手持裸笔悬停，左手触到报价单北侧边。"
+                },
+                "transition_out": "切到桌面动作覆盖，接许左手抽纸；不重复拔帽。",
+                "merge_candidate": false,
+                "local_rework_risk": "必须分清许右手持笔、左手拔帽；检查停笔后说明仍双空白。笔帽不能自行变到笔尾。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-03",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 3,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "许岚抽出在场报价单并转给赵衡，建立旧确认签名的实物来源。",
+                "visual": "@许岚左手从双空白的@情况说明下面抽出@报价单，沿桌面带到北侧中区，平转半圈至标题端朝东、版面朝西侧赵衡。纸停稳后松手撤回，红改和旧确认区无遮挡。本镜看清抽纸、转向、松手，不承担运动中准确姓名精读。说明仍在东侧朝许；许右手持裸笔在画外，独立笔帽不动。",
+                "framing": "9:16桌面中近景，覆盖两纸分开的路径；米白左袖从画右进入。",
+                "camera": "南侧高斜俯固定，画左西、画右东。东窗柔光不变，不追字、不镜像纸面。",
+                "audio_intent": "许岚画外完整第二句：“这版是你改的。我还问过你，能不能发。”只说一次，声音连续跨本镜2.5秒及紧随的旧确认静态镜1.5秒，总窗口4秒。对白ID唯一归属本镜；编译与剪辑须保留跨切的同一句，不能强塞进2.5秒或在证据镜重起整句。赵衡不发声，纸声低于对白。",
+                "dialogue_line_ids": [
+                  "line-yqq-02"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.1,
+                    "visual": "@报价单从东侧说明下抽离并转向西座赵衡；情况说明双栏仍空。",
+                    "framing": "桌面中近景，纸的移动路径可见。",
+                    "camera": "南侧固定斜俯。",
+                    "action": "许左手捏报价单北侧空白边，向北中部抽出，再沿桌面转半圈至标题端朝东；右手画外持裸笔。",
+                    "performance": "平稳出示，不甩纸。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-02"
+                    ],
+                    "sound": "许岚画外开始第二句，连续普通话配低纸摩擦声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 2.1,
+                    "end_seconds": 2.5,
+                    "visual": "@报价单停在北中部朝赵，旧红改和确认区无遮挡；说明留在东侧。",
+                    "framing": "维持动作覆盖，不要求精读姓名。",
+                    "camera": "固定。",
+                    "action": "许左手松纸并撤向东侧；报价停稳，赵尚未按纸。",
+                    "performance": "画外语气克制，不添加解释。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "同一句继续并跨入下一静态镜，不重新起句。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西仍坐着，只见必要袖口和手；主轴南侧。",
+                  "eyeline": "许看纸再看赵；赵的识别反应在证据插入后出现。",
+                  "prop_state_in": "说明双空白压在报价上，两纸东侧朝许；许右手裸笔，帽独立在东缘南部许左手边。",
+                  "prop_state_out": "报价北中标题东，旧红改旧确认不变；说明东侧标题西双空白。许左手已离纸、右手持裸笔，帽不动。",
+                  "action_in": "许左手已触下层报价单北边。",
+                  "action_out": "抽出、转向、松手完成；赵还未按报价。"
+                },
+                "transition_out": "纸停稳后直切同一道具的独立静态旧确认证据；第二句声音连续跨切。",
+                "merge_candidate": false,
+                "local_rework_risk": "真实动作需检查只抽一张、转向及松手；准确旧签名由下一静态镜承担。不使用运动跟踪贴字、透视合成或遮挡恢复。4秒原句的声桥待实际声音检查。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-03-evidence",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 4,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "让观众看清既有红改和“确认：赵衡”，证明主管确认过这版报价。",
+                "visual": "@报价单的独立全画幅静态证据插入，使用同一道具版式的实际准确图片，同时容纳中部红改及右下“确认：赵衡”。黑色姓名开场已存在，不出现新书写。无手、笔或移动背景，不把图版贴到前镜运动纸面。",
+                "framing": "9:16静态画面，紧裁中部红改至右下确认区；确认文字足够大，1.5秒全程无遮挡，字幕避开证据区。",
+                "camera": "中性正俯纸面插入，画面上方对应桌东；实物标题端仍朝东。改变观看方向而非转动纸张，不暗示换座；静帧不推拉。",
+                "audio_intent": "承接前镜许岚画外第二句的尾部，预计“能不能发。”落在本段；使用同一条连续声音，不生成第二份对白。结构归属已在抽转报价镜，本镜对白ID留空仅为避免重复归属，并不表示删除声音。无新发言、无书写声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@报价单中部旧红改及右下“确认：赵衡”准确静止可读。",
+                    "framing": "全画幅静态证据插入，确认区不被字幕挡住。",
+                    "camera": "正俯中性，画面上方为桌东，不运动。",
+                    "action": "保持旧签名与红改，不增加墨迹，无手或笔。",
+                    "performance": "人物画外；许岚只接完原第二句。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "前镜许岚第二句连续尾部，室内底声不断；不重新发声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西均在原座，双方不入静态镜。",
+                  "eyeline": "中性证据镜；下一镜赵衡低头识别，不改变人物轴线。",
+                  "prop_state_in": "报价北中标题东，旧红改旧确认不变，许左手已松开；说明东侧双空白。",
+                  "prop_state_out": "全部状态不变；赵尚未按报价，许右手持裸笔，帽东缘南部。",
+                  "action_in": "报价已转向赵并停稳。",
+                  "action_out": "旧确认看清后，切赵衡看纸、按纸与反问。"
+                },
+                "transition_out": "直切赵衡识别并按住北缘，恢复南侧主轴赵左许右。",
+                "merge_candidate": false,
+                "local_rework_risk": "需检查实际图片的版式、红改、中文、旧签名、字高及裁切。图片以EDITORIAL用途作独立全画幅插入，不送视频模型重绘，不依赖跟踪或动态合成。本单未绑定具体媒体，不声称图像已验收。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-04",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 5,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 4.5,
+                "narrative_purpose": "看见自己的确认签名后，赵衡用按纸与反问试图把责任推回许岚。",
+                "visual": "赵衡西侧坐姿中近景，面孔居画左，目光落到画面下方的报价单，再抬向画右的许岚。浅蓝袖口的左手向北侧中区伸出，压住报价单北缘而不盖住原确认签名。画内只有赵衡的脸与手；许岚在画外，不要求她同时表演。",
+                "framing": "9:16，南偏东机位拍赵衡胸口以上及左手压纸的桌面下缘；脸和手同为可读层次，不用极浅景深。",
+                "camera": "固定，保持在东西人物轴线南侧；人物视线朝画右。东侧高窗的柔光与前镜一致。",
+                "audio_intent": "赵衡画内普通话原句：我说能发，你就不再看一遍？先看纸再反问，不吼叫。许岚不发声。低室内底噪，按纸轻响，不配转折重音。",
+                "dialogue_line_ids": [
+                  "line-yqq-03"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.0,
+                    "visual": "赵衡读到自己签名，左手落到报价单北缘。",
+                    "framing": "中近景带桌面",
+                    "camera": "固定南偏东角度",
+                    "action": "眼睛先向下，左手伸出接触纸的北缘并停住，手指不遮右下确认区。",
+                    "performance": "下颌微紧，只停一下，不表演惊慌。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "指腹压纸的轻响，室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.0,
+                    "end_seconds": 4.5,
+                    "visual": "赵衡按着报价单，看向画右的许岚。",
+                    "framing": "同一中近景",
+                    "camera": "不移动、不反向越轴",
+                    "action": "左手保持压纸，右手不碰笔；抬眼说完反问，末尾等待回答。",
+                    "performance": "维护体面，句中“能发”稍重，尾部不是吼叫。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-03"
+                    ],
+                    "sound": "赵衡：我说能发，你就不再看一遍？对白约2.9秒，末尾留约0.6秒。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西许东，均坐着；赵画左，许在画右外。",
+                  "eyeline": "赵先看北侧报价单的原确认签名，再朝画右的许岚看；许岚画外看赵。",
+                  "prop_state_in": "报价北侧中区朝赵；说明东侧朝许，双空白；许右手持裸笔，帽在她左手边。",
+                  "prop_state_out": "赵左手按报价单北缘；报价原签名、红改不变。说明、裸笔与笔帽未变。",
+                  "action_in": "赵尚未接触报价单。",
+                  "action_out": "赵左手保持压纸，反问完等许岚，不取笔。"
+                },
+                "transition_out": "按反问后的停顿切许岚；室内底噪连续。",
+                "merge_candidate": false,
+                "local_rework_risk": "按纸若遮证据，可调整手接触的边缘，不改既有签名、不把签名移到其他角。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-05",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 6,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.5,
+                "narrative_purpose": "许岚承认自己的经办责任，同时把说明摆成双方共同面对的文件，不先给自己签字。",
+                "visual": "许岚东侧中近景，浅米白衬衫，面孔在画右，看向画左的赵衡。她先停一下并轻点头，用左手将情况说明从东侧移至桌南侧中区，转成便于赵衡阅读和落笔的方向；右手仍握裸笔，笔尖离纸。赵衡只可见背景西侧的浅蓝左袖和按报价单的手，不抢表情中心。",
+                "framing": "9:16，南偏西拍许岚，腰上带桌面交接区；下部看清一纸被移中，不必读正文细字。",
+                "camera": "固定，同主轴南侧反打；许岚看画左。东窗柔光保持从她东后侧进入，面部用中性室内光补清。",
+                "audio_intent": "许岚画内原句：我的经办，我签。你的复核，也别空着。克制清楚，句间有停顿；赵衡安静。纸轻擦桌面的声响，不另加旁白。",
+                "dialogue_line_ids": [
+                  "line-yqq-04"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.8,
+                    "visual": "许岚握笔悬停，听完后轻点一次头。",
+                    "framing": "中近景带双手",
+                    "camera": "固定",
+                    "action": "右手笔尖远离纸面，左手接触说明靠近自己的边缘。",
+                    "performance": "停一下再点头，承认自己的部分，不露胜利笑容。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻呼吸与室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.8,
+                    "end_seconds": 5.5,
+                    "visual": "情况说明被许岚左手移到南侧中区，纸面转向西侧赵衡；北侧报价单仍被赵左手按着。",
+                    "framing": "同机位，面部与移纸同框",
+                    "camera": "固定不追手",
+                    "action": "边说边用左手平移并转动说明约半圈：字头朝东、底边朝西，南侧中区与北侧报价单分开放置。左手松开后收回，右手持裸笔不落笔。",
+                    "performance": "先看赵说“我的经办，我签”，目光短落双栏，随后看赵说“你的复核，也别空着”。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-04"
+                    ],
+                    "sound": "许岚：我的经办，我签。你的复核，也别空着。约4.2秒，句间自然停顿。纸擦声不盖对白。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东侧画右，赵西侧画左外；不换座。",
+                  "eyeline": "许先看画左赵衡，移纸时短看说明，后重新看赵。",
+                  "prop_state_in": "说明在东侧朝许双空白；赵左手压北侧报价；许右手持裸笔，帽在东侧桌缘南部。",
+                  "prop_state_out": "说明在南侧中区朝赵、双空白；与北侧报价分开不叠压。许仍右手持裸笔；赵左手仍按报价；帽不动。",
+                  "action_in": "许未点头、未移动说明。",
+                  "action_out": "说明置中且转好，许左手退出，右手准备放笔。"
+                },
+                "transition_out": "按许岚右手向中间伸的起势切桌面插入镜，保留动作方向。",
+                "merge_candidate": false,
+                "local_rework_risk": "不能因翻转说明而镜像印字；若手遮挡，优先只保留平移终态与可读纸面，不把报价单一起拖动。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-06",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 7,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.0,
+                "narrative_purpose": "许岚把裸笔放到复核栏旁并真正松手，交出选择；准确的双空白证据紧接下一镜。",
+                "visual": "@许岚右手从东侧进入，把同一支裸笔放到南中部@情况说明的复核栏旁空白纸边，笔杆接触纸面后才松开，手退回东侧。说明标题端朝东，两栏仍空；黑色笔尾不套帽。北中部报价仍被赵衡左手压住北缘，独立帽留桌东缘南部。本镜看接触、松手和笔留在原处，不要求运动中精读印字。",
+                "framing": "9:16南侧桌面中近景，米白右袖、手、裸笔与说明下半页同框；准确栏名与空线由下一静态插入单独展示。",
+                "camera": "南侧固定斜俯，画左西、画右东；纸沿前镜标题朝东，不为读字镜像或转纸。",
+                "audio_intent": "无对白。轻放笔声、衣袖轻擦声和低连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.3,
+                    "visual": "@许岚右手把裸笔放到@情况说明复核栏旁的空白纸边。",
+                    "framing": "手、笔、说明下半页的中近景。",
+                    "camera": "南侧固定斜俯。",
+                    "action": "许右手持笔由东侧进入，笔杆轻触空白纸边后松开手指。笔尖朝北、笔尾朝南，不压签字线，不落笔写字。",
+                    "performance": "平稳交出选择，不摔笔。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "一次轻放笔声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.3,
+                    "end_seconds": 2.0,
+                    "visual": "@情况说明旁裸笔静止，许岚右手撤出，赵衡没有伸手接。",
+                    "framing": "保持动作覆盖，不追读纸面文字。",
+                    "camera": "固定。",
+                    "action": "许右手退回东侧自己桌边；笔原位不动，两栏不增加墨迹，赵左手仍压北侧报价单。",
+                    "performance": "人物不发声。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "室内底声，纸笔声已停。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西，均坐着。只需许右手米白袖与远处赵左手浅蓝袖，主轴南侧。",
+                  "eyeline": "两人面部不入画；赵看说明与刚放下的笔，许随后看赵。",
+                  "prop_state_in": "说明南中标题东、双空白，许右手持裸笔；报价北中标题东，赵左手压北缘。帽在东缘南部许左手边。",
+                  "prop_state_out": "裸笔放复核旁空白纸边，尖北尾南，许已松手撤回。说明仍双空白；报价旧红改旧确认不变，赵仍按其北缘；帽不动。",
+                  "action_in": "许右手向中区伸出持有的裸笔。",
+                  "action_out": "放笔、松手、撤手完成，赵尚未取笔。"
+                },
+                "transition_out": "直切同一道具的独立双空白静态证据，不重复放笔，不改变纸向或笔的所在位置。",
+                "merge_candidate": false,
+                "local_rework_risk": "实际动作须检查接触、松手、唯一裸笔及帽的位置。准确栏名和双空白由下一静态镜承担，不安排运动跟踪、透视贴字或手部遮挡恢复。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-06-evidence",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 8,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "准确看清上经办、下复核都还空着：许岚没有先签，也没有替赵衡签。",
+                "visual": "@情况说明下半页的独立全画幅静态证据插入，采用同一道具版式的实际准确图片。上方“经办：”后为空线，下方“复核：”后也为空线，没有任何姓名或新增墨迹。紧裁两栏和必要白纸边，不包含栏外裸笔、手、报价单或移动背景；这些物件仍留在上一镜既定位置。",
+                "framing": "9:16静态插入，双栏居中占画面宽度约四分之三，栏名和空线全程1.5秒无遮挡，无字幕盖住证据。",
+                "camera": "中性正俯纸面插入，画面上方对应桌东，实物标题端仍朝东；只改变观看方向，不转实物、不镜像、不暗示换座。静帧不推拉。",
+                "audio_intent": "无对白，无书写声，仅连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@情况说明上经办、下复核两栏均准确为空，双栏静止可读。",
+                    "framing": "全画幅静态双栏插入，文字与空线无遮挡。",
+                    "camera": "正俯中性，画面上方为桌东，不运动。",
+                    "action": "保持双空白，不出现新姓名、笔迹、手或逐笔动画。栏外裸笔与其他桌面物件未移动，只在裁切外。",
+                    "performance": "双方画外安静。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "低连续室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西仍在原座，均不入静态镜。",
+                  "eyeline": "中性证据插入；下一镜赵从说明抬眼看许，不改变人物轴线。",
+                  "prop_state_in": "说明南中标题东、双空白；裸笔复核旁尖北尾南。赵左手压北中报价北缘；帽东缘南部。",
+                  "prop_state_out": "全部状态不变，赵仍未取笔，许双手已空。",
+                  "action_in": "许已放笔松手，纸与笔都停稳。",
+                  "action_out": "双空白看清后接赵衡不取笔的追问。"
+                },
+                "transition_out": "回到南偏东拍赵衡的反角，赵画左看画右许岚，先抬眼再追问。",
+                "merge_candidate": false,
+                "local_rework_risk": "需检查实际双空白图片的版式、中文字形、空线、字高、裁切和停留。usage=EDITORIAL，作独立全画幅静态插入，不送视频模型重绘，不贴到运动纸面。本单未绑定具体媒体，不声称图片已验收。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-07",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 9,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "赵衡不拿笔，转而测试许岚是否会放弃分清责任。",
+                "visual": "@赵衡西侧中近景，先从桌面抬眼，看向画右许岚。左手仍压北侧报价单，右手留在自己一侧，明确没有去拿南侧中区的裸笔。",
+                "framing": "9:16中近景，赵面孔居画左，右手停在身前的桌边可见，不强塞许岚正脸。",
+                "camera": "沿赵衡看旧确认并按纸时的南偏东机位固定拍摄，主轴南侧、东窗光向不变，不使用已顺移的旧镜号定位。",
+                "audio_intent": "赵衡画内原句：非得分这么清？短、压着不满，不提高音量。许岚无声听完，下一镜再回答。",
+                "dialogue_line_ids": [
+                  "line-yqq-05"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.4,
+                    "visual": "@赵衡没有拿笔，抬眼看许岚。",
+                    "framing": "中近景。",
+                    "camera": "南偏东固定。",
+                    "action": "双手保持原位，仅视线由南侧说明抬到画右。",
+                    "performance": "嘴唇收紧后开口，不瞪眼。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.4,
+                    "end_seconds": 2.5,
+                    "visual": "@赵衡盯住许岚，问完仍等她退让。",
+                    "framing": "同一中近景。",
+                    "camera": "固定。",
+                    "action": "说话期间不取笔，尾句结束保持视线。",
+                    "performance": "原句自然说约1.6秒，末尾留半秒等待。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-05"
+                    ],
+                    "sound": "赵衡：非得分这么清？",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西画左，许东画右外，全程就坐。",
+                  "eyeline": "赵自说明抬眼看画右许岚，许画外看赵。",
+                  "prop_state_in": "说明南中标题东双空白，裸笔在复核旁；赵左手压北中报价北缘；帽在许左手边。",
+                  "prop_state_out": "所有纸、笔、帽位置和签名状态不变，赵未拿笔。",
+                  "action_in": "赵看刚放下的裸笔与说明。",
+                  "action_out": "赵问完抬眼等许岚答话，左手仍压报价。"
+                },
+                "transition_out": "答话前切许岚，保持赵看右、许看左的互补视线。",
+                "merge_candidate": false,
+                "local_rework_risk": "若无故新增伸手取笔会提前让步；只修右手与表演，不改对白或座位。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-08",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 10,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.0,
+                "narrative_purpose": "许岚明确愿意一起补错，但不接受一人认责。观众站在她克制且不回避自身职责的处境里。",
+                "visual": "许岚坐在会议桌东侧，浅米白长袖衬衫，画面偏右，稳定看向画左的赵衡。她不再推纸，也不指着对方；双手已退到自己一侧，右手空着，左手边的笔帽留在桌上。报价单、情况说明及裸笔维持上一镜位置，画面主读她的脸而不要求文件细字同时清楚。",
+                "framing": "9:16胸上近景，给画左视线留空；下沿可带桌边，不强迫赵衡入画。",
+                "camera": "摄影机位于桌西南、对话轴南侧，眼平固定看向许岚；柔和东窗天光及中性顶光不变。不环绕、不越轴。",
+                "audio_intent": "仅许岚画内说完整原句：“出了错可以一起补，责任也得一起认。”普通话，正常音量；前半句提出合作，后半句坚定收住。赵衡画外安静听，不替她发声。低连续室内底噪，无强调胜负的音乐。",
+                "dialogue_line_ids": [
+                  "line-yqq-06"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 4.5,
+                    "visual": "许岚的面部保持清楚，朝画左看赵衡，不寻找镜头。",
+                    "framing": "胸上近景",
+                    "camera": "西南侧眼平固定",
+                    "action": "手留在自己桌边不动，面对赵衡说完原句。",
+                    "performance": "先平稳说“出了错可以一起补”，句逗略停，再说“责任也得一起认”；不挑眉讥讽，不提高嗓门。",
+                    "emotion": "愿意合作，也明确守住责任边界。",
+                    "dialogue_line_ids": [
+                      "line-yqq-06"
+                    ],
+                    "sound": "许岚画内完整对白：“出了错可以一起补，责任也得一起认。”赵衡不出声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 4.5,
+                    "end_seconds": 5.0,
+                    "visual": "许岚说完后仍看着赵衡。",
+                    "framing": "同一近景",
+                    "camera": "固定不变",
+                    "action": "闭嘴等回应，不伸手拿笔。",
+                    "performance": "嘴角不露胜利笑，呼吸稳定，目光不回避。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "短暂室内静默和自然呼吸。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许岚固定东座面西，赵衡固定西座面东且本镜画外；南侧轴线。",
+                  "eyeline": "许岚看画左的赵衡，视线高度对应对坐者眼睛；不低头准备签字。",
+                  "prop_state_in": "说明南中朝赵，双栏空白；裸笔复核旁尖北尾南。报价北中朝赵，赵左手压北缘，既有红改与确认签名不变。帽在东缘南部许左手边。",
+                  "prop_state_out": "全部文件、笔及帽的位置和签名状态不变。许岚双手均空。",
+                  "action_in": "许岚听完赵衡的追问，手已从放笔位置退回。",
+                  "action_out": "许岚说完第六句，仍等赵衡回应。"
+                },
+                "transition_out": "直切赵衡反应，不把下一镜的松手提早到许岚对白中。",
+                "merge_candidate": false,
+                "local_rework_risk": "只校正语气和视线；若口型提前结束，优先按实际语音调整本镜尾部，不改原句。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-09",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 11,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 5.0,
+                "narrative_purpose": "让赵衡的让步有可见过程：想反驳却没说出话，重新看空栏和自己确认过的报价单，再松开控制证据的左手。",
+                "visual": "赵衡坐西侧、浅蓝长袖衬衫，画面偏左，先看画右的许岚。较高的中近景同时容纳他的脸、前臂和桌面南北两份文件：南中的情况说明两栏仍空，北中的报价单红改与既有确认签名不变；赵左掌只压报价北缘，不遮住右下角签名。他依次垂眼看说明、转眼看报价，最后抬起左掌并收回一点。裸笔始终未动。",
+                "framing": "9:16较高机位中近景，赵衡脸为主、桌面双纸与左手为次；能读左手离纸的结果，不要求同时读正文细字。",
+                "camera": "摄影机位于桌东南、对话轴南侧，略高于眼平向西北俯看；固定，保留画右视线空位。东窗光方向不变。",
+                "audio_intent": "没有新对白；赵衡只张嘴吸一口气而不发出词句。保留极轻衣袖、手离纸声音与连续室内底噪，不用夸张叹气或音乐替代反应。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.8,
+                    "visual": "赵衡看着许岚，左手仍压报价单。",
+                    "framing": "脸与桌面同框中近景",
+                    "camera": "东南侧略高固定",
+                    "action": "张了张嘴，没有接话，随后合上嘴。",
+                    "performance": "原本要反驳的气息收住，下颌轻微放松；不摇头笑、不夸张认输。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻吸气但无词句。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.8,
+                    "end_seconds": 2.0,
+                    "visual": "他的视线落向南中部情况说明的两处空白栏。",
+                    "framing": "同一中近景",
+                    "camera": "固定",
+                    "action": "低头看情况说明；左右手都不取笔。",
+                    "performance": "看清空栏后短停，避免目光一扫即过。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "室内底噪。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 2.0,
+                    "end_seconds": 3.2,
+                    "visual": "赵衡再看北中部被自己压住的报价单。",
+                    "framing": "同一中近景",
+                    "camera": "固定",
+                    "action": "眼睛和下巴小幅转向报价单原确认签名所在位置，左掌仍压北缘。",
+                    "performance": "意识到自己的记录也在场，目光停住，不另加表情宣言。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "无对白。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 3.2,
+                    "end_seconds": 5.0,
+                    "visual": "左掌松开报价单北缘，纸仍平放原处。",
+                    "framing": "脸和左手均在画内",
+                    "camera": "固定",
+                    "action": "左指放松，左掌离纸，再撤回西侧自己桌缘几厘米；右手仍空，裸笔留在复核栏旁。",
+                    "performance": "肩背不再前顶，动作比前面的按纸缓和。最后短停给观众看清纸已不受压。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻微衣袖与纸面接触声收束。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡西侧面东、画左；许岚东側面西且画外。机位在南侧不跨轴。",
+                  "eyeline": "赵衡起初看画右许岚，随后向桌面南中空栏、再向北中报价单看；不是看门外或第三人。",
+                  "prop_state_in": "双纸都朝赵衡。说明南中双空白，裸笔复核旁尖北尾南。报价北中，赵左掌压北缘；报价既有签名不变。帽仍东缘南部。",
+                  "prop_state_out": "赵左手已离报价单并退向西侧；报价单留北中不移动。说明双栏仍空，裸笔未拿起，帽未动。",
+                  "action_in": "赵衡听完许岚的话，欲言又止。",
+                  "action_out": "赵衡松开报价单，停在准备自主拿笔的前一刻。"
+                },
+                "transition_out": "在左手离纸后切到取笔签复核的桌面动作，下一镜不能恢复压纸状态。",
+                "merge_candidate": false,
+                "local_rework_risk": "主要风险是目光顺序含混或左手仍压纸。实际媒体须检查镜尾左手已离开；计划终态不是已生成证据。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-10",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 12,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "看清赵衡自主拿笔，并实际在复核栏开始落笔；完整姓名的准确结果由后面的独立证据镜承担。",
+                "visual": "@赵衡的浅蓝袖口从西侧进入。@情况说明在南中部，标题端朝东供赵衡阅读，上经办、下复核均为空。赵右手拿起复核栏旁的@黑色带帽签字笔，左指稳住说明上部空白边，右手将裸笔尖落到复核线起笔区并开始书写。只看取笔、真实接触与短段手腕运动，不要求本镜连续写完准确的两个汉字。北中部报价单和东缘南部的独立笔帽不动。",
+                "framing": "9:16南侧桌面中近景，保留浅蓝袖、右手持笔与落笔所属栏位。笔尖接触可见，不把完整姓名成字过程作为微距识读对象。",
+                "camera": "南侧斜俯固定，西在画左、东在画右。东窗光连续；不追笔、不镜像纸面。",
+                "audio_intent": "无对白。取笔轻响后开始自然书写摩擦声；书写声跨切到许岚等待反应，不口述姓名。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 0.9,
+                    "visual": "@情况说明双栏空白，裸笔在复核旁，浅蓝袖自画左伸入。",
+                    "framing": "桌面中近景含两栏及赵双手。",
+                    "camera": "南侧固定斜俯。",
+                    "action": "赵衡右手捏笔杆拿起并调整握姿；左指只稳说明上部空白边，不重新按报价单。",
+                    "performance": "决定已形成，动作平稳。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "轻微取笔声与室内底声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 0.9,
+                    "end_seconds": 2.5,
+                    "visual": "@赵衡右手的裸笔尖接触@情况说明下方复核栏，上方经办未被触碰。",
+                    "framing": "保持袖口、笔尖接触点和复核栏的关系；不要求逐笔辨认完整姓名。",
+                    "camera": "同一固定机位。",
+                    "action": "右手在复核起笔区落笔并作短段自然签写，左指稳纸。切点仍在书写中；不展示写完状态，不移动或转动纸张。",
+                    "performance": "自然签字，不犹豫摆拍。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "细微书写声持续到下一反应镜。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西许东；本镜只需赵衡浅蓝袖和双手，南侧轴线。",
+                  "eyeline": "赵低头看复核起笔区；许画外看他的签字。",
+                  "prop_state_in": "说明南中标题东，经办空、复核空；报价北中标题东，旧红改和旧确认不变。裸笔复核旁，帽独立留许左手边。赵已松开报价。",
+                  "prop_state_out": "赵右手持裸笔在复核栏书写中，左指稳说明边；经办仍空。纸向、报价及笔帽均未变。",
+                  "action_in": "赵已经松开报价单，准备自主取笔。",
+                  "action_out": "赵实际开始签复核，在未展示完整字形时切至许岚等待。"
+                },
+                "transition_out": "直切许岚等待反应，连续书写声说明动作仍在进行，不在切点重复取笔或落笔。",
+                "merge_candidate": false,
+                "local_rework_risk": "需实际视频核对持笔者、落笔栏位与接触，不能用静态图证明动态成功。完整姓名准确性由独立静态结果镜承担；不使用笔画动画、跟踪贴字或手部遮挡恢复兜底。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 2
+              },
+              {
+                "id": "shot-yqq-10-reaction",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 13,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.0,
+                "narrative_purpose": "让赵衡在画外继续完成签字，并让观众看见许岚等待责任落到纸上的反应。",
+                "visual": "@许岚坐东侧，脸居画右，目光向左下方桌面南中的说明。她闭口等待，没有伸手催笔，也没有提前庆祝。赵衡和文件不入画；书写声延续后停止，表示赵在画外完成复核签字并抬笔。",
+                "framing": "9:16许岚胸上近景，不带需要读字的纸面，给画左下视线留空间。",
+                "camera": "沿南偏西拍许岚的固定反角，不跨北侧，不改变东窗光。",
+                "audio_intent": "无人说话。前约1.6秒承接赵衡画外书写声，随后自然停止，留短暂室内安静。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.0,
+                    "visual": "@许岚安静看向画左下的签字位置，双手留自己一侧画外。",
+                    "framing": "胸上近景，脸清楚。",
+                    "camera": "南偏西固定。",
+                    "action": "许岚不说话、不取笔，目光保持在说明上。画外赵衡继续签复核，声止后右手抬笔、左手松开说明。",
+                    "performance": "耐心等对方完成选择，嘴角保持中性。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "连续书写声约1.6秒后停止；不增加词句或夸张叹气。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东侧面西，赵西侧画外，全程坐着。",
+                  "eyeline": "许看画左下南中说明，不看镜头、不看门外。",
+                  "prop_state_in": "赵右手正签复核，左指稳说明；说明标题东，经办空。报价北中原签不变；帽在东缘南部。",
+                  "prop_state_out": "设计上赵已完成复核并抬笔，裸笔仍在赵右手西侧纸外；左手离纸。说明仍南中标题东、经办空。完成字形在下一镜才可见。",
+                  "action_in": "承接赵衡正在书写的动作和声音。",
+                  "action_out": "书写声停止，许岚仍等待，下一镜给出真实准确的完成状态。"
+                },
+                "transition_out": "声止后切准确的仅复核签字结果，不用字幕或旁白解释。",
+                "merge_candidate": false,
+                "local_rework_risk": "本镜只能观察许岚的反应；画外动作是设计，不是已经验证的赵衡视频。不得让她对嘴或提前伸手接笔。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-10-result",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 14,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "准确证明先签下的是复核赵衡，而经办依然空白。",
+                "visual": "@情况说明的下半页作为独立全画幅静态证据插入：版面上方“经办：”后仍是空线，下方“复核：赵衡”准确完整。使用同一道具版式的已检查实际图片，保留纸面质感；画面无手、无笔、无移动背景。本镜展示完成结果，不展示签名逐笔生成。",
+                "framing": "9:16完整静态画面；双栏居中占画面宽度约四分之三，姓名有充分字高和行距，全程1.5秒无遮挡、无字幕覆盖。",
+                "camera": "中性正俯纸面插入，画面上方对应实际桌东，纸标题端仍朝东；通过插入镜的观看方向正读版面，不旋转实物、不暗示人物换座。静帧不推拉。",
+                "audio_intent": "无对白、无继续书写声，仅连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@情况说明仅复核赵衡已签、经办空白，准确双栏静止可读。",
+                    "framing": "全画幅静态证据插入，两栏大字且无遮挡。",
+                    "camera": "正俯中性插入；画面上方为桌东，无摄影机或图版运动。",
+                    "action": "保持已经完成的单签状态，不出现手、笔、逐笔动画或任何新墨迹变化。",
+                    "performance": "人物画外，无新增表演要求。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "低室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "双方仍在原座，均不入本静态证据镜。",
+                  "eyeline": "此为中性文件插入，不代替任一人物的正反打。",
+                  "prop_state_in": "说明南中标题东，复核赵衡已完成、经办空；赵右手持裸笔在纸西侧外，左手离纸。",
+                  "prop_state_out": "同一说明同一方向，仍仅复核有赵衡。笔仍赵右手，报价和东侧笔帽未动。",
+                  "action_in": "赵已经完成签字并抬笔。",
+                  "action_out": "单签结果看清后，接赵持笔向许岚递出的关系镜。"
+                },
+                "transition_out": "直切南侧双人交笔镜，恢复赵左许右；不再次签字。",
+                "merge_candidate": false,
+                "local_rework_risk": "须准备并实际检查准确单签静态图。该图作为EDITORIAL全画幅替代画面，不贴到运动纸面，不需要跟踪、透视拟合、遮挡恢复或笔画动画。当前未绑定图片，不声称已完成合成或视频验收。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-11",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 15,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 3.0,
+                "narrative_purpose": "赵衡主动承担递交，并把书写权交回许岚；许岚先确认他的态度，再接笔。",
+                "visual": "南侧双人中景，赵衡在画左，许岚在画右，两人仍坐着。赵衡右手将裸笔递过桌面南中部，笔尾朝许岚、笔尖朝自己并稍向下。许岚先看他的脸，再看笔，用右手接住可握的后半段。她接稳后赵衡才松开。情况说明仍朝赵，复核已签、经办未签；报价单在北中部，帽仍在许左手边。",
+                "framing": "9:16双人坐姿关系中景，脸和桌面交笔区同时可读；无需把两张整页都塞入画面。",
+                "camera": "南侧固定眼平略高机位，维持西左东右。人物不前后换位，东窗光不反转。",
+                "audio_intent": "赵衡画内用自然普通话完整说“说明我来交。”，音量比开头收敛，不增加道歉或催促。许岚不说话，不替他对嘴。",
+                "dialogue_line_ids": [
+                  "line-yqq-07"
+                ],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "赵衡持笔伸向许岚，两人视线短暂相遇。",
+                    "framing": "双人中景，交笔区在两人之间下方。",
+                    "camera": "南侧固定。",
+                    "action": "赵衡右手捏笔杆中部偏笔尖处，笔尾朝东，向许岚递出并稳定停住；许岚先抬眼看他，再将视线落到笔上，右手开始伸出。",
+                    "performance": "赵衡对许岚说“说明我来交。”，语气落地，没有命令意味。许岚看他一眼，不笑、不点头庆祝。",
+                    "emotion": null,
+                    "dialogue_line_ids": [
+                      "line-yqq-07"
+                    ],
+                    "sound": "唯一对白为赵衡“说明我来交。”，室内底噪连续。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.5,
+                    "end_seconds": 3.0,
+                    "visual": "两人的右手短暂同时接触同一支裸笔，随后持有者变为许岚。",
+                    "framing": "保留双方脸与交笔手，不另切手部极近景。",
+                    "camera": "同一固定机位。",
+                    "action": "许岚右手握住裸笔后半段，接稳；赵衡确认接触后才张开手指松开并收回西侧。许岚将笔收至自己面前、尖离纸。她左手仍空，未转纸未签字。",
+                    "performance": "赵衡不再催；许岚从确认转为准备履行经办职责。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "对白结束后仅衣袖和轻微接笔声，不新增语气词。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡西侧画左，许岚东侧画右，全程坐姿，镜头在轴线南侧。",
+                  "eyeline": "赵看右侧许；许先看左侧赵的脸，再下看交笔区，接稳后看说明。",
+                  "prop_state_in": "说明南中部朝赵，仅复核赵衡已签。报价北中部朝赵，原签红改不变。赵右手持裸笔，帽在桌东缘南部许左手边。",
+                  "prop_state_out": "许岚右手持裸笔，赵右手已松开收回。说明仍朝赵、仅复核已签；报价和帽未动，许左手空。",
+                  "action_in": "赵衡签毕，准备向东递出笔。",
+                  "action_out": "许岚接稳笔，赵衡收回手；下一镜许岚才转说明、签经办。"
+                },
+                "transition_out": "接许岚低头动作切到桌面签字覆盖，不提前出现经办签名。",
+                "merge_candidate": false,
+                "local_rework_risk": "双手交笔需实查接触、松手和唯一持有状态；不能让笔瞬移或套帽。若实际交接遮挡，用本镜连续动作的可用区间与后镜已接稳状态衔接，不改先后因果。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-12",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 16,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.5,
+                "narrative_purpose": "许岚在赵衡先签之后开始履行经办责任；看清转纸、落笔者及所属栏位，不要求连续精确成字。",
+                "visual": "@许岚右手持同一支裸笔，左手把南中部的@情况说明单独转半圈，标题端朝西、版面朝向东座的自己。纸停稳后左指压空白边，右手裸笔尖接触版面上方经办栏并开始签写。复核赵衡已经存在，经办此时才开始增加笔迹。北中部报价单与东缘南部独立笔帽不动。本镜不展示完整姓名逐笔写成。",
+                "framing": "9:16南侧桌面中近景，米白袖、双手、纸的转向和经办落笔位置可见；不以微距同时要求两个完整姓名精确成字。",
+                "camera": "南偏东固定斜俯，画左西、画右东，保持东窗光；转的是说明实物，不镜像印字。",
+                "audio_intent": "无对白。先有纸擦声，纸停稳后开始书写声；书写声接到赵衡等待镜。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.3,
+                    "visual": "@情况说明仅复核赵衡已签；@许岚右手持裸笔在纸外，左手转纸。",
+                    "framing": "桌面中近景含单张说明轮廓和双手。",
+                    "camera": "南偏东斜俯固定。",
+                    "action": "许左手接触说明东南空白边，沿桌面转半圈，使标题端朝西、版面朝自己；纸仍留南中部。左指稳住不遮栏位的边缘。右手等纸停稳，报价单和帽均不随动。",
+                    "performance": "平稳，不抢笔、不甩纸。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "纸面摩擦声，无对白。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.3,
+                    "end_seconds": 2.5,
+                    "visual": "@许岚右手笔尖落到@情况说明上方经办栏起笔区，复核已有签名保持不变。",
+                    "framing": "保留米白袖、裸笔尖接触和所属栏位。",
+                    "camera": "同一固定斜俯，不追笔。",
+                    "action": "右手在经办起笔区实际落笔并作短段自然签写；左指稳纸。仍在书写时切镜，不要求本镜完成两个准确汉字，不接触复核栏或报价单。",
+                    "performance": "确定地履行自己的职责，不做胜利表情。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "自然书写声持续至下一镜。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东、赵西均坐着；只需许岚米白袖与双手，机位在南侧。",
+                  "eyeline": "许低头看经办起笔区；赵画外看她签字。",
+                  "prop_state_in": "说明南中标题东，仅复核赵衡已签；报价北中标题东，旧红改旧确认不变。许右手裸笔，帽独立留东缘南部左手边。",
+                  "prop_state_out": "说明南中标题西，许右手正在经办栏签写、左指稳纸；复核原签不变。报价与帽均未动。",
+                  "action_in": "许已接稳笔，赵已松手收回。",
+                  "action_out": "转纸停稳后实际开始签经办，在完整字形尚未呈现时切赵衡等待。"
+                },
+                "transition_out": "书写声跨切赵衡安静等待，不重复转纸或落笔。",
+                "merge_candidate": false,
+                "local_rework_risk": "实际视频需核对转纸终向、持笔者、落笔栏位和接触。准确完整双签由独立静态结果镜承担；不用运动跟踪、透视贴字、遮挡恢复或签字笔画动画兜底。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 3
+              },
+              {
+                "id": "shot-yqq-12-reaction",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 17,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "赵衡不再催促，让许岚在画外完成经办签字。",
+                "visual": "@赵衡坐西侧，脸居画左，安静看向画右下方南中部的说明。他闭嘴等待，双手留自己一侧，不提前伸手收纸。许岚和纸面不入画；承接书写声，随后声止表示许岚完成并抬笔。",
+                "framing": "9:16胸上近景，赵衡面部清楚，给画右下视线留空。",
+                "camera": "南偏东固定反角，保持东窗光和南侧主轴。",
+                "audio_intent": "无人说话。前约1.2秒延续许岚画外书写声，随后停止，室内底声连续。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@赵衡向画右下看许岚签字，不再催。",
+                    "framing": "胸上近景。",
+                    "camera": "南偏东固定。",
+                    "action": "赵双手留身前画外，闭口等待。画外许岚继续完成经办签字，声止后右手抬笔退至东侧纸外、左手离开纸边。",
+                    "performance": "下颌放松，眼神不催促，不点头指挥。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "连续书写声约1.2秒后停止，无新增词句。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵西画左，许东画外，两人原座不变。",
+                  "eyeline": "赵看画右下南中说明，不看门外。",
+                  "prop_state_in": "说明南中标题西，许右手正在经办签写，左指稳纸；复核已签。报价北中与独立帽未动。",
+                  "prop_state_out": "设计上经办已写完，许右手持裸笔抬离纸面并退东侧，左手离纸；说明仍标题西。完整双签下一镜才可见。",
+                  "action_in": "许正在画外签经办，赵不干预。",
+                  "action_out": "书写声止，赵仍未收纸，等待准确完成状态的插入镜。"
+                },
+                "transition_out": "声止后直切准确双签静态结果，不以对白解释。",
+                "merge_candidate": false,
+                "local_rework_risk": "本镜可观察的是赵衡等待；许岚画外完成签字是设计意图，不能冒充实际动态检查。赵不得提前收纸或增加对白。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-12-result",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 18,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 1.5,
+                "narrative_purpose": "准确读到经办许岚、复核赵衡，完成双方依次留名的回报。",
+                "visual": "@情况说明下半页的独立全画幅静态证据插入：版面上方准确为“经办：许岚”，下方准确为“复核：赵衡”。使用同一道具版式的实际准确图片，不出现手、笔或移动背景；这是签完的结果，不是逐笔动画。",
+                "framing": "9:16静态画面，双栏居中占宽约四分之三，姓名字高与行距充分，全程1.5秒无遮挡、无字幕覆盖。",
+                "camera": "中性正俯插入，画面上方对应实际桌西，说明标题端仍朝西；只改变观看方向，不旋转实物，不暗示换座。静帧不推拉。",
+                "audio_intent": "无对白，无继续书写声，只有低连续室内底声。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.5,
+                    "visual": "@情况说明准确双签静止可读：上经办许岚，下复核赵衡。",
+                    "framing": "全画幅静态双栏插入，无遮挡。",
+                    "camera": "正俯中性，画面上方为桌西，不运动。",
+                    "action": "保持已经完成的双签，不增加笔迹，不出现手、笔或运动背景。",
+                    "performance": "人物均画外。",
+                    "emotion": null,
+                    "dialogue_line_ids": [],
+                    "sound": "连续室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许东赵西原座不变，均不入静态镜。",
+                  "eyeline": "中性文件证据镜，不作为人物反打。",
+                  "prop_state_in": "说明南中标题西，双签完成；许右手裸笔退至东侧、左手离纸。报价北中标题东，帽东缘南部。",
+                  "prop_state_out": "同一说明双签齐全、标题西，未收纸；报价、笔帽与许持笔状态不变。",
+                  "action_in": "许已签毕并抬笔，让开纸面。",
+                  "action_out": "两栏看清后赵衡才伸手叠齐收纸。"
+                },
+                "transition_out": "直切南侧收纸动作镜，恢复画左西、画右东；不重复签字，不重置纸向。",
+                "merge_candidate": false,
+                "local_rework_risk": "需制作并实际检查准确双签图片。作为EDITORIAL全画幅独立插入，不贴到运动纸面，不依赖跟踪、透视贴合、遮挡恢复或笔画动画。本单未绑定具体媒体，不声称图像或视频已通过检查。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-13",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 19,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 3.0,
+                "narrative_purpose": "赵衡实际收走两张纸，用行动兑现“说明我来交”，同时让双签结果有可读停留。",
+                "visual": "@赵衡的浅蓝袖口从画左进入，左手先按住北中部@报价单的空白边，右手捏住南中部已签全的@情况说明西侧空白边，把说明提起少许向北移到报价单上。两手把两张纸轻轻对齐，再把整叠沿桌面收到自己西侧面前。说明保持在上，朝许岚的方向不另作旋转，“经办：许岚”“复核：赵衡”始终不被改写。@许岚双手已退至东侧，右手仍持裸笔；帽还未扣回。",
+                "framing": "9:16桌面中近景，起始包括南、北两张纸和两侧袖口，末尾西侧整叠纸仍在画内；脸不是本镜识别重点。",
+                "camera": "桌南侧较高的固定俯角，画左西、画右东不变；让西侧收纸落点处于构图内，避免追纸摇晃。",
+                "audio_intent": "无对白。纸张提起、叠齐、滑动的自然声清楚但不夸大；空调底声连贯。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.8,
+                    "visual": "南中部@情况说明双签齐全朝许岚，北中部@报价单原签红改不变。@赵衡双手从西侧伸入。",
+                    "framing": "同一桌面中近景，签字区尽量保持无遮挡。",
+                    "camera": "南侧俯角固定。",
+                    "action": "赵衡左手按报价单西侧空白边，右手捏说明的西侧边，略抬后向北平移，放到报价单上。左手不穿过右手，许岚不碰纸。两纸上下关系变为说明在上、报价在下。",
+                    "performance": "不再催促，动作比开场推纸轻；不敲桌或夺纸。",
+                    "emotion": "接受共同记录，承担递交。",
+                    "dialogue_line_ids": [],
+                    "sound": "轻纸响，无新台词。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.8,
+                    "end_seconds": 3.0,
+                    "visual": "@情况说明在最上，双签完整；下层@报价单只露出一条纸边，未变成第三张纸。",
+                    "framing": "保留西侧落点与东侧许岚留在原位的手，最后留约半秒纸叠静止。",
+                    "camera": "固定，不另切插入。",
+                    "action": "赵衡双手从空白边将两张纸对齐，沿桌面向西收至自己面前，收纸后停住。说明仍朝许岚，不为读字临时翻面或换向。",
+                    "performance": "收纸完成后双手松缓地停在纸边，不压住双签区。",
+                    "emotion": "责任有了归属，不宣告报价后果已解决。",
+                    "dialogue_line_ids": [],
+                    "sound": "纸叠滑动声止，连贯室内底声。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "赵衡西侧画左，许岚东侧画右，全程坐着。只露本次动作需要的双人袖口与手。",
+                  "eyeline": "赵衡低头看自己正收的两张纸；许岚看收纸过程，二人均不张嘴说话。",
+                  "prop_state_in": "说明南中朝许，已双签；报价北中朝赵，原签红改不变。许右手持裸笔，两手已离说明；帽在东缘南部。",
+                  "prop_state_out": "两张纸叠齐收至西侧赵衡面前，情况说明在上朝许，双签均在；报价在下朝赵，原签不变。许右手裸笔、帽仍在原桌边。",
+                  "action_in": "许岚完成经办签字后让开纸面，赵衡从自己一侧伸手。",
+                  "action_out": "赵衡收纸完成并停住，不再催；许岚下一镜才取帽。"
+                },
+                "transition_out": "纸叠静止后切许岚面部与手同框的中近景，纸擦声不延续成新的收纸动作。",
+                "merge_candidate": false,
+                "local_rework_risk": "两纸叠齐时易增生纸张或交换上下层；明确两纸各自方向可相反，但说明一定在上。实际素材需检查收纸起止及纸叠落点，只修影响因果的穿模、增纸或签名消失。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              },
+              {
+                "id": "shot-yqq-14",
+                "project_id": "project-5b8286dc63e6",
+                "sequence": 20,
+                "scene_id": "scene-5441e73077d5",
+                "duration_seconds": 2.0,
+                "narrative_purpose": "扣帽与放松回收许岚开场停笔的紧绷，单篇安静结束。",
+                "visual": "@许岚仍坐桌东侧，右手握同一支裸笔，左手从自己左手边、桌东缘南部拾起一直放在那里的笔帽，对准笔尖扣回。扣帽声后，她仍持着已盖好的笔，肩膀自然落下一点，目光从桌上的纸叠回到对面的赵衡，嘴角不作胜利笑。@公司小会议室仍是东窗柔光与中性顶光；西侧两纸已经收好，不再发生新动作。",
+                "framing": "9:16中近景，同时保留许岚清晰面部、肩膀和桌缘两手；不裁掉扣帽动作。赵衡可完全画外，不要求双人正脸。",
+                "camera": "南侧偏西拍东侧许岚，仍在对话轴南半区；许岚看向画左的赵衡。固定眼平偏低的自然角度，手部位于画面下半，不推近裁手。",
+                "audio_intent": "无人说话。一次轻扣帽声、许岚自然缓出的一口气，低室内底声延续至画面结束；不用旁白解释双签，不加胜利音效。",
+                "dialogue_line_ids": [],
+                "references": [],
+                "timeline_beats": [
+                  {
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.2,
+                    "visual": "@许岚右手持裸笔，左手伸向桌东缘南部原位置的帽；米白衬衫与发型不变。",
+                    "framing": "面部与双手同框的竖屏中近景。",
+                    "camera": "南偏西固定机位，视线方向画左。",
+                    "action": "左手抓起笔帽，帽口对准右手笔尖，双手靠合扣住笔尖。笔帽从桌上来，不从笔尾取下。右手一直持笔，不中途交手。",
+                    "performance": "先低头看帽口对准，动作结束才抬眼。",
+                    "emotion": "紧绷正在释放。",
+                    "dialogue_line_ids": [],
+                    "sound": "轻微扣帽声，室内底声。",
+                    "references": []
+                  },
+                  {
+                    "start_seconds": 1.2,
+                    "end_seconds": 2.0,
+                    "visual": "@许岚右手持已经盖帽的黑笔，左手离帽，肩膀放松。纸叠在画外赵衡西侧面前，双签结果承接上一镜。",
+                    "framing": "保持同一中近景与自然面部层次，最后不突然变成大笑特写。",
+                    "camera": "固定至结束。",
+                    "action": "左手松开帽，右手把盖好帽的笔降低少许但仍握着；肩膀落下，目光抬向画左的赵衡。无起身、离场或再次索纸。",
+                    "performance": "一口轻缓呼气，正常闭嘴，不说新增结束语。",
+                    "emotion": "边界被承认后的平静，不表示客户或损失问题已经解决。",
+                    "dialogue_line_ids": [],
+                    "sound": "自然呼气；底声在成片末端短收，不增加额外片尾时长。",
+                    "references": []
+                  }
+                ],
+                "continuity": {
+                  "character_positions": "许岚仍桌东侧朝西，赵衡仍西侧画外，未换座。许岚保持米白衬衫、深灰裤与固定发型。",
+                  "eyeline": "先低头看笔尖与帽口，扣好后向画左看对面赵衡；赵衡画外不说话。",
+                  "prop_state_in": "说明双签齐全，在报价单上叠齐收于赵衡西侧面前。许右手裸笔，帽在东缘南部许左手边。",
+                  "prop_state_out": "两纸位置和签名状态不变；同一帽已盖住笔尖，许岚右手握盖好帽的笔，左手松开。无笔帽留在桌上的重复物。",
+                  "action_in": "赵衡刚收好纸，许岚才开始取桌边的帽。",
+                  "action_out": "扣帽完成，肩膀放松，两人仍在原座，安静结束。"
+                },
+                "transition_out": "以许岚安静松肩的稳定尾帧结束；不额外加黑场片尾或悬念对白。需要片名可在既有画面内简洁叠加，不改变54.5秒设计长度。",
+                "merge_candidate": false,
+                "local_rework_risk": "扣帽易变成按动笔或从笔尾取帽；必须核查帽的来源、笔尖闭合和右手连续持笔。面部与手同框需要足够范围，不以只看脸掩盖未完成扣帽。",
+                "approval_status": "DRAFT",
+                "freshness": "CURRENT",
+                "revision": 1
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

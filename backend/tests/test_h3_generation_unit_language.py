@@ -423,9 +423,10 @@ def test_clip_compile_rejects_unusable_media_before_language_call(tmp_path: Path
 
 def test_clip_compile_reports_unsupported_format_before_language_call(tmp_path: Path) -> None:
     service, fake, document, _generation, _unit, request = _fixture(
-        tmp_path, aspect_ratio="16:9"
+        tmp_path
     )
-    with pytest.raises(WorkflowConflictError, match="aspect ratios"):
+    request.aspect_ratio = "5:4"
+    with pytest.raises(WorkflowConflictError, match="aspect ratio"):
         service.compile_h3_prompt_with_language_model(document.project.id, request)
     assert fake.calls == []
 

@@ -61,6 +61,10 @@ from short_drama.agent_runtime.completion import verify_completion_claims
 from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary, execution_control
 from short_drama.agent_runtime.model_input import ModelInputCompiler, generate_context_managed_text, json_text, pointer_value
+from short_drama.agent_runtime.response_normalization import normalize_specialist_tool_payload
+from short_drama.agent_runtime.leader_context import (
+    BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result,
+)
 from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
 from short_drama.studio_trace import record_trace, trace_context
 from short_drama.image_models import ImageGenerationTask
@@ -462,7 +466,9 @@ class AgentPlanProposal(DomainModel):
     """A complete, replaceable plan authored by an Agent or supplied by a caller."""
 
     summary: str = Field(min_length=1, max_length=4000)
-    steps: list[PlanStep] = Field(default_factory=list[PlanStep], max_length=48)
+    # Appended plans retain earlier steps; their history must not hit the former
+    # per-response limit. The language request still has its token/output budget.
+    steps: list[PlanStep] = Field(default_factory=list[PlanStep])
     selected_method_skill_ids: SkillIds = Field(default_factory=list[str])
     method_selection_rationale: str | None = Field(
         default=None,
@@ -501,6 +507,21 @@ class AgentPlanProposal(DomainModel):
                 "An incomplete Agent plan must contain at least one next step or retain pending work"
             )
         return self
+
+
+class CompletionPlanningInput(DomainModel):
+    """One consumed completion event and its read-only planning snapshot."""
+
+    run_id: str
+    plan_revision_id: str
+    completed_work_order_ids: list[str]
+    latest_user_instructions: list[str]
+    current_plan: AgentPlanProposal
+    context: ContextPack
+    profile: ProductionProfile
+    execution_target: ProductionExecutionTarget | None
+    local_plan_completed: bool = False
+    failed_plan_state: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class AgentToolSchemaRequest(DomainModel):
@@ -1089,57 +1110,11 @@ def _json_block(text: str) -> str:
 
 
 def _normalize_specialist_response_payload(text: str) -> str:
-    """Recover two observed, content-preserving Tool-request serialization slips.
+    """Keep compatibility aligned with the current typed Worker Tool envelope."""
 
-    Some language providers occasionally emit a structurally complete object,
-    close it one brace too early after the large ``arguments`` value, and then
-    continue with the non-executing ``reason`` field.  Large nested Tool calls
-    may also contain one redundant final closing brace after an otherwise complete
-    JSON object.  These are transport-level serialization slips, not second
-    responses.  Accept only those exact observed shapes.  Separate JSON objects,
-    prose, truncated payloads, unknown suffixes, and field conflicts remain invalid
-    and continue through typed protocol feedback.
-    """
-
-    payload = _json_block(text)
-    try:
-        json.loads(payload)
-    except json.JSONDecodeError:
-        pass
-    else:
-        return payload
-
-    try:
-        decoded, end = json.JSONDecoder().raw_decode(payload)
-    except json.JSONDecodeError:
-        return payload
-    if not isinstance(decoded, dict):
-        return payload
-    decoded_object = cast(dict[str, JsonValue], decoded)
-    remainder = payload[end:].strip()
-    tool_request_keys = frozenset(decoded_object)
-    if remainder == "}" and tool_request_keys in {
-        frozenset({"tool_name", "arguments"}),
-        frozenset({"tool_name", "reason", "arguments"}),
-    }:
-        return json.dumps(decoded_object, ensure_ascii=False)
-    if set(decoded_object) != {"tool_name", "arguments"}:
-        return payload
-
-    if not remainder.startswith(","):
-        return payload
-    try:
-        continuation = json.loads("{" + remainder[1:])
-    except json.JSONDecodeError:
-        return payload
-    if not isinstance(continuation, dict):
-        return payload
-    continuation_object = cast(dict[str, JsonValue], continuation)
-    if set(continuation_object) != {"reason"}:
-        return payload
-
-    decoded_object.update(continuation_object)
-    return json.dumps(decoded_object, ensure_ascii=False)
+    return normalize_specialist_tool_payload(
+        _json_block(text), tool_request_fields=SpecialistToolRequest.model_fields
+    )
 
 
 def _validation_issues(error: ValueError) -> list[dict[str, JsonValue]]:
@@ -1433,10 +1408,11 @@ def _plan_inherited_decision_id_entries(
 def _unavailable_plan_artifact_ref_feedback(
     proposal: AgentPlanProposal,
     context: ContextPack,
+    *, observed_artifact_refs: Sequence[ArtifactRef] = (),
 ) -> dict[str, JsonValue] | None:
     """Describe invented context refs so the same Leader can correct its plan."""
 
-    available_refs = _visible_context_artifact_refs(context)
+    available_refs = _unique_artifact_refs([*_visible_context_artifact_refs(context), *observed_artifact_refs])
     available_identities = {ref.identity() for ref in available_refs}
     issues: list[JsonValue] = []
     for path, ref in _plan_artifact_ref_entries(proposal):
@@ -1510,8 +1486,9 @@ def _unavailable_plan_artifact_ref_feedback(
             ],
             "available_decision_ids": available_decision_ids,
             "instruction": (
-                "Copy each complete ArtifactRef, ToolAttemptRef, or inherited Decision ID "
-                "exactly from the current ContextPack. Do not invent, concatenate, rename, "
+                "Copy complete ArtifactRefs exactly from the current ContextPack or the "
+                "provided working_set.artifact_refs. Copy ToolAttemptRefs and inherited "
+                "Decision IDs from the current ContextPack. Do not invent, concatenate, rename, "
                 "alias, or infer its identity fields. If no exact current reference is "
                 "available, end this plan before the dependent step and obtain it in a "
                 "later replan."
@@ -1532,15 +1509,19 @@ def _compact_tool_catalog_entry(
 ) -> dict[str, JsonValue]:
     """Expose discovery metadata only; exact contracts are loaded on demand."""
 
+    description = descriptor.description.strip()
+    for index, character in enumerate(description):
+        if character in "。！？" or (character in ".!?" and (index + 1 == len(description) or description[index + 1].isspace())):
+            description = description[:index + 1]
+            break
+    if len(description) > 64:
+        description = description[:63] + "…"
     return cast(
         dict[str, JsonValue],
         {
             "id": descriptor.id,
-            "version": descriptor.version,
-            "category": descriptor.category.value,
+            "description": description,
             "effect": descriptor.effect.value,
-            "idempotent": descriptor.idempotent,
-            "tags": sorted(descriptor.tags),
         },
     )
 
@@ -1599,6 +1580,7 @@ class LanguageProductionPlanner:
         invalid_plan_signatures: set[str] = set()
         while True:
             execution_boundary()
+            observed_artifact_refs: list[ArtifactRef] = []
             payload = {
                 "reason": reason,
                 "context": context.model_context_dump(),
@@ -1635,6 +1617,14 @@ class LanguageProductionPlanner:
             if plan_validation_feedback is not None:
                 payload["plan_validation_feedback"] = plan_validation_feedback
             if self.context_compiler.store is not None:
+                read_working_set = leader_read_working_set(
+                    self.context_compiler.store, run_id=context.run_id,
+                    project_id=context.project_id, tools=tools,
+                    read_key=_specialist_read_observation_key,
+                    project_result=_specialist_read_observation_result,
+                )
+                payload["working_set"] = read_working_set
+                observed_artifact_refs = _artifact_refs_from_json(read_working_set.get("artifact_refs"))
                 run = self.context_compiler.store.get_run(context.run_id)
                 if run is not None:
                     payload["goal"] = {
@@ -1776,6 +1766,7 @@ class LanguageProductionPlanner:
                 feedback = _unavailable_plan_artifact_ref_feedback(
                     proposal,
                     context,
+                    observed_artifact_refs=observed_artifact_refs,
                 )
             except ProductionManagerError as exc:
                 issues = _validation_issues(exc)
@@ -2221,6 +2212,7 @@ def _specialist_working_set(
     selected_repair_attempt_ids: set[str] = set()
     artifact_ref_slots: dict[tuple[str, str, str], ArtifactRef] = {}
     inspection_report_ids: dict[tuple[str, str], str] = {}
+    shot_write_revisions: dict[str, int | None] = {}
     turns_by_id = {turn.id: turn for turn in ordered_turns}
     for turn in ordered_turns:
         compact_result = (
@@ -2337,6 +2329,8 @@ def _specialist_working_set(
             if turn.tool_name in write_tool_ids and turn_refs:
                 for ref in turn_refs:
                     if ref.artifact_type == "shot":
+                        entities.pop(("shot", ref.artifact_id), None)
+                        shot_write_revisions[ref.artifact_id] = ref.version
                         entities.pop(("shot_reference_plan", ref.artifact_id), None)
                         entities.pop(("reference_plan_preview", ref.artifact_id), None)
                     elif ref.artifact_type == "reference_pack":
@@ -2442,6 +2436,7 @@ def _specialist_working_set(
                 sequence=turn.sequence,
                 arguments=turn.arguments,
                 result=compact_result,
+                shot_write_revisions=shot_write_revisions,
             )
 
     progress = _specialist_progress_checkpoint(work_order, progress_entries)
@@ -2452,6 +2447,13 @@ def _specialist_working_set(
         # whiteboard free of duplicate copies while retaining every other
         # independent observation the Worker still needs for the decision.
         read_observations.pop(_specialist_read_observation_key(latest_turn, read_schemas.get(latest_turn.tool_name)), None)
+        if latest_turn.tool_name in {"artifact.get_asset_work_context", "artifact.get_asset_planning_context", "artifact.read_current"}:
+            # The immediate read already delivers this same Shot and source in
+            # latest_handoff. Rebuild its entity on the following turn instead
+            # of adding a second complete body to this request.
+            for key, entity in list(entities.items()):
+                if key[0] == "shot" and entity.source_sequence == latest_turn.sequence:
+                    entities.pop(key)
         latest_selected_ref = _selected_tool_attempt_ref(latest_turn)
         if latest_selected_ref is not None:
             tool_attempt_observations.pop(latest_selected_ref.identity(), None)
@@ -2924,6 +2926,7 @@ def _fold_specialist_entities(
     sequence: int,
     arguments: Mapping[str, JsonValue],
     result: Mapping[str, JsonValue],
+    shot_write_revisions: Mapping[str, int | None] | None = None,
 ) -> None:
     output_value = result.get("output")
     if not isinstance(output_value, dict):
@@ -2960,6 +2963,71 @@ def _fold_specialist_entities(
                 sequence=sequence,
                 value=output,
                 identity_id=output.get("shot_id"),
+            )
+        elif tool_name == "shot.save_current":
+            preview = output.get("reference_plan_preview")
+            if isinstance(preview, dict):
+                _put_specialist_entity(
+                    entities, kind="reference_plan_preview", source_tool=tool_name,
+                    sequence=sequence, value=preview, identity_id=preview.get("shot_id"),
+                )
+        # Preserve only the bounded Shots explicitly returned by these reads.
+        # The asset work read uses the plan's pinned Storyboard source; keep
+        # that identity instead of relabelling its snapshot as current content.
+        shot_values: list[JsonValue] = []
+        storyboard_identity: JsonValue = None
+        current_shot_read = tool_name in {"artifact.read_current", "artifact.get_asset_planning_context"}
+        if tool_name in {"artifact.get_asset_work_context", "artifact.get_asset_planning_context"}:
+            storyboard = output.get("storyboard")
+            storyboard_identity = (output.get("storyboard_identity")
+                if tool_name == "artifact.get_asset_planning_context"
+                else storyboard.get("identity") if isinstance(storyboard, dict) else None)
+            shots = storyboard.get("shots") if isinstance(storyboard, dict) else None
+            if isinstance(shots, list):
+                shot_values = shots
+        elif current_shot_read:
+            content = output.get("content")
+            shot = content.get("shot") if isinstance(content, dict) else None
+            if isinstance(shot, dict):
+                shot_values = [shot]
+        for shot in shot_values:
+            if not isinstance(shot, dict) or not isinstance(shot.get("id"), str):
+                continue
+            shot_id = cast(str, shot["id"])
+            revision = shot.get("revision")
+            if not isinstance(revision, int) or isinstance(revision, bool):
+                continue
+            known = entities.get(("shot", shot_id))
+            known_shot = known.state.get("shot") if known is not None else None
+            known_revision = known_shot.get("revision") if isinstance(known_shot, dict) else None
+            if isinstance(known_revision, int) and not isinstance(known_revision, bool) and revision < known_revision:
+                # A pinned source read must not overwrite a newer current read,
+                # including changes made by the user or another Worker.
+                continue
+            if (known is not None and revision == known_revision and not current_shot_read
+                and known.state.get("source") in ("CURRENT_SHOT_READ", "CURRENT_STORYBOARD_READ")):
+                # A later historical work slice does not change which source
+                # established the current body, even when this Shot is unchanged.
+                continue
+            if shot_write_revisions is not None and shot_id in shot_write_revisions:
+                written_revision = shot_write_revisions[shot_id]
+                if (written_revision is not None and revision < written_revision
+                    or written_revision is None and not current_shot_read):
+                    # A later reread of an old plan source must not resurrect
+                    # the pre-edit body after an observed successful Shot write.
+                    continue
+            refs = _artifact_refs_from_json(result.get("artifact_refs"))
+            source_ref = next((ref for ref in refs if ref.artifact_type == "shot"
+                and ref.artifact_id == shot_id and ref.version == revision), None)
+            _put_specialist_entity(
+                entities, kind="shot", source_tool=tool_name, sequence=sequence,
+                identity_id=shot_id, value={
+                    "shot": shot,
+                    "source": ("CURRENT_STORYBOARD_READ" if tool_name == "artifact.get_asset_planning_context"
+                        else "CURRENT_SHOT_READ" if current_shot_read else "ASSET_PLAN_STORYBOARD_SOURCE"),
+                    "artifact_ref": None if source_ref is None else source_ref.model_dump(mode="json"),
+                    "storyboard_identity": storyboard_identity,
+                },
             )
         # A scoped read can contain several independent entities. A later Shot
         # write invalidates that read body, but does not change its packs or the
@@ -3023,26 +3091,42 @@ def _fold_specialist_entities(
                     ),
                 )
 
+    asset_values = output.get("assets")
+    assets = list(asset_values) if isinstance(asset_values, list) else []
     asset_value = output.get("asset")
     if isinstance(asset_value, dict):
-        _put_specialist_entity(
-            entities,
-            kind="asset",
-            source_tool=tool_name,
-            sequence=sequence,
-            value=_select_json_fields(
-                cast(dict[str, JsonValue], asset_value),
-                (
-                    "id",
-                    "project_id",
-                    "kind",
-                    "name",
-                    "bible_entity_id",
-                    "current_version_id",
-                    "approved_version_id",
-                ),
-            ),
-        )
+        assets.append(asset_value)
+    for asset_value in assets:
+        if not isinstance(asset_value, dict) or not isinstance(asset_value.get("id"), str):
+            continue
+        asset_id = cast(str, asset_value["id"])
+        previous = entities.get(("asset", asset_id))
+        state = dict(previous.state) if previous else {}
+        state.update({key: asset_value[key] for key in (
+            "id", "project_id", "kind", "name", "bible_entity_id",
+            "current_version_id", "approved_version_id", "brief",
+        ) if key in asset_value})
+        # Retain the current authored definition once per object. Successful
+        # write handoffs keep only receipts; dropping this small brief forced a
+        # Writer to read back its own just-saved clothes/appearance next turn.
+        versions = asset_value.get("versions")
+        current_version = next((item for item in versions if isinstance(item, dict)
+            and item.get("id") == state.get("current_version_id")), None) if isinstance(versions, list) else None
+        response_version = output.get("version")
+        if current_version is None and isinstance(response_version, dict) and response_version.get("id") == state.get("current_version_id"):
+            current_version = response_version
+        if current_version is not None and "descriptor" in current_version:
+            state["descriptor"] = current_version["descriptor"]
+            state["descriptor_version_id"] = current_version.get("id")
+        elif state.get("descriptor_version_id") != state.get("current_version_id"):
+            state.pop("descriptor", None)
+            state.pop("descriptor_version_id", None)
+        _put_specialist_entity(entities, kind="asset", source_tool=tool_name, sequence=sequence, value=state)
+        # Batch responses carry each initial version inside its own Asset,
+        # avoiding a repeated ProjectAggregate or an ambiguous shared version.
+        if tool_name == "artifact.create_assets" and isinstance(current_version, dict):
+            _put_specialist_entity(entities, kind="asset_version", source_tool=tool_name, sequence=sequence,
+                value=_compact_version_state(current_version, entity_kind="asset_version"))
     version_value = output.get("version")
     if isinstance(version_value, dict):
         version = cast(dict[str, JsonValue], version_value)
@@ -3116,6 +3200,8 @@ def _fold_specialist_entities(
                     "summary": output.get("summary"),
                     "issues": output.get("issues"),
                     "evidence_references": output.get("evidence_references"),
+                    **({"crop_suggestion": output["crop_suggestion"]}
+                       if output.get("crop_suggestion") is not None else {}),
                 },
                 # Multiple views of one subject share an Asset. Their visual
                 # findings belong to distinct immutable versions; folding by
@@ -4718,6 +4804,26 @@ class LanguageSpecialistAgent:
             working_set.model_dump(mode="json"), store=store,
             project_id=work_order.context.project_id, work_order=work_order.work_order,
         )
+        if store is not None:
+            selected_ids = exact_context_values(work_order.work_order.task_inputs)
+            selected_ids.update(ref.artifact_id for ref in [
+                *work_order.work_order.scope,
+                *(artifact.ref for artifact in work_order.context.artifacts),
+                *working_set.artifact_refs,
+            ] if ref.artifact_type not in BROAD_COMPLETION_REF_TYPES)
+            handoffs, handoff_refs = completed_work_handoffs(store,
+                run_id=work_order.work_order.parent_run_id, project_id=work_order.context.project_id,
+                selected_ids=selected_ids, exclude_work_order_id=work_order.work_order.id)
+            if handoffs:
+                working_set_payload["completion_handoffs"] = handoffs
+                working_set_payload["completion_handoff_guidance"] = (
+                    "These are persisted completed deliveries relevant to your selected objects/media. "
+                    "Use their actual completion time and findings when older task wording says to wait for that work. "
+                    "A completed review is an observation, not a new approval or proof that later edits remain valid."
+                )
+                known_refs = {ref.identity(): ref for ref in working_set.artifact_refs}
+                known_refs.update({ref.identity(): ref for ref in handoff_refs})
+                working_set_payload["artifact_refs"] = [ref.model_dump(mode="json") for ref in known_refs.values()]
         while True:
             execution_boundary()
             payload = {
@@ -4878,8 +4984,6 @@ class ProductionManager:
         self._language_client_resolver = language_client_resolver
         self._planner_factory = planner_factory
         self._specialist_agent_factory = specialist_agent_factory
-        self._run_locks_guard = threading.RLock()
-        self._run_locks: dict[str, threading.Lock] = {}
         self._project_tool_locks_guard = threading.RLock()
         self._project_tool_locks: dict[str, threading.Lock] = {}
         if not self.tools.contains("agent.get_tool_attempt"):
@@ -5316,6 +5420,194 @@ class ProductionManager:
             context=context,
             content_planning_trace=planning_trace,
         )
+
+    def prepare_completion_planning(
+        self, run_id: str, *, include_local_plan_completion: bool = False,
+        include_failed_plan: bool = False,
+    ) -> CompletionPlanningInput | None:
+        """Claim new completed work once, while unrelated work still continues."""
+        with self._run_lock(run_id):
+            if include_failed_plan:
+                self._return_leader_owned_work_orders(run_id)
+            snapshot = self.runtime.snapshot(run_id)
+            plan = snapshot.current_plan
+            if plan is None or plan.goal_complete or snapshot.run.status in {
+                AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED,
+            }:
+                return None
+            graph = PlanGraph(plan)
+            failure_state = self._plan_failure_state(snapshot, plan)
+            if failure_state and not include_failed_plan:
+                return None
+            owned_work_ids = {action.work_order_id for action in snapshot.actions if graph.owns_action(action)}
+            workers = [work for work in self.runtime.store.list_work_orders(run_id)
+                       if work.active_plan_revision_id == plan.id or work.id in owned_work_ids]
+            unfinished = [work for work in workers if work.status in {
+                DelegationStatus.PENDING, DelegationStatus.IN_PROGRESS, DelegationStatus.NEEDS_ATTENTION,
+            }]
+            if (not unfinished and not failure_state) or any(
+                work.next_owner == WorkOrderNextOwner.USER_INPUT for work in unfinished
+            ) or (not failure_state and any(work.next_owner == WorkOrderNextOwner.LEADER_REPLAN for work in unfinished)):
+                return None
+            # Workers selected by their current active-plan ownership may have
+            # an original Action from before they were carried into this plan.
+            completed_ids = {action.work_order_id for action in snapshot.actions
+                             if action.status == ActionStatus.SUCCEEDED}
+            new_ids = [work.id for work in workers if work.status == DelegationStatus.COMPLETED
+                       and (work.id in completed_ids or work.id in plan.carried_work_order_ids)
+                       and work.id not in snapshot.run.completion_planned_work_order_ids]
+            local_complete = (include_local_plan_completion and bool(plan.steps)
+                              and graph.is_complete(snapshot.actions))
+            if not new_ids and not local_complete and not failure_state:
+                return None
+            document = self._require_project(snapshot.run.project_id)
+            self.refresh_project_memory(document)
+            prepared = CompletionPlanningInput(
+                run_id=run_id, plan_revision_id=plan.id, completed_work_order_ids=new_ids,
+                latest_user_instructions=list(snapshot.run.latest_user_instructions),
+                current_plan=AgentPlanProposal(
+                    summary=plan.summary, steps=plan.steps,
+                    selected_method_skill_ids=plan.selected_method_skill_ids,
+                    method_selection_rationale=plan.method_selection_rationale,
+                    carried_work_order_ids=[work.id for work in unfinished
+                        if work.next_owner != WorkOrderNextOwner.LEADER_REPLAN], goal_complete=False,
+                ),
+                context=self.get_run(run_id).context, profile=document.project.production_profile,
+                execution_target=snapshot.run.execution_target,
+                local_plan_completed=local_complete,
+                failed_plan_state=failure_state,
+            )
+            # Claim before the slow call. A failed optional supplement is visible,
+            # and normal completion/failure/user replanning remains available;
+            # the runner must not retry this same result set on every tick/restart.
+            current_run = self.runtime.store.get_run(run_id)
+            assert current_run is not None
+            current_run.completion_planned_work_order_ids = list(dict.fromkeys([
+                *current_run.completion_planned_work_order_ids, *new_ids,
+            ]))
+            self.runtime.store.save_run(current_run)
+            record_trace("agent.completion_planning", {
+                "run_id": run_id, "status": "STARTED", "completed_work_order_ids": cast(list[JsonValue], new_ids),
+                "plan_revision_id": plan.id,
+                "trigger": "FAILED_PLAN" if failure_state else "LOCAL_PLAN_COMPLETED" if local_complete else "WORKER_COMPLETED",
+            })
+            return prepared
+
+    def plan_after_completions(self, prepared: CompletionPlanningInput) -> AgentPlanProposal:
+        """Perform only the language decision, without holding the run lock."""
+        client = self._language_client_resolver()
+        if client is None:
+            if prepared.failed_plan_state:
+                raise ProductionManagerError("Failed plan requires a Leader decision, but no language client is configured")
+            return AgentPlanProposal(
+                summary="Continue the existing work until its next result.", steps=[],
+                carried_work_order_ids=prepared.current_plan.carried_work_order_ids,
+            )
+        compiled = compile_production_prompt(
+            prepared.profile, roles=(ProductionSkillRole.PLANNER,),
+            stage=ProductionPromptStage.ORCHESTRATION,
+            method_skill_ids=_method_skill_ids_for_role(
+                prepared.current_plan.selected_method_skill_ids, ProductionSkillRole.PLANNER,
+            ),
+        )
+        planner = self._planner_factory(client)
+        if isinstance(planner, LanguageProductionPlanner):
+            planner.context_compiler = ModelInputCompiler(self.runtime.store)
+        with trace_context(run_id=prepared.run_id, agent_role="leader", work_order_id=None):
+            return planner.propose_plan(
+                context=prepared.context, skill_prompt=compiled.text,
+                method_skills=[_agent_method_skill_descriptor(descriptor)
+                               for descriptor in production_method_skill_catalog()],
+                tools=_tools_for_execution_target(self.tools.list(), prepared.execution_target),
+                current_plan=prepared.current_plan,
+                reason=(
+                    "当前计划有实际失败，需要修订失败和未执行的部分："
+                    + json.dumps(prepared.failed_plan_state, ensure_ascii=False)
+                    + "。已成功及正在执行的步骤、仍在途的工单由系统保留，不能改写、重派或重复提交媒体。"
+                    "失败步骤不会被继承，可修正后沿用其 step ID；尚未执行的步骤由本次计划决定是否保留。"
+                    "新步骤可依赖已成功或在途的原步骤。只以当前持久结果为事实，按原目标继续。"
+                    "若只能等待仍在途工单，返回 steps=[] 并保留 current_plan.carried_work_order_ids。"
+                    if prepared.failed_plan_state else
+                    "当前这一小段已计划工作全部执行完成，结果已经保存。结合当前上下文继续原目标，"
+                    "可安排依赖这些结果的新工作，也可明确等待；其他工单仍在独立执行，必须保留其 ID，"
+                    "不要重派、重提媒体或假定其已经完成。新步骤可依赖 current_plan 中已完成的步骤。"
+                    "若没有独立工作，返回 steps=[] 并保留 current_plan.carried_work_order_ids。"
+                    if prepared.local_plan_completed else
+                    "这些 Worker 已完成并保存真实结果：" + ", ".join(prepared.completed_work_order_ids)
+                    + "。其他工单仍独立继续。这次是补充规划：只在结果足以支持时追加新的就绪工作，"
+                    "不要复制、替换或重新派发已有步骤，不要重提媒体任务。"
+                    "已有全部步骤和在途工单由系统原样保留，新步骤可 depends_on 已有步骤 ID。"
+                    "若没有实际可推进的独立工作，返回 steps=[] 并沿用 current_plan.carried_work_order_ids；"
+                    "不要为了唤醒调度新增读取、检查点或角色。goal_complete=false。"
+                    "只使用当前已经保存且明确可用的输入；不能把仍在制作的素材当作已完成。"
+                ),
+            )
+
+    def apply_completion_plan(
+        self, prepared: CompletionPlanningInput, proposal: AgentPlanProposal,
+    ) -> bool:
+        """Append to the unchanged plan; never cancel or replay existing work."""
+        execution_boundary()
+        with self._run_lock(prepared.run_id):
+            self._return_leader_owned_work_orders(prepared.run_id)
+            snapshot = self.runtime.snapshot(prepared.run_id)
+            plan = snapshot.current_plan
+            if (plan is None or plan.id != prepared.plan_revision_id
+                or snapshot.run.latest_user_instructions != prepared.latest_user_instructions
+                or snapshot.run.status in {AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}
+                or any(work.active_plan_revision_id == prepared.plan_revision_id
+                    and work.status in {DelegationStatus.PENDING, DelegationStatus.IN_PROGRESS, DelegationStatus.NEEDS_ATTENTION}
+                    and work.next_owner == WorkOrderNextOwner.USER_INPUT
+                    for work in self.runtime.store.list_work_orders(prepared.run_id))
+                or self._plan_failure_state(snapshot, plan) != prepared.failed_plan_state):
+                record_trace("agent.completion_planning", {"run_id": prepared.run_id,
+                    "status": "SUPERSEDED", "plan_revision_id": prepared.plan_revision_id})
+                return False
+            protected_ids = {action.plan_step_id for action in snapshot.actions
+                if PlanGraph(plan).owns_action(action) and action.status in {ActionStatus.SUCCEEDED, ActionStatus.RUNNING}}
+            old_steps = {step.id: step for step in plan.steps
+                if not prepared.failed_plan_state or step.id in protected_ids}
+            added: list[PlanStep] = []
+            for step in proposal.steps:
+                if step.id in old_steps:
+                    if step != old_steps[step.id]:
+                        raise ProductionManagerError("Completion planning cannot rewrite an existing step: " + step.id)
+                else:
+                    added.append(step)
+            if prepared.local_plan_completed or prepared.failed_plan_state:
+                # This is the ordinary continuation after all local steps, not
+                # an optional early supplement. Keep completed dependencies and
+                # every still-running handoff; never replay the original steps.
+                # A new empty waiting revision consumes this read-result event.
+                self._replace_plan(prepared.run_id, proposal.model_copy(update={
+                    "steps": added,
+                    "selected_method_skill_ids": list(dict.fromkeys([
+                        *plan.selected_method_skill_ids, *proposal.selected_method_skill_ids,
+                    ])),
+                }), append_to_plan=plan, completed_local_continuation=True,
+                    failed_plan_continuation=bool(prepared.failed_plan_state))
+                record_trace("agent.completion_planning", {"run_id": prepared.run_id,
+                    "status": "APPLIED", "summary": proposal.summary,
+                    "trigger": "FAILED_PLAN" if prepared.failed_plan_state else "LOCAL_PLAN_COMPLETED",
+                    "added_step_ids": [step.id for step in added],
+                    "completed_work_order_ids": cast(list[JsonValue], prepared.completed_work_order_ids)})
+                return True
+            if not added:
+                record_trace("agent.completion_planning", {"run_id": prepared.run_id,
+                    "status": "WAITING", "summary": proposal.summary,
+                    "completed_work_order_ids": cast(list[JsonValue], prepared.completed_work_order_ids)})
+                return False
+            self._replace_plan(prepared.run_id, proposal.model_copy(update={
+                "steps": added, "goal_complete": False,
+                "selected_method_skill_ids": list(dict.fromkeys([
+                    *plan.selected_method_skill_ids, *proposal.selected_method_skill_ids,
+                ])),
+            }), append_to_plan=plan)
+            record_trace("agent.completion_planning", {"run_id": prepared.run_id,
+                "status": "APPLIED", "summary": proposal.summary,
+                "added_step_ids": [step.id for step in added],
+                "completed_work_order_ids": cast(list[JsonValue], prepared.completed_work_order_ids)})
+            return True
 
     def replan(
         self,
@@ -5805,14 +6097,16 @@ class ProductionManager:
         self,
         run_id: str,
         request: AgentRunAdvanceRequest,
+        *, allow_replanning: bool = True,
     ) -> AgentAdvanceResponse:
         with self._run_lock(run_id):
-            return self._advance_unlocked(run_id, request)
+            return self._advance_unlocked(run_id, request, allow_replanning=allow_replanning)
 
     def _advance_unlocked(
         self,
         run_id: str,
         request: AgentRunAdvanceRequest,
+        *, allow_replanning: bool = True,
     ) -> AgentAdvanceResponse:
         snapshot = self.runtime.snapshot(run_id)
         if snapshot.run.status in {
@@ -5845,6 +6139,8 @@ class ProductionManager:
 
             failed_actions = self._failed_actions_for_plan(current, plan.id)
             if failed_actions:
+                if not allow_replanning:
+                    break
                 reason = "Revise the plan after failed actions: " + "; ".join(
                     action.error_message or action.input_summary
                     for action in failed_actions[-4:]
@@ -5857,6 +6153,8 @@ class ProductionManager:
                 self._carried_work_order_state(plan)
             )
             if carried_failed or invalid_carried_ids:
+                if not allow_replanning:
+                    break
                 details = [
                     f"{work_order.id}={work_order.status.value}, next_owner={work_order.next_owner}"
                     for work_order in carried_failed
@@ -5978,6 +6276,8 @@ class ProductionManager:
             # while retained work continues. The Leader can add independent
             # work or explicitly wait with an empty plan that carries it.
             if local_plan_complete:
+                if not allow_replanning:
+                    break
                 if plan.goal_complete:
                     self.runtime.set_run_status(run_id, AgentRunStatus.COMPLETED)
                     notes.append("The Agent confirmed that the run objective is complete")
@@ -5997,7 +6297,7 @@ class ProductionManager:
             self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
             if any(
                 action.status == ActionStatus.RUNNING
-                and action.plan_revision_id == plan.id
+                and PlanGraph(plan).owns_action(action)
                 for action in current.actions
             ):
                 notes.append("Waiting for delegated Agent or user input")
@@ -6006,16 +6306,12 @@ class ProductionManager:
             break
 
         view = self.get_run(run_id)
-        active_plan_id = (
-            None
-            if view.snapshot.current_plan is None
-            else view.snapshot.current_plan.id
-        )
         active_blockers = [
             action.error_message
             for action in view.snapshot.actions
             if action.status == ActionStatus.FAILED
-            and action.plan_revision_id == active_plan_id
+            and view.snapshot.current_plan is not None
+            and PlanGraph(view.snapshot.current_plan).owns_action(action)
             and action.error_message
         ][-4:]
         if not active_blockers and view.snapshot.run.status == AgentRunStatus.WAITING:
@@ -6036,7 +6332,8 @@ class ProductionManager:
                 for action in view.snapshot.actions
                 if action.kind == ActionKind.USER_INPUT
                 and action.status == ActionStatus.RUNNING
-                and action.plan_revision_id == active_plan_id
+                and view.snapshot.current_plan is not None
+                and PlanGraph(view.snapshot.current_plan).owns_action(action)
             ],
             next_actions=next_actions,
             artifact_refs=[
@@ -6081,7 +6378,7 @@ class ProductionManager:
         matches: list[tuple[ActionRecord, PlanStep]] = []
         for action in snapshot.actions:
             if (
-                action.plan_revision_id != plan.id
+                not PlanGraph(plan).owns_action(action)
                 or action.status != ActionStatus.RUNNING
                 or action.tool_name != "planning.advance"
                 or action.plan_step_id is None
@@ -6177,7 +6474,7 @@ class ProductionManager:
         actions_by_work_order_id = {
             action.work_order_id: action
             for action in snapshot.actions
-            if action.plan_revision_id == plan.id
+            if PlanGraph(plan).owns_action(action)
             and action.work_order_id is not None
             and action.status == ActionStatus.RUNNING
         }
@@ -6212,10 +6509,12 @@ class ProductionManager:
         snapshot: AgentRunSnapshot,
         plan_revision_id: str,
     ) -> list[ActionRecord]:
+        plan = snapshot.current_plan
         return [
             action
             for action in snapshot.actions
-            if action.plan_revision_id == plan_revision_id
+            if (PlanGraph(plan).owns_action(action) if plan is not None and plan.id == plan_revision_id
+                else action.plan_revision_id == plan_revision_id)
             and action.status == ActionStatus.FAILED
         ]
 
@@ -6252,6 +6551,22 @@ class ProductionManager:
                 failed.append(work_order)
         return waiting, failed, invalid_ids
 
+    def _plan_failure_state(self, snapshot: AgentRunSnapshot, plan: PlanRevision) -> dict[str, JsonValue]:
+        """Capture only actionable failures; intermediate Worker progress is not a replan event."""
+        actions = self._failed_actions_for_plan(snapshot, plan.id)
+        _waiting, carried_failed, invalid_ids = self._carried_work_order_state(plan)
+        if not actions and not carried_failed and not invalid_ids:
+            return {}
+        return {
+            "actions": [{"id": action.id, "step_id": action.plan_step_id,
+                "error_kind": action.error_kind, "error_message": action.error_message,
+                "summary": action.output_summary} for action in actions],
+            "carried_work_orders": [{"id": work.id, "status": work.status.value,
+                "next_owner": work.next_owner.value if work.next_owner is not None else None}
+                for work in carried_failed],
+            "missing_carried_work_order_ids": list(invalid_ids),
+        }
+
     def _automatic_replan_unlocked(
         self,
         run_id: str,
@@ -6259,14 +6574,12 @@ class ProductionManager:
         notes: list[str],
     ) -> bool:
         snapshot = self.runtime.snapshot(run_id)
-        active_plan_id = (
-            None if snapshot.current_plan is None else snapshot.current_plan.id
-        )
         blockers = [
             action.error_message
             for action in snapshot.actions
             if action.status == ActionStatus.FAILED
-            and action.plan_revision_id == active_plan_id
+            and snapshot.current_plan is not None
+            and PlanGraph(snapshot.current_plan).owns_action(action)
             and action.error_message
         ][-4:]
         self.runtime.checkpoint(
@@ -7234,7 +7547,11 @@ class ProductionManager:
         self.runtime.store.save_project_memory(memory)
         return memory
 
-    def _replace_plan(self, run_id: str, proposal: AgentPlanProposal) -> None:
+    def _replace_plan(
+        self, run_id: str, proposal: AgentPlanProposal, *, append_to_plan: PlanRevision | None = None,
+        completed_local_continuation: bool = False,
+        failed_plan_continuation: bool = False,
+    ) -> None:
         run = self.runtime.store.get_run(run_id)
         if run is None:
             raise ProductionManagerError(f"Unknown agent run: {run_id}")
@@ -7359,9 +7676,13 @@ class ProductionManager:
             )
         ]
         unfinished_ids = {work_order.id for work_order in unfinished}
+        requested_carried_ids = (
+            [work_order.id for work_order in unfinished]
+            if append_to_plan is not None else proposal.carried_work_order_ids
+        )
         unknown_carried = [
             work_order_id
-            for work_order_id in proposal.carried_work_order_ids
+            for work_order_id in requested_carried_ids
             if work_order_id not in unfinished_ids
         ]
         if unknown_carried:
@@ -7376,17 +7697,57 @@ class ProductionManager:
         }
         effective_carried_ids = [
             work_order_id
-            for work_order_id in proposal.carried_work_order_ids
+            for work_order_id in requested_carried_ids
             if work_order_id not in leader_returned_ids
         ]
+        if append_to_plan is not None and leader_returned_ids and not failed_plan_continuation:
+            raise ProductionManagerError("A Worker returned control while planning; preserve it for normal Leader replanning")
+        retained_steps = [] if append_to_plan is None else append_to_plan.steps
+        if failed_plan_continuation and append_to_plan is not None:
+            protected_ids = {action.plan_step_id for action in actions
+                if PlanGraph(append_to_plan).owns_action(action)
+                and action.status in {ActionStatus.SUCCEEDED, ActionStatus.RUNNING}}
+            retained_steps = [step for step in retained_steps if step.id in protected_ids]
+        retain_old_steps = append_to_plan is not None and (
+            bool(proposal.steps) or not completed_local_continuation
+        )
+        inherited_action_ids = (
+            [action.id for action in actions if PlanGraph(append_to_plan).owns_action(action)
+             and action.plan_step_id in {step.id for step in retained_steps}
+             and (not failed_plan_continuation or action.status in {ActionStatus.SUCCEEDED, ActionStatus.RUNNING})]
+            if append_to_plan is not None and retain_old_steps else []
+        )
+        # A carried Worker can finish after the Leader's input snapshot. Move
+        # that still-unconsumed completion into the new plan in the same commit,
+        # so an empty waiting proposal cannot strand its real result behind the
+        # previous revision. Do not mark this unseen completion as consumed.
+        unconsumed_completed = [
+            work for work in self.runtime.store.list_work_orders(run_id)
+            if append_to_plan is not None and work.active_plan_revision_id == previous_plan_id
+            and work.status == DelegationStatus.COMPLETED
+            and work.id not in run.completion_planned_work_order_ids
+            and work.superseded_by_plan_revision_id is None
+        ]
+        if append_to_plan is None:
+            # Ordinary planning also consumes the completed results it saw.
+            # Later scheduler ticks must not ask about the same handoff again.
+            run.completion_planned_work_order_ids = list(dict.fromkeys([
+                *run.completion_planned_work_order_ids,
+                *[work.id for work in self.runtime.store.list_work_orders(run_id)
+                  if work.status == DelegationStatus.COMPLETED],
+            ]))
+            self.runtime.store.save_run(run)
         next_plan = self.runtime.replace_plan(
             run_id,
             summary=proposal.summary,
-            steps=proposal.steps,
+            steps=([*retained_steps, *proposal.steps]
+                   if append_to_plan is not None and retain_old_steps else proposal.steps),
             selected_method_skill_ids=proposal.selected_method_skill_ids,
             method_selection_rationale=proposal.method_selection_rationale,
             carried_work_order_ids=effective_carried_ids,
             goal_complete=proposal.goal_complete,
+            inherited_action_ids=inherited_action_ids,
+            updated_work_orders=[*unfinished, *unconsumed_completed] if append_to_plan is not None else (),
         )
         if proposal.goal_summary is not None:
             updated_run = self.runtime.store.get_run(run_id)
@@ -7445,6 +7806,22 @@ class ProductionManager:
                 *narrative_ids,
             ],
         )
+
+    def _canonical_work_order_refs(self, run: AgentRun, refs: Sequence[ArtifactRef]) -> list[ArtifactRef]:
+        """Complete immutable version UUIDs, without selecting an asset's current media."""
+        if not any(ref.artifact_type == "asset_version" for ref in refs):
+            return list(refs)
+        document = self._require_project(run.project_id)
+        versions = {version.id: version.version for asset in document.assets for version in asset.versions}
+        canonical = [ref.model_copy(update={"version": versions[ref.artifact_id]})
+            if ref.project_id == run.project_id and ref.artifact_type == "asset_version"
+            and ref.version is None and ref.artifact_id in versions else ref for ref in refs]
+        unresolved = self.runtime.unresolved_artifact_refs(run.id,
+            [ref for ref in canonical if ref.artifact_type == "asset_version"])
+        if unresolved:
+            raise ProductionManagerError("WorkOrder contains unresolved exact AssetVersion references: "
+                + ", ".join(f"{ref.artifact_id}@{ref.version}" for ref in unresolved))
+        return canonical
 
     def _execute_step(
         self,
@@ -7505,6 +7882,8 @@ class ProductionManager:
                     None,
                     "Tool scope error recorded; the Agent can revise the plan",
                 )
+            persist_leader_tool_result(self.runtime.store, action,
+                arguments=step.arguments, result=result.model_dump(mode="json"))
             if result.status != ToolCallStatus.SUCCEEDED:
                 message = (
                     result.error.message
@@ -7603,6 +7982,12 @@ class ProductionManager:
             }:
                 production_prompt_stage = ProductionPromptStage.ASSETS
             try:
+                run = self.runtime.store.get_run(run_id)
+                assert run is not None
+                scope = self._canonical_work_order_refs(run, step.artifact_refs)
+                boundaries = [boundary.model_copy(update={
+                    "artifact_refs": self._canonical_work_order_refs(run, boundary.artifact_refs),
+                }) for boundary in _context_boundaries_argument(arguments)]
                 work_order = self.runtime.create_work_order(
                     run_id,
                     sender="production-manager",
@@ -7612,7 +7997,7 @@ class ProductionManager:
                     objective=step.instructions,
                     why_now=_string_argument(arguments, "why_now", step.title),
                     task_inputs=_delegation_task_inputs(arguments),
-                    scope=step.artifact_refs,
+                    scope=scope,
                     tool_attempt_refs=_tool_attempt_refs_argument(arguments),
                     constraints=_string_list_argument(arguments, "constraints"),
                     confirmed_decisions=_string_list_argument(
@@ -7621,7 +8006,7 @@ class ProductionManager:
                     inherited_decision_ids=_string_list_argument(
                         arguments, "inherited_decision_ids"
                     ),
-                    adjacent_boundaries=_context_boundaries_argument(arguments),
+                    adjacent_boundaries=boundaries,
                     experience_tags=_string_list_argument(
                         arguments, "experience_tags"
                     ),
@@ -8135,14 +8520,25 @@ class ProductionManager:
             for work_order in work_orders:
                 if work_order.status != DelegationStatus.IN_PROGRESS:
                     continue
+                interrupted_tool = False
                 for turn in work_order.specialist_turns:
                     if turn.status != SpecialistTurnStatus.IN_PROGRESS:
                         continue
+                    interrupted_tool = True
                     turn.status = SpecialistTurnStatus.INTERRUPTED
                     turn.result = _interrupted_tool_result(turn)
                     turn.updated_at = utc_now()
                 work_order.status = DelegationStatus.NEEDS_ATTENTION
-                work_order.next_owner = WorkOrderNextOwner.WORKER_DECISION
+                if work_order.next_owner not in {
+                    WorkOrderNextOwner.LEADER_REPLAN, WorkOrderNextOwner.USER_INPUT,
+                }:
+                    work_order.next_owner = (
+                        WorkOrderNextOwner.WORKER_TOOL
+                        if not interrupted_tool and any(
+                            turn.status == SpecialistTurnStatus.REQUESTED
+                            for turn in work_order.specialist_turns
+                        ) else WorkOrderNextOwner.WORKER_DECISION
+                    )
                 work_order.updated_at = utc_now()
                 self.runtime.store.save_work_order(work_order)
                 recovered = True
@@ -8603,6 +8999,7 @@ class ProductionManager:
     ) -> str | None:
         """Reconcile one interrupted delegation without replaying its specialist."""
 
+        recovery_started_at = utc_now()
         source_matches = work_orders_by_source_action.get(action.id, [])
         linked = (
             None
@@ -8686,10 +9083,24 @@ class ProductionManager:
                 self.runtime.store.save_work_order(linked)
             return "A delegation action and WorkOrder have mismatched linkage."
 
+        # save_agent_result updates the WorkOrder in the same transaction. Later
+        # decisions, cancellation or interrupted-Tool normalization can advance
+        # that state without another result. A receipt may finish its Action,
+        # but must never replay its older status/owner over the current work.
+        if linked.status == DelegationStatus.CANCELLED:
+            self.runtime.finish_action(
+                action.id,
+                status=ActionStatus.CANCELLED,
+                output_summary="The persisted WorkOrder was cancelled before restart.",
+            )
+            return None
+
         result = self.runtime.store.get_agent_result(linked.id)
-        if result is not None:
-            refs = [*result.created_artifacts, *result.updated_artifacts]
-            if result.stale_handoff:
+        if result is not None and result.stale_handoff:
+            run = self.runtime.store.get_run(action.run_id)
+            if run is not None and self._work_order_stale_reason(
+                linked, run.current_plan_revision_id,
+            ) is not None:
                 self.runtime.finish_action(
                     action.id,
                     status=ActionStatus.CANCELLED,
@@ -8699,14 +9110,19 @@ class ProductionManager:
                     ),
                 )
                 return None
-            if result.status == AgentResultStatus.COMPLETED:
+            result = None
+        if result is not None:
+            refs = [*result.created_artifacts, *result.updated_artifacts]
+            if (linked.status == DelegationStatus.COMPLETED
+                    and result.status == AgentResultStatus.COMPLETED):
                 self.runtime.complete_action(
                     action.id,
                     output_summary=result.concise_summary,
                     artifact_refs=refs,
                 )
                 return None
-            if result.status == AgentResultStatus.FAILED:
+            if (linked.status == DelegationStatus.FAILED
+                    and result.status == AgentResultStatus.FAILED):
                 self.runtime.fail_action(
                     action.id,
                     error_message=result.concise_summary,
@@ -8714,57 +9130,52 @@ class ProductionManager:
                     error_kind="RecoveredAgentResultFailure",
                 )
                 return "A persisted delegated result failed and needs replanning."
-            if linked.status != DelegationStatus.NEEDS_ATTENTION:
-                linked.status = DelegationStatus.NEEDS_ATTENTION
-            linked.next_owner = result.next_owner
-            linked.updated_at = utc_now()
-            self.runtime.store.save_work_order(linked)
-            if result.next_owner in {
-                WorkOrderNextOwner.LEADER_REPLAN,
-                WorkOrderNextOwner.USER_INPUT,
-            }:
-                self.runtime.fail_action(
-                    action.id,
-                    error_message=result.concise_summary,
-                    output_summary=result.concise_summary,
-                    error_kind=(
-                        "RecoveredSpecialistNeedsUserInput"
-                        if result.next_owner == WorkOrderNextOwner.USER_INPUT
-                        else "RecoveredSpecialistNeedsLeaderReplan"
-                    ),
-                )
-                return "A partial delegated result returned control to the Leader."
-            return "A partial delegated result is persisted and ready for the specialist."
 
         if linked.status == DelegationStatus.COMPLETED:
             self.runtime.fail_action(
                 action.id,
                 error_message=(
-                    "WorkOrder was marked completed without a persisted AgentResult; "
+                    "WorkOrder was marked completed without a matching completed AgentResult; "
                     "manual reconciliation is required."
                 ),
                 error_kind="MissingDelegationResult",
             )
-            return "A completed WorkOrder is missing its persisted AgentResult."
+            return "A completed WorkOrder is missing its matching completed AgentResult."
         if linked.status == DelegationStatus.FAILED:
             self.runtime.fail_action(
                 action.id,
-                error_message="The persisted WorkOrder failed before an AgentResult was saved.",
+                error_message="The persisted WorkOrder has no matching failed AgentResult.",
                 error_kind="MissingDelegationResult",
             )
-            return "A failed WorkOrder has no persisted AgentResult."
-        if linked.status == DelegationStatus.CANCELLED:
-            self.runtime.finish_action(
+            return "A failed WorkOrder has no matching failed AgentResult."
+        owner = linked.next_owner
+        if owner is not None and owner in {
+            WorkOrderNextOwner.LEADER_REPLAN, WorkOrderNextOwner.USER_INPUT,
+        }:
+            summary = f"{linked.recipient_role} returned control to {owner.value}."
+            if result is not None and result.next_owner == owner:
+                summary = result.concise_summary
+            # Link repair above emits its own note. It is not the reason the
+            # specialist handed back control before this restart.
+            progress = [entry for entry in self.runtime.store.list_work_order_progress(linked.id)
+                        if entry.created_at < recovery_started_at]
+            if progress and (result is None or progress[-1].created_at > result.created_at):
+                summary = progress[-1].summary
+            self.runtime.fail_action(
                 action.id,
-                status=ActionStatus.CANCELLED,
-                output_summary="The persisted WorkOrder was cancelled before restart.",
+                error_message=summary,
+                output_summary=summary,
+                error_kind=(
+                    "RecoveredSpecialistNeedsUserInput"
+                    if owner == WorkOrderNextOwner.USER_INPUT
+                    else "RecoveredSpecialistNeedsLeaderReplan"
+                ),
             )
-            return None
+            return "The current WorkOrder returned control to the Leader or user."
         return "A persisted WorkOrder is waiting; its specialist was not replayed."
 
     def _run_lock(self, run_id: str) -> threading.Lock:
-        with self._run_locks_guard:
-            return self._run_locks.setdefault(run_id, threading.Lock())
+        return self.runtime.run_lock(run_id)
 
     @staticmethod
     def _work_order_stale_reason(

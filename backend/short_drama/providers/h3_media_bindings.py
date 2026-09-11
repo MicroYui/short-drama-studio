@@ -13,7 +13,13 @@ from short_drama.h3_models import (
     H3VideoGuideKind,
     derive_h3_reference_alias,
 )
-from short_drama.models import ProjectDocument
+from short_drama.models import ImageReferenceRole, ProjectDocument
+
+
+def is_h3_composition_reference(media: H3MediaInput) -> bool:
+    return media.role == H3MediaRole.REFERENCE_IMAGE and media.image_reference_role in {
+        ImageReferenceRole.COMPOSITION, ImageReferenceRole.LAYOUT_GUIDE,
+    }
 
 
 @dataclass(frozen=True)
@@ -65,6 +71,7 @@ def resolve_h3_media_bindings(
         if (
             media.kind == H3MediaKind.IMAGE
             and media.role == H3MediaRole.REFERENCE_IMAGE
+            and not is_h3_composition_reference(media)
         ):
             subject_key = _reference_image_subject_key(
                 media,
@@ -115,6 +122,8 @@ def resolve_h3_media_bindings(
                 H3MediaKind.VIDEO: "declared motion, timing, camera behavior, or continuity",
                 H3MediaKind.AUDIO: "voice identity and acoustic character, not copied words",
             }[media.kind]
+            if is_h3_composition_reference(media) and media.binding_purpose is None:
+                purpose = "soft shot composition, visible staging and object state; not a hard boundary frame or a new identity"
             default_alias = _default_alias(media, subject)
 
         alias = media.reference_alias or _alias_token(default_alias)
@@ -163,6 +172,8 @@ def _default_alias(media: H3MediaInput, subject: str) -> str:
         return "shot_start"
     if media.role == H3MediaRole.LAST_FRAME:
         return "shot_end"
+    if is_h3_composition_reference(media):
+        return f"{_alias_token(subject)}_composition"
     tokens = [_alias_token(subject)]
     tokens.extend(_alias_token(tag) for tag in media.reference_tags if tag)
     if len(tokens) == 1 and media.kind == H3MediaKind.AUDIO:
@@ -207,4 +218,4 @@ def _media_identity(media: H3MediaInput) -> tuple[str, ...]:
     )
 
 
-__all__ = ["ResolvedH3MediaBinding", "resolve_h3_media_bindings"]
+__all__ = ["ResolvedH3MediaBinding", "resolve_h3_media_bindings", "is_h3_composition_reference"]

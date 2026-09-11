@@ -18,6 +18,8 @@ from short_drama.asset_catalog import (
 from short_drama.image_models import (
     AssetBriefUpdateRequest,
     AssetCreateRequest,
+    AssetBatchCreateRequest,
+    AssetBatchMutationResponse,
     AssetImportLocalRequest,
     AssetImportUrlRequest,
     AssetMutationResponse,
@@ -194,6 +196,8 @@ class ArtifactToolService(Protocol):
         request: AssetCreateRequest,
     ) -> AssetMutationResponse: ...
 
+    def create_assets(self, project_id: str, request: AssetBatchCreateRequest) -> AssetBatchMutationResponse: ...
+
     def update_asset_brief(
         self,
         project_id: str,
@@ -321,6 +325,11 @@ class AssetPlanAttemptRetrier(Protocol):
 class AssetCreateInput(ToolModel):
     project_id: str
     request: AssetCreateRequest
+
+
+class AssetsCreateInput(ToolModel):
+    project_id: str
+    request: AssetBatchCreateRequest
 
 
 class AssetBriefUpdateInput(ToolModel):
@@ -1135,6 +1144,9 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 "跨多个 item 但只需修改局部字段时，使用 field_patches "
                 "按稳定 item_id/work_item_id 提交一组原子 RFC 6902 修订，避免"
                 "重传多个完整 item；work_item_id 在计划内唯一时可省略父 item_id。"
+                "若新增项使用更新后的分镜，可在同一请求用不带 item_id 的 field_patches "
+                "replace /storyboard_version_id 同步明确采用的分镜来源；"
+                "source_artifact_refs 只记录出处，不会替换计划正文中的来源字段。"
                 "仅提交字段修改且本次对象未变化时，会与其他工作项的并行保存合并，"
                 "可沿用最新已知 base_version_id；实际对象或制作来源发生变化才返回冲突。"
                 "校验成功后保存；不会调用 Provider。局部完成"
@@ -1597,6 +1609,20 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             service.create_asset(request.project_id, request.request),
         )
 
+    def create_assets(request: AssetsCreateInput) -> ToolExecution[AssetBatchMutationResponse]:
+        result = service.create_assets(request.project_id, request.request)
+        refs: list[ArtifactRef] = []
+        for asset in result.assets:
+            refs.append(ArtifactRef(project_id=request.project_id, artifact_type="asset", artifact_id=asset.id))
+            refs.extend(ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=version.id,
+                version=version.version) for version in asset.versions)
+        return ToolExecution(output=result, artifact_refs=tuple(refs))
+
+    registry.register(ToolSpec(id="artifact.create_assets", version=1, category=ToolCategory.ARTIFACT,
+        description="一次保存多个已确定的新人物、场景、道具或参考对象的文字设定。request.assets 每项复用 create_asset 的 kind/name/descriptor/brief；全批先校验，成功后一次局部追加保存，返回本批实际 Asset、brief、初始文本版本与精确引用，不返回整份项目。不生成图片、不修改已有对象、不要求凑齐全片对象；多个对象已明确时优先此入口，避免逐个语言轮搬运。已有对象设定用 artifact.update_brief，图像制作另用 image 工具。",
+        effect=ToolEffect.WRITE, idempotent=False, input_model=AssetsCreateInput, output_model=AssetBatchMutationResponse,
+        handler=create_assets, tags=frozenset({"asset", "project", "batch", "current-content"})))
+
     registry.register(
         ToolSpec(
             id="artifact.create_asset",
@@ -1605,7 +1631,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             description=(
                 "当角色、场景、道具或通用参考需要稳定 ID 与版本系谱时"
                 "创建资产。只会建立结构化 Asset 和初始文本版本，不生成图片；"
-                "项目视听风格仍写入 ProjectBible.style。"
+                "项目视听风格仍写入 ProjectBible.style。多个对象已确定时用 artifact.create_assets 一次保存。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,

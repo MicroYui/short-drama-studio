@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from io import BytesIO
+import json
 from typing import cast
 from urllib.parse import urlsplit
 
@@ -159,6 +160,29 @@ class OpenAIImageClient:
             provider_prompt = (
                 f"{request.prompt}\n\n有序参考图职责（按上传顺序）：\n"
                 + "\n".join(reference_lines)
+            )
+
+        source_plates: list[dict[str, object]] = []
+        for index, image in enumerate((item for item in inputs if item.asset_version_id != request.mask_version_id), start=1):
+            plate = image.text_plate
+            if plate is None:
+                continue
+            visible_text = plate.required_visible_text()
+            source_plates.append({
+                "image": index, "asset_version_id": image.asset_version_id,
+                "purpose": image.purpose, "reference_role": image.reference_role.value,
+                "reference_authority": image.reference_authority.value,
+                "plate_purpose": plate.purpose,
+                "content_state": plate.content_state.model_dump(mode="json") if plate.content_state is not None else None,
+                "rendered_visible_text": visible_text,
+            })
+        if source_plates:
+            provider_prompt += (
+                "\n\n已保存输入字版的准确内容（编号对应实际上传图像）：\n"
+                + json.dumps(source_plates, ensure_ascii=False, separators=(",", ":"))
+                + "\n这些是各参考图自身的内容状态。按本次明确的参考职责和目标状态使用；"
+                "不要把不同状态合并，也不要把平面内容图版当作已完成的物理摄影。"
+                "用作准确内容来源时保留其指定字形、姓名与位置。"
             )
 
         payload: dict[str, object] = {

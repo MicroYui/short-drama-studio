@@ -6,6 +6,7 @@ from typing import cast
 
 from pydantic import JsonValue
 
+from short_drama.dialogue_sequence import ordered_dialogue_line_ids
 from short_drama.models import (
     ProductionDocument, ProductionDocumentVersion, ProjectDocument, ShotPlan, ShotReferenceCue,
 )
@@ -92,7 +93,8 @@ def prepare_repaired_storyboard(
             group.clip_group.shot_ids = remap(group.clip_group.shot_ids)
             group.shots = shots(group.clip_group.shot_ids)
             group.clip_group.duration_seconds = float(sum(Decimal(str(item.duration_seconds)) for item in group.shots))
-            group.source_range.script_line_ids = [line for item in group.shots for line in item.dialogue_line_ids]
+            group.source_range.script_line_ids = ordered_dialogue_line_ids(
+                group.shots, clip_groups=[group.clip_group])
         for scene in draft.scene_nodes:
             scene.shot_ids = remap(scene.shot_ids)
         draft.verification = None

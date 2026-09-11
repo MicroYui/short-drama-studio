@@ -355,6 +355,13 @@ class LocalTeamExecutor:
                 self._claimed_work_order_ids.discard(work_order.id)
 
     def _queue_deterministic_continuation(self, work_order_id: str) -> bool:
+        work = self._manager.runtime.store.get_work_order(work_order_id)
+        if work is None:
+            return False
+        with self._manager.runtime.run_lock(work.parent_run_id):
+            return self._queue_deterministic_continuation_unlocked(work_order_id)
+
+    def _queue_deterministic_continuation_unlocked(self, work_order_id: str) -> bool:
         """Persist the next mechanical Tool step without asking the Worker again.
 
         A Worker still makes every creative and recovery decision.  The executor

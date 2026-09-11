@@ -33,6 +33,12 @@ from short_drama.visual_input_quality import (
 
 
 class QaToolService(Protocol):
+    def asset_version_artifact_refs(
+        self,
+        project_id: str,
+        version_ids: list[str],
+    ) -> list[ArtifactRef]: ...
+
     def analyze_source_image(
         self,
         project_id: str,
@@ -149,10 +155,8 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
                     artifact_type="asset",
                     artifact_id=request.asset_id,
                 ),
-                ArtifactRef(
-                    project_id=request.project_id,
-                    artifact_type="asset_version",
-                    artifact_id=request.version_id,
+                *service.asset_version_artifact_refs(
+                    request.project_id, [request.version_id]
                 ),
             ),
         )
@@ -212,11 +216,6 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
                 artifact_type="asset",
                 artifact_id=request.asset_id,
             ),
-            ArtifactRef(
-                project_id=request.project_id,
-                artifact_type="asset_version",
-                artifact_id=request.version_id,
-            ),
         ]
         if request.request.shot_id is not None:
             refs.append(
@@ -226,25 +225,30 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
                     artifact_id=request.request.shot_id,
                 )
             )
-        refs.extend(
-            ArtifactRef(
-                project_id=reference_project_id,
-                artifact_type="asset_version",
-                artifact_id=version_id,
-            )
-            for reference_project_id, version_id in unique_reference_refs
-            if reference_project_id == request.project_id
-        )
+        refs.extend(service.asset_version_artifact_refs(
+            request.project_id,
+            [request.version_id, *(
+                version_id
+                for reference_project_id, version_id in unique_reference_refs
+                if reference_project_id == request.project_id
+            )],
+        ))
         return ToolExecution(output=result, artifact_refs=tuple(refs))
 
     registry.register(
         ToolSpec(
             id="qa.inspect_asset_version",
-            version=1,
+            version=3,
             category=ToolCategory.QA,
             description=(
                 "生成或导入一个实际图片版本后调用；对照资产 brief、"
+                "本张真实 ImageTask 的生成意图和 output_layout、"
                 "可选镜头、已批准母版与候选固化的派生来源进行多模态语义检查。"
+                "本张局部视图不按整个资产的最终多视图卡误审。review_focus 可指定当前疑问；"
+                "regions 在同一次检查中追加候选/已声明参考的实际脸部、文字、部件裁图，"
+                "保留全图与真实像素范围，细节不足应报告未观察。"
+                "仅需裁切且边界可见时，crop_suggestion 可在同次观察给出候选的归一化region、"
+                "原因及实际源版本/像素范围，供 image.crop 使用；它不自动执行，也不代表裁后已通过。"
                 "审图保留每个派生来源的参考职责、权威级别、用途和主体别名；"
                 "用户明确锁定的原始图可在它声明的职责内作为历史证据，但不因此"
                 "被泛化为已批准资产。它只返回"
@@ -411,7 +415,14 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             id="qa.list_visual_input_reports",
             version=1,
             category=ToolCategory.QA,
-            description="List persisted advisory visual-input quality reports for a project.",
+            description=(
+                "读取项目已保存的三类镜头输入报告：参考图排序 "
+                "reference_reranks、关键帧比较 keyframe_comparisons、"
+                "输入兼容检查 compatibility_checks。它们对应 qa.rerank_reference_visuals、"
+                "qa.compare_keyframes 和 qa.check_input_compatibility；"
+                "单张图片 qa.inspect_asset_version 的语义检查保留在原 Tool "
+                "结果及工单回执中，不在本清单内。空清单不表示现有图片尚未检查。"
+            ),
             effect=ToolEffect.READ,
             idempotent=True,
             input_model=QaVisualReportsInput,

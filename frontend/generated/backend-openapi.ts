@@ -1084,6 +1084,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/projects/{project_id}/agent-tools/extract-frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extract Take Frame */
+        post: operations["extract_take_frame_api_short_drama_projects__project_id__agent_tools_extract_frame_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/projects/{project_id}/agent-tools/plan-change": {
         parameters: {
             query?: never;
@@ -3061,6 +3078,10 @@ export interface components {
             status: components["schemas"]["ActionStatus"];
             /** Summary */
             summary: string;
+            /** Tool Result Ref */
+            tool_result_ref?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
             /** Work Order Id */
             work_order_id?: string | null;
         };
@@ -3109,6 +3130,8 @@ export interface components {
             status: components["schemas"]["ActionStatus"];
             /** Tool Name */
             tool_name?: string | null;
+            /** Tool Result Context Ref */
+            tool_result_context_ref?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -3304,6 +3327,8 @@ export interface components {
             active_skill_ids?: string[];
             /** Completed At */
             completed_at?: string | null;
+            /** Completion Planned Work Order Ids */
+            completion_planned_work_order_ids?: string[];
             /**
              * Created At
              * Format: date-time
@@ -3779,6 +3804,25 @@ export interface components {
             /** Subject Alias */
             subject_alias?: string | null;
         };
+        /**
+         * AssetImageCrop
+         * @description Actual pixels selected from an EXIF-oriented local source; never regenerated.
+         */
+        AssetImageCrop: {
+            /** Box Pixels */
+            box_pixels: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Source Asset Version Id */
+            source_asset_version_id: string;
+            /** Source Height */
+            source_height: number;
+            /** Source Width */
+            source_width: number;
+        };
         /** AssetImportLocalRequest */
         AssetImportLocalRequest: {
             /** Descriptor */
@@ -3932,6 +3976,11 @@ export interface components {
          * @description Exact text and deterministic layout metadata for a local text plate.
          */
         AssetTextPlate: {
+            /**
+             * Append Text Blocks
+             * @description Accumulated additions drawn over the original plate PNG. Original title, exact_lines, text_blocks and lines retain their actual layout.
+             */
+            append_text_blocks?: components["schemas"]["TextPlateAppendedTextBlock"][];
             /** Background Color */
             background_color: string;
             /**
@@ -3949,6 +3998,7 @@ export interface components {
                 number,
                 number
             ];
+            content_state?: components["schemas"]["AssetTextPlateContentState"] | null;
             /** Exact Lines */
             exact_lines?: string[];
             /** Font Family */
@@ -3957,6 +4007,14 @@ export interface components {
             foreground_color: string;
             /** Layout Description */
             layout_description: string;
+            /** Lines */
+            lines?: components["schemas"]["TextPlateLine"][];
+            /**
+             * Purpose
+             * @default SCREEN_CONTENT
+             * @enum {string}
+             */
+            purpose: "SCREEN_CONTENT" | "PHYSICAL_SURFACE_CONTENT";
             /** Size */
             size: string;
             /**
@@ -3975,6 +4033,8 @@ export interface components {
              * @enum {string}
              */
             text_align: "left" | "center" | "right";
+            /** Text Blocks */
+            text_blocks?: components["schemas"]["TextPlateTextBlock"][];
             /** Title */
             title?: string | null;
             /**
@@ -3983,6 +4043,22 @@ export interface components {
              * @enum {string}
              */
             vertical_align: "top" | "center" | "bottom";
+        };
+        /**
+         * AssetTextPlateContentState
+         * @description Explicit narrative state and exact copy for this candidate only.
+         */
+        AssetTextPlateContentState: {
+            /**
+             * Name
+             * @description This candidate's explicit narrative state; never inferred from descriptor or layout instructions.
+             */
+            name: string;
+            /**
+             * Required Visible Text
+             * @description Complete ordered visible wording for this state. Preserve each fixed brief text entry as an unchanged entry in order; add state text as separate entries. Rendering blocks may reflow this same wording.
+             */
+            required_visible_text: string[];
         };
         /** AssetVersion */
         AssetVersion: {
@@ -4004,6 +4080,7 @@ export interface components {
             height?: number | null;
             /** Id */
             id: string;
+            image_crop?: components["schemas"]["AssetImageCrop"] | null;
             /** Image Task Id */
             image_task_id?: string | null;
             /** Local Path */
@@ -4414,7 +4491,10 @@ export interface components {
             id: string;
             /** Reference Notes */
             reference_notes?: string[];
-            /** Shot Ids */
+            /**
+             * Shot Ids
+             * @description Shots rendered in one request, in order. The same dialogue line ID may continue across adjacent Shots in this group as one utterance; it cannot continue across a group boundary or a Shot without that line.
+             */
             shot_ids: string[];
             /** Title */
             title: string;
@@ -5903,6 +5983,11 @@ export interface components {
              * @default MiniMax-H3
              */
             model: string;
+            /**
+             * Output Format Guidance
+             * @default DIRECT requires a fixed aspect ratio. REFERENCE accepts fixed/adaptive ratio. FRAME_FIRST/FRAME_LAST/FRAME_FIRST_LAST use omitted/adaptive ratio and the actual frame shape; prepare the intended frame shape before submission. Default resolution is 768P; 2K is optional. Resolution labels do not specify exact output pixels in the current AceData API.
+             */
+            output_format_guidance: string;
             /** Project Id */
             project_id?: string | null;
             /**
@@ -5914,9 +5999,13 @@ export interface components {
             regression_cases: components["schemas"]["RegressionCase"][];
             /** Risks */
             risks: components["schemas"]["CapabilityRisk"][];
+            /** Supported Aspect Ratios */
+            supported_aspect_ratios?: string[];
+            /** Supported Resolutions */
+            supported_resolutions?: string[];
             /**
              * Version
-             * @default 2026-08-17.1
+             * @default 2026-09-12.1
              */
             version: string;
         };
@@ -5957,6 +6046,8 @@ export interface components {
             asset_version_id?: string | null;
             /** Binding Purpose */
             binding_purpose?: string | null;
+            /** @description The image's visual purpose, separate from the H3 transport role. COMPOSITION or LAYOUT_GUIDE keeps a concrete Picture anchor in REFERENCE mode; it is soft guidance and does not become a hard first_frame/last_frame input. Omit for legacy reusable subject references. */
+            image_reference_role?: components["schemas"]["ImageReferenceRole"] | null;
             kind: components["schemas"]["H3MediaKind"];
             /** Reference Alias */
             reference_alias?: string | null;
@@ -6055,6 +6146,8 @@ export interface components {
         };
         /** H3ProbeRequest */
         H3ProbeRequest: {
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
             /** Duration Seconds */
             duration_seconds?: number | null;
             /** Learning Objective */
@@ -6067,6 +6160,11 @@ export interface components {
             purpose: components["schemas"]["EvidencePurpose"];
             /** Regression Case Id */
             regression_case_id?: string | null;
+            /**
+             * Resolution
+             * @default 768P
+             */
+            resolution: string;
             /** @default DIRECT */
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
@@ -6133,13 +6231,10 @@ export interface components {
             created_at: string;
             /** Decisions */
             decisions: components["schemas"]["H3ShotRoutePlan"][];
-            /**
-             * Estimated Cost Credits
-             * @default 0
-             */
-            estimated_cost_credits: number;
+            /** Estimated Cost Credits */
+            estimated_cost_credits?: number | null;
             /** Estimated Cost Usd */
-            estimated_cost_usd: number;
+            estimated_cost_usd?: number | null;
             /** Estimated New H3 Seconds */
             estimated_new_h3_seconds: number;
             /** Executed At */
@@ -6205,6 +6300,8 @@ export interface components {
         };
         /** H3ProductionRoutePlanRequest */
         H3ProductionRoutePlanRequest: {
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
             /**
              * Candidate Count
              * @description Number of candidates the calling Agent requests in this action.
@@ -6220,6 +6317,8 @@ export interface components {
             generation_plan_document_id?: string | null;
             /** Generation Plan Version Id */
             generation_plan_version_id?: string | null;
+            /** Resolution */
+            resolution?: string | null;
             /** Shot Directives */
             shot_directives?: components["schemas"]["H3ShotRouteDirective"][];
             /** Shot Ids */
@@ -6267,6 +6366,10 @@ export interface components {
              * @default 768P
              */
             resolution: string;
+            /** Supported Aspect Ratios */
+            supported_aspect_ratios?: string[];
+            /** Supported Resolutions */
+            supported_resolutions?: string[];
         };
         /** H3ProviderConfigUpdate */
         H3ProviderConfigUpdate: {
@@ -6280,6 +6383,8 @@ export interface components {
         };
         /** H3ProviderRun */
         H3ProviderRun: {
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
             /** Clip Group Id */
             clip_group_id?: string | null;
             /** Created At */
@@ -6502,6 +6607,8 @@ export interface components {
         /** H3ShotRoutePlan */
         H3ShotRoutePlan: {
             action: components["schemas"]["H3ShotRouteAction"];
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
             /** Asset Preparations */
             asset_preparations?: components["schemas"]["H3RouteAssetPreparation"][];
             /**
@@ -6554,6 +6661,11 @@ export interface components {
             readiness: components["schemas"]["H3ShotRouteReadiness"];
             /** Reference Selection Candidate Ids */
             reference_selection_candidate_ids?: string[];
+            /**
+             * Resolution
+             * @default 768P
+             */
+            resolution: string;
             /** Reuse Take Id */
             reuse_take_id?: string | null;
             /** Risk Ids */
@@ -7342,11 +7454,17 @@ export interface components {
             mask_feather_pixels: number;
             /** Mask Version Id */
             mask_version_id?: string | null;
-            /** @default GENERATE */
+            /**
+             * @description GENERATE: no reference images or target parent. REFERENCE_GENERATE: ordered reference images with parent_version_id omitted; it can create another candidate in an existing Asset. EDIT: ordered reference images plus an explicit target parent_version_id. A planned REFERENCE_GENERATE does not itself select a parent; when the actual task explicitly derives from a target version, use EDIT.
+             * @default GENERATE
+             */
             operation: components["schemas"]["ImageOperation"];
             /** @default png */
             output_format: components["schemas"]["ImageOutputFormat"];
-            /** Parent Version Id */
+            /**
+             * Parent Version Id
+             * @description Explicit target AssetVersion lineage for EDIT; requires operation=EDIT. Omit for GENERATE and REFERENCE_GENERATE. A reference, dependency, primary input, or existing target Asset does not automatically become this parent.
+             */
             parent_version_id?: string | null;
             /** Primary Input Version Id */
             primary_input_version_id?: string | null;
@@ -7742,6 +7860,8 @@ export interface components {
         };
         /** LanguagePromptCompileRequest */
         LanguagePromptCompileRequest: {
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
             /** Duration Seconds */
             duration_seconds?: number | null;
             /** Generation Plan Document Id */
@@ -7754,6 +7874,8 @@ export interface components {
             media_inputs?: components["schemas"]["H3MediaInput"][];
             /** Method Skill Ids */
             method_skill_ids?: string[];
+            /** Resolution */
+            resolution?: string | null;
             /**
              * Revision Instructions
              * @description Agent feedback for this compilation, including a prior failure. May revise wording, never locked facts or media order.
@@ -7771,6 +7893,8 @@ export interface components {
         };
         /** LanguagePromptCompileResponse */
         LanguagePromptCompileResponse: {
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
             /** Candidate Id */
             candidate_id?: string | null;
             /** Compiled Prompt */
@@ -7802,6 +7926,11 @@ export interface components {
              * @default xhigh
              */
             reasoning_effort: string;
+            /**
+             * Resolution
+             * @default 768P
+             */
+            resolution: string;
             route: components["schemas"]["VideoGenerationRoute"];
             /** Shot Id */
             shot_id?: string | null;
@@ -8286,6 +8415,12 @@ export interface components {
              */
             crf: number;
             /**
+             * Follow Source Dimensions
+             * @description New automatic manifests follow selected Take dimensions on rebuild. False preserves an explicitly chosen or historical output size.
+             * @default false
+             */
+            follow_source_dimensions: boolean;
+            /**
              * Fps
              * @default 30
              */
@@ -8335,6 +8470,8 @@ export interface components {
             goal_complete: boolean;
             /** Id */
             id: string;
+            /** Inherited Action Ids */
+            inherited_action_ids?: string[];
             /** Method Selection Rationale */
             method_selection_rationale?: string | null;
             /** Revision */
@@ -9563,7 +9700,7 @@ export interface components {
              */
             references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
-            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
+            timeline_beats?: components["schemas"]["ShotTimelineBeat-Input"][];
             /** Transition Out */
             transition_out: string;
             /** Visual */
@@ -9605,7 +9742,7 @@ export interface components {
              */
             references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
-            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
+            timeline_beats?: components["schemas"]["ShotTimelineBeat-Output"][];
             /** Transition Out */
             transition_out: string;
             /** Visual */
@@ -10249,7 +10386,10 @@ export interface components {
             /** Camera */
             camera: string;
             continuity: components["schemas"]["ContinuityState"];
-            /** Dialogue Line Ids */
+            /**
+             * Dialogue Line Ids
+             * @description Script line IDs in audible order, folding a line continued across adjacent beats. A line may also continue as the next Shot's first line within the same ClipGroup/request; cover its actual time in both Shots' timeline_beats. Keep that same ID on both Shots and their audible beats; audio_intent prose alone does not declare coverage. Do not create a new ScriptLine for a continuation. Source line IDs still count once per continuous utterance.
+             */
             dialogue_line_ids: string[];
             /** Duration Seconds */
             duration_seconds: number;
@@ -10278,7 +10418,7 @@ export interface components {
             /** Sequence */
             sequence: number;
             /** Timeline Beats */
-            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
+            timeline_beats?: components["schemas"]["ShotTimelineBeat-Input"][];
             /** Transition Out */
             transition_out: string;
             /** Visual */
@@ -10292,7 +10432,10 @@ export interface components {
             /** Camera */
             camera: string;
             continuity: components["schemas"]["ContinuityState"];
-            /** Dialogue Line Ids */
+            /**
+             * Dialogue Line Ids
+             * @description Script line IDs in audible order, folding a line continued across adjacent beats. A line may also continue as the next Shot's first line within the same ClipGroup/request; cover its actual time in both Shots' timeline_beats. Keep that same ID on both Shots and their audible beats; audio_intent prose alone does not declare coverage. Do not create a new ScriptLine for a continuation. Source line IDs still count once per continuous utterance.
+             */
             dialogue_line_ids: string[];
             /** Duration Seconds */
             duration_seconds: number;
@@ -10321,7 +10464,7 @@ export interface components {
             /** Sequence */
             sequence: number;
             /** Timeline Beats */
-            timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
+            timeline_beats?: components["schemas"]["ShotTimelineBeat-Output"][];
             /** Transition Out */
             transition_out: string;
             /** Visual */
@@ -10349,7 +10492,7 @@ export interface components {
             /** References */
             references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
-            timeline_beats?: components["schemas"]["ShotTimelineBeat"][] | null;
+            timeline_beats?: components["schemas"]["ShotTimelineBeat-Input"][] | null;
             /** Transition Out */
             transition_out?: string | null;
             /** Visual */
@@ -10377,7 +10520,7 @@ export interface components {
             /** References */
             references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
-            timeline_beats?: components["schemas"]["ShotTimelineBeat"][] | null;
+            timeline_beats?: components["schemas"]["ShotTimelineBeat-Output"][] | null;
             /** Transition Out */
             transition_out?: string | null;
             /** Visual */
@@ -10396,6 +10539,8 @@ export interface components {
             field?: ("visual" | "action" | "performance" | "camera") | null;
             /** Id */
             id?: string | null;
+            /** @description 图片实际提供的视觉依据。COMPOSITION 为本镜构图、站位或状态画面；LAYOUT_GUIDE 为分镜顺序或布局参考，均不代表角色身份卡，也不是硬首尾帧。身份、服装、场景、道具按实际用途填写；省略兼容已有引用。 */
+            image_reference_role?: components["schemas"]["ImageReferenceRole"] | null;
             /** Purpose */
             purpose: string;
             /** Required Tags */
@@ -10456,12 +10601,46 @@ export interface components {
          * ShotTimelineBeat
          * @description One observable camera/action/performance phase inside an editorial shot.
          */
-        ShotTimelineBeat: {
+        "ShotTimelineBeat-Input": {
             /** Action */
             action: string;
             /** Camera */
             camera: string;
-            /** Dialogue Line Ids */
+            /**
+             * Dialogue Line Ids
+             * @description Exact script line IDs audible during this beat. Repeat one ID on adjacent beats or adjacent Shots in the same ClipGroup when the same utterance continues across their boundary; do not repeat the spoken text.
+             */
+            dialogue_line_ids?: string[];
+            /** Emotion */
+            emotion?: string | null;
+            /** End Seconds */
+            end_seconds: number;
+            /** Framing */
+            framing: string;
+            /** Performance */
+            performance?: string | null;
+            /** References */
+            references?: components["schemas"]["ShotReferenceCue"][];
+            /** Sound */
+            sound?: string | null;
+            /** Start Seconds */
+            start_seconds: number;
+            /** Visual */
+            visual: string;
+        };
+        /**
+         * ShotTimelineBeat
+         * @description One observable camera/action/performance phase inside an editorial shot.
+         */
+        "ShotTimelineBeat-Output": {
+            /** Action */
+            action: string;
+            /** Camera */
+            camera: string;
+            /**
+             * Dialogue Line Ids
+             * @description Exact script line IDs audible during this beat. Repeat one ID on adjacent beats or adjacent Shots in the same ClipGroup when the same utterance continues across their boundary; do not repeat the spoken text.
+             */
             dialogue_line_ids?: string[];
             /** Emotion */
             emotion?: string | null;
@@ -11105,6 +11284,22 @@ export interface components {
             visible_changes?: string[];
         };
         /**
+         * StoryboardClipGroupSplice
+         * @description Change only a contiguous range of existing generation groups.
+         */
+        StoryboardClipGroupSplice: {
+            /**
+             * Clip Group Ids
+             * @description 按现有顺序列出要重新划分的连续旧组ID。未列出的组保持原样。
+             */
+            clip_group_ids: string[];
+            /**
+             * Clip Groups
+             * @description 这些旧组替换成的新组，可沿用原组ID或添加新ID；只含本次涉及的镜头。duration_seconds在结构编辑时按当前镜头重新计算。
+             */
+            clip_groups?: components["schemas"]["ClipGroup"][];
+        };
+        /**
          * StoryboardContent
          * @description Complete structured storyboard and its provider-independent clip groups.
          */
@@ -11461,16 +11656,18 @@ export interface components {
         };
         /**
          * StoryboardPatchRequest
-         * @description Targeted shot revisions; structural rewrites use StoryboardReplaceRequest.
+         * @description Edit selected content or local shot/group structure without rewriting the film.
          */
         StoryboardPatchRequest: {
             /** Base Version Id */
             base_version_id: string;
             /** Bible Version Id */
             bible_version_id?: string | null;
+            /** Clip Group Splices */
+            clip_group_splices?: components["schemas"]["StoryboardClipGroupSplice"][];
             /**
              * Clip Groups
-             * @description 按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。增加、删除或重排分组使用完整 StoryboardReplaceRequest。
+             * @description 按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。局部增加、删除或重分组用clip_group_splices；同组拆镜默认自动更新成员和时长。
              */
             clip_groups?: components["schemas"]["ClipGroup"][] | null;
             /** Notes */
@@ -11489,6 +11686,8 @@ export interface components {
             scene_nodes?: components["schemas"]["StoryboardSceneNode"][] | null;
             /** Script Version Id */
             script_version_id?: string | null;
+            /** Shot Splices */
+            shot_splices?: components["schemas"]["StoryboardShotSplice"][];
             /** Source Artifact Refs */
             source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
             /** Timing Notes */
@@ -11563,6 +11762,27 @@ export interface components {
             replacement: components["schemas"]["ShotPlan-Input"];
             /** Shot Id */
             shot_id: string;
+        };
+        /**
+         * StoryboardShotSplice
+         * @description Replace a local shot range, or insert at a stable shot boundary.
+         */
+        StoryboardShotSplice: {
+            /**
+             * After Shot Id
+             * @description 只用于纯插入：插入到此已有镜头之后；省略表示片首。默认归入此镜头的原生成组（片首归入首组）。
+             */
+            after_shot_id?: string | null;
+            /**
+             * Shot Ids
+             * @description 已读分镜中连续、按顺序的原镜头ID。只传本次拆分/合并/删除的区间；shots替换该区间。空列表表示纯插入。
+             */
+            shot_ids?: string[];
+            /**
+             * Shots
+             * @description 本次区间的完整新镜头；可保留原ID，新增镜头使用新ID，空列表表示删除。sequence/revision由服务计算，不必重写后续镜头。对白归属、逐时段及引用仍须完整。
+             */
+            shots?: components["schemas"]["ShotPlan-Input"][];
         };
         /**
          * StoryboardSourceRange
@@ -11959,9 +12179,9 @@ export interface components {
             fps: number;
             /**
              * Height
-             * @default 720
+             * @description Explicit output height; supply together with width, or omit both to follow selected source media.
              */
-            height: number;
+            height?: number | null;
             /**
              * Subtitles
              * @default true
@@ -11969,14 +12189,19 @@ export interface components {
             subtitles: boolean;
             /**
              * Width
-             * @default 1280
+             * @description Explicit output width. Omit width and height together to retain actual selected video detail in the project aspect ratio.
              */
-            width: number;
+            width?: number | null;
         };
         /** StudioJob */
         StudioJob: {
             /** Created At */
             created_at: string;
+            /**
+             * Current Goal
+             * @description 活动视图从当前 AgentRun 读取的有效目标；原始 objective 保留用于制作记录。
+             */
+            current_goal?: string | null;
             /** Error */
             error?: string | null;
             /** Id */
@@ -12056,6 +12281,10 @@ export interface components {
         };
         /** StudioMutationResult */
         StudioMutationResult: {
+            /** Changed Scene Ids */
+            changed_scene_ids?: string[];
+            /** Changed Shot Ids */
+            changed_shot_ids?: string[];
             /** Notices */
             notices?: string[];
             project: components["schemas"]["ProjectAggregate"];
@@ -12088,6 +12317,42 @@ export interface components {
              */
             name: string;
         };
+        /** StudioRelatedSceneUpdate */
+        StudioRelatedSceneUpdate: {
+            /**
+             * Affected Shot Ids
+             * @description After reading current shots, identify which shots need a visual update for this scene edit. Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. Shots using changed structured dialogue are always included.
+             */
+            affected_shot_ids?: string[] | null;
+            /** @description Relevant state established by the current screenplay at scene entry, not an unfulfilled outline. Omit to preserve; explicitly null to remove an obsolete state summary. */
+            entry_state?: components["schemas"]["SceneContinuitySummary"] | null;
+            /** @description Relevant facts, prop/character states and open threads actually established by this scene's text. Omit to preserve; explicitly null to remove an obsolete state summary. */
+            exit_state?: components["schemas"]["SceneContinuitySummary"] | null;
+            /**
+             * Expected Text
+             * @description Exact current body read from this related scene; protects concurrent edits.
+             */
+            expected_text: string;
+            /** Heading */
+            heading: string;
+            /** Lines */
+            lines?: components["schemas"]["ScriptLine"][] | null;
+            /** Narrative Purpose */
+            narrative_purpose?: string | null;
+            /**
+             * Reason
+             * @description Concrete semantic connection to the main edit, such as a setup/payoff, shared fact or prop state.
+             */
+            reason: string;
+            /** Scene Id */
+            scene_id: string;
+            /** Screenplay Text */
+            screenplay_text: string;
+            /** Summary */
+            summary?: string | null;
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
+        };
         /** StudioRename */
         StudioRename: {
             /** Name */
@@ -12100,6 +12365,10 @@ export interface components {
              * @description After reading current shots, identify which shots need a visual update for this scene edit. Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. Shots using changed structured dialogue are always included.
              */
             affected_shot_ids?: string[] | null;
+            /** @description Relevant state established by the current screenplay at scene entry, not an unfulfilled outline. Omit to preserve; explicitly null to remove an obsolete state summary. */
+            entry_state?: components["schemas"]["SceneContinuitySummary"] | null;
+            /** @description Relevant facts, prop/character states and open threads actually established by this scene's text. Omit to preserve; explicitly null to remove an obsolete state summary. */
+            exit_state?: components["schemas"]["SceneContinuitySummary"] | null;
             /** Expected Text */
             expected_text?: string | null;
             /** Heading */
@@ -12108,6 +12377,11 @@ export interface components {
             lines?: components["schemas"]["ScriptLine"][] | null;
             /** Narrative Purpose */
             narrative_purpose?: string | null;
+            /**
+             * Related Scene Updates
+             * @description Optional narrowly related scene edits saved atomically with this scene. Use only when the current change affects an earlier setup, later payoff or established fact. Read each current body first; update its summary/purpose/state when affected. Do not include unchanged or unrelated scenes.
+             */
+            related_scene_updates?: components["schemas"]["StudioRelatedSceneUpdate"][];
             /** Scene Id */
             scene_id?: string | null;
             /** Screenplay Text */
@@ -12119,6 +12393,11 @@ export interface components {
         };
         /** StudioScope */
         "StudioScope-Input": {
+            /**
+             * Asset Version Id
+             * @description Exact media file selected from project assets; does not adopt it or replace the asset's current file.
+             */
+            asset_version_id?: string | null;
             /** @description Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow. */
             editor_selection?: components["schemas"]["StudioEditorSelection"] | null;
             /** Id */
@@ -12134,9 +12413,19 @@ export interface components {
              * @default 当前集
              */
             label: string;
+            /**
+             * Take Id
+             * @description Exact generated source video selected for viewing or this request; does not adopt the Take.
+             */
+            take_id?: string | null;
         };
         /** StudioScope */
         "StudioScope-Output": {
+            /**
+             * Asset Version Id
+             * @description Exact media file selected from project assets; does not adopt it or replace the asset's current file.
+             */
+            asset_version_id?: string | null;
             /** @description Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow. */
             editor_selection?: components["schemas"]["StudioEditorSelection"] | null;
             /** Id */
@@ -12152,6 +12441,11 @@ export interface components {
              * @default 当前集
              */
             label: string;
+            /**
+             * Take Id
+             * @description Exact generated source video selected for viewing or this request; does not adopt the Take.
+             */
+            take_id?: string | null;
         };
         /** StudioShotMediaSelect */
         StudioShotMediaSelect: {
@@ -12534,6 +12828,86 @@ export interface components {
             project: components["schemas"]["ProjectAggregate"];
             report: components["schemas"]["TakeComparisonReport"];
         };
+        /** TakeFrameAssetRequest */
+        TakeFrameAssetRequest: {
+            /**
+             * Asset Id
+             * @description Optional existing REFERENCE asset to receive the frame; omit to create one.
+             */
+            asset_id?: string | null;
+            /** Clip Id */
+            clip_id?: string | null;
+            /**
+             * Description
+             * @description Why this actual frame is useful; extraction itself does not inspect its identity or quality.
+             */
+            description: string;
+            /** Name */
+            name?: string | null;
+            /** Shot Id */
+            shot_id?: string | null;
+            /** Take Id */
+            take_id: string;
+            /**
+             * Time Seconds
+             * @description Source-video seconds by default; with shot_id, seconds from that Take's shot window; with clip_id, seconds from that exact current film-use clip, including speed/reverse. The window end selects its last available frame.
+             */
+            time_seconds: number;
+            /** Timeline Id */
+            timeline_id?: string | null;
+        };
+        /** TakeFrameAssetResponse */
+        TakeFrameAssetResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Asset Version Id */
+            asset_version_id: string;
+            /** Clip Id */
+            clip_id?: string | null;
+            /**
+             * Coordinate Space
+             * @enum {string}
+             */
+            coordinate_space: "SOURCE" | "SHOT_LOCAL" | "CLIP_LOCAL";
+            h3_media_input: components["schemas"]["H3MediaInput"];
+            /** Height */
+            height: number;
+            image_reference_input: components["schemas"]["ImageReferenceInput"];
+            /** Local Path */
+            local_path: string;
+            /**
+             * Notes
+             * @default Full-resolution underlying video frame, without editorial overlays, crop, flips or grading. Use image.enqueue EDIT/REFERENCE_GENERATE with image_reference_input to derive a target composition, or use h3_media_input as a soft REFERENCE composition anchor. For hard FRAME_FIRST, explicitly choose that route and only its first_frame input. A copied frame also retains source defects; it has not passed visual review.
+             */
+            notes: string;
+            /** Project Id */
+            project_id: string;
+            /** Requested Time Seconds */
+            requested_time_seconds: number;
+            /**
+             * Reused
+             * @default false
+             */
+            reused: boolean;
+            /**
+             * Review Status
+             * @default NOT_REVIEWED
+             * @constant
+             */
+            review_status: "NOT_REVIEWED";
+            /** Source Take Id */
+            source_take_id: string;
+            /** Source Time Seconds */
+            source_time_seconds: number;
+            /** Source Window End Seconds */
+            source_window_end_seconds: number;
+            /** Source Window Start Seconds */
+            source_window_start_seconds: number;
+            /** Timeline Id */
+            timeline_id?: string | null;
+            /** Width */
+            width: number;
+        };
         /**
          * TargetResolution
          * @description Desired output resolution for a local generation. The backend corrects it to the
@@ -12622,6 +12996,114 @@ export interface components {
             expected_size_bytes: number;
             /** Expected Size Gb */
             expected_size_gb: number;
+        };
+        /**
+         * TextPlateAppendedTextBlock
+         * @description Actually drawn local addition; the original plate pixels are retained.
+         */
+        TextPlateAppendedTextBlock: {
+            /** Color */
+            color?: string | null;
+            /**
+             * Content Box
+             * @description Normalized canvas x/y/width/height. No implicit margins; all ink must fit this box.
+             */
+            content_box: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Font Family */
+            font_family: string;
+            /**
+             * Font Size
+             * @description Actual font size in output pixels. Overflow returns an error; text is not silently clipped or shrunk.
+             * @default 48
+             */
+            font_size: number;
+            /** Text */
+            text: string;
+            /**
+             * Text Align
+             * @default left
+             * @enum {string}
+             */
+            text_align: "left" | "center" | "right";
+            /**
+             * Vertical Align
+             * @default top
+             * @enum {string}
+             */
+            vertical_align: "top" | "center" | "bottom";
+        };
+        /**
+         * TextPlateLine
+         * @description A rule or signature line; geometry is not part of required visible wording.
+         */
+        TextPlateLine: {
+            /** Color */
+            color?: string | null;
+            /**
+             * End
+             * @description Normalized canvas end x/y.
+             */
+            end: [
+                number,
+                number
+            ];
+            /**
+             * Start
+             * @description Normalized canvas start x/y.
+             */
+            start: [
+                number,
+                number
+            ];
+            /**
+             * Width
+             * @description Stroke width in output pixels.
+             * @default 2
+             */
+            width: number;
+        };
+        /**
+         * TextPlateTextBlock
+         * @description One exact visible line positioned in a normalized canvas region.
+         */
+        TextPlateTextBlock: {
+            /** Color */
+            color?: string | null;
+            /**
+             * Content Box
+             * @description Normalized canvas x/y/width/height. No implicit margins; all ink must fit this box.
+             */
+            content_box: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /**
+             * Font Size
+             * @description Actual font size in output pixels. Overflow returns an error; text is not silently clipped or shrunk.
+             * @default 48
+             */
+            font_size: number;
+            /** Text */
+            text: string;
+            /**
+             * Text Align
+             * @default left
+             * @enum {string}
+             */
+            text_align: "left" | "center" | "right";
+            /**
+             * Vertical Align
+             * @default top
+             * @enum {string}
+             */
+            vertical_align: "top" | "center" | "bottom";
         };
         /**
          * TimedTextLock
@@ -15811,6 +16293,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TakeComparisonResponse"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    extract_take_frame_api_short_drama_projects__project_id__agent_tools_extract_frame_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeFrameAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakeFrameAssetResponse"];
                 };
             };
             /** @description Client Error */

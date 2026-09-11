@@ -299,6 +299,7 @@ class AgentRun(RuntimeModel):
     goal_summary: str | None = Field(default=None, max_length=16000)
     latest_user_instructions: list[str] = Field(default_factory=list[str])
     loaded_tool_schema_ids: list[str] = Field(default_factory=list[str])
+    completion_planned_work_order_ids: list[str] = Field(default_factory=list[str])
     root_agent: str = Field(min_length=1)
     active_skill_ids: SkillIds = Field(default_factory=list[str])
     unattended: bool = False
@@ -353,6 +354,7 @@ class PlanRevision(RuntimeModel):
         max_length=4000,
     )
     carried_work_order_ids: list[str] = Field(default_factory=list[str])
+    inherited_action_ids: list[str] = Field(default_factory=list[str])
     goal_complete: bool = False
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -378,6 +380,10 @@ class PlanRevision(RuntimeModel):
             normalized_carried_ids
         ) != len(set(normalized_carried_ids)):
             raise ValueError("Plan carried_work_order_ids must be trimmed and unique")
+        if any(not action_id or action_id != action_id.strip() for action_id in self.inherited_action_ids) or len(
+            self.inherited_action_ids
+        ) != len(set(self.inherited_action_ids)):
+            raise ValueError("Plan inherited_action_ids must be trimmed and unique")
         step_by_id = {step.id: step for step in self.steps}
         if len(step_by_id) != len(self.steps):
             raise ValueError("Plan step ids must be unique within a revision")
@@ -422,6 +428,7 @@ class ActionRecord(RuntimeModel):
     work_order_id: str | None = None
     input_summary: str = Field(min_length=1)
     output_summary: str | None = None
+    tool_result_context_ref: str | None = None
     error_message: str | None = None
     duration_ms: int | None = Field(default=None, ge=0)
     error_kind: str | None = Field(default=None, min_length=1, max_length=200)
@@ -757,6 +764,7 @@ class ActionDigest(RuntimeModel):
     kind: ActionKind
     status: ActionStatus
     summary: str
+    tool_result_ref: dict[str, JsonValue] | None = None
     artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     agent_result: AgentResultDigest | None = None
 

@@ -205,6 +205,27 @@ def edit_editorial(service: ShortDramaService, project_id: str, request: "Studio
         if change.end_seconds is not None: cue.endTime = change.end_seconds
         if change.text is not None: cue.text = change.text
         if change.style is not None: cue.style.update(change.style)
+    local_duration = max((clip.startTime + clip.duration for clip in timeline.clips if clip.type != "audio"), default=0.0)
+    for cue in request.add_subtitles:
+        if any(item.id == cue.id for item in timeline.subtitles):
+            raise ValueError(f"/add_subtitles: {cue.id!r} already exists in timeline_id={target_id!r}; use subtitles to edit it.")
+        if request.shot_id and cue.end_seconds > local_duration:
+            raise ValueError(f"/add_subtitles: {cue.id!r} exceeds the edited SHOT_LOCAL duration {local_duration:g}s; use FILM coordinates without shot_id for a crossing caption.")
+        track_index = cue.track_index
+        if track_index is None:
+            track_index = next((index for index, track in enumerate(timeline.tracks)
+                                if track.type == "subtitle" and track.enabled and not track.locked), None)
+            if track_index is None:
+                track_id, suffix = "subtitles", 1
+                while any(track.id == track_id for track in timeline.tracks):
+                    track_id, suffix = f"subtitles-{suffix}", suffix + 1
+                track_index = len(timeline.tracks)
+                timeline.tracks.append(EditorTrack(id=track_id, name="字幕", type="subtitle"))
+        elif track_index >= len(timeline.tracks) or timeline.tracks[track_index].type != "subtitle":
+            raise ValueError(f"/add_subtitles: track_index={track_index} is not a current subtitle track in timeline_id={target_id!r}.")
+        timeline.subtitles.append(EditorSubtitle(id=cue.id, text=cue.text, startTime=cue.start_seconds,
+            endTime=cue.end_seconds, trackIndex=track_index, style=cue.style,
+            **({"sourceShotId": request.shot_id} if request.shot_id else {})))
     save = StudioTimelineSave(expected_revision=request.expected_revision, anchor_clip_id=request.anchor_clip_id,
         timeline={"project": cast(dict[str, JsonValue], project.model_dump(mode="json"))})
     if request.shot_id:

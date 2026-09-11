@@ -62,6 +62,7 @@ from short_drama.language_models import (
     LanguageProviderConfigUpdate,
 )
 from short_drama.media import MediaGenerationError
+from short_drama.media_frame_asset import TakeFrameAssetRequest, TakeFrameAssetResponse
 from short_drama.models import (
     AudioInspectionRequest,
     AudioInspectionResponse,
@@ -1857,6 +1858,18 @@ def select_take(
     try:
         return service.select_take(take_id)
     except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.post("/projects/{project_id}/agent-tools/extract-frame", response_model=TakeFrameAssetResponse)
+def extract_take_frame(
+    project_id: str,
+    request: TakeFrameAssetRequest,
+    service: ShortDramaService = Depends(get_short_drama_service),
+) -> TakeFrameAssetResponse:
+    try:
+        return service.extract_take_frame(project_id, request)
+    except (ProjectNotFoundError, ArtifactNotFoundError, WorkflowConflictError, MediaGenerationError) as exc:
         raise _translate_error(exc) from exc
 
 

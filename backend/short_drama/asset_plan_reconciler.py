@@ -206,18 +206,11 @@ def assess_asset_plan_execution_contract(
             for work in item.work_items
             if work.review_purpose == AssetReviewPurpose.SUPPLEMENTAL_REFERENCE
         ]
-        work_position = {
-            work.id: position for position, work in enumerate(item.work_items)
-        }
         canonical = canonical_work[0] if len(canonical_work) == 1 else None
         canonical_is_executable_root = (
             canonical is not None
             and canonical.operation
             not in {AssetPlanOperation.COMPOSE, AssetPlanOperation.TEXT_PLATE}
-            and all(
-                work_position[canonical.id] < work_position[work.id]
-                for work in supplemental_work
-            )
         )
         if (
             supplemental_work
@@ -235,7 +228,7 @@ def assess_asset_plan_execution_contract(
                         *[work.id for work in supplemental_work],
                     ],
                     detail=(
-                        "Supplemental outputs do not follow one earlier identity or "
+                        "Supplemental outputs do not have one executable identity or "
                         "physical canonical root; a composed sheet or text plate is "
                         "a derived output rather than that root."
                     ),
@@ -257,6 +250,7 @@ def assess_asset_plan_execution_contract(
                     canonical is not None
                     and lineage is not None
                     and lineage.source_work_item_id == canonical.id
+                    and canonical.id in work.dependency_ids
                 )
                 if (
                     intent is None
@@ -291,6 +285,11 @@ def assess_asset_plan_execution_contract(
         if (
             item.asset_kind == AssetKind.PROP
             and text_work
+            and not (
+                item.brief is not None
+                and item.brief.presentation_mode == AssetPresentationMode.PHYSICAL_MASTER
+                and item.brief.required_visible_text
+            )
             and any(
                 work.operation != AssetPlanOperation.TEXT_PLATE
                 for work in item.work_items
@@ -563,7 +562,7 @@ def _reconcile_subject(
     unknown = sorted(selected_ids - set(work_by_id))
     if unknown:
         raise AssetPlanReconcileError(
-            "UNKNOWN_WORK_ITEM: " + ", ".join(unknown)
+            f"UNKNOWN_WORK_ITEM: item {item.id} has no work item " + ", ".join(unknown)
         )
     canonical = work_by_id[canonical_work_item_id]
     if canonical.operation in {
@@ -719,9 +718,9 @@ def _physical_brief(
 
 
 def _plate_item(spec: AssetPlanTextPlateSpec) -> AssetPlanItem:
-    visible_text = ([spec.title] if spec.title is not None else []) + list(
-        spec.exact_lines
-    )
+    request = spec.to_compose_request(size=spec.size, descriptor=spec.name)
+    visible_text = (request.content_state.required_visible_text if request.base_version_id is not None
+        and request.content_state is not None else request.required_visible_text())
     return AssetPlanItem(
         id=spec.item_id,
         disposition=AssetPlanDisposition.ANCHOR,
@@ -754,12 +753,8 @@ def _plate_item(spec: AssetPlanTextPlateSpec) -> AssetPlanItem:
                 ),
                 size=spec.size,
                 review_purpose=AssetReviewPurpose.CANONICAL_MASTER,
-                text_plate_intent=AssetPlanTextPlateIntent(
-                    background_color=spec.background_color,
-                    foreground_color=spec.foreground_color,
-                    title=spec.title,
-                    exact_lines=list(spec.exact_lines),
-                    layout_description=spec.layout_description,
+                text_plate_intent=AssetPlanTextPlateIntent.model_validate(
+                    spec.model_dump(include=set(AssetPlanTextPlateIntent.model_fields))
                 ),
             )
         ],
@@ -773,9 +768,10 @@ def reconcile_asset_plan_execution_contract(
     """Compile one Agent-authored semantic reconciliation into a valid plan."""
 
     item_by_id = {item.id: item.model_copy(deep=True) for item in current.items}
-    global_work_ids = {
-        work.id for item in current.items for work in item.work_items
+    work_item_owners = {
+        work.id: item.id for item in current.items for work in item.work_items
     }
+    global_work_ids = set(work_item_owners)
     normalized_layout_item_ids: list[str] = []
     canonicalized_item_ids: list[str] = []
     canonical_work_item_ids: list[str] = []
@@ -786,6 +782,19 @@ def reconcile_asset_plan_execution_contract(
         if item is None:
             raise AssetPlanReconcileError(
                 f"UNKNOWN_ITEM: {subject.item_id}"
+            )
+        outside_subject = [
+            f"{work_id} belongs to item {work_item_owners[work_id]}"
+            for work_id in [subject.canonical_work_item_id, *subject.supplemental_work_item_ids]
+            if work_id in work_item_owners and work_item_owners[work_id] != item.id
+        ]
+        if outside_subject:
+            raise AssetPlanReconcileError(
+                f"WORK_ITEM_OUTSIDE_SUBJECT: subject item {item.id}; "
+                + "; ".join(outside_subject)
+                + ". Reconcile only selects this item's own work_items. "
+                "Use artifact.patch_asset_plan_fields for explicit cross-item "
+                "reference changes; this operation does not move work items."
             )
         reconciled = _reconcile_subject(
             item,

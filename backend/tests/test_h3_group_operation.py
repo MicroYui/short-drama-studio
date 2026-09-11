@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import json
+import os
 from pathlib import Path
+
+from PIL import Image
+import pytest
 
 from short_drama.agent_runtime.artifact_resolver import ProjectArtifactResolver
 from short_drama.agent_runtime.models import ArtifactRef
@@ -20,6 +25,7 @@ from short_drama.tools.contracts import ToolCallStatus
 from short_drama.video_inspection import selected_generation_reference_ids, semantic_reference_entries
 from tests.test_h3_generation_unit_language import _fixture
 from tests.test_h3_context_ir import FakeIR, due
+from tests.test_short_drama_h3 import FakeH3Client
 
 
 def test_prepare_and_restart_enqueue_keep_one_language_result_route_and_real_task(tmp_path: Path) -> None:
@@ -218,6 +224,84 @@ def test_current_selected_draft_reference_is_resolved_without_copying_media_ids(
     assert saved.resolved_media_inputs == [media]
     assert len(fake.calls) == 1
     assert service.repository.list_tasks(document.project.id) == []
+
+
+@pytest.mark.parametrize("stale_source_exists", [True, False])
+def test_prepare_tracks_canonical_local_files_before_cache_and_compilation(
+    tmp_path: Path, stale_source_exists: bool,
+) -> None:
+    service, language, document, _generation, unit, _request = _fixture(tmp_path)
+    video = FakeH3Client()
+    service = ShortDramaService(database_path=service.repository.database_path, workspace_root=service.workspace_root,
+        language_provider_factory=lambda _key, _url: language, h3_client_factory=lambda _key: video)
+    service.update_h3_config(H3ProviderConfigUpdate(api_key="test-token"))
+    old_path = tmp_path / "previous-source.png"
+    if stale_source_exists:
+        Image.new("RGB", (64, 96), "gray").save(old_path)
+    media: list[H3MediaInput] = []
+    for index, asset in enumerate(reversed(document.assets[:2])):
+        version = asset.versions[0]
+        path = tmp_path / f"actual-{index}.png"
+        Image.new("RGB", (96, 144), (40 + index * 80, 50, 100)).save(path)
+        version.local_path, version.external_url = str(path), None
+        version.media_type, version.approval_status, version.freshness = AssetMediaType.IMAGE, ApprovalStatus.DRAFT, Freshness.CURRENT
+        asset.current_version_id = version.id
+        item = H3MediaInput(kind=H3MediaKind.IMAGE, role=H3MediaRole.REFERENCE_IMAGE,
+            source=H3MediaSource(local_path=str(path)), asset_version_id=version.id,
+            subject_asset_id=asset.id, reference_alias=f"actor-{index}")
+        media.append(item)
+        document.shots[0].references.append(ShotReferenceCue(subject_asset_id=asset.id,
+            asset_version_id=version.id, alias=f"actor-{index}", purpose="Preserve this selected identity"))
+    for reference_plan in document.reference_plan:
+        if reference_plan.shot_id in unit.shot_ids:
+            reference_plan.bindings = []
+    service.repository.save_project(document)
+    language.output_text = build_h3_generation_unit_prompt(document, unit, document.shots[:2],
+        route=VideoGenerationRoute.REFERENCE, media_inputs=media)
+    request = H3GroupOperationRequest(shot_id=unit.shot_ids[0], resolution="2K", aspect_ratio="9:16",
+        route=VideoGenerationRoute.REFERENCE, enqueue=False,
+        media_inputs=[item.model_copy(update={"source": H3MediaSource(local_path=str(old_path))}) for item in media])
+    prepared = service.prepare_h3_group(document.project.id, request)
+    assert prepared.status == "PREPARED", prepared.error
+    operation = service.repository.get_h3_group_operation(prepared.operation_id)
+    assert operation is not None and prepared.route_plan_id is not None
+    assert operation.input_context["media_inputs"] == [item.model_dump(mode="json") for item in media]
+    assert operation.input_context["media_file_states"] == [{
+        "path": str(Path(item.source.local_path or "").resolve()),
+        "size": Path(item.source.local_path or "").stat().st_size,
+        "modified_ns": Path(item.source.local_path or "").stat().st_mtime_ns,
+    } for item in media]
+    assert operation.resolved_media_inputs == media
+    assert prepared.input_strategy["resolution"] == "2K" and prepared.input_strategy["aspect_ratio"] == "9:16"
+    read = service.tool_registry.invoke("route.get_h3_plan", {"project_id": document.project.id, "plan_id": prepared.route_plan_id})
+    assert read.status == ToolCallStatus.SUCCEEDED and read.output is not None
+    plan = service.get_h3_production_route_plan(document.project.id, prepared.route_plan_id).plan
+    assert read.output == {"plan": plan.model_dump(mode="json")}
+    assert plan.decisions[0].media_inputs == media and plan.decisions[0].prompt == language.output_text
+    assert plan.decisions[0].resolution == "2K" and plan.decisions[0].aspect_ratio == "9:16"
+    payload = json.loads(language.calls[0][1])
+    assert payload["model_lock"]["resolution"] == "2K" and payload["aspect_ratio"] == "9:16"
+    # A stale caller path is neither the actual compiler input nor a dependency.
+    Image.new("RGB", (80, 100), "red").save(old_path)
+    repeated = service.prepare_h3_group(document.project.id, request)
+    assert repeated.operation_id == prepared.operation_id and len(language.calls) == 1
+    actual = Path(media[0].source.local_path or "")
+    previous = actual.stat()
+    Image.new("RGB", (100, 150), "blue").save(actual)
+    os.utime(actual, ns=(previous.st_atime_ns, previous.st_mtime_ns + 1_000_000))
+    changed = service.prepare_h3_group(document.project.id, H3GroupOperationRequest(operation_id=prepared.operation_id))
+    assert changed.status == "INPUTS_CHANGED" and len(language.calls) == 1
+    fresh = service.prepare_h3_group(document.project.id, request)
+    assert fresh.status == "PREPARED" and fresh.operation_id != prepared.operation_id
+    assert len(language.calls) == 2
+    actual.unlink()
+    missing = service.prepare_h3_group(document.project.id, H3GroupOperationRequest(operation_id=fresh.operation_id))
+    assert missing.status == "BLOCKED" and str(actual) in (missing.error or "")
+    assert len(language.calls) == 2
+    assert prepared.task_ids == fresh.task_ids == []
+    assert service.repository.list_tasks(document.project.id) == []
+    assert service.repository.list_provider_runs(document.project.id) == []
+    assert video.submitted_requests == []
 
 
 def test_official_compiler_pending_operation_resumes_after_restart_without_language_or_duplicate_submit(tmp_path: Path) -> None:

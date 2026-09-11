@@ -31,6 +31,7 @@ from short_drama.providers.minimax_h3_client import (
     H3DefiniteRequestError, H3SubmissionUnknown, H3TransientError, encode_h3_media_data_uri,
 )
 from short_drama.providers.minimax_h3_compiler import compile_h3_request
+from short_drama.providers.h3_output_format import h3_prompt_document, resolve_h3_output_format
 from short_drama.studio_references import assert_generation_references
 from short_drama.studio_trace import record_trace
 
@@ -127,10 +128,10 @@ class OfficialH3ContextIRClient:
 
 
 def build_context_ir_request(source_text: str, *, route: VideoGenerationRoute, duration: int,
-    media_inputs: list[H3MediaInput], resolve_url: Callable[[H3MediaInput], str]) -> H3ContextIRRequest:
+    media_inputs: list[H3MediaInput], resolve_url: Callable[[H3MediaInput], str], aspect_ratio: str | None = None) -> H3ContextIRRequest:
     # Reuse mode/count/file validation and the exact ordered H3 content serialization.
     video = compile_h3_request(route=route, prompt=source_text, duration_seconds=duration,
-        media_inputs=media_inputs, resolve_url=resolve_url)
+        media_inputs=media_inputs, resolve_url=resolve_url, aspect_ratio=aspect_ratio)
     return H3ContextIRRequest(content=video.content, duration=duration, ratio=video.ratio or "adaptive")
 
 
@@ -241,7 +242,11 @@ def compile_h3_context_ir(service: ShortDramaService, project_id: str, request: 
         assert_generation_references(document, shot, media)
     if request.source_prompt is not None:
         raise ValueError("Context IR consumes canonical source facts directly; select the language compiler for an existing compiled-prompt revision")
+    resolution, aspect_ratio = resolve_h3_output_format(route=request.route, resolution=request.resolution or unit.resolution or "768P",
+        aspect_ratio=request.aspect_ratio, default_aspect_ratio=spec.aspect_ratio)
+    document = h3_prompt_document(document, route=request.route, aspect_ratio=aspect_ratio)
     _instructions, input_text = build_generation_unit_language_prompt_input(document, unit, shots, route=request.route,
+        resolution=resolution, aspect_ratio=aspect_ratio,
         duration_seconds=duration, production_spec=spec, media_inputs=media, method_skill_ids=request.method_skill_ids,
         revision_instructions=request.revision_instructions,
         actual_previous_media_boundary=service._previous_adopted_media_boundary(document, shots[0].id))  # pyright: ignore[reportPrivateUsage]
@@ -275,12 +280,13 @@ def compile_h3_context_ir(service: ShortDramaService, project_id: str, request: 
     try:
         raw = advance_context_ir(client=actual_client, cache_directory=service.workspace_root / "h3-context-ir",
             identity=identity, retry_failed=retry_failed,
-            build_request=lambda: build_context_ir_request(source, route=request.route, duration=duration, media_inputs=media, resolve_url=resolve_url))
+            build_request=lambda: build_context_ir_request(source, route=request.route, duration=duration, media_inputs=media, resolve_url=resolve_url, aspect_ratio=aspect_ratio))
     except (H3SubmissionUnknown, H3TransientError, H3DefiniteRequestError) as exc:
         raise ProviderOperationError(str(exc)) from exc
     prompt = normalize_language_prompt(raw, document, route=request.route, duration_seconds=duration, media_inputs=media, generation_unit=True)
     notes = validate_language_generation_unit_prompt(prompt, document, unit, shots, route=request.route, duration_seconds=duration, media_inputs=media)
     return LanguagePromptCompileResponse(provider="minimax-official-context-ir", model="MiniMax-H3", reasoning_effort="provider-managed",
+        resolution=resolution, aspect_ratio=aspect_ratio,
         candidate_id=f"{request.route.value.lower().replace('_', '-')}:{unit.id}", generation_plan_document_id=request.generation_plan_document_id,
         generation_plan_version_id=request.generation_plan_version_id, generation_unit_id=unit.id, shot_ids=list(unit.shot_ids),
         method_skill_ids=list(request.method_skill_ids), media_inputs=media, route=request.route, duration_seconds=duration,

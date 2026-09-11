@@ -5,6 +5,7 @@ import type { StudioEvent, StudioJob, StudioScope, StudioWorker } from './studio
 import { StudioApi } from './studio-api'
 import { StudioTeam } from './StudioTeam'
 import { StudioGenerationDraft } from './StudioGenerationDraft'
+import { StudioMediaTasks } from './StudioMediaTasks'
 
 const statusLabels: Record<StudioJob['status'], string> = { queued: '准备开始', running: '正在制作', retrying: '正在恢复连接', pausing: '完成当前步骤后暂停', paused: '已暂停', waiting_user: '等待你的补充', completed: '已完成', failed: '需要处理后继续' }
 
@@ -106,8 +107,9 @@ export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false,
     <div className="sd-agent-scroll" ref={scroll} onScroll={event => { const element = event.currentTarget; nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100 }}>
       {!messages.length && <div className="sd-agent-welcome"><span className="sd-agent-welcome-icon"><Sparkles size={22} /></span><h3>我们来做一部作品。</h3><p>告诉我这次想完成什么。你也可以选中某个场次、镜头或资产，让我定向修改。</p><small>要求只写剧本时，我会写完停下。要求成片时，我会继续推进制作。</small></div>}
       {messages.map(message => <div key={message.id} className={`sd-chat-message ${message.kind === 'chat.user' ? 'sd-chat-user' : 'sd-chat-assistant'}`}><div className="sd-chat-label">{message.kind === 'chat.user' ? '你' : '制作助手'}<time>{new Date(message.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</time></div><ChatText text={textField(message, 'text')} projectId={projectId} onError={onError} /></div>)}
-      {job && <div className={`sd-job-card sd-job-${job.status}`}><div className="sd-job-heading">{active ? <Loader2 size={16} className="sd-spin" /> : job.status === 'completed' ? <Check size={16} /> : <span className="sd-status-dot" />}<strong>{job.status === 'waiting_user' && pendingChanges > 0 ? '等待审阅修改' : statusLabels[job.status]}</strong></div><p>{active ? currentAction.split('\n')[0].slice(0, 145) : job.error || job.objective}</p>
+      {job && <div className={`sd-job-card sd-job-${job.status}`}><div className="sd-job-heading">{active ? <Loader2 size={16} className="sd-spin" /> : job.status === 'completed' ? <Check size={16} /> : <span className="sd-status-dot" />}<strong>{job.status === 'waiting_user' && pendingChanges > 0 ? '等待审阅修改' : statusLabels[job.status]}</strong></div><p>{active ? currentAction.split('\n')[0].slice(0, 145) : job.error || job.current_goal || job.objective}</p>
         {(job.pending_messages ?? []).length > 0 && <small>已收到你的新要求，当前步骤结束后处理。</small>}
+        <StudioMediaTasks events={jobEvents} />
         <StudioTeam workers={workers} events={jobEvents} job={job} />
         {pendingChanges > 0 && <button className="sd-review-callout" onClick={onReview}><span><strong>{pendingChanges} 处修改等待审阅</strong><small>查看前后对照，逐项接受</small></span><ChevronDown size={17} /></button>}
         <details className="sd-task-detail"><summary>制作任务 <ChevronDown size={13} /></summary>{tasks.slice(-9).map(event => <div key={event.id}><span className={textField(event, 'status') === 'FAILED' ? 'sd-danger-dot' : 'sd-task-dot'} /><p>{actionLabel(event)}<small>{taskStatus(event, Boolean(active))}</small></p></div>)}

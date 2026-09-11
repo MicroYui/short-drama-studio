@@ -476,7 +476,13 @@ class AudioInspector:
                 "No audio semantic service is configured; signal, subtitle, and duration checks "
                 "completed, while transcript and voice identity remain UNKNOWN."
             )
-        elif semantic_attempts > 0 and semantic_failures == semantic_attempts:
+        elif semantic_attempts == 0:
+            semantic_status = SemanticReviewStatus.UNAVAILABLE
+            warnings.append(
+                "No usable script-linked dialogue windows were transcribed. Signal checks remain available; "
+                "use audio.transcribe_native to observe native speech before creating first captions."
+            )
+        elif semantic_failures == semantic_attempts:
             semantic_status = SemanticReviewStatus.FAILED
             warnings.append(
                 "Every dialogue semantic check failed; technical audio evidence remains usable."

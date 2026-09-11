@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from threading import Thread
@@ -14,6 +15,7 @@ from uuid import uuid4
 
 import imageio_ffmpeg
 from pydantic import JsonValue
+from short_drama.export_dimensions import source_output_dimensions
 from short_drama.media import probe_media_with_ffmpeg
 from short_drama.studio_editorial import EditorProject, EditorTimeline, validate_editorial
 from short_drama.studio_models import StudioExport, StudioExportRequest
@@ -72,6 +74,46 @@ def inspect_export(service: ShortDramaService, project_id: str, export_id: str |
         "review_scope": "实际解码、尺寸、时长、帧率与音轨检查；不等于模型审美或剧情审校。"}
 
 
+def _selected_video_dimensions(project: EditorProject) -> list[tuple[int, int]]:
+    """Probe the same active source selection consumed by studio-export-cli."""
+    timeline = next(item for item in project.timelines if item.id == project.activeTimelineId)
+    has_solo = any(track.solo for track in timeline.tracks)
+    assets = {asset.id: asset for asset in project.assets}
+    sizes_by_path: dict[str, tuple[int, int]] = {}
+    for clip in timeline.clips:
+        track = timeline.tracks[clip.trackIndex]
+        if clip.type != "video" or clip.opacity <= 0 or not track.enabled or (has_solo and not track.solo):
+            continue
+        asset = assets[clip.assetId or ""]
+        source = cast(dict[str, JsonValue], asset.model_dump(mode="json"))
+        take_index = (clip.model_extra or {}).get("takeIndex")
+        takes = source.get("takes")
+        if (isinstance(take_index, int) and not isinstance(take_index, bool)
+                and isinstance(takes, list) and 0 <= take_index < len(takes)):
+            selected = takes[take_index]
+            if isinstance(selected, dict):
+                source = selected
+        path = source.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError(f"片段 {clip.id} 的实际视频来源缺少路径。")
+        if path not in sizes_by_path:
+            # Decode just the first frame for geometry. Full-stream validation
+            # already belongs to ingestion and the completed export check.
+            result = subprocess.run([
+                imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-i", path,
+                "-map", "0:v:0", "-frames:v", "1", "-f", "null", "-",
+            ], capture_output=True, text=True, check=False)
+            dimensions = re.findall(r"Video:.*?\b(\d{2,5})x(\d{2,5})\b", result.stderr)
+            if result.returncode != 0 or not dimensions:
+                raise ValueError(f"片段 {clip.id} 的实际视频尺寸不可读，无法确定跟随素材的导出尺寸。")
+            # The output stream also accounts for FFmpeg's display rotation.
+            width, height = (int(value) for value in dimensions[-1])
+            if width <= 0 or height <= 0:
+                raise ValueError(f"片段 {clip.id} 的视频尺寸无效。")
+            sizes_by_path[path] = (width, height)
+    return list(sizes_by_path.values())
+
+
 def start_export(service: ShortDramaService, project_id: str, request: StudioExportRequest, *, background: bool = True) -> StudioExport:
     with service.studio.lock:
         document = service.get_project(project_id).document
@@ -87,14 +129,29 @@ def start_export(service: ShortDramaService, project_id: str, request: StudioExp
             transitions = [extra.get(key, {}) for key in ("transitionIn", "transitionOut")]
             if clip.type in {"text", "adjustment"} or any(isinstance(item, dict) and cast(dict[str, object], item).get("type") not in (None, "none") for item in transitions):
                 raise ValueError("当前导出支持镜头、多轨、透明度、PNG图层、裁切、变速、翻转、声音和字幕。请移除尚未接通的文字层、调整层或转场；画面文字可使用字幕或PNG图版。")
+        aspect_ratio = document.project.aspect_ratio
+
+    # Actual file inspection can take time; don't hold the user's content lock.
+    if request.width is not None and request.height is not None:
+        width, height = request.width // 2 * 2, request.height // 2 * 2
+    else:
+        width, height = source_output_dimensions(_selected_video_dimensions(project), aspect_ratio)
+
+    with service.studio.lock:
+        document = service.get_project(project_id).document
+        if (document.editorial_timeline or {}).get("revision") != request.expected_revision:
+            raise StudioContentConflict("确认素材尺寸期间剪辑已改变，请导出当前保存的剪辑。")
+        if request.width is None and document.project.aspect_ratio != aspect_ratio:
+            raise StudioContentConflict("确认素材尺寸期间项目画幅已改变，请按当前画幅重新导出。")
         for old in document.studio_exports:
             if old.get("status") == "running":
-                if old.get("editorial_revision") == request.expected_revision:
+                if (old.get("editorial_revision") == request.expected_revision
+                        and old.get("width") == width and old.get("height") == height and old.get("fps") == request.fps):
                     return StudioExport.model_validate(old)
-                raise StudioContentConflict("另一份成片正在导出。完成后可以继续导出当前剪辑。")
+                raise StudioContentConflict("另一份内容或尺寸的成片正在导出。完成后可以继续导出当前剪辑。")
         record = StudioExport(id=f"editorial-export-{uuid4().hex[:12]}", project_id=project_id,
-            editorial_revision=request.expected_revision, width=request.width // 2 * 2,
-            height=request.height // 2 * 2, fps=request.fps, created_at=datetime.now(UTC).isoformat())
+            editorial_revision=request.expected_revision, width=width,
+            height=height, fps=request.fps, created_at=datetime.now(UTC).isoformat())
         _save(service, record)
     if background:
         Thread(target=_render, args=(service, project, request, record), daemon=True, name=record.id).start()

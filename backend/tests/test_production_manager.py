@@ -4041,7 +4041,7 @@ def test_language_planner_preloads_small_hot_set_and_discovers_long_tail(
     assert all(
         "input_schema" not in descriptor
         and "output_schema" not in descriptor
-        and "description" not in descriptor
+        and 0 < len(descriptor["description"]) <= 64
         for descriptor in first_payload["available_tools"]
     )
     assert set(second_payload["tool_schemas"]) == {*first_payload["tool_schemas"], "project.get"}
@@ -4458,7 +4458,7 @@ def test_language_specialist_receives_append_only_work_order_progress(
     assert all(
         "input_schema" not in descriptor
         and "output_schema" not in descriptor
-        and "description" not in descriptor
+        and 0 < len(descriptor["description"]) <= 64
         for descriptor in first_payload["available_tools"]
     )
     assert set(second_payload["tool_schemas"]) == {*first_payload["tool_schemas"], "project.get"}

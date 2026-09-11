@@ -22,12 +22,13 @@ const toolLabels: Record<string, string> = {
   'shot.replace_storyboard_draft_group': '调整分镜细节', 'shot.finalize_storyboard': '汇总本集分镜',
   'shot.get_storyboard': '读取完整分镜',
   'shot.save_current': '保存当前镜头', 'artifact.get_production_document': '读取制作内容',
-  'artifact.get_asset_planning_context': '查看人物与场景', 'artifact.create_asset': '建立资产',
+  'artifact.get_asset_planning_context': '查看人物与场景', 'artifact.create_asset': '建立资产', 'artifact.create_assets': '建立本批资产',
   'artifact.create_asset_plan': '保存素材安排', 'artifact.patch_asset_plan': '补充素材安排',
   'artifact.get_asset_plan': '读取已保存的素材安排', 'artifact.get_asset_plan_index': '查看素材进度',
   'artifact.get_asset_work_context': '读取本项素材与引用', 'artifact.patch_asset_plan_fields': '更新素材进度',
   'artifact.reconcile_asset_plan_execution_contract': '调整素材依赖', 'agent.get_tool_attempt': '查看上次操作结果',
   'image.enqueue': '提交图片生成', 'image.advance': '生成参考图片', 'image.compose_reference_sheet': '整理多视图',
+  'image.crop': '裁切参考图', 'video.extract_frame': '提取视频参考帧',
   'image.compose_text_plate': '排版画面文字', 'project.bind_output_slot': '保存制作结果',
   'image.capability': '查看图片生成能力', 'image.list': '查看图片任务',
   'qa.analyze_source_image': '观察参考图', 'qa.inspect_asset_version': '检查实际图片',
@@ -39,6 +40,8 @@ const toolLabels: Record<string, string> = {
   'route.compile_generation_plan': '整理视频生成组', 'route.get_generation_plan': '读取视频生成组',
   'route.get_generation_unit_context': '读取本组镜头与实际素材', 'route.prepare_h3_group': '准备当前镜头组制作',
   'audio.align_subtitles': '对齐当前剪辑字幕', 'audio.inspect_episode': '检查当前原声与对白',
+  'audio.transcribe_native': '识别实际原声对白', 'timeline.edit_clips': '修改片段与字幕',
+  'audio.inspect_manifest': '检查实际原声与对白',
   'route.get_h3_plan': '读取已保存的视频路线', 'route.list_h3_plans': '查看已有视频路线',
   'route.list_h3_runs': '查看已有视频任务', 'route.get_h3_run': '读取视频生成记录',
   'route.preview_h3_probe': '核对视频输入', 'video.select_take': '采用镜头视频',
@@ -89,11 +92,11 @@ export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; 
       const elapsed = started ? Math.max(0, Math.floor((now - Date.parse(started.created_at)) / 1000)) : 0
       const status = done ? '已完成' : review ? '等待指定修改审阅' : polling ? '等待生成结果' : job.status === 'paused' ? '已暂停' : running ? '进行中' : worker.next_owner === 'LEADER_REPLAN' ? '等待调整' : active && ['WORKER_DECISION', 'WORKER_TOOL'].includes(worker.next_owner ?? '') ? '已就绪' : '等待继续'
       const completed = done ? [...workerEvents].reverse().find(event => event.kind === 'worker.updated' && stringField(event, 'status') === 'COMPLETED') : undefined
-      const detail = worker.summary || completed && stringField(completed, 'summary') || worker.latest_reason || worker.objective
+      const detail = done ? worker.summary || completed && stringField(completed, 'summary') || worker.latest_reason || worker.objective : worker.latest_reason || worker.objective
       const pollSeconds = worker.waiting_until ? Math.max(0, Math.ceil((Date.parse(worker.waiting_until) - now) / 1000)) : 0
       const skills = workerEvents.filter(event => event.kind === 'skills.loaded')
       return <article className={`sd-team-worker ${running ? 'is-running' : ''} ${done ? 'is-done' : ''}`} key={worker.id}>
-        <button className="sd-team-worker-head" aria-expanded={expanded === worker.id} onClick={() => setExpanded(expanded === worker.id ? null : worker.id)}><span className="sd-team-role-icon"><Icon size={16} /></span><strong>{descriptor.label}</strong><small>{running ? <Loader2 size={11} className="sd-spin" /> : done ? <Check size={12} /> : null}{status}</small><ChevronDown size={13} /></button>
+        <button className="sd-team-worker-head" aria-expanded={expanded === worker.id} onClick={() => setExpanded(expanded === worker.id ? null : worker.id)}><span className="sd-team-role-icon"><Icon size={16} /></span><strong>{worker.role.trim() || descriptor.label}</strong><small>{running ? <Loader2 size={11} className="sd-spin" /> : done ? <Check size={12} /> : null}{status}</small><ChevronDown size={13} /></button>
         <p className="sd-team-objective" title={worker.objective}>{detail}</p>
         <div className="sd-team-current"><span className={running ? 'sd-team-activity-dot' : ''} /><span>{review ? '相关内容审阅后继续，无关分工照常推进' : polling ? (pollSeconds ? `下次检查 ${pollSeconds} 秒后` : '准备查收生成结果') : deciding ? '组织内容与下一步' : labelTool(last ? stringField(last, 'tool_name') : worker.latest_tool || '准备任务')}</span><time>{done && worker.completed_artifact_count ? `已登记 ${worker.completed_artifact_count} 项结果` : running && elapsed > 2 ? `${elapsed}s` : `${worker.tool_turns} 次操作`}</time></div>
         {worker.latest_error && <p className="sd-team-error" role="status">{worker.latest_error}</p>}

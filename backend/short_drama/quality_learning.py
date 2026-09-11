@@ -13,6 +13,7 @@ from short_drama.models import (
     QaFailureCategory,
     Take,
 )
+from short_drama.providers.h3_output_format import H3_ASPECT_RATIOS, H3_RESOLUTIONS
 
 
 class CapabilityRisk(DomainModel):
@@ -39,7 +40,15 @@ class RegressionCase(DomainModel):
 class H3CapabilityProfileResponse(DomainModel):
     provider: str = "minimax"
     model: str = "MiniMax-H3"
-    version: str = "2026-08-17.1"
+    version: str = "2026-09-12.1"
+    supported_resolutions: list[str] = Field(default_factory=lambda: list(H3_RESOLUTIONS))
+    supported_aspect_ratios: list[str] = Field(default_factory=lambda: list(H3_ASPECT_RATIOS))
+    output_format_guidance: str = (
+        "DIRECT requires a fixed aspect ratio. REFERENCE accepts fixed/adaptive ratio. "
+        "FRAME_FIRST/FRAME_LAST/FRAME_FIRST_LAST use omitted/adaptive ratio and the actual frame shape; "
+        "prepare the intended frame shape before submission. Default resolution is 768P; 2K is optional. "
+        "Resolution labels do not specify exact output pixels in the current AceData API."
+    )
     project_id: str | None = None
     risks: list[CapabilityRisk]
     regression_cases: list[RegressionCase]

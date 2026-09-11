@@ -8,6 +8,7 @@ from short_drama.image_capabilities import ImageProviderCapabilityResponse
 from short_drama.image_models import (
     AgentImageTaskCreateRequest,
     AssetMutationResponse,
+    AssetImageCropRequest,
     AssetReferenceSheetComposeRequest,
     AssetTextPlateComposeRequest,
     ImageNotSubmittedResolutionRequest,
@@ -29,6 +30,10 @@ from short_drama.tools.registry import ToolRegistry
 
 class ImageToolService(Protocol):
     def get_image_provider_capability(self) -> ImageProviderCapabilityResponse: ...
+
+    def crop_asset_image(
+        self, project_id: str, asset_id: str, request: AssetImageCropRequest,
+    ) -> AssetMutationResponse: ...
 
     def compose_asset_reference_sheet(
         self,
@@ -86,6 +91,12 @@ class ImageReferenceSheetComposeInput(ToolModel):
     project_id: str
     asset_id: str
     request: AssetReferenceSheetComposeRequest
+
+
+class ImageCropInput(ToolModel):
+    project_id: str
+    asset_id: str
+    request: AssetImageCropRequest
 
 
 class ImageTextPlateComposeInput(ToolModel):
@@ -159,6 +170,28 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
         )
     )
 
+    def crop_image(request: ImageCropInput) -> ToolExecution[AssetMutationResponse]:
+        result = service.crop_asset_image(request.project_id, request.asset_id, request.request)
+        return ToolExecution(output=result, artifact_refs=(
+            ArtifactRef(project_id=request.project_id, artifact_type="asset", artifact_id=result.asset.id),
+            ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=result.version.id,
+                        version=result.version.version),
+        ))
+
+    registry.register(ToolSpec(
+        id="image.crop", version=1, category=ToolCategory.IMAGE,
+        description=(
+            "从已选本地图片裁出清晰脸部、单个视图、场景区域或道具，直接登记目标 Asset 的新版本。"
+            "region 是图片按 EXIF 转正后的归一化 x/y/width/height；使用真实看过的区域，不猜测五官位置。"
+            "保留原始像素与透明度，不调用 Provider、不放大、不重绘、不改变原图或当前母版。"
+            "返回 image_crop 的真实源尺寸和像素范围。低分辨率原脸不会因裁切增加细节；"
+            "需要时用 qa.inspect_asset_version 检查局部并将可用结果加入 ReferencePack。"
+        ),
+        effect=ToolEffect.WRITE, idempotent=False, input_model=ImageCropInput,
+        output_model=AssetMutationResponse, handler=crop_image,
+        tags=frozenset({"image", "asset", "crop", "local", "identity", "reference"}),
+    ))
+
     def compose_reference_sheet(
         request: ImageReferenceSheetComposeInput,
     ) -> ToolExecution[AssetMutationResponse]:
@@ -231,6 +264,8 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
                     artifact_id=result.version.id,
                     version=result.version.version,
                 ),
+                *(ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=reference.asset_version_id)
+                    for reference in result.version.derivation_references),
             ),
         )
 
@@ -240,11 +275,25 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             version=1,
             category=ToolCategory.IMAGE,
             description=(
-                "为 presentation_mode=SCREEN_CONTENT_PLATE 的资产在本地"
-                "确定性排版菜价、金额、姓名、标题或文件条款。title "
-                "与 exact_lines 的合并文案须保持 brief.required_visible_text 的字符和顺序，"
-                "可在标题、正文之间重新分行。不同文案可以分别保存为 TEXT_PLATE，"
-                "本 Tool 不调用图像 Provider，输出可追溯的 PNG DRAFT。"
+                "为 SCREEN_CONTENT_PLATE 或已有 PHYSICAL_MASTER PROP 的准确表面内容在本地"
+                "确定性排版菜价、金额、姓名、标题或文件条款。文案须保持 "
+                "brief.required_visible_text 的词句、数字与顺序；空行、行末标签冒号和尾随装饰横线不要求改 brief，"
+                "若同一资产的后续剧情状态需新增姓名等文字，显式提供 content_state.name 和该状态完整的 "
+                "required_visible_text：保留 brief 每项固定文字为独立条目并按原顺序排列，新增文字另列条目。"
+                "实际渲染逐字匹配该状态；状态只保存在本候选 AssetTextPlate，不修改全局 brief 或旧候选。"
+                "已有字版仅新增姓名等文字时，传 base_version_id 与 append_text_blocks："
+                "复制这份真实可用 PNG，只画新增块；完整 content_state.required_visible_text 包含原文字和新增文字。"
+                "该模式继承实际尺寸、颜色、旧文字和横线，size等旧布局参数不覆盖基图；不要重传 title/exact_lines/text_blocks/lines。"
+                "原样保留追加区域之外的像素，支持旧式流式字版；不能擦除或移动原内容，不把摄影当字版。"
+                "parent_version_id 仍仅表示来源关系，不会自动复制版式；返回的 derivation_references 指向实际复制的 base。"
+                "正文内部标点、标识符、金额小数、正负号、百分号与姓名仍校验。title/exact_lines 是简易流式排版，"
+                "exact_lines 的空字符串保留空行。精确版式改用 text_blocks（不要同时给 title/exact_lines）："
+                "每块给 text、归一化 content_box=[x,y,width,height]、实际像素 font_size 与对齐，"
+                "无隐含边距，越界/放不下会明确报块索引，不自动截字。lines 的归一化 start/end、像素 width、"
+                "可选 color 绘制签字线或分隔线，不把下划线长度当剧情文字。不同文案可以分别保存为 TEXT_PLATE，"
+                "本 Tool 不调用图像 Provider，输出 PNG DRAFT。物理道具的字版保存为同Asset下 "
+                "text_plate.purpose=PHYSICAL_SURFACE_CONTENT 候选，不改变母资产brief/current/canonical，"
+                "不冒充摄影母图；使用返回的精确version引用即可，不必临时改成SCREEN_CONTENT_PLATE或另建假载体。"
                 "background_color=#00000000 保留透明通道；content_box 明确指定"
                 "归一化 x/y/宽/高文字区域，text_align、vertical_align 和描边参数"
                 "控制实际排版，layout_description 只记录说明。透明图版可通过"
@@ -275,8 +324,12 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             category=ToolCategory.IMAGE,
             description=(
                 "在 Asset/brief 和本次要生成的精确视图、状态或区域已明确后，"
-                "为一个输出版本创建图像任务。GENERATE 不带输入图；从主图派生"
-                "视角/换装/状态通常用 EDIT，并显式绑定父版本与参考图。"
+                "为一个输出版本创建图像任务。GENERATE 不带输入图或父版本；"
+                "REFERENCE_GENERATE 使用有序参考图且省略 parent_version_id，"
+                "可给已有 Asset 创建新候选；显式指定目标 parent_version_id 时"
+                "必须用 EDIT，并保留实际参考图。计划 operation 表达制作意图，"
+                "实际选择目标父图后按此合同映射为 EDIT；依赖、身份参考、"
+                "primary_input 或已有 Asset 不会自动成为 target parent。"
                 "request.layout_profile 只描述本次输出；单张脸部、正面、"
                 "侧面、背面素材使用 LIGHTWEIGHT_SINGLE，不继承 Asset.brief "
                 "中最终参考卡的多区布局。"
@@ -285,9 +338,9 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
                 "一图生成标准卡时，已登记的布局 guide 必须作为真实参考"
                 "传入才能在 Prompt 中声称“图N是布局参考”；没有实际"
                 "LAYOUT_GUIDE reference_input 就不执行或冒充官方标准一图路线。"
-                "已有图像提供可用身份时，定向修视图、裁切、排版或局部状态"
+                "已有图像提供可用身份时，定向修视图或局部状态"
                 "优先用 EDIT，并将该图作为 parent 和 identity reference；不用无参考"
-                "GENERATE 冒充“保持原人物”。像素级几何改用"
+                "GENERATE 冒充“保持原人物”。已有图只需裁脸/裁单格时用本地 image.crop；像素级排版改用"
                 "分视图后调用 image.compose_reference_sheet。"
                 "对只有后续文字不同的同规格重复载体，不要求 Provider 一次"
                 "生成多件像素级一致的物件；先生成单件干净物理母版，"

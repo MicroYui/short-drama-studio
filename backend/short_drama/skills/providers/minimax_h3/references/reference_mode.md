@@ -15,9 +15,13 @@ REFERENCE / Ref2VA 使用六个字段，并严格保持此顺序：
 
 Prompt 中还要区分“上传的源文件”和“从源文件提取的可复用可见内容”：
 
-- `REFERENCE_IMAGE` 上传后仍由 `<Picture N>` 追踪实际文件，但角色、场景、道具、服饰或风格等可复用内容必须定义为 `<Subject N>`，并说明它从哪个 `<Picture N>` 提取。
+- `REFERENCE_IMAGE` 上传后仍由 `<Picture N>` 追踪实际文件。身份、外观、服饰等可复用内容定义为 `<Subject N>`；`image_reference_role=COMPOSITION/LAYOUT_GUIDE` 指定的具体画面或关键帧图保留 `<Picture N>`。服从 `route_media_bindings.prompt_label`，不能把构图图另造为一个人物或场景身份。
 - 只有图片本身就是当前镜头的首帧、关键帧、尾帧、编辑目标帧或构图锚点时，才在时间线中直接把 `<Picture N>` 当作具体画面。
 - `<Video N>` 和 `<Audio N>` 继续表示实际视频或音频源。当前 `REFERENCE_VIDEO` binding 仅把视频用作已声明的运动、时序、机位或连续性参考；需要稳定人物、物件或场景身份时，应另外绑定当前选中且可用的 `REFERENCE_IMAGE` 来建立 `<Subject N>`。
+
+构图图应说明它指导哪一镜、哪个时点的站位、视线、机位和物件初态，以及谁出现、谁不出现。多格关键帧图表示连续时点，不能生成成拼图或把所有格子的角色同时搬入画面。图数和格数由当前动作需要决定；人物卡清楚但现场空间未建立时，可以用现有图像工具派生一张完整现场图。已生成片段的实际状态可由 `video.extract_frame` 提取，并直接交给图像工具调整下一镜构图；源画面错脸、错道具或越轴时先修来源，不能因它是真实帧就继续继承。
+
+这些 Picture 在 REFERENCE 中只是软指导。若必须从一张已准备好的完整画面起拍，明确选择 `FRAME_FIRST`，只交 `first_frame`；当前 Provider 不支持把硬首帧/尾帧与人物、图像、视频或音频 reference 混在同次请求中。
 
 ## subject_definitions
 
@@ -60,15 +64,15 @@ Prompt 中还要区分“上传的源文件”和“从源文件提取的可复�
 
 ## 声音与音乐
 
-对白、动作声、环境声和参考声音的实际使用写入 `overall_soundscape`。若参考音频只用于声线，应明确不复制原文案；若用于具体音效，应说明其出现时机和画面来源。非叙事音乐单独写入 `non_diegetic_music`，无音乐时写 `N/A`。
+对白原文及随镜头发生的声音写入 `detailed_description`，`overall_soundscape` 汇总环境和物理声音，不重复对白。若参考音频只用于声线，应明确不复制原文案；若用于具体音效，应说明其出现时机和画面来源。非叙事音乐单独写入 `non_diegetic_music`，无音乐时写 `N/A`。
 
 ## 提交前专项检查
 
 - 六个字段齐全且顺序正确；
 - 每个实际参考标签都被定义和使用；
-- `REFERENCE_IMAGE` 生成的 `<Subject N>` 已与源 `<Picture N>` 明确关联，后续镜头不再把源图整幅当成角色或场景；
+- 身份引用的 `<Subject N>` 与源 `<Picture N>` 明确关联；构图 Picture 的用途、适用时点和出场范围明确，不生成新的身份或意外拼图；
 - `retention_analysis` 同时说明保留、转移与不复制项；
 - 没有把参考背景、字幕、无关角色或原视频事件带进来；
 - 参考用途与 `route_media_bindings` 描述一致；
 - 对白原文、说话人和声音来源没有变化；
-- 总时长、9:16 画幅、开始状态和结束状态明确。
+- 总时长、本次目标画幅、开始状态和结束状态明确。

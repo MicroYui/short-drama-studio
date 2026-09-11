@@ -289,6 +289,12 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             "Use shot_id or clip_group_id; no manual plan IDs or prompt transfer. Defaults to preparation only; enqueue=true "
             "explicitly queues real H3 generation. Repeat/resume by operation_id reuses completed prompt/route/tasks. "
             "Existing selected bindings determine media unless an ordered media_inputs choice is supplied. "
+            "This preserves the chosen input strategy; it does not evaluate whether identity cards alone "
+            "can establish the planned space/action. Mark staged-frame/sheet references COMPOSITION/LAYOUT_GUIDE "
+            "in current shot cues or media_inputs. These are soft anchors in REFERENCE mode. "
+            "Choose FRAME_FIRST explicitly with a complete prepared first_frame image when a hard start "
+            "is needed; hard frame roles cannot mix with reference roles. Read get_generation_unit_context "
+            "or use image/video tools to prepare an appropriate frame when needed, without a mandatory extra LM step. "
             "For rework identify source_take_id/source_repair_id; this creates a whole affected-group candidate, never video inpainting. "
             "Blocked returns preserve exact phase and completed refs; retry_failed_step requests one retry."),
         effect=ToolEffect.EXTERNAL, idempotent=True, input_model=H3GroupOperationInput,
@@ -323,8 +329,9 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
         id="route.get_generation_unit_context", version=1, category=ToolCategory.ROUTE,
         description=(
             "Read one exact GenerationUnit's complete canonical shots, dialogue, timing, "
-            "production direction and visible Bible, plus approved current media candidates "
+            "production direction and visible Bible, plus current usable media candidates "
             "with real local_path/external_url, AssetVersion, subject, role, purpose and tags. "
+            "Current available DRAFT images can be selected directly; approval status is not a prerequisite. "
             "Use this before compile_h3_prompt; it replaces full Storyboard/AssetPlan reads "
             "for video preparation. Select the route and ordered media subset yourself. "
             "Read-only; no model, upload or H3 call."

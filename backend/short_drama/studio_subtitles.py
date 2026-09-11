@@ -35,7 +35,7 @@ def _saved_project(document: ProjectDocument) -> tuple[EditorProject, EditorTime
     return project, timeline, int(cast(int, saved.get("revision", 0)))
 
 
-def _native_sources(service: ShortDramaService, document: ProjectDocument, project: EditorProject,
+def native_audio_sources(service: ShortDramaService, document: ProjectDocument, project: EditorProject,
                     timeline: EditorTimeline) -> list[NativeSource]:
     assets = {asset.id: asset for asset in project.assets}
     clips = {clip.id: clip for clip in timeline.clips}
@@ -88,7 +88,7 @@ def _relevant_sources(sources: list[NativeSource], cues: list[EditorSubtitle]) -
     return [source for source in ordered if source.clip.id in selected]
 
 
-def _source_signature(sources: list[NativeSource]) -> list[dict[str, JsonValue]]:
+def native_source_signature(sources: list[NativeSource]) -> list[dict[str, JsonValue]]:
     result: list[dict[str, JsonValue]] = []
     for source in sources:
         stat = Path(source.path).stat()
@@ -105,7 +105,7 @@ def _cue_signature(cue: EditorSubtitle) -> tuple[str, float, float, int]:
     return cue.text, cue.startTime, cue.endTime, cue.trackIndex
 
 
-def _audio_snapshot(document: ProjectDocument, project: EditorProject, timeline: EditorTimeline,
+def native_audio_snapshot(document: ProjectDocument, project: EditorProject, timeline: EditorTimeline,
                     sources: list[NativeSource]) -> tuple[ProjectDocument, set[str]]:
     """Merge contiguous native windows before speed/volume processing, for ASR only."""
     groups: list[list[NativeSource]] = []
@@ -138,7 +138,7 @@ def align_editorial_native_subtitles(
     project, timeline, source_revision = _saved_project(document)
     if request.expected_editorial_revision is not None and request.expected_editorial_revision != source_revision:
         raise WorkflowConflictError(f"Current editorial revision is {source_revision}; read the selected captions before alignment")
-    sources = _native_sources(service, document, project, timeline)
+    sources = native_audio_sources(service, document, project, timeline)
     solo = any(track.solo for track in timeline.tracks)
     usable = [cue for cue in timeline.subtitles if timeline.tracks[cue.trackIndex].enabled
               and (not solo or timeline.tracks[cue.trackIndex].solo)]
@@ -156,8 +156,8 @@ def align_editorial_native_subtitles(
     relevant = _relevant_sources(sources, targets)
     if not relevant:
         raise WorkflowConflictError("Selected captions have no audible native Take audio; narration and music use their own timed-text workflow")
-    before_sources = _source_signature(relevant)
-    audio_document, clip_ids = _audio_snapshot(document, project, timeline, relevant)
+    before_sources = native_source_signature(relevant)
+    audio_document, clip_ids = native_audio_snapshot(document, project, timeline, relevant)
     prepared = editorial_audio_input(service, audio_document, utc_now(), native_only=True, clip_ids=clip_ids)
     assert prepared is not None
     manifest, _, _ = prepared
@@ -182,8 +182,8 @@ def align_editorial_native_subtitles(
             and (not current_solo or current_timeline.tracks[cue.trackIndex].solo)}
         if current_timeline.id != timeline.id or any(cue_id not in enabled_ids or _cue_signature(current_cues[cue_id]) != signature for cue_id, signature in target_signatures.items()):
             raise WorkflowConflictError("A selected caption changed during alignment; its current text and timing were preserved")
-        current_sources = _relevant_sources(_native_sources(service, current, current_project, current_timeline), [current_cues[cue_id] for cue_id in selected_ids])
-        if _source_signature(current_sources) != before_sources:
+        current_sources = _relevant_sources(native_audio_sources(service, current, current_project, current_timeline), [current_cues[cue_id] for cue_id in selected_ids])
+        if native_source_signature(current_sources) != before_sources:
             raise WorkflowConflictError("Relevant native audio changed during alignment; the current timeline was preserved")
         # Unselected captions may have changed while ASR ran. Refuse a new overlap,
         # while allowing unrelated subtitle, style, graphics and media edits.

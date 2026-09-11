@@ -13,6 +13,7 @@ from short_drama.models import (
     ExportRecord,
     GenerationTask,
     GenerationUnitShotWindow,
+    ImageReferenceRole,
     ProjectAggregate,
     QaStatus,
     QaIssue,
@@ -105,6 +106,12 @@ class H3MediaInput(DomainModel):
     reference_alias: str | None = Field(default=None, min_length=1, max_length=80)
     binding_purpose: str | None = Field(default=None, min_length=1, max_length=500)
     reference_tags: list[str] = Field(default_factory=list[str], max_length=12)
+    image_reference_role: ImageReferenceRole | None = Field(default=None, description=(
+        "The image's visual purpose, separate from the H3 transport role. "
+        "COMPOSITION or LAYOUT_GUIDE keeps a concrete Picture anchor in REFERENCE mode; "
+        "it is soft guidance and does not become a hard first_frame/last_frame input. "
+        "Omit for legacy reusable subject references."
+    ))
 
     @field_validator("reference_alias", mode="before")
     @classmethod
@@ -117,6 +124,8 @@ class H3MediaInput(DomainModel):
 
     @model_validator(mode="after")
     def validate_reference_metadata(self) -> H3MediaInput:
+        if self.image_reference_role is not None and self.kind != H3MediaKind.IMAGE:
+            raise ValueError("image_reference_role is only valid for image inputs")
         normalized_tags = [item.strip() for item in self.reference_tags if item.strip()]
         if normalized_tags != self.reference_tags or len(normalized_tags) != len(
             set(normalized_tags)
@@ -127,6 +136,8 @@ class H3MediaInput(DomainModel):
 
 class H3ProbeRequest(DomainModel):
     shot_id: str
+    resolution: str = "768P"
+    aspect_ratio: str | None = None
     route: VideoGenerationRoute = VideoGenerationRoute.DIRECT
     duration_seconds: int | None = Field(default=None, ge=4, le=15)
     prompt_override: str | None = Field(default=None, max_length=7000)
@@ -250,6 +261,8 @@ class H3VideoGuide(DomainModel):
 
 
 class H3ShotRoutePlan(DomainModel):
+    resolution: str = "768P"
+    aspect_ratio: str | None = None
     shot_id: str
     shot_sequence: int = Field(ge=1)
     generation_unit_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -383,8 +396,8 @@ class H3ProductionRoutePlan(DomainModel):
     input_voice_reference_revision: int = Field(default=0, ge=0)
     decisions: list[H3ShotRoutePlan] = Field(min_length=1)
     estimated_new_h3_seconds: int = Field(ge=0)
-    estimated_cost_usd: float = Field(ge=0.0)
-    estimated_cost_credits: float = Field(default=0.0, ge=0.0)
+    estimated_cost_usd: float | None = Field(default=None, ge=0.0)
+    estimated_cost_credits: float | None = Field(default=None, ge=0.0)
     warnings: list[str] = Field(default_factory=list[str], max_length=100)
     created_at: str
     updated_at: str
@@ -478,6 +491,8 @@ class H3ShotRouteDirective(DomainModel):
 
 
 class H3ProductionRoutePlanRequest(DomainModel):
+    resolution: str | None = None
+    aspect_ratio: str | None = None
     source_operation_id: str | None = Field(default=None, min_length=1)
     shot_ids: list[str] = Field(default_factory=list[str], max_length=500)
     generation_plan_document_id: str | None = Field(
@@ -698,6 +713,7 @@ class H3PricingSnapshot(DomainModel):
 
 
 class H3ProviderRun(DomainModel):
+    aspect_ratio: str | None = None
     id: str
     task_id: str
     project_id: str
@@ -742,6 +758,8 @@ class H3ProviderConfigUpdate(DomainModel):
 
 
 class H3ProviderConfigResponse(DomainModel):
+    supported_resolutions: list[str] = Field(default_factory=lambda: ["768P", "2K"])
+    supported_aspect_ratios: list[str] = Field(default_factory=lambda: ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"])
     provider: str = "minimax"
     model: str = "MiniMax-H3"
     base_url: str = "https://api.acedata.cloud"

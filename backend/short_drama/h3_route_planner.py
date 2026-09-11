@@ -38,12 +38,14 @@ from short_drama.models import (
     ApprovalStatus,
     AssetKind,
     AssetMediaType,
+    CharacterProfile,
     DirectorRepairDecision,
     DirectorRepairStrategy,
     DomainModel,
     EvidencePurpose,
     Freshness,
     GenerationTask,
+    ImageReferenceRole,
     ProjectDocument,
     QAReport,
     QaFailureCategory,
@@ -70,9 +72,12 @@ from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
     build_h3_generation_unit_prompt,
     build_h3_prompt,
+    validate_h3_audio_durations,
     validate_h3_probe,
 )
 from short_drama.providers.h3_prompt_skill import validate_h3_generation_unit_prompt_ir
+from short_drama.providers.h3_dialogue_spans import assert_complete_dialogue_request, generation_unit_dialogue_spans
+from short_drama.providers.h3_output_format import resolve_h3_output_format
 from short_drama.providers.openai_compatible_language_client import (
     LanguageProviderClient,
     LanguageProviderError,
@@ -167,7 +172,13 @@ def build_h3_production_route_plan(
     generation_plan_version_id: str | None = None,
     storyboard_document_id: str | None = None,
     storyboard_version_id: str | None = None,
+    resolution: str | None = None,
+    aspect_ratio: str | None = None,
 ) -> H3ProductionRoutePlan:
+    resolve_h3_output_format(route=VideoGenerationRoute.REFERENCE, resolution=resolution or "768P",
+        aspect_ratio=aspect_ratio, default_aspect_ratio=document.project.aspect_ratio)
+    if aspect_ratio is not None:
+        document = document.model_copy(update={"project": document.project.model_copy(update={"aspect_ratio": aspect_ratio})})
     if generation_units is not None:
         if shot_ids:
             raise RoutePlanningError(
@@ -175,6 +186,7 @@ def build_h3_production_route_plan(
             )
         return _build_h3_generation_unit_route_plan(
             document=document,
+            resolution=resolution, aspect_ratio=aspect_ratio,
             pricing=pricing,
             version=version,
             created_at=created_at,
@@ -201,6 +213,8 @@ def build_h3_production_route_plan(
     ]
     if not shots:
         raise RoutePlanningError("A production route plan requires at least one shot")
+    for shot in shots:
+        assert_complete_dialogue_request(document, [shot])
     directive_by_shot = {
         item.shot_id: item
         for item in (shot_directives or [])
@@ -401,6 +415,9 @@ def build_h3_production_route_plan(
         decisions.append(
             H3ShotRoutePlan(
                 shot_id=shot.id,
+                resolution=resolution or "768P",
+                aspect_ratio=resolve_h3_output_format(route=chosen.route, resolution=resolution or "768P",
+                    aspect_ratio=aspect_ratio, default_aspect_ratio=document.project.aspect_ratio)[1],
                 shot_sequence=shot.sequence,
                 input_script_version_id=document.project.current_script_version_id,
                 input_bible_version_id=document.project.current_bible_version_id,
@@ -449,8 +466,12 @@ def build_h3_production_route_plan(
     )
     if has_unresolved_route:
         planner += "+awaiting-agent-decision"
+    estimated_usd, estimated_credits = _route_plan_cost_estimate(
+        decisions, pricing, new_seconds, global_warnings
+    )
     return H3ProductionRoutePlan(
         id=f"h3-route-plan-{uuid4().hex}",
+        resolution=resolution or "768P",
         project_id=document.project.id,
         version=version,
         status=status,
@@ -460,11 +481,8 @@ def build_h3_production_route_plan(
         input_voice_reference_revision=document.project.voice_reference_revision,
         decisions=decisions,
         estimated_new_h3_seconds=new_seconds,
-        estimated_cost_usd=round(new_seconds * pricing.output_per_second, 6),
-        estimated_cost_credits=round(
-            new_seconds * pricing.billing_output_per_second,
-            6,
-        ),
+        estimated_cost_usd=estimated_usd,
+        estimated_cost_credits=estimated_credits,
         warnings=global_warnings,
         created_at=created_at,
         updated_at=created_at,
@@ -487,6 +505,8 @@ def _build_h3_generation_unit_route_plan(
     storyboard_document_id: str | None,
     storyboard_version_id: str | None,
     warnings: list[str],
+    resolution: str | None = None,
+    aspect_ratio: str | None = None,
 ) -> H3ProductionRoutePlan:
     if not generation_units:
         raise RoutePlanningError(
@@ -657,6 +677,9 @@ def _build_h3_generation_unit_route_plan(
         decisions.append(
             H3ShotRoutePlan(
                 shot_id=first_shot.id,
+                resolution=resolution or unit.resolution or "768P",
+                aspect_ratio=resolve_h3_output_format(route=chosen.route, resolution=resolution or unit.resolution or "768P",
+                    aspect_ratio=aspect_ratio, default_aspect_ratio=document.project.aspect_ratio)[1],
                 shot_sequence=first_shot.sequence,
                 generation_unit_id=unit.id,
                 clip_group_id=unit.clip_group_id,
@@ -702,8 +725,12 @@ def _build_h3_generation_unit_route_plan(
     )
     if unresolved:
         planner += "+awaiting-agent-decision"
+    estimated_usd, estimated_credits = _route_plan_cost_estimate(
+        decisions, pricing, new_seconds, warnings
+    )
     return H3ProductionRoutePlan(
         id=f"h3-route-plan-{uuid4().hex}",
+        resolution=resolution or (generation_units[0].resolution or "768P"),
         project_id=document.project.id,
         version=version,
         status=status,
@@ -717,14 +744,34 @@ def _build_h3_generation_unit_route_plan(
         input_voice_reference_revision=document.project.voice_reference_revision,
         decisions=decisions,
         estimated_new_h3_seconds=new_seconds,
-        estimated_cost_usd=round(new_seconds * pricing.output_per_second, 6),
-        estimated_cost_credits=round(
-            new_seconds * pricing.billing_output_per_second,
-            6,
-        ),
+        estimated_cost_usd=estimated_usd,
+        estimated_cost_credits=estimated_credits,
         warnings=warnings,
         created_at=created_at,
         updated_at=created_at,
+    )
+
+
+def _route_plan_cost_estimate(
+    decisions: list[H3ShotRoutePlan],
+    pricing: H3PricingSnapshot,
+    new_seconds: int,
+    warnings: list[str],
+) -> tuple[float | None, float | None]:
+    if any(
+        item.action == H3ShotRouteAction.GENERATE
+        and item.resolution != pricing.billing_resolution
+        for item in decisions
+    ):
+        warnings.append(
+            f"The saved rate applies to {pricing.billing_resolution}; "
+            "this plan includes another resolution, so its cost estimate is unavailable. "
+            "Actual provider usage remains separate."
+        )
+        return None, None
+    return (
+        round(new_seconds * pricing.output_per_second, 6),
+        round(new_seconds * pricing.billing_output_per_second, 6),
     )
 
 
@@ -928,7 +975,7 @@ def generation_unit_media_candidates(
                 media_input=H3MediaInput(kind=kind, role=role, source=source.model_copy(deep=True),
                     asset_version_id=cue.asset_version_id, subject_asset_id=cue.subject_asset_id,
                     reference_alias=alias, binding_purpose=cue.purpose,
-                    reference_tags=list(cue.required_tags)),
+                    reference_tags=list(cue.required_tags), image_reference_role=cue.image_reference_role),
                 reference_role="SHOT_REFERENCE", serves_shot_ids=[shot.id],
             )
             explicit_count += 1
@@ -966,6 +1013,73 @@ def generation_unit_media_candidates(
                 serves_shot_ids=[shot.id],
             )
     return list(candidates.values()), list(dict.fromkeys(warnings))
+
+
+def generation_unit_voice_reference_inputs(
+    document: ProjectDocument, shots: list[ShotPlan], *, selected_media_inputs: list[H3MediaInput],
+) -> list[H3MediaInput]:
+    """Supplement default group inputs with the actual speakers' chosen voices.
+
+    An audio cue explicitly assigned to a character overrides that character's
+    project default. Explicit operation media lists do not call this helper.
+    Invalid selected defaults fail with their exact owner instead of silently
+    turning into a different native voice.
+    """
+    script = next((item for item in document.script_versions if item.id == document.project.current_script_version_id), None)
+    bible = next((item for item in document.bible_versions if item.id == document.project.current_bible_version_id), None)
+    if not document.voice_references or script is None or bible is None:
+        return []
+    lines = {line.id: line for line in script.lines}
+    characters = {character.id: character for character in bible.characters}
+    bindings = {binding.character_id: binding for binding in document.voice_references}
+    overridden = {media.subject_asset_id for media in selected_media_inputs if media.kind == H3MediaKind.AUDIO}
+    seen: set[str] = set()
+    aliases = {media.reference_alias for media in selected_media_inputs if media.reference_alias is not None}
+    result: list[H3MediaInput] = []
+    for shot in shots:
+        for line_id in shot.dialogue_line_ids:
+            line = lines.get(line_id)
+            character = characters.get(line.speaker_character_id or "") if line is not None else None
+            if character is None or character.id in seen:
+                continue
+            seen.add(character.id)
+            binding = bindings.get(character.id)
+            character_asset = next((asset for asset in document.assets
+                if asset.kind == AssetKind.CHARACTER and asset.bible_entity_id == character.id), None)
+            if binding is None or character_asset is not None and character_asset.id in overridden:
+                continue
+            media = _selected_voice_media(document, character, binding.asset_id)
+            result.append(_route_media_with_unique_alias(media, aliases))
+    validate_h3_audio_durations(document, [*selected_media_inputs, *result])
+    return result
+
+
+def _selected_voice_media(document: ProjectDocument, character: CharacterProfile, asset_id: str) -> H3MediaInput:
+    asset = next((item for item in document.assets if item.id == asset_id), None)
+    version_id = (asset.current_version_id or asset.approved_version_id) if asset is not None else None
+    context = f"Selected voice for {character.name} ({character.id}), asset {asset_id}"
+    if asset is None or asset.kind != AssetKind.REFERENCE or version_id is None:
+        raise RoutePlanningError(f"{context} has no current audio version; choose a usable voice or explicitly clear its binding")
+    try:
+        _owner, version = resolve_current_asset_media(document, asset_version_id=version_id, subject_asset_id=asset_id)
+    except AssetReferenceTruthError as exc:
+        raise RoutePlanningError(f"{context}: {exc}; choose a usable voice or explicitly clear its binding") from exc
+    if version.media_type != AssetMediaType.AUDIO:
+        raise RoutePlanningError(f"{context} currently selects {version_id}, which is not audio")
+    if version.local_path is not None:
+        path = Path(version.local_path).expanduser()
+        if path.suffix.lower() not in {".wav", ".mp3"} or path.stat().st_size > 15 * 1024 * 1024:
+            raise RoutePlanningError(f"{context}: {version_id} must be a usable WAV/MP3 file up to 15 MB")
+        source = H3MediaSource(local_path=str(path))
+    else:
+        source = H3MediaSource(external_url=version.external_url)
+    character_asset = next((item for item in document.assets
+        if item.kind == AssetKind.CHARACTER and item.bible_entity_id == character.id), None)
+    return H3MediaInput(kind=H3MediaKind.AUDIO, role=H3MediaRole.REFERENCE_AUDIO,
+        source=source, asset_version_id=version.id,
+        subject_asset_id=character_asset.id if character_asset is not None else None,
+        reference_alias=_route_reference_alias(f"{character.name}声线"),
+        binding_purpose=f"只锚定{character.name}的声线与声音质感；实际说词仍逐字使用本组该角色的已保存对白，不照读参考录音")
 
 
 def _generation_unit_media_route(
@@ -1011,9 +1125,7 @@ def _synthetic_shot_for_generation_unit(
             "audio_intent": " ".join(
                 dict.fromkeys(shot.audio_intent for shot in shots)
             ),
-            "dialogue_line_ids": [
-                line_id for shot in shots for line_id in shot.dialogue_line_ids
-            ],
+            "dialogue_line_ids": [span.line_id for span in generation_unit_dialogue_spans(unit, shots)],
             "timeline_beats": [],
             "continuity": first.continuity.model_copy(
                 update={
@@ -1841,7 +1953,7 @@ def _reference_selection_media_input(
     approved = approved_inputs.get(selected.asset_version_id)
     if approved is None:
         raise ValueError(
-            f"Reference candidate {selected.candidate_id} no longer has approved media"
+            f"Reference candidate {selected.candidate_id} no longer has current usable media"
         )
     media_type, source = approved
     kind_and_role = {
@@ -1867,7 +1979,7 @@ def _reference_selection_media_input(
         score=selected.deterministic_score,
         reasons=list(selected.deterministic_reasons),
     )
-    alias, purpose = _selected_reference_metadata(document, shot, plan, selection)
+    alias, purpose, image_reference_role = _selected_reference_metadata(document, shot, plan, selection)
     alias = _unique_route_reference_alias(
         alias,
         stable_id=selected.candidate_id,
@@ -1884,6 +1996,7 @@ def _reference_selection_media_input(
         reference_alias=alias,
         binding_purpose=purpose,
         reference_tags=list(selected.tags),
+        image_reference_role=image_reference_role,
     )
 
 
@@ -1892,7 +2005,7 @@ def _selected_reference_metadata(
     shot: ShotPlan,
     plan: ReferencePlanEntry,
     selected: ReferenceSelection,
-) -> tuple[str, str]:
+) -> tuple[str, str, ImageReferenceRole | None]:
     subject = next(
         (asset for asset in document.assets if asset.id == selected.subject_asset_id),
         None,
@@ -1912,7 +2025,7 @@ def _selected_reference_metadata(
             matching_cues,
             key=lambda item: (len(item[1].required_tags), -item[0]),
         )
-        return cue.alias, cue.purpose
+        return cue.alias, cue.purpose, cue.image_reference_role
     alias_parts = [subject_name, *selected.tags[:2]]
     if len(alias_parts) == 1:
         alias_parts.append(selected.role.value.lower())
@@ -1921,7 +2034,7 @@ def _selected_reference_metadata(
         for requirement in plan.requirements
         if requirement.id in selected.requirement_ids
     ]
-    return "_".join(alias_parts), "；".join(requirement_purposes) or selected.description
+    return "_".join(alias_parts), "；".join(requirement_purposes) or selected.description, None
 
 
 def _route_reference_alias(value: str) -> str:
@@ -2104,7 +2217,7 @@ def _voice_reference_inputs(
             )
             break
         asset = assets.get(binding.asset_id)
-        approved_version_id = asset.approved_version_id if asset is not None else None
+        approved_version_id = (asset.current_version_id or asset.approved_version_id) if asset is not None else None
         approved = (
             approved_inputs.get(approved_version_id)
             if approved_version_id is not None
@@ -2223,7 +2336,12 @@ def _available_media_inputs(
         for version in asset.versions:
             if version.media_type == AssetMediaType.TEXT_REFERENCE:
                 continue
-            if version.approval_status != ApprovalStatus.APPROVED:
+            if version.media_type == AssetMediaType.AUDIO:
+                try:
+                    resolve_current_asset_media(document, asset_version_id=version.id, subject_asset_id=asset.id)
+                except AssetReferenceTruthError:
+                    continue
+            elif version.approval_status != ApprovalStatus.APPROVED:
                 if version.media_type != AssetMediaType.IMAGE or version.approval_status != ApprovalStatus.DRAFT:
                     continue
                 try:
@@ -2233,7 +2351,7 @@ def _available_media_inputs(
             if version.media_type == AssetMediaType.IMAGE:
                 if version.freshness != Freshness.CURRENT:
                     continue
-            elif asset.approved_version_id != version.id:
+            elif version.media_type != AssetMediaType.AUDIO and asset.approved_version_id != version.id:
                 continue
             if version.local_path is not None:
                 source = H3MediaSource(local_path=version.local_path)
@@ -2487,7 +2605,7 @@ def _choose_with_language_agent(
         stage=ProductionPromptStage.VISUAL_GEN,
     )
     instructions = (
-        "你是 AI 原生竖屏视频制片流程中的生成路线 Agent。"
+        "你是 AI 原生视频制片流程中的生成路线 Agent，画幅以本次输出选择为准。"
         f"{skill_prompt.text} 只返回符合给定 schema 的 JSON；每个镜头从已提供的候选中"
         "选择一个，不得发明路线、资产 ID、Take ID 或供应商能力。当前版本且本地技术可用"
         "的 Take 只是一个创作选项，不会因 QA 结果自动入选或排除；只有当它的实际成片比可用的新生成"

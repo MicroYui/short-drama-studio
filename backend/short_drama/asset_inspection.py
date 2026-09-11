@@ -13,13 +13,18 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import Field, model_validator
 
 from short_drama.h3_models import H3RouteAssetPreparation
+from short_drama.image_models import ImageGenerationTask, ImageRegion
+from short_drama.image_regions import read_image_region, region_box
 from short_drama.models import (
+    ApprovalStatus,
     Asset,
     AssetKind,
+    AssetImageCrop,
     AssetLayoutProfile,
     AssetPresentationMode,
     AssetVersion,
     DomainModel,
+    Freshness,
     ImageReferenceAuthority,
     ImageReferenceRole,
     ProjectDocument,
@@ -44,11 +49,51 @@ class SemanticAssetReviewEvidenceReference(DomainModel):
     asset_version_id: str = Field(min_length=1)
 
 
+class AssetInspectionRegion(DomainModel):
+    asset_version_id: str | None = Field(
+        default=None, description="Omit for the candidate; otherwise use one of its actual inspection reference IDs.",
+    )
+    label: str = Field(min_length=1, max_length=200)
+    region: ImageRegion
+
+
+class AssetInspectionRegionEvidence(DomainModel):
+    asset_version_id: str
+    label: str
+    source_width: int
+    source_height: int
+    box_pixels: tuple[int, int, int, int]
+
+
+class AssetCropSuggestion(DomainModel):
+    """An optional observed crop, never an automatic edit or a passed review."""
+
+    region: ImageRegion
+    reason: str = Field(min_length=1, max_length=1000)
+    source: AssetImageCrop | None = Field(
+        default=None,
+        description="Runtime-attached candidate version, original visible size and pixel box. Return null in model output.",
+    )
+
+
 class SemanticAssetReview(DomainModel):
     recommended: bool
     score: float = Field(ge=0.0, le=5.0)
     issues: list[QaIssue] = Field(default_factory=list[QaIssue], max_length=16)
     summary: str = Field(min_length=1, max_length=3000)
+    review_focus: str | None = None
+    candidate_output_layout: AssetLayoutProfile | None = None
+    region_evidence: list[AssetInspectionRegionEvidence] = Field(
+        default_factory=list[AssetInspectionRegionEvidence], max_length=6,
+    )
+    crop_suggestion: AssetCropSuggestion | None = Field(
+        default=None,
+        description=(
+            "Optional candidate-only crop when visible framing can be repaired by cropping. "
+            "Use normalized x/y/width/height in the full EXIF-oriented candidate, not a detail crop. "
+            "The suggestion preserves the existing recommendation and does not perform an edit."
+        ),
+    )
     evidence_references: list[SemanticAssetReviewEvidenceReference] = Field(
         default_factory=list[SemanticAssetReviewEvidenceReference],
         max_length=16,
@@ -70,8 +115,17 @@ class AssetVersionInspectionRequest(DomainModel):
         default_factory=list[str],
         max_length=8,
         description=(
-            "Current approved image versions that define the identity, appearance, "
+            "Current explicitly selected usable image versions that define the identity, appearance, "
             "space, or prop structure the candidate should preserve."
+        ),
+    )
+    review_focus: str | None = Field(default=None, min_length=1, max_length=2000)
+    regions: list[AssetInspectionRegion] = Field(
+        default_factory=list[AssetInspectionRegion], max_length=6,
+        description=(
+            "Optional detail areas seen in the image: face, small prop, text or contact. "
+            "Full images remain available; these local crops add evidence in the same visual call. "
+            "Coordinates are normalized after EXIF orientation. They do not improve source detail."
         ),
     )
 
@@ -617,14 +671,28 @@ def inspect_asset_image(
     preparation: H3RouteAssetPreparation | None = None,
     canonical_references: list[tuple[Asset, AssetVersion]] | None = None,
     inspection_references: list[AssetInspectionReference] | None = None,
+    generation_task: ImageGenerationTask | None = None,
+    request: AssetVersionInspectionRequest | None = None,
 ) -> SemanticAssetReview:
+    request = request or AssetVersionInspectionRequest()
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.ASSET_REVIEWER,),
         include_constitution=False,
         stage=ProductionPromptStage.ASSETS,
     )
-    if (
+    if version.text_plate is not None:
+        review_scope = (
+            "审核本张确定性平面内容候选的准确文字、信息层级、留白、线条和声明的贴合用途。"
+            "依据 candidate_creation.text_plate 检查实际文字和布局；required_visible_text 中的正文、"
+            "名称、金额及内部标点不得改变，空白行、字段标签末尾冒号和装饰横线属于排版。"
+            "若本候选有 content_state，以其 name 和 required_visible_text 为本状态的完整准确文字，"
+            "同时保留 brief 的固定文字；明确登记的本状态签名不是多余文字，不要求旧空白候选也出现该签名。"
+            "未声明 content_state 时仍使用 brief.required_visible_text，不从 descriptor 猜测新增文字。"
+            "若 purpose=PHYSICAL_SURFACE_CONTENT，它只承担物理道具的表面内容，"
+            "不要求本图出现纸张厚度、摄影透视或演员接触，也不据此判定物理母图完成。"
+        )
+    elif (
         asset.brief is not None
         and asset.brief.presentation_mode == AssetPresentationMode.SCREEN_CONTENT_PLATE
     ):
@@ -661,8 +729,28 @@ def inspect_asset_image(
         f"{skill_prompt.text} "
         "只返回符合给定 schema 的 JSON。evidence_references 由工具运行时附着，"
         "你始终返回空数组，不要自行填写项目或版本 ID。"
+        "region_evidence、review_focus、candidate_output_layout 也由工具附着，分别返回空数组/null/null。"
+        "crop_suggestion 默认为null。仅当 candidate_creation.local_crop_available 为true，且已看清"
+        "通过本地裁切能解决的景别、留白或单视图提取问题时，在本次观察中给出一个可用region和reason，"
+        "避免只说建议裁切却让后续再看同一图取坐标；source返回null，由工具附着实际源版本和像素范围。"
+        "region使用Image 1完整候选经EXIF校正后的0—1 x/y/width/height，不使用参考图、追加局部图或"
+        "缩略图像素坐标。保留声明必需的头发、肢体、文字及视线空间；以实际源宽高计算裁后画幅。"
+        "若源和目标画幅相同，归一化width和height应相同。裁切不能增加细节、改变背景结构或移动主体；"
+        "无法兼顾要求或边界看不清时返回null并说明限制，不靠放大凑像素。"
+        "建议尚未执行，不能把裁后的预期效果写成当前图已合格，也不能消除其他实际问题。"
         "只比较图像中的可见证据与输入的资产简报、项目 "
         "Bible，以及可选的 ShotPlan 或关键帧简报。项目 Bible 已声明的媒介和 Style 是依据，"
+        "candidate_creation 是这张图片实际保存的生成/裁切意图；asset.brief 是整个资产的总体要求。"
+        "只审核本张图片承担的视图和职责；总体brief列四视图，不代表单张正脸或侧面图必须展示四视图。"
+        "candidate_creation.text_plate 表示本地确定性平面内容；PHYSICAL_SURFACE_CONTENT 只检查准确文字、版式与当前文案状态，"
+        "不要求该平面PNG已呈现母道具的摄影厚度、透视或手部接触，也不据此判定物理母图已完成。"
+        "image_map 中参考的 text_plate 是实际输入字版的内容与状态来源；审核派生摄影时，"
+        "按本次 generation_prompt 与 reference_role/purpose 指定的用途核对所选字版的准确文字和签名状态。"
+        "不要把多个不同参考状态合并，也不要因总体 brief 只列固定正文而忽略明确选中的状态姓名；"
+        "目标状态未明确时记录缺少依据，不自行推断。"
+        "生成prompt是意图，不是已观察事实。先说明真实可见的身份、轮廓、空间或文字，再比较要求。"
+        "细节区域与原图属于同一证据，不是不同身份或新增参考。小脸、细小文字和部件看不清时明确未观察，"
+        "不能用总分或同色服装代替身份比对；记录哪个部位和下游用途仍缺可见依据。"
         "不要追加项目未要求的视觉媒介、表面质感、机位或运动规则。"
         "比较不同视角时，区分实际结构变化与透视、遮挡和正常的可见面变化。"
         "某个正面部件在背面不可见，并不证明它缺失或被换成另一种结构；"
@@ -682,7 +770,7 @@ def inspect_asset_image(
         "提供参考图时，Image 1 始终是待审核候选，后续图片的准确职责、权威级别、"
         "用途、主体别名、生命周期状态和来源都在 image_map 中结构化声明。只在它声明的"
         "reference_role 范围内比较，不要平均或混合不同角色身份。"
-        "EXPLICIT_CANONICAL 是当前已批准母版；DERIVATION_SOURCE 是候选生成时实际使用的"
+        "EXPLICIT_CANONICAL 是本次明确选择的可用参考，可为 DRAFT；DERIVATION_SOURCE 是候选生成时实际使用的"
         "历史证据，不因后来更换母版而消失。approval_status=DRAFT 不等于该图已被"
         "批准为资产；但若它是用户明确锁定的权威源图且 normative_for_declared_role=true，"
         "它仍是该声明职责内的事实来源，不得仅因 DRAFT 状态判定派生候选失败。"
@@ -698,7 +786,7 @@ def inspect_asset_image(
             project_id=document.project.id,
             reference_role=_default_reference_role(reference_asset.kind),
             reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
-            purpose="当前已批准母版，用于审核候选的连续性。",
+            purpose="当前明确选择的可用参考，用于审核候选的连续性。",
             subject_alias=reference_asset.name,
             source=AssetInspectionReferenceSource.EXPLICIT_CANONICAL,
             normative_for_declared_role=True,
@@ -708,6 +796,50 @@ def inspect_asset_image(
         not in {item.version.id for item in resolved_references}
     )
     reference_images = _inspection_reference_images(resolved_references)
+    detail_urls: list[str] = []
+    detail_evidence: list[AssetInspectionRegionEvidence] = []
+    available_versions = {version.id: version, **{item.version.id: item.version for item in resolved_references}}
+    for detail in request.regions:
+        detail_id = detail.asset_version_id or version.id
+        detail_version = available_versions.get(detail_id)
+        if detail_version is None:
+            raise ValueError(f"Inspection region asset_version_id is not a candidate or declared reference: {detail_id}")
+        if detail_version.local_path is None:
+            raise ValueError(f"Inspection region requires a locally cached image: {detail_id}")
+        cropped, source_size, box = read_image_region(Path(detail_version.local_path), detail.region)
+        with cropped:
+            encoded = base64.b64encode(_encode_review_image(cropped)).decode("ascii")
+        detail_urls.append(f"data:image/jpeg;base64,{encoded}")
+        detail_evidence.append(AssetInspectionRegionEvidence(
+            asset_version_id=detail_id, label=detail.label,
+            source_width=source_size[0], source_height=source_size[1], box_pixels=box,
+        ))
+    output_layout = (
+        generation_task.request.layout_profile if generation_task is not None
+        else AssetLayoutProfile.LIGHTWEIGHT_SINGLE if version.image_crop is not None
+        else version.reference_sheet.layout_profile if version.reference_sheet is not None
+        else None
+    )
+    crop_source_size = _local_candidate_visible_size(version)
+    crop_available = (
+        crop_source_size is not None
+        and version.approval_status in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+        and version.freshness == Freshness.CURRENT
+    )
+    creation = {
+        "output_layout_profile": output_layout,
+        "actual_size": {
+            "width": crop_source_size[0] if crop_source_size else version.width,
+            "height": crop_source_size[1] if crop_source_size else version.height,
+        },
+        "local_crop_available": crop_available,
+        "operation": generation_task.operation if generation_task is not None else version.origin_type,
+        "generation_prompt": generation_task.request.prompt if generation_task is not None
+        else version.source.prompt if version.source is not None else None,
+        "crop": version.image_crop.model_dump(mode="json") if version.image_crop is not None else None,
+        "reference_sheet": version.reference_sheet.model_dump(mode="json") if version.reference_sheet is not None else None,
+        "text_plate": version.text_plate.model_dump(mode="json") if version.text_plate is not None else None,
+    }
     payload = {
         "output_schema": SemanticAssetReview.model_json_schema(),
         "asset": {
@@ -721,6 +853,8 @@ def inspect_asset_image(
                 else None
             ),
         },
+        "candidate_creation": creation,
+        "review_focus": request.review_focus,
         "bible": next(
             item.model_dump(mode="json")
             for item in document.bible_versions
@@ -766,6 +900,7 @@ def inspect_asset_image(
                     "purpose": reference.purpose,
                     "subject_alias": reference.subject_alias,
                     "approval_status": reference.version.approval_status.value,
+                    **({"text_plate": reference.version.text_plate.model_dump(mode="json")} if reference.version.text_plate is not None else {}),
                     "is_current_canonical_master": (
                         reference.asset.approved_version_id == reference.version.id
                     ),
@@ -778,6 +913,11 @@ def inspect_asset_image(
                     start=2,
                 )
             ],
+            *[
+                {"image": len(reference_images) + 2 + index, "role": "DETAIL_OF_EXISTING_IMAGE",
+                 **evidence.model_dump(mode="json")}
+                for index, evidence in enumerate(detail_evidence)
+            ],
         ],
     }
     output = client.generate_text(
@@ -786,10 +926,40 @@ def inspect_asset_image(
         image_urls=[
             _asset_image_url(version),
             *(url for _reference, url in reference_images),
+            *detail_urls,
         ],
         max_output_tokens=16000,
     )
-    return SemanticAssetReview.model_validate_json(_strip_json_fence(output))
+    result = SemanticAssetReview.model_validate_json(_strip_json_fence(output))
+    suggestion = result.crop_suggestion
+    if suggestion is not None and crop_available and crop_source_size is not None:
+        width, height = crop_source_size
+        box = region_box(suggestion.region, width, height)
+        if box[2] - box[0] < 2 or box[3] - box[1] < 2:
+            suggestion = None
+        else:
+            suggestion = suggestion.model_copy(update={"source": AssetImageCrop(
+                source_asset_version_id=version.id, source_width=width, source_height=height,
+                box_pixels=box,
+            )})
+    else:
+        suggestion = None
+    return result.model_copy(update={
+        "review_focus": request.review_focus, "candidate_output_layout": output_layout,
+        "region_evidence": detail_evidence, "crop_suggestion": suggestion,
+    })
+
+
+def _local_candidate_visible_size(version: AssetVersion) -> tuple[int, int] | None:
+    # The visual call uses external_url first. Do not map a remote observation to
+    # potentially different cached pixels or invent a local source for it.
+    if version.external_url is not None or not version.local_path:
+        return None
+    with Image.open(version.local_path) as opened:
+        width, height = opened.size
+        if opened.getexif().get(274) in (5, 6, 7, 8):
+            width, height = height, width
+        return width, height
 
 
 def _default_reference_role(kind: AssetKind) -> ImageReferenceRole:
@@ -845,24 +1015,25 @@ def _analysis_thumbnail_bytes(path: Path) -> bytes:
             # untouched on disk and are reduced immediately after decoding.
             opened.draft("RGB", (_ANALYSIS_IMAGE_MAX_EDGE, _ANALYSIS_IMAGE_MAX_EDGE))
             image = ImageOps.exif_transpose(opened)
-            image.thumbnail(
-                (_ANALYSIS_IMAGE_MAX_EDGE, _ANALYSIS_IMAGE_MAX_EDGE),
-                Image.Resampling.LANCZOS,
-                reducing_gap=3.0,
-            )
-            if image.mode in {"RGBA", "LA"} or (
-                image.mode == "P" and "transparency" in image.info
-            ):
-                rgba = image.convert("RGBA")
-                flattened = Image.new("RGB", rgba.size, "white")
-                flattened.paste(rgba, mask=rgba.getchannel("A"))
-                image = flattened
-            elif image.mode != "RGB":
-                image = image.convert("RGB")
-            else:
-                image = image.copy()
+            return _encode_review_image(image)
     except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
         raise ValueError(f"AssetVersion image cannot be decoded: {path}") from exc
+
+
+def _encode_review_image(source: Image.Image) -> bytes:
+    image = source.copy()
+    image.thumbnail(
+        (_ANALYSIS_IMAGE_MAX_EDGE, _ANALYSIS_IMAGE_MAX_EDGE),
+        Image.Resampling.LANCZOS, reducing_gap=3.0,
+    )
+    if image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info):
+        rgba = image.convert("RGBA")
+        # Mid-grey keeps both white and black text visible during asset inspection.
+        flattened = Image.new("RGB", rgba.size, "#808080")
+        flattened.paste(rgba, mask=rgba.getchannel("A"))
+        image = flattened
+    elif image.mode != "RGB":
+        image = image.convert("RGB")
 
     quality = 90
     while True:

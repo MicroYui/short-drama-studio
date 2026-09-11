@@ -16,7 +16,21 @@
 
 默认引用来自当前镜头已选择、可用的生成参考，保留具体素材、用途和实际顺序；DRAFT 状态本身不阻止使用。明确提供 `media_inputs` 时以调用给出的选择为准。混合了互不兼容的首尾帧与参考模式时返回具体问题，不替用户猜测创意路线。
 
+2026-09-12 增加参考用途贯通：`ShotReferenceCue.image_reference_role` 和 `H3MediaInput.image_reference_role` 复用现有图像用途。身份、服装等可复用内容仍建立 Subject；`COMPOSITION` 或 `LAYOUT_GUIDE` 指定的现场构图、动作初态、关键帧图保留 Picture。组入口与单镜路线使用相同用途，不再把每张 reference image 都变成一个新主体。`prepare_h3_group` 的 `input_strategy` 返回实际路线、选择来源、每张图的用途和能力边界；默认从已选择的媒体角色判断可执行路线，不新增语言决策轮，也不把“已有角色卡”判断为“现场站位已准备好”。需要改变视觉方案时，Agent 可读取当前组候选，并在本次调用显式选择路线和有序媒体。
+
+REFERENCE 中的构图图是软指导，可以与身份、场景卡并用；关键帧图的格数由动作需要决定，图中各格表示先后状态，不应成为成片拼图。硬 `FRAME_FIRST` 要求一张已具备身份、空间和物件初态的完整画面；当前适配器禁止 `first_frame/last_frame` 与任何 reference 输入混用。两者不能仅靠改提示词互换。
+
+新 `video.extract_frame` 从一个 Take 的实际本地文件提取完整分辨率 PNG，登记为当前可用的 DRAFT 参考资产。默认 `time_seconds` 是源视频时间；带 `shot_id` 时是该 Take 对应镜头时窗的局部秒，带精确 `clip_id/timeline_id` 时是本次采用位置的局部秒，换算包含裁切、变速与倒放。返回解码帧的实际 PTS、源时窗、资产引用、可直接交给 `image.enqueue` 的 `image_reference_input`，以及软构图用途的 `h3_media_input`。相同来源、区间和说明重复调用复用已有图片。HTTP 入口为 `POST /projects/{project_id}/agent-tools/extract-frame`。
+
+取帧不调用 Provider、不选用 Take，也不声称通过视觉检查；图片是底层视频帧，不包含编辑器字幕、叠层、裁切、翻转或调色合成。实际帧可以交给现有图像工具派生下一镜的现场图；源画面错脸、错道具或越轴时不应直接继承。后续目标图是否适合软参考或硬首帧仍由具体镜头决定。本轮能力用本地真实解码和 Fake 编译验证，没有新增真实媒体调用，因此尚不宣称成片质量收益。
+
 保存的操作返回 `operation_id`、生成计划 document/version、`generation_unit_id`、`route_plan_id`、`task_ids` 和实际状态。Tool receipt 的操作完成只表示本次调用已返回，`WAITING_MEDIA` 仍表示视频任务等待执行或结果，不能当成视频制作完成。
+
+2026-09-12 同步当前 [AceData H3 视频 API](https://github.com/AceDataCloud/MiniMaxAPI/blob/main/docs/videos.md) 的输出选项：首次准备可选 `resolution: "768P" | "2K"` 和 `aspect_ratio`。固定画幅包括 21:9、16:9、4:3、1:1、3:4、9:16；REFERENCE 还可使用 adaptive，纯文本使用固定画幅，硬首尾帧路线省略画幅或使用 adaptive 并遵循实际帧图比例。未指定时使用当前组分辨率或 768P、当前项目画幅；恢复 operation 沿用其保存值，不改变已有任务。单镜 Prompt / Route / Probe 使用相同适配规则。一次生成覆盖值不会改写项目成片画幅，旧任务和保存请求继续兼容。
+
+分辨率、画幅进入实际 Prompt 输入、路线、任务和 Provider 请求，界面按当前配置与请求显示；旧风格备注中的画幅不覆盖本次选择。下载校验去掉“只能竖屏、短边 700–820”的假限制，继续检查实际解码、尺寸、可确定的固定或帧输入比例、时长、镜头时窗及音轨。API 未声明每个档位的精确像素映射，因此不把未知像素规范写成通过。若配置费率只对应 768P，2K 路线和任务估价为未提供；供应商实际用量单独保留。本轮通过 Fake 传输、重启复用及本地媒体校验，尚未据此证明 2K 画质或收益。
+
+同日补齐成片出口：`timeline.export_editorial` 省略宽高时，读取当前实际采用视频的解码尺寸，按项目画幅建立不缩小这些源画面的画布；未采用素材、隐藏轨与 PNG 图版不会把默认尺寸放大。UI 默认“跟随素材”，明确选择 720p / 1080p 等尺寸仍按选择输出。没有采用视频时才回退到画幅默认尺寸。旧 Manifest 新建时同样跟随选中 Take，保存 `OutputSpec.follow_source_dimensions` 以便后续重建继续跟随；历史或明确指定的尺寸保持原值。导出回执与技术检查记录真实像素，原文件保持不变；“保留尺寸”不等同于已经验证生成内容的清晰度或质量。
 
 ```json
 {

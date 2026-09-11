@@ -6,7 +6,9 @@ choices stay in the request/current bindings. Video execution stays in H3 tasks.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
+import math
 from pathlib import Path
 from threading import Lock, RLock
 from typing import TYPE_CHECKING, Literal, cast
@@ -19,12 +21,13 @@ from short_drama.h3_models import (
     H3MediaInput, H3MediaRole, H3ProductionRouteExecuteRequest,
     H3ProductionRoutePlan, H3ProductionRoutePlanRequest, H3ShotRouteDirective,
 )
-from short_drama.h3_route_planner import validate_route_plan_freshness
+from short_drama.h3_route_planner import generation_unit_voice_reference_inputs, validate_route_plan_freshness
 from short_drama.language_models import H3GenerationUnitContextRequest, LanguagePromptCompileRequest
 from short_drama.models import DomainModel, ProductionDocumentOrigin, TaskStatus, VideoGenerationRoute
 from short_drama.production_contracts import GenerationPlanCompileRequest, GenerationPlanReadResponse, GenerationUnit
 from short_drama.skill_ids import SkillIds, canonical_skill_ids
 from short_drama.studio_trace import current_trace_context, record_trace
+from short_drama.providers.h3_output_format import resolve_h3_output_format
 from short_drama.video_inspection import selected_generation_reference_ids
 
 if TYPE_CHECKING:
@@ -33,12 +36,18 @@ if TYPE_CHECKING:
 
 
 class H3GroupOperationRequest(DomainModel):
+    resolution: str | None = Field(default=None, description="AceData H3 output: 768P or 2K; omit to use this generation unit's choice or the 768P default.")
+    aspect_ratio: str | None = Field(default=None, description="Fixed output shape for text/reference generation, or adaptive for frame routes. Omit to use the project's shape, with frame routes following their input frame.")
     operation_id: str | None = Field(default=None, min_length=1)
     shot_id: str | None = Field(default=None, min_length=1)
     clip_group_id: str | None = Field(default=None, min_length=1)
     compile_mode: Literal["LANGUAGE", "H3_CONTEXT_IR"] = Field(default="LANGUAGE",
         description="Default Astra compilation, or opt-in official asynchronous H3 Context IR with separate MiniMax credentials. Exactly one compiler is used.")
-    route: VideoGenerationRoute | None = None
+    route: VideoGenerationRoute | None = Field(default=None, description=(
+        "Choose the shot's input strategy when needed. Omit to honor the selected media roles: "
+        "reference media stay REFERENCE; a prepared complete first/last frame uses its hard frame route. "
+        "Identity cards alone do not establish a shot's staging. A REFERENCE composition image is soft guidance."
+    ))
     media_inputs: list[H3MediaInput] | None = Field(default=None, max_length=12)
     method_skill_ids: SkillIds | None = None
     revision_instructions: str | None = Field(default=None, min_length=1, max_length=2000)
@@ -54,7 +63,7 @@ class H3GroupOperationRequest(DomainModel):
         if sum(value is not None for value in (self.operation_id, self.shot_id, self.clip_group_id)) != 1:
             raise ValueError("Choose operation_id to resume, or one current shot_id/clip_group_id")
         if self.operation_id is not None and (
-            any(value is not None for value in (self.route, self.media_inputs, self.method_skill_ids,
+            any(value is not None for value in (self.resolution, self.aspect_ratio, self.route, self.media_inputs, self.method_skill_ids,
                 self.revision_instructions, self.source_take_id, self.source_repair_id))
             or self.candidate_count != 1 or self.compile_mode != "LANGUAGE"
         ):
@@ -89,6 +98,7 @@ class H3GroupOperationResponse(DomainModel):
     error: str | None = None
     retryable: bool = False
     warnings: list[str] = Field(default_factory=list[str])
+    input_strategy: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     reused: bool = False
 
 
@@ -133,6 +143,22 @@ def _step(service: ShortDramaService, record: H3GroupOperation, step: str) -> No
 
 def _identity(request: H3GroupOperationRequest) -> dict[str, JsonValue]:
     return request.model_dump(mode="json", exclude={"operation_id", "shot_id", "clip_group_id", "enqueue", "retry_failed_step"})
+
+
+def _source_identity(source: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Film-wide display numbering cannot invalidate an unchanged local clip."""
+    result = deepcopy(source)
+    context = result.get("source_context")
+    if isinstance(context, dict):
+        shots = context.get("locked_shots")
+        if isinstance(shots, list):
+            for row in shots:
+                if isinstance(row, dict) and isinstance(shot := row.get("locked_shot"), dict):
+                    shot.pop("sequence", None)
+        previous = context.get("previous_clip_planned_terminal_state")
+        if isinstance(previous, dict):
+            previous.pop("sequence", None)
+    return result
 
 
 def _new_operation(service: ShortDramaService, project_id: str, request: H3GroupOperationRequest, group_id: str) -> H3GroupOperation:
@@ -250,6 +276,12 @@ def _matching_route(service: ShortDramaService, record: H3GroupOperation) -> H3P
                 or decision.media_inputs != record.resolved_media_inputs
                 or decision.candidate_count != record.request.candidate_count):
             continue
+        decision_ratio = resolve_h3_output_format(route=decision.route, resolution=decision.resolution,
+            aspect_ratio=decision.aspect_ratio)[1]
+        expected_ratio = record.input_context.get("aspect_ratio", None if decision.route in {
+            VideoGenerationRoute.FRAME_FIRST, VideoGenerationRoute.FRAME_LAST, VideoGenerationRoute.FRAME_FIRST_LAST} else "9:16")
+        if decision.resolution != record.input_context.get("resolution", "768P") or decision_ratio != expected_ratio:
+            continue
         # A source Take explicitly asks for a new candidate; a previous route
         # already producing that Take is not its replacement.
         if record.request.source_take_id and record.request.source_take_id in {
@@ -328,6 +360,10 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
         record.state.enqueue_requested = record.state.enqueue_requested or request.enqueue
         try:
             plan, unit = _current_plan(service, project_id, group.id, record)
+            if not 4 <= math.ceil(unit.requested_duration_seconds) <= 15:
+                raise ValueError(f"H3 group {group.id} requests {unit.requested_duration_seconds:g} seconds; "
+                    "H3 generation supports 4–15 seconds per request. Adjust this group's duration or grouping "
+                    "with shot.patch_storyboard; the saved storyboard is unchanged.")
             context = service.get_h3_generation_unit_context(project_id, H3GenerationUnitContextRequest(
                 generation_plan_document_id=plan.document.id, generation_plan_version_id=plan.version.id,
                 generation_unit_id=unit.id,
@@ -350,9 +386,19 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 missing = set(selected_ids) - {item.asset_version_id for item in media}
                 if missing:
                     raise ValueError("Current selected references are unavailable: " + ", ".join(sorted(missing)))
+                shots_by_id = {shot.id: shot for shot in document.shots}
+                media.extend(generation_unit_voice_reference_inputs(document,
+                    [shots_by_id[shot_id] for shot_id in unit.shot_ids], selected_media_inputs=media))
             else:
                 media = list(intent.media_inputs)
+            # AssetVersion is the canonical source used by compilation and the
+            # saved route. Observe those files before deciding cache freshness,
+            # not a caller's stale source path; the resolver preserves order.
+            media = service._resolve_approved_asset_inputs(document, media)  # pyright: ignore[reportPrivateUsage]
             route = intent.route or _route_for(media)
+            resolution, aspect_ratio = resolve_h3_output_format(route=route,
+                resolution=intent.resolution or unit.resolution or "768P", aspect_ratio=intent.aspect_ratio,
+                default_aspect_ratio=document.project.aspect_ratio)
             methods = _method_ids(service, project_id, intent)
             source: dict[str, JsonValue] = {
                 "source_context": context.source_context, "route": route.value,
@@ -360,8 +406,14 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 "media_file_states": cast(JsonValue, _media_file_states(media)), "method_skill_ids": list(methods),
                 "revision_instructions": intent.revision_instructions,
                 "compile_mode": intent.compile_mode,
+                "resolution": resolution, "aspect_ratio": aspect_ratio,
             }
-            if record.input_context and record.input_context != source:
+            previous_source = dict(record.input_context)
+            if previous_source:
+                previous_source.setdefault("resolution", "768P")
+                previous_source.setdefault("aspect_ratio", None if route in {
+                    VideoGenerationRoute.FRAME_FIRST, VideoGenerationRoute.FRAME_LAST, VideoGenerationRoute.FRAME_FIRST_LAST} else "9:16")
+            if previous_source and _source_identity(previous_source) != _source_identity(source):
                 if request.operation_id:
                     record.state.status, record.state.next_action = "INPUTS_CHANGED", "PREPARE_CURRENT_SHOT_OR_GROUP"
                     record.state.error = "Current group/media differs from this saved operation; its previous prompt/tasks remain retained."
@@ -372,6 +424,22 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 return record.public_response()
             record.input_context = source
             record.resolved_route, record.resolved_media_inputs = route, media
+            record.state.input_strategy = {
+                "route": route.value,
+                "resolution": resolution, "aspect_ratio": aspect_ratio,
+                "selected_by": "explicit_request" if intent.route is not None else "selected_media_roles",
+                "media_source": "explicit_request" if intent.media_inputs is not None else "current_shot_references_and_speaking_character_voices",
+                "references": [{"asset_version_id": item.asset_version_id, "role": item.role.value,
+                    "image_reference_role": item.image_reference_role.value if item.image_reference_role else None,
+                    "purpose": item.binding_purpose} for item in media],
+                "guidance": (
+                    "REFERENCE composition/layout pictures guide staging softly and can accompany identity references; "
+                    "FRAME_FIRST uses a complete prepared starting image and cannot mix reference media. "
+                    "The selected route is an input choice, not a visual-quality judgment. "
+                    "Use route.get_generation_unit_context for alternatives and image tools or video.extract_frame "
+                    "when the required visible starting state has not been prepared."
+                ),
+            }
             record.state.error, record.state.retryable = None, False
             record.state.shot_ids = list(unit.shot_ids)
             record.state.generation_plan_document_id = plan.document.id
@@ -382,7 +450,7 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
             _step(service, record, "CURRENT_GROUP_INPUTS_RESOLVED")
             if record.compiled_prompt is None:
                 cached = next((item for item in reversed(service.repository.list_h3_group_operations(project_id))
-                               if item.id != record.id and item.input_context == source and item.compiled_prompt is not None), None)
+                               if item.id != record.id and _source_identity(item.input_context) == _source_identity(source) and item.compiled_prompt is not None), None)
                 if cached is not None:
                     record.compiled_prompt = cached.compiled_prompt
                     record.resolved_media_inputs = list(cached.resolved_media_inputs)
@@ -391,6 +459,7 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 record.state.phase = "PROMPT_COMPILATION"
                 _persist(service, record)
                 compiler_request = LanguagePromptCompileRequest(
+                    resolution=resolution, aspect_ratio=aspect_ratio,
                     generation_plan_document_id=plan.document.id, generation_plan_version_id=plan.version.id,
                     generation_unit_id=unit.id, route=route, media_inputs=media,
                     method_skill_ids=methods, revision_instructions=intent.revision_instructions,
@@ -411,6 +480,7 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 # The compiler has made the one language call. Route creation is
                 # now deterministic and consumes that exact authored result.
                 route_plan = service.compile_h3_production_route_plan(project_id, H3ProductionRoutePlanRequest(
+                        resolution=resolution, aspect_ratio=aspect_ratio,
                         source_operation_id=record.id,
                         generation_plan_document_id=plan.document.id, generation_plan_version_id=plan.version.id,
                         unit_ids=[unit.id], use_language_agent=False, consider_video_guides=False,

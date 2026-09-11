@@ -204,3 +204,79 @@ def test_parallel_caption_tracks_share_asr_without_changing_an_unselected_track(
     project = EditorProject.model_validate(read_editorial(service, pid).project)
     parallel = next(cue for cue in project.timelines[0].subtitles if cue.id == "parallel")
     assert (parallel.startTime, parallel.endTime, parallel.text, parallel.style) == (0, 1.5, "另一轨的标签", {"fontSize": 18})
+
+
+def test_native_transcription_needs_no_captions_and_uses_selected_film_coordinates(tmp_path: Path) -> None:
+    from short_drama.native_transcription import NativeTranscriptionResponse
+
+    service, timing, pid, _ = _current_fixture(tmp_path)
+    def second_cut(project: EditorProject) -> None:
+        cut = project.timelines[0].model_copy(deep=True)
+        cut.id = "alternate-cut"
+        cut.subtitles = []
+        next(clip for clip in cut.clips if clip.type == "video").startTime = 5
+        project.timelines.append(cut)
+    _edit_current(service, pid, second_cut)
+    before = service.get_project(pid).document
+    revision = read_editorial(service, pid).revision
+    result = service.tool_registry.invoke("audio.transcribe_native", {"project_id": pid,
+        "request": {"timeline_id": "alternate-cut", "expected_editorial_revision": revision}})
+    assert result.status == ToolCallStatus.SUCCEEDED, result.error
+    response = NativeTranscriptionResponse.model_validate(result.output)
+    assert response.editorial_timeline_id == "alternate-cut" and response.time_space == "FILM"
+    assert response.source_editorial_revision == revision
+    assert timing.calls == [(24000, 16000)]  # Trim/speed/reverse applied; music is not transcribed.
+    assert len(response.windows) == 1
+    window = response.windows[0]
+    assert (window.start_seconds, window.end_seconds) == (5, 6.5)
+    assert window.characters[0].start_seconds == 5.4
+    assert window.transcript_text == "保留人工台词" and window.take_id and window.shot_ids
+    assert Path(response.report_path).is_file()
+    assert service.get_project(pid).document == before  # No captions or active-timeline switch saved.
+
+
+def test_native_transcription_checks_scope_before_asr_and_retains_concurrent_edits(tmp_path: Path) -> None:
+    from short_drama.native_transcription import NativeTranscriptionResponse
+
+    service, timing, pid, shot_id = _current_fixture(tmp_path)
+    revision = read_editorial(service, pid).revision
+    for request in ({"expected_editorial_revision": revision - 1}, {"clip_ids": ["music-clip"]}, {"timeline_id": "absent"}):
+        result = service.tool_registry.invoke("audio.transcribe_native", {"project_id": pid, "request": request})
+        assert result.status == ToolCallStatus.FAILED
+    assert timing.calls == []
+    def concurrent_edit(project: EditorProject) -> None:
+        project.timelines[0].subtitles[0].text = "用户正在修改字幕"
+    timing.on_transcribe = lambda: _edit_current(service, pid, concurrent_edit)
+    result = service.tool_registry.invoke("audio.transcribe_native", {"project_id": pid, "request": {"shot_ids": [shot_id]}})
+    assert result.status == ToolCallStatus.SUCCEEDED, result.error
+    response = NativeTranscriptionResponse.model_validate(result.output)
+    assert response.source_editorial_revision == revision
+    assert any("changed during transcription" in message for message in response.warnings)
+    saved = read_editorial(service, pid)
+    assert saved.revision == revision + 1
+    assert EditorProject.model_validate(saved.project).timelines[0].subtitles[0].text == "用户正在修改字幕"
+
+
+def test_native_transcription_reads_initial_adopted_take_without_saving_timeline(tmp_path: Path) -> None:
+    service, timing, pid, _ = _current_fixture(tmp_path)
+    document = service.get_project(pid).document
+    document.editorial_timeline = None
+    service.repository.save_project(document)
+    result = service.tool_registry.invoke("audio.transcribe_native", {"project_id": pid,
+        "request": {"expected_editorial_revision": 0}})
+    assert result.status == ToolCallStatus.SUCCEEDED, result.error
+    assert len(timing.calls) == 1
+    assert service.get_project(pid).document.editorial_timeline is None
+
+
+def test_audio_inspection_without_captions_does_not_claim_dialogue_was_transcribed(tmp_path: Path) -> None:
+    from short_drama.models import AudioInspectionRequest, SemanticReviewStatus
+
+    service, _, pid, _ = _current_fixture(tmp_path)
+    def clear_captions(project: EditorProject) -> None:
+        project.timelines[0].subtitles = []
+    _edit_current(service, pid, clear_captions)
+    report = service.inspect_current_manifest_audio(pid, AudioInspectionRequest()).report
+    assert report.clip_inspections and report.dialogue_checks == []
+    assert report.semantic_status == SemanticReviewStatus.UNAVAILABLE
+    assert any("No usable script-linked dialogue windows" in message for message in report.warnings)

@@ -194,7 +194,7 @@ def test_text_plate_can_reflow_lines_without_changing_the_declared_words(tmp_pat
     assert mismatch.error and "13.00元" in mismatch.error.message and "13.10元" in mismatch.error.message
 
 
-def test_compose_text_plate_rejects_non_screen_asset_and_copy_mismatch(
+def test_compose_text_plate_preserves_physical_asset_and_rejects_copy_mismatch(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -204,13 +204,16 @@ def test_compose_text_plate_rejects_non_screen_asset_and_copy_mismatch(
         project_id=project_id,
         presentation_mode=AssetPresentationMode.PHYSICAL_MASTER,
     )
-    non_screen = service.tool_registry.invoke(
+    surface = service.tool_registry.invoke(
         "image.compose_text_plate",
         _arguments(project_id, physical.asset.id),
     )
-    assert non_screen.status == ToolCallStatus.FAILED, non_screen.error
-    assert non_screen.error is not None
-    assert "SCREEN_CONTENT_PLATE" in non_screen.error.message
+    assert surface.status == ToolCallStatus.SUCCEEDED, surface.error
+    assert surface.output is not None
+    assert surface.output["version"]["text_plate"]["purpose"] == "PHYSICAL_SURFACE_CONTENT"
+    assert surface.output["asset"]["current_version_id"] == physical.asset.current_version_id
+    assert physical.asset.brief is not None
+    assert surface.output["asset"]["brief"] == physical.asset.brief.model_dump(mode="json")
 
     plate = _create_plate_asset(
         service,

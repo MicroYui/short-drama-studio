@@ -17,6 +17,7 @@ from short_drama.h3_models import (
     H3VideoRequest,
 )
 from short_drama.models import ProjectDocument, ShotPlan, VideoGenerationRoute
+from short_drama.providers.h3_output_format import h3_prompt_document, resolve_h3_output_format
 from short_drama.providers.h3_prompt_skill import (
     compile_h3_generation_unit_prompt_ir,
     compile_h3_prompt_ir,
@@ -56,10 +57,11 @@ def build_h3_prompt(
     duration_seconds: int | None = None,
     media_inputs: list[H3MediaInput] | None = None,
     video_guides: list[H3VideoGuide] | None = None,
+    aspect_ratio: str | None = None,
 ) -> str:
     try:
         return compile_h3_prompt_ir(
-            document,
+            h3_prompt_document(document, route=route, aspect_ratio=aspect_ratio),
             shot,
             route=route,
             duration_seconds=duration_seconds,
@@ -79,10 +81,11 @@ def build_h3_generation_unit_prompt(
     duration_seconds: int | None = None,
     media_inputs: list[H3MediaInput] | None = None,
     video_guides: list[H3VideoGuide] | None = None,
+    aspect_ratio: str | None = None,
 ) -> str:
     try:
         return compile_h3_generation_unit_prompt_ir(
-            document,
+            h3_prompt_document(document, route=route, aspect_ratio=aspect_ratio),
             unit,
             shots,
             route=route,
@@ -155,6 +158,11 @@ def validate_h3_inputs(
         raise H3CapabilityError("H3 accepts at most three reference videos")
     if roles[H3MediaRole.REFERENCE_AUDIO] > 3:
         raise H3CapabilityError("H3 accepts at most three reference audio clips")
+    if roles[H3MediaRole.REFERENCE_AUDIO] and not (roles[H3MediaRole.REFERENCE_IMAGE] or roles[H3MediaRole.REFERENCE_VIDEO]):
+        raise H3CapabilityError(
+            "H3 reference audio requires at least one reference image or reference video; "
+            "select the intended visual reference, or explicitly choose native audio without reference media"
+        )
 
     if route == VideoGenerationRoute.DIRECT and media_inputs:
         raise H3CapabilityError("DIRECT does not accept media inputs")
@@ -175,6 +183,30 @@ def validate_h3_inputs(
             raise H3CapabilityError("REFERENCE requires at least one reference media item")
 
 
+def validate_h3_audio_durations(document: ProjectDocument, media_inputs: list[H3MediaInput]) -> None:
+    """Check saved duration metadata without probing files or inventing unknown values."""
+    versions = {version.id: (asset, version) for asset in document.assets for version in asset.versions}
+    subjects = {asset.id: asset.name for asset in document.assets}
+    known_seconds: list[float] = []
+    for media in media_inputs:
+        if media.kind != H3MediaKind.AUDIO:
+            continue
+        found = versions.get(media.asset_version_id or "")
+        if found is None or found[1].duration_seconds is None:
+            continue
+        asset, version = found
+        seconds = version.duration_seconds
+        assert seconds is not None
+        if not 2.0 <= seconds <= 15.0:
+            subject = subjects.get(media.subject_asset_id or "") or asset.name
+            raise H3CapabilityError(f"H3 reference audio {version.id} for {subject} ({asset.id}) is {seconds:g} seconds; "
+                "each reference audio must be 2–15 seconds. Select a usable voice reference or explicitly revise the inputs.")
+        known_seconds.append(seconds)
+    if sum(known_seconds) > 15.0:
+        raise H3CapabilityError(f"Selected reference audio totals at least {sum(known_seconds):g} seconds from saved metadata; "
+            "H3 accepts at most 15 seconds combined. Select shorter current voice references or explicitly revise the input media; no voice was omitted.")
+
+
 def compile_h3_request(
     *,
     route: VideoGenerationRoute,
@@ -182,7 +214,13 @@ def compile_h3_request(
     duration_seconds: int,
     media_inputs: list[H3MediaInput],
     resolve_url: Callable[[H3MediaInput], str],
+    resolution: str = "768P",
+    aspect_ratio: str | None = None,
 ) -> H3VideoRequest:
+    try:
+        resolution, ratio = resolve_h3_output_format(route=route, resolution=resolution, aspect_ratio=aspect_ratio)
+    except ValueError as exc:
+        raise H3CapabilityError(str(exc)) from exc
     validate_h3_probe(
         route=route,
         prompt=prompt,
@@ -198,12 +236,7 @@ def compile_h3_request(
             content.append(H3ContentItem(type="video_url", video_url=url, role=media.role))
         else:
             content.append(H3ContentItem(type="audio_url", audio_url=url, role=media.role))
-    ratio = None if route in {
-        VideoGenerationRoute.FRAME_FIRST,
-        VideoGenerationRoute.FRAME_LAST,
-        VideoGenerationRoute.FRAME_FIRST_LAST,
-    } else "9:16"
-    return H3VideoRequest(content=content, duration=duration_seconds, ratio=ratio)
+    return H3VideoRequest(content=content, duration=duration_seconds, ratio=ratio, resolution=resolution)
 
 
 def _validate_local_file(item: H3MediaInput) -> None:

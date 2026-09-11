@@ -6,6 +6,7 @@ import { StudioApi, type ReferenceCue, type StudioScope } from './studio-api'
 import { AssetPicker, ReferenceChip, ReferenceUsagePicker, ShotReferenceEditor } from './ShotReferenceEditor'
 import { ShotSecondsInput } from './ShotSecondsInput'
 import { StudioEditorialPreview } from './StudioEditorialPreview'
+import { studioAspectRatio } from './studio-aspect-ratio'
 import { mergeCurrentChanges } from './studio-editor-merge'
 
 export interface ShotDraft { shot: ShotPlan; base: ShotPlan; revision: number }
@@ -20,7 +21,7 @@ export function ShotPlayer({ project, shot }: { project: ProjectAggregate; shot:
   const [position, setPosition] = useState(0)
   const [muted, setMuted] = useState(false)
   useEffect(() => { setPosition(0); setPlaying(false) }, [source.path, source.sourceIn])
-  if (source.hasEditorial) return <StudioEditorialPreview projectId={project.document.project.id} shotId={shot.id} revision={Number(project.document.editorial_timeline?.revision ?? 0)} aspectRatio={project.document.project.aspect_ratio === '9:16' ? 9 / 16 : project.document.project.aspect_ratio === '1:1' ? 1 : 16 / 9} />
+  if (source.hasEditorial) return <StudioEditorialPreview projectId={project.document.project.id} shotId={shot.id} revision={Number(project.document.editorial_timeline?.revision ?? 0)} aspectRatio={studioAspectRatio(project.document.project.aspect_ratio)} />
   if (!source.path) return <div className="sd-video-placeholder"><Film size={28} /><strong>这个镜头还没有视频</strong><span>完善分镜和参考图后，交给 Agent 生成。</span></div>
   const toggle = () => { if (video.current?.paused) void video.current.play(); else video.current?.pause() }
   return <div className="sd-shot-playback" ref={frame}><video ref={video} key={`${source.path}-${source.sourceIn}`} className="sd-shot-video" playsInline preload="metadata" muted={muted} poster={mediaUrl(source.thumbnail)} src={mediaUrl(source.path)} aria-label={`镜头 ${shot.sequence} 视频`} onClick={toggle}

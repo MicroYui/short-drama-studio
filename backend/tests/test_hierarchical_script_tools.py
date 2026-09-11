@@ -362,6 +362,8 @@ def test_scene_writer_uses_rolling_state_without_replaying_prior_screenplays() -
         _scene_patch(blueprint, blueprint.scenes[0].sequence, "第一场完整可读剧本。"),
         _scene_patch(blueprint, blueprint.scenes[1].sequence, "第二场完整可读剧本。"),
     ]
+    for patch in previous_patches:
+        patch.state_source = "SCREENPLAY"
 
     _, input_text = _scene_writer_prompt(
         request,
@@ -375,7 +377,9 @@ def test_scene_writer_uses_rolling_state_without_replaying_prior_screenplays() -
     assert payload["previous_scene_boundary"] == {
         "scene_ref": "scene:2",
         "scene_sequence": 2,
+        "state_source": "SCREENPLAY",
         "outcome": previous_patches[1].summary,
+        "outline_summary": None,
         "final_rendered_line": previous_patches[1].screenplay_text.splitlines()[-1],
         "final_dialogue_line": {
             "line_ref": "scene:2:line:1",
@@ -384,16 +388,17 @@ def test_scene_writer_uses_rolling_state_without_replaying_prior_screenplays() -
         "continuity_out": previous_patches[1].continuity_out.model_dump(mode="json"),
     }
     assert payload["story_state_before_current_scene"] == (
-        blueprint.scenes[2].continuity_in.model_dump(mode="json")
+        previous_patches[1].continuity_out.model_dump(mode="json")
     )
     assert payload["older_scene_rollup"] == {
         "through_scene_sequence": 1,
-        "fulfilled_events": previous_patches[1].continuity_in.known_facts,
+        "state_source": "SCREENPLAY",
+        "fulfilled_events": previous_patches[0].continuity_out.known_facts,
         "character_and_relationship_states": (
-            previous_patches[1].continuity_in.character_states
+            previous_patches[0].continuity_out.character_states
         ),
-        "prop_states": previous_patches[1].continuity_in.prop_states,
-        "unresolved_promises": previous_patches[1].continuity_in.open_threads,
+        "prop_states": previous_patches[0].continuity_out.prop_states,
+        "unresolved_promises": previous_patches[0].continuity_out.open_threads,
     }
     assert payload["prior_scene_archive"] == {
         "written_scene_range": {"start_sequence": 1, "end_sequence": 2},

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import subprocess
+import json
 from pathlib import Path
 
 import imageio_ffmpeg
 import pytest
+from PIL import Image
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -18,7 +20,8 @@ from short_drama.h3_models import (
 )
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.image_models import AssetCreateRequest, AssetImportLocalRequest
-from short_drama.models import ApprovalStatus, AssetKind, VideoGenerationRoute
+from short_drama.models import ApprovalStatus, AssetKind, AssetMediaType, Freshness, VideoGenerationRoute
+from short_drama.visual_input_quality import ReferenceVisualRerankRequest, build_reference_visual_candidates
 from short_drama.voice_models import VoiceReferenceUpdateRequest
 from short_drama.service import ShortDramaService, WorkflowConflictError
 
@@ -74,6 +77,28 @@ def _route_choice(shot_id: str, candidate_id: str) -> str:
         '"rationale":"根据当前镜头的结构化资产和声音绑定做出路线决策。",'
         '"qa_focus_categories":[],"warnings":[]}]}'
     )
+
+
+def _voice_choice_with_visual(service: ShortDramaService, project_id: str, shot_id: str) -> str:
+    """A real PNG accompanies reference audio, as required by H3's input contract."""
+    document = service.get_project(project_id).document
+    asset = next(a for a in document.assets if a.bible_entity_id == "character-linxia")
+    version = next(v for v in asset.versions if v.id == asset.current_version_id)
+    path = service.workspace_root / "voice-reference-visual.png"
+    Image.new("RGB", (96, 144), "gray").save(path)
+    version.media_type, version.approval_status, version.freshness = AssetMediaType.IMAGE, ApprovalStatus.APPROVED, Freshness.CURRENT
+    version.local_path, version.external_url = str(path), None
+    asset.approved_version_id = version.id
+    service.repository.save_project(document)
+    shot = next(s for s in document.shots if s.id == shot_id)
+    plan = next(p for p in document.reference_plan if p.shot_id == shot_id)
+    choices, _limit, _warnings = build_reference_visual_candidates(document=document, shot=shot,
+        plan=plan, request=ReferenceVisualRerankRequest(), bound_candidates=False)
+    visual = next(c for c in choices if c.asset_version_id == version.id)
+    return json.dumps({"choices": [{"shot_id": shot_id, "candidate_id": f"reference:{shot_id}",
+        "reference_selection_candidate_ids": [visual.candidate_id],
+        "rationale": "Use the selected face and character's actual voice reference.",
+        "qa_focus_categories": [], "warnings": []}]})
 
 
 def _render_audio(path: Path, duration: float = 3.0) -> bytes:
@@ -187,10 +212,7 @@ def test_route_planner_uses_character_voice_for_speaking_shot_and_native_fallbac
     speaking_shot.local_rework_risk = "低；稳定对白近景"
     silent_shot.local_rework_risk = "低；稳定空镜"
     service.repository.save_project(document)
-    agent.output = _route_choice(
-        speaking_shot.id,
-        f"reference:{speaking_shot.id}",
-    )
+    agent.output = _voice_choice_with_visual(service, project_id, speaking_shot.id)
 
     voice_plan = service.compile_h3_production_route_plan(
         project_id,
@@ -201,9 +223,10 @@ def test_route_planner_uses_character_voice_for_speaking_shot_and_native_fallbac
     ).plan
     voice_decision = voice_plan.decisions[0]
     assert voice_decision.route == VideoGenerationRoute.REFERENCE
-    assert [item.role.value for item in voice_decision.media_inputs] == [
+    assert [item.role.value for item in voice_decision.media_inputs if item.kind.value == "AUDIO"] == [
         "reference_audio"
     ]
+    assert any(item.role.value == "reference_image" for item in voice_decision.media_inputs)
     assert "<Audio 1>" in voice_decision.prompt
     assert "all spoken words remain the locked dialogue" in voice_decision.prompt
 
@@ -250,7 +273,7 @@ def test_route_planner_binds_voice_only_from_structured_speaker_identity(
     character_asset.name = "故意误导的资产名"
     character_asset.bible_entity_id = "character-linxia"
     service.repository.save_project(document)
-    agent.output = _route_choice(shot.id, f"reference:{shot.id}")
+    agent.output = _voice_choice_with_visual(service, project_id, shot.id)
 
     structured = service.compile_h3_production_route_plan(
         project_id,
@@ -352,7 +375,7 @@ def test_route_planner_keeps_combined_character_voice_audio_within_h3_limit(
     shot.dialogue_line_ids = [script.lines[0].id, script.lines[1].id]
     shot.local_rework_risk = "低；双人稳定对白"
     service.repository.save_project(document)
-    agent.output = _route_choice(shot.id, f"reference:{shot.id}")
+    agent.output = _voice_choice_with_visual(service, project_id, shot.id)
 
     decision = service.compile_h3_production_route_plan(
         project_id,
@@ -362,9 +385,10 @@ def test_route_planner_keeps_combined_character_voice_audio_within_h3_limit(
         ),
     ).plan.decisions[0]
 
-    assert [item.role.value for item in decision.media_inputs] == [
+    assert [item.role.value for item in decision.media_inputs if item.kind.value == "AUDIO"] == [
         "reference_audio"
     ]
+    assert any(item.role.value == "reference_image" for item in decision.media_inputs)
     assert any("15-second combined audio limit" in item for item in decision.warnings)
 
 

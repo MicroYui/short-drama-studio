@@ -56,6 +56,8 @@ export default defineConfig({
     }
   },
   base: './',  // Use relative paths for Electron file:// protocol
+  // Generated previews and copied upstream apps are not application entries.
+  optimizeDeps: { entries: ['index.html'] },
   server: {
     host: '127.0.0.1',
     watch: { ignored: ['**/output/**'] },

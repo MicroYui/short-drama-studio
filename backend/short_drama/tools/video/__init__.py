@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from short_drama.media_frame_asset import TakeFrameAssetRequest, TakeFrameAssetResponse
+
 from short_drama.models import (
     EnqueueRequest,
     GenerationTask,
@@ -28,6 +30,8 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class VideoToolService(Protocol):
+    def extract_take_frame(self, project_id: str, request: TakeFrameAssetRequest) -> TakeFrameAssetResponse: ...
+
     def enqueue(self, project_id: str, request: EnqueueRequest) -> ProjectAggregate: ...
 
     def select_take(self, take_id: str, *, shot_ids: list[str] | None = None,
@@ -63,6 +67,11 @@ class VideoEnqueueInput(ToolModel):
     request: EnqueueRequest
 
 
+class VideoExtractFrameInput(ToolModel):
+    project_id: str
+    request: TakeFrameAssetRequest
+
+
 class VideoSelectTakeInput(ToolModel):
     take_id: str
     shot_ids: list[str] | None = None
@@ -92,6 +101,28 @@ class VideoLocalReworkInput(ToolModel):
 
 
 def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
+    def extract_frame(request: VideoExtractFrameInput) -> ToolExecution[TakeFrameAssetResponse]:
+        result = service.extract_take_frame(request.project_id, request.request)
+        return ToolExecution(output=result, artifact_refs=(
+            ArtifactRef(project_id=result.project_id, artifact_type="asset", artifact_id=result.asset_id),
+            ArtifactRef(project_id=result.project_id, artifact_type="asset_version", artifact_id=result.asset_version_id),
+            ArtifactRef(project_id=result.project_id, artifact_type="take", artifact_id=result.source_take_id),
+        ))
+
+    registry.register(ToolSpec(
+        id="video.extract_frame", version=1, category=ToolCategory.VIDEO,
+        description=(
+            "Extract a full-resolution actual source frame from a Take and save a usable image asset. "
+            "time_seconds is source time, or local time with shot_id/clip_id; exact clip uses preserve "
+            "trim/speed/reverse mapping. Returns actual PTS plus ready image/H3 reference inputs. "
+            "Use it to derive a new composition with image.enqueue, or as a soft H3 reference anchor; "
+            "a hard first-frame route must be chosen explicitly. No model call, quality approval, "
+            "film compositing or Take selection occurs. Repeats reuse an unchanged extracted source."
+        ), effect=ToolEffect.WRITE, idempotent=True,
+        input_model=VideoExtractFrameInput, output_model=TakeFrameAssetResponse,
+        handler=extract_frame, tags=frozenset({"video", "frame", "image", "reference", "continuity"}),
+    ))
+
     def get_inspection(request: VideoGetTakeInspectionInput) -> ToolExecution[VideoInspectionLookupResponse]:
         result = service.get_take_video_inspection(request.take_id, request.report_id)
         refs = [ArtifactRef(

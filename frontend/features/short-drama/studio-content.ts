@@ -1,7 +1,10 @@
-import type { Asset, AssetVersion, ProjectAggregate, ShotPlan } from './api'
+import type { AssetVersion, ProjectAggregate, ShotPlan } from './api'
 import { pathToFileUrl } from '../../lib/file-url'
 import type { ReferenceCue } from './studio-api'
 import { projectSchema, type Project } from '../../types/project-model'
+import { mediaLabel } from './studio-media-library'
+export { assetGroups, mediaLabel } from './studio-media-library'
+export type { AssetGroup } from './studio-media-library'
 
 const editorialCache = new WeakMap<object, Project | null>()
 export function currentEditorial(project: ProjectAggregate): Project | null {
@@ -16,12 +19,6 @@ export function currentEditorial(project: ProjectAggregate): Project | null {
 
 export const mediaUrl = (path: string | null | undefined, external?: string | null): string => path ? pathToFileUrl(path) : external || ''
 
-/** Older experiment labels include work-item metadata; keep the descriptive title visible. */
-export function mediaLabel(description: string): string {
-  const parts = description.split(/[|｜]/).map(part => part.trim())
-  const title = parts.length > 1 ? parts.find(part => /\p{Script=Han}/u.test(part) && !part.startsWith('wi-')) || parts[0] : description
-  return title.replace(/^wi-[a-z0-9-]+\s*/i, '').split(/[；。\n]/)[0].slice(0, 64)
-}
 export function mediaTitle(project: ProjectAggregate, version: AssetVersion): string {
   const entry = (project.document.reference_packs ?? []).flatMap(pack => pack.entries ?? []).find(item => item.asset_version_id === version.id)
   if (version.reference_sheet) return version.reference_sheet.strategy === 'CHARACTER_STANDARD_VIEWS' ? '角色参考卡' : '多视角参考卡'
@@ -33,31 +30,6 @@ export function mediaTitle(project: ProjectAggregate, version: AssetVersion): st
 export const durationLabel = (seconds: number): string => `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`
 export const currentScript = (project: ProjectAggregate) => project.document.script_versions.find(item => item.id === project.document.project.current_script_version_id) ?? project.document.script_versions.at(-1)
 export const allCues = (shot: ShotPlan): ReferenceCue[] => [...(shot.references ?? []), ...(shot.timeline_beats ?? []).flatMap(beat => beat.references ?? [])]
-
-export interface AssetGroup { id: string; name: string; kind: Asset['kind']; subject: Asset; files: { asset: Asset; version: AssetVersion }[] }
-
-export function assetGroups(project: ProjectAggregate): AssetGroup[] {
-  const { assets, shots } = project.document
-  const packs = project.document.reference_packs ?? []
-  const groups = new Map<string, AssetGroup>()
-  const bound = new Set(shots.flatMap(allCues).map(cue => cue.asset_version_id))
-  const packVersions = new Set(packs.flatMap(pack => (pack.entries ?? []).map(entry => entry.asset_version_id)))
-  for (const asset of assets) {
-    const pack = packs.find(item => (item.entries ?? []).some(entry => asset.versions.some(version => version.id === entry.asset_version_id)))
-    const subject = assets.find(item => item.id === pack?.subject_asset_id) ?? assets.find(item => item.bible_entity_id && item.bible_entity_id === asset.bible_entity_id) ?? asset
-    let group = groups.get(subject.id)
-    if (!group) {
-      group = { id: subject.id, name: subject.name, kind: subject.kind, subject, files: [] }
-      groups.set(subject.id, group)
-    }
-    for (const version of asset.versions) {
-      if (!(version.local_path || version.external_url)) continue
-      if (version.id !== asset.current_version_id && version.id !== asset.approved_version_id && !bound.has(version.id) && !packVersions.has(version.id)) continue
-      group.files.push({ asset, version })
-    }
-  }
-  return [...groups.values()]
-}
 
 export function resolveCue(project: ProjectAggregate, cue: ReferenceCue) {
   const asset = project.document.assets.find(item => item.versions.some(version => version.id === cue.asset_version_id))

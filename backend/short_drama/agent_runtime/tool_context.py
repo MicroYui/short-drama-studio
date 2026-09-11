@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 from difflib import get_close_matches
+import json
 from typing import cast
 
 from pydantic import JsonValue
 
 from short_drama.agent_runtime.models import WorkOrder
-from short_drama.agent_runtime.model_input import json_text
+from short_drama.agent_runtime.context_markers import context_marker, context_read_contract
+from short_drama.agent_runtime.model_input import json_text, pointer_value
 from short_drama.agent_runtime.store import AgentRuntimeStore
 from short_drama.agent_runtime.token_budget import count_text_tokens
 from short_drama.studio_trace import record_trace
@@ -28,7 +30,7 @@ _ROLE_TOOLS: dict[str, tuple[str, ...]] = {
     "WRITER": ("script.save_scene",),
     "DIRECTOR": ("shot.save_current",),
     "ASSET_PLANNER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan"),
-    "ASSET_BUILDER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan", "image.capability", "image.enqueue"),
+    "ASSET_BUILDER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan_fields", "image.capability", "image.enqueue"),
     "ASSET_VERIFIER": ("artifact.get_asset_work_context", "artifact.inspect_asset"),
     "VIDEO_PROMPT_COMPILER": ("route.get_generation_unit_context", "route.h3_capability_profile", "route.compile_h3_prompt", "route.plan_h3"),
     "ROUTE_PLANNER": ("route.get_generation_unit_context", "route.h3_capability_profile", "route.plan_h3"),
@@ -145,6 +147,7 @@ def project_retained_read_results(
     if not isinstance(observations, list):
         return working_set
     projected = deepcopy(working_set)
+    has_context_refs = False
     selected = _selected_ids(work_order.task_inputs)
     selected.update(ref.artifact_id for ref in work_order.scope)
     latest = working_set.get("latest_handoff")
@@ -168,15 +171,7 @@ def project_retained_read_results(
                 "reason": "retained_read_projection"})
 
         def marker(value: JsonValue, path: str) -> dict[str, JsonValue]:
-            return {
-                "context_ref": snapshot_id, "pointer": path,
-                "estimated_tokens": count_text_tokens(json_text(value)),
-                "read": {"tool_name": "agent.read_context", "arguments": {
-                    "project_id": project_id, "run_id": work_order.parent_run_id,
-                    "snapshot_id": snapshot_id, "pointer": path, "offset": 0, "limit": 6000,
-                }},
-                "note": "Exact retained field; read its required content before editing. Refresh current content if it changed.",
-            }
+            return context_marker(snapshot_id, path, estimated_tokens=count_text_tokens(json_text(value)))
 
         def brief(value: JsonValue, path: str) -> JsonValue:
             if not isinstance(value, dict):
@@ -229,4 +224,88 @@ def project_retained_read_results(
         if count_text_tokens(json_text(view)) < count_text_tokens(json_text(result)):
             target_observation = cast(dict[str, JsonValue], target[index])
             target_observation["result"] = view
+            has_context_refs = True
+    shared = _share_retained_reference_entities(projected, store=store, work_order=work_order)
+    if has_context_refs or shared:
+        projected["context_read"] = context_read_contract(project_id=project_id, run_id=work_order.parent_run_id)
     return projected
+
+
+def _share_retained_reference_entities(
+    working_set: dict[str, JsonValue], *, store: AgentRuntimeStore,
+    work_order: WorkOrder,
+) -> bool:
+    """Share identical reference bodies with an already durable retained read.
+
+    Read scope/order and entity provenance remain intact. The visible read avoids
+    another Tool turn; its existing snapshot is still resolvable if the final
+    request budget externalizes that read. Small entities stay inline.
+    """
+    entities = working_set.get("entities")
+    observations = working_set.get("read_observations")
+    if not isinstance(entities, list) or not isinstance(observations, list):
+        return False
+    shared = False
+    paths = {"reference_pack": ("/output/reference_packs",),
+             "shot_reference_plan": ("/output/shot_reference_plans",),
+             "shot": ("/output/storyboard/shots", "/output/content/shot")}
+    remaining = [entity for entity in entities if isinstance(entity, dict)
+                 and isinstance(entity.get("kind"), str) and entity.get("kind") in paths
+                 and isinstance(entity.get("state"), dict)]
+
+    def same_value(left: JsonValue, right: JsonValue) -> bool:
+        # Object key order is immaterial; array order and JSON scalar types are
+        # significant (Python equality alone treats True and 1 as equal).
+        return json.dumps(left, sort_keys=True, ensure_ascii=False) == json.dumps(right, sort_keys=True, ensure_ascii=False)
+
+    for index in range(len(observations) - 1, -1, -1):
+        if not remaining:
+            break
+        observation = observations[index]
+        if not isinstance(observation, dict) or observation.get("tool_name") == "agent.read_context":
+            continue
+        result = observation.get("result")
+        output = result.get("output") if isinstance(result, dict) and result.get("status") == "SUCCEEDED" else None
+        sequence = observation.get("source_sequence")
+        if not isinstance(output, dict) or not isinstance(sequence, int) or isinstance(sequence, bool):
+            continue
+        snapshot_id = f"context-read-{work_order.id}-{sequence}"
+        snapshot: dict[str, JsonValue] | None = None
+        for entity in list(remaining):
+            kind = cast(str, entity["kind"])
+            state = cast(dict[str, JsonValue], entity["state"])
+            body = state.get("shot") if kind == "shot" else state
+            candidates: list[tuple[str, JsonValue]] = []
+            for base_path in paths[kind]:
+                try:
+                    values = pointer_value(cast(dict[str, JsonValue], result), base_path)
+                except ValueError:
+                    continue
+                if isinstance(values, list):
+                    candidates.extend((f"{base_path}/{position}", value) for position, value in enumerate(values))
+                elif isinstance(values, dict):
+                    candidates.append((base_path, values))
+            for path, value in candidates:
+                if not isinstance(value, dict) or not same_value(body, value):
+                    continue
+                marker = context_marker(snapshot_id, path)
+                marker["visible_at"] = f"/working_set/read_observations/{index}/result{path}"
+                if count_text_tokens(json_text(marker)) >= count_text_tokens(json_text(body)):
+                    break
+                if snapshot is None:
+                    snapshot = store.get_context_snapshot(snapshot_id, work_order.parent_run_id)
+                if snapshot is None:
+                    break
+                try:
+                    saved = pointer_value(snapshot, path)
+                except ValueError:
+                    break
+                if same_value(saved, value):
+                    if kind == "shot":
+                        state["shot"] = marker
+                    else:
+                        entity["state"] = marker
+                    remaining.remove(entity)
+                    shared = True
+                break
+    return shared

@@ -1,6 +1,7 @@
 import type { components } from '../../generated/backend-openapi'
 import { backendFetch } from '../../lib/backend'
 import type { ProjectAggregate, ShotPlan } from './api'
+import type { StudioExportDimensions } from './studio-aspect-ratio'
 
 export type StudioEvent = components['schemas']['StudioEvent']
 export type StudioJob = components['schemas']['StudioJob']
@@ -59,7 +60,7 @@ export const StudioApi = {
   editorial: (id: string) => studioRequest<StudioEditorial>(`${projectPath(id)}/editorial`),
   shotEditorial: (id: string, shotId: string, anchor?: string) => studioRequest<StudioEditorial>(`${projectPath(id)}/shots/${encodeURIComponent(shotId)}/editorial${anchor ? `?anchor_clip_id=${encodeURIComponent(anchor)}` : ''}`),
   saveShotTimeline: (id: string, shotId: string, timeline: unknown, revision: number, anchor?: string | null) => studioRequest<StudioMutation>(`${projectPath(id)}/shots/${encodeURIComponent(shotId)}/editorial`, json('PUT', { timeline, expected_revision: revision, anchor_clip_id: anchor ?? null })),
-  exportTimeline: (id: string, request: { expected_revision: number; width: number; height: number; fps: number; subtitles: boolean }) => studioRequest<StudioExport>(`${projectPath(id)}/exports`, json('POST', request)),
+  exportTimeline: (id: string, request: { expected_revision: number; fps: number; subtitles: boolean } & StudioExportDimensions) => studioRequest<StudioExport>(`${projectPath(id)}/exports`, json('POST', request)),
   exportStatus: (id: string, exportId: string) => studioRequest<StudioExport>(`${projectPath(id)}/exports/${exportId}`),
   activity: (id: string, after = 0) => studioRequest<StudioActivity>(`${projectPath(id)}/activity?after=${after}`),
   send: (id: string, text: string, scope: StudioScope) => studioRequest<StudioJob>(`${projectPath(id)}/messages`, json('POST', { text, scope })),

@@ -64,7 +64,7 @@ def register_tools(registry: ToolRegistry, service: TimelineToolService) -> None
             id="timeline.rebuild",
             version=1,
             category=ToolCategory.TIMELINE,
-            description="Build a new timeline manifest from current selected Takes.",
+            description="Build a new timeline manifest from current selected Takes. New automatic output sizes retain selected source detail in the project aspect ratio; an existing explicitly chosen output size is preserved. Use the editorial tools for saved user edits.",
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=TimelineRebuildInput,
@@ -99,6 +99,7 @@ def register_tools(registry: ToolRegistry, service: TimelineToolService) -> None
             description=(
                 "Render an existing current timeline to clean and subtitled video files without rebuilding it. "
                 "Pass manifest_id to pin the exact version you reviewed. Subtitle edits and audio windows are preserved. "
+                "Render the manifest's stored output dimensions without a fixed 720p/1080p fallback. "
                 "Rebuild is a separate timeline.rebuild operation and would discard authored cue timing."
             ),
             effect=ToolEffect.EXTERNAL,

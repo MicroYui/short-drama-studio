@@ -23,7 +23,12 @@ from short_drama.providers.h3_prompt_skill import (
     validate_h3_generation_unit_prompt_ir,
     validate_h3_prompt_ir,
 )
-from short_drama.providers.h3_media_bindings import resolve_h3_media_bindings
+from short_drama.providers.h3_media_bindings import is_h3_composition_reference, resolve_h3_media_bindings
+from short_drama.providers.h3_output_format import h3_prompt_document, resolve_h3_output_format
+from short_drama.providers.h3_dialogue_spans import (
+    assert_complete_dialogue_request, dialogue_span_payload, generation_unit_dialogue_spans,
+    request_dialogue_span_payload, request_speaker_ids,
+)
 
 
 _H3_FIELDS = (
@@ -32,6 +37,16 @@ _H3_FIELDS = (
 )
 _H3_FIELD_PATTERN = re.compile(
     r"(?m)^[ \t]*(" + "|".join(_H3_FIELDS) + r"):[ \t]*"
+)
+_DIALOGUE_POLICY = (
+    "dialogue_spans 从当前分镜推导，每个 span 是一次实际发声，原文只写一个 <d>，"
+    "放在起始镜头的 start_beat_index 时段并说明完整范围；continuation_beat_indices 及 continuing_dialogue 只延续，不重启或重复。"
+    "beat 索引从0开始，span 起止是 beat 容纳范围；保留 sound/audio_intent 更细的发声时间，不强迫说满。"
+    "同组相邻镜明确承载同ID时是一句跨切对白：按 request_dialogue_spans 的完整时间说一次，"
+    "切镜两侧用 <scenetrans> 和相同声线的连续说明；不因视觉切换暂停、截短或重念，也不猜测切点具体词语。"
+    "同镜连续阶段不使用 <scenetrans> 伪造切镜；不同 span 即使 line_id 或文字相同也不可去重。"
+    "全部镜头使用 locked_dialogue.speaker_id 标注同一请求内的稳定声线，同时保留 speaker 名称。"
+    "speaker_character_id 不同即使同名也保持不同声音ID；无绑定名称只在本请求内分配声线，不代表 Bible 实体。"
 )
 
 
@@ -136,8 +151,9 @@ def normalize_language_prompt(
                 raise LanguagePromptValidationError(f"H3 prompt has a conflicting binding for @{binding.alias}")
             if required not in definitions or binding.provider_label not in definitions:
                 declaration = (
-                    f"{required}; {binding.prompt_label} refers to {binding.subject} "
-                    f"from {binding.provider_label}."
+                    f"{required}; {binding.provider_label} is a soft composition reference: {binding.purpose}."
+                    if is_h3_composition_reference(binding.media) else
+                    f"{required}; {binding.prompt_label} refers to {binding.subject} from {binding.provider_label}."
                 )
                 if declaration not in additions:
                     additions.append(declaration)
@@ -444,6 +460,7 @@ def _route_media_bindings(
             "subject": resolved.subject,
             "subject_asset_id": resolved.subject_asset_id,
             "reference_tags": list(resolved.tags),
+            "image_reference_role": media.image_reference_role.value if media.image_reference_role else None,
             "purpose": resolved.purpose,
         }
         if media.asset_version_id is not None:
@@ -513,6 +530,8 @@ def _compiler_instructions(
         "只有当前 Provider Skill 提供输出语法。"
         "\nmodel_lock 来自本次明确调用的 H3 适配器，是实际目标模型；"
         "GenerationUnit 中可空的 provider/model/resolution 是上游偏好，不替代该目标。"
+        "aspect_ratio 是本次实际输出画幅，优先于旧风格备注中的画幅；"
+        "adaptive 表示沿用所选画面比例，不得擅自写成竖屏或其他固定比例。"
         "operation_scope 是当前 Tool 调用范围：只编译文本，没有媒体上传、提交或生成。"
         "ProductionSpec 的 user_constraints 保留当时的记录：其中创作约束仍须遵守，"
         "而描述当时停在哪个工序的阶段备注不能替代当前 Tool 的调用范围。"
@@ -523,11 +542,18 @@ def _compiler_instructions(
         "不展开解释性推理、重复禁止事项或在每镜重写全部身份定义。"
         "官方字段是必要格式，不是要删除的解释包装：保留全部字段标题，压缩的是正文。"
         "英文叙述用直接、紧凑的句法，不用电影化修辞扩写已给事实。"
-        "subject_definitions 只需短身份名、全部语义别名及对应图片；summary 一句；"
+        "subject_definitions 保留短身份名、来源支持的主要可见区别、全部语义别名及对应图片；summary 一句；"
+        "COMPOSITION/LAYOUT_GUIDE 的 prompt_label 为 Picture：它提供本镜构图、站位和当前物件状态，"
+        "不是另一个 Subject，也不承诺硬首尾帧。明确它适用的镜头、时间和哪些人可见；"
+        "分镜拼图只提供顺序与构图，不能照抄成分屏。人物图提取身份，构图图传递空间，两者冲突时"
+        "如实指出冲突，不能把构图里的错误演员重新定义成主角。"
         "retention_analysis 集中说明保留与不复制的范围，不重复主体定义；"
         "overall_soundscape 只补充共享声音，不再逐字重复各镜已写的对白和动作声。"
         "每镜对白在对应时间窗内逐字保留，发话标注同时保留 locked_dialogue.speaker 原名；"
-        "例如 Lin Yi（林一） says: <d>[Chinese] 原文对白</d>。"
+        "例如 Lin Yi（林一） (S1) says: <d>[Chinese] 原文对白</d>。"
+        "按 production_rules.dialogue 使用 dialogue_spans 与 locked_dialogue.speaker_id，"
+        "不按时段数量重复发声，不在每个镜头重置声音编号。"
+        "保留各 beat 的视听动作与时间关系，镜头组内使用加过 source_window 起点的绝对时间。"
         "英文译名不能独自代替原说话人身份，尤其是媒体资产没有 Bible entity 关联时。"
         "若提供 source_prompt，它是本次待修订的完整草稿；结合 compiler_feedback 修改它，"
         "超长草稿本身不是最终 H3 请求，最终输出仍必须通过7000字符限制。"
@@ -540,12 +566,12 @@ def _compiler_instructions(
     )
 
 
-def _h3_compilation_target() -> dict[str, object]:
+def _h3_compilation_target(resolution: str = "768P") -> dict[str, object]:
     return {
         "model_lock": {
             "provider": "minimax",
             "model": H3VideoRequest.model_fields["model"].default,
-            "resolution": H3VideoRequest.model_fields["resolution"].default,
+            "resolution": resolution,
         },
         "operation_scope": {
             "current_tool": "route.compile_h3_prompt",
@@ -569,7 +595,13 @@ def build_language_prompt_input(
     method_skill_ids: Sequence[str] = (),
     revision_instructions: str | None = None,
     actual_previous_media_boundary: dict[str, object] | None = None,
+    resolution: str = "768P",
+    aspect_ratio: str | None = None,
 ) -> tuple[str, str]:
+    assert_complete_dialogue_request(document, [shot])
+    resolution, _ratio = resolve_h3_output_format(route=route, resolution=resolution, aspect_ratio=aspect_ratio,
+                                                default_aspect_ratio=document.project.aspect_ratio)
+    document = h3_prompt_document(document, route=route, aspect_ratio=aspect_ratio)
     instructions = _compiler_instructions(document, method_skill_ids=method_skill_ids)
     script = next(
         version
@@ -582,6 +614,7 @@ def build_language_prompt_input(
         for line_id in shot.dialogue_line_ids
         if line_id in line_by_id
     ]
+    speaker_ids = request_speaker_ids(document, [shot])
     scene = next(
         (item for item in script.structured_scenes if item.id == shot.scene_id),
         None,
@@ -602,14 +635,14 @@ def build_language_prompt_input(
     route_media = _route_media_bindings(document, resolved_media_inputs)
     payload = {
         "task": "将当前镜头、原文对白和有序媒体忠实编译为 required_prompt_schema 指定的 MiniMax-H3 Prompt IR；仅在提供 source_prompt 时修订该草稿。",
-        **_h3_compilation_target(),
+        **_h3_compilation_target(resolution),
         "production_profile": document.project.production_profile.value,
         "route": route.value,
         "required_prompt_schema": prompt_schema_for_route(route),
         "route_guidance": route_guidance,
         "route_media_bindings": route_media,
         "duration_seconds": duration_seconds,
-        "aspect_ratio": "9:16",
+        "aspect_ratio": document.project.aspect_ratio,
         "locked_shot": {
             "sequence": shot.sequence,
             "narrative_purpose": shot.narrative_purpose,
@@ -634,16 +667,20 @@ def build_language_prompt_input(
             "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
             "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
             "continuity_handoff": "有实际连续性依赖时使用已观察的采用媒体边界；未提供观察时只保留计划意图，不携入当前镜头未列出的可见资产。",
+            "dialogue": _DIALOGUE_POLICY,
         },
         "locked_dialogue": [
             {
+                "id": line.id,
                 "speaker": line.speaker,
+                "speaker_id": speaker_ids[line.id],
                 "speaker_character_id": line.speaker_character_id,
                 "spoken_text": line.spoken_text,
                 "audio_kind": line.audio_kind.value,
             }
             for line in dialogue
         ],
+        "dialogue_spans": dialogue_span_payload(shot),
         "visible_assets": visible_asset_names,
         "visible_asset_bible_for_disambiguation_only": visible_bible,
     }
@@ -667,6 +704,8 @@ def build_generation_unit_language_prompt_input(
     source_prompt: str | None = None,
     revision_instructions: str | None = None,
     actual_previous_media_boundary: dict[str, object] | None = None,
+    resolution: str | None = None,
+    aspect_ratio: str | None = None,
 ) -> tuple[str, str]:
     """Read one complete clip from canonical facts, without replaying other stages.
 
@@ -674,10 +713,16 @@ def build_generation_unit_language_prompt_input(
     output limit. Each editorial window retains its dialogue and local roster.
     """
 
+    resolution, _ratio = resolve_h3_output_format(route=route, resolution=resolution or unit.resolution or "768P",
+        aspect_ratio=aspect_ratio, default_aspect_ratio=production_spec.aspect_ratio)
+    document = h3_prompt_document(document, route=route, aspect_ratio=aspect_ratio)
     shot_by_id = {shot.id: shot for shot in shots}
     if set(shot_by_id) != set(unit.shot_ids):
         raise ValueError("Prompt compilation requires every shot in the generation unit")
     ordered_shots = [shot_by_id[window.shot_id] for window in unit.shot_windows]
+    assert_complete_dialogue_request(document, ordered_shots)
+    spans = generation_unit_dialogue_spans(unit, ordered_shots)
+    speaker_ids = request_speaker_ids(document, ordered_shots)
     script = next(
         version
         for version in document.script_versions
@@ -704,15 +749,26 @@ def build_generation_unit_language_prompt_input(
                     },
                 ),
                 "locked_dialogue": [
-                    line_by_id[line_id].model_dump(
+                    {**line_by_id[line_id].model_dump(
                         mode="json",
                         include={
                             "id", "speaker", "speaker_character_id", "spoken_text", "audio_kind"
                         },
-                    )
-                    for line_id in shot.dialogue_line_ids
+                    ), "speaker_id": speaker_ids[line_id]}
+                    for line_id in [span.line_id for span in spans if span.parts[0].shot_id == shot.id]
                     if line_id in line_by_id
                 ],
+                "dialogue_spans": [{
+                    "utterance_id": f"utterance-{span_index + 1}", "line_id": span.line_id,
+                    "start_seconds": span.start_seconds, "end_seconds": span.end_seconds,
+                    "start_beat_index": span.parts[0].beat_indices[0] if span.parts[0].beat_indices else None,
+                    "continuation_beat_indices": list(span.parts[0].beat_indices[1:]),
+                } for span_index, span in enumerate(spans) if span.parts[0].shot_id == shot.id],
+                "continuing_dialogue": [{
+                    "utterance_id": f"utterance-{span_index + 1}", "line_id": span.line_id,
+                    "speaker_id": speaker_ids.get(span.line_id), "finish_by_seconds": span.end_seconds,
+                    "beat_indices": list(part.beat_indices),
+                } for span_index, span in enumerate(spans) for part in span.parts[1:] if part.shot_id == shot.id],
                 "visible_asset_ids": _explicit_shot_asset_ids(document, shot, []),
                 "structured_action_plan": _structured_action_plan(document, shot),
             }
@@ -722,17 +778,18 @@ def build_generation_unit_language_prompt_input(
         binding.pop("review_notes", None)
     payload: dict[str, object] = {
         "task": "将当前完整镜头组忠实编译为一次 H3 音视频请求；每个 locked_shots 条目形成一个独立、按顺序承接的自然叙事段落。",
-        **_h3_compilation_target(),
+        **_h3_compilation_target(resolution),
         "route": route.value,
         "required_prompt_schema": prompt_schema_for_route(route),
         "duration_seconds": duration_seconds,
-        "aspect_ratio": production_spec.aspect_ratio,
+        "aspect_ratio": document.project.aspect_ratio,
         "production_direction": production_spec.model_dump(
             mode="json",
             include={"production_mode", "language", "visual", "audio", "user_constraints"},
         ),
         "locked_generation_unit": unit.model_dump(mode="json", exclude={"shot_windows"}),
         "locked_shots": locked_shots,
+        "request_dialogue_spans": request_dialogue_span_payload(spans),
         "previous_clip_planned_terminal_state": _previous_shot_planned_terminal_state(document, ordered_shots[0]),
         "actual_previous_media_boundary": actual_previous_media_boundary,
         "route_media_bindings": bindings,
@@ -742,6 +799,7 @@ def build_generation_unit_language_prompt_input(
             "timing": "每段原样保留 required_timing_marker；组内节拍加上 source_window 的起点后才是片段绝对时间。不得移动、合并、增删镜头或逐字台词。",
             "references": "按 route_media_bindings 的实际顺序绑定全部参考；每镜可见范围以该镜 visible_asset_ids 和 locked_shot 为准。当前组的完整参考包不表示所有主体每镜都在场。",
             "audio": "落实已声明的逐镜对白、声线、环境声和动作声；未准备独立音轨不代表静音。BGM、配音替换和字幕按制作方向与用户要求决定，不因有对白而自动另配音或烧字幕。",
+            "dialogue": _DIALOGUE_POLICY,
             "output": "输出不超过7000字符的官方 H3 Prompt IR；删除重复表达但保留全部事实。无法忠实容纳时明确报告冲突，不截断台词或私自改分镜。",
         },
     }

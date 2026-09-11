@@ -88,6 +88,14 @@ def test_activity_reads_persisted_polling_and_scoped_error(tmp_path: Path) -> No
     now = datetime.now(UTC).isoformat()
     service.repository.save_studio_job(StudioJob(id="job", project_id=pid, run_id=run.id, objective=run.objective,
         status="running", scope=StudioScope(), created_at=now, updated_at=now))
+    run.goal_summary = "当前只完成视频生成前准备，不提交视频。"
+    runtime.store.save_run(run)
+    activity = service.studio_runtime.activity(pid)
+    assert activity.jobs[0].current_goal == run.goal_summary
+    assert activity.jobs[0].objective == "制作当前镜头"
+    persisted_job = service.repository.list_studio_jobs(pid)[0]
+    assert persisted_job.objective == "制作当前镜头"
+    assert persisted_job.current_goal is None
     worker = service.studio_runtime.activity(pid).workers[0]
     assert worker.waiting_until == work.continuation_not_before.isoformat()
     assert not worker.waiting_review and worker.latest_error is None

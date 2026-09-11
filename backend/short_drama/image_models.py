@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 import math
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AfterValidator, Field, ValidationInfo, field_validator, model_validator
 
 from short_drama.models import (
     Asset,
@@ -16,12 +16,15 @@ from short_drama.models import (
     AssetReferenceStrategy,
     AssetSheetInputPolicy,
     AssetStandardView,
+    AssetTextPlateContentState,
     AssetVersion,
     CoreAssetBrief,
     DomainModel,
     ImageReferenceAuthority,
     ImageReferenceRole,
     ProjectAggregate,
+    TextPlateLine,
+    TextPlateTextBlock,
 )
 
 
@@ -96,6 +99,11 @@ class AssetCreateRequest(DomainModel):
     brief: CoreAssetBrief | None = None
 
 
+class AssetBatchCreateRequest(DomainModel):
+    assets: list[AssetCreateRequest] = Field(min_length=1, max_length=50,
+        description="Already determined new characters, locations, props or references to save together. Creates text definitions only; does not generate media or replace existing objects.")
+
+
 class AssetBriefUpdateRequest(DomainModel):
     brief: CoreAssetBrief
 
@@ -111,6 +119,30 @@ class AssetImportUrlRequest(DomainModel):
     descriptor: str = Field(min_length=1, max_length=4000)
     media_type: AssetMediaType = AssetMediaType.IMAGE
     parent_version_id: str | None = None
+
+
+class ImageRegion(DomainModel):
+    """Normalized rectangle in the visible image after EXIF orientation."""
+
+    x: float = Field(ge=0, lt=1)
+    y: float = Field(ge=0, lt=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> ImageRegion:
+        if self.x + self.width > 1.000000001 or self.y + self.height > 1.000000001:
+            raise ValueError("Image region must be contained within the visible image")
+        return self
+
+
+class AssetImageCropRequest(DomainModel):
+    source_asset_version_id: str = Field(min_length=1)
+    region: ImageRegion
+    descriptor: str = Field(min_length=1, max_length=4000)
+    reference_role: ImageReferenceRole = Field(
+        description="What the selected pixels provide: identity, wardrobe, space, prop, etc.",
+    )
 
 
 class AssetReviewRequest(DomainModel):
@@ -339,10 +371,22 @@ def _parse_local_text_plate_size(value: str) -> tuple[int, int]:
     return width, height
 
 
+def _text_plate_line(value: str) -> str:
+    if "\n" in value or "\r" in value:
+        raise ValueError("Use one line per exact_lines item; use an empty item for a blank layout row")
+    return value.strip()
+
+
 class AssetTextPlateComposeRequest(DomainModel):
     """Deterministic exact-copy plate rendered locally without an image provider."""
 
     size: str = "1536x864"
+    base_version_id: str | None = Field(default=None, min_length=1, max_length=200,
+        description="Explicit existing usable local TextPlate PNG to copy before drawing append_text_blocks. Inherits actual dimensions and every original layout element; parent_version_id alone remains lineage only.")
+    append_text_blocks: list[TextPlateTextBlock] = Field(default_factory=list[TextPlateTextBlock], max_length=64,
+        description="Only new text to draw on base_version_id. Requires an explicit complete content_state; omit all full-layout fields. Never redraw, move or erase existing content.")
+    content_state: AssetTextPlateContentState | None = Field(default=None,
+        description="Optional explicit narrative state and full exact visible copy for this candidate. Allows declared additions such as a signature while preserving all fixed brief text. Omit to use brief.required_visible_text unchanged; never rewrite the global brief merely to create a later state.")
     background_color: str = Field(default="#F5F1E8", min_length=1, max_length=64)
     foreground_color: str = Field(default="#171717", min_length=1, max_length=64)
     content_box: tuple[float, float, float, float] = Field(default=(0, 0, 1, 1), description="Normalized x/y/width/height of the text area. Set a full-frame transparent background with #00000000 for an overlay.")
@@ -351,7 +395,12 @@ class AssetTextPlateComposeRequest(DomainModel):
     stroke_width: int = Field(default=0, ge=0, le=16)
     stroke_color: str = "#000000"
     title: str | None = Field(default=None, min_length=1, max_length=500)
-    exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
+    exact_lines: list[Annotated[str, AfterValidator(_text_plate_line)]] = Field(default_factory=list[str], max_length=64,
+        description="Legacy ordered lines. Empty strings reserve blank layout rows, not visible wording. For precise positions use text_blocks instead.")
+    text_blocks: list[TextPlateTextBlock] = Field(default_factory=list[TextPlateTextBlock], max_length=64,
+        description="Ordered exact text with explicit canvas boxes, pixel font sizes and alignment. Use instead of title/exact_lines; the array order follows required_visible_text even when positions differ.")
+    lines: list[TextPlateLine] = Field(default_factory=list[TextPlateLine], max_length=64,
+        description="Optional ruled/signature line geometry, separate from visible wording. Works with either text mode.")
     layout_description: str = Field(min_length=1, max_length=2000)
     descriptor: str = Field(min_length=1, max_length=4000)
     parent_version_id: str | None = None
@@ -377,22 +426,29 @@ class AssetTextPlateComposeRequest(DomainModel):
             value = getattr(self, field_name)
             if value != value.strip():
                 raise ValueError(f"Text plate {field_name} must be trimmed")
+        if self.base_version_id is not None:
+            if not self.append_text_blocks:
+                raise ValueError("base_version_id requires non-empty append_text_blocks")
+            if self.content_state is None:
+                raise ValueError("Appending text requires content_state.name and complete required_visible_text, including existing text")
+            if self.title is not None or self.exact_lines or self.text_blocks or self.lines:
+                raise ValueError("base_version_id inherits all original content; omit title/exact_lines/text_blocks/lines. Only append_text_blocks may change pixels")
+            return self
+        if self.append_text_blocks:
+            raise ValueError("append_text_blocks requires an explicit base_version_id")
         if self.title is not None:
             if self.title != self.title.strip() or "\n" in self.title or "\r" in self.title:
                 raise ValueError("Text plate title must be one trimmed line")
-        normalized_lines = [line.strip() for line in self.exact_lines if line.strip()]
-        if normalized_lines != self.exact_lines:
-            raise ValueError("Text plate exact_lines must be trimmed and non-empty")
-        if any("\n" in line or "\r" in line for line in self.exact_lines):
-            raise ValueError("Text plate exact_lines must contain one visible line each")
-        if self.title is None and not self.exact_lines:
-            raise ValueError("Text plate requires a title or at least one exact line")
+        if self.text_blocks and (self.title is not None or self.exact_lines):
+            raise ValueError("Use text_blocks or title/exact_lines, not both; lines may be used with either mode")
+        if self.title is None and not any(self.exact_lines) and not self.text_blocks:
+            raise ValueError("Text plate requires a title, visible exact_lines or text_blocks; blank rows and lines alone contain no wording")
         return self
 
     def required_visible_text(self) -> list[str]:
-        return ([self.title] if self.title is not None else []) + list(
-            self.exact_lines
-        )
+        if self.text_blocks:
+            return [block.text for block in self.text_blocks]
+        return ([self.title] if self.title is not None else []) + [line for line in self.exact_lines if line]
 
 
 class ImageReferenceInput(DomainModel):
@@ -568,11 +624,25 @@ class ImageProviderRequest(DomainModel):
         return f"{width}x{height}"
 
 
+_IMAGE_TASK_OPERATION_DESCRIPTION = (
+    "GENERATE: no reference images or target parent. REFERENCE_GENERATE: ordered "
+    "reference images with parent_version_id omitted; it can create another candidate "
+    "in an existing Asset. EDIT: ordered reference images plus an explicit target "
+    "parent_version_id. A planned REFERENCE_GENERATE does not itself select a parent; "
+    "when the actual task explicitly derives from a target version, use EDIT."
+)
+_IMAGE_TASK_PARENT_DESCRIPTION = (
+    "Explicit target AssetVersion lineage for EDIT; requires operation=EDIT. "
+    "Omit for GENERATE and REFERENCE_GENERATE. A reference, dependency, primary input, "
+    "or existing target Asset does not automatically become this parent."
+)
+
+
 class ImageTaskCreateRequest(DomainModel):
-    operation: ImageOperation = ImageOperation.GENERATE
+    operation: ImageOperation = Field(default=ImageOperation.GENERATE, description=_IMAGE_TASK_OPERATION_DESCRIPTION)
     prompt: str = Field(min_length=1, max_length=32000)
     descriptor: str = Field(min_length=1, max_length=4000)
-    parent_version_id: str | None = None
+    parent_version_id: str | None = Field(default=None, description=_IMAGE_TASK_PARENT_DESCRIPTION)
     input_version_ids: list[str] = Field(default_factory=list[str], max_length=16)
     reference_inputs: list[ImageReferenceInput] = Field(
         default_factory=list[ImageReferenceInput],
@@ -594,6 +664,18 @@ class ImageTaskCreateRequest(DomainModel):
         ),
     )
 
+    @field_validator("parent_version_id")
+    @classmethod
+    def validate_reference_generation_parent(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is not None and info.data.get("operation") == ImageOperation.REFERENCE_GENERATE:
+            raise ValueError(
+                "REFERENCE_GENERATE runs without a target parent; when parent_version_id "
+                "explicitly selects an existing target version, set operation='EDIT' and "
+                "keep the intended parent and ordered references. If no target parent "
+                "is intended, omit parent_version_id; an existing Asset is still allowed."
+            )
+        return value
+
     @model_validator(mode="after")
     def validate_operation_inputs(self) -> ImageTaskCreateRequest:
         effective_ids = _validate_reference_inputs(
@@ -610,10 +692,6 @@ class ImageTaskCreateRequest(DomainModel):
             if not effective_ids:
                 raise ValueError(
                     "REFERENCE_GENERATE requires at least one reference input"
-                )
-            if self.parent_version_id is not None:
-                raise ValueError(
-                    "REFERENCE_GENERATE creates a first asset version without a target parent"
                 )
         else:
             if not effective_ids:
@@ -660,10 +738,10 @@ class AgentImageTaskCreateRequest(DomainModel):
     ambiguous.
     """
 
-    operation: ImageOperation = ImageOperation.GENERATE
+    operation: ImageOperation = Field(default=ImageOperation.GENERATE, description=_IMAGE_TASK_OPERATION_DESCRIPTION)
     prompt: str = Field(min_length=1, max_length=32000)
     descriptor: str = Field(min_length=1, max_length=4000)
-    parent_version_id: str | None = None
+    parent_version_id: str | None = Field(default=None, description=_IMAGE_TASK_PARENT_DESCRIPTION)
     reference_inputs: list[ImageReferenceInput] = Field(
         default_factory=list[ImageReferenceInput],
         max_length=16,
@@ -787,6 +865,11 @@ class AssetMutationResponse(DomainModel):
     asset: Asset
     version: AssetVersion
     project: ProjectAggregate
+
+
+class AssetBatchMutationResponse(DomainModel):
+    assets: list[Asset]
+    created_asset_ids: list[str]
 
 
 class ImageTaskResponse(DomainModel):

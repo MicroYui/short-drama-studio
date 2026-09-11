@@ -26,6 +26,7 @@ from short_drama.tools.contracts import (
 )
 from short_drama.tools.registry import ToolRegistry
 from short_drama.subtitle_alignment import NativeSubtitleAlignmentRequest, NativeSubtitleAlignmentResponse
+from short_drama.native_transcription import NativeTranscriptionRequest, NativeTranscriptionResponse
 from short_drama.voice_models import (
     VoiceReferenceMutationResponse,
     VoiceReferenceUpdateRequest,
@@ -33,6 +34,10 @@ from short_drama.voice_models import (
 
 
 class AudioToolService(Protocol):
+    def transcribe_current_native_audio(
+        self, project_id: str, request: NativeTranscriptionRequest,
+    ) -> NativeTranscriptionResponse: ...
+
     def align_current_native_subtitles(
         self, project_id: str, request: NativeSubtitleAlignmentRequest,
     ) -> NativeSubtitleAlignmentResponse: ...
@@ -79,6 +84,11 @@ class AudioAlignNativeSubtitlesInput(ToolModel):
     request: NativeSubtitleAlignmentRequest
 
 
+class AudioTranscribeNativeInput(ToolModel):
+    project_id: str
+    request: NativeTranscriptionRequest
+
+
 class AudioVoiceReferenceUpdateInput(ToolModel):
     project_id: str
     character_id: str
@@ -122,6 +132,25 @@ def _production_document_refs(
 
 
 def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
+    def transcribe_native(request: AudioTranscribeNativeInput) -> ToolExecution[NativeTranscriptionResponse]:
+        result = service.transcribe_current_native_audio(request.project_id, request.request)
+        return ToolExecution(output=result, warnings=tuple(result.warnings))
+
+    registry.register(ToolSpec(
+        id="audio.transcribe_native", version=1, category=ToolCategory.AUDIO,
+        description=(
+            "Transcribe actual audible native Take audio without requiring existing captions. "
+            "Reads the selected Studio timeline with actual trims, speed, reverse, volume and track audibility; "
+            "music and separate narration are excluded. Optional clip_ids/shot_ids limit scope. "
+            "Returns source revision, original ASR text and approximate character times in FILM coordinates, "
+            "plus a persisted report. Does not save captions or claim speaker/lip-sync verification. "
+            "For first captions, review transcription against actual dialogue then use timeline.edit_clips add_subtitles; "
+            "audio.align_subtitles adjusts already-existing caption timing."
+        ), effect=ToolEffect.READ, idempotent=True,
+        input_model=AudioTranscribeNativeInput, output_model=NativeTranscriptionResponse,
+        handler=transcribe_native, tags=frozenset({"audio", "subtitles", "transcript", "timeline"}),
+    ))
+
     def align_subtitles(request: AudioAlignNativeSubtitlesInput) -> ToolExecution[NativeSubtitleAlignmentResponse]:
         result = service.align_current_native_subtitles(request.project_id, request.request)
         if result.editorial_timeline_id is not None:
@@ -291,8 +320,12 @@ def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
                 "current trims, timing, mute, volume and speed, and persist a report tied to its "
                 "editorial revision. Does not rebuild or replace edits. Uses the current legacy "
                 "TimelineManifest only when no Studio edit has been saved. The Studio report's "
-                "manifest_id is an inspection snapshot; saved Studio subtitle changes use "
-                "timeline.read_editorial/save_editorial, not legacy manifest alignment."
+                "manifest_id is an inspection snapshot. For existing subtitles, read the current "
+                "timeline with timeline.read_editorial, then modify only the relevant cues with "
+                "timeline.edit_clips or align their timing with audio.align_subtitles. If subtitles "
+                "do not exist, first use audio.transcribe_native to observe the actual native dialogue, "
+                "then create reviewed cues with timeline.edit_clips.add_subtitles. An empty subtitle "
+                "list does not mean the dialogue has been transcribed."
             ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,

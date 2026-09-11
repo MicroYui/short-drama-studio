@@ -1,0 +1,112 @@
+{
+  "source_turn_id": "specialist-turn-1b537c2eeeab422390f66648262e6e51",
+  "source_line_ids": [
+    "line-yqq-02"
+  ],
+  "shots": [
+    {
+      "id": "shot-yqq-03",
+      "project_id": "project-5b8286dc63e6",
+      "sequence": 3,
+      "scene_id": "scene-5441e73077d5",
+      "duration_seconds": 2.5,
+      "narrative_purpose": "许岚抽出在场的报价单并转给赵衡，建立后续旧确认签名证据的实物来源。",
+      "visual": "@许岚左手从双空白的@情况说明下面抽出@报价单，沿桌面带到北侧中区，再平转半圈，标题端朝东、版面朝西侧赵衡。纸停稳后她松手撤回，红改和旧确认区不被遮挡。本镜看清抽纸、转向和松手，不承担运动中的准确姓名精读。说明留在东侧朝许，许右手持裸笔在画外，独立笔帽不动。",
+      "framing": "9:16桌面中近景，完整覆盖两纸分开的路径；米白左袖从画右进入，画左可留浅蓝袖边缘。",
+      "camera": "南侧高斜俯固定，画左西、画右东。东窗柔光不变，不追字、不镜像纸面。",
+      "audio_intent": "许岚画外第二句只连续说一次，跨本镜2.5秒及下一静态镜1.5秒：“这版是你改的。我还问过你，能不能发。”本镜开始说“这版是你改的。我还问过你，”，下一镜自然接完“能不能发。”不重新起句。纸声低于对白，赵衡不发声。",
+      "dialogue_line_ids": [
+        "line-yqq-02"
+      ],
+      "references": [],
+      "timeline_beats": [
+        {
+          "start_seconds": 0,
+          "end_seconds": 2.1,
+          "visual": "@报价单从东侧说明下抽离并转向西座赵衡；情况说明仍双空白。",
+          "framing": "桌面中近景，纸的移动路径可见。",
+          "camera": "南侧固定斜俯。",
+          "action": "许左手捏报价单北侧空白边，向北中部抽出，沿桌面转半圈至标题端朝东。右手始终在画外持裸笔，不参与抽纸。",
+          "performance": "平稳出示证据，不甩纸。",
+          "dialogue_line_ids": [
+            "line-yqq-02"
+          ],
+          "sound": "许岚画外开始第二句，连续普通话配低纸摩擦声。",
+          "references": []
+        },
+        {
+          "start_seconds": 2.1,
+          "end_seconds": 2.5,
+          "visual": "@报价单停在北中部朝赵，旧红改和确认区无遮挡；说明在东侧。",
+          "framing": "维持动作覆盖，不在此要求精读姓名。",
+          "camera": "固定。",
+          "action": "许左手松开纸边并撤向东侧，赵尚未按纸；报价单停止移动。",
+          "performance": "画外语气克制，不添加解释。",
+          "dialogue_line_ids": [
+            "line-yqq-02"
+          ],
+          "sound": "同一句继续，到下一镜接完，不重复播放。",
+          "references": []
+        }
+      ],
+      "continuity": {
+        "character_positions": "许东赵西仍坐着，只见必要袖口和手，主轴南侧。",
+        "eyeline": "许看纸再看赵；赵的识别反应在证据插入后出现。",
+        "prop_state_in": "说明双空白压在报价单上，两纸东侧朝许；许右手持裸笔，帽独立在东缘南部许左手边。",
+        "prop_state_out": "报价单北中标题东、旧红改旧确认不变；说明东侧标题西、双空白。许左手已离报价，右手仍持裸笔，帽不动。",
+        "action_in": "许左手已触下层报价单北边。",
+        "action_out": "抽出、转向、松手完成，赵还没有按住纸。"
+      },
+      "transition_out": "纸停稳后直切同一道具的独立静态旧确认证据；第二句声音连续跨切。",
+      "merge_candidate": false,
+      "local_rework_risk": "实际视频需检查只抽出一张、转向及松手终态；准确旧签名由下一静态镜承担。不安排运动跟踪贴字、透视合成或遮挡恢复。",
+      "approval_status": "DRAFT",
+      "freshness": "CURRENT"
+    },
+    {
+      "id": "shot-yqq-03-evidence",
+      "project_id": "project-5b8286dc63e6",
+      "sequence": 4,
+      "scene_id": "scene-5441e73077d5",
+      "duration_seconds": 1.5,
+      "narrative_purpose": "观众准确看清既有红改和“确认：赵衡”，证明主管确认过这版报价。",
+      "visual": "@报价单作为独立全画幅静态证据插入，使用同一道具版式的实际准确图片，构图同时容纳中部红改与右下“确认：赵衡”。姓名是开场已有的黑色签名，不出现新书写。无手、无笔、无移动背景；不把准确图版贴到前镜运动纸面。",
+      "framing": "9:16静态画面，紧裁红改至右下确认区，确认文字保持足够字高；1.5秒全程无遮挡，字幕避开证据区。",
+      "camera": "中性正俯纸面插入，画面上方对应桌东，实物标题端仍朝东。改变观看方向而非转动纸张，不暗示换座；静帧不推拉。",
+      "audio_intent": "承接许岚画外同一句尾部“能不能发。”，与前镜合计约4秒，仅一句连续录音，不重复整句。此后保留短尾停；无新发言，无书写声。",
+      "dialogue_line_ids": [
+        "line-yqq-02"
+      ],
+      "references": [],
+      "timeline_beats": [
+        {
+          "start_seconds": 0,
+          "end_seconds": 1.5,
+          "visual": "@报价单中部旧红改及右下“确认：赵衡”准确静止可读。",
+          "framing": "全画幅静态证据插入，确认区不被字幕挡住。",
+          "camera": "正俯中性，画面上方为桌东，不运动。",
+          "action": "保持已有签名与红改，不增加墨迹，不出现手或笔。",
+          "performance": "人物画外，许岚只接完第二句，不新增反应要求。",
+          "dialogue_line_ids": [
+            "line-yqq-02"
+          ],
+          "sound": "许岚画外接完“能不能发。”，连续室内底声。",
+          "references": []
+        }
+      ],
+      "continuity": {
+        "character_positions": "许东赵西仍在原座，双方均不入静态镜。",
+        "eyeline": "中性证据镜，不代替人物反打；下一镜赵衡低头识别。",
+        "prop_state_in": "报价北中标题东，旧红改和旧确认不变，许左手已松开；说明东侧双空白。",
+        "prop_state_out": "全部状态不变；赵尚未按报价。许右手仍持裸笔，帽仍东缘南部。",
+        "action_in": "报价单已被转向赵衡并停稳。",
+        "action_out": "旧确认看清后，才切赵衡看纸并按住北缘。"
+      },
+      "transition_out": "直切赵衡识别、按纸和反问，恢复南侧主轴的赵左许右。",
+      "merge_candidate": false,
+      "local_rework_risk": "需实际检查同版式图片的红改、中文、旧签名、字高与裁切。图片以EDITORIAL用途作独立全画幅静态插入，不交视频模型重绘，不依赖跟踪或动态合成。本单尚未绑定媒体，不声称图像已验收。",
+      "approval_status": "DRAFT",
+      "freshness": "CURRENT"
+    }
+  ]
+}

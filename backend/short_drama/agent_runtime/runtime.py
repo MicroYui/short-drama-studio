@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import threading
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -91,6 +92,13 @@ class AgentRuntime:
     ) -> None:
         self.store = store
         self._context_compiler = context_compiler
+        self._run_locks: dict[str, threading.Lock] = {}
+        self._run_locks_guard = threading.Lock()
+
+    def run_lock(self, run_id: str) -> threading.Lock:
+        """Share the short control-state boundary across Leader and continuations."""
+        with self._run_locks_guard:
+            return self._run_locks.setdefault(run_id, threading.Lock())
 
     def create_run(
         self,
@@ -156,6 +164,8 @@ class AgentRuntime:
         selected_method_skill_ids: Sequence[str] = (),
         method_selection_rationale: str | None = None,
         carried_work_order_ids: Sequence[str] = (),
+        inherited_action_ids: Sequence[str] = (),
+        updated_work_orders: Sequence[WorkOrder] = (),
         goal_complete: bool = False,
     ) -> PlanRevision:
         run = self._require_run(run_id)
@@ -169,11 +179,15 @@ class AgentRuntime:
             selected_method_skill_ids=list(selected_method_skill_ids),
             method_selection_rationale=method_selection_rationale,
             carried_work_order_ids=list(carried_work_order_ids),
+            inherited_action_ids=list(inherited_action_ids),
             goal_complete=goal_complete,
         )
+        carried_orders = [order.model_copy(deep=True, update={
+            "active_plan_revision_id": revision.id,
+        }) for order in updated_work_orders]
         run.current_plan_revision_id = revision.id
         run.updated_at = utc_now()
-        self.store.append_plan_revision(revision, run)
+        self.store.append_plan_revision(revision, run, updated_work_orders=carried_orders)
         return revision
 
     def add_plan(
@@ -206,6 +220,8 @@ class AgentRuntime:
         selected_method_skill_ids: Sequence[str] = (),
         method_selection_rationale: str | None = None,
         carried_work_order_ids: Sequence[str] = (),
+        inherited_action_ids: Sequence[str] = (),
+        updated_work_orders: Sequence[WorkOrder] = (),
         goal_complete: bool = False,
     ) -> PlanRevision:
         """Replace the active plan by appending a recoverable new revision."""
@@ -217,6 +233,8 @@ class AgentRuntime:
             selected_method_skill_ids=selected_method_skill_ids,
             method_selection_rationale=method_selection_rationale,
             carried_work_order_ids=carried_work_order_ids,
+            inherited_action_ids=inherited_action_ids,
+            updated_work_orders=updated_work_orders,
             goal_complete=goal_complete,
         )
 
@@ -397,17 +415,17 @@ class AgentRuntime:
     def set_run_status(self, run_id: str, status: AgentRunStatus) -> AgentRun:
         run = self._require_run(run_id)
         previous_status = run.status
+        terminal = status in {
+            AgentRunStatus.COMPLETED, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED,
+        }
+        # This setter owns only status and its completion timestamp. Reasons,
+        # blockers and action/worker progress are saved by their own operations.
+        # Still normalize an inconsistent legacy completion timestamp.
+        if previous_status == status and (run.completed_at is not None) == terminal:
+            return run
         run.status = status
         run.updated_at = utc_now()
-        run.completed_at = (
-            run.updated_at
-            if status in (
-                AgentRunStatus.COMPLETED,
-                AgentRunStatus.FAILED,
-                AgentRunStatus.CANCELLED,
-            )
-            else None
-        )
+        run.completed_at = run.updated_at if terminal else None
         self.store.save_run(run)
         self._log_run_status(run, previous_status=previous_status)
         return run

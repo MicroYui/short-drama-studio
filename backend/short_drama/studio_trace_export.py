@@ -62,6 +62,14 @@ def export_studio_trace(service: ShortDramaService, project_id: str) -> Path:
             "path": version.local_path, "external_url": version.external_url, "type": version.media_type.value}
             for asset in project.document.assets for version in asset.versions if version.local_path or version.external_url]
         archive.writestr("media-index.json", json.dumps(shareable_trace(media), ensure_ascii=False, indent=2))
+        # Real media requests also belong to the production record. These records
+        # survive restarts and include the original prompt, input bindings and IDs.
+        for media_task in service.repository.list_tasks(project_id):
+            archive.writestr(f"providers/video/{media_task.id}/task.json", _share_json(media_task.model_dump_json()))
+        for provider_run in service.repository.list_provider_runs(project_id):
+            archive.writestr(f"providers/video/{provider_run.task_id}/run.json", _share_json(provider_run.model_dump_json()))
+        for image_task in service.repository.list_image_tasks(project_id):
+            archive.writestr(f"providers/image/{image_task.id}.json", _share_json(image_task.model_dump_json()))
         for run in store.list_runs(project_id):
             prefix = f"agent/{run.id}"
             archive.writestr(f"{prefix}/snapshot.json", _share_json(service.agent_runtime.snapshot(run.id).model_dump_json()))

@@ -17,6 +17,7 @@ from short_drama.models import (
     AudioKind,
     CreateProjectRequest,
     DomainModel,
+    SceneContinuitySummary,
     SourceMode,
     StoryIntent,
     StoryRevisionVerification,
@@ -149,8 +150,16 @@ class SceneScriptBlock(DomainModel):
         return self
 
 
+class SceneWrittenState(DomainModel):
+    """Compact authored handoff grounded in the finished blocks, not the plan."""
+
+    summary: str = Field(min_length=1, max_length=1600)
+    entry_state: SceneContinuitySummary
+    exit_state: SceneContinuitySummary
+
+
 class SceneCreativeDraft(DomainModel):
-    """Minimal creative output; blueprint-owned fields are merged by code."""
+    """Scene body and its actual handoff; global planning fields stay code-owned."""
 
     scene_sequence: int = Field(ge=1, le=500)
     blocks: list[SceneScriptBlock] = Field(
@@ -162,6 +171,11 @@ class SceneCreativeDraft(DomainModel):
         min_length=1,
         max_length=1200,
     )
+    written_scene: SceneWrittenState | None = Field(default=None, description=(
+        "Summarize what the completed blocks actually establish, including relevant carried facts and "
+        "unresolved promises from the supplied written state. Never copy a planned event that was not "
+        "written. Optional only for legacy/in-flight responses; absent metadata stays unverified OUTLINE."
+    ))
     upstream_replan_request: SceneUpstreamReplanRequest | None = None
 
     @model_validator(mode="after")
@@ -173,6 +187,8 @@ class SceneCreativeDraft(DomainModel):
                 "Scene Writer must return either screenplay blocks or one upstream "
                 "replan request"
             )
+        if has_replan and self.written_scene is not None:
+            raise ValueError("A replan request cannot claim a written scene state")
         return self
 
 
@@ -331,15 +347,18 @@ def _scene_patch_from_creative_draft(
     return EpisodeScenePatch(
         scene_sequence=scene.sequence,
         heading=scene.heading,
-        summary=scene.summary,
+        summary=draft.written_scene.summary if draft.written_scene is not None else scene.summary,
         narrative_purpose=scene.narrative_purpose,
         playable_actions=list(scene.playable_actions),
         screenplay_text="\n".join(screenplay_blocks),
         target_duration_seconds=scene.target_duration_seconds,
         location_names=list(scene.location_names),
         prop_ids=list(scene.prop_ids),
-        continuity_in=scene.continuity_in.model_copy(deep=True),
-        continuity_out=scene.continuity_out.model_copy(deep=True),
+        continuity_in=(draft.written_scene.entry_state if draft.written_scene is not None
+                       else scene.continuity_in).model_copy(deep=True),
+        continuity_out=(draft.written_scene.exit_state if draft.written_scene is not None
+                        else scene.continuity_out).model_copy(deep=True),
+        state_source="SCREENPLAY" if draft.written_scene is not None else "OUTLINE",
         lines=lines,
         performance_timing_assessment=draft.performance_timing_assessment,
     )
@@ -434,7 +453,9 @@ def _scene_writer_prompt(
     instructions = (
         "你是面向当前视频制作媒介的场景编剧 Agent（Scene Writer Agent）。"
         "只返回 JSON，并严格匹配 SceneCreativeDraft；只把当前场景节点扩写成按演出顺序排列的 "
-        "ACTION、DIALOGUE、VOICEOVER blocks。heading、summary、duration、locations 与 continuity "
+        "ACTION、DIALOGUE、VOICEOVER blocks，并用 written_scene 返回依据完成正文写出的简短 summary、"
+        "entry_state 与 exit_state。只记录正文实际建立的事实及从已写状态继承的相关承诺，"
+        "不要把蓝图要求但没有演出的事件算作已完成。heading、duration、locations 等制作字段"
         "由代码从蓝图合并，不要在输出中重复，也不要改写全局蓝图、其他场次、角色、地点、道具或风格。"
         "本阶段不写镜头、运镜、关键帧、剪辑或供应商提示词。把当前节点写成可读、可演的场景："
         "尽快进入当下目标与冲突，用可见动作、反应、调度、情绪变化和对白推动。"
@@ -451,15 +472,18 @@ def _scene_writer_prompt(
         "在当前场自行收敛；只有继续压缩会破坏用户承诺、来源保真、主要因果或结尾回报时，"
         "才请求上游重规划。performance_timing_assessment 可记录自然演读的压力与取舍；"
         "不用字数公式、固定容差、逐句范围或删改清单代替语义判断。"
-        "延续 story_state_before_current_scene 和 older_scene_rollup 中的人物目标与关系位置、"
-        "道具状态、已兑现事件和未回收承诺，不提前解决后续场景。previous_scene_boundary "
-        "只提供紧邻上一场的精确语义尾部；更早场次已归档为稳定滚动状态，不要假设其正文在当前输入中。"
-        "需要指向某个更早事实时，使用 prior_scene_archive 给出的 scene/line ref 格式在证据中标明，"
-        "不要要求把整集前文重放进当前场。"
+        "延续 story_state_before_current_scene 和 older_scene_rollup 中已写明的人物目标与关系位置、"
+        "道具状态、已兑现事件和未回收承诺，不提前解决后续场景。只有 state_source=SCREENPLAY "
+        "的状态来自实际写作；null 表示未提供，不能用当前蓝图的 continuity_in/out 冒充既成事实。"
+        "current_scene_node 是本场意图，必须在正文中实际建立所需条件。previous_scene_boundary "
+        "提供上一场精确尾部及有来源的状态；OUTLINE 的计划摘要仅供辨认意图。"
+        "prior_scene_archive 只给定位格式，不包含原文，也不是本次调用可执行的检索工具；"
+        "不要从未载入的 scene/line 引用猜测台词或事实，不重放整集历史正文。"
         "blocks 必须是最终演出顺序，"
         "自然交错动作、反应、情绪转折、停顿与对白。playable_actions 是 Story Architect 给出的语义意图，"
         "不是必须逐字写进 screenplay 的文本清单；可以合并、压缩、重排，或用等价的可见行为完成，"
-        "但要守住本场 narrative_purpose 与 continuity_out。covers_action_indices 只是可选的意图来源标注："
+        "但要实现本场 narrative_purpose 与必要的连续性意图；实际变化如实写入 written_scene，"
+        "不能仅靠抄写计划宣称完成。covers_action_indices 只是可选的意图来源标注："
         "能明确对应时填写，不确定时可留空，不要求逐项全覆盖。已声明的常驻角色标为 CORE，"
         "并且用 speaker_character_id 显式引用 episode_context.characters 中的稳定 ID；"
         "确实只在本场出现的群众、店员等小角色可标为 SCENE_EXTRA，避免无意升级成全局重资产。"
@@ -549,7 +573,9 @@ def _scene_writer_prompt(
             {
                 "scene_ref": f"scene:{previous_scene.scene_sequence}",
                 "scene_sequence": previous_scene.scene_sequence,
-                "outcome": previous_scene.summary,
+                "state_source": previous_scene.state_source,
+                "outcome": previous_scene.summary if previous_scene.state_source == "SCREENPLAY" else None,
+                "outline_summary": previous_scene.summary if previous_scene.state_source == "OUTLINE" else None,
                 "final_rendered_line": _last_rendered_screenplay_line(
                     previous_scene.screenplay_text
                 ),
@@ -564,23 +590,28 @@ def _scene_writer_prompt(
                     if previous_scene.lines
                     else None
                 ),
-                "continuity_out": previous_scene.continuity_out.model_dump(mode="json"),
+                "continuity_out": (previous_scene.continuity_out.model_dump(mode="json")
+                                   if previous_scene.state_source == "SCREENPLAY" else None),
             }
             if previous_scene is not None
             else None
         ),
-        "story_state_before_current_scene": scene.continuity_in.model_dump(mode="json"),
+        "story_state_before_current_scene": (
+            previous_scene.continuity_out.model_dump(mode="json")
+            if previous_scene is not None and previous_scene.state_source == "SCREENPLAY" else None
+        ),
         "older_scene_rollup": (
             {
                 "through_scene_sequence": older_scene.scene_sequence,
-                "fulfilled_events": list(previous_scene.continuity_in.known_facts),
+                "state_source": "SCREENPLAY",
+                "fulfilled_events": list(older_scene.continuity_out.known_facts),
                 "character_and_relationship_states": list(
-                    previous_scene.continuity_in.character_states
+                    older_scene.continuity_out.character_states
                 ),
-                "prop_states": list(previous_scene.continuity_in.prop_states),
-                "unresolved_promises": list(previous_scene.continuity_in.open_threads),
+                "prop_states": list(older_scene.continuity_out.prop_states),
+                "unresolved_promises": list(older_scene.continuity_out.open_threads),
             }
-            if previous_scene is not None and older_scene is not None
+            if older_scene is not None and older_scene.state_source == "SCREENPLAY"
             else None
         ),
         "prior_scene_archive": (
@@ -619,15 +650,18 @@ def _validate_scene_patch(
     immutable_pairs = (
         ("scene_sequence", patch.scene_sequence, scene.sequence),
         ("heading", patch.heading, scene.heading),
-        ("summary", patch.summary, scene.summary),
         ("narrative_purpose", patch.narrative_purpose, scene.narrative_purpose),
         ("playable_actions", patch.playable_actions, scene.playable_actions),
         ("target_duration_seconds", patch.target_duration_seconds, scene.target_duration_seconds),
         ("location_names", patch.location_names, scene.location_names),
         ("prop_ids", patch.prop_ids, scene.prop_ids),
-        ("continuity_in", patch.continuity_in, scene.continuity_in),
-        ("continuity_out", patch.continuity_out, scene.continuity_out),
     )
+    if patch.state_source == "OUTLINE":
+        immutable_pairs += (
+            ("summary", patch.summary, scene.summary),
+            ("continuity_in", patch.continuity_in, scene.continuity_in),
+            ("continuity_out", patch.continuity_out, scene.continuity_out),
+        )
     changed = [name for name, actual, expected in immutable_pairs if actual != expected]
     if changed:
         raise ValueError(

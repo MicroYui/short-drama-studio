@@ -18,6 +18,8 @@
 
 ## 已阅读的成熟实现
 
+2026-09-12 补齐部分分工完成后的增量规划：已落盘完成结果可以触发一次锁外 Leader 补充判断，同时继续其他 Worker。原步骤、Action 和在途媒体任务保留；同一结果不按 tick 或重启反复触发。实现、一手调度资料与验证边界见[按已完成分工补充计划](incremental-worker-planning.md)。实际总耗时和额外语言用量仍需新空项目验证。
+
 | 来源 | 采用的机制 | 在本产品中的处理 |
 | --- | --- | --- |
 | [Codex compact.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/compact.rs) 与 [Agents SDK CompactionSession 实现](https://github.com/openai/openai-agents-python/blob/main/src/agents/memory/openai_responses_compaction_session.py) | 压缩后恢复当前运行上下文，保留真实用户意图；窗口超限后先改变输入再重试；会话替换失败时恢复旧数据 | 保留完整原始要求、当前目标摘要和最新消息；通过已落盘数据构建工作集；先保存原始上下文再替换为可回读引用。没有照搬 SDK 默认按消息条数触发的策略 |

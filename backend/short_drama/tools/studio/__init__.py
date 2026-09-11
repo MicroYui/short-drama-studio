@@ -10,6 +10,9 @@ from short_drama.tools.contracts import ArtifactRef, ToolCategory, ToolEffect, T
 from short_drama.tools.registry import ToolRegistry
 from short_drama.studio_comfy import ComfyRunRequest, ComfyRun
 from short_drama.studio_models import StudioChangeRequest, StudioChangeSet, StudioSceneOutline
+from short_drama.reference_planner import (
+    ReferencePlanPreviewRequest, ReferencePlanPreviewResponse, preview_reference_plan,
+)
 
 if TYPE_CHECKING:
     from short_drama.service import ShortDramaService
@@ -101,6 +104,12 @@ class CurrentWriteOutput(DomainModel):
     editorial_revision: int | None = None
     timeline_id: str | None = None
     changed_shot_ids: list[str] = Field(default_factory=list[str])
+    changed_scene_ids: list[str] = Field(default_factory=list[str])
+
+
+class ShotWriteOutput(CurrentWriteOutput):
+    reference_plan_preview: ReferencePlanPreviewResponse | None = None
+    reference_plan_preview_error: str | None = None
 
 
 class TextProposalInput(ToolModel):
@@ -135,7 +144,8 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
             "script_id": script.id,
             "episode_title": document.project.episode_title,
             "input_text": document.project.input_text,
-            "scene_index": [{"id": scene.id, "heading": scene.heading, "summary": scene.summary} for scene in script.structured_scenes],
+            "scene_index": [{"id": scene.id, "heading": scene.heading, "summary": scene.summary,
+                             "narrative_purpose": scene.narrative_purpose} for scene in script.structured_scenes],
             "shot_index": [{"id": shot.id, "sequence": shot.sequence, "scene_id": shot.scene_id, "duration_seconds": shot.duration_seconds} for shot in document.shots],
             "asset_index": [{"id": asset.id, "name": asset.name, "kind": asset.kind.value, "media": [
                 {"id": version.id, "descriptor": version.descriptor, "media_type": version.media_type.value}
@@ -169,15 +179,31 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         document = result.project.document
         script = next(item for item in document.script_versions if item.id == document.project.current_script_version_id)
         return ToolExecution(output=CurrentWriteOutput(project_id=request.project_id,
-            scene_ids=[item.id for item in script.structured_scenes], shot_ids=[], notices=result.notices),
+            scene_ids=[item.id for item in script.structured_scenes], shot_ids=[], notices=result.notices,
+            changed_scene_ids=result.changed_scene_ids, changed_shot_ids=result.changed_shot_ids),
             artifact_refs=(ArtifactRef(project_id=request.project_id, artifact_type="script_version", artifact_id=script.id, version=script.version),))
 
-    def save_shot(request: ShotWriteInput) -> ToolExecution[CurrentWriteOutput]:
+    def save_shot(request: ShotWriteInput) -> ToolExecution[ShotWriteOutput]:
         result = service.studio.save_shot(request.project_id, request.shot_id, request.request)
-        saved = next(shot for shot in result.project.document.shots if shot.id == request.shot_id)
-        return ToolExecution(output=CurrentWriteOutput(project_id=request.project_id,
+        document = result.project.document
+        saved = next(shot for shot in document.shots if shot.id == request.shot_id)
+        plan = next((item for item in document.reference_plan if item.shot_id == saved.id), None)
+        preview = None
+        preview_error = None
+        if plan is not None:
+            try:
+                preview = preview_reference_plan(document, saved, plan, ReferencePlanPreviewRequest())
+            except ValueError as exc:
+                # The content is already saved. A reference diagnostic must not
+                # turn that successful write into a failed, blindly retried action.
+                preview_error = str(exc)
+        else:
+            preview_error = "当前镜头尚无参考计划；分镜已保存，引用待后续准备。"
+        return ToolExecution(output=ShotWriteOutput(project_id=request.project_id,
             scene_ids=[], shot_ids=[saved.id], notices=result.notices,
-            shot_revisions={saved.id: saved.revision}, changed_shot_ids=[saved.id]),
+            shot_revisions={saved.id: saved.revision}, changed_shot_ids=[saved.id],
+            reference_plan_preview=preview, reference_plan_preview_error=preview_error),
+            warnings=tuple(preview.warnings) if preview is not None else (preview_error or "引用预览不可用",),
             artifact_refs=(ArtifactRef(project_id=request.project_id, artifact_type="shot",
                 artifact_id=saved.id, version=saved.revision),))
 
@@ -264,7 +290,7 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         editor = EditorProject.model_validate(value.project)
         target_id = request.request.timeline_id or editor.activeTimelineId
         timeline = next(item for item in editor.timelines if item.id == target_id)
-        cue_ids = {item.id for item in request.request.subtitles}
+        cue_ids = {item.id for item in (*request.request.subtitles, *request.request.add_subtitles)}
         clip_ids = {item.id for item in request.request.clips}
         if request.request.keep_linked_audio:
             for item in timeline.clips:
@@ -277,6 +303,7 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
                 "source_in_seconds": clip.trimStart, "volume": clip.volume, "muted": clip.muted, "speed": clip.speed}
                 for clip in timeline.clips if clip.id in clip_ids],
             "changed_subtitles": [cast(JsonValue, item.model_dump(mode="json")) for item in timeline.subtitles if item.id in cue_ids],
+            "created_subtitle_ids": [item.id for item in request.request.add_subtitles],
             "removed_subtitle_ids": [item.id for item in request.request.subtitles if item.remove],
             "time_coordinates": "保存后的全片时间；字幕样式与文字仅更新显式字段。"}), artifact_refs=refs)
 
@@ -348,12 +375,12 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         description="读取并检查本集已存在的剪辑导出；export_id 可精确指定，省略取最新完成记录。实际解码两个 MP4 并返回尺寸、时长、帧率、音轨、保存修订与技术检查。不重导出、不修改内容，不依赖旧 TimelineManifest；普通成片导出验收优先用此工具。",
         effect=ToolEffect.READ, idempotent=True, input_model=ExportReadInput, output_model=CurrentReadOutput, handler=read_export,
         tags=frozenset({"studio", "editorial", "export", "inspection"})))
-    registry.register(ToolSpec(id="timeline.export_editorial", version=1, category=ToolCategory.TIMELINE,
-        description="把当前已保存的剪辑导出为实际 MP4，使用相同 LTX 时间线、声音和字幕。等待本地 FFmpeg 完成后返回媒体路径；存在用户剪辑时必须使用本工具，不能用重新组接覆盖用户修改。",
+    registry.register(ToolSpec(id="timeline.export_editorial", version=2, category=ToolCategory.TIMELINE,
+        description="把当前已保存的剪辑导出为实际 MP4，使用相同 LTX 时间线、声音和字幕。默认省略width和height，由实际采用的视频尺寸与项目画幅确定画布，保留原素材细节；只有明确需要指定尺寸时同时传宽高，不能把2K素材默认为720p。无采用视频才使用画幅对应默认尺寸。支持硬切、多轨、透明度、PNG图层、裁切、变速、翻转、声音与字幕；text/adjustment片段和非none的transitionIn/transitionOut尚未接通导出，不能把编辑器可显示当作可导出能力，准确文字可用字幕或PNG图版。等待本地 FFmpeg 完成后返回实际尺寸和媒体路径；存在用户剪辑时必须使用本工具，不能用重新组接覆盖用户修改。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineExportInput, output_model=StudioExport, handler=export_timeline,
         tags=frozenset({"studio", "editorial", "export"})))
-    registry.register(ToolSpec(id="timeline.edit_clips", version=3, category=ToolCategory.TIMELINE,
-        description="精确修改当前片段与字幕，只发变化字段，无需读取或回写整个LTX project。request.timeline_id使用editor_selection/read_editorial返回的准确时间线，保留用户当前active选择和其他时间线；省略仅兼容修改当前active。expected_revision必须是当前读取的全局剪辑revision，目标删除或对象不在范围会报错。clips按id修改起点、素材入点、时长、音量、静音或speed，默认同步原声；subtitles按id修改start_seconds/end_seconds/text/style（仅合并给定样式）或remove，保留其余内容，可与clips一次保存。只改字幕可以clips=[]。SHOT_LOCAL修改同时传shot_id与anchor_clip_id；FILM修改不传shot_id。返回实际目标变化和新revision。设计时长用shot.save_current。",
+    registry.register(ToolSpec(id="timeline.edit_clips", version=4, category=ToolCategory.TIMELINE,
+        description="精确修改当前片段与字幕，只发变化字段，无需读取或回写整个LTX project。request.timeline_id使用editor_selection/read_editorial返回的准确时间线，保留用户当前active选择和其他时间线；省略仅兼容修改当前active。expected_revision必须是当前读取的全局剪辑revision，目标删除或对象不在范围会报错。clips按id修改起点、素材入点、时长、音量、静音或speed，默认同步原声；subtitles按已有id修改start_seconds/end_seconds/text/style（仅合并给定样式）或remove。首次字幕用add_subtitles:[{id,text,start_seconds,end_seconds,style?,track_index?}]，id必须在所选时间线中不存在，默认复用可用字幕轨或新增字幕轨；可与修改、删除及clips一次保存，保留其他内容。对白字幕来自audio.transcribe_native的实际声音及有依据的识别校正，不把未听见的剧本台词写成转录；后续audio.align_subtitles仅修已有字幕时码。只改字幕可以clips=[]。SHOT_LOCAL修改同时传shot_id与anchor_clip_id，新增字幕不得超过编辑后本次采用时长；跨镜字幕用FILM时间且不传shot_id。返回实际创建/变化字幕与新revision。设计时长用shot.save_current。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineEditInput, output_model=CurrentReadOutput, handler=edit_timeline,
         tags=frozenset({"studio", "editorial", "partial-edit"})))
     registry.register(ToolSpec(id="task.read_workflow", version=1, category=ToolCategory.TASK,
@@ -364,13 +391,13 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         description="执行已配置 ComfyUI 的 API 格式工作流。bindings 绑定项目确切素材到 node_id/input_name，实际输出导入共享资产并保留记录。用于用户需要的高级处理；服务未连接时给出具体连接需求，日常创作不依赖此服务。",
         effect=ToolEffect.EXTERNAL, idempotent=False, input_model=WorkflowInput, output_model=ComfyRun, handler=workflow,
         tags=frozenset({"studio", "comfyui", "workflow"})))
-    registry.register(ToolSpec(id="script.save_scene", version=1, category=ToolCategory.SCRIPT,
-        description="按完整场次新增或直接修改当前剧本，实时显示。已有场次需带 expected_text；同时写入正文中逐字存在的 lines，保留不受影响的场次。已读取镜头并判断修改范围时，用 affected_shot_ids 限定需更新画面的镜头，保留同场其它镜头的人工修改和可用视频；范围未知时省略。更改台词会自动关联使用该台词的镜头。只要求剧本时完成后停止，不建立分镜/资产/视频。",
+    registry.register(ToolSpec(id="script.save_scene", version=2, category=ToolCategory.SCRIPT,
+        description="按完整场次新增或修改当前剧本，实时显示。已有场次带 expected_text；同时写入正文中逐字存在的 lines，summary/narrative_purpose 与当前正文一致。entry_state/exit_state 可记录正文实际建立的相关事实，勿照抄未实现的蓝图。修改回报、关键道具、人物知情或因果时，先用 artifact.read_current 的场次索引定位相关铺垫/回收，再按 scene_id 读取正文；必要的跨场修复用 related_scene_updates 一次保存，每场独立 expected_text，任一冲突整体不保存。无关联无需填写，不默认重写全剧。用每场 affected_shot_ids 限定需更新画面的镜头；[] 保留画面，范围未知时省略。变更台词仍自动关联使用它的镜头。返回实际 changed_scene_ids/changed_shot_ids；只要求剧本时完成即交付。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=SceneWriteInput, output_model=CurrentWriteOutput, handler=save_scene,
         tags=frozenset({"studio", "script", "partial-edit"})))
-    registry.register(ToolSpec(id="shot.save_current", version=1, category=ToolCategory.SHOT,
-        description="保存一个当前镜头和逐时段分镜，返回实际保存的镜头修订号与精确引用。references 使用对象 id、精确 asset_version_id、purpose、field 和 Unicode 字符 text_start/text_end，作用时段来自 beat。使用 expected_revision 保护用户编辑，保留已有视频。",
-        effect=ToolEffect.WRITE, idempotent=False, input_model=ShotWriteInput, output_model=CurrentWriteOutput, handler=save_shot,
+    registry.register(ToolSpec(id="shot.save_current", version=2, category=ToolCategory.SHOT,
+        description="保存一个当前镜头和逐时段分镜，返回实际修订号及同次保存结果的reference_plan_preview（实际解析的精确图片、缺项与警告）。可直接据此判断引用，不必对未变内容再调用preview。references 使用对象 id、精确 asset_version_id、purpose、field 和 Unicode 字符 text_start/text_end，作用时段来自 beat。使用 expected_revision 保护用户编辑，保留已有视频。预览仅是当前输入解析，不证明图片或视频质量；预览问题不会把已成功保存的正文报为写入失败。",
+        effect=ToolEffect.WRITE, idempotent=False, input_model=ShotWriteInput, output_model=ShotWriteOutput, handler=save_shot,
         tags=frozenset({"studio", "shot", "references"})))
     registry.register(ToolSpec(id="timeline.save_editorial", version=1, category=ToolCategory.TIMELINE,
         description="保存已读取并编辑的 LTX 时间线。整集保存必须保留其他片段；单镜头投影必须传 shot_id 和 request.anchor_clip_id，局部合并并顺移后续内容。使用当前 expected_revision，不能用一个镜头的 project 覆盖全片。普通裁切优先 edit_clips。",
