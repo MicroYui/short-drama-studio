@@ -2340,6 +2340,7 @@ def _specialist_working_set(
                 for ref in turn_refs:
                     if ref.artifact_type == "shot":
                         entities.pop(("shot", ref.artifact_id), None)
+                        entities.pop(("saved_shot", ref.artifact_id), None)
                         shot_write_revisions[ref.artifact_id] = ref.version
                         entities.pop(("shot_reference_plan", ref.artifact_id), None)
                         entities.pop(("reference_plan_preview", ref.artifact_id), None)
@@ -2469,6 +2470,16 @@ def _specialist_working_set(
             tool_attempt_observations.pop(latest_selected_ref.identity(), None)
     if latest_handoff is not None:
         latest_result = latest_handoff.get("result")
+        receipt = latest_result.get("receipt") if isinstance(latest_result, dict) else None
+        current_state = receipt.get("current_state") if isinstance(receipt, dict) else None
+        saved_shot = current_state.get("saved_shot") if isinstance(current_state, dict) else None
+        if isinstance(saved_shot, dict) and isinstance(saved_shot.get("shot_id"), str):
+            key = ("saved_shot", cast(str, saved_shot["shot_id"]))
+            saved_entity = entities.get(key)
+            if saved_entity is not None and saved_entity.state == saved_shot:
+                # The latest successful write already carries this exact summary
+                # in its receipt. Rebuild it after the next Tool, not twice here.
+                entities.pop(key)
         report = _video_inspection_result_report(
             cast(dict[str, JsonValue], latest_result) if isinstance(latest_result, dict) else None
         )
@@ -2994,8 +3005,17 @@ def _fold_specialist_entities(
                 identity_id=output.get("shot_id"),
             )
         elif tool_name == "shot.save_current":
+            saved_shot = output.get("saved_shot")
+            if isinstance(saved_shot, dict):
+                _put_specialist_entity(
+                    entities, kind="saved_shot", source_tool=tool_name,
+                    sequence=sequence, value=saved_shot, identity_id=saved_shot.get("shot_id"),
+                )
             preview = output.get("reference_plan_preview")
             if isinstance(preview, dict):
+                preview_scope = output.get("reference_plan_preview_scope")
+                if preview_scope == "GENERATION_ONLY":
+                    preview = {**preview, "scope": preview_scope}
                 _put_specialist_entity(
                     entities, kind="reference_plan_preview", source_tool=tool_name,
                     sequence=sequence, value=preview, identity_id=preview.get("shot_id"),
@@ -3045,6 +3065,14 @@ def _fold_specialist_entities(
                     # A later reread of an old plan source must not resurrect
                     # the pre-edit body after an observed successful Shot write.
                     continue
+            summary = entities.get(("saved_shot", shot_id))
+            summary_revision = summary.state.get("revision") if summary is not None else None
+            if isinstance(summary_revision, int) and revision >= summary_revision:
+                # An exact full read now carries these same facts or a newer
+                # revision. Do not keep an old saved summary beside current prose.
+                entities.pop(("saved_shot", shot_id), None)
+                if revision > summary_revision:
+                    entities.pop(("reference_plan_preview", shot_id), None)
             refs = _artifact_refs_from_json(result.get("artifact_refs"))
             source_ref = next((ref for ref in refs if ref.artifact_type == "shot"
                 and ref.artifact_id == shot_id and ref.version == revision), None)
@@ -3233,6 +3261,8 @@ def _fold_specialist_entities(
                        if output.get("crop_suggestion") is not None else {}),
                     **({"edit_guide_suggestion": output["edit_guide_suggestion"]}
                        if output.get("edit_guide_suggestion") is not None else {}),
+                    **({"plane_composite_suggestion": output["plane_composite_suggestion"]}
+                       if output.get("plane_composite_suggestion") is not None else {}),
                 },
                 # Multiple views of one subject share an Asset. Their visual
                 # findings belong to distinct immutable versions; folding by

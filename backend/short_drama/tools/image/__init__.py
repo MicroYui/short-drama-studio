@@ -6,6 +6,7 @@ from typing import Protocol
 
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
 from short_drama.image_edit_guides import AssetImageEditGuideRequest, AssetImageEditGuideResponse
+from short_drama.image_plane_composite import AssetImagePlaneCompositeRequest
 from short_drama.image_models import (
     AgentImageTaskCreateRequest,
     AssetMutationResponse,
@@ -40,6 +41,10 @@ class ImageToolService(Protocol):
     def create_asset_edit_guide(
         self, project_id: str, request: AssetImageEditGuideRequest,
     ) -> AssetImageEditGuideResponse: ...
+
+    def composite_asset_plane(
+        self, project_id: str, request: AssetImagePlaneCompositeRequest,
+    ) -> AssetMutationResponse: ...
 
     def compose_asset_reference_sheet(
         self,
@@ -108,6 +113,11 @@ class ImageCropInput(ToolModel):
 class ImageEditGuideInput(ToolModel):
     project_id: str
     request: AssetImageEditGuideRequest
+
+
+class ImagePlaneCompositeInput(ToolModel):
+    project_id: str
+    request: AssetImagePlaneCompositeRequest
 
 
 class ImageTextPlateComposeInput(ToolModel):
@@ -238,6 +248,44 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
         effect=ToolEffect.WRITE, idempotent=False, input_model=ImageEditGuideInput,
         output_model=AssetImageEditGuideResponse, handler=create_edit_guide,
         tags=frozenset({"image", "asset", "edit", "mask", "local", "layout", "reference"}),
+    ))
+
+    def composite_plane(request: ImagePlaneCompositeInput) -> ToolExecution[AssetMutationResponse]:
+        result = service.composite_asset_plane(request.project_id, request.request)
+        refs = (
+            ArtifactRef(project_id=request.project_id, artifact_type="asset", artifact_id=result.asset.id),
+            ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=result.version.id,
+                version=result.version.version),
+        )
+        return ToolExecution(output=result, artifact_refs=refs, receipt=ToolWriteReceipt(
+            artifact_refs=list(refs), current_state={
+                "project_id": request.project_id, "asset_id": result.asset.id,
+                "base_asset_version_id": request.request.base_asset_version_id,
+                "source_asset_version_ids": list(dict.fromkeys(layer.source_asset_version_id for layer in request.request.layers)),
+                "version.id": result.version.id, "version.version": result.version.version,
+                "version.local_path": result.version.local_path, "version.width": result.version.width,
+                "version.height": result.version.height,
+                "asset.current_version_id": result.asset.current_version_id,
+                "composition_completed": True, "visual_acceptance": "NOT_ASSESSED",
+            }, changed_ids={"created_asset_version_ids": [result.version.id]}))
+
+    registry.register(ToolSpec(
+        id="image.composite_plane", version=1, category=ToolCategory.IMAGE,
+        description=(
+            "把已有准确图文或摄影纸面按四角透视映射到实际照片的平面上，保存本地PNG候选，不调用Provider。"
+            "适用于可观察的纸面、屏幕、标牌等平面，整页字符与布局一起变换，不重新排字或生成姓名。"
+            "base和各source均用本项目精确本地图片版本；先观察真实四角，source_quad省略时取整张源图。"
+            "target_quad的每一点对应同序source角，旋转90度通过这种对应表达；不能把两组角分别按画面上下重新排序。"
+            "摄影源仅圈纸面，不带桌面和灰背景。replace覆盖平面，multiply保留底面纹理但也保留旧墨，"
+            "仅在实际确认目标是空白或透明图形适用时使用multiply；它不能清除已有错字。"
+            "用protected_regions保留真实可见的手、笔等前景遮挡。目标平面外和保护区保持base像素。"
+            "若新纸范围外仍露出旧纸文字/边缘，应先修好底图；这个工具不擦除旧物体、移动手势、补阴影或改变机位。"
+            "输出仍需观察朝向、文字、透视、光照、边缘和遮挡；未改变current/canonical、镜头绑定或宣告制作项完成。"
+            "坐标对应EXIF转正后的可见像素；保持底图尺寸，局部合成不提高源内容的实际细节。"
+        ),
+        effect=ToolEffect.WRITE, idempotent=False, input_model=ImagePlaneCompositeInput,
+        output_model=AssetMutationResponse, handler=composite_plane,
+        tags=frozenset({"image", "asset", "local", "perspective", "composite", "text", "edit"}),
     ))
 
     def compose_reference_sheet(

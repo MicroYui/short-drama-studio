@@ -138,6 +138,7 @@ from short_drama.h3_video_guides import H3VideoGuideBuilder
 from short_drama.episode_review import review_episode, review_scene
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
 from short_drama.image_edit_guides import AssetImageEditGuideRequest, AssetImageEditGuideResponse
+from short_drama.image_plane_composite import AssetImagePlaneCompositeRequest
 from short_drama.image_models import (
     AssetBriefUpdateRequest,
     AssetCreateRequest,
@@ -13008,6 +13009,18 @@ class ShortDramaService:
         self._require_project_mutation_allowed(project_id)
         try:
             return self.asset_workbench.create_edit_guide(project_id, request)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def composite_asset_plane(
+        self, project_id: str, request: AssetImagePlaneCompositeRequest,
+    ) -> AssetMutationResponse:
+        self._require_project_mutation_allowed(project_id)
+        try:
+            version = self.asset_workbench.composite_plane(project_id, request)
+            return self._asset_mutation_response(project_id, version.id)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
         except AssetWorkbenchConflict as exc:

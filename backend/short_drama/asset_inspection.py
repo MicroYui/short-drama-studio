@@ -17,6 +17,9 @@ from short_drama.image_models import ImageGenerationTask, ImageRegion, parse_ima
 from short_drama.image_edit_guides import (
     ImageEditGuideRegion, ImageGuideArrow, validate_edit_guide_geometry,
 )
+from short_drama.image_plane_composite import (
+    AssetImagePlaneCompositeRequest, validate_plane_composite_geometry,
+)
 from short_drama.image_regions import read_image_region, region_box
 from short_drama.models import (
     ApprovalStatus,
@@ -109,6 +112,14 @@ class SemanticAssetReview(DomainModel):
     )
     edit_guide_suggestion: AssetEditGuideSuggestion | None = Field(default=None,
         description="Optional observed candidate regions and target arrows for image.create_edit_guide; null if uncertain or a local edit cannot preserve the required composition.")
+    plane_composite_suggestion: AssetImagePlaneCompositeRequest | None = Field(
+        default=None,
+        description=(
+            "Optional image.composite_plane request using only the actual candidate and visible, "
+            "locally available references. Preserve source-to-target corner identities for whole-plane "
+            "rotation. Null when corners, foreground protection or suitable source content are uncertain."
+        ),
+    )
     evidence_references: list[SemanticAssetReviewEvidenceReference] = Field(
         default_factory=list[SemanticAssetReviewEvidenceReference],
         max_length=16,
@@ -127,6 +138,16 @@ class SemanticAssetReview(DomainModel):
             return AssetEditGuideSuggestion.model_validate(value)
         except ValidationError:
             # A malformed optional edit cannot invalidate an otherwise usable QA.
+            return None
+
+    @field_validator("plane_composite_suggestion", mode="before")
+    @classmethod
+    def keep_only_usable_optional_plane(cls, value: object) -> AssetImagePlaneCompositeRequest | None:
+        if value is None:
+            return None
+        try:
+            return AssetImagePlaneCompositeRequest.model_validate(value)
+        except ValidationError:
             return None
 
 
@@ -873,6 +894,31 @@ def inspect_asset_image(
                 pass
             else:
                 edit_guide_available = source.getexif().get(274, 1) == 1
+    plane_base_size = _local_plane_image_size(version)
+    plane_source_sizes: dict[str, tuple[int, int]] = {}
+    whole_content_plate_ids: set[str] = set()
+    for reference, _url in reference_images:
+        # A cross-project image can remain visual evidence, but this Tool's
+        # source IDs resolve in the current project only.
+        if reference.project_id != document.project.id or reference.version.id == version.id:
+            continue
+        size = _local_plane_image_size(reference.version)
+        if size is not None:
+            plane_source_sizes[reference.version.id] = size
+            if reference.version.text_plate is not None:
+                whole_content_plate_ids.add(reference.version.id)
+    plane_available = plane_base_size is not None and bool(plane_source_sizes)
+    instructions += (
+        "可选plane_composite_suggestion可直接交给image.composite_plane。仅从image_map中"
+        "local_plane_composite_source.available=true的本次所见精确源图选择，base填写当前候选version_id。"
+        "坐标按对应整图实际EXIF转正尺寸，不按局部放大图；摄影源明确source_quad，只有"
+        "full_image_is_content_plate=true可省略。源角逐点对应目标角，不能两边各按屏幕左上排序。"
+        "整页字形与版面同转不等于竖排重写。适用性、遮挡与混合方式按已加载方法和schema；"
+        "边角不清、旧纸残留或实际需要改手姿机位时留null，不改变已有QA结论。"
+        if plane_available else
+        "本次没有可用于本地平面合成的基图和已观察来源，plane_composite_suggestion返回null，"
+        "不为取得建议追加发现、回读或视觉调用。"
+    )
     creation = {
         "output_layout_profile": output_layout,
         "actual_size": {
@@ -881,6 +927,8 @@ def inspect_asset_image(
         },
         "local_crop_available": crop_available,
         "local_edit_guide_available": edit_guide_available,
+        "local_plane_composite_available": plane_available,
+        "plane_composite_tool": "image.composite_plane",
         "operation": generation_task.operation if generation_task is not None else version.origin_type,
         "generation_prompt": generation_task.request.prompt if generation_task is not None
         else version.source.prompt if version.source is not None else None,
@@ -949,6 +997,15 @@ def inspect_asset_image(
                     "purpose": reference.purpose,
                     "subject_alias": reference.subject_alias,
                     "approval_status": reference.version.approval_status.value,
+                    "local_plane_composite_source": {
+                        "available": reference.version.id in plane_source_sizes,
+                        "actual_size": (
+                            {"width": plane_source_sizes[reference.version.id][0],
+                             "height": plane_source_sizes[reference.version.id][1]}
+                            if reference.version.id in plane_source_sizes else None
+                        ),
+                        "full_image_is_content_plate": reference.version.id in whole_content_plate_ids,
+                    },
                     **({"text_plate": reference.version.text_plate.model_dump(mode="json")} if reference.version.text_plate is not None else {}),
                     "is_current_canonical_master": (
                         reference.asset.approved_version_id == reference.version.id
@@ -1004,11 +1061,44 @@ def inspect_asset_image(
             edit_guide = edit_guide.model_copy(update={"source_asset_version_id": version.id})
     else:
         edit_guide = None
+    plane = result.plane_composite_suggestion
+    if plane is not None and plane_available and plane_base_size is not None:
+        plane = plane.model_copy(update={"base_asset_version_id": version.id})
+        if any(
+            layer.source_asset_version_id not in plane_source_sizes
+            or (layer.source_quad is None and layer.source_asset_version_id not in whole_content_plate_ids)
+            for layer in plane.layers
+        ):
+            plane = None
+        else:
+            try:
+                validate_plane_composite_geometry(plane, plane_base_size, plane_source_sizes)
+            except ValueError:
+                plane = None
+    else:
+        plane = None
     return result.model_copy(update={
         "review_focus": request.review_focus, "candidate_output_layout": output_layout,
         "region_evidence": detail_evidence, "crop_suggestion": suggestion,
         "edit_guide_suggestion": edit_guide,
+        "plane_composite_suggestion": plane,
     })
+
+
+def _local_plane_image_size(version: AssetVersion) -> tuple[int, int] | None:
+    """Only map observed local pixels; never substitute a cache for a remote image."""
+    if (
+        version.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+        or version.freshness != Freshness.CURRENT
+    ):
+        return None
+    try:
+        size = _local_candidate_visible_size(version)
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return None
+    if size is None or min(size) < 2 or size[0] * size[1] > _ANALYSIS_IMAGE_MAX_SOURCE_PIXELS:
+        return None
+    return size
 
 
 def _local_candidate_visible_size(version: AssetVersion) -> tuple[int, int] | None:

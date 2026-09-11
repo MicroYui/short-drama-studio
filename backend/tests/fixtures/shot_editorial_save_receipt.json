@@ -1,0 +1,271 @@
+{
+  "source_work_order_id": "work-order-a318e1e27639488fab20ba34fc3a80d8",
+  "decision_call_id": "model-a0996bd3d4c0",
+  "decision_input_file": "20260911T230057595752-523f0081-model.input.json",
+  "turns": [
+    {
+      "id": "specialist-turn-fae7fb51260c4b31918602498726daaa",
+      "sequence": 7,
+      "tool_name": "shot.save_current",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "shot_id": "shot-yqq-03-evidence",
+        "request": {
+          "expected_revision": 2,
+          "shot": {
+            "id": "shot-yqq-03-evidence",
+            "project_id": "project-5b8286dc63e6",
+            "sequence": 4,
+            "scene_id": "scene-5441e73077d5",
+            "duration_seconds": 1.5,
+            "narrative_purpose": "让观众看清既有红改和“确认：赵衡”，证明主管确认过这版报价。",
+            "visual": "@报价单的独立全画幅静态证据插入，使用同一道具版式的实际准确图片，同时容纳中部红改及右下“确认：赵衡”。黑色姓名开场已存在，不出现新书写。无手、笔或移动背景，不把图版贴到前镜运动纸面。",
+            "framing": "9:16静态画面，紧裁中部红改至右下确认区；确认文字足够大，1.5秒全程无遮挡，字幕避开证据区。",
+            "camera": "中性正俯纸面插入，画面上方对应桌东；实物标题端仍朝东。改变观看方向而非转动纸张，不暗示换座；静帧不推拉。",
+            "audio_intent": "承接前镜许岚画外同一条line-yqq-02的尾部，切入时已在发声，本镜不重新开口念整句。设计续接窗口为本镜0—1.5秒，接在前镜0—2.5秒之后，总计一次连续4秒发声，并在本镜1.5秒处结束；预计“能不能发。”落在本段，具体字词切点待实际语音验证。本镜dialogue_line_ids及0—1.5秒beat均保留line-yqq-02，与前镜共享来源，表示同一次发声的续接而非第二份对白。无新发言、无书写声；静态证据画面承接同一声音，不要求画内人物对嘴。",
+            "dialogue_line_ids": [
+              "line-yqq-02"
+            ],
+            "references": [
+              {
+                "subject_asset_id": "asset-797c99b1531c",
+                "asset_version_id": "asset-version-9ed9636918b5",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 4,
+                "alias": "报价单",
+                "purpose": "本镜0—1.5秒独立全画幅静态证据。实际540×960原像素裁图，保留旧红划改、调整报价、确认：赵衡及完整底线；不重绘、不推拉，不送视频模型。字幕只可使用底部约y810—910空白且须另查遮挡。承接同一次line-yqq-02尾部，不重起句；1.5秒未作观众识读测试。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "EDITORIAL"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0,
+                "end_seconds": 1.5,
+                "visual": "@报价单中部旧红改及右下“确认：赵衡”准确静止可读。",
+                "framing": "全画幅静态证据插入，确认区不被字幕挡住。",
+                "camera": "正俯中性，画面上方为桌东，不运动。",
+                "action": "保持旧签名与红改，不增加墨迹，无手或笔。",
+                "performance": "人物画外；许岚只接完原第二句。",
+                "emotion": null,
+                "dialogue_line_ids": [
+                  "line-yqq-02"
+                ],
+                "sound": "前镜许岚第二句连续尾部，室内底声不断；不重新发声。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-797c99b1531c",
+                    "asset_version_id": "asset-version-9ed9636918b5",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 4,
+                    "alias": "报价单",
+                    "purpose": "0—1.5秒全程静止使用同一540×960裁图；旧红改、调整报价与确认赵衡完整，无手笔或新增墨迹。usage=EDITORIAL，不上传视频模型、不贴运动纸面；同一line-yqq-02持续发声，不能删除对白覆盖或重新起句。",
+                    "image_reference_role": "COMPOSITION",
+                    "usage": "EDITORIAL"
+                  }
+                ]
+              }
+            ],
+            "continuity": {
+              "character_positions": "许东赵西均在原座，双方不入静态镜。",
+              "eyeline": "中性证据镜；下一镜赵衡低头识别，不改变人物轴线。",
+              "prop_state_in": "报价北中标题东，旧红改旧确认不变，许左手已松开；说明东侧双空白。",
+              "prop_state_out": "全部状态不变；赵尚未按报价，许右手持裸笔，帽东缘南部。",
+              "action_in": "报价已转向赵并停稳。",
+              "action_out": "旧确认看清后，切赵衡看纸、按纸与反问。"
+            },
+            "transition_out": "直切赵衡识别并按住北缘，恢复南侧主轴赵左许右。",
+            "merge_candidate": false,
+            "local_rework_risk": "已选并实际检查540×960原像素9:16裁图：旧红改、确认赵衡及完整底线清楚，印字约38—42px、姓名约70—80px为目测估计。上下两组证据需转移视线，1.5秒为设计窗口，未作观众识读测试。EDITORIAL独立全画幅插入，不送视频模型重绘、不跟踪贴纸；实际字幕遮挡、音频续接和成片阅读效果仍待后续验证。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 2
+          }
+        }
+      },
+      "reason": "报价证据裁图已实际检查并登记采用，将精确静态文件绑定到原0—1.5秒时段，完整保留许岚第二句的连续对白覆盖。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "shot.save_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "project_id": "project-5b8286dc63e6",
+          "scene_ids": [],
+          "shot_ids": [
+            "shot-yqq-03-evidence"
+          ],
+          "notices": [
+            "镜头设计已保存；已有视频保留，可按新设计重新生成。"
+          ],
+          "shot_revisions": {
+            "shot-yqq-03-evidence": 3
+          },
+          "editorial_revision": null,
+          "timeline_id": null,
+          "changed_shot_ids": [
+            "shot-yqq-03-evidence"
+          ],
+          "changed_scene_ids": [],
+          "reference_plan_preview": {
+            "shot_id": "shot-yqq-03-evidence",
+            "selected": [],
+            "missing_requirement_ids": [],
+            "warnings": [],
+            "complexity": {
+              "duration_seconds": 1.5,
+              "action_beat_count": 0,
+              "interaction_count": 0,
+              "missing_topology_anchors": [],
+              "observations": [
+                "镜头时长为 1.5 秒，共声明 0 个动作节拍。",
+                "当前镜头未显式声明空间交互。"
+              ],
+              "advisory_only": true
+            },
+            "proceed_allowed": true
+          },
+          "reference_plan_preview_error": null
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "shot",
+            "artifact_id": "shot-yqq-03-evidence",
+            "version": 3
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-5b8286dc63e6",
+              "artifact_type": "shot",
+              "artifact_id": "shot-yqq-03-evidence",
+              "version": 3
+            }
+          ],
+          "current_state": {
+            "project_id": "project-5b8286dc63e6",
+            "shot_revisions": {
+              "shot-yqq-03-evidence": 3
+            },
+            "editorial_revision": null,
+            "timeline_id": null
+          },
+          "changed_ids": {
+            "changed_shot_ids": [
+              "shot-yqq-03-evidence"
+            ],
+            "changed_scene_ids": []
+          }
+        }
+      },
+      "requested_at": "2026-09-11T23:00:53.737670Z",
+      "updated_at": "2026-09-11T23:00:55.701527Z"
+    },
+    {
+      "id": "specialist-turn-03f9f7ded8f44637a635d280b845f22c",
+      "sequence": 8,
+      "tool_name": "artifact.read_current",
+      "arguments": {
+        "project_id": "project-5b8286dc63e6",
+        "shot_id": "shot-yqq-03-evidence"
+      },
+      "reason": "上一回执显示报价证据镜已保存，但引用预览为空且未显示原时段；定向读取该镜，核对是否真正绑定裁图，并保留最新对白及用户编辑后修复。",
+      "status": "COMPLETED",
+      "result": {
+        "tool_id": "artifact.read_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "content": {
+            "shot": {
+              "id": "shot-yqq-03-evidence",
+              "project_id": "project-5b8286dc63e6",
+              "sequence": 4,
+              "scene_id": "scene-5441e73077d5",
+              "duration_seconds": 1.5,
+              "narrative_purpose": "让观众看清既有红改和“确认：赵衡”，证明主管确认过这版报价。",
+              "visual": "@报价单的独立全画幅静态证据插入，使用同一道具版式的实际准确图片，同时容纳中部红改及右下“确认：赵衡”。黑色姓名开场已存在，不出现新书写。无手、笔或移动背景，不把图版贴到前镜运动纸面。",
+              "framing": "9:16静态画面，紧裁中部红改至右下确认区；确认文字足够大，1.5秒全程无遮挡，字幕避开证据区。",
+              "camera": "中性正俯纸面插入，画面上方对应桌东；实物标题端仍朝东。改变观看方向而非转动纸张，不暗示换座；静帧不推拉。",
+              "audio_intent": "承接前镜许岚画外同一条line-yqq-02的尾部，切入时已在发声，本镜不重新开口念整句。设计续接窗口为本镜0—1.5秒，接在前镜0—2.5秒之后，总计一次连续4秒发声，并在本镜1.5秒处结束；预计“能不能发。”落在本段，具体字词切点待实际语音验证。本镜dialogue_line_ids及0—1.5秒beat均保留line-yqq-02，与前镜共享来源，表示同一次发声的续接而非第二份对白。无新发言、无书写声；静态证据画面承接同一声音，不要求画内人物对嘴。",
+              "dialogue_line_ids": [
+                "line-yqq-02"
+              ],
+              "references": [
+                {
+                  "subject_asset_id": "asset-797c99b1531c",
+                  "id": "shot-yqq-03-evidence-shot-ref-0",
+                  "asset_version_id": "asset-version-9ed9636918b5",
+                  "field": "visual",
+                  "text_start": 0,
+                  "text_end": 4,
+                  "alias": "报价单",
+                  "required_tags": [],
+                  "purpose": "本镜0—1.5秒独立全画幅静态证据。实际540×960原像素裁图，保留旧红划改、调整报价、确认：赵衡及完整底线；不重绘、不推拉，不送视频模型。字幕只可使用底部约y810—910空白且须另查遮挡。承接同一次line-yqq-02尾部，不重起句；1.5秒未作观众识读测试。",
+                  "image_reference_role": "COMPOSITION",
+                  "usage": "EDITORIAL"
+                }
+              ],
+              "timeline_beats": [
+                {
+                  "start_seconds": 0.0,
+                  "end_seconds": 1.5,
+                  "visual": "@报价单中部旧红改及右下“确认：赵衡”准确静止可读。",
+                  "framing": "全画幅静态证据插入，确认区不被字幕挡住。",
+                  "camera": "正俯中性，画面上方为桌东，不运动。",
+                  "action": "保持旧签名与红改，不增加墨迹，无手或笔。",
+                  "performance": "人物画外；许岚只接完原第二句。",
+                  "emotion": null,
+                  "dialogue_line_ids": [
+                    "line-yqq-02"
+                  ],
+                  "sound": "前镜许岚第二句连续尾部，室内底声不断；不重新发声。",
+                  "references": [
+                    {
+                      "subject_asset_id": "asset-797c99b1531c",
+                      "id": "shot-yqq-03-evidence-beat-0-ref-0",
+                      "asset_version_id": "asset-version-9ed9636918b5",
+                      "field": "visual",
+                      "text_start": 0,
+                      "text_end": 4,
+                      "alias": "报价单",
+                      "required_tags": [],
+                      "purpose": "0—1.5秒全程静止使用同一540×960裁图；旧红改、调整报价与确认赵衡完整，无手笔或新增墨迹。usage=EDITORIAL，不上传视频模型、不贴运动纸面；同一line-yqq-02持续发声，不能删除对白覆盖或重新起句。",
+                      "image_reference_role": "COMPOSITION",
+                      "usage": "EDITORIAL"
+                    }
+                  ]
+                }
+              ],
+              "continuity": {
+                "character_positions": "许东赵西均在原座，双方不入静态镜。",
+                "eyeline": "中性证据镜；下一镜赵衡低头识别，不改变人物轴线。",
+                "prop_state_in": "报价北中标题东，旧红改旧确认不变，许左手已松开；说明东侧双空白。",
+                "prop_state_out": "全部状态不变；赵尚未按报价，许右手持裸笔，帽东缘南部。",
+                "action_in": "报价已转向赵并停稳。",
+                "action_out": "旧确认看清后，切赵衡看纸、按纸与反问。"
+              },
+              "transition_out": "直切赵衡识别并按住北缘，恢复南侧主轴赵左许右。",
+              "merge_candidate": false,
+              "local_rework_risk": "已选并实际检查540×960原像素9:16裁图：旧红改、确认赵衡及完整底线清楚，印字约38—42px、姓名约70—80px为目测估计。上下两组证据需转移视线，1.5秒为设计窗口，未作观众识读测试。EDITORIAL独立全画幅插入，不送视频模型重绘、不跟踪贴纸；实际字幕遮挡、音频续接和成片阅读效果仍待后续验证。",
+              "approval_status": "DRAFT",
+              "freshness": "CURRENT",
+              "revision": 3
+            }
+          }
+        },
+        "artifact_refs": [],
+        "warnings": [],
+        "error": null,
+        "receipt": null
+      },
+      "requested_at": "2026-09-11T23:01:08.613454Z",
+      "updated_at": "2026-09-11T23:01:09.253359Z"
+    }
+  ]
+}

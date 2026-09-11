@@ -571,6 +571,11 @@ def test_asset_review_compares_candidate_with_approved_canonical_images(tmp_path
             "purpose": "当前明确选择的可用参考，用于审核候选的连续性。",
             "subject_alias": character.name,
             "approval_status": "APPROVED",
+            "local_plane_composite_source": {
+                "available": True,
+                "actual_size": {"width": 32, "height": 56},
+                "full_image_is_content_plate": False,
+            },
             "is_current_canonical_master": False,
             "normative_for_declared_role": True,
         },
@@ -629,6 +634,7 @@ def test_asset_version_semantic_inspection_is_agent_callable_before_review(
         "region_evidence": [],
         "crop_suggestion": None,
         "edit_guide_suggestion": None,
+        "plane_composite_suggestion": None,
     }
     assert {item.artifact_type for item in result.artifact_refs} == {
         "asset",
@@ -832,6 +838,11 @@ def test_asset_inspection_automatically_compares_authoritative_derivation_source
         "purpose": "保持用户提供的同一人物身份",
         "subject_alias": "林一",
         "approval_status": "DRAFT",
+        "local_plane_composite_source": {
+            "available": True,
+            "actual_size": {"width": 768, "height": 1344},
+            "full_image_is_content_plate": False,
+        },
         "is_current_canonical_master": False,
         "normative_for_declared_role": True,
     }

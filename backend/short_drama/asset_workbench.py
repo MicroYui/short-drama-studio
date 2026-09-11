@@ -53,6 +53,7 @@ from short_drama.image_models import (
 from short_drama.image_edit_guides import (
     AssetImageEditGuideRequest, AssetImageEditGuideResponse, render_edit_guide,
 )
+from short_drama.image_plane_composite import AssetImagePlaneCompositeRequest, render_plane_composite
 from short_drama.models import (
     ImageReferenceRole,
     ApprovalStatus,
@@ -567,6 +568,80 @@ class AssetWorkbench:
         except Exception:
             guide_path.unlink(missing_ok=True)
             mask_path.unlink(missing_ok=True)
+            raise
+
+    def composite_plane(
+        self, project_id: str, request: AssetImagePlaneCompositeRequest,
+    ) -> AssetVersion:
+        """Save an exact local surface composite as a candidate, preserving selected media."""
+        with self._lock:
+            document = self._require_project(project_id)
+            target, base = self._find_version(document, request.base_asset_version_id)
+            asset_id = target.id
+            identifiers = list(dict.fromkeys([base.id, *(layer.source_asset_version_id for layer in request.layers)]))
+            sources: dict[str, tuple[AssetVersion, Path, tuple[int, int], str]] = {}
+            for identifier in identifiers:
+                owner, version = self._find_version(document, identifier)
+                if version.media_type != AssetMediaType.IMAGE or not version.local_path:
+                    raise AssetWorkbenchConflict(f"Plane composite requires a local image: {identifier}")
+                if version.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED} or version.freshness != Freshness.CURRENT:
+                    raise AssetWorkbenchConflict(f"Plane composite source is not current usable media: {identifier}")
+                path = Path(version.local_path).expanduser().resolve()
+                if not path.is_file() or path.stat().st_size == 0:
+                    raise AssetWorkbenchConflict(f"Plane composite source file is missing or empty: {identifier}")
+                stat = path.stat()
+                sources[identifier] = (version, path, (stat.st_size, stat.st_mtime_ns), owner.name)
+
+        directory = self._asset_directory(project_id, asset_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        output_id = f"asset-version-{uuid4().hex[:12]}"
+        temporary = directory / f".{output_id}-plane.png"
+        destination = temporary
+        try:
+            try:
+                width, height = render_plane_composite(sources[base.id][1],
+                    {identifier: entry[1] for identifier, entry in sources.items()},
+                    request, output_path=temporary)
+            except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                raise AssetWorkbenchConflict(f"Cannot composite image plane: {exc}") from exc
+            with self._lock:
+                document = self._require_project(project_id)
+                target = self._require_asset(document, asset_id)
+                for identifier, (original, path, expected_stat, _name) in sources.items():
+                    _owner, current = self._find_version(document, identifier)
+                    stat = path.stat() if path.is_file() else None
+                    if (current.local_path != original.local_path
+                            or current.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+                            or current.freshness != Freshness.CURRENT or stat is None
+                            or (stat.st_size, stat.st_mtime_ns) != expected_stat):
+                        raise AssetWorkbenchConflict(f"Plane composite source changed during local processing: {identifier}; read that exact source again")
+                number = self._next_version_number(target)
+                destination = directory / f"v{number}-{output_id}-plane.png"
+                temporary.replace(destination)
+                now = utc_now()
+                version = AssetVersion(id=output_id, version=number,
+                    origin_type=OriginType.LOCAL_DERIVED, media_type=AssetMediaType.IMAGE,
+                    descriptor=request.descriptor.strip(), local_path=str(destination), mime_type="image/png",
+                    width=width, height=height, file_size_bytes=destination.stat().st_size,
+                    parent_version_id=base.id,
+                    derivation_references=[AssetDerivationReference(
+                        asset_version_id=identifier, source_project_id=project_id,
+                        reference_role=ImageReferenceRole.COMPOSITION if identifier == base.id else ImageReferenceRole.SUPPORTING_VISUAL,
+                        reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+                        purpose="保留平面外及明确遮挡区的原图像素。" if identifier == base.id else "按记录的四角对应变换此来源的实际像素，不重新生成文字或图形。",
+                        subject_alias=sources[identifier][3],
+                    ) for identifier in identifiers],
+                    source=AssetSourceRecord(source_type=OriginType.LOCAL_DERIVED, source_label="本地图像透视合成",
+                        provider="local", model="pillow-plane-composite-v1", prompt=request.model_dump_json(), created_at=now),
+                    approval_status=ApprovalStatus.DRAFT, freshness=Freshness.CURRENT, created_at=now)
+                # A composite still needs visual inspection; preserve concurrent/user selections.
+                target.versions.append(version)
+                document.project.updated_at = now
+                self.repository.save_project(document)
+                return version
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            destination.unlink(missing_ok=True)
             raise
 
     def compose_reference_sheet(
