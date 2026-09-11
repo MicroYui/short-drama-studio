@@ -116,8 +116,9 @@ class SemanticAssetReview(DomainModel):
         default=None,
         description=(
             "Optional image.composite_plane request using only the actual candidate and visible, "
-            "locally available references. Preserve source-to-target corner identities for whole-plane "
-            "rotation. Null when corners, foreground protection or suitable source content are uncertain."
+            "locally available references. Visible interior coplanar regions may contain the complete "
+            "required content; preserve matching corner identities. Null if the selected regions, "
+            "foreground protection or suitable source content are uncertain."
         ),
     )
     evidence_references: list[SemanticAssetReviewEvidenceReference] = Field(
@@ -790,6 +791,8 @@ def inspect_asset_image(
         "source_asset_version_id返回null，运行时只绑定Image 1候选。坐标均为完整候选EXIF校正后"
         "的0—1位置，不能使用参考或局部放大图的坐标。polygon圈出实际要改的范围；如需移动物体，"
         "包含原位置、明确目标位置及必要接触或阴影范围，arrows说明可见特征的目标方向。"
+        "姿态选区按Verifier方法覆盖完整移动部位和必要连接，不默认只圈指尖；"
+        "已有断面或连接失败时，不原样重复同一过小选区。"
         "箭头只是编辑指示，不是要画入成图的内容。只按已声明目标和本次实际可见位置作图，"
         "不猜遮挡边界、画外布局或不存在的新画面。大机位、多人站位或整体透视变化通常不能用"
         "狭小mask修复，应说明需扩大编辑范围或不用局部mask；范围无法确定则留空。"
@@ -913,8 +916,8 @@ def inspect_asset_image(
         "local_plane_composite_source.available=true的本次所见精确源图选择，base填写当前候选version_id。"
         "坐标按对应整图实际EXIF转正尺寸，不按局部放大图；摄影源明确source_quad，只有"
         "full_image_is_content_plate=true可省略。源角逐点对应目标角，不能两边各按屏幕左上排序。"
-        "整页字形与版面同转不等于竖排重写。适用性、遮挡与混合方式按已加载方法和schema；"
-        "边角不清、旧纸残留或实际需要改手姿机位时留null，不改变已有QA结论。"
+        "可用包含完整必要内容的可见纸内共面区域，只改所选quad，不猜遮挡物理角；字形版面同转。"
+        "选区、遮挡和混合按方法与schema；需移除的旧纸残留或需改手姿机位时留null，不改变QA结论。"
         if plane_available else
         "本次没有可用于本地平面合成的基图和已观察来源，plane_composite_suggestion返回null，"
         "不为取得建议追加发现、回读或视觉调用。"

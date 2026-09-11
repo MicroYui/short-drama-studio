@@ -1690,6 +1690,67 @@ def test_parallel_field_edits_preserve_sibling_work_and_reject_changed_target(
     assert service.get_asset_plan(project_id).asset_plan == saved.asset_plan
 
 
+@pytest.mark.parametrize("explicit_null", [False, True])
+def test_shared_notes_conflict_can_retry_unchanged_fields_without_losing_peer_work(
+    tmp_path: Path, explicit_null: bool,
+) -> None:
+    service = _service(tmp_path, "parallel-work-notes")
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    created = service.create_asset_plan(project_id, AssetPlanCreateRequest(
+        asset_plan=plan, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    first, second = plan.items[0].work_items[:2]
+    shared_notes = ["全片保持同一套服装和道具。"]
+    peer = service.patch_asset_plan(project_id, AssetPlanPatchRequest(
+        base_version_id=created.version.id,
+        field_patches=[AssetPlanFieldPatch(
+            work_item_id=first.id, op=AssetPlanFieldPatchOperation.REPLACE,
+            path="/final_prompt", value="保留并行任务保存的主图构图。",
+        )],
+        notes=shared_notes, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    request: dict[str, object] = {
+        "project_id": project_id,
+        "base_version_id": created.version.id,
+        "patches": [{
+            "work_item_id": second.id, "op": "replace", "path": "/final_prompt",
+            "value": "仅补充当前工作项的侧面视角。",
+        }],
+        "notes": ["我的候选已落盘，下一步检查。"],
+        "origin": ProductionDocumentOrigin.AGENT.value,
+    }
+    failed = service.tool_registry.invoke("artifact.patch_asset_plan_fields", request)
+    assert failed.status == ToolCallStatus.FAILED
+    assert failed.error is not None
+    assert failed.error.kind == "WorkflowConflictError"
+    assert "/notes" in failed.error.message
+    assert "working_notes" in failed.error.message
+    assert service.get_asset_plan(project_id).version.id == peer.version.id
+    assert service.get_asset_plan(project_id).asset_plan == peer.asset_plan
+
+    # Retrying the exact selected fields against the same base is safe; neither
+    # omitted nor null notes may overwrite a peer's shared plan notes.
+    if explicit_null:
+        request["notes"] = None
+    else:
+        request.pop("notes")
+    retried = service.tool_registry.invoke("artifact.patch_asset_plan_fields", request)
+    assert retried.status == ToolCallStatus.SUCCEEDED
+    current = service.get_asset_plan(project_id)
+    assert current.asset_plan.notes == shared_notes
+    assert [work.final_prompt for work in current.asset_plan.items[0].work_items] == [
+        "保留并行任务保存的主图构图。", "仅补充当前工作项的侧面视角。",
+    ]
+    # Genuine shared-note changes remain possible when explicitly merged using
+    # the current version, instead of silently dropping a requested edit.
+    request["base_version_id"] = current.version.id
+    request["notes"] = [*shared_notes, "侧面视角与主图使用同一件外套。"]
+    changed = service.tool_registry.invoke("artifact.patch_asset_plan_fields", request)
+    assert changed.status == ToolCallStatus.SUCCEEDED
+    assert service.get_asset_plan(project_id).asset_plan.notes == request["notes"]
+
+
 def test_patch_asset_plan_merges_local_work_changes_and_versions_full_truth(
     tmp_path: Path,
 ) -> None:

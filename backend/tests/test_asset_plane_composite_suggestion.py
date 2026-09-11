@@ -134,6 +134,8 @@ def test_actual_plane_qa_survives_worker_read_and_restart(tmp_path: Path, sugges
     assert source_info == {"available": True, "actual_size": {"width": 360, "height": 240}, "full_image_is_content_plate": False}
     assert "不能两边各按屏幕左上排序" in language.instructions
     assert "`multiply` 只用于已确认的空白底面" in language.instructions
+    assert "物理纸角被手挡住不单独构成不可合成理由" in language.instructions
+    assert "只改所选quad，不猜遮挡物理角" in language.instructions
     assert service.get_project(pid).document.model_dump(mode="json") == before
     store, work, context = runtime_work(tmp_path / "worker.sqlite3")
     context.project_id = pid

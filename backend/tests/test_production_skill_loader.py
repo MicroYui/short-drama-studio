@@ -438,6 +438,7 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
     assert "不要叠加 `project.get`" in asset_builder.text
     assert "image.capability" in asset_builder.text
     assert "image.compose_reference_sheet" in asset_builder.text
+    assert "完整移动部位、必要连接关节" in asset_builder.text
     assert "Builder 自行判断输出是否满足当前用途" in asset_builder.text
     assert "不把审核标记或另一名 Verifier 当成继续制作的条件" in asset_builder.text
 
@@ -447,6 +448,7 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
     assert "不调用媒体 Provider" in asset_verifier.text
     assert "artifact.patch_asset_plan" in asset_verifier.text
     assert "不要自己发起返工循环" in asset_verifier.text
+    assert "完整移动部位、必要连接关节" in asset_verifier.text
 
     assert "兼容角色" in legacy_asset_reviewer.text
     assert "新的 Agent Plan 不再选择它" in legacy_asset_reviewer.text

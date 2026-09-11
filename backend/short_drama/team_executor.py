@@ -115,6 +115,7 @@ class LocalTeamExecutor:
         self._project_locks: dict[str, threading.Lock] = {}
         self._background_pool: ThreadPoolExecutor | None = None
         self._background_futures: dict[str, tuple[str, Future[TeamWorkAdvance]]] = {}
+        self._blocked_work_order_ids: dict[str, frozenset[str]] = {}
 
     def has_active_work(self, run_id: str) -> bool:
         """Include completed futures until their results have been collected."""
@@ -125,6 +126,10 @@ class LocalTeamExecutor:
         """Start ready work and return completions without a batch barrier."""
         execution_boundary()
         with self._claims_lock:
+            if blocked_work_order_ids:
+                self._blocked_work_order_ids[run_id] = frozenset(blocked_work_order_ids)
+            else:
+                self._blocked_work_order_ids.pop(run_id, None)
             finished = [key for key, (parent, future) in self._background_futures.items()
                         if parent == run_id and future.done()]
             advances = [self._background_futures.pop(key)[1].result() for key in finished]
@@ -135,7 +140,7 @@ class LocalTeamExecutor:
             for work_order in selected:
                 assert self._background_pool is not None
                 future = self._background_pool.submit(copy_context().run, self._advance_reserved,
-                    work_order, drain_worker_ownership=True)
+                    work_order, drain_worker_ownership=True, yield_to_ready_peers=True)
                 self._background_futures[work_order.id] = (run_id, future)
             active = [key for key, (parent, _future) in self._background_futures.items() if parent == run_id]
         waiting = [work.id for work in self._manager.runtime.store.list_work_orders(run_id)
@@ -223,7 +228,6 @@ class LocalTeamExecutor:
         run = self._manager.runtime.store.get_run(run_id)
         if run is None:
             raise KeyError(f"Unknown agent run: {run_id}")
-        active_plan_id = run.current_plan_revision_id
         candidates = self._manager.runtime.store.list_work_orders(
             run_id,
             statuses=(
@@ -235,36 +239,49 @@ class LocalTeamExecutor:
             selected = [
                 work_order
                 for work_order in candidates
-                if work_order.id not in self._claimed_work_order_ids
-                and work_order.id not in (blocked_work_order_ids or set())
-                and work_order.id not in self._background_futures
-                and (work_order.continuation_not_before is None or work_order.continuation_not_before <= utc_now())
-                and work_order.next_owner in {
-                    WorkOrderNextOwner.WORKER_DECISION,
-                    WorkOrderNextOwner.WORKER_TOOL,
-                }
-                and (
-                    work_order.source_plan_revision_id is None
-                    or work_order.active_plan_revision_id == active_plan_id
-                )
+                if self._ready_to_claim(work_order, run, blocked_work_order_ids or set())
             ]
             if self._max_workers is not None:
                 selected = selected[:max(0, self._max_workers - len(self._claimed_work_order_ids))]
             self._claimed_work_order_ids.update(work_order.id for work_order in selected)
         return selected
 
+    def _ready_to_claim(
+        self, work_order: WorkOrder, run: AgentRun, blocked_work_order_ids: set[str] | frozenset[str],
+    ) -> bool:
+        """Selection and fair yielding use the same eligibility under the claims lock."""
+        return (
+            work_order.id not in self._claimed_work_order_ids
+            and work_order.id not in self._background_futures
+            and work_order.id not in blocked_work_order_ids
+            and self._worker_still_owns(work_order, run)
+            and (work_order.continuation_not_before is None or work_order.continuation_not_before <= utc_now())
+        )
+
+    def _has_ready_peer(self, run_id: str) -> bool:
+        with self._claims_lock:
+            run = self._manager.runtime.store.get_run(run_id)
+            if run is None:
+                return False
+            blocked = self._blocked_work_order_ids.get(run_id, frozenset())
+            return any(self._ready_to_claim(work, run, blocked) for work in
+                       self._manager.runtime.store.list_work_orders(run_id, statuses=(
+                           DelegationStatus.PENDING, DelegationStatus.NEEDS_ATTENTION)))
+
     def _advance_reserved(
-        self, work_order: WorkOrder, *, drain_worker_ownership: bool,
+        self, work_order: WorkOrder, *, drain_worker_ownership: bool, yield_to_ready_peers: bool = False,
     ) -> TeamWorkAdvance:
         with trace_context(run_id=work_order.parent_run_id, work_order_id=work_order.id,
                            agent_role=work_order.recipient_role):
-            return self._advance_reserved_in_context(work_order, drain_worker_ownership=drain_worker_ownership)
+            return self._advance_reserved_in_context(work_order, drain_worker_ownership=drain_worker_ownership,
+                                                     yield_to_ready_peers=yield_to_ready_peers)
 
     def _advance_reserved_in_context(
         self,
         work_order: WorkOrder,
         *,
         drain_worker_ownership: bool,
+        yield_to_ready_peers: bool = False,
     ) -> TeamWorkAdvance:
         serialized_project_write = False
         advance_count = 0
@@ -311,6 +328,11 @@ class LocalTeamExecutor:
                 ):
                     deterministic_continuation_count += 1
                 if not drain_worker_ownership:
+                    break
+                # A completed turn and its mechanical continuation are durable.
+                # Release this slot for an eligible waiting peer; leave ownership
+                # and the pending request intact for the next normal selection.
+                if yield_to_ready_peers and self._has_ready_peer(work_order.parent_run_id):
                     break
 
             current = self._manager.runtime.store.get_work_order(work_order.id)

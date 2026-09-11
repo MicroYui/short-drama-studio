@@ -21,9 +21,9 @@ class ImagePlanePoint(DomainModel):
 class ImagePlaneLayer(DomainModel):
     source_asset_version_id: str = Field(min_length=1, description="Exact usable image containing the intended existing content.")
     source_quad: list[ImagePlanePoint] | None = Field(default=None, min_length=4, max_length=4,
-        description="Four source plane corners in boundary order. Omit only when the whole image is the isolated plane; the default is TL,TR,BR,BL. Crop photographic background out with these corners.")
+        description="Four visible source-region corners in boundary order; an interior coplanar region is valid if it contains all required content. Exclude photographic background. Omit only for a whole-image isolated plane (TL,TR,BR,BL).")
     target_quad: list[ImagePlanePoint] = Field(min_length=4, max_length=4,
-        description="Four base-image corners corresponding one-for-one to source_quad. Preserve corner identities to rotate the whole content; do not independently sort these by screen position. Convex, noncrossing, same winding; no implicit mirror.")
+        description="Four visible base-region corners matching source_quad one-for-one; physical object corners are not required. Preserve corner identities, usable direction and proportions, not independent screen sorting. Only this region is changed, without whole-page extrapolation. Convex, noncrossing, same winding; no mirror.")
     blend_mode: Literal["replace", "multiply"] = Field(default="replace",
         description="replace covers existing pixels with source pixels/alpha, including their lighting. multiply adds dark ink onto an already blank lit surface; it cannot erase old text. Neither mode infers shadows, removes old paper outside the plane, or repairs foreground hands.")
 

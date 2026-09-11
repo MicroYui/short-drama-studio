@@ -7459,7 +7459,15 @@ class ShortDramaService:
                             + (patch.work_item_id or patch.item_id or "plan")
                         )
                 if request.notes is not None and latest.notes not in (current.notes, request.notes):
-                    raise WorkflowConflictError("AssetPlan notes changed while this work was running")
+                    raise WorkflowConflictError(
+                        "AssetPlan shared /notes changed while this work was running; "
+                        "notes replaces the entire shared list. No fields were saved. "
+                        "If these notes only describe worker progress, keep that progress "
+                        "in working_notes and retry the same field patches without notes; "
+                        "selected-content conflict checks still apply. If changing shared "
+                        "notes intentionally, read the latest notes and merge the complete "
+                        "intended list against that version."
+                    )
                 pending_patches = [
                     patch for patch in request.field_patches
                     if asset_plan_field_patch_target(latest, patch)

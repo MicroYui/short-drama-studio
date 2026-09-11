@@ -2377,7 +2377,15 @@ class AssetPlanPatchRequest(DomainModel):
         ),
     )
     removed_item_ids: list[str] = Field(default_factory=list[str])
-    notes: list[str] | None = None
+    notes: list[str] | None = Field(
+        default=None,
+        description=(
+            "Complete shared AssetPlan notes. Omit or null to preserve existing notes; "
+            "a list replaces all notes ([] clears them), with conflicts checked against "
+            "base_version_id. Keep worker progress in working_notes. Supply the complete "
+            "intended list only when editing shared plan notes."
+        ),
+    )
     source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
         default_factory=list[ProductionDocumentArtifactRef]
     )

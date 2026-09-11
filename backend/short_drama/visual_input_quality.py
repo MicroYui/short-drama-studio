@@ -44,6 +44,8 @@ from short_drama.reference_planner import (
     compile_keyframe_brief,
     preview_reference_plan,
     ReferencePlanPreviewRequest,
+    role_is_compatible,
+    usable_reference_pack_entries,
 )
 from short_drama.video_inspection import boundary_frame_image_url, image_data_url, selected_generation_reference_ids
 
@@ -365,6 +367,10 @@ def build_reference_visual_candidates(
     version_index = _version_index(document)
     asset_index = {asset.id: asset for asset in document.assets}
     requested_ids = set(request.candidate_entry_ids)
+    usable_explicit_entries: set[tuple[str, str]] = {
+        (pack.id, entry.id)
+        for pack, entry in usable_reference_pack_entries(document)
+    } if requested_ids else set()
     known_requested: set[str] = set()
     candidates: list[ReferenceVisualCandidate] = []
     warnings: list[str] = []
@@ -397,25 +403,52 @@ def build_reference_visual_candidates(
                         f"Reference entry {entry.id} points to an unknown AssetVersion"
                     )
                 continue
-            _asset, version = resolved
+            source_asset, version = resolved
             subject = asset_index.get(pack.subject_asset_id)
-            lineage_is_current = (
-                entry.lineage_root_version_id is None
-                or subject is not None
-                and subject.approved_version_id == entry.lineage_root_version_id
-            )
-            if not lineage_is_current:
-                if explicitly_requested:
+            if explicitly_requested:
+                if subject is None or not role_is_compatible(subject.kind, entry.role):
                     raise VisualInputContractError(
-                        f"Reference entry {entry.id} belongs to a superseded subject lineage"
+                        f"Reference entry {entry.id} has an unknown or incompatible subject "
+                        f"{pack.subject_asset_id} for role {entry.role.value}"
                     )
-                continue
-            if not _is_usable_approved_image(version):
-                if explicitly_requested:
+                if entry.role == ReferenceRole.CANONICAL_MASTER and (
+                    source_asset.id != subject.id
+                    or entry.lineage_root_version_id not in {None, version.id}
+                ):
                     raise VisualInputContractError(
-                        f"Reference entry {entry.id} is not a usable approved image"
+                        f"Reference entry {entry.id}: CANONICAL_MASTER must use an image "
+                        f"owned by subject {subject.id} and cannot declare another lineage root"
                     )
-                continue
+                if (pack.id, entry.id) not in usable_explicit_entries:
+                    raise VisualInputContractError(
+                        f"Reference entry {entry.id} requires CURRENT DRAFT or APPROVED image "
+                        f"{version.id} with usable media; its declared lineage root "
+                        f"{entry.lineage_root_version_id} must also be a current usable image "
+                        f"owned by subject {subject.id}"
+                    )
+                media_ids = [version.id]
+                if (
+                    entry.lineage_root_version_id is not None
+                    and entry.lineage_root_version_id != version.id
+                ):
+                    media_ids.append(entry.lineage_root_version_id)
+                for media_id in media_ids:
+                    _owner, media_version = version_index[media_id]
+                    if media_version.external_url is None and (
+                        media_version.local_path is None
+                        or not Path(media_version.local_path).expanduser().is_file()
+                    ):
+                        raise VisualInputContractError(
+                            f"Reference entry {entry.id}: AssetVersion media is missing: {media_id}"
+                        )
+            else:
+                lineage_is_current = (
+                    entry.lineage_root_version_id is None
+                    or subject is not None
+                    and subject.approved_version_id == entry.lineage_root_version_id
+                )
+                if not lineage_is_current or not _is_usable_approved_image(version):
+                    continue
             score, reasons = _candidate_score(entry, matches)
             candidates.append(
                 ReferenceVisualCandidate(
@@ -476,7 +509,7 @@ def build_reference_visual_candidates(
 
     if not candidates:
         raise VisualInputContractError(
-            "No project-local approved visual candidates match this shot and ReferencePlan"
+            "No selected or eligible current visual candidates match this shot and ReferencePlan"
         )
 
     candidates.sort(

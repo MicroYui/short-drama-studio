@@ -102,6 +102,8 @@ def test_actual_qa_suggestion_survives_other_read_and_worker_restart(tmp_path: P
     assert language.calls == 1
     assert json.loads(language.input_text)["candidate_creation"]["local_edit_guide_available"] is True
     assert "范围无法确定则留空" in language.instructions
+    assert "完整移动部位、必要连接关节" in language.instructions
+    assert "不固定每次整手或整腕" in language.instructions
     assert "不改变recommended或已有问题" in language.instructions
     assert service.get_project(pid).document.model_dump(mode="json") == before
     store, work, context = runtime_work(tmp_path / "worker.sqlite3")

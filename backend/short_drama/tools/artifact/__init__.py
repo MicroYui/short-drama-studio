@@ -443,7 +443,14 @@ class AssetPlanFieldPatchInput(ToolModel):
     project_id: str = Field(min_length=1)
     base_version_id: str = Field(min_length=1)
     patches: list[AssetPlanFieldPatch] = Field(min_length=1)
-    notes: list[str] | None = None
+    notes: list[str] | None = Field(
+        default=None,
+        description=(
+            "共享 AssetPlan 的完整备注列表；省略或 null 保留现有备注，"
+            "传列表表示整表替换（[] 清空），并按 base 检查共享备注冲突。"
+            "个人进度写 working_notes；只有确需修改共享备注时才提供完整目标列表。"
+        ),
+    )
     source_artifact_refs: list[ProductionDocumentArtifactRef] = Field(
         default_factory=list[ProductionDocumentArtifactRef]
     )
@@ -1940,12 +1947,13 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             version=1,
             category=ToolCategory.ARTIFACT,
             description=(
-                "当某个已批准图片版本将在后续镜头中承担明确的身份、"
-                "角度、空间或道具职责时，把该精确版本加入主体 ReferencePack。"
-                "接受当前已批准的 canonical 或 supplemental 图像，不会为"
-                "草稿自动背书。从 canonical 派生的条目应显式指定当前"
-                " lineage_root_version_id；独立来源可留空。CANONICAL_MASTER 不能伪装："
-                "必须是主体资产自身当前的已批准母版。"
+                "把已明确选用、CURRENT 且有可用图片媒体的精确版本加入主体 "
+                "ReferencePack，声明身份、角度、空间或道具职责。DRAFT 与 "
+                "APPROVED 均可；登记不自动审核，不改变资产的 current_version_id "
+                "或 approved_version_id。CANONICAL_MASTER 只接受主体自身图片，"
+                "不要求已是 approved_version_id；lineage_root_version_id 省略或等于"
+                "本版本，保存为自身。其他角色若声明来源根，该根须为主体自身 "
+                "CURRENT 且可用的图片；独立来源可留空。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
