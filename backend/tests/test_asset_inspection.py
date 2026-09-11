@@ -209,7 +209,8 @@ def test_prop_reference_prompt_excludes_full_people_and_story_context(tmp_path) 
     assert "若 ShotPlan 显式把演员、手、道具或状态" in client.instructions
     assert "其缺席就是符合要求的证据" in client.instructions
     assert "当前制片技能：AI 短剧（本地格式适配）。" in client.instructions
-    assert "只完成这一段后返回 Leader" in client.instructions
+    assert "资产验收的通用职责" in client.instructions
+    assert "旧版资产职责" not in client.instructions
     assert "类型创作原则：" not in client.instructions
 
 
@@ -564,6 +565,7 @@ def test_asset_review_compares_candidate_with_approved_canonical_images(tmp_path
             "asset_kind": "CHARACTER",
             "asset_name": character.name,
             "version_id": canonical.id,
+            "descriptor": canonical.descriptor,
             "reference_role": "SUBJECT_IDENTITY",
             "reference_authority": "AUTHORITATIVE",
             "purpose": "当前明确选择的可用参考，用于审核候选的连续性。",
@@ -626,6 +628,7 @@ def test_asset_version_semantic_inspection_is_agent_callable_before_review(
         "review_focus": None,
         "region_evidence": [],
         "crop_suggestion": None,
+        "edit_guide_suggestion": None,
     }
     assert {item.artifact_type for item in result.artifact_refs} == {
         "asset",
@@ -823,6 +826,7 @@ def test_asset_inspection_automatically_compares_authoritative_derivation_source
         "asset_kind": "CHARACTER",
         "asset_name": character.name,
         "version_id": source.version.id,
+        "descriptor": source.version.descriptor,
         "reference_role": "SUBJECT_IDENTITY",
         "reference_authority": "AUTHORITATIVE",
         "purpose": "保持用户提供的同一人物身份",

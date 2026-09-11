@@ -8,6 +8,7 @@ from typing import Annotated, Literal, Protocol
 from pydantic import Field, JsonValue, model_validator
 
 from short_drama.agent_runtime import ToolAttemptRef
+from short_drama.asset_plan_receipts import asset_plan_write_receipt
 
 from short_drama.asset_catalog import (
     AssetCatalogImportRequest,
@@ -1024,6 +1025,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
         return ToolExecution(
             output=summary,
             artifact_refs=_asset_plan_mutation_refs(request.project_id, summary),
+            receipt=asset_plan_write_receipt(result, _asset_plan_mutation_refs(request.project_id, summary)),
         )
 
     registry.register(
@@ -1065,6 +1067,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
         return ToolExecution(
             output=summary,
             artifact_refs=_asset_plan_mutation_refs(request.project_id, summary),
+            receipt=asset_plan_write_receipt(result, _asset_plan_mutation_refs(request.project_id, summary)),
         )
 
     registry.register(
@@ -1126,6 +1129,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
         return ToolExecution(
             output=summary,
             artifact_refs=_asset_plan_patch_refs(request.project_id, summary),
+            receipt=asset_plan_write_receipt(result, _asset_plan_patch_refs(request.project_id, summary)),
         )
 
     registry.register(
@@ -1152,8 +1156,10 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 "校验成功后保存；不会调用 Provider。局部完成"
                 "回写、补参考或少量修复优先使用本 Tool，只有整体结构重构才提交"
                 " artifact.replace_asset_plan 的完整快照。成功响应只返回新版本身份与"
-                "本次变更 ID 摘要，不回传完整 AssetPlan；需要继续调度时读取轻量"
-                " artifact.get_asset_plan_index。"
+                "本次变更 ID 摘要，不回传完整 AssetPlan。receipt 保留新"
+                "asset_plan_identity.version_id、实际变更ID和执行合同诊断；"
+                "后续局部保存可沿用该精确身份，无需只为取得版本再读index。"
+                "需要完整工作目录时按需读取 artifact.get_asset_plan_index。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
@@ -1196,6 +1202,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 request.project_id,
                 summary,
             ),
+            receipt=asset_plan_write_receipt(result, _asset_plan_reconcile_refs(request.project_id, summary)),
         )
 
     registry.register(
@@ -1255,6 +1262,7 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
         return ToolExecution(
             output=summary,
             artifact_refs=_asset_plan_patch_refs(request.project_id, summary),
+            receipt=asset_plan_write_receipt(result, _asset_plan_patch_refs(request.project_id, summary)),
         )
 
     registry.register(

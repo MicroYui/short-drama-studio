@@ -1,0 +1,224 @@
+{
+  "source": {
+    "trace_file": "output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-5b8286dc63e6/studio-trace/studio-job-20f086971171/20260911T222410281267-69294832-model.input.json",
+    "call_id": "model-d8edba7e1f37",
+    "note": "Exact saved shot, generation prompt, review focus and ordered reference declarations. Test images are synthetic color patches; this verifies transport, not model visual accuracy. Reference descriptors come from those exact stored AssetVersions."
+  },
+  "shot": {
+    "id": "shot-yqq-04",
+    "project_id": "project-5b8286dc63e6",
+    "sequence": 5,
+    "scene_id": "scene-5441e73077d5",
+    "duration_seconds": 4.5,
+    "narrative_purpose": "看见自己的确认签名后，赵衡用按纸与反问试图把责任推回许岚。",
+    "visual": "赵衡西侧坐姿中近景，面孔居画左，目光落到画面下方的报价单，再抬向画右的许岚。浅蓝袖口的左手向北侧中区伸出，压住报价单北缘而不盖住原确认签名。画内只有赵衡的脸与手；许岚在画外，不要求她同时表演。",
+    "framing": "9:16，南偏东机位拍赵衡胸口以上及左手压纸的桌面下缘；脸和手同为可读层次，不用极浅景深。",
+    "camera": "固定，保持在东西人物轴线南侧；人物视线朝画右。东侧高窗的柔光与前镜一致。",
+    "audio_intent": "赵衡画内普通话原句：我说能发，你就不再看一遍？先看纸再反问，不吼叫。许岚不发声。低室内底噪，按纸轻响，不配转折重音。",
+    "dialogue_line_ids": [
+      "line-yqq-03"
+    ],
+    "references": [],
+    "timeline_beats": [
+      {
+        "start_seconds": 0.0,
+        "end_seconds": 1.0,
+        "visual": "赵衡读到自己签名，左手落到报价单北缘。",
+        "framing": "中近景带桌面",
+        "camera": "固定南偏东角度",
+        "action": "眼睛先向下，左手伸出接触纸的北缘并停住，手指不遮右下确认区。",
+        "performance": "下颌微紧，只停一下，不表演惊慌。",
+        "emotion": null,
+        "dialogue_line_ids": [],
+        "sound": "指腹压纸的轻响，室内底噪。",
+        "references": []
+      },
+      {
+        "start_seconds": 1.0,
+        "end_seconds": 4.5,
+        "visual": "赵衡按着报价单，看向画右的许岚。",
+        "framing": "同一中近景",
+        "camera": "不移动、不反向越轴",
+        "action": "左手保持压纸，右手不碰笔；抬眼说完反问，末尾等待回答。",
+        "performance": "维护体面，句中“能发”稍重，尾部不是吼叫。",
+        "emotion": null,
+        "dialogue_line_ids": [
+          "line-yqq-03"
+        ],
+        "sound": "赵衡：我说能发，你就不再看一遍？对白约2.9秒，末尾留约0.6秒。",
+        "references": []
+      }
+    ],
+    "continuity": {
+      "character_positions": "赵西许东，均坐着；赵画左，许在画右外。",
+      "eyeline": "赵先看北侧报价单的原确认签名，再朝画右的许岚看；许岚画外看赵。",
+      "prop_state_in": "报价北侧中区朝赵；说明东侧朝许，双空白；许右手持裸笔，帽在她左手边。",
+      "prop_state_out": "赵左手按报价单北缘；报价原签名、红改不变。说明、裸笔与笔帽未变。",
+      "action_in": "赵尚未接触报价单。",
+      "action_out": "赵左手保持压纸，反问完等许岚，不取笔。"
+    },
+    "transition_out": "按反问后的停顿切许岚；室内底噪连续。",
+    "merge_candidate": false,
+    "local_rework_risk": "按纸若遮证据，可调整手接触的边缘，不改既有签名、不把签名移到其他角。",
+    "approval_status": "DRAFT",
+    "freshness": "CURRENT",
+    "revision": 1
+  },
+  "candidate_creation": {
+    "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+    "actual_size": {
+      "width": 1440,
+      "height": 2560
+    },
+    "local_crop_available": true,
+    "operation": "REFERENCE_GENERATE",
+    "generation_prompt": "制作《一起签》单幅9:16自然真人摄影镜头构图参考。按有序输入分别使用：赵衡唯一身份及浅蓝长袖衬衫；既有小会议室空间和东窗柔光；报价单既有红改与黑墨确认赵衡；双空白情况说明。不得复制身份图的站姿、中性背景，或道具独拍图的灰色产品背景。赵衡仍坐桌西侧面东，相机在桌南偏东、人物轴南侧，固定略高的中近景；赵脸在画左，向画右留视线空间。完整保留清楚面部、左前臂、手和报价北缘接触区，右手空着留自己西侧桌边。此图是第4镜0秒：赵先垂眼看北中部报价，左手伸向但尚未压上其北缘；不得将已经松手或拿笔的状态当作开头。报价标题端朝东、版面朝赵，红改及右下旧确认签名已有且不被手挡住。说明仍在东侧许岚面前，标题端朝西，经办和复核均为空，与报价分开；说明可只露必要边缘，不强求整页文字在此面手中景精读。许岚脸、持笔右手和东缘南部笔帽均在画外，不增加第二人物或笔。赵面容年龄感、肤色、黑短发、无胡须、浅蓝扣袖衬衫保持母图；不怒吼、不瞪眼、不预演夸张惊慌，嘴轻闭。浅橡木桌和局部会议室空间连续，不越轴或镜像，不交换座位。只呈现这一个动作前瞬间，不拼多个状态。完成检查：脸与身份母图一致、左手属于赵、可落北缘且不挡确认、右手空、两纸当前方位正确、无多纸。静图只证明构图和初态；后续0–1秒看纸按纸、1–4.5秒抬眼反问仍需真实视频验证。本工作不做视频，不重画纸笔母图或身份卡。",
+    "crop": null,
+    "reference_sheet": null,
+    "text_plate": null
+  },
+  "candidate_brief": {
+    "identity_anchor": "赵衡，38岁中国成年男性，直属主管及报价复核人；方圆脸、整齐侧分黑色短发、深棕眼睛、无胡须，固定面容。",
+    "tone_or_temperament": "习惯下指令、维护体面；被证据顶住后先反问，继而沉默、主动签字，不突然谄媚或痛哭。",
+    "visual_attributes": [
+      "中等偏高身材，略宽肩，普通办公室体态",
+      "方圆脸，眼下有轻微自然疲态",
+      "黑色短发整齐侧分，无胡须，自然皮肤纹理"
+    ],
+    "wardrobe_or_materials": [
+      "浅蓝哑光长袖商务衬衫，无图案无标志，袖口扣好",
+      "领口第一颗扣子解开，无领带、无外套",
+      "炭灰西裤，无工牌和醒目首饰"
+    ],
+    "background_constraints": [
+      "人物身份参考不自行加入许岚或第三人",
+      "全场保持相同年龄、面容、服装、发型"
+    ],
+    "texture_constraints": [
+      "自然真人摄影质感，不动漫化、不重度磨皮"
+    ],
+    "continuity_anchors": [
+      "会议桌西侧座位，面向东侧的许岚；全场不换座",
+      "右手拿笔签字，左手压住报价单后松开",
+      "报价单开场已有他的确认签名；情况说明的复核签名在末段才出现",
+      "先签复核、再递笔给许岚，最后把两张纸收在自己面前"
+    ],
+    "named_views_or_zones": [],
+    "presentation_mode": "PHYSICAL_MASTER",
+    "required_visible_text": [],
+    "reference_strategy": "LIGHTWEIGHT",
+    "layout_profile": "LIGHTWEIGHT_SINGLE",
+    "requested_views": [
+      "CANONICAL_MASTER"
+    ],
+    "strategy_rationale": "先固定面容、衬衫和克制表演的身份锚点；后续按分镜需要补角度，不在编剧阶段生成图片。"
+  },
+  "review_focus": "这是第4镜0秒按报价前的单幅构图参考，不是人物卡。检查赵衡面部与身份母图是否一致，浅蓝袖的解剖左右手是否明确：左手尚未接触报价北缘且有可落下的接触区；右手空着不取笔。空间赵西许东，南偏东机位，脸偏画左看画右；报价在北中标题端朝东、旧红改及右下确认区无遮挡；说明仍在东侧标题朝西且双空白，未提前移至南中。许岚可在画外，裸笔仍由许右手持有、唯一帽留东缘南部，不应出现桌上提前放好的笔。报告实际可辨与无法判断处，判断脸、左臂、报价北缘是否共同足够用于本镜；不要求本镜精读正文小字。",
+  "references": [
+    {
+      "image_map": {
+        "image": 1,
+        "role": "candidate_under_review",
+        "asset_id": "asset-5f4d7485e6b8",
+        "asset_name": "赵衡",
+        "version_id": "asset-version-df5a3f9578c2"
+      },
+      "descriptor": "第4镜按纸前构图候选：赵衡西座面手同框，左手尚未压报价北缘，右手空着。补充构图参考，不替换身份母图；待实图检查。",
+      "version": 6,
+      "asset_kind": "CHARACTER",
+      "approval_status": "DRAFT"
+    },
+    {
+      "image_map": {
+        "image": 2,
+        "role": "derivation_reference",
+        "reference_source": "DERIVATION_SOURCE",
+        "source_project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-5f4d7485e6b8",
+        "asset_kind": "CHARACTER",
+        "asset_name": "赵衡",
+        "version_id": "asset-version-6a56e078129b",
+        "reference_role": "SUBJECT_IDENTITY",
+        "reference_authority": "AUTHORITATIVE",
+        "purpose": "唯一面容、发型、年龄感、身体比例与浅蓝扣袖衬衫依据；不贡献站姿或背景。",
+        "subject_alias": "赵衡",
+        "approval_status": "APPROVED",
+        "is_current_canonical_master": true,
+        "normative_for_declared_role": true
+      },
+      "descriptor": "赵衡原创正面人物母图：38岁中国成年男性，方圆脸、黑短发侧分、无胡须；浅蓝长袖衬衫首扣解开且袖口扣好、炭灰西裤，自然克制表情。单人头顶至大腿中段，供身份与服装参考。",
+      "version": 2,
+      "asset_kind": "CHARACTER",
+      "approval_status": "APPROVED"
+    },
+    {
+      "image_map": {
+        "image": 3,
+        "role": "derivation_reference",
+        "reference_source": "DERIVATION_SOURCE",
+        "source_project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-4024e0462bfc",
+        "asset_kind": "LOCATION",
+        "asset_name": "公司小会议室",
+        "version_id": "asset-version-d42fba8ad6bb",
+        "reference_role": "SCENE_IDENTITY",
+        "reference_authority": "AUTHORITATIVE",
+        "purpose": "同一浅橡木桌、西座、东窗柔光和南侧轴线；空景不是首帧。",
+        "subject_alias": "公司小会议室",
+        "approval_status": "APPROVED",
+        "is_current_canonical_master": true,
+        "normative_for_declared_role": true
+      },
+      "descriptor": "会议室主空景：南侧中央向北；画面左西侧赵衡座位、右东侧许岚座位。南北向浅橡木桌、两把东西对坐深灰无扶手椅；北磨砂隔断、东高窗、西墙北端关门。空桌无人无道具。供空间身份及座位/光向连续性参考，不是带人物的开镜状态。",
+      "version": 2,
+      "asset_kind": "LOCATION",
+      "approval_status": "APPROVED"
+    },
+    {
+      "image_map": {
+        "image": 4,
+        "role": "derivation_reference",
+        "reference_source": "DERIVATION_SOURCE",
+        "source_project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-797c99b1531c",
+        "asset_kind": "PROP",
+        "asset_name": "报价单｜红色修改与赵衡确认签名",
+        "version_id": "asset-version-d99209b73470",
+        "reference_role": "PROP_IDENTITY",
+        "reference_authority": "AUTHORITATIVE",
+        "purpose": "单张报价外形、版式、旧红改和确认赵衡，不复制产品背景或独拍方向。",
+        "subject_alias": "报价单",
+        "approval_status": "DRAFT",
+        "is_current_canonical_master": false,
+        "normative_for_declared_role": true
+      },
+      "descriptor": "报价单｜摄影道具候选：既有红色划改与红字调整报价，右下角确认：赵衡为黑墨手写签名。由准确字版派生，作为全场不变的报价单状态参考；与情况说明后来新增的签名分开，不证明转纸、按纸或视频文字稳定性已实现。",
+      "version": 3,
+      "asset_kind": "PROP",
+      "approval_status": "DRAFT"
+    },
+    {
+      "image_map": {
+        "image": 5,
+        "role": "derivation_reference",
+        "reference_source": "DERIVATION_SOURCE",
+        "source_project_id": "project-5b8286dc63e6",
+        "asset_id": "asset-08b6047a6a38",
+        "asset_kind": "PROP",
+        "asset_name": "情况说明｜经办与复核双签栏",
+        "version_id": "asset-version-a9fb492dce6b",
+        "reference_role": "PROP_IDENTITY",
+        "reference_authority": "AUTHORITATIVE",
+        "purpose": "同一说明，上经办下复核均空，仍东侧标题西；不复制独拍背景。",
+        "subject_alias": "情况说明",
+        "approval_status": "DRAFT",
+        "is_current_canonical_master": false,
+        "normative_for_declared_role": true
+      },
+      "descriptor": "情况说明｜双空白摄影道具候选。开场至赵衡签复核前使用；经办、复核均为空白。由已检查准确字版派生，须检查实际中文与纸张外观；不代表视频手部接触或书写已验证。",
+      "version": 4,
+      "asset_kind": "PROP",
+      "approval_status": "DRAFT"
+    }
+  ]
+}

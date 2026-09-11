@@ -13,7 +13,7 @@ from short_drama.tools.contracts import ToolError, ToolErrorDetail, ToolWriteRec
 
 _SCOPE_FIELDS = {
     "id", "project_id", "shot_id", "shot_ids", "scene_id", "asset_id", "asset_version_id",
-    "work_order_id", "work_item_id", "generation_unit_id", "clip_group_id", "take_id",
+    "work_order_id", "item_id", "work_item_id", "source_work_item_id", "generation_unit_id", "clip_group_id", "take_id",
     "document_id", "version_id", "expected_revision", "base_version_id", "anchor_clip_id",
     "source_in_seconds", "source_out_seconds", "start_seconds", "end_seconds",
     "timeline_id", "subtitle_ids", "clip_ids",
@@ -59,6 +59,12 @@ def validation_feedback(error: ValidationError, arguments: Mapping[str, object])
             else:
                 node = None
             pointer += "/" + str(segment).replace("~", "~0").replace("/", "~1")
+        # Model-level errors point at the object itself, not one of its fields.
+        # Include its selectors so the caller can repair the exact reference.
+        if isinstance(node, dict):
+            selected = argument_scope(cast(dict[str, object], node))
+            if selected:
+                identifiers[pointer or "/"] = selected
         constraints: dict[str, JsonValue] = {}
         for key, value in (issue.get("ctx") or {}).items():
             if isinstance(value, (str, int, float, bool)) or value is None:

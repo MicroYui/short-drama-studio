@@ -62,6 +62,8 @@ from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary, execution_control
 from short_drama.agent_runtime.model_input import ModelInputCompiler, generate_context_managed_text, json_text, pointer_value
 from short_drama.agent_runtime.response_normalization import normalize_specialist_tool_payload
+from short_drama.agent_runtime.asset_plan_context import asset_work_read_is_stale, fold_asset_plan_items
+from short_drama.asset_plan_receipts import compatible_asset_plan_receipt
 from short_drama.agent_runtime.leader_context import (
     BROAD_COMPLETION_REF_TYPES, completed_work_handoffs, exact_context_values, leader_read_working_set, persist_leader_tool_result,
 )
@@ -2213,6 +2215,7 @@ def _specialist_working_set(
     artifact_ref_slots: dict[tuple[str, str, str], ArtifactRef] = {}
     inspection_report_ids: dict[tuple[str, str], str] = {}
     shot_write_revisions: dict[str, int | None] = {}
+    asset_plan_versions: dict[str, int] = {}
     turns_by_id = {turn.id: turn for turn in ordered_turns}
     for turn in ordered_turns:
         compact_result = (
@@ -2253,6 +2256,13 @@ def _specialist_working_set(
         )
         result_status = (
             None if turn.result is None else turn.result.get("status")
+        )
+        fold_asset_plan_items(
+            entities, turn,
+            read_scope_key=_specialist_read_observation_key(turn, read_schemas.get(turn.tool_name)),
+            read_scope=turn.arguments,
+            known_versions=asset_plan_versions,
+            entity_type=SpecialistEntitySnapshot,
         )
         if turn.tool_name == "artifact.retry_asset_plan_attempt":
             resolved_attempt_ids = _local_tool_attempt_lineage_ids(
@@ -2465,6 +2475,25 @@ def _specialist_working_set(
         if report is not None:
             # This report is already in latest_handoff; retain other Takes once.
             entities.pop(("video_inspection", cast(str, report["take_id"])), None)
+    for key, observation in list(read_observations.items()):
+        if asset_work_read_is_stale(
+            observation.tool_name, observation.result, known_versions=asset_plan_versions,
+        ):
+            # A read-only index can reveal another writer's change too. Keep
+            # exact historical snapshots addressable, not as current item facts.
+            read_observations.pop(key)
+    visible_plan_read_sequences = {
+        observation.source_sequence for observation in read_observations.values()
+        if observation.tool_name == "artifact.get_asset_work_context"
+    }
+    if latest_turn is not None and latest_turn.tool_name == "artifact.get_asset_work_context":
+        visible_plan_read_sequences.add(latest_turn.sequence)
+    for key, entity in list(entities.items()):
+        if entity.kind == "asset_plan_item" and entity.source_sequence in visible_plan_read_sequences:
+            # Its original scoped read already carries the same body (and its
+            # exact snapshot). Materialize the item only if a later local write
+            # invalidates that multi-object response while proving this item unchanged.
+            entities.pop(key)
     repair_tool_schema_ids = sorted(pending_tool_repairs)
     if latest_turn is not None:
         latest_repair = pending_tool_repairs.get(latest_turn.tool_name)
@@ -2735,7 +2764,7 @@ def _specialist_turn_handoff(
                 "artifact_refs": turn.result.get("artifact_refs"),
                 "warnings": turn.result.get("warnings"),
                 "error": turn.result.get("error"),
-                "receipt": turn.result.get("receipt"),
+                "receipt": compatible_asset_plan_receipt(turn.tool_name, turn.result),
             }
             if compact_write_result or (attempt_ref is not None and not retain_exact_payload)
             else _compact_specialist_tool_result(
@@ -3202,6 +3231,8 @@ def _fold_specialist_entities(
                     "evidence_references": output.get("evidence_references"),
                     **({"crop_suggestion": output["crop_suggestion"]}
                        if output.get("crop_suggestion") is not None else {}),
+                    **({"edit_guide_suggestion": output["edit_guide_suggestion"]}
+                       if output.get("edit_guide_suggestion") is not None else {}),
                 },
                 # Multiple views of one subject share an Asset. Their visual
                 # findings belong to distinct immutable versions; folding by
@@ -5169,6 +5200,7 @@ class ProductionManager:
             output=AssetPlanMutationSummaryResponse.model_validate(result.output),
             artifact_refs=tuple(result.artifact_refs),
             warnings=tuple(result.warnings),
+            receipt=result.receipt,
         )
 
     def capability_catalog(self) -> AgentCapabilityCatalog:

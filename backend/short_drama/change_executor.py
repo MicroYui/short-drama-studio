@@ -9,6 +9,7 @@ approval gate, content freeze, hash chain, or provider submission.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import StrEnum
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from pydantic import Field, model_validator
 from short_drama.change_planner import ChangeTargetKind, SemanticChangePlan
 from short_drama.models import (
     ApprovalStatus,
+    Asset,
     AssetMediaType,
     AssetSourceRecord,
     AssetVersion,
@@ -188,6 +190,8 @@ def _validate_plan_scope(
 def prepare_semantic_change(
     document: ProjectDocument,
     request: SemanticChangeApplyRequest,
+    *,
+    next_asset_version_number: Callable[[Asset], int] | None = None,
 ) -> PreparedSemanticChange:
     """Prepare one atomic project mutation without performing external side effects."""
 
@@ -322,7 +326,10 @@ def prepare_semantic_change(
                 )
             current.approval_status = ApprovalStatus.SUPERSEDED
             current.freshness = Freshness.STALE
-            next_number = max(item.version for item in asset.versions) + 1
+            next_number = (
+                next_asset_version_number(asset) if next_asset_version_number is not None
+                else max(item.version for item in asset.versions) + 1
+            )
             version = AssetVersion(
                 id=f"asset-version-{uuid4().hex[:12]}",
                 version=next_number,

@@ -475,7 +475,7 @@ class ImageReferenceInput(DomainModel):
         return self
 
 
-def _parse_image_size(value: str) -> tuple[int, int]:
+def parse_image_size(value: str) -> tuple[int, int]:
     try:
         raw_width, raw_height = value.lower().split("x", maxsplit=1)
         width = int(raw_width)
@@ -620,7 +620,7 @@ class ImageProviderRequest(DomainModel):
     @field_validator("size")
     @classmethod
     def validate_size(cls, value: str) -> str:
-        width, height = _parse_image_size(value)
+        width, height = parse_image_size(value)
         return f"{width}x{height}"
 
 

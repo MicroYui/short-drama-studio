@@ -10,10 +10,13 @@ from io import BytesIO
 from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from short_drama.h3_models import H3RouteAssetPreparation
-from short_drama.image_models import ImageGenerationTask, ImageRegion
+from short_drama.image_models import ImageGenerationTask, ImageRegion, parse_image_size
+from short_drama.image_edit_guides import (
+    ImageEditGuideRegion, ImageGuideArrow, validate_edit_guide_geometry,
+)
 from short_drama.image_regions import read_image_region, region_box
 from short_drama.models import (
     ApprovalStatus,
@@ -76,6 +79,16 @@ class AssetCropSuggestion(DomainModel):
     )
 
 
+class AssetEditGuideSuggestion(DomainModel):
+    """Observed optional geometry for the existing candidate edit-guide Tool."""
+
+    regions: list[ImageEditGuideRegion] = Field(min_length=1, max_length=16)
+    arrows: list[ImageGuideArrow] = Field(default_factory=list[ImageGuideArrow], max_length=16)
+    descriptor: str = Field(min_length=1, max_length=2000)
+    source_asset_version_id: str | None = Field(default=None,
+        description="Runtime-attached exact candidate. Return null; never choose another reference as edit source.")
+
+
 class SemanticAssetReview(DomainModel):
     recommended: bool
     score: float = Field(ge=0.0, le=5.0)
@@ -94,6 +107,8 @@ class SemanticAssetReview(DomainModel):
             "The suggestion preserves the existing recommendation and does not perform an edit."
         ),
     )
+    edit_guide_suggestion: AssetEditGuideSuggestion | None = Field(default=None,
+        description="Optional observed candidate regions and target arrows for image.create_edit_guide; null if uncertain or a local edit cannot preserve the required composition.")
     evidence_references: list[SemanticAssetReviewEvidenceReference] = Field(
         default_factory=list[SemanticAssetReviewEvidenceReference],
         max_length=16,
@@ -102,6 +117,17 @@ class SemanticAssetReview(DomainModel):
             "request for the language model to create artifact references."
         ),
     )
+
+    @field_validator("edit_guide_suggestion", mode="before")
+    @classmethod
+    def keep_only_usable_optional_guide(cls, value: object) -> AssetEditGuideSuggestion | None:
+        if value is None:
+            return None
+        try:
+            return AssetEditGuideSuggestion.model_validate(value)
+        except ValidationError:
+            # A malformed optional edit cannot invalidate an otherwise usable QA.
+            return None
 
 
 class AssetVersionInspectionRequest(DomainModel):
@@ -677,7 +703,7 @@ def inspect_asset_image(
     request = request or AssetVersionInspectionRequest()
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
-        roles=(ProductionSkillRole.ASSET_REVIEWER,),
+        roles=(ProductionSkillRole.ASSET_VERIFIER,),
         include_constitution=False,
         stage=ProductionPromptStage.ASSETS,
     )
@@ -738,6 +764,15 @@ def inspect_asset_image(
         "若源和目标画幅相同，归一化width和height应相同。裁切不能增加细节、改变背景结构或移动主体；"
         "无法兼顾要求或边界看不清时返回null并说明限制，不靠放大凑像素。"
         "建议尚未执行，不能把裁后的预期效果写成当前图已合格，也不能消除其他实际问题。"
+        "edit_guide_suggestion也默认为null。只有candidate_creation.local_edit_guide_available为true，"
+        "已看清候选中的具体问题且适合局部编辑时，才一次给出regions、可选arrows和descriptor；"
+        "source_asset_version_id返回null，运行时只绑定Image 1候选。坐标均为完整候选EXIF校正后"
+        "的0—1位置，不能使用参考或局部放大图的坐标。polygon圈出实际要改的范围；如需移动物体，"
+        "包含原位置、明确目标位置及必要接触或阴影范围，arrows说明可见特征的目标方向。"
+        "箭头只是编辑指示，不是要画入成图的内容。只按已声明目标和本次实际可见位置作图，"
+        "不猜遮挡边界、画外布局或不存在的新画面。大机位、多人站位或整体透视变化通常不能用"
+        "狭小mask修复，应说明需扩大编辑范围或不用局部mask；范围无法确定则留空。"
+        "建议不执行编辑、不改变recommended或已有问题，也不表示编辑后已经验收。"
         "只比较图像中的可见证据与输入的资产简报、项目 "
         "Bible，以及可选的 ShotPlan 或关键帧简报。项目 Bible 已声明的媒介和 Style 是依据，"
         "candidate_creation 是这张图片实际保存的生成/裁切意图；asset.brief 是整个资产的总体要求。"
@@ -770,6 +805,8 @@ def inspect_asset_image(
         "提供参考图时，Image 1 始终是待审核候选，后续图片的准确职责、权威级别、"
         "用途、主体别名、生命周期状态和来源都在 image_map 中结构化声明。只在它声明的"
         "reference_role 范围内比较，不要平均或混合不同角色身份。"
+        "参考项 descriptor 来自该精确图片版本，是它原有机位、空间或内容的说明，"
+        "不是当前候选已符合要求的结论，也不要求候选照搬参考图原机位。"
         "EXPLICIT_CANONICAL 是本次明确选择的可用参考，可为 DRAFT；DERIVATION_SOURCE 是候选生成时实际使用的"
         "历史证据，不因后来更换母版而消失。approval_status=DRAFT 不等于该图已被"
         "批准为资产；但若它是用户明确锁定的权威源图且 normative_for_declared_role=true，"
@@ -826,6 +863,16 @@ def inspect_asset_image(
         and version.approval_status in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
         and version.freshness == Freshness.CURRENT
     )
+    edit_guide_available = False
+    if crop_available and version.local_path is not None and crop_source_size is not None:
+        with Image.open(version.local_path) as source:
+            # The guide and masked EDIT share the original upright pixel grid.
+            try:
+                parse_image_size(f"{crop_source_size[0]}x{crop_source_size[1]}")
+            except ValueError:
+                pass
+            else:
+                edit_guide_available = source.getexif().get(274, 1) == 1
     creation = {
         "output_layout_profile": output_layout,
         "actual_size": {
@@ -833,6 +880,7 @@ def inspect_asset_image(
             "height": crop_source_size[1] if crop_source_size else version.height,
         },
         "local_crop_available": crop_available,
+        "local_edit_guide_available": edit_guide_available,
         "operation": generation_task.operation if generation_task is not None else version.origin_type,
         "generation_prompt": generation_task.request.prompt if generation_task is not None
         else version.source.prompt if version.source is not None else None,
@@ -895,6 +943,7 @@ def inspect_asset_image(
                     "asset_kind": reference.asset.kind.value,
                     "asset_name": reference.asset.name,
                     "version_id": reference.version.id,
+                    "descriptor": reference.version.descriptor,
                     "reference_role": reference.reference_role.value,
                     "reference_authority": reference.reference_authority.value,
                     "purpose": reference.purpose,
@@ -944,9 +993,21 @@ def inspect_asset_image(
             )})
     else:
         suggestion = None
+    edit_guide = result.edit_guide_suggestion
+    if edit_guide is not None and edit_guide_available and crop_source_size is not None:
+        width, height = crop_source_size
+        try:
+            validate_edit_guide_geometry(edit_guide.regions, edit_guide.arrows, width, height)
+        except ValueError:
+            edit_guide = None
+        else:
+            edit_guide = edit_guide.model_copy(update={"source_asset_version_id": version.id})
+    else:
+        edit_guide = None
     return result.model_copy(update={
         "review_focus": request.review_focus, "candidate_output_layout": output_layout,
         "region_evidence": detail_evidence, "crop_suggestion": suggestion,
+        "edit_guide_suggestion": edit_guide,
     })
 
 

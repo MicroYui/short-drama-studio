@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
+from short_drama.image_edit_guides import AssetImageEditGuideRequest, AssetImageEditGuideResponse
 from short_drama.image_models import (
     AgentImageTaskCreateRequest,
     AssetMutationResponse,
@@ -24,6 +25,7 @@ from short_drama.tools.contracts import (
     ToolExecution,
     ToolModel,
     ToolSpec,
+    ToolWriteReceipt,
 )
 from short_drama.tools.registry import ToolRegistry
 
@@ -34,6 +36,10 @@ class ImageToolService(Protocol):
     def crop_asset_image(
         self, project_id: str, asset_id: str, request: AssetImageCropRequest,
     ) -> AssetMutationResponse: ...
+
+    def create_asset_edit_guide(
+        self, project_id: str, request: AssetImageEditGuideRequest,
+    ) -> AssetImageEditGuideResponse: ...
 
     def compose_asset_reference_sheet(
         self,
@@ -97,6 +103,11 @@ class ImageCropInput(ToolModel):
     project_id: str
     asset_id: str
     request: AssetImageCropRequest
+
+
+class ImageEditGuideInput(ToolModel):
+    project_id: str
+    request: AssetImageEditGuideRequest
 
 
 class ImageTextPlateComposeInput(ToolModel):
@@ -190,6 +201,43 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
         effect=ToolEffect.WRITE, idempotent=False, input_model=ImageCropInput,
         output_model=AssetMutationResponse, handler=crop_image,
         tags=frozenset({"image", "asset", "crop", "local", "identity", "reference"}),
+    ))
+
+    def create_edit_guide(request: ImageEditGuideInput) -> ToolExecution[AssetImageEditGuideResponse]:
+        result = service.create_asset_edit_guide(request.project_id, request.request)
+        refs = tuple(ArtifactRef(project_id=request.project_id, artifact_type="asset_version",
+            artifact_id=version.id, version=version.version)
+            for version in (result.guide_version, result.mask_version))
+        return ToolExecution(output=result, artifact_refs=refs, receipt=ToolWriteReceipt(
+            artifact_refs=list(refs), current_state={"project_id": result.project_id, "asset_id": result.asset_id,
+                "source_asset_version_id": result.source_asset_version_id,
+                "guide_asset_version_id": result.guide_version.id,
+                "mask_asset_version_id": result.mask_version.id,
+                "width": result.guide_version.width, "height": result.guide_version.height,
+                "guide_reference_role": "LAYOUT_GUIDE",
+                "mask_semantics": "transparent pixels are editable; opaque pixels preserve the original"},
+            changed_ids={"created_asset_version_ids": [version.id for version in (result.guide_version, result.mask_version)]}))
+
+    registry.register(ToolSpec(
+        id="image.create_edit_guide", version=1, category=ToolCategory.IMAGE,
+        description=(
+            "为看过的实际候选制作本地局部编辑图示和独立PNG透明遮罩，不调用Provider。"
+            "按归一化图像坐标圈出真正需要重画的区域，可加箭头与具体目标文字，"
+            "例如标题边应落在画面哪一侧、哪只手需要移动。区域包含物体原位置和目标位置；"
+            "要保留的手指、脸、门窗不要圈入。仅世界方位词不能代替可见位置。"
+            "返回两个同尺寸精确版本并保留current/canonical。后续image.enqueue用EDIT，"
+            "原图仍为parent及第一张primary参考，图示作为额外LAYOUT_GUIDE参考，"
+            "mask_version_id单独使用返回遮罩，不放进reference_inputs；size与原图一致。"
+            "注明红框、箭头、标签只是修改说明，不出现在结果中。output_format用png时，现有EDIT合成保留mask外原像素；mask_feather_pixels为0直接替换圈内，非零仅柔化圈内边缘。"
+            "圈内是否改对仍需观察。涉及整个人物站位或全景机位变化时不要用狭小mask限制修改。"
+            "图示和遮罩不是修好的照片，不登记为镜头已完成。源像素需已转正；"
+            "带EXIF旋转的导入图先用image.crop取完整图像得到转正版本。"
+            "原图尺寸也须符合image.enqueue的边长、像素总数和16倍数限制；不符合时用可用尺寸原图，"
+            "或不用mask进行整图EDIT，不能仅改请求size而让遮罩错位。"
+        ),
+        effect=ToolEffect.WRITE, idempotent=False, input_model=ImageEditGuideInput,
+        output_model=AssetImageEditGuideResponse, handler=create_edit_guide,
+        tags=frozenset({"image", "asset", "edit", "mask", "local", "layout", "reference"}),
     ))
 
     def compose_reference_sheet(

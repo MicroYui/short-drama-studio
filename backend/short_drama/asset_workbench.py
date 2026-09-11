@@ -50,7 +50,11 @@ from short_drama.image_models import (
     ImageTaskStatus,
     ImageUsage,
 )
+from short_drama.image_edit_guides import (
+    AssetImageEditGuideRequest, AssetImageEditGuideResponse, render_edit_guide,
+)
 from short_drama.models import (
+    ImageReferenceRole,
     ApprovalStatus,
     Asset,
     AssetDerivationReference,
@@ -432,14 +436,13 @@ class AssetWorkbench:
                 raise AssetWorkbenchConflict(f"Crop source file is missing or empty: {source.id}")
             source_stat = source_path.stat()
             expected_current_id = target.current_version_id
-            output_number = self._next_version_number(target)
             output_id = f"asset-version-{uuid4().hex[:12]}"
             parent_id = source.id if source_asset.id == target.id else None
 
         directory = self._asset_directory(project_id, asset_id)
         directory.mkdir(parents=True, exist_ok=True)
         temporary = directory / f".{output_id}-crop.png"
-        destination = directory / f"v{output_number}-{output_id}-crop.png"
+        destination = temporary
         try:
             try:
                 cropped, source_size, box = read_image_region(source_path, request.region)
@@ -459,7 +462,6 @@ class AssetWorkbench:
                 current_stat = source_path.stat() if source_path.is_file() else None
                 if (
                     target.current_version_id != expected_current_id
-                    or self._next_version_number(target) != output_number
                     or current_source.local_path != source.local_path
                     or current_source.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
                     or current_source.freshness != Freshness.CURRENT
@@ -467,6 +469,8 @@ class AssetWorkbench:
                     or (current_stat.st_size, current_stat.st_mtime_ns) != (source_stat.st_size, source_stat.st_mtime_ns)
                 ):
                     raise AssetWorkbenchConflict("Asset or crop source changed during local processing; re-read that asset")
+                output_number = self._next_version_number(target)
+                destination = directory / f"v{output_number}-{output_id}-crop.png"
                 temporary.replace(destination)
                 now = utc_now()
                 version = AssetVersion(
@@ -498,6 +502,73 @@ class AssetWorkbench:
             destination.unlink(missing_ok=True)
             raise
 
+    def create_edit_guide(
+        self, project_id: str, request: AssetImageEditGuideRequest,
+    ) -> AssetImageEditGuideResponse:
+        """Save local edit instructions and mask without selecting either as current media."""
+        with self._lock:
+            document = self._require_project(project_id)
+            source_asset, source = self._find_version(document, request.source_asset_version_id)
+            if source.media_type != AssetMediaType.IMAGE or not source.local_path:
+                raise AssetWorkbenchConflict("Edit guide requires a local image AssetVersion")
+            if source.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED} or source.freshness != Freshness.CURRENT:
+                raise AssetWorkbenchConflict("Edit guide source is not current usable media")
+            source_path = Path(source.local_path).expanduser().resolve()
+            if not source_path.is_file() or source_path.stat().st_size == 0:
+                raise AssetWorkbenchConflict("Edit guide source file is missing or empty")
+            source_stat = source_path.stat()
+            asset_id = source_asset.id
+        directory = self._asset_directory(project_id, asset_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        guide_id, mask_id = (f"asset-version-{uuid4().hex[:12]}" for _ in range(2))
+        guide_path = directory / f"{guide_id}-edit-guide.png"
+        mask_path = directory / f"{mask_id}-edit-mask.png"
+        try:
+            font_source, _ = self._text_plate_font([region.label for region in request.regions] + [arrow.label for arrow in request.arrows])
+            try:
+                width, height = render_edit_guide(source_path, request, guide_path=guide_path,
+                    mask_path=mask_path, font_source=font_source)
+            except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                raise AssetWorkbenchConflict(f"Cannot create edit guide: {exc}") from exc
+            with self._lock:
+                document = self._require_project(project_id)
+                asset, current_source = self._find_version(document, source.id)
+                current_stat = source_path.stat() if source_path.is_file() else None
+                if (current_source.local_path != source.local_path
+                    or current_source.approval_status not in {ApprovalStatus.DRAFT, ApprovalStatus.APPROVED}
+                    or current_source.freshness != Freshness.CURRENT or current_stat is None
+                    or (current_stat.st_size, current_stat.st_mtime_ns) != (source_stat.st_size, source_stat.st_mtime_ns)):
+                    raise AssetWorkbenchConflict("Edit source changed during local processing; read that exact source again")
+                now = utc_now()
+                versions: list[AssetVersion] = []
+                for identifier, path, kind, title in (
+                    (guide_id, guide_path, "guide", "局部编辑图示"),
+                    (mask_id, mask_path, "mask", "局部编辑遮罩"),
+                ):
+                    version = AssetVersion(id=identifier, version=self._next_version_number(asset),
+                        origin_type=OriginType.LOCAL_DERIVED, descriptor=f"{title}：{request.descriptor}",
+                        media_type=AssetMediaType.IMAGE, local_path=str(path), mime_type="image/png",
+                        width=width, height=height, file_size_bytes=path.stat().st_size,
+                        parent_version_id=source.id,
+                        derivation_references=[AssetDerivationReference(asset_version_id=source.id,
+                            source_project_id=project_id, reference_role=ImageReferenceRole.COMPOSITION,
+                            reference_authority=ImageReferenceAuthority.AUTHORITATIVE,
+                            purpose="本次局部编辑的实际原图；图示和遮罩不代表修复完成。", subject_alias=asset.name)],
+                        source=AssetSourceRecord(source_type=OriginType.LOCAL_DERIVED, source_label=title,
+                            provider="local", model=f"pillow-edit-{kind}-v1", prompt=request.model_dump_json(), created_at=now),
+                        approval_status=ApprovalStatus.DRAFT, freshness=Freshness.CURRENT, created_at=now)
+                    asset.versions.append(version)
+                    versions.append(version)
+                # Auxiliary images are available by exact ID; current and canonical stay selected.
+                document.project.updated_at = now
+                self.repository.save_project(document)
+                return AssetImageEditGuideResponse(project_id=project_id, asset_id=asset_id,
+                    source_asset_version_id=source.id, guide_version=versions[0], mask_version=versions[1])
+        except Exception:
+            guide_path.unlink(missing_ok=True)
+            mask_path.unlink(missing_ok=True)
+            raise
+
     def compose_reference_sheet(
         self,
         project_id: str,
@@ -514,7 +585,6 @@ class AssetWorkbench:
             self._validate_sheet_views(request)
             parent_id = self._resolve_parent(target, request.parent_version_id)
             expected_current_version_id = target.current_version_id
-            output_number = self._next_version_number(target)
             output_version_id = f"asset-version-{uuid4().hex[:12]}"
             source_rows: list[tuple[Path, AssetReferenceSheetCell]] = []
             for requested_cell in request.cells:
@@ -577,9 +647,7 @@ class AssetWorkbench:
         output_directory = self._asset_directory(project_id, asset_id)
         output_directory.mkdir(parents=True, exist_ok=True)
         temporary_path = output_directory / f".{output_version_id}-reference-sheet.png"
-        output_path = output_directory / (
-            f"v{output_number}-{output_version_id}-reference-sheet.png"
-        )
+        output_path = temporary_path
         try:
             width, height = self._render_reference_sheet(
                 source_rows,
@@ -593,10 +661,7 @@ class AssetWorkbench:
             with self._lock:
                 document = self._require_project(project_id)
                 target = self._require_asset(document, asset_id)
-                if (
-                    target.current_version_id != expected_current_version_id
-                    or self._next_version_number(target) != output_number
-                ):
+                if target.current_version_id != expected_current_version_id:
                     raise AssetWorkbenchConflict(
                         "Target asset changed while the reference sheet was being composed; retry"
                     )
@@ -656,6 +721,10 @@ class AssetWorkbench:
                         "Reference sheet authoritative derivation lineage exceeds "
                         "16 unique source versions"
                     )
+                output_number = self._next_version_number(target)
+                output_path = output_directory / (
+                    f"v{output_number}-{output_version_id}-reference-sheet.png"
+                )
                 temporary_path.replace(output_path)
                 now = utc_now()
                 version = AssetVersion(
@@ -719,7 +788,6 @@ class AssetWorkbench:
             parent_id = self._resolve_parent(target, request.parent_version_id)
             base_state = self._text_plate_file_state(base) if base is not None else None
             expected_current_version_id = target.current_version_id
-            output_number = self._next_version_number(target)
             output_version_id = f"asset-version-{uuid4().hex[:12]}"
 
         try:
@@ -749,9 +817,7 @@ class AssetWorkbench:
         output_directory = self._asset_directory(project_id, asset_id)
         output_directory.mkdir(parents=True, exist_ok=True)
         temporary_path = output_directory / f".{output_version_id}-text-plate.png"
-        output_path = output_directory / (
-            f"v{output_number}-{output_version_id}-text-plate.png"
-        )
+        output_path = temporary_path
         try:
             if base is None:
                 width, height = self._render_text_plate(request, font_source=font_source, destination=temporary_path)
@@ -760,10 +826,7 @@ class AssetWorkbench:
             with self._lock:
                 document = self._require_project(project_id)
                 target = self._require_asset(document, asset_id)
-                if (
-                    target.current_version_id != expected_current_version_id
-                    or self._next_version_number(target) != output_number
-                ):
+                if target.current_version_id != expected_current_version_id:
                     raise AssetWorkbenchConflict(
                         "Target asset changed while the text plate was being composed; retry"
                     )
@@ -775,6 +838,10 @@ class AssetWorkbench:
                         raise AssetWorkbenchConflict(f"base_version_id={base.id} changed during local composition; re-read this source")
                 if parent_id is not None:
                     self._require_asset_version(target, parent_id)
+                output_number = self._next_version_number(target)
+                output_path = output_directory / (
+                    f"v{output_number}-{output_version_id}-text-plate.png"
+                )
                 temporary_path.replace(output_path)
                 now = utc_now()
                 version = AssetVersion(
@@ -994,7 +1061,6 @@ class AssetWorkbench:
                 raise AssetWorkbenchConflict(
                     "A character voice reference must use a REFERENCE asset"
                 )
-            next_version = self._next_version_number(asset) if asset is not None else 1
             resolved_asset_id = asset.id if asset is not None else f"asset-{uuid4().hex[:12]}"
             expected_current_version_id = (
                 asset.current_version_id if asset is not None else None
@@ -1003,7 +1069,7 @@ class AssetWorkbench:
         directory = self._asset_directory(project_id, resolved_asset_id)
         directory.mkdir(parents=True, exist_ok=True)
         source_path = directory / f".{version_id}-upload{suffix}"
-        output_path = directory / f"v{next_version}-{version_id}.wav"
+        output_path = directory / f".{version_id}-normalized.wav"
         try:
             source_path.write_bytes(data)
             duration = 0.0
@@ -1056,7 +1122,7 @@ class AssetWorkbench:
         now = utc_now()
         version = AssetVersion(
             id=version_id,
-            version=next_version,
+            version=1,
             origin_type=OriginType.UPLOAD,
             descriptor=normalized_descriptor,
             media_type=AssetMediaType.AUDIO,
@@ -1091,6 +1157,11 @@ class AssetWorkbench:
                     raise AssetWorkbenchConflict(
                         "Voice reference asset was created concurrently; retry"
                     )
+                version.version = self._next_version_number(asset) if asset is not None else 1
+                destination = directory / f"v{version.version}-{version_id}.wav"
+                output_path.replace(destination)
+                output_path = destination
+                version.local_path = str(output_path)
                 if asset is None:
                     asset = Asset(
                         id=resolved_asset_id,
@@ -1563,6 +1634,15 @@ class AssetWorkbench:
             )
             now = utc_now()
             if existing is None:
+                # New tasks reserve unique numbers at enqueue. Older persisted tasks
+                # may share a reservation; repair only this not-yet-registered output.
+                if any(item.version == task.output_version_number for item in asset.versions):
+                    task.output_version_number = self._next_version_number(asset)
+                    destination = self._final_output_path(task, output_path.suffix)
+                    output_path.replace(destination)
+                    output_path = destination
+                    task.output_path = str(output_path)
+                    self.repository.save_image_task(task)
                 origin = (
                     OriginType.AI_EDITED
                     if task.operation == ImageOperation.EDIT
@@ -1611,6 +1691,7 @@ class AssetWorkbench:
                 )
                 asset.versions.append(version)
             else:
+                task.output_version_number = existing.version
                 existing.local_path = str(output_path)
                 existing.width = width
                 existing.height = height
@@ -1658,7 +1739,9 @@ class AssetWorkbench:
         for reference in ordered_references:
             version_id = reference.asset_version_id
             _asset, version = self._find_version(document, version_id)
-            if version.external_url is not None:
+            # A mask and the final local composite use saved local pixels. Upload
+            # those same pixels rather than a potentially different remote image.
+            if version.external_url is not None and task.request.mask_version_id is None:
                 image_url = version.external_url
             elif version.local_path is not None:
                 path = Path(version.local_path)
@@ -2549,6 +2632,22 @@ class AssetWorkbench:
             raise AssetWorkbenchNotFound(task_id)
         return task
 
-    @staticmethod
-    def _next_version_number(asset: Asset) -> int:
-        return max((version.version for version in asset.versions), default=0) + 1
+    def next_asset_version_number(self, asset: Asset) -> int:
+        """Read the next unoccupied number while holding the shared mutation lock.
+
+        The caller must save its version before releasing that same lock. This
+        supports local frame and semantic edits using the same reservation space.
+        """
+        return self._next_version_number(asset)
+
+    def _next_version_number(self, asset: Asset) -> int:
+        """Allocate under the workbench lock; persisted tasks also reserve numbers.
+
+        Terminal task reservations remain occupied so retries and delayed recovery
+        cannot reuse a number already exposed in a task receipt or output path.
+        """
+        reserved = (
+            task.output_version_number
+            for task in self.repository.list_image_tasks(asset.project_id, asset.id)
+        )
+        return max([0, *(version.version for version in asset.versions), *reserved]) + 1

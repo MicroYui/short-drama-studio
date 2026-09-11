@@ -12,6 +12,8 @@ from _routes.short_drama import router
 from _routes._errors import HTTPError
 from short_drama.deps import get_short_drama_service
 from short_drama.media_frame_asset import TakeFrameAssetRequest, TakeFrameAssetResponse
+from short_drama.image_models import AssetCreateRequest, ImageOperation, ImageProviderConfigUpdate, ImageTaskCreateRequest
+from short_drama.models import AssetKind
 from short_drama.models import ApprovalStatus, EnqueueRequest, GenerationUnitShotWindow, ImageReferenceRole, ProjectDocument, Take
 from short_drama.service import ShortDramaService, WorkflowConflictError
 from short_drama.tools.contracts import ToolCallStatus
@@ -62,6 +64,23 @@ def test_tool_preserves_pixels_actual_pts_and_reference_handoff_without_adoption
     cached = TakeFrameAssetResponse.model_validate(repeated.output)
     assert cached.reused and cached.asset_version_id == response.asset_version_id
     assert len(service.get_project(document.project.id).document.assets) == len(after.assets)
+
+
+def test_frame_registration_skips_existing_image_task_reservation(source: Source) -> None:
+    service, document, take = source
+    service.update_image_provider_config(ImageProviderConfigUpdate(
+        api_key="test-key", base_url="https://image.example.test/v1"))
+    asset = service.create_asset(document.project.id, AssetCreateRequest(
+        kind=AssetKind.REFERENCE, name="frame reference", descriptor="frame reference")).asset
+    task = service.enqueue_image_task(document.project.id, asset.id, ImageTaskCreateRequest(
+        operation=ImageOperation.GENERATE, prompt="candidate", descriptor="candidate")).task
+    result = service.extract_take_frame(document.project.id, TakeFrameAssetRequest(
+        take_id=take.id, asset_id=asset.id, time_seconds=.5, description="actual frame"))
+    saved = next(a for a in service.get_project(document.project.id).document.assets if a.id == asset.id)
+    version = next(v for v in saved.versions if v.id == result.asset_version_id)
+    assert version.version == task.output_version_number + 1
+    assert service.repository.get_image_task(task.id) == task
+    assert Path(result.local_path).is_file()
 
 
 def test_shot_local_uses_covered_window_and_endpoint_stays_inside(source: Source) -> None:

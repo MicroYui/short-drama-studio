@@ -137,6 +137,7 @@ from short_drama.h3_worker import (
 from short_drama.h3_video_guides import H3VideoGuideBuilder
 from short_drama.episode_review import review_episode, review_scene
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
+from short_drama.image_edit_guides import AssetImageEditGuideRequest, AssetImageEditGuideResponse
 from short_drama.image_models import (
     AssetBriefUpdateRequest,
     AssetCreateRequest,
@@ -1003,7 +1004,8 @@ class ShortDramaService:
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
             try:
-                prepared = prepare_semantic_change(document, request)
+                prepared = prepare_semantic_change(document, request,
+                    next_asset_version_number=self.asset_workbench.next_asset_version_number)
             except ChangeExecutionError as exc:
                 raise WorkflowConflictError(str(exc)) from exc
             affected = prepared.result.invalidated_shot_ids
@@ -12995,6 +12997,17 @@ class ShortDramaService:
         try:
             version = self.asset_workbench.crop_image(project_id, asset_id, request)
             return self._asset_mutation_response(project_id, version.id)
+        except AssetWorkbenchNotFound as exc:
+            raise ArtifactNotFoundError(str(exc)) from exc
+        except AssetWorkbenchConflict as exc:
+            raise WorkflowConflictError(str(exc)) from exc
+
+    def create_asset_edit_guide(
+        self, project_id: str, request: AssetImageEditGuideRequest,
+    ) -> AssetImageEditGuideResponse:
+        self._require_project_mutation_allowed(project_id)
+        try:
+            return self.asset_workbench.create_edit_guide(project_id, request)
         except AssetWorkbenchNotFound as exc:
             raise ArtifactNotFoundError(str(exc)) from exc
         except AssetWorkbenchConflict as exc:

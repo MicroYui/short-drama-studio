@@ -205,7 +205,7 @@ def extract_take_frame(service: ShortDramaService, project_id: str,
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(temporary_frame.read_bytes())
             now = datetime.now(UTC).isoformat()
-            version = AssetVersion(id=version_id, version=max((item.version for item in asset.versions), default=0) + 1 if asset else 1,
+            version = AssetVersion(id=version_id, version=service.asset_workbench.next_asset_version_number(asset) if asset else 1,
                 origin_type=OriginType.LOCAL_DERIVED, descriptor=request.description,
                 media_type=AssetMediaType.IMAGE, local_path=str(destination), mime_type="image/png",
                 width=width, height=height, file_size_bytes=destination.stat().st_size,

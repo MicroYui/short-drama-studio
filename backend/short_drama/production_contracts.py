@@ -1521,9 +1521,22 @@ class AssetPlanReference(DomainModel):
     reference_authority: ImageReferenceAuthority = (
         ImageReferenceAuthority.SUPPORTING
     )
-    source_work_item_id: str | None = Field(default=None, min_length=1, max_length=200)
-    asset_id: str | None = Field(default=None, min_length=1, max_length=200)
-    asset_version_id: str | None = Field(default=None, min_length=1, max_length=200)
+    source_work_item_id: str | None = Field(
+        default=None, min_length=1, max_length=200,
+        description=(
+            "动态引用一个工作项的完成输出；使用本字段时 asset_id 和 asset_version_id 留空。"
+            "若本次已明确选用某张现成图片，改填完整 asset_id + asset_version_id 并省略本字段。"
+            "工作依赖另放 dependency_ids，不把依赖 ID 同时塞进精确媒体引用。"
+        ),
+    )
+    asset_id: str | None = Field(
+        default=None, min_length=1, max_length=200,
+        description="精确媒体所属 Asset ID；必须与 asset_version_id 成对，且与 source_work_item_id 二选一。",
+    )
+    asset_version_id: str | None = Field(
+        default=None, min_length=1, max_length=200,
+        description="明确选用的精确 AssetVersion ID；与 asset_id 成对填写，source_work_item_id 留空。",
+    )
 
     @model_validator(mode="after")
     def validate_reference_source(self) -> AssetPlanReference:
@@ -1531,7 +1544,10 @@ class AssetPlanReference(DomainModel):
         from_asset_version = self.asset_id is not None or self.asset_version_id is not None
         if from_work_item == from_asset_version:
             raise ValueError(
-                "Asset-plan reference must select exactly one work item or asset version"
+                "Asset-plan reference must select exactly one work item or asset version: "
+                "use source_work_item_id alone for a work item's output, or asset_id + "
+                "asset_version_id for the selected exact media and omit source_work_item_id. "
+                "Keep execution dependencies in dependency_ids; no reference has been selected automatically."
             )
         if (self.asset_id is None) != (self.asset_version_id is None):
             raise ValueError(

@@ -1,0 +1,1299 @@
+{
+  "source": {
+    "work_order_id": "work-order-5aa6b485cec14f60acdf9803f9d69ee1",
+    "read_sequence": 23,
+    "write_sequence": 24,
+    "input_after_write": "20260911T220517893202-d671f495-model.input.json",
+    "call_id": "model-351e33ef4d70",
+    "note": "Read output cropped to exact plan items/scope/identity; raw write preserved. New receipt computed from actual saved v19 and its actual v18 parent, no runtime writes.",
+    "diagnostic_note": "Actual successful t11 write output and computed receipt from saved v15 vs actual parent; original t11 arguments reduced to base selector. These two canonical-root issues were exposed later by t14 index. No actual historical receipt was changed."
+  },
+  "read": {
+    "id": "specialist-turn-8fa5b37f3ba047a987c28936988b7b65",
+    "sequence": 23,
+    "tool_name": "artifact.get_asset_work_context",
+    "arguments": {
+      "project_id": "project-5b8286dc63e6",
+      "scope": {
+        "mode": "ITEM",
+        "item_ids": [
+          "item-yqq-room",
+          "item-yqq-external-statement-blank",
+          "item-yqq-external-statement-review-signed",
+          "item-yqq-external-statement-both-signed",
+          "item-yqq-external-quotation",
+          "item-yqq-external-pen-states",
+          "item-yqq-g01-preparation-slice",
+          "item-yqq-g02-preparation-slice",
+          "item-yqq-g03-preparation-slice",
+          "item-yqq-g04-preparation-slice",
+          "item-yqq-g05-preparation-slice"
+        ]
+      },
+      "shot_ids": [],
+      "clip_group_ids": []
+    },
+    "reason": "读取将要局部修改的纸笔、会议室和五组目录当前正文，保留晚到登记；随后按原纸笔工单已完成的实图检查结果解除旧等待，并追加必要构图工作。",
+    "status": "COMPLETED",
+    "result": {
+      "tool_id": "artifact.get_asset_work_context",
+      "status": "SUCCEEDED",
+      "output": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_plan_identity": {
+          "document_id": "production-document-9bf5a748eb3a",
+          "version_id": "production-document-version-a168475e72ee",
+          "version": 18
+        },
+        "asset_plan_items": [
+          {
+            "id": "item-yqq-room",
+            "disposition": "REUSE_EXISTING",
+            "asset_kind": "LOCATION",
+            "name": "公司小会议室｜既有南侧空景",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-01",
+              "shot-yqq-02",
+              "shot-yqq-03",
+              "shot-yqq-04",
+              "shot-yqq-05",
+              "shot-yqq-06",
+              "shot-yqq-07",
+              "shot-yqq-08",
+              "shot-yqq-09",
+              "shot-yqq-10",
+              "shot-yqq-10-reaction",
+              "shot-yqq-11",
+              "shot-yqq-12",
+              "shot-yqq-12-reaction",
+              "shot-yqq-13",
+              "shot-yqq-14"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g01",
+              "clip-yqq-g02",
+              "clip-yqq-g03",
+              "clip-yqq-g04",
+              "clip-yqq-g05"
+            ],
+            "brief": null,
+            "rationale": "复用已审图采用的2304×1536南侧中央向北空景：浅橡木桌长边南北、西左东右两椅、北磨砂隔断、东高窗、西墙北端关门，东侧天光。所有镜头使用同一空间或可见桌面材质；不是每镜都上传完整空景。该母图无人无纸笔，不代表开场桌面，不证明反打坐姿、交接接触区和最终9:16裁幅已经可用。已有单张足够空间身份锚定，不强制补四向卡。",
+            "work_items": [
+              {
+                "id": "wi-yqq-reuse-room",
+                "operation": "IMPORT",
+                "output_role": "已采用会议室空间母图的同项目直接复用记录；不重新生成空景",
+                "output_view": "SCENE_MASTER",
+                "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+                "final_prompt": "直接使用本项目已采用会议室图片asset-version-d42fba8ad6bb。空间身份与桌椅比例、门窗、磨砂隔断、浅橡木纹和东窗柔光以图为准。许岚固定东侧、赵衡固定西侧；南侧机位西左东右。不得把空场图误作带人物纸笔的镜头首帧。此工作已有结果，不启动Provider。",
+                "size": "2304x1536",
+                "review_purpose": "CANONICAL_MASTER",
+                "reference_pack_intent": {
+                  "subject_item_id": "item-yqq-room",
+                  "role": "CANONICAL_MASTER",
+                  "angle": "NOT_APPLICABLE",
+                  "framing": "WIDE",
+                  "tags": [
+                    "room-identity",
+                    "south-to-north",
+                    "empty-table",
+                    "adopted-existing",
+                    "not-first-frame"
+                  ],
+                  "lineage_root": null
+                },
+                "import_intent": {
+                  "source_project_id": "project-5b8286dc63e6",
+                  "source_asset_id": "asset-4024e0462bfc",
+                  "source_asset_version_id": "asset-version-d42fba8ad6bb"
+                },
+                "compose_intent": null,
+                "text_plate_intent": null,
+                "ordered_references": [],
+                "dependency_ids": [],
+                "candidate_asset_id": null,
+                "candidate_asset_version_id": null,
+                "completed_asset_id": "asset-4024e0462bfc",
+                "completed_asset_version_id": "asset-version-d42fba8ad6bb"
+              }
+            ],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": "asset-4024e0462bfc",
+            "completed_asset_version_id": "asset-version-d42fba8ad6bb"
+          },
+          {
+            "id": "item-yqq-external-statement-blank",
+            "disposition": "ANCHOR",
+            "asset_kind": "PROP",
+            "name": "情况说明｜同一物理纸张与三种签名状态",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-01",
+              "shot-yqq-02",
+              "shot-yqq-03",
+              "shot-yqq-04",
+              "shot-yqq-05",
+              "shot-yqq-06",
+              "shot-yqq-06-evidence",
+              "shot-yqq-07",
+              "shot-yqq-09",
+              "shot-yqq-10",
+              "shot-yqq-10-result",
+              "shot-yqq-11",
+              "shot-yqq-12",
+              "shot-yqq-12-result",
+              "shot-yqq-13",
+              "shot-yqq-14"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g01",
+              "clip-yqq-g02",
+              "clip-yqq-g03",
+              "clip-yqq-g04",
+              "clip-yqq-g05"
+            ],
+            "brief": null,
+            "rationale": "同一母资产asset-08b6047a6a38，不重建物理载体或图片。双空白摄影asset-version-a9fb492dce6b为物理根；单签asset-version-1156f46e26af、双签asset-version-3adcb6b5365e为同一纸张剧情状态。三者均由原纸笔工单work-order-e523f7976b014a3aa367ec1ffb4185b1接续实际检查登记，本规划不虚报完成。准确文字源依次为asset-version-318e8d7fb28c、asset-version-9d931209f7ec、asset-version-5464dab394be；字版不是摄影或接触构图。开场说明标题西；镜5移至南中转标题东；赵镜10先签复核；镜11交笔仍标题东；镜12许才转标题西并签经办；镜13收纸不再旋转说明。准确静态证据各自独立准备，动作镜使用相应摄影状态。原两个状态目录只作别名，执行依赖均指向本主体内保留的稳定work ID。",
+            "work_items": [
+              {
+                "id": "wi-yqq-import-statement-blank-photo",
+                "operation": "IMPORT",
+                "output_role": "复用现成双空白摄影状态；原工单检查并登记，不再次导入或生成",
+                "output_view": "PROP_STATE",
+                "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+                "final_prompt": "只处理本项目现有asset-08b6047a6a38/asset-version-a9fb492dce6b，不调用图像Provider、不制造副本。由原纸笔工单读取实际媒体及已有review_notes；已有明确采用结论直接登记，没有结论才接续实查。检查单张白色A4、标题情况说明、固定正文、上经办下复核，两栏均无姓名墨迹，与asset-version-318e8d7fb28c准确字版一致。外观可用于GENERATION物理状态，准确证据另按最终裁切检查。采用后写入本work与主体item的completed引用，保留同一母资产current/canonical管理，不用此静物照证明推纸或落笔动作。",
+                "size": "1536x2048",
+                "review_purpose": "CANONICAL_MASTER",
+                "reference_pack_intent": {
+                  "subject_item_id": "item-yqq-external-statement-blank",
+                  "role": "CANONICAL_MASTER",
+                  "angle": "NOT_APPLICABLE",
+                  "framing": "DETAIL",
+                  "tags": [
+                    "physical-prop",
+                    "statement-blank",
+                    "existing-candidate"
+                  ],
+                  "lineage_root": null
+                },
+                "import_intent": {
+                  "source_project_id": "project-5b8286dc63e6",
+                  "source_asset_id": "asset-08b6047a6a38",
+                  "source_asset_version_id": "asset-version-a9fb492dce6b"
+                },
+                "compose_intent": null,
+                "text_plate_intent": null,
+                "ordered_references": [],
+                "dependency_ids": [],
+                "candidate_asset_id": "asset-08b6047a6a38",
+                "candidate_asset_version_id": "asset-version-a9fb492dce6b",
+                "completed_asset_id": null,
+                "completed_asset_version_id": null
+              },
+              {
+                "id": "wi-yqq-import-statement-review-photo",
+                "operation": "IMPORT",
+                "output_role": "复用现成单签摄影状态；只接续原工单检查登记",
+                "output_view": "PROP_STATE",
+                "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+                "final_prompt": "复用本项目asset-08b6047a6a38/asset-version-1156f46e26af，禁止重新生成或导入副本。原纸笔工单沿已有review_notes核验同一纸外观、原版式、上经办完全空、下复核仅自然黑墨赵衡；准确字版asset-version-9d931209f7ec为文字证据。与双空白摄影前态比较，只有复核姓名变化。通过后以PROP_STATE补充引用登记到说明主体，不替换双空白物理母图。镜10-result的0–1.5秒需独立准确双栏裁切；镜11、12签前仅作物理状态，不证明交笔或书写成功。",
+                "size": "1440x2032",
+                "review_purpose": "SUPPLEMENTAL_REFERENCE",
+                "reference_pack_intent": {
+                  "subject_item_id": "item-yqq-external-statement-blank",
+                  "role": "PROP_STATE",
+                  "angle": "NOT_APPLICABLE",
+                  "framing": "DETAIL",
+                  "tags": [
+                    "statement-review-signed",
+                    "existing-candidate"
+                  ],
+                  "lineage_root": {
+                    "role": "物理说明母图",
+                    "purpose": "同一纸张身份根，不重建",
+                    "reference_role": "SUPPORTING_VISUAL",
+                    "reference_authority": "SUPPORTING",
+                    "source_work_item_id": "wi-yqq-import-statement-blank-photo",
+                    "asset_id": null,
+                    "asset_version_id": null
+                  }
+                },
+                "import_intent": {
+                  "source_project_id": "project-5b8286dc63e6",
+                  "source_asset_id": "asset-08b6047a6a38",
+                  "source_asset_version_id": "asset-version-1156f46e26af"
+                },
+                "compose_intent": null,
+                "text_plate_intent": null,
+                "ordered_references": [],
+                "dependency_ids": [
+                  "wi-yqq-import-statement-blank-photo"
+                ],
+                "candidate_asset_id": "asset-08b6047a6a38",
+                "candidate_asset_version_id": "asset-version-1156f46e26af",
+                "completed_asset_id": null,
+                "completed_asset_version_id": null
+              },
+              {
+                "id": "wi-yqq-import-statement-both-photo",
+                "operation": "IMPORT",
+                "output_role": "复用现成双签摄影状态；只接续原工单检查登记",
+                "output_view": "PROP_STATE",
+                "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+                "final_prompt": "复用asset-08b6047a6a38/asset-version-3adcb6b5365e，禁止重制或新导入副本。原工单先读取已有review_notes，再补缺失的实际检查：同一白纸与版面、上经办许岚、下复核赵衡；对比单签摄影仅新增经办许岚，下方赵衡未移位或重写，准确字形对照asset-version-5464dab394be。采用为同一说明主体的PROP_STATE补充版本，不改身份母图。仅用于许签毕之后；独立证据裁切另查1.5秒可读性。当前收纸说明标题西、报价标题东，无重新转纸。",
+                "size": "1440x2032",
+                "review_purpose": "SUPPLEMENTAL_REFERENCE",
+                "reference_pack_intent": {
+                  "subject_item_id": "item-yqq-external-statement-blank",
+                  "role": "PROP_STATE",
+                  "angle": "NOT_APPLICABLE",
+                  "framing": "DETAIL",
+                  "tags": [
+                    "statement-both-signed",
+                    "existing-candidate"
+                  ],
+                  "lineage_root": {
+                    "role": "物理说明母图",
+                    "purpose": "同一纸张身份根",
+                    "reference_role": "SUPPORTING_VISUAL",
+                    "reference_authority": "SUPPORTING",
+                    "source_work_item_id": "wi-yqq-import-statement-blank-photo",
+                    "asset_id": null,
+                    "asset_version_id": null
+                  }
+                },
+                "import_intent": {
+                  "source_project_id": "project-5b8286dc63e6",
+                  "source_asset_id": "asset-08b6047a6a38",
+                  "source_asset_version_id": "asset-version-3adcb6b5365e"
+                },
+                "compose_intent": null,
+                "text_plate_intent": null,
+                "ordered_references": [],
+                "dependency_ids": [
+                  "wi-yqq-import-statement-blank-photo"
+                ],
+                "candidate_asset_id": "asset-08b6047a6a38",
+                "candidate_asset_version_id": "asset-version-3adcb6b5365e",
+                "completed_asset_id": null,
+                "completed_asset_version_id": null
+              }
+            ],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-external-statement-review-signed",
+            "disposition": "TEXT_ONLY",
+            "asset_kind": "PROP",
+            "name": "情况说明单签｜状态用途索引",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-10-result",
+              "shot-yqq-11",
+              "shot-yqq-12"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g04",
+              "clip-yqq-g05"
+            ],
+            "brief": null,
+            "rationale": "仅用途索引，不代表图片已完成。实际可执行项wi-yqq-import-statement-review-photo已归入item-yqq-external-statement-blank，仍复用asset-08b6047a6a38/asset-version-1156f46e26af，由原纸笔工单接续检查。准确字版asset-version-9d931209f7ec保留。镜10-result静态证据、镜11交笔及镜12转纸前使用：经办空、复核赵衡已签。说明镜11仍标题东，镜12才转标题西。不得重造纸张或单签图片。",
+            "work_items": [],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-external-statement-both-signed",
+            "disposition": "TEXT_ONLY",
+            "asset_kind": "PROP",
+            "name": "情况说明双签｜状态用途索引",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-12-result",
+              "shot-yqq-13",
+              "shot-yqq-14"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g05"
+            ],
+            "brief": null,
+            "rationale": "仅用途索引，不代表图片已完成。实际可执行项wi-yqq-import-statement-both-photo已归入item-yqq-external-statement-blank，复用asset-08b6047a6a38/asset-version-3adcb6b5365e，由原纸笔工单接续检查。准确修正版asset-version-5464dab394be及全部旧版保留。仅许签经办后使用，上经办许岚、下复核赵衡；镜12-result静态证据与镜13收纸职责分开，说明标题西、报价标题东，不再旋转。",
+            "work_items": [],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-external-quotation",
+            "disposition": "ANCHOR",
+            "asset_kind": "PROP",
+            "name": "报价单｜旧红改与确认赵衡现成摄影候选",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-01",
+              "shot-yqq-02",
+              "shot-yqq-03",
+              "shot-yqq-03-evidence",
+              "shot-yqq-04",
+              "shot-yqq-05",
+              "shot-yqq-06",
+              "shot-yqq-07",
+              "shot-yqq-09",
+              "shot-yqq-10",
+              "shot-yqq-11",
+              "shot-yqq-12",
+              "shot-yqq-13",
+              "shot-yqq-14"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g01",
+              "clip-yqq-g02",
+              "clip-yqq-g03",
+              "clip-yqq-g04",
+              "clip-yqq-g05"
+            ],
+            "brief": null,
+            "rationale": "更正旧计划的无图片判断：已有摄影asset-version-d99209b73470和准确字版asset-version-974420be0033。红改和确认赵衡从开场存在，全文无金额，不加数字。原纸笔工单接续检查登记。开场说明下标题西；镜3抽出转至北中标题东，随后至结束均不转报价。镜3-evidence独立准确插入，不送视频模型重绘。",
+            "work_items": [
+              {
+                "id": "wi-yqq-import-quotation-photo",
+                "operation": "IMPORT",
+                "output_role": "复用现成报价摄影候选；原工单核验旧红改和确认签名",
+                "output_view": "PROP_PRODUCT",
+                "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+                "final_prompt": "仅复用本项目asset-797c99b1531c/asset-version-d99209b73470；原工单先读取已有检查，不重复生成。对照asset-version-974420be0033检查报价单标题、两列表格项目/报价版本、服务项目、原报价红划改与调整报价红字、右下确认赵衡黑墨姓名；不增加金额、经办复核栏或许岚姓名。检查单张A4摄影纸质、四边与签名字形。完成后登记采用引用；静态证据须另核最终9:16裁切中红改与确认同时可读，物理图本身不证明抽转和按纸。",
+                "size": "1440x2032",
+                "review_purpose": "CANONICAL_MASTER",
+                "reference_pack_intent": {
+                  "subject_item_id": "item-yqq-external-quotation",
+                  "role": "CANONICAL_MASTER",
+                  "angle": "NOT_APPLICABLE",
+                  "framing": "DETAIL",
+                  "tags": [
+                    "quotation-existing-red-mark",
+                    "existing-candidate"
+                  ],
+                  "lineage_root": null
+                },
+                "import_intent": {
+                  "source_project_id": "project-5b8286dc63e6",
+                  "source_asset_id": "asset-797c99b1531c",
+                  "source_asset_version_id": "asset-version-d99209b73470"
+                },
+                "compose_intent": null,
+                "text_plate_intent": null,
+                "ordered_references": [],
+                "dependency_ids": [],
+                "candidate_asset_id": "asset-797c99b1531c",
+                "candidate_asset_version_id": "asset-version-d99209b73470",
+                "completed_asset_id": null,
+                "completed_asset_version_id": null
+              }
+            ],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-external-pen-states",
+            "disposition": "ANCHOR",
+            "asset_kind": "PROP",
+            "name": "同一黑笔｜闭帽与拔帽分离现成候选",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-01",
+              "shot-yqq-02",
+              "shot-yqq-03",
+              "shot-yqq-05",
+              "shot-yqq-06",
+              "shot-yqq-07",
+              "shot-yqq-09",
+              "shot-yqq-10",
+              "shot-yqq-11",
+              "shot-yqq-12",
+              "shot-yqq-13",
+              "shot-yqq-14"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g01",
+              "clip-yqq-g02",
+              "clip-yqq-g03",
+              "clip-yqq-g04",
+              "clip-yqq-g05"
+            ],
+            "brief": null,
+            "rationale": "保留asset-d4a1234d0350两张实际图片，由原纸笔工单完成外形对照及采用登记。闭帽仅开场/结尾；镜2许左手拔帽放东缘南部自己左手边，帽直到镜14才回笔尖。镜6裸笔复核旁尖北尾南，镜10赵右持，镜11赵右递许右接，镜12后许右持。静物图不是任何持笔或交接构图，四个纯文件证据镜无需笔输入。",
+            "work_items": [
+              {
+                "id": "wi-yqq-import-pen-capped",
+                "operation": "IMPORT",
+                "output_role": "复用闭帽外形母图候选，不新生成",
+                "output_view": "PROP_PRODUCT",
+                "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+                "final_prompt": "复用asset-d4a1234d0350/asset-version-c10cf71df108。原纸笔工单按已有实际检查续办，确认唯一朴素黑笔、帽盖笔尖、圆角裸尾、不按动、无第二帽。采用后登记本work及主体item，不能据静物照证明拔帽或扣帽。",
+                "size": "1536x1536",
+                "review_purpose": "CANONICAL_MASTER",
+                "reference_pack_intent": {
+                  "subject_item_id": "item-yqq-external-pen-states",
+                  "role": "CANONICAL_MASTER",
+                  "angle": "NOT_APPLICABLE",
+                  "framing": "DETAIL",
+                  "tags": [
+                    "pen-capped",
+                    "existing-candidate"
+                  ],
+                  "lineage_root": null
+                },
+                "import_intent": {
+                  "source_project_id": "project-5b8286dc63e6",
+                  "source_asset_id": "asset-d4a1234d0350",
+                  "source_asset_version_id": "asset-version-c10cf71df108"
+                },
+                "compose_intent": null,
+                "text_plate_intent": null,
+                "ordered_references": [],
+                "dependency_ids": [],
+                "candidate_asset_id": "asset-d4a1234d0350",
+                "candidate_asset_version_id": "asset-version-c10cf71df108",
+                "completed_asset_id": null,
+                "completed_asset_version_id": null
+              },
+              {
+                "id": "wi-yqq-import-pen-uncapped",
+                "operation": "IMPORT",
+                "output_role": "复用同一黑笔裸笔加独立帽候选，不新生成",
+                "output_view": "PROP_STATE",
+                "output_layout_profile": "LIGHTWEIGHT_SINGLE",
+                "final_prompt": "复用asset-d4a1234d0350/asset-version-f4936a914dc3。原纸笔工单按已有实际检查续办；对照闭帽外形，唯一同一裸笔和唯一分离帽，裸笔尖清楚，笔尾无帽，材质比例相同。登记PROP_STATE补充版本不替换闭帽母图。独立帽在静物照的摆位不约束会议室桌面位置；当前镜头规定东缘南部许左手边。禁止重制副本。",
+                "size": "1536x1536",
+                "review_purpose": "SUPPLEMENTAL_REFERENCE",
+                "reference_pack_intent": {
+                  "subject_item_id": "item-yqq-external-pen-states",
+                  "role": "PROP_STATE",
+                  "angle": "NOT_APPLICABLE",
+                  "framing": "DETAIL",
+                  "tags": [
+                    "pen-uncapped",
+                    "single-separated-cap",
+                    "existing-candidate"
+                  ],
+                  "lineage_root": {
+                    "role": "黑笔外形根",
+                    "purpose": "保持同一支黑笔身份",
+                    "reference_role": "SUPPORTING_VISUAL",
+                    "reference_authority": "SUPPORTING",
+                    "source_work_item_id": "wi-yqq-import-pen-capped",
+                    "asset_id": null,
+                    "asset_version_id": null
+                  }
+                },
+                "import_intent": {
+                  "source_project_id": "project-5b8286dc63e6",
+                  "source_asset_id": "asset-d4a1234d0350",
+                  "source_asset_version_id": "asset-version-f4936a914dc3"
+                },
+                "compose_intent": null,
+                "text_plate_intent": null,
+                "ordered_references": [],
+                "dependency_ids": [
+                  "wi-yqq-import-pen-capped"
+                ],
+                "candidate_asset_id": "asset-d4a1234d0350",
+                "candidate_asset_version_id": "asset-version-f4936a914dc3",
+                "completed_asset_id": null,
+                "completed_asset_version_id": null
+              }
+            ],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-g01-preparation-slice",
+            "disposition": "TEXT_ONLY",
+            "asset_kind": "REFERENCE",
+            "name": "第1组待就绪切片｜推纸、拔帽、旧签名证据",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-01",
+              "shot-yqq-02",
+              "shot-yqq-03",
+              "shot-yqq-03-evidence"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g01"
+            ],
+            "brief": null,
+            "rationale": "状态：WAIT_EXTERNAL_INPUT；本组构图及证据裁切未完成。TEXT_ONLY和索引NOT_REQUIRED只表示此项当前没有可执行work，绝不表示图片不需要或已就绪。原纸笔及分镜工单work-order-e523f7976b014a3aa367ec1ffb4185b1、work-order-12f15f76ccb84cf1b6346a8ab5374c03保留原职责，本项不重复制作其纸笔。\n已解析输入：许岚asset-85d4f6cc7d52/asset-version-3a8b4ea6267b，仅身份服装；赵衡asset-5f4d7485e6b8/asset-version-6a56e078129b，仅身份服装；会议室asset-4024e0462bfc/asset-version-d42fba8ad6bb，仅空间材质东窗光。均不是自动首帧。外部依赖：item-yqq-external-statement-blank、item-yqq-external-quotation、item-yqq-external-pen-states的精确采用版本、实际检查结论及原工单纸向修订收口。\nA，保留未来ID wi-yqq-s01-opening-contact，服务shot-yqq-01全段0–5.5秒，补推纸前南侧双人接触初态。拟REFERENCE_GENERATE、1440x2560、LIGHTWEIGHT_SINGLE；会议室SUPPLEMENTAL_REFERENCE/LOCATION_INTERACTION，lineage根wi-yqq-reuse-room。输入顺序：许身份、赵身份、会议室、双空白说明摄影状态、旧红改报价摄影状态、闭帽笔，各图一次。赵西画左许东画右，两脸上半、关键手与桌面下半；说明在上报价在下，叠纸近桌中，赵左手准备推纸、右手持唯一闭帽笔，许未拿笔。双栏无姓名，帽在笔尖不套尾。不能把推纸结果用作0秒初态。\nB，保留未来ID wi-yqq-s02-xulan-uncap-start，服务shot-yqq-02的0–3秒。拟同规格参考生成；许岚SUPPLEMENTAL_REFERENCE，lineage根wi-yqq-reuse-xulan。有序输入：许身份、会议室、双空白说明及下层报价、闭帽笔；A的实际采用图可按需要补构图，不替代身份。南偏西拍东座，脸右上、经办空栏和双手下半；盖帽笔仍横栏，右手准备取杆、左手可接近帽，东缘南部留落帽点。裸笔独立帽参考仅约束后续状态，不在一张初态图上多造一支笔或两个帽。拔帽后悬停未签不预设固定终帧。\nC，保留未来ID wi-yqq-s03-quotation-extract-start，服务shot-yqq-03的0–2.5秒动作。拟同规格参考生成，会议室LOCATION_INTERACTION，lineage根wi-yqq-reuse-room。有序输入：会议室、许母图仅贡献米白左袖、双空白说明摄影状态、旧确认报价摄影状态。南侧高斜俯，两纸初始叠在东侧，许左手触下层报价北边；只抽报价并沿桌面转半圈到北中标题东，说明留东侧标题西。右手裸笔及东缘南部独立帽按是否入画精简引用。图只表现抽纸前一个状态，不伪装为已抽转完成。\nD，沿用保留ID wi-yqq-s03-quotation-evidence，专属shot-yqq-03-evidence全段0–1.5秒，不再绑定旧版动作镜2.6–4.0秒。此切片为准确报价实图的选择/本地裁切与EDITORIAL登记，不是交给视频模型重绘的构图图。紧裁同版式中部旧红改至右下“确认：赵衡”，无手、笔、移动背景，整段静止无遮挡；画面上方对应桌东，实物标题仍东。输入只需原工单已检查的准确报价图片，不需人物、说明或会议室图；不得凭空猜金额、增加签名或另造版式。若需裁切，以实际源像素确定image.crop参数并登记精确版本，不编造AssetPlan不存在的CROP操作。抽转镜及本镜合计4秒承接第二句同一声音，不能在1.5秒证据镜重起对白；此处不制作声音。\n依赖就绪后只将A–C实际必要项实体化为合法work，补真实dependency_ids、有序媒体及最终prompt；D按实际可用图片登记EDITORIAL。不得把保留ID当READY。检查两人身份、南侧轴线、两纸层数与标题方向、唯一帽、空栏及旧签名无遮挡。静态证据不证明抽转动作或声桥成功，也不需要运动跟踪、透视贴字或遮挡恢复。",
+            "work_items": [],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-g02-preparation-slice",
+            "disposition": "TEXT_ONLY",
+            "asset_kind": "REFERENCE",
+            "name": "第2组待就绪切片｜按报价、移说明、空复核栏",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-04",
+              "shot-yqq-05",
+              "shot-yqq-06",
+              "shot-yqq-06-evidence",
+              "shot-yqq-07",
+              "shot-yqq-09"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g02",
+              "clip-yqq-g03"
+            ],
+            "brief": null,
+            "rationale": "状态：WAIT_EXTERNAL_INPUT。TEXT_ONLY/索引NOT_REQUIRED仅为无可执行work的依赖切片，不表示无需图片或已经完成。共用已解析输入：许岚asset-85d4f6cc7d52/asset-version-3a8b4ea6267b、赵衡asset-5f4d7485e6b8/asset-version-6a56e078129b、会议室asset-4024e0462bfc/asset-version-d42fba8ad6bb。外部依赖：item-yqq-external-statement-blank、item-yqq-external-quotation、item-yqq-external-pen-states的实际采用版本与检查、原工单纸向修订收口。摄影图负责物理外形，准确图版负责文字，不能互相冒充。A–D拟REFERENCE_GENERATE、1440x2560、LIGHTWEIGHT_SINGLE；所有补图为SUPPLEMENTAL_REFERENCE，不另造身份母版。\nA，保留未来ID wi-yqq-s04-zhaoheng-press-start，服务shot-yqq-04全段0–4.5秒。输入按赵身份、会议室、报价摄影状态、双空白说明排序。南偏东拍赵脸、左臂及接触区；赵西画左看北中报价，左手准备落北缘，右手不取笔；说明仍东侧标题西，报价北中标题东。留足左手空间，旧红改与旧确认不变。归赵主体，lineage根wi-yqq-reuse-zhaoheng。\nB，保留未来ID wi-yqq-s05-xulan-move-statement，服务shot-yqq-05全段0–5.5秒。输入顺序：许身份、赵母图仅贡献浅蓝左袖、会议室、双空白说明、报价、裸笔独立帽。南偏西拍许腰上带交接路径，许脸清楚赵脸画外；初态说明还在东侧标题西，赵左手已压北中报价北缘。许右持裸笔离纸、左手准备接触说明，将仅此纸移南中并转至标题东；帽不动，不拖报价，不预签。归许主体，lineage根wi-yqq-reuse-xulan。\nC，保留未来ID wi-yqq-s06-blank-review-contact，服务shot-yqq-06全段0–2秒动作，不承担下一镜准确双栏精读。输入顺序：会议室、双空白说明摄影状态、报价、裸笔独立帽；许母图仅米白右袖，赵母图仅远处浅蓝左袖，实际出镜才传。南侧斜俯，说明南中标题东，报价北中标题东且赵左手压北缘。初态许右手把裸笔送到复核栏旁空白纸边，尚未松手；尖北尾南、不压签字线，唯一帽在东缘南部。后续笔接触后许才松手撤回，赵不取笔。归会议室LOCATION_INTERACTION，lineage根wi-yqq-reuse-room。手持初态不能冒充松手结果。\nD，保留未来ID wi-yqq-s07-s09-zhaoheng-held-evidence，服务shot-yqq-07的0–2.5秒及shot-yqq-09的0–3.2秒松手前构图。输入按赵身份、会议室、说明双空白、报价旧确认、裸笔独立帽排序。南偏东稍高视角保留赵脸、两前臂及南北文件；赵画左看右，左手压报价北缘、右手在自己桌边可见且空着。说明已南中标题东、裸笔复核旁尖北尾南，两纸分开。不能用无手脸部近景替代压纸关系，也不提前伸右手取笔。第9镜3.2–5.0秒左手离纸仍待实际视频验证；只在路线确需时派生终态，不固定增图。归赵主体，lineage根wi-yqq-reuse-zhaoheng。\nE，保留未来ID wi-yqq-s06-blank-review-evidence，专属shot-yqq-06-evidence全段0–1.5秒。选择或本地裁切原工单实际准确双空白图片，usage=EDITORIAL作全画幅静态插入，不送视频模型重绘。上经办、下复核两栏均空且无姓名，紧裁双栏及必要纸边，不含栏外裸笔、手、报价或移动背景；这些物件在故事空间中保持原位，只在裁切外。画面上方对应桌东、说明标题仍东；静帧不推拉。输入仅同版式准确双空白图片，不需人物/空间参考。真实裁切参数依据源图，不虚构CROP计划操作。检查最终9:16下双栏宽度、字高、两空线和1.5秒识读，静态文件保存不等于已经检查。\n上述保留ID尚不可执行。就绪后读取对应当前镜头，精简实际输入并补工作项、依赖、最终prompt；E登记实际EDITORIAL版本。重点检查A说明尚东侧、B仅移说明、C接触后松手、D左压纸右手空、E准确双空白且不带笔。所有文字证据均不依赖运动跟踪、透视合成、手部遮挡恢复。",
+            "work_items": [],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-g03-preparation-slice",
+            "disposition": "TEXT_ONLY",
+            "asset_kind": "REFERENCE",
+            "name": "第3组素材切片｜共同担责与松开证据",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-08",
+              "shot-yqq-09"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g03"
+            ],
+            "brief": null,
+            "rationale": "本项是分派与绑定合同，不是图片；空work_items不表示图片已完成。第8镜所需可执行任务已在人物项保存为wi-yqq-s08-xulan-seated-closeup：许岚asset-85d4f6cc7d52/asset-version-3a8b4ea6267b贡献身份与服装，会议室asset-4024e0462bfc/asset-version-d42fba8ad6bb贡献空间及东窗光。该work输入已就绪，输出尚未生成或检查；1440x2560单幅胸上近景，许东座画右看画左同高度赵衡，不展示手或纸笔。不能把已有站姿母图冒称本镜首帧。\n第9镜0–3.2秒沿用第2组保留切片wi-yqq-s07-s09-zhaoheng-held-evidence的采用结果作构图参考，不额外建同用途反角。赵衡asset-5f4d7485e6b8/asset-version-6a56e078129b贡献脸和浅蓝衬衫；会议室贡献东南向西北的真实西座空间。还依赖原纸笔工单返回双空白说明、旧红改报价、裸笔与唯一独立帽的可用精确版本和纸向修订。赵左手压北中报价北缘，右手在西侧空着且可见；说明南中向赵阅读，裸笔在复核栏旁尖北尾南，帽东缘南部。第9镜3.2–5.0秒才松左手，不能拿已松手状态当开头，也不能用无手近景覆盖本镜因果。\n后续绑定：第8镜全段使用许岚身份、空间及采用近景；第9镜全段使用赵衡身份、空间、当前道具状态与接触构图，0–3.2秒按纸、3.2–5.0秒离纸分别写清。人物与场景引用usage=GENERATION，身份图不自动是首帧；未出镜对象不强制上传。真实版本就绪后由镜头绑定负责人在当前正文与时段写对象、版本、用途及文字锚点，并让生成输入使用同一组绑定。本单不写镜头。\n完成标准：实际图中两位身份不串、座位和视线正确、东窗光连续；第9镜接触区足够且两手状态准确。静图不能验证欲言又止、目光顺序和左手实际离纸；这些均留待未来视频检查。视频目标2K、9:16，仅准备不提交。",
+            "work_items": [],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-g04-preparation-slice",
+            "disposition": "TEXT_ONLY",
+            "asset_kind": "REFERENCE",
+            "name": "第4组素材切片｜开始签复核、等待、单签结果、交笔",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-10",
+              "shot-yqq-10-reaction",
+              "shot-yqq-10-result",
+              "shot-yqq-11"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g04"
+            ],
+            "brief": null,
+            "rationale": "以已读取当前修订为准：第10镜2.5秒只取笔并开始签复核，随后许岚等待2秒、独立单签结果1.5秒、第11镜交笔3秒。这里保存依赖与未来切片，不执行原纸笔/分镜工单；空work_items不是READY。\n已确定输入：赵衡asset-5f4d7485e6b8/asset-version-6a56e078129b、许岚asset-85d4f6cc7d52/asset-version-3a8b4ea6267b、会议室asset-4024e0462bfc/asset-version-d42fba8ad6bb。外部依赖：item-yqq-external-statement-blank、item-yqq-external-statement-review-signed、item-yqq-external-quotation、item-yqq-external-pen-states及最终纸向修订。\n切片A保留ID wi-yqq-s10-review-sign-start，待媒体返回后实体化为REFERENCE_GENERATE/1440x2560/LIGHTWEIGHT_SINGLE，登记会议室SUPPLEMENTAL_REFERENCE/LOCATION_INTERACTION，lineage根wi-yqq-reuse-room。有序输入为赵衡母图仅贡献浅蓝袖与手归属、会议室桌面、双空白说明摄影状态、报价旧确认状态、裸笔独立帽。初态说明南中向赵正读且双空白，裸笔复核旁尖北尾南；赵左手已离报价，右手准备拿笔，左指可准备稳说明空白边。南侧斜俯保留持笔者、两栏及实际起笔接触区，不提前出现完整赵衡姓名，不复原按报价状态。后续0–0.9秒取笔、0.9–2.5秒仅复核起笔；不制作笔画中间帧或准确连续成字图集。\n切片B，shot-yqq-10-reaction全段：优先复用wi-yqq-s08-xulan-seated-closeup采用结果作为身份、东座、胸上机位及光向参考；该图原视线看画左同高度人物，等待镜必须在生成提示中改为画左下南中说明。不得标它为已满足等待视线的准确首帧；若选定路线确需精确首帧，先以采用图局部派生向左下等待图，而非重做人物母版。双手与纸笔均画外、闭嘴、不提前接笔。\n切片C保留ID wi-yqq-s10-review-result-editorial：shot-yqq-10-result全段1.5秒，使用原工单已核对的仅复核赵衡已签图片，确定性裁取下半双栏并准备9:16独立静态画面；上经办空线、下复核赵衡，保留纸质，双栏占宽约四分之三，无手笔、无字幕遮挡。观看方向画面上方对应桌东，实物仍标题东。usage=EDITORIAL，不输入视频模型重绘，不贴运动纸面；不把本项当已生成或已有裁切坐标。\n切片D保留ID wi-yqq-s11-handover-start，待输入齐后REFERENCE_GENERATE/1440x2560单幅，会议室SUPPLEMENTAL_REFERENCE/LOCATION_INTERACTION，根wi-yqq-reuse-room。有序输入：许岚身份、赵衡身份、会议室、仅复核已签说明、报价、裸笔独立帽。南侧赵左许右双人坐姿中景，两脸和交笔区同框。一个真实0秒初态：裸笔只在赵右手，笔尾朝东许岚、笔尖朝赵稍向下；许尚未接触，左手空。说明南中仍向赵，仅复核有字，经办绝不预签。后续许右手接稳后赵才松手；只有一笔一帽。\n绑定负责人须按动作/等待/EDITORIAL结果分开选择真实版本；不用一组同时含空白、单签、双签的无时段引用。完成检查分别覆盖签前构图、等待视线、真实单签中文和交笔接触区。静态结果不证明动态落笔、接稳松手、对白口型或画外连续书写成功。没有运动跟踪、透视贴字、遮挡恢复或笔画动画兜底。",
+            "work_items": [],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          },
+          {
+            "id": "item-yqq-g05-preparation-slice",
+            "disposition": "TEXT_ONLY",
+            "asset_kind": "REFERENCE",
+            "name": "第5组素材切片｜开始签经办、等待、双签、收纸与扣帽",
+            "bible_entity_id": null,
+            "serves_shot_ids": [
+              "shot-yqq-12",
+              "shot-yqq-12-reaction",
+              "shot-yqq-12-result",
+              "shot-yqq-13",
+              "shot-yqq-14"
+            ],
+            "serves_clip_group_ids": [
+              "clip-yqq-g05"
+            ],
+            "brief": null,
+            "rationale": "当前有效覆盖：第12镜2.5秒转说明并开始签经办，赵衡等待1.5秒，独立双签静态结果1.5秒，随后收纸3秒、扣帽2秒。只规划，不接管原工单的分镜或纸笔制作；空work_items不代表所需图片已完成。\n共用精确基础输入：许岚asset-85d4f6cc7d52/asset-version-3a8b4ea6267b、赵衡asset-5f4d7485e6b8/asset-version-6a56e078129b、会议室asset-4024e0462bfc/asset-version-d42fba8ad6bb。外部依赖为仅复核已签说明、双签说明、报价旧红改旧确认、同一裸笔与独立帽及最终纸向修订；由item-yqq-external-*记录，不重复生成。\n切片A保留ID wi-yqq-s12-turn-sign-start，待输入齐后REFERENCE_GENERATE/1440x2560/LIGHTWEIGHT_SINGLE，会议室SUPPLEMENTAL_REFERENCE/LOCATION_INTERACTION，根wi-yqq-reuse-room。有序输入为许岚母图仅贡献米白双袖和手归属、会议室、仅复核已签说明、报价、裸笔独立帽。南偏东斜俯，纸轮廓、双手和转纸空间完整；0秒说明南中向赵正读、仅复核有赵衡，许右手已接稳裸笔且悬纸外，左手准备触东南空白边。不得把已转朝许的结果当0秒，也不得提前经办许岚。0–1.3秒只转说明，1.3–2.5秒纸停稳才落上方经办栏；报价和帽不随纸移动。不制作逐笔准确姓名动画。\n切片B为已实体化wi-yqq-s12-zhaoheng-wait-closeup，输入仅赵衡身份与会议室，现可独立制作，尚无输出。服务shot-yqq-12-reaction全段：赵西画左看右下说明，胸上、闭嘴等待、双手画外不提前收纸。不得用无手等待图代替第7或9镜的手纸关系。\n切片C保留ID wi-yqq-s12-both-result-editorial：shot-yqq-12-result全段1.5秒，只从原工单已检查的双签状态准确图片确定性准备9:16下半页静态插入，上经办许岚、下复核赵衡，双栏约占宽四分之三；无手笔，无字幕盖字，无运动。画面上方对应桌西，实物标题端仍西；不镜像、不转实物。usage=EDITORIAL，不送视频模型重绘，不贴到运动纸面。实际裁切范围要根据返回图片测定，不能虚构坐标或审图通过。\n切片D保留ID wi-yqq-s13-collect-start，待输入齐后REFERENCE_GENERATE/1440x2560单幅，会议室SUPPLEMENTAL_REFERENCE/LOCATION_INTERACTION，根wi-yqq-reuse-room。有序输入为会议室、双签说明、报价、裸笔独立帽，再加入赵浅蓝袖和许米白袖各自身份图仅作衣袖/手归属。南侧较高斜俯同时容纳南北两纸、赵西侧收纸落点；起始说明南中朝许已双签，报价北中朝赵旧签不变，两张分开。赵双手准备从西侧伸入，许双手已离说明、右持裸笔退东侧。后续说明放报价上、两纸齐收赵侧；不先叠齐、不增第三纸、不重置纸向。签名准确识读由前一静态结果承担，运动中仍需保持同一版面和双签状态，不计划动态贴字。\n切片E保留ID wi-yqq-s14-recap-start，待裸笔/独立帽及末段状态齐后REFERENCE_GENERATE/1440x2560单幅，许岚SUPPLEMENTAL_REFERENCE/CHARACTER_BODY，根wi-yqq-reuse-xulan。有序输入为许岚身份、会议室、裸笔独立帽；纸叠若入画才加入双签说明和报价，画外不强塞。南偏西中近景同时清楚容纳许脸、肩、两手及东缘南部原落帽点。0秒许右手持裸笔，左手准备取桌上唯一帽；帽不在笔尾。纸已收赵侧，不能还在南北中区。后续左手取帽、对准笔尖扣回，右手持续持笔，结束桌上不剩重复帽，肩自然松下。\n就绪后按保留ID落实真实媒体、有序输入、最终prompt和依赖再交Builder，不把文本切片作为READY。实际图片需查单签/双签先后、纸向、两纸层数、收纸路径、手物接触与唯一帽。视频阶段仍须验证转纸、落笔、接触、收纸、扣帽及跨镜连续性；本轮不生成视频或制作基于视频的声音后期。",
+            "work_items": [],
+            "omitted_work_item_ids": [],
+            "completed_asset_id": null,
+            "completed_asset_version_id": null
+          }
+        ],
+        "requested_item_ids": [
+          "item-yqq-room",
+          "item-yqq-external-statement-blank",
+          "item-yqq-external-statement-review-signed",
+          "item-yqq-external-statement-both-signed",
+          "item-yqq-external-quotation",
+          "item-yqq-external-pen-states",
+          "item-yqq-g01-preparation-slice",
+          "item-yqq-g02-preparation-slice",
+          "item-yqq-g03-preparation-slice",
+          "item-yqq-g04-preparation-slice",
+          "item-yqq-g05-preparation-slice"
+        ],
+        "requested_work_item_ids": [],
+        "dependency_work_item_ids": [
+          "wi-yqq-reuse-room",
+          "wi-yqq-import-statement-blank-photo",
+          "wi-yqq-import-statement-review-photo",
+          "wi-yqq-import-statement-both-photo",
+          "wi-yqq-import-quotation-photo",
+          "wi-yqq-import-pen-capped",
+          "wi-yqq-import-pen-uncapped"
+        ]
+      },
+      "artifact_refs": [
+        {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_plan_index",
+          "artifact_id": "production-document-9bf5a748eb3a",
+          "version": 18
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "receipt": null
+    },
+    "requested_at": "2026-09-11T22:03:43.232490Z",
+    "updated_at": "2026-09-11T22:03:43.848286Z"
+  },
+  "write": {
+    "id": "specialist-turn-4f0fb362f2f74e548e68f5f8d0c7bd4e",
+    "sequence": 24,
+    "tool_name": "artifact.patch_asset_plan",
+    "arguments": {
+      "project_id": "project-5b8286dc63e6",
+      "request": {
+        "base_version_id": "production-document-version-a168475e72ee",
+        "origin": "AGENT",
+        "field_patches": [
+          {
+            "item_id": "item-yqq-external-statement-blank",
+            "op": "replace",
+            "path": "/disposition",
+            "value": "REUSE_EXISTING"
+          },
+          {
+            "item_id": "item-yqq-external-statement-blank",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-08b6047a6a38"
+          },
+          {
+            "item_id": "item-yqq-external-statement-blank",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-a9fb492dce6b"
+          },
+          {
+            "item_id": "item-yqq-external-statement-blank",
+            "op": "replace",
+            "path": "/rationale",
+            "value": "沿用同一物理资产asset-08b6047a6a38。原纸笔制作工单work-order-12f15f76ccb84cf1b6346a8ab5374c03已于交付中检查真实像素并明确采用三摄影状态及三准确字版，不再等待旧计划误指的分镜工单。双空白摄影asset-version-a9fb492dce6b为物理根；单签asset-version-1156f46e26af、双签asset-version-3adcb6b5365e为同纸补充状态；准确文字依据依次为asset-version-318e8d7fb28c、asset-version-9d931209f7ec、asset-version-5464dab394be。原工单观察：固定标题正文、上经办下复核准确；单签仅复核赵衡，双签仅新增经办许岚；跨状态未见影响使用的纸形、版面或既有签名变化。双空白摄影较字版有轻微签栏位置和线长偏移，已决定可用，不重制。保留当前DRAFT和所有历史文件；本次登记不冒称重新审图或改变资产current/canonical。摄影图承担物理身份和状态，字版承担文字核对，均不证明会议室手物接触。开场说明标题西；镜5单独移南中转标题东；镜10赵先签复核；镜11仍标题东；镜12许才转标题西并签经办；镜13收纸不再旋转。四处最终证据裁切和交互构图另由明确工作项准备。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-blank-photo",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-08b6047a6a38"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-blank-photo",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-a9fb492dce6b"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-blank-photo",
+            "op": "replace",
+            "path": "/output_role",
+            "value": "原纸笔工单已检查采用的双空白摄影状态复用记录；不再生成或导入"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-blank-photo",
+            "op": "replace",
+            "path": "/final_prompt",
+            "value": "已完成的同项目复用登记：asset-08b6047a6a38/asset-version-a9fb492dce6b。依据原纸笔工单真实像素检查，情况说明标题和固定正文准确，上经办、下复核均空白，无姓名或墨迹；纸张及版面可用。准确内容核对源为asset-version-318e8d7fb28c。保持现有文件，不调用Provider、不重复导入、不因DRAFT重复检查。用于开场至赵签复核前的物理状态输入，不证明推纸、落笔或最终证据裁切完成。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-blank-photo",
+            "op": "replace",
+            "path": "/ordered_references",
+            "value": [
+              {
+                "role": "双空白准确表面内容",
+                "purpose": "原工单已采用的准确标题、固定正文及上经办下复核双空白版式核对源；不是摄影初态或新增Provider输入任务。",
+                "reference_role": "LAYOUT_GUIDE",
+                "reference_authority": "AUTHORITATIVE",
+                "asset_id": "asset-08b6047a6a38",
+                "asset_version_id": "asset-version-318e8d7fb28c"
+              }
+            ]
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-review-photo",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-08b6047a6a38"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-review-photo",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-1156f46e26af"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-review-photo",
+            "op": "replace",
+            "path": "/output_role",
+            "value": "原纸笔工单已检查采用的仅复核赵衡摄影状态复用记录"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-review-photo",
+            "op": "replace",
+            "path": "/final_prompt",
+            "value": "已完成复用：asset-08b6047a6a38/asset-version-1156f46e26af。原纸笔工单已实际检查并采用：同一白纸和固定版面，上经办仍空，下复核仅自然黑墨手写赵衡，未出现许岚。准确文字源asset-version-9d931209f7ec。作为同纸PROP_STATE补充结果，保留双空白物理根；禁止重复生成、重复导入或重新等待批准。只用于赵签毕后、许签前。单签静态证据最终裁切与镜11交笔、镜12转纸初态另行准备；此独立静物照不证明接触动作。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-review-photo",
+            "op": "replace",
+            "path": "/ordered_references",
+            "value": [
+              {
+                "role": "单签准确表面内容",
+                "purpose": "已采用的准确状态：经办空、复核赵衡；供核对姓名及所属栏位，不以平面字版取代摄影物理状态。",
+                "reference_role": "LAYOUT_GUIDE",
+                "reference_authority": "AUTHORITATIVE",
+                "asset_id": "asset-08b6047a6a38",
+                "asset_version_id": "asset-version-9d931209f7ec"
+              }
+            ]
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-both-photo",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-08b6047a6a38"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-both-photo",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-3adcb6b5365e"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-both-photo",
+            "op": "replace",
+            "path": "/output_role",
+            "value": "原纸笔工单已检查采用的经办许岚、复核赵衡双签摄影状态复用记录"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-both-photo",
+            "op": "replace",
+            "path": "/final_prompt",
+            "value": "已完成复用：asset-08b6047a6a38/asset-version-3adcb6b5365e。原纸笔工单已实际对照并采用：沿单签前态仅增加上经办许岚，下复核赵衡保留，未见影响连续使用的纸形、印字、签线及既有签名变化。准确字版使用修正版asset-version-5464dab394be，不使用早期漂移版。保留同一物理资产、双空白根和全部历史，不重复制图。仅许签经办完成后使用；收纸时说明标题西、报价标题东且不旋转。静态双签裁切和两纸收集接触构图尚须单独完成。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-statement-both-photo",
+            "op": "replace",
+            "path": "/ordered_references",
+            "value": [
+              {
+                "role": "双签准确表面内容修正版",
+                "purpose": "已采用的准确完整状态：上经办许岚、下复核赵衡；沿单签版式只新增经办姓名，旧早期双签字版不作输入。",
+                "reference_role": "LAYOUT_GUIDE",
+                "reference_authority": "AUTHORITATIVE",
+                "asset_id": "asset-08b6047a6a38",
+                "asset_version_id": "asset-version-5464dab394be"
+              }
+            ]
+          },
+          {
+            "item_id": "item-yqq-external-statement-review-signed",
+            "op": "replace",
+            "path": "/rationale",
+            "value": "状态用途目录，不另造物理主体或重复执行任务。已完成摄影状态见说明主体内wi-yqq-import-statement-review-photo，精确采用asset-08b6047a6a38/asset-version-1156f46e26af；准确字版asset-version-9d931209f7ec。原纸笔工单已检查采用，非待审。上经办空、下复核赵衡；用于镜10-result、镜11及镜12转纸签前。镜11仍标题东，镜12才转标题西。TEXT_ONLY仅表示本目录不是图片；必需的证据裁切和构图由主体内具体work执行，不以本目录代表完成。"
+          },
+          {
+            "item_id": "item-yqq-external-statement-both-signed",
+            "op": "replace",
+            "path": "/rationale",
+            "value": "状态用途目录，不另造主体。已完成摄影状态见说明主体内wi-yqq-import-statement-both-photo，采用asset-08b6047a6a38/asset-version-3adcb6b5365e；准确修正版asset-version-5464dab394be。原纸笔工单已检查采用，非待审。仅许签经办完成后使用，上经办许岚、下复核赵衡；镜12-result证据与镜13收紙职责分开。说明标题西、报价标题东，收纸不旋转。TEXT_ONLY只代表目录，实际图片准备由具体work承担，保留全部历史版本。"
+          },
+          {
+            "item_id": "item-yqq-external-quotation",
+            "op": "replace",
+            "path": "/disposition",
+            "value": "REUSE_EXISTING"
+          },
+          {
+            "item_id": "item-yqq-external-quotation",
+            "op": "replace",
+            "path": "/name",
+            "value": "报价单｜已采用旧红改与确认赵衡摄影状态"
+          },
+          {
+            "item_id": "item-yqq-external-quotation",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-797c99b1531c"
+          },
+          {
+            "item_id": "item-yqq-external-quotation",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-d99209b73470"
+          },
+          {
+            "item_id": "item-yqq-external-quotation",
+            "op": "replace",
+            "path": "/rationale",
+            "value": "原纸笔工单已检查并明确采用摄影asset-version-d99209b73470及准确字版asset-version-974420be0033，实际文件可用；不再等待、重制或重复导入。原工单观察：报价全文、红色划改与右下手写确认赵衡清楚，未混入情况说明双签栏；调整报价红字偏规整属非阻断限制，已决定采用。红改和确认签名从开场就存在，全文无金额，禁止加数字。开场在说明下标题西；镜3仅抽报价转至北中标题东，此后至结束不再转报价。摄影只贡献本纸外观、版面及固定状态，不贡献会议室背景或手纸接触。镜3-evidence准确独立静态裁切另行准备，不送视频模型重绘。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-quotation-photo",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-797c99b1531c"
+          },
+          {
+            "work_item_id": "wi-yqq-import-quotation-photo",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-d99209b73470"
+          },
+          {
+            "work_item_id": "wi-yqq-import-quotation-photo",
+            "op": "replace",
+            "path": "/output_role",
+            "value": "原纸笔工单已检查采用的旧红改与赵衡确认摄影状态复用记录"
+          },
+          {
+            "work_item_id": "wi-yqq-import-quotation-photo",
+            "op": "replace",
+            "path": "/final_prompt",
+            "value": "已完成同项目复用asset-797c99b1531c/asset-version-d99209b73470。原工单实际检查并采用：报价单标题、项目/报价版本两列表格、服务项目、原报价红划改、调整报价红字及右下确认赵衡黑墨手写清楚；无金额、经办复核栏或许岚姓名。准确内容源asset-version-974420be0033。保持当前文件，不再次生成或导入。红字偏规整不妨碍旧修改证据用途，不重新翻新。最终9:16旧确认证据选用/裁切另有任务；此图不能证明抽转、按纸或会议室构图。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-quotation-photo",
+            "op": "replace",
+            "path": "/ordered_references",
+            "value": [
+              {
+                "role": "报价单准确表面内容",
+                "purpose": "已采用的全文、红改位置和确认赵衡准确核对源；无金额，不贡献情况说明签栏或会议室空间。",
+                "reference_role": "LAYOUT_GUIDE",
+                "reference_authority": "AUTHORITATIVE",
+                "asset_id": "asset-797c99b1531c",
+                "asset_version_id": "asset-version-974420be0033"
+              }
+            ]
+          },
+          {
+            "item_id": "item-yqq-external-pen-states",
+            "op": "replace",
+            "path": "/disposition",
+            "value": "REUSE_EXISTING"
+          },
+          {
+            "item_id": "item-yqq-external-pen-states",
+            "op": "replace",
+            "path": "/name",
+            "value": "同一黑笔｜已采用闭帽与唯一分离帽状态"
+          },
+          {
+            "item_id": "item-yqq-external-pen-states",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-d4a1234d0350"
+          },
+          {
+            "item_id": "item-yqq-external-pen-states",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-c10cf71df108"
+          },
+          {
+            "item_id": "item-yqq-external-pen-states",
+            "op": "replace",
+            "path": "/rationale",
+            "value": "原纸笔工单已实际检查并采用asset-d4a1234d0350闭帽asset-version-c10cf71df108及裸笔/唯一分离帽asset-version-f4936a914dc3：两态外形相符、无按动按钮、无笔尾套帽、无重复笔或帽。保留现成DRAFT文件，不重制。闭帽为外形根，裸笔为同笔补充状态，不改变资产既有current/canonical。帽开场盖笔尖；镜2许左手拔帽放东缘南部自己左手边，直至镜14才拾回扣笔尖。镜6裸笔复核旁尖北尾南，镜10赵右持，镜11赵右递许右接，镜12以后许右持。产品摄影不证明持笔、传笔或扣帽接触；四个纯文件证据镜不传笔图。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-capped",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-d4a1234d0350"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-capped",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-c10cf71df108"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-capped",
+            "op": "replace",
+            "path": "/output_role",
+            "value": "原纸笔工单已检查采用的闭帽黑笔外形复用记录"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-capped",
+            "op": "replace",
+            "path": "/final_prompt",
+            "value": "已完成同项目复用asset-d4a1234d0350/asset-version-c10cf71df108。原工单实图检查确认唯一朴素黑笔、帽盖笔尖、圆角裸尾、非按动、没有第二帽。保持原文件和历史，不调用Provider、不重复导入或因DRAFT等待批准。闭帽只用于开场及末尾扣好之后，产品照片不证明人物拔帽或扣帽。"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-uncapped",
+            "op": "replace",
+            "path": "/completed_asset_id",
+            "value": "asset-d4a1234d0350"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-uncapped",
+            "op": "replace",
+            "path": "/completed_asset_version_id",
+            "value": "asset-version-f4936a914dc3"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-uncapped",
+            "op": "replace",
+            "path": "/output_role",
+            "value": "原纸笔工单已检查采用的同一裸笔与唯一分离帽复用记录"
+          },
+          {
+            "work_item_id": "wi-yqq-import-pen-uncapped",
+            "op": "replace",
+            "path": "/final_prompt",
+            "value": "已完成复用asset-d4a1234d0350/asset-version-f4936a914dc3。原工单已对照闭帽图，确认同一笔杆、裸露笔尖和笔尾、唯一独立帽，外形一致。作为PROP_STATE补充参考，不替换外形根，不重制副本。静物照里帽的摆位不约束会议室，当前镜头要求独立帽在桌东缘南部许左手边；本图不证明手物接触。"
+          }
+        ],
+        "source_artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-a9fb492dce6b",
+            "version": 4
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-1156f46e26af",
+            "version": 6
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-3adcb6b5365e",
+            "version": 9
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-d99209b73470",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-c10cf71df108",
+            "version": 2
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-f4936a914dc3",
+            "version": 3
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-318e8d7fb28c"
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-9d931209f7ec"
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-5464dab394be"
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-974420be0033"
+          }
+        ]
+      }
+    },
+    "reason": "按原纸笔工单已完成的实图检查和明确采用结果，登记六张现成摄影状态及四张准确字版，解除旧等待；只改相关字段，保留人物近景和其他工作。",
+    "status": "COMPLETED",
+    "result": {
+      "tool_id": "artifact.patch_asset_plan",
+      "status": "SUCCEEDED",
+      "output": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_plan_identity": {
+          "document_id": "production-document-9bf5a748eb3a",
+          "version_id": "production-document-version-d3f81efa1738",
+          "version": 19
+        },
+        "base_version_id": "production-document-version-a168475e72ee",
+        "upserted_item_ids": [],
+        "work_item_patch_item_ids": [],
+        "upserted_work_item_ids": [],
+        "removed_item_ids": [],
+        "removed_work_item_ids": [],
+        "notes_updated": false
+      },
+      "artifact_refs": [
+        {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_plan",
+          "artifact_id": "production-document-9bf5a748eb3a",
+          "version": 19
+        },
+        {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_plan_index",
+          "artifact_id": "production-document-9bf5a748eb3a",
+          "version": 19
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "receipt": {
+        "operation_completed": true,
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_plan",
+            "artifact_id": "production-document-9bf5a748eb3a",
+            "version": 19
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_plan_index",
+            "artifact_id": "production-document-9bf5a748eb3a",
+            "version": 19
+          }
+        ],
+        "current_state": {
+          "project_id": "project-5b8286dc63e6"
+        },
+        "changed_ids": {
+          "removed_item_ids": [],
+          "removed_work_item_ids": []
+        }
+      }
+    },
+    "requested_at": "2026-09-11T22:05:15.147033Z",
+    "updated_at": "2026-09-11T22:05:16.340687Z"
+  },
+  "saved_receipt": {
+    "operation_completed": true,
+    "artifact_refs": [
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_plan",
+        "artifact_id": "production-document-9bf5a748eb3a",
+        "version": 19
+      },
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_plan_index",
+        "artifact_id": "production-document-9bf5a748eb3a",
+        "version": 19
+      }
+    ],
+    "current_state": {
+      "project_id": "project-5b8286dc63e6",
+      "asset_plan_identity": {
+        "document_id": "production-document-9bf5a748eb3a",
+        "version_id": "production-document-version-d3f81efa1738",
+        "version": 19
+      },
+      "base_asset_plan_identity": {
+        "document_id": "production-document-9bf5a748eb3a",
+        "version_id": "production-document-version-a168475e72ee",
+        "version": 18
+      },
+      "sources_changed": false,
+      "execution_contract": {
+        "needs_reconciliation": false,
+        "issues": []
+      }
+    },
+    "changed_ids": {
+      "changed_item_ids": [
+        "item-yqq-external-statement-blank",
+        "item-yqq-external-statement-review-signed",
+        "item-yqq-external-statement-both-signed",
+        "item-yqq-external-quotation",
+        "item-yqq-external-pen-states"
+      ],
+      "removed_item_ids": [],
+      "changed_work_item_ids": [
+        "wi-yqq-import-statement-blank-photo",
+        "wi-yqq-import-statement-review-photo",
+        "wi-yqq-import-statement-both-photo",
+        "wi-yqq-import-quotation-photo",
+        "wi-yqq-import-pen-capped",
+        "wi-yqq-import-pen-uncapped"
+      ],
+      "removed_work_item_ids": []
+    }
+  },
+  "diagnostic_write": {
+    "id": "specialist-turn-eff5450c8d8e471bbbdc571d1d409472",
+    "sequence": 11,
+    "tool_name": "artifact.patch_asset_plan",
+    "arguments": {
+      "project_id": "project-5b8286dc63e6",
+      "request": {
+        "base_version_id": "production-document-version-c578fc898379"
+      }
+    },
+    "reason": "修正上一批候选登记的状态类型并保存：现成图片尚待原工单检查，记为ANCHOR候选而不是已完成复用；不重制纸笔，不触碰已采用人物和近景。",
+    "status": "COMPLETED",
+    "result": {
+      "tool_id": "artifact.patch_asset_plan",
+      "status": "SUCCEEDED",
+      "output": {
+        "project_id": "project-5b8286dc63e6",
+        "asset_plan_identity": {
+          "document_id": "production-document-9bf5a748eb3a",
+          "version_id": "production-document-version-3bf7c59ac060",
+          "version": 15
+        },
+        "base_version_id": "production-document-version-c578fc898379",
+        "upserted_item_ids": [
+          "item-yqq-external-statement-blank",
+          "item-yqq-external-statement-review-signed",
+          "item-yqq-external-statement-both-signed",
+          "item-yqq-external-quotation",
+          "item-yqq-external-pen-states"
+        ],
+        "work_item_patch_item_ids": [],
+        "upserted_work_item_ids": [],
+        "removed_item_ids": [],
+        "removed_work_item_ids": [],
+        "notes_updated": true
+      },
+      "artifact_refs": [
+        {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_plan",
+          "artifact_id": "production-document-9bf5a748eb3a",
+          "version": 15
+        },
+        {
+          "project_id": "project-5b8286dc63e6",
+          "artifact_type": "asset_plan_index",
+          "artifact_id": "production-document-9bf5a748eb3a",
+          "version": 15
+        }
+      ],
+      "warnings": [],
+      "error": null,
+      "receipt": {
+        "operation_completed": true,
+        "artifact_refs": [
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_plan",
+            "artifact_id": "production-document-9bf5a748eb3a",
+            "version": 15
+          },
+          {
+            "project_id": "project-5b8286dc63e6",
+            "artifact_type": "asset_plan_index",
+            "artifact_id": "production-document-9bf5a748eb3a",
+            "version": 15
+          }
+        ],
+        "current_state": {
+          "project_id": "project-5b8286dc63e6"
+        },
+        "changed_ids": {
+          "removed_item_ids": [],
+          "removed_work_item_ids": []
+        }
+      }
+    }
+  },
+  "diagnostic_saved_receipt": {
+    "operation_completed": true,
+    "artifact_refs": [
+      {
+        "project_id": "project-5b8286dc63e6",
+        "artifact_type": "asset_plan_index",
+        "artifact_id": "production-document-9bf5a748eb3a",
+        "version": 15
+      }
+    ],
+    "current_state": {
+      "project_id": "project-5b8286dc63e6",
+      "asset_plan_identity": {
+        "document_id": "production-document-9bf5a748eb3a",
+        "version_id": "production-document-version-3bf7c59ac060",
+        "version": 15
+      },
+      "base_asset_plan_identity": {
+        "document_id": "production-document-9bf5a748eb3a",
+        "version_id": "production-document-version-c578fc898379",
+        "version": 14
+      },
+      "sources_changed": true,
+      "execution_contract": {
+        "needs_reconciliation": true,
+        "issues": [
+          {
+            "code": "CANONICAL_ROOT_REQUIRES_RECONCILIATION",
+            "item_id": "item-yqq-external-statement-review-signed",
+            "work_item_ids": [
+              "wi-yqq-import-statement-review-photo"
+            ],
+            "detail": "Supplemental outputs do not have one executable identity or physical canonical root; a composed sheet or text plate is a derived output rather than that root."
+          },
+          {
+            "code": "CANONICAL_ROOT_REQUIRES_RECONCILIATION",
+            "item_id": "item-yqq-external-statement-both-signed",
+            "work_item_ids": [
+              "wi-yqq-import-statement-both-photo"
+            ],
+            "detail": "Supplemental outputs do not have one executable identity or physical canonical root; a composed sheet or text plate is a derived output rather than that root."
+          }
+        ]
+      }
+    },
+    "changed_ids": {
+      "changed_item_ids": [
+        "item-yqq-external-statement-blank",
+        "item-yqq-external-statement-review-signed",
+        "item-yqq-external-statement-both-signed",
+        "item-yqq-external-quotation",
+        "item-yqq-external-pen-states"
+      ],
+      "removed_item_ids": [],
+      "changed_work_item_ids": [
+        "wi-yqq-import-statement-blank-photo",
+        "wi-yqq-import-statement-review-photo",
+        "wi-yqq-import-statement-both-photo",
+        "wi-yqq-import-quotation-photo",
+        "wi-yqq-import-pen-capped",
+        "wi-yqq-import-pen-uncapped"
+      ],
+      "removed_work_item_ids": []
+    }
+  }
+}
