@@ -14,7 +14,7 @@ import pytest
 
 from _routes.short_drama import router
 from short_drama.deps import get_short_drama_service
-from short_drama.models import AssetKind
+from short_drama.models import AssetKind, GenerationUnitShotWindow
 from short_drama.service import ShortDramaService
 from short_drama.studio_editorial import EditorAsset, EditorProject, EditorSubtitle, edit_editorial, read_editorial
 from short_drama.studio_export import start_export
@@ -144,6 +144,41 @@ def test_shot_without_video_has_readable_empty_editor_and_no_fake_duration(tmp_p
     assert service.get_project(document.project.id).document.shots == document.shots
 
 
+def test_returned_video_can_be_trimmed_before_adoption_without_changing_the_film_on_open(
+    episode: tuple[ShortDramaService, str, list[str]],
+) -> None:
+    service, pid, ids = episode
+    aggregate = service.get_project(pid)
+    aggregate.document.editorial_timeline = None
+    aggregate.document.manifests = []
+    aggregate.document.project.current_manifest_id = None
+    service.repository.save_project(aggregate.document)
+    for take in aggregate.takes:
+        take.is_selected = False
+        take.selected_shot_ids = []
+        service.repository.save_take(take)
+
+    local = read_shot_editorial(service, pid, ids[1])
+    assert local.scope and local.scope.duration_seconds == 0
+    editor = EditorProject.model_validate(local.project)
+    clips = editor.timelines[0].clips
+    assert len(clips) == 1
+    assert (clips[0].model_extra or {}).get("sourceShotId") == ids[1]
+    assert clips[0].startTime == 0 and not clips[0].muted
+    assert len(editor.assets) == 1
+    assert EditorProject.model_validate(read_editorial(service, pid).project).timelines[0].clips == []
+    assert service.get_project(pid).document.editorial_timeline is None
+    assert all(not take.is_selected for take in service.get_project(pid).takes)
+
+    clips[0].duration = 2
+    save_shot_editorial(service, pid, ids[1], StudioTimelineSave(
+        expected_revision=0, timeline={"project": as_json(editor)}))
+    full = EditorProject.model_validate(read_editorial(service, pid).project).timelines[0]
+    assert len(full.clips) == 1 and full.clips[0].duration == 2
+    assert (full.clips[0].model_extra or {}).get("sourceShotId") == ids[1]
+    assert service.get_project(pid).document.shots == aggregate.document.shots
+
+
 def test_agent_speed_keeps_source_span_and_linked_audio(episode: tuple[ShortDramaService, str, list[str]]) -> None:
     service, pid, ids = episode
     local = read_shot_editorial(service, pid, ids[0])
@@ -155,3 +190,68 @@ def test_agent_speed_keeps_source_span_and_linked_audio(episode: tuple[ShortDram
     assert after.scope and after.scope.duration_seconds == 2
     following = read_shot_editorial(service, pid, ids[1])
     assert following.scope and following.scope.film_start_seconds == 2
+
+
+def test_direct_local_editor_project_can_be_saved(episode: tuple[ShortDramaService, str, list[str]]) -> None:
+    service, pid, ids = episode
+    local = read_shot_editorial(service, pid, ids[1])
+    editor = EditorProject.model_validate(local.project)
+    for clip in editor.timelines[0].clips:
+        clip.duration = 3
+    save_shot_editorial(service, pid, ids[1], StudioTimelineSave(
+        expected_revision=1, timeline=as_json(editor)))
+    after = read_shot_editorial(service, pid, ids[1])
+    assert after.scope and after.scope.duration_seconds == 3
+    following = read_shot_editorial(service, pid, ids[2])
+    assert following.scope and following.scope.film_start_seconds == 7
+
+
+@pytest.mark.parametrize("following_source_shot", [False, True])
+def test_unused_source_tail_is_editable_without_entering_another_shot(
+    episode: tuple[ShortDramaService, str, list[str]], following_source_shot: bool,
+) -> None:
+    service, pid, ids = episode
+    aggregate = service.get_project(pid)
+    take = next(item for item in aggregate.takes if item.shot_id == ids[1])
+    take.shot_id = ids[0]
+    take.generation_unit_id = "shared-source-unit"
+    take.shot_windows = [GenerationUnitShotWindow(
+        shot_id=shot_id, shot_revision=1, source_in_seconds=start,
+        source_out_seconds=end, duration_seconds=end-start,
+    ) for shot_id, start, end in [(ids[0], 0, 2), (ids[1], 2, 6)]]
+    if following_source_shot:
+        take.shot_windows.append(GenerationUnitShotWindow(
+            shot_id=ids[2], shot_revision=1, source_in_seconds=6,
+            source_out_seconds=8, duration_seconds=2))
+    service.repository.save_take(take)
+    editor = EditorProject.model_validate(read_editorial(service, pid).project)
+    for clip in editor.timelines[0].clips:
+        if (clip.model_extra or {}).get("sourceShotId") == ids[1]:
+            clip.trimStart = 2
+    service.studio.save_timeline(pid, StudioTimelineSave(
+        expected_revision=1, timeline={"project": as_json(editor)}))
+    baseline = read_editorial(service, pid)
+    local = read_shot_editorial(service, pid, ids[1])
+    local_clips = EditorProject.model_validate(local.project).timelines[0].clips
+    assert {(item.model_extra or {}).get("sourceWindowEnd") for item in local_clips} == {
+        6 if following_source_shot else 8}
+    video = next(item for item in local_clips if item.type == "video")
+    change = StudioEditorialEdit(expected_revision=2, shot_id=ids[1],
+        clips=[EditorialClipChange(id=video.id, duration_seconds=5.5)])
+    if following_source_shot:
+        with pytest.raises(ValueError, match="本镜头的素材范围"):
+            edit_editorial(service, pid, change)
+        assert read_editorial(service, pid) == baseline
+        return
+    edit_editorial(service, pid, change)
+    full = EditorProject.model_validate(read_editorial(service, pid).project).timelines[0]
+    for clip in full.clips:
+        shot_id = (clip.model_extra or {}).get("sourceShotId")
+        if shot_id == ids[0]:
+            assert clip.startTime == 0 and clip.duration == 4
+        elif shot_id == ids[1]:
+            assert (clip.startTime, clip.trimStart, clip.duration) == (4, 2, 5.5)
+        elif shot_id == ids[2]:
+            assert clip.startTime == 9.5 and clip.duration == 4
+    assert next(cue for cue in full.subtitles if cue.id == "cue-2").startTime == 10.25
+    assert service.get_project(pid).document.shots == aggregate.document.shots

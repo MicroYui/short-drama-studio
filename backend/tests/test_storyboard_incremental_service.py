@@ -467,12 +467,12 @@ def test_group_segment_prevalidates_then_persists_one_version_per_group(
     wrong_second = groups[1].model_copy(
         update={
             "clip_group": groups[1].clip_group.model_copy(
-                update={"id": "clip-out-of-order"}
+                update={"id": groups[0].clip_group.id}
             )
         },
         deep=True,
     )
-    with pytest.raises(WorkflowConflictError, match="next planned ClipGroup"):
+    with pytest.raises(ValueError, match="cannot repeat a ClipGroup ID"):
         service.append_storyboard_groups(
             document.project.id,
             StoryboardDraftGroupsAppendRequest(
@@ -521,7 +521,7 @@ def test_group_segment_prevalidates_then_persists_one_version_per_group(
     assert committed_counts == [1, 2]
 
 
-def test_group_segment_canonicalizes_source_range_prose_to_sealed_outline(
+def test_group_segment_preserves_current_source_description(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -603,197 +603,77 @@ def test_group_segment_canonicalizes_source_range_prose_to_sealed_outline(
         version_id=response.progress.draft_version_id,
     )
     content = StoryboardDraftContent.model_validate(persisted.version.payload)
-    assert [item.source_range for item in content.committed_groups] == [
-        item.source_range for item in canonical_outlines
-    ]
+    assert [item.source_range for item in content.committed_groups] == prose_variants
 
 
-def test_target_led_duration_conflict_returns_to_script_revision_with_exact_evidence(
-    tmp_path: Path,
+def test_direct_draft_streams_editable_shots_and_finalizes_without_planning_gates(tmp_path: Path) -> None:
+    from short_drama.studio_models import StudioShotSave
+    service = _service(tmp_path)
+    document, script, spec, dialogue_shots = _prepare_script_only_project(service)
+    draft = _draft(document, script, spec, dialogue_shots=dialogue_shots)
+    begun = service.begin_storyboard_draft(document.project.id, StoryboardDraftBeginRequest(
+        seed=_seed_from_draft(draft), origin=ProductionDocumentOrigin.AGENT)).progress
+    assert begun.phase == StoryboardDraftPhase.GROUP_AUTHORING
+    work, groups = _adjacent_prefix_batch(script=script, dialogue_shots=dialogue_shots, draft=draft)
+    first = service.append_storyboard_group(document.project.id, StoryboardDraftAppendRequest(
+        draft_document_id=begun.draft_ref.artifact_id, base_version_id=begun.draft_version_id,
+        work_unit=work, group=groups[0], origin=ProductionDocumentOrigin.AGENT)).progress
+    visible = service.studio.current_project(document.project.id).document
+    assert len(visible.shots) == 1 and not visible.storyboard_document_id
+    shot = visible.shots[0].model_copy(deep=True)
+    shot.camera = "用户保存的平视固定机位"
+    shot.duration_seconds += 0.5
+    service.studio.save_shot(document.project.id, shot.id, StudioShotSave(
+        expected_revision=shot.revision, shot=shot))
+    saved = service.get_production_document(document.project.id, begun.draft_ref.artifact_id)
+    latest = saved.version.id
+    progress = _append_all_groups(service, document=document,
+        script=script.model_copy(update={"lines": script.lines[1:]}),
+        dialogue_shots=dialogue_shots[1:], draft_document_id=begun.draft_ref.artifact_id,
+        base_version_id=latest, starting_sequence=2,
+        starting_continuity_in=[f"after-{script.lines[0].id}"])
+    latest = progress.draft_version_id
+    final = service.finalize_storyboard(document.project.id, StoryboardDraftFinalizeRequest(
+        draft_document_id=begun.draft_ref.artifact_id, draft_version_id=latest,
+        origin=ProductionDocumentOrigin.AGENT))
+    assert final.storyboard.shots[0].camera == "用户保存的平视固定机位"
+    assert final.storyboard.shots[0].duration_seconds == shot.duration_seconds
+    assert len(final.storyboard.shots) == len(script.lines)
+    content = StoryboardDraftContent.model_validate(saved.version.payload)
+    assert not content.timing_ledger and not content.planned_clip_groups and content.timing_audit is None
+
+
+
+
+@pytest.mark.parametrize(
+    ("runtime", "expected"),
+    [(44.0, DurationAlignment.OUTSIDE_ACCEPTED_RANGE),
+     (45.0, DurationAlignment.ALIGNED),
+     (52.0, DurationAlignment.ALIGNED),
+     (60.0, DurationAlignment.ALIGNED),
+     (61.0, DurationAlignment.OUTSIDE_ACCEPTED_RANGE)],
+)
+def test_user_duration_range_does_not_require_an_invented_exact_target(
+    tmp_path: Path, runtime: float, expected: DurationAlignment,
 ) -> None:
     service = _service(tmp_path)
-    document, script, initial_spec, dialogue_shots = _prepare_script_only_project(
-        service
-    )
-    target_seconds = 120.0
-    duration_contract = DurationContract(
-        target_seconds=target_seconds,
+    _, _, spec, _ = _prepare_script_only_project(service)
+    contract = DurationContract(
+        target_seconds=None,
         target_origin=DurationTargetOrigin.USER_DECLARED,
         authority=DurationAuthority.TARGET_LED,
-        acceptable_range_seconds=DurationRange(
-            minimum_seconds=115.0,
-            maximum_seconds=125.0,
-        ),
+        acceptable_range_seconds=DurationRange(minimum_seconds=45, maximum_seconds=60),
         source_fidelity_policy=DurationFidelityPolicy.PRESERVE_STORY_COMMITMENTS,
-        mismatch_resolution=DurationMismatchResolution.REVISE_SCRIPT,
-        decision_basis="用户明确要求成片约两分钟。",
+        mismatch_resolution=DurationMismatchResolution.REPORT_NATURAL_RUNTIME,
+        decision_basis="用户给出45–60秒范围，没有指定精确秒数。",
     )
-    target_spec = service.replace_production_spec(
-        document.project.id,
-        ProductionSpecReplaceRequest(
-            base_version_id=initial_spec.version.id,
-            spec=initial_spec.spec.model_copy(
-                update={
-                    "target_duration_seconds": target_seconds,
-                    "duration_intent": "以 120 秒为制片目标。",
-                    "duration_contract": duration_contract,
-                },
-                deep=True,
-            ),
-            origin=ProductionDocumentOrigin.AGENT,
-        ),
-    )
-    draft = _draft(
-        document,
-        script,
-        target_spec,
-        dialogue_shots=dialogue_shots,
-    )
-    assert draft.timing_audit is not None
-    natural_duration = draft.timing_audit.computed_episode_duration_s
-    correct_audit = draft.timing_audit.model_copy(
-        update={
-            "target_duration_s": target_seconds,
-            "alignment": DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
-            "difference_seconds": natural_duration - target_seconds,
-        },
+    range_spec = spec.spec.model_copy(
+        update={"target_duration_seconds": None, "duration_contract": contract},
         deep=True,
     )
-    begun = service.begin_storyboard_draft(
-        document.project.id,
-        StoryboardDraftBeginRequest(
-            seed=_seed_from_draft(draft),
-            origin=ProductionDocumentOrigin.AGENT,
-        ),
-    ).progress
-    ledger = service.append_storyboard_ledger_segment(
-        document.project.id,
-        StoryboardDraftLedgerSegmentAppendRequest(
-            draft_document_id=begun.draft_ref.artifact_id,
-            base_version_id=begun.draft_version_id,
-            entries=draft.timing_ledger,
-            origin=ProductionDocumentOrigin.AGENT,
-        ),
-    ).progress
-    ledger_complete = service.complete_storyboard_ledger(
-        document.project.id,
-        StoryboardDraftLedgerCompleteRequest(
-            draft_document_id=begun.draft_ref.artifact_id,
-            base_version_id=ledger.draft_version_id,
-            origin=ProductionDocumentOrigin.AGENT,
-        ),
-    ).progress
-    outline = service.append_storyboard_outline_segment(
-        document.project.id,
-        StoryboardDraftOutlineSegmentAppendRequest(
-            draft_document_id=begun.draft_ref.artifact_id,
-            base_version_id=ledger_complete.draft_version_id,
-            groups=draft.planned_clip_groups,
-            origin=ProductionDocumentOrigin.AGENT,
-        ),
-    ).progress
-
-    with pytest.raises(WorkflowConflictError, match="alignment"):
-        service.complete_storyboard_outline(
-            document.project.id,
-            StoryboardDraftOutlineCompleteRequest(
-                draft_document_id=begun.draft_ref.artifact_id,
-                base_version_id=outline.draft_version_id,
-                timing_audit=correct_audit.model_copy(
-                    update={"alignment": DurationAlignment.ALIGNED}
-                ),
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
-
-    reconciliation = service.complete_storyboard_outline(
-        document.project.id,
-        StoryboardDraftOutlineCompleteRequest(
-            draft_document_id=begun.draft_ref.artifact_id,
-            base_version_id=outline.draft_version_id,
-            timing_audit=correct_audit,
-            origin=ProductionDocumentOrigin.AGENT,
-        ),
-    ).progress
-    assert reconciliation.phase == StoryboardDraftPhase.DURATION_RECONCILIATION
-    assert reconciliation.total_planned_duration_seconds == natural_duration
-
-    with pytest.raises(WorkflowConflictError, match="duration reconciliation"):
-        _append_all_groups(
-            service,
-            document=document,
-            script=script,
-            dialogue_shots=dialogue_shots,
-            draft_document_id=begun.draft_ref.artifact_id,
-            base_version_id=reconciliation.draft_version_id,
-        )
-    with pytest.raises(WorkflowConflictError, match="duration reconciliation"):
-        service.record_storyboard_draft_verification(
-            document.project.id,
-            StoryboardDraftVerificationRequest(
-                draft_document_id=begun.draft_ref.artifact_id,
-                base_version_id=reconciliation.draft_version_id,
-                report=StoryboardDraftVerificationReport(
-                    status=StoryboardDraftVerificationStatus.READY,
-                    summary="不应在时长冲突状态接受。",
-                    checked_clip_group_ids=[draft.planned_clip_groups[0].id],
-                ),
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
-    with pytest.raises(WorkflowConflictError, match="duration reconciliation"):
-        service.finalize_storyboard(
-            document.project.id,
-            StoryboardDraftFinalizeRequest(
-                draft_document_id=begun.draft_ref.artifact_id,
-                draft_version_id=reconciliation.draft_version_id,
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
-
-    current = service.get_project(document.project.id).document
-    current_script = next(
-        item
-        for item in current.script_versions
-        if item.id == current.project.current_script_version_id
-    )
-    prior_overrides = (
-        []
-        if current_script.source_contract is None
-        else list(current_script.source_contract.authoritative_user_overrides)
-    )
-    evidence_refs = [
-        ProductionDocumentArtifactRef(
-            project_id=document.project.id,
-            artifact_type="script_version",
-            artifact_id=current_script.id,
-            version=current_script.version,
-        ),
-        ProductionDocumentArtifactRef(
-            project_id=document.project.id,
-            artifact_type="production_spec",
-            artifact_id=target_spec.document.id,
-            version=target_spec.version.version,
-        ),
-        reconciliation.draft_ref,
-    ]
-    revision = service.start_script_revision(
-        document.project.id,
-        owner_agent_run_id="agent-run-duration-reconciliation",
-        instruction="保留剧情承诺，重新收敛事件密度以符合制片时长契约。",
-        base_script_version_id=current_script.id,
-        revision_origin=ScriptRevisionOrigin.PRODUCTION_CONSTRAINT,
-        evidence_refs=evidence_refs,
-    ).run
-    assert revision.revision_origin == ScriptRevisionOrigin.PRODUCTION_CONSTRAINT
-    assert revision.revision_evidence_refs == evidence_refs
-    assert revision.source_contract is not None
-    assert revision.source_contract.authoritative_user_overrides == prior_overrides
-    assert revision.review_report is not None
-    assert revision.review_report.issues[0].category == "DURATION_CONTRACT"
-    assert revision.issue_ledger[0].semantic_cluster == (
-        "duration-contract-reconciliation"
-    )
+    alignment, difference = service._storyboard_duration_alignment(range_spec, runtime)
+    assert alignment == expected
+    assert difference is None
 
 
 def test_target_led_duration_without_an_accepted_range_remains_unresolved(
@@ -894,7 +774,7 @@ def test_target_led_duration_without_an_accepted_range_remains_unresolved(
         ),
     ).progress
 
-    assert reconciliation.phase == StoryboardDraftPhase.DURATION_RECONCILIATION
+    assert reconciliation.phase == StoryboardDraftPhase.GROUP_AUTHORING
     assert reconciliation.total_planned_duration_seconds == natural_duration
     persisted = service.get_production_document(
         document.project.id,
@@ -904,6 +784,28 @@ def test_target_led_duration_without_an_accepted_range_remains_unresolved(
     reconciled = StoryboardDraftContent.model_validate(persisted.version.payload)
     assert reconciled.timing_audit is not None
     assert reconciled.timing_audit.alignment == DurationAlignment.UNRESOLVED
+
+
+def test_draft_tool_reports_the_generic_document_identity_for_read_invalidation(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    document, script, spec, dialogue_shots = _prepare_script_only_project(service)
+    draft = _draft(document, script, spec, dialogue_shots=dialogue_shots)
+    result = service.tool_registry.invoke("shot.begin_storyboard_draft", {
+        "project_id": document.project.id,
+        "request": StoryboardDraftBeginRequest(
+            seed=_seed_from_draft(draft), origin=ProductionDocumentOrigin.AGENT,
+        ).model_dump(mode="json"),
+    })
+    refs = {item.artifact_type: item for item in result.artifact_refs}
+    assert refs["production_document"].artifact_id == refs["storyboard_draft"].artifact_id
+    assert refs["production_document"].version == refs["storyboard_draft"].version
+    read = service.tool_registry.invoke("artifact.get_production_document", {
+        "project_id": document.project.id,
+        "production_document_id": refs["production_document"].artifact_id,
+    })
+    assert refs["production_document"] in read.artifact_refs
 
 
 def test_incremental_draft_persists_progress_without_publishing_until_finalize(
@@ -930,7 +832,7 @@ def test_incremental_draft_persists_progress_without_publishing_until_finalize(
     assert after_begin.storyboard_document_id is None
     assert after_begin.shots == []
     assert after_begin.project.stage == ProjectStage.SCRIPT_READY
-    assert begun.phase == StoryboardDraftPhase.LEDGER_BUILDING
+    assert begun.phase == StoryboardDraftPhase.GROUP_AUTHORING
     assert begun.timing_ledger_entry_count == 0
     assert begun.planned_clip_group_count == 0
     assert begun.committed_clip_group_count == 0
@@ -1196,127 +1098,23 @@ def test_finalizing_revision_preserves_unchanged_shot_revisions(tmp_path: Path) 
     )
 
 
-def test_append_must_land_on_the_exact_planned_clip_group(tmp_path: Path) -> None:
+def test_unfinished_scene_is_not_published_as_complete(tmp_path: Path) -> None:
     service = _service(tmp_path)
     document, script, spec, dialogue_shots = _prepare_script_only_project(service)
-    project_id = document.project.id
-    begun = _begin_and_plan_draft(
-        service,
-        project_id=project_id,
-        draft=_draft(
-            document,
-            script,
-            spec,
-            dialogue_shots=dialogue_shots,
-        ),
-    )
+    draft = _draft(document, script, spec, dialogue_shots=dialogue_shots)
+    begun = service.begin_storyboard_draft(document.project.id, StoryboardDraftBeginRequest(
+        seed=_seed_from_draft(draft), origin=ProductionDocumentOrigin.AGENT)).progress
+    work, groups = _adjacent_prefix_batch(script=script, dialogue_shots=dialogue_shots, draft=draft)
+    latest = service.append_storyboard_group(document.project.id, StoryboardDraftAppendRequest(
+        draft_document_id=begun.draft_ref.artifact_id, base_version_id=begun.draft_version_id,
+        work_unit=work, group=groups[0], origin=ProductionDocumentOrigin.AGENT)).progress
+    with pytest.raises(WorkflowConflictError, match="all source lines must be covered"):
+        service.finalize_storyboard(document.project.id, StoryboardDraftFinalizeRequest(
+            draft_document_id=begun.draft_ref.artifact_id, draft_version_id=latest.draft_version_id,
+            origin=ProductionDocumentOrigin.AGENT))
+    assert service.studio.current_project(document.project.id).document.shots
 
-    second_line = script.lines[1]
-    second_source_range = StoryboardSourceRange(
-        id=f"range-{second_line.id}",
-        scene_ids=[script.structured_scenes[0].id],
-        script_line_ids=[second_line.id],
-        description="The second planned beat.",
-    )
-    second_work_unit = StoryboardWorkUnitContract(
-        id="dynamic-work-order-for-second-beat",
-        title="Author second planned beat",
-        source_range=second_source_range,
-        objective="Author the planned beat without changing its ledger slot.",
-        completion_criteria=["The planned line is covered."],
-    )
-    second_shot = dialogue_shots[1].model_copy(
-        update={
-            "id": f"incremental-{second_line.id}",
-            "sequence": 2,
-            "scene_id": script.structured_scenes[0].id,
-        },
-        deep=True,
-    )
-    with pytest.raises(WorkflowConflictError, match="next planned ClipGroup"):
-        service.append_storyboard_group(
-            project_id,
-            StoryboardDraftAppendRequest(
-                draft_document_id=begun.draft_ref.artifact_id,
-                base_version_id=begun.draft_version_id,
-                work_unit=second_work_unit,
-                group=StoryboardClipGroupDraft(
-                    work_unit_id=second_work_unit.id,
-                    scene_node_id=(
-                        f"scene-node-{script.structured_scenes[0].id}"
-                    ),
-                    scene_group_sequence=2,
-                    source_range=second_source_range,
-                    shots=[second_shot],
-                    clip_group=ClipGroup(
-                        id=f"clip-{second_line.id}",
-                        title=f"Clip for {second_line.id}",
-                        shot_ids=[second_shot.id],
-                        duration_seconds=second_shot.duration_seconds,
-                        generation_intent="Render the second beat.",
-                        continuity_in=[f"after-{script.lines[0].id}"],
-                        visible_changes=[
-                            f"{second_line.id} completes its visible action."
-                        ],
-                        continuity_out=[f"after-{second_line.id}"],
-                    ),
-                ),
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
 
-    line = script.lines[0]
-    scene = script.structured_scenes[0]
-    source_range = StoryboardSourceRange(
-        id=f"range-{line.id}",
-        scene_ids=[scene.id],
-        script_line_ids=[line.id],
-        description="The first planned beat.",
-    )
-    work_unit = StoryboardWorkUnitContract(
-        id="dynamic-work-order-for-first-beat",
-        title="Author first planned beat",
-        source_range=source_range,
-        objective="Author the planned beat without changing its ledger slot.",
-        completion_criteria=["The planned line is covered."],
-    )
-    planned_duration = dialogue_shots[0].duration_seconds
-    changed_duration = planned_duration + 1.0
-    if changed_duration > 15.0:
-        changed_duration = planned_duration - 1.0
-    changed_shot = dialogue_shots[0].model_copy(
-        update={
-            "id": f"incremental-{line.id}",
-            "sequence": 1,
-            "scene_id": scene.id,
-            "duration_seconds": changed_duration,
-        },
-        deep=True,
-    )
-    with pytest.raises(WorkflowConflictError, match="match its planned ClipGroup"):
-        service.append_storyboard_group(
-            project_id,
-            StoryboardDraftAppendRequest(
-                draft_document_id=begun.draft_ref.artifact_id,
-                base_version_id=begun.draft_version_id,
-                work_unit=work_unit,
-                group=StoryboardClipGroupDraft(
-                    work_unit_id=work_unit.id,
-                    scene_node_id=f"scene-node-{scene.id}",
-                    scene_group_sequence=1,
-                    source_range=source_range,
-                    shots=[changed_shot],
-                    clip_group=ClipGroup(
-                        id=f"clip-{line.id}",
-                        title="First clip",
-                        shot_ids=[changed_shot.id],
-                        duration_seconds=changed_duration,
-                        generation_intent="Render the first beat.",
-                    ),
-                ),
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
 
 
 def test_verification_persists_and_targeted_replacement_invalidates_it(
@@ -1448,7 +1246,7 @@ def test_verification_persists_and_targeted_replacement_invalidates_it(
     replaced_content = StoryboardDraftContent.model_validate(
         persisted_replacement.version.payload
     )
-    assert replaced_content.committed_groups[-1].source_range == source_range
+    assert replaced_content.committed_groups[-1].source_range.script_line_ids == source_range.script_line_ids
 
     ready = service.record_storyboard_draft_verification(
         project_id,
@@ -1571,7 +1369,7 @@ def test_staged_planning_resumes_and_preserves_exact_segment_boundaries(
         ),
     ).progress
     assert outline_open.phase == StoryboardDraftPhase.OUTLINE_BUILDING
-    with pytest.raises(WorkflowConflictError, match="LEDGER_BUILDING"):
+    with pytest.raises(WorkflowConflictError, match="entry IDs must be unique"):
         service.append_storyboard_ledger_segment(
             project_id,
             StoryboardDraftLedgerSegmentAppendRequest(
@@ -1591,16 +1389,6 @@ def test_staged_planning_resumes_and_preserves_exact_segment_boundaries(
             origin=ProductionDocumentOrigin.AGENT,
         ),
     ).progress
-    with pytest.raises(WorkflowConflictError, match="full timing ledger"):
-        service.complete_storyboard_outline(
-            project_id,
-            StoryboardDraftOutlineCompleteRequest(
-                draft_document_id=begun.draft_ref.artifact_id,
-                base_version_id=first_outline.draft_version_id,
-                timing_audit=full.timing_audit,
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
 
     service = _service(tmp_path)
     full_outline = service.append_storyboard_outline_segment(
@@ -1687,7 +1475,7 @@ def test_ledger_completion_accepts_a_contiguous_integer_partition_per_scene(
     assert completed.phase == StoryboardDraftPhase.OUTLINE_BUILDING
 
 
-def test_ledger_completion_rejects_an_unpartitionable_scene_without_sealing(
+def test_optional_time_notes_do_not_need_a_provider_sized_partition(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -1723,22 +1511,21 @@ def test_ledger_completion_rejects_an_unpartitionable_scene_without_sealing(
         ),
     ).progress
 
-    with pytest.raises(WorkflowConflictError, match="cannot be partitioned"):
-        service.complete_storyboard_ledger(
-            project_id,
-            StoryboardDraftLedgerCompleteRequest(
-                draft_document_id=begun.draft_ref.artifact_id,
-                base_version_id=ledger.draft_version_id,
-                notes=["This failed completion note must not be persisted."],
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
+    service.complete_storyboard_ledger(
+        project_id,
+        StoryboardDraftLedgerCompleteRequest(
+            draft_document_id=begun.draft_ref.artifact_id,
+            base_version_id=ledger.draft_version_id,
+            notes=["Use natural pacing; the provider route will partition as needed."],
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
 
     persisted = service.get_production_document(
         project_id,
         begun.draft_ref.artifact_id,
     )
-    assert persisted.document.current_version_id == ledger.draft_version_id
+    assert persisted.document.current_version_id != ledger.draft_version_id
     content = StoryboardDraftContent.model_validate(persisted.version.payload)
-    assert content.phase == StoryboardDraftPhase.LEDGER_BUILDING
-    assert "This failed completion note must not be persisted." not in content.timing_notes
+    assert content.phase == StoryboardDraftPhase.OUTLINE_BUILDING
+    assert "Use natural pacing; the provider route will partition as needed." in content.timing_notes

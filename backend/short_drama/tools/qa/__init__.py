@@ -285,7 +285,14 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
             id="qa.review_episode",
             version=1,
             category=ToolCategory.QA,
-            description="Review the current episode timeline and persist the result.",
+            description=(
+                "Optionally review narrative continuity in the current episode from persisted "
+                "visual evidence. Reuse an existing report unless new evidence needs review; "
+                "Saved Studio editorial clips, timing, transforms, layers and subtitles take precedence "
+                "over a legacy TimelineManifest. Source Take contact sheets are not composited export frames. "
+                "findings do not gate editing or export. This does not listen to the soundtrack. "
+                "A failed stage returns its saved progress for the Agent to decide what to do next."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=QaReviewEpisodeInput,

@@ -342,11 +342,11 @@ class AudioInspector:
             ),
             None,
         )
-        if script is None:
+        if script is None and any(cue.script_line_id for cue in manifest.subtitle_cues):
             raise MediaGenerationError(
                 f"Manifest script version is missing: {manifest.script_version_id}"
             )
-        line_by_id = {line.id: line for line in script.lines}
+        line_by_id = {line.id: line for line in script.lines} if script else {}
         clip_inspections: list[AudioClipInspection] = []
         issues: list[QaIssue] = []
         warnings: list[str] = []
@@ -513,7 +513,7 @@ class AudioInspector:
             id=report_id,
             project_id=document.project.id,
             manifest_id=manifest.id,
-            source_script_version_id=script.id,
+            source_script_version_id=script.id if script else manifest.script_version_id,
             semantic_status=semantic_status,
             semantic_provider=(
                 semantic_service.provider if semantic_service is not None else None

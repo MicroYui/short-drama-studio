@@ -192,9 +192,13 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             description=(
                 "在所需视图已分别生成或导入且 Agent 明确选定源版本后，"
                 "将 2–9 张本地图片确定性拼成角色、场景或轻量参考板。"
+                "普通 LIGHTWEIGHT 拼板允许不同对象采用相同视图，按真实图片标注即可。"
+                "普通网格的 layout_profile 留空（null），用 columns 指定列数；"
+                "LIGHTWEIGHT_SINGLE 只用于单格。"
                 "它适合最终参考卡需要像素级分区、固定语义槽、可重复裁切"
                 "或统一背景时使用，避免让概率生成器为微小几何偏差反复返修。"
-                "它不生成缺失视图、不判断一致性，输出仍是需验收的 DRAFT。"
+                "它不生成缺失视图、不判断一致性。输出保存为 DRAFT，"
+                "Agent 可以明确选用，并按实际疑问决定是否检查。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,
@@ -238,9 +242,13 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             description=(
                 "为 presentation_mode=SCREEN_CONTENT_PLATE 的资产在本地"
                 "确定性排版菜价、金额、姓名、标题或文件条款。title "
-                "与 exact_lines 必须逐项完整匹配 brief.required_visible_text；"
-                "同一物理母版上的不同文案分别保存为独立 TEXT_PLATE，"
+                "与 exact_lines 的合并文案须保持 brief.required_visible_text 的字符和顺序，"
+                "可在标题、正文之间重新分行。不同文案可以分别保存为 TEXT_PLATE，"
                 "本 Tool 不调用图像 Provider，输出可追溯的 PNG DRAFT。"
+                "background_color=#00000000 保留透明通道；content_box 明确指定"
+                "归一化 x/y/宽/高文字区域，text_align、vertical_align 和描边参数"
+                "控制实际排版，layout_description 只记录说明。透明图版可通过"
+                " timeline.add_asset_overlay 直接叠加到当前视频，不需要 ComfyUI。"
             ),
             effect=ToolEffect.WRITE,
             idempotent=False,

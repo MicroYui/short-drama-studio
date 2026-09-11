@@ -5,7 +5,7 @@ from __future__ import annotations
 from short_drama.skill_ids import SkillIds
 
 from typing import Literal
-from pydantic import Field, JsonValue
+from pydantic import Field, JsonValue, model_validator
 
 from short_drama.models import DomainModel, ProjectAggregate, ProjectRecord, ShotPlan, ScriptLine
 
@@ -26,6 +26,13 @@ class StudioSceneSave(DomainModel):
     expected_text: str | None = None
     lines: list[ScriptLine] | None = None
     summary: str | None = None
+    target_duration_seconds: float | None = Field(default=None, gt=0)
+    narrative_purpose: str | None = None
+    affected_shot_ids: list[str] | None = Field(default=None, description=(
+        "After reading current shots, identify which shots need a visual update for this scene edit. "
+        "Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. "
+        "Shots using changed structured dialogue are always included."
+    ))
 
 
 class StudioShotSave(DomainModel):
@@ -33,10 +40,26 @@ class StudioShotSave(DomainModel):
     expected_revision: int = Field(ge=1)
 
 
+class StudioSceneOutline(DomainModel):
+    heading: str = Field(min_length=1, max_length=240)
+    narrative_purpose: str = Field(min_length=1, max_length=2000)
+    target_duration_seconds: float | None = Field(default=None, gt=0)
+
+
 class StudioTimelineSave(DomainModel):
     timeline: dict[str, JsonValue]
     expected_revision: int = Field(default=0, ge=0)
     anchor_clip_id: str | None = None
+
+    @model_validator(mode="after")
+    def accept_editor_project(self) -> StudioTimelineSave:
+        # The reader exposes the editor project directly as well as in a saved
+        # timeline record. Both forms describe the same content.
+        if ("project" not in self.timeline
+                and isinstance(self.timeline.get("timelines"), list)
+                and isinstance(self.timeline.get("assets"), list)):
+            self.timeline = {"project": self.timeline}
+        return self
 
 
 class EditorialClipChange(DomainModel):
@@ -58,9 +81,67 @@ class StudioEditorialEdit(DomainModel):
     anchor_clip_id: str | None = None
 
 
+class StudioAssetOverlay(DomainModel):
+    expected_revision: int = Field(ge=0)
+    overlay_id: str = Field(min_length=1, max_length=200, description="Stable ID for this placed graphic; repeating the same placement does not duplicate it.")
+    asset_version_id: str = Field(min_length=1)
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    duration_seconds: float = Field(gt=0, allow_inf_nan=False)
+    shot_id: str | None = None
+    anchor_clip_id: str | None = None
+
+
 class StudioMutationResult(DomainModel):
     project: ProjectAggregate
     notices: list[str] = Field(default_factory=list[str])
+
+
+class StudioTextChangeInput(DomainModel):
+    target: Literal["scene", "shot"]
+    target_id: str
+    field: str = Field(description="scene: screenplay_text/heading/summary; shot: visual/camera/framing/audio_intent or timeline_beats.<zero-based index>.<text field>")
+    title: str = Field(min_length=1, max_length=160)
+    before: str = Field(min_length=1, max_length=50000, description="Exact, uniquely identifiable text in the current field. Include enough surrounding text to disambiguate.")
+    after: str = Field(max_length=50000)
+    explanation: str = Field(default="", max_length=2000)
+    lines: list[ScriptLine] | None = Field(default=None, description="Only changed/new dialogue lines from this edit. Keep stable IDs. On acceptance, other lines remain unchanged.")
+    affected_shot_ids: list[str] | None = Field(default=None, description=(
+        "For a scene edit, identify affected shots after reading their current content. "
+        "Unlisted shots in that scene keep their current media and manual edits. "
+        "Omit if the impact is unknown; use [] for no visual change. "
+        "Shots using changed dialogue are always included."
+    ))
+
+
+class StudioTextChange(StudioTextChangeInput):
+    id: str
+    status: Literal["pending", "accepted", "rejected"] = "pending"
+    decided_at: str | None = None
+
+
+class StudioChangeRequest(DomainModel):
+    title: str = Field(min_length=1, max_length=160)
+    summary: str = Field(default="", max_length=2000)
+    items: list[StudioTextChangeInput] = Field(min_length=1, max_length=30)
+
+
+class StudioChangeSet(DomainModel):
+    id: str
+    project_id: str
+    run_id: str | None = None
+    title: str
+    summary: str = ""
+    items: list[StudioTextChange]
+    created_at: str
+
+
+class StudioChangeDecision(DomainModel):
+    decision: Literal["accept", "reject"]
+
+
+class StudioChangeResult(DomainModel):
+    change: StudioChangeSet
+    project: ProjectAggregate
 
 
 class StudioRename(DomainModel):
@@ -110,11 +191,15 @@ class StudioWorker(DomainModel):
     id: str
     run_id: str
     role: str
+    skill_role: str | None = None
+    stage: str | None = None
     objective: str
     status: str
     next_owner: str | None = None
     summary: str | None = None
     tool_turns: int = 0
+    latest_tool: str | None = None
+    latest_reason: str | None = None
 
 
 class StudioActivity(DomainModel):

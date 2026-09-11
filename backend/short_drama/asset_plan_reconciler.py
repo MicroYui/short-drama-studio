@@ -278,7 +278,7 @@ def assess_asset_plan_execution_contract(
                         work_item_ids=incompatible_supplemental_ids,
                         detail=(
                             "Supplemental outputs are not explicitly derived from the "
-                            "subject's canonical work item or completed approved version."
+                            "subject's canonical work item or explicitly selected completed version."
                         ),
                     )
                 )

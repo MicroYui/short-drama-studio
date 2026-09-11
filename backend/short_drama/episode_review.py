@@ -8,7 +8,7 @@ import mimetypes
 from pathlib import Path
 from uuid import uuid4
 
-from pydantic import Field, model_validator
+from pydantic import Field, JsonValue, model_validator
 
 from short_drama.models import (
     DomainModel,
@@ -79,6 +79,7 @@ def review_scene(
     takes_by_id: dict[str, Take],
     latest_inspection_by_take: dict[str, VideoInspectionReport],
     client: LanguageProviderClient,
+    editorial_project: dict[str, JsonValue] | None = None,
 ) -> SceneEpisodeReview:
     shot_ids = [shot.id for shot in shots]
     clip_by_shot = {item.shot_id: item for item in manifest.video_clips}
@@ -159,13 +160,13 @@ def review_scene(
     instructions = (
         "你是当前视频制作媒介中的场景级成片审校 Agent。"
         f"{skill_prompt.text} 只返回 JSON，并严格匹配 SceneReviewAgentOutput。请基于已经剪成的"
-        "场景进行审校，使用已锁定的场景意图、按时间顺序排列的 ShotPlan、已选 Take、时间线片段"
+        "场景进行审校，使用当前采用的场景意图、按时间顺序排列的 ShotPlan、已选 Take、时间线片段"
         "以及已持久化的视频观察。先陈述证据，再作推断。不要给场景打分，不要要求固定的节拍"
         "数量，不要要求每隔固定时间出现新信息，也不要把润色偏好当作问题。只有出现具体矛盾、"
         "缺失的因果环节、无法读懂的叙事动作、状态不连续，或画面证据明显无法支撑当前时长时，"
         "才形成 finding。LOW 和 MEDIUM 级 finding 只作为建议。只有当关联镜头能够在不改写周边"
         "剧情的前提下合理地局部重生成时，才设置 repair_recommended。不要执行语音转写、音色身份"
-        "或音频质量 QA。只有现有画面证据或已锁定的声音意图表明发声主体错误时，才可使用 "
+        "或音频质量 QA。只有现有画面证据或当前声音意图表明发声主体错误时，才可使用 "
         "SOUND_SOURCE_SEMANTICS。所有 finding 都可以被忽略，且绝不阻塞导出。"
     )
     payload = {
@@ -186,11 +187,19 @@ def review_scene(
             "只依据提供的场景与制作证据。"
         ),
     }
+    if editorial_project is not None:
+        from short_drama.studio_episode_review import editorial_scene_context
+        payload["saved_editorial_scene"] = editorial_scene_context(editorial_project, shot_ids)
+        payload["visual_evidence_scope"] = (
+            "当前时间、取用范围、变速、倒放、图层和字幕以 saved_editorial_scene 为准。"
+            "图片是源 Take 的观察联系表，不是当前剪辑合成画面；不能凭它断言剪辑图版缺失、"
+            "合成排版正确或变速后画面已通过检查。完整合成需查看当前修订的实际导出。"
+        )
     output = client.generate_text(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
         image_urls=image_urls or None,
-        max_output_tokens=5000,
+        max_output_tokens=16_000,
     )
     parsed = SceneReviewAgentOutput.model_validate_json(_strip_json_fence(output))
     allowed_scenes = {scene.id}
@@ -239,7 +248,7 @@ def review_episode(
     )
     instructions = (
         "你是当前视频制作媒介中的整集审校 Agent。"
-        f"{skill_prompt.text} 只返回 JSON，并严格匹配 EpisodeReviewAgentOutput。请对照已锁定剧本、"
+        f"{skill_prompt.text} 只返回 JSON，并严格匹配 EpisodeReviewAgentOutput。请对照当前剧本、"
         "各场景的进入与退出状态、时间线顺序以及相互独立的场景审校结果。只识别这些产物能够支持的"
         "跨场景或整集问题，包括故事是否清楚、因果是否顺利交接、人物或道具状态是否连续、已有画面"
         "观察支持的声音来源语义，以及具体剪辑内容造成的节奏问题。除非合并多个场景 finding 会改变"
@@ -271,7 +280,7 @@ def review_episode(
     output = client.generate_text(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
-        max_output_tokens=6000,
+        max_output_tokens=16_000,
     )
     parsed = EpisodeReviewAgentOutput.model_validate_json(_strip_json_fence(output))
     findings = [

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ArrowRight, FileUp, Plus, Save, Sparkles } from 'lucide-react'
+import { ArrowRight, FileUp, Plus, Save, Sparkles, Pencil } from 'lucide-react'
 import type { ProjectAggregate } from './api'
 import { currentScript, durationLabel } from './studio-content'
 import { StudioApi, type ScriptScene, type StudioScope } from './studio-api'
@@ -23,12 +23,12 @@ function SceneEditor({ scene, index, projectId, onProject, onScope, onAsk, onErr
   return <section className="sd-scene" id={`script-${scene.id}`} onFocus={() => onScope(scope)}>
     <div className="sd-scene-title"><span className="sd-scene-number">{String(index + 1).padStart(2, '0')}</span><div>
       {draft ? <input aria-label={`场次 ${index + 1} 标题`} value={draft.heading} onChange={event => setDraft({ ...draft, heading: event.target.value })} /> : <h3>{scene.heading}</h3>}
-      <span>{scene.target_duration_seconds ? `约 ${durationLabel(scene.target_duration_seconds)}` : '完整场次'}{scene.narrative_purpose ? ` · ${scene.narrative_purpose}` : ''}</span>
-    </div><button className="sd-icon" aria-label={`请 Agent 修改场次 ${index + 1}`} title="请 Agent 修改这个场次" onClick={() => { onScope(scope); onAsk('', scope) }}><Sparkles size={16} /></button></div>
+      <span title={scene.narrative_purpose || undefined}>{scene.target_duration_seconds ? `约 ${durationLabel(scene.target_duration_seconds)}` : '完整场次'}{scene.narrative_purpose ? ` · ${scene.narrative_purpose}` : ''}</span>
+    </div>{!draft && <button className="sd-text-button" aria-label={`编辑场次 ${index + 1} 正文`} onClick={() => { setDraft({ heading: scene.heading, text: scene.screenplay_text, base: scene.screenplay_text }); onScope(scope) }}><Pencil size={13} />编辑</button>}<button className="sd-icon" aria-label={`请 Agent 修改场次 ${index + 1}`} title="请 Agent 修改这个场次" onClick={() => { onScope(scope); onAsk('', scope) }}><Sparkles size={16} /></button></div>
     {draft ? <><textarea className="sd-screenplay-editor" aria-label={`场次 ${index + 1} 正文`} value={draft.text} onChange={event => setDraft({ ...draft, text: event.target.value })} style={{ minHeight: Math.min(680, Math.max(220, draft.text.split('\n').length * 26 + 60)) }} />
       {conflict && <p className="sd-inline-notice">这个场次刚有新内容。你的编辑已保留，可查看最新正文后合并。<button onClick={() => { if (draft) setDraft({ ...draft, base: scene.screenplay_text }) }}>我已对照最新正文</button><details><summary>查看最新正文</summary><pre>{scene.screenplay_text}</pre></details></p>}
       <div className="sd-editor-actions"><button className="sd-text-button" onClick={() => setDraft(null)}>取消编辑</button><button className="sd-button sd-primary" disabled={saving || !!conflict || !draft.heading.trim()} onClick={() => void save()}><Save size={14} />{saving ? '正在保存…' : '保存场次'}</button></div>
-    </> : <button className="sd-screenplay" aria-label={`编辑场次 ${index + 1} 正文`} onClick={() => { setDraft({ heading: scene.heading, text: scene.screenplay_text, base: scene.screenplay_text }); onScope(scope) }}>{scene.screenplay_text || <span className="sd-hint">点击开始写这一场…</span>}</button>}
+    </> : <div className="sd-screenplay">{scene.screenplay_text || <span className="sd-hint">场次已安排，正文尚未写入。</span>}</div>}
   </section>
 }
 

@@ -545,7 +545,7 @@ def test_cross_project_character_master_clone_keeps_authoritative_lineage(
     ) == [(source_project_id, source_version_id)]
 
 
-def test_canonical_pack_role_cannot_be_faked_by_a_supplement(
+def test_canonical_pack_role_uses_an_explicitly_selected_subject_image(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -608,7 +608,7 @@ def test_canonical_pack_role_cannot_be_faked_by_a_supplement(
         purpose=AssetReviewPurpose.SUPPLEMENTAL_REFERENCE,
     )
 
-    for fake_version_id in (same_asset_supplement_id, other_version_id):
+    for fake_version_id in (other_version_id,):
         with pytest.raises(WorkflowConflictError, match="CANONICAL_MASTER"):
             service.add_reference_pack_entry(
                 project_id,
@@ -619,6 +619,15 @@ def test_canonical_pack_role_cannot_be_faked_by_a_supplement(
                     description="Must not masquerade as the canonical master.",
                 ),
             )
+
+    selected_supplement = service.add_reference_pack_entry(
+        project_id, ReferencePackEntryCreateRequest(
+            subject_asset_id=subject.id, asset_version_id=same_asset_supplement_id,
+            role=ReferenceRole.CANONICAL_MASTER,
+            description="Explicitly use this image of the same subject as a master.",
+        ),
+    )
+    assert selected_supplement.entry.asset_version_id == same_asset_supplement_id
 
     truthful = service.add_reference_pack_entry(
         project_id,

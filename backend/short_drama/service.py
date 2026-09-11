@@ -12,7 +12,6 @@ import math
 import shutil
 import threading
 from copy import deepcopy
-from decimal import Decimal
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -229,7 +228,6 @@ from short_drama.models import (
     MusicAnalysisRequest,
     MusicAnalysisResponse,
     OperationKind,
-    OriginType,
     OutputSpec,
     PlanningOutlineSnapshot,
     PlanningReviewSnapshot,
@@ -343,6 +341,7 @@ from short_drama.production_contracts import (
     AssetWorkSourceIntake,
     AssetWorkStoryboardSlice,
     apply_asset_plan_field_patches,
+    asset_plan_field_patch_target,
     GenerationPlanCompileRequest,
     GenerationPlanContent,
     GenerationPlanMutationResponse,
@@ -358,8 +357,6 @@ from short_drama.production_contracts import (
     ProductionSpecMutationResponse,
     ProductionSpecReadResponse,
     ProductionSpecReplaceRequest,
-    StoryboardClipGroupDraft,
-    StoryboardClipGroupOutline,
     StoryboardContent,
     StoryboardCreateRequest,
     StoryboardDraftAppendRequest,
@@ -395,6 +392,7 @@ from short_drama.production_contracts import (
     invalidate_project_output_slot,
     production_document_payload,
 )
+from short_drama.generation_plan_state import validate_generation_units_current
 from short_drama.observability import log_provider_task_transition
 from short_drama.production_planner import (
     EpisodeOutline,
@@ -755,6 +753,7 @@ class ShortDramaService:
         ),
     ) -> None:
         self.repository = ShortDramaRepository(database_path)
+        self._lock = threading.RLock()
         self.workspace_root = workspace_root
         self.media_renderer = MockMediaRenderer(workspace_root)
         self.exporter = TimelineExporter(workspace_root)
@@ -783,6 +782,7 @@ class ShortDramaService:
             workspace_root=workspace_root,
             config_store=self.image_config,
             provider_factory=image_provider_factory or default_image_provider_factory,
+            lock=self._lock,
         )
         self.language_config = LanguageProviderConfigStore(
             database_path.parent / "short-drama-language-provider-settings.json"
@@ -796,7 +796,6 @@ class ShortDramaService:
         self.stock_asset_client = stock_asset_client or RequestsStockAssetSearchClient(
             self.stock_config
         )
-        self._lock = threading.RLock()
         self.studio = StudioWorkspaceService(self, lock=self._lock)
         self._planning_run_locks: dict[str, threading.Lock] = {}
         self.tool_registry = build_default_tool_registry(self, registry=tool_registry)
@@ -906,7 +905,9 @@ class ShortDramaService:
             request = request.model_copy(update={"max_actions": 1})
         return self.production_manager.advance(run_id, request)
 
-    def advance_agent_team(self, run_id: str) -> TeamExecutionBatch:
+    def advance_agent_team(self, run_id: str, *, continue_until_handoff: bool = False) -> TeamExecutionBatch:
+        if continue_until_handoff:
+            return self.team_executor.drain_ready_work_until_handoff(run_id)
         return self.team_executor.run_ready_work(run_id)
 
     def get_agent_work_order(self, work_order_id: str) -> AgentWorkOrderView:
@@ -4471,7 +4472,9 @@ class ShortDramaService:
         if source_version is None:
             raise ArtifactNotFoundError(request.source_version_id)
         if (
-            source_version.approval_status != ApprovalStatus.APPROVED
+            source_version.approval_status not in {
+                ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+            }
             or source_version.freshness != Freshness.CURRENT
             or source_version.media_type != AssetMediaType.IMAGE
             or (
@@ -4480,7 +4483,7 @@ class ShortDramaService:
             )
         ):
             raise WorkflowConflictError(
-                "Only a usable current approved catalog image can be imported"
+                "Only a current usable catalog image can be imported"
             )
         target_asset: Asset
         if request.target_asset_id is None:
@@ -4954,17 +4957,20 @@ class ShortDramaService:
         return self.language_provider_factory(api_key, base_url)
 
     @staticmethod
-    def _require_approved_voice_audio(asset: Asset) -> AssetVersion:
-        if asset.kind != AssetKind.REFERENCE or asset.approved_version_id is None:
+    def _require_usable_voice_audio(asset: Asset) -> AssetVersion:
+        if asset.kind != AssetKind.REFERENCE:
             raise WorkflowConflictError(
-                "A character voice reference needs an approved REFERENCE audio asset"
+                "A character voice reference needs a REFERENCE audio asset"
             )
         version = next(
             (
                 item
                 for item in asset.versions
-                if item.id == asset.approved_version_id
-                and item.approval_status == ApprovalStatus.APPROVED
+                if item.id == asset.current_version_id
+                and item.approval_status in {
+                    ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                }
+                and item.freshness == Freshness.CURRENT
                 and item.media_type == AssetMediaType.AUDIO
                 and (item.local_path is not None or item.external_url is not None)
             ),
@@ -4972,7 +4978,7 @@ class ShortDramaService:
         )
         if version is None:
             raise WorkflowConflictError(
-                "A character voice reference needs an approved audio version"
+                "A character voice reference needs a current usable audio version"
             )
         if version.local_path is not None:
             path = Path(version.local_path).expanduser().resolve()
@@ -4994,18 +5000,20 @@ class ShortDramaService:
     ) -> H3MediaInput:
         _asset, version = self._find_asset_version(document, version_id)
         if (
-            version.approval_status != ApprovalStatus.APPROVED
+            version.approval_status not in {
+                ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+            }
             or version.freshness != Freshness.CURRENT
             or version.media_type != AssetMediaType.IMAGE
         ):
             raise WorkflowConflictError(
-                f"AssetVersion {version.id} is not a current approved image"
+                f"AssetVersion {version.id} is not a current usable image"
             )
         if version.local_path is not None:
             path = Path(version.local_path).expanduser().resolve()
             if not path.is_file():
                 raise WorkflowConflictError(
-                    f"Approved image AssetVersion {version.id} is missing its local media"
+                    f"Image AssetVersion {version.id} is missing its local media"
                 )
             source = H3MediaSource(local_path=str(path))
         elif version.external_url is not None:
@@ -5066,7 +5074,7 @@ class ShortDramaService:
         document: ProjectDocument,
         preparation: H3RouteAssetPreparation,
     ) -> bool:
-        """Check that every source used to author a boundary frame is still approved."""
+        """Check that every selected source is still available for this preparation."""
 
         versions = {
             version.id: (asset, version)
@@ -5077,14 +5085,12 @@ class ShortDramaService:
             resolved = versions.get(version_id)
             if resolved is None:
                 return False
-            asset, version = resolved
+            _asset, version = resolved
             if (
-                version.approval_status != ApprovalStatus.APPROVED
+                version.approval_status not in {
+                    ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                }
                 or version.freshness != Freshness.CURRENT
-                or (
-                    version.media_type != AssetMediaType.IMAGE
-                    and asset.approved_version_id != version.id
-                )
             ):
                 return False
         return True
@@ -5476,10 +5482,9 @@ class ShortDramaService:
                     operation="ledger append",
                 )
             )
-            if current.phase != StoryboardDraftPhase.LEDGER_BUILDING:
+            if current.committed_groups:
                 raise WorkflowConflictError(
-                    "Timing-ledger segments can only be appended while the draft "
-                    "is in LEDGER_BUILDING"
+                    "Timing notes cannot replace authored groups; edit the relevant group directly"
                 )
             for entry in request.entries:
                 self._validate_storyboard_source_range(
@@ -5491,6 +5496,7 @@ class ShortDramaService:
                 revised = StoryboardDraftContent.model_validate(
                     {
                         **current.model_dump(mode="json"),
+                        "phase": StoryboardDraftPhase.LEDGER_BUILDING,
                         "timing_ledger": [
                             *[
                                 item.model_dump(mode="json")
@@ -5555,7 +5561,6 @@ class ShortDramaService:
                     "The storyboard ledger can only be completed from "
                     "LEDGER_BUILDING"
                 )
-            self._validate_storyboard_ledger_partition_feasibility(current)
             try:
                 revised = StoryboardDraftContent.model_validate(
                     {
@@ -5705,29 +5710,6 @@ class ShortDramaService:
                     request.timing_audit.computed_episode_duration_s,
                 )
             )
-            if request.timing_audit.alignment != expected_alignment:
-                raise WorkflowConflictError(
-                    "Timing-audit alignment does not match the bound "
-                    "ProductionSpec DurationContract"
-                )
-            submitted_difference = request.timing_audit.difference_seconds
-            if (
-                (submitted_difference is None) != (expected_difference is None)
-                or (
-                    submitted_difference is not None
-                    and expected_difference is not None
-                    and not math.isclose(
-                        submitted_difference,
-                        expected_difference,
-                        rel_tol=0.0,
-                        abs_tol=1e-6,
-                    )
-                )
-            ):
-                raise WorkflowConflictError(
-                    "Timing-audit difference_seconds does not match the bound "
-                    "ProductionSpec DurationContract"
-                )
             reconciled_audit = request.timing_audit.model_copy(
                 update={
                     "target_duration_s": (
@@ -5738,20 +5720,11 @@ class ShortDramaService:
                 },
                 deep=True,
             )
-            next_phase = (
-                StoryboardDraftPhase.DURATION_RECONCILIATION
-                if expected_alignment
-                in {
-                    DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
-                    DurationAlignment.UNRESOLVED,
-                }
-                else StoryboardDraftPhase.GROUP_AUTHORING
-            )
             try:
                 revised = StoryboardDraftContent.model_validate(
                     {
                         **current.model_dump(mode="json"),
-                        "phase": next_phase,
+                        "phase": StoryboardDraftPhase.GROUP_AUTHORING,
                         "timing_audit": reconciled_audit.model_dump(mode="json"),
                         "notes": [*current.notes, *request.notes],
                     }
@@ -5930,7 +5903,7 @@ class ShortDramaService:
         project_id: str,
         request: StoryboardDraftGroupReplaceRequest,
     ) -> StoryboardDraftMutationResponse:
-        """Replace one committed planned group while retaining its ledger slot."""
+        """Replace one group while preserving unrelated content."""
 
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
@@ -5953,15 +5926,6 @@ class ShortDramaService:
             current_version = self._production_document_version(draft_document)
             current = self._parse_storyboard_draft(current_version)
             self._validate_storyboard_draft(document, current)
-            if current.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
-                raise WorkflowConflictError(
-                    "Storyboard verification cannot be recorded while the draft "
-                    "requires duration reconciliation"
-                )
-            if current.phase != StoryboardDraftPhase.GROUP_AUTHORING:
-                raise WorkflowConflictError(
-                    "Storyboard groups can only be replaced during GROUP_AUTHORING"
-                )
             self._validate_storyboard_work_unit(document, current, request.work_unit)
             self._validate_storyboard_source_range(
                 document,
@@ -5978,23 +5942,9 @@ class ShortDramaService:
                     "Storyboard draft replacement requires an already committed "
                     f"ClipGroup {request.replaced_clip_group_id}"
                 )
-            planned = next(
-                (
-                    item
-                    for item in current.planned_clip_groups
-                    if item.id == request.replaced_clip_group_id
-                ),
-                None,
-            )
-            if planned is None:
-                raise WorkflowConflictError(
-                    "Storyboard draft replacement has no sealed planned ClipGroup "
-                    f"{request.replaced_clip_group_id}"
-                )
-            canonical_group = self._canonical_storyboard_group_for_planned_slot(
-                request.group,
-                planned,
-            )
+            canonical_group = request.group.model_copy(deep=True)
+            if canonical_group.clip_group.id != request.replaced_clip_group_id:
+                raise WorkflowConflictError("A group edit must preserve the target group ID")
             if any(shot.project_id != project_id for shot in request.group.shots):
                 raise WorkflowConflictError(
                     "Storyboard draft replacement Shots must belong to the "
@@ -6008,6 +5958,7 @@ class ShortDramaService:
                 revised = StoryboardDraftContent.model_validate(
                     {
                         **current.model_dump(mode="json"),
+                        "phase": StoryboardDraftPhase.GROUP_AUTHORING,
                         "committed_groups": [
                             item.model_dump(mode="json") for item in revised_groups
                         ],
@@ -6192,11 +6143,6 @@ class ShortDramaService:
             )
             draft = self._parse_storyboard_draft(draft_version)
             self._validate_storyboard_draft(document, draft)
-            if draft.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
-                raise WorkflowConflictError(
-                    "Storyboard finalization is unavailable while the draft requires "
-                    "duration reconciliation"
-                )
 
             storyboard_document: ProductionDocument | None = None
             current_storyboard_version: ProductionDocumentVersion | None = None
@@ -6455,7 +6401,9 @@ class ShortDramaService:
                 storyboard = apply_storyboard_patch(current, request)
             except ValueError as exc:
                 raise WorkflowConflictError(str(exc)) from exc
-            self._validate_storyboard(document, storyboard)
+            self._validate_storyboard(
+                document, storyboard, require_current_sources=not current_content_edit,
+            )
             changed_shot_ids = self._changed_storyboard_shot_ids(current, storyboard)
             now = utc_now()
             result = self._revise_production_document_locked(
@@ -6600,42 +6548,23 @@ class ShortDramaService:
                     "Project current ProjectBibleVersion is missing"
                 )
 
-            spec_document = self._managed_project_document(
-                document,
-                document.production_spec_document_id,
-                PRODUCTION_SPEC_DOCUMENT_KIND,
-            )
-            spec_version = self._production_document_version(spec_document, None)
-            production_spec = self._parse_production_spec(spec_version)
-            storyboard_document = self._managed_project_document(
-                document,
-                document.storyboard_document_id,
-                STORYBOARD_DOCUMENT_KIND,
-            )
-            storyboard_version = self._production_document_version(
-                storyboard_document,
-                None,
-            )
-            storyboard = self._parse_storyboard(storyboard_version)
-
-            if (
-                production_spec.script_version_id != script.id
-                or production_spec.bible_version_id != bible.id
-            ):
-                raise WorkflowConflictError(
-                    "Current ProductionSpec does not reference the current ScriptVersion "
-                    "and ProjectBibleVersion"
-                )
-            if (
-                storyboard.script_version_id != script.id
-                or storyboard.bible_version_id != bible.id
-                or storyboard.production_spec_document_id != spec_document.id
-                or storyboard.production_spec_version_id != spec_version.id
-            ):
-                raise WorkflowConflictError(
-                    "Current Storyboard does not reference the current ScriptVersion, "
-                    "ProjectBibleVersion and ProductionSpec"
-                )
+            spec_document = (self._managed_project_document(document, document.production_spec_document_id,
+                PRODUCTION_SPEC_DOCUMENT_KIND) if document.production_spec_document_id else None)
+            spec_version = self._production_document_version(spec_document) if spec_document else None
+            production_spec = self._parse_production_spec(spec_version) if spec_version else None
+            storyboard_document = (self._managed_project_document(document, document.storyboard_document_id,
+                STORYBOARD_DOCUMENT_KIND) if document.storyboard_document_id else None)
+            storyboard_version = self._production_document_version(storyboard_document) if storyboard_document else None
+            storyboard = self._parse_storyboard(storyboard_version) if storyboard_version else None
+            notes: list[str] = []
+            if production_spec is None:
+                notes.append("尚未建立制作计划，可依据当前剧本、Bible 和已导入参考准备核心资产。")
+            elif production_spec.script_version_id != script.id or production_spec.bible_version_id != bible.id:
+                notes.append("制作计划引用较早正文；当前剧本和 Bible 已返回，请按实际受影响内容调整。")
+            if storyboard is None:
+                notes.append("尚无正式分镜；核心人物和场景制作不依赖完整分镜。")
+            elif storyboard.script_version_id != script.id or storyboard.bible_version_id != bible.id:
+                notes.append("分镜引用较早正文；现有素材保留，后续镜头引用以当前内容为准。")
 
             source_intake: list[AssetPlanningSourceIntake] = []
             source_asset_ids: set[str] = set()
@@ -6738,13 +6667,13 @@ class ShortDramaService:
                 original_user_brief=document.project.input_text,
                 script=script.model_copy(deep=True),
                 bible=bible.model_copy(deep=True),
-                production_spec_identity=AssetWorkContextVersion(
+                production_spec_identity=None if spec_document is None or spec_version is None else AssetWorkContextVersion(
                     document_id=spec_document.id,
                     version_id=spec_version.id,
                     version=spec_version.version,
                 ),
                 production_spec=production_spec,
-                storyboard_identity=AssetWorkContextVersion(
+                storyboard_identity=None if storyboard_document is None or storyboard_version is None else AssetWorkContextVersion(
                     document_id=storyboard_document.id,
                     version_id=storyboard_version.id,
                     version=storyboard_version.version,
@@ -6753,6 +6682,7 @@ class ShortDramaService:
                 source_intake=source_intake,
                 existing_assets=existing_assets,
                 existing_asset_plan_index=existing_asset_plan_index,
+                notes=notes,
             )
 
     def get_asset_plan_index(
@@ -7378,30 +7308,6 @@ class ShortDramaService:
                 request.base_version_id,
             )
             current = self._parse_asset_plan(base_version)
-            if request.field_patches:
-                try:
-                    merged = apply_asset_plan_field_patches(
-                        current,
-                        request.field_patches,
-                    )
-                except ValueError as exc:
-                    raise WorkflowConflictError(
-                        f"Merged AssetPlan field patch is structurally invalid: {exc}"
-                    ) from exc
-                if request.notes is not None:
-                    merged = merged.model_copy(
-                        update={"notes": list(request.notes)},
-                        deep=True,
-                    )
-                self._validate_asset_plan(document, merged)
-                return self._persist_asset_plan_patch_locked(
-                    document=document,
-                    production_document=production_document,
-                    base_version_id=request.base_version_id,
-                    merged=merged,
-                    source_artifact_refs=request.source_artifact_refs,
-                    origin=request.origin,
-                )
             current_item_ids = {item.id for item in current.items}
             unknown_removed_item_ids = sorted(
                 set(request.removed_item_ids) - current_item_ids
@@ -7483,18 +7389,55 @@ class ShortDramaService:
                 deep=True,
             )
             try:
-                merged = AssetPlanContent.model_validate(
-                    merged_candidate.model_dump(mode="json")
+                merged = (
+                    apply_asset_plan_field_patches(merged_candidate, request.field_patches)
+                    if request.field_patches
+                    else AssetPlanContent.model_validate(merged_candidate.model_dump(mode="json"))
                 )
             except ValueError as exc:
                 raise WorkflowConflictError(
                     f"Merged AssetPlan patch is structurally invalid: {exc}"
                 ) from exc
-            self._validate_asset_plan(document, merged)
+            persisted_base_id = request.base_version_id
+            if (
+                request.base_version_id != production_document.current_version_id
+                and request.field_patches
+                and not request.upsert_items
+                and not request.work_item_patches
+                and not request.removed_item_ids
+            ):
+                latest_version = self._production_document_version(production_document, None)
+                latest = self._parse_asset_plan(latest_version)
+                if current.model_dump(exclude={"items", "notes"}) != latest.model_dump(exclude={"items", "notes"}):
+                    raise WorkflowConflictError("AssetPlan sources changed while this work was running")
+                for patch in request.field_patches:
+                    old_target = asset_plan_field_patch_target(current, patch)
+                    latest_target = asset_plan_field_patch_target(latest, patch)
+                    intended_target = asset_plan_field_patch_target(merged, patch)
+                    if latest_target != old_target and latest_target != intended_target:
+                        raise WorkflowConflictError(
+                            "AssetPlan selected content changed while this work was running: "
+                            + (patch.work_item_id or patch.item_id or "plan")
+                        )
+                if request.notes is not None and latest.notes not in (current.notes, request.notes):
+                    raise WorkflowConflictError("AssetPlan notes changed while this work was running")
+                pending_patches = [
+                    patch for patch in request.field_patches
+                    if asset_plan_field_patch_target(latest, patch)
+                    != asset_plan_field_patch_target(merged, patch)
+                ]
+                try:
+                    merged = apply_asset_plan_field_patches(latest, pending_patches)
+                except ValueError as exc:
+                    raise WorkflowConflictError(f"Merged AssetPlan field patch is structurally invalid: {exc}") from exc
+                if request.notes is not None:
+                    merged = merged.model_copy(update={"notes": list(request.notes)}, deep=True)
+                persisted_base_id = latest_version.id
+            self._validate_asset_plan(document, merged, require_current_sources=False)
             return self._persist_asset_plan_patch_locked(
                 document=document,
                 production_document=production_document,
-                base_version_id=request.base_version_id,
+                base_version_id=persisted_base_id,
                 merged=merged,
                 source_artifact_refs=request.source_artifact_refs,
                 origin=request.origin,
@@ -7532,7 +7475,9 @@ class ShortDramaService:
                 )
             except AssetPlanReconcileError as exc:
                 raise WorkflowConflictError(str(exc)) from exc
-            self._validate_asset_plan(document, reconciled.asset_plan)
+            self._validate_asset_plan(
+                document, reconciled.asset_plan, require_current_sources=False
+            )
             persisted = self._persist_asset_plan_patch_locked(
                 document=document,
                 production_document=production_document,
@@ -8237,20 +8182,8 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "ProductionSpec must reference the current ProjectBibleVersion"
             )
-        current_script = self._current_script(project_document)
-        story_duration_contract = (
-            None
-            if current_script.story_intent is None
-            else current_script.story_intent.duration_contract
-        )
-        if (
-            story_duration_contract is not None
-            and production_spec.duration_contract != story_duration_contract
-        ):
-            raise WorkflowConflictError(
-                "ProductionSpec DurationContract must match the current "
-                "ScriptVersion StoryIntent DurationContract"
-            )
+        # Production timing is the Agent's current plan. A previous writing
+        # estimate must not prevent a new user-directed duration from being used.
         if production_spec.duration_contract.authority == DurationAuthority.AUDIO_LED:
             _master_document, master_version, binding = (
                 self._current_master_audio_binding(project_document)
@@ -8288,8 +8221,6 @@ class ShortDramaService:
         )
         if contract.authority != DurationAuthority.TARGET_LED:
             return DurationAlignment.NOT_APPLICABLE, difference
-        if contract.target_seconds is None:
-            return DurationAlignment.UNRESOLVED, None
         accepted = contract.acceptable_range_seconds
         if accepted is None:
             return DurationAlignment.UNRESOLVED, difference
@@ -8309,18 +8240,34 @@ class ShortDramaService:
         self,
         project_document: ProjectDocument,
     ) -> list[ProductionDocumentArtifactRef]:
-        script = self._current_script(project_document)
+        return self._story_source_refs(
+            project_document,
+            script_version_id=project_document.project.current_script_version_id,
+            bible_version_id=project_document.project.current_bible_version_id,
+        )
+
+    def _story_source_refs(
+        self,
+        project_document: ProjectDocument,
+        *,
+        script_version_id: str | None,
+        bible_version_id: str | None,
+    ) -> list[ProductionDocumentArtifactRef]:
+        script = next((item for item in project_document.script_versions
+                       if item.id == script_version_id), None)
+        if script is None:
+            raise WorkflowConflictError("Referenced ScriptVersion is missing")
         bible = next(
             (
                 item
                 for item in project_document.bible_versions
-                if item.id == project_document.project.current_bible_version_id
+                if item.id == bible_version_id
             ),
             None,
         )
         if bible is None:
             raise WorkflowConflictError(
-                "Project current ProjectBibleVersion is missing"
+                "Referenced ProjectBibleVersion is missing"
             )
         return [
             ProductionDocumentArtifactRef(
@@ -8614,41 +8561,9 @@ class ShortDramaService:
         current: StoryboardDraftContent,
         request: StoryboardDraftAppendRequest,
     ) -> StoryboardDraftContent:
-        """Validate one next planned group and return the simulated new draft."""
+        """Validate current group content and return the updated draft."""
 
-        if current.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
-            raise WorkflowConflictError(
-                "Detailed ClipGroups cannot be appended while the draft requires "
-                "duration reconciliation"
-            )
-        if current.phase != StoryboardDraftPhase.GROUP_AUTHORING:
-            raise WorkflowConflictError(
-                "Detailed ClipGroups can only be authored after the ledger and "
-                "outline are complete"
-            )
-        scene_order = {item.id: item.sequence for item in current.scene_nodes}
-        ordered_plans = sorted(
-            current.planned_clip_groups,
-            key=lambda item: (
-                scene_order[item.scene_node_id],
-                item.scene_group_sequence,
-            ),
-        )
-        if len(current.committed_groups) >= len(ordered_plans):
-            raise WorkflowConflictError(
-                "Storyboard draft already contains every planned ClipGroup"
-            )
-        next_planned = ordered_plans[len(current.committed_groups)]
-        if request.group.clip_group.id != next_planned.id:
-            raise WorkflowConflictError(
-                "Single-user storyboard authoring must append the next planned "
-                f"ClipGroup {next_planned.id}; received "
-                f"{request.group.clip_group.id}"
-            )
-        canonical_group = self._canonical_storyboard_group_for_planned_slot(
-            request.group,
-            next_planned,
-        )
+        canonical_group = request.group.model_copy(deep=True)
         self._validate_storyboard_work_unit(
             project_document,
             current,
@@ -8667,6 +8582,7 @@ class ShortDramaService:
             revised = StoryboardDraftContent.model_validate(
                 {
                     **current.model_dump(mode="json"),
+                    "phase": StoryboardDraftPhase.GROUP_AUTHORING,
                     "committed_groups": [
                         *[
                             item.model_dump(mode="json")
@@ -8681,34 +8597,6 @@ class ShortDramaService:
             raise WorkflowConflictError(str(exc)) from exc
         self._validate_storyboard_draft(project_document, revised)
         return revised
-
-    @staticmethod
-    def _canonical_storyboard_group_for_planned_slot(
-        group: StoryboardClipGroupDraft,
-        planned: StoryboardClipGroupOutline,
-    ) -> StoryboardClipGroupDraft:
-        """Match stable slot identity, then restore sealed explanatory prose."""
-
-        if (
-            group.clip_group.id != planned.id
-            or group.scene_node_id != planned.scene_node_id
-            or group.scene_group_sequence != planned.scene_group_sequence
-            or group.source_range.id != planned.source_range.id
-            or group.source_range.scene_ids != planned.source_range.scene_ids
-            or group.source_range.script_line_ids
-            != planned.source_range.script_line_ids
-            or group.clip_group.duration_seconds != planned.duration_seconds
-        ):
-            raise WorkflowConflictError(
-                "Storyboard draft group must match its planned ClipGroup slot's "
-                "stable identity, source span, and duration"
-            )
-        return group.model_copy(
-            update={
-                "source_range": planned.source_range.model_copy(deep=True),
-            },
-            deep=True,
-        )
 
     @staticmethod
     def _storyboard_draft_progress(
@@ -8768,11 +8656,7 @@ class ShortDramaService:
             scene_committed_duration = sum(
                 item.clip_group.duration_seconds for item in committed
             )
-            planned_line_ids = {
-                line_id
-                for item in planned
-                for line_id in item.source_range.script_line_ids
-            }
+            planned_line_ids = set(node.source_line_ids)
             scene_covered_line_ids = {
                 line_id
                 for item in committed
@@ -8972,55 +8856,6 @@ class ShortDramaService:
             work_unit.source_range,
         )
 
-    @staticmethod
-    def _validate_storyboard_ledger_partition_feasibility(
-        draft: StoryboardDraftContent,
-    ) -> None:
-        """Ensure every scene can become complete H3-sized ClipGroups.
-
-        This check intentionally lives at the ledger-to-outline transition rather
-        than in the persisted draft model.  Ledger-building drafts may be partial,
-        and older drafts must remain readable while an Agent repairs their timing.
-        """
-
-        minimum_duration = Decimal("4")
-        maximum_duration = Decimal("15")
-        for node in draft.scene_nodes:
-            entries = [
-                entry
-                for entry in draft.timing_ledger
-                if entry.scene_node_id == node.id
-            ]
-            reachable_boundaries = [False] * (len(entries) + 1)
-            reachable_boundaries[0] = True
-            for start in range(len(entries)):
-                if not reachable_boundaries[start]:
-                    continue
-                duration = Decimal("0")
-                for end in range(start, len(entries)):
-                    duration += Decimal(
-                        str(entries[end].allocated_duration_seconds)
-                    )
-                    if duration > maximum_duration:
-                        break
-                    if (
-                        duration >= minimum_duration
-                        and duration == duration.to_integral_value()
-                    ):
-                        reachable_boundaries[end + 1] = True
-            if not reachable_boundaries[-1]:
-                allocations = ", ".join(
-                    str(Decimal(str(entry.allocated_duration_seconds)))
-                    for entry in entries
-                )
-                raise WorkflowConflictError(
-                    "Storyboard timing ledger scene "
-                    f"{node.id} cannot be partitioned contiguously and completely "
-                    "without crossing scenes into ClipGroups with exact integer "
-                    "durations from 4 to 15 seconds; revise its timing allocations "
-                    f"before completing the ledger (allocations: [{allocations}])"
-                )
-
     def _validate_storyboard_draft(
         self,
         project_document: ProjectDocument,
@@ -9179,7 +9014,7 @@ class ShortDramaService:
             )
         ]
         return StoryboardDraftContent(
-            phase=StoryboardDraftPhase.LEDGER_BUILDING,
+            phase=StoryboardDraftPhase.GROUP_AUTHORING,
             project_id=seed.project_id,
             title=seed.title,
             script_version_id=seed.script_version_id,
@@ -9208,7 +9043,11 @@ class ShortDramaService:
             storyboard.production_spec_version_id,
         )
         return [
-            *self._current_story_source_refs(project_document),
+            *self._story_source_refs(
+                project_document,
+                script_version_id=storyboard.script_version_id,
+                bible_version_id=storyboard.bible_version_id,
+            ),
             ProductionDocumentArtifactRef(
                 project_id=project_document.project.id,
                 artifact_type="production_spec",
@@ -9221,16 +9060,18 @@ class ShortDramaService:
         self,
         project_document: ProjectDocument,
         storyboard: StoryboardContent,
+        *,
+        require_current_sources: bool = True,
     ) -> None:
         if storyboard.project_id != project_document.project.id:
             raise WorkflowConflictError(
                 "Storyboard must belong to the current project"
             )
-        if storyboard.script_version_id != project_document.project.current_script_version_id:
+        if require_current_sources and storyboard.script_version_id != project_document.project.current_script_version_id:
             raise WorkflowConflictError(
                 "Storyboard must reference the current ScriptVersion"
             )
-        if storyboard.bible_version_id != project_document.project.current_bible_version_id:
+        if require_current_sources and storyboard.bible_version_id != project_document.project.current_bible_version_id:
             raise WorkflowConflictError(
                 "Storyboard must reference the current ProjectBibleVersion"
             )
@@ -9243,16 +9084,19 @@ class ShortDramaService:
             production_spec_document,
             storyboard.production_spec_version_id,
         )
-        if production_spec_document.id != project_document.production_spec_document_id:
+        if require_current_sources and production_spec_document.id != project_document.production_spec_document_id:
             raise WorkflowConflictError(
                 "Storyboard must reference the project's ProductionSpec"
             )
-        if production_spec_version.id != production_spec_document.current_version_id:
+        if require_current_sources and production_spec_version.id != production_spec_document.current_version_id:
             raise WorkflowConflictError(
                 "Storyboard must reference the current ProductionSpec version"
             )
         production_spec = self._parse_production_spec(production_spec_version)
-        self._validate_production_spec(project_document, production_spec)
+        if require_current_sources:
+            self._validate_production_spec(project_document, production_spec)
+        elif production_spec.project_id != project_document.project.id:
+            raise WorkflowConflictError("ProductionSpec must belong to the current project")
         if (
             storyboard.script_version_id != production_spec.script_version_id
             or storyboard.bible_version_id != production_spec.bible_version_id
@@ -9262,7 +9106,14 @@ class ShortDramaService:
                 "ScriptVersion and ProjectBibleVersion"
             )
 
-        script = self._current_script(project_document)
+        # Content stays editable while its upstream script is being revised.
+        # Keep declared source evidence until the Agent synchronizes it, rather
+        # than claiming unrelated shots have already adopted the new script.
+        script = next((item for item in project_document.script_versions
+                       if item.id == storyboard.script_version_id), None)
+        if script is None or not any(item.id == storyboard.bible_version_id
+                                     for item in project_document.bible_versions):
+            raise WorkflowConflictError("Storyboard references missing story sources")
         source_line_ids = [line.id for line in script.lines]
         if storyboard.script_line_ids != source_line_ids:
             raise WorkflowConflictError(
@@ -9321,7 +9172,11 @@ class ShortDramaService:
             asset_plan.storyboard_version_id,
         )
         return [
-            *self._current_story_source_refs(project_document),
+            *self._story_source_refs(
+                project_document,
+                script_version_id=asset_plan.script_version_id,
+                bible_version_id=asset_plan.bible_version_id,
+            ),
             ProductionDocumentArtifactRef(
                 project_id=project_document.project.id,
                 artifact_type="production_spec",
@@ -9340,14 +9195,21 @@ class ShortDramaService:
         self,
         project_document: ProjectDocument,
         asset_plan: AssetPlanContent,
+        *,
+        require_current_sources: bool = True,
     ) -> None:
         if asset_plan.project_id != project_document.project.id:
             raise WorkflowConflictError("AssetPlan must belong to the current project")
-        if asset_plan.script_version_id != project_document.project.current_script_version_id:
+        self._story_source_refs(
+            project_document,
+            script_version_id=asset_plan.script_version_id,
+            bible_version_id=asset_plan.bible_version_id,
+        )
+        if require_current_sources and asset_plan.script_version_id != project_document.project.current_script_version_id:
             raise WorkflowConflictError(
                 "AssetPlan must reference the current ScriptVersion"
             )
-        if asset_plan.bible_version_id != project_document.project.current_bible_version_id:
+        if require_current_sources and asset_plan.bible_version_id != project_document.project.current_bible_version_id:
             raise WorkflowConflictError(
                 "AssetPlan must reference the current ProjectBibleVersion"
             )
@@ -9365,12 +9227,15 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "AssetPlan must reference the project's ProductionSpec"
             )
-        if production_spec_version.id != production_spec_document.current_version_id:
+        if require_current_sources and production_spec_version.id != production_spec_document.current_version_id:
             raise WorkflowConflictError(
                 "AssetPlan must reference the current ProductionSpec version"
             )
         production_spec = self._parse_production_spec(production_spec_version)
-        self._validate_production_spec(project_document, production_spec)
+        if require_current_sources:
+            self._validate_production_spec(project_document, production_spec)
+        elif production_spec.project_id != project_document.project.id:
+            raise WorkflowConflictError("ProductionSpec must belong to the current project")
 
         storyboard_document = self._managed_project_document(
             project_document,
@@ -9385,14 +9250,19 @@ class ShortDramaService:
             raise WorkflowConflictError(
                 "AssetPlan must reference the project's Storyboard"
             )
-        if storyboard_version.id != storyboard_document.current_version_id:
+        if require_current_sources and storyboard_version.id != storyboard_document.current_version_id:
             raise WorkflowConflictError(
                 "AssetPlan must reference the current Storyboard version"
             )
         storyboard = self._parse_storyboard(storyboard_version)
-        self._validate_storyboard(project_document, storyboard)
+        self._validate_storyboard(
+            project_document, storyboard, require_current_sources=require_current_sources
+        )
 
-        if (
+        # A local asset edit can be saved while script/storyboard synchronization
+        # is still underway. Keep its declared sources; generation validates the
+        # concrete current inputs when they are actually used.
+        if require_current_sources and (
             asset_plan.script_version_id != production_spec.script_version_id
             or asset_plan.bible_version_id != production_spec.bible_version_id
             or asset_plan.script_version_id != storyboard.script_version_id
@@ -9520,11 +9390,13 @@ class ShortDramaService:
                 )
             if require_completed_media:
                 if (
-                    version.approval_status != ApprovalStatus.APPROVED
+                    version.approval_status not in {
+                        ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                    }
                     or version.freshness != Freshness.CURRENT
                 ):
                     raise WorkflowConflictError(
-                        f"Completed AssetPlan version {version.id} must be current and approved"
+                        f"Completed AssetPlan version {version.id} must be current and usable"
                     )
                 if version.local_path is None and version.external_url is None:
                     raise WorkflowConflictError(
@@ -9985,16 +9857,6 @@ class ShortDramaService:
                         f"Completed TEXT_PLATE work item {work_item.id} must reference "
                         "a deterministic screen-content plate version"
                     )
-                if (
-                    completed is not None
-                    and work_item.review_purpose
-                    == AssetReviewPurpose.CANONICAL_MASTER
-                    and completed[0].approved_version_id != completed[1].id
-                ):
-                    raise WorkflowConflictError(
-                        f"Completed AssetPlan work item {work_item.id} declares a canonical "
-                        "review purpose but does not reference the asset's canonical version"
-                    )
                 for reference in work_item.ordered_references:
                     validate_asset_version(
                         reference.asset_id,
@@ -10067,8 +9929,8 @@ class ShortDramaService:
                     raise WorkflowConflictError(
                         f"Completed AssetPlan work item {work_item.id} requires completed "
                         f"ReferencePack subject item {subject_item.id}. Set that item's "
-                        "completed_asset_id/completed_asset_version_id to its APPROVED, "
-                        "CURRENT canonical master, in the same patch when completing "
+                        "completed_asset_id/completed_asset_version_id to its selected, "
+                        "current canonical image, in the same patch when completing "
                         "that master. This maps the item to ReferencePack.subject_asset_id; "
                         "it does not mark the item's remaining work complete or require "
                         "ReferencePack migration."
@@ -10299,7 +10161,7 @@ class ShortDramaService:
         origin: ProductionDocumentOrigin,
         created_at: str,
     ) -> ProductionDocumentMutationResponse:
-        self._validate_production_document_source_refs(
+        source_artifact_refs = self._validate_production_document_source_refs(
             project_document,
             source_artifact_refs,
         )
@@ -10349,7 +10211,7 @@ class ShortDramaService:
                 f"received {base_version_id}"
             )
         current = self._production_document_version(production_document)
-        self._validate_production_document_source_refs(
+        source_artifact_refs = self._validate_production_document_source_refs(
             project_document,
             source_artifact_refs,
         )
@@ -10375,11 +10237,12 @@ class ShortDramaService:
         self,
         project_document: ProjectDocument,
         source_artifact_refs: list[ProductionDocumentArtifactRef],
-    ) -> None:
-        """Keep authoritative documents linked to real, project-local snapshots."""
+    ) -> list[ProductionDocumentArtifactRef]:
+        """Resolve source IDs, deriving redundant numbers from immutable versions."""
 
         project_id = project_document.project.id
         resolver = ProjectArtifactResolver(self.repository)
+        normalized: list[ProductionDocumentArtifactRef] = []
         for source_ref in source_artifact_refs:
             if source_ref.project_id != project_id:
                 raise WorkflowConflictError(
@@ -10390,6 +10253,18 @@ class ShortDramaService:
             runtime_ref = ArtifactRef.model_validate(
                 source_ref.model_dump(mode="json")
             )
+            if runtime_ref.version is None:
+                versions: dict[str, int] = {}
+                if runtime_ref.artifact_type in {"script", "script_version"}:
+                    versions = {item.id: item.version for item in project_document.script_versions}
+                elif runtime_ref.artifact_type in {"bible", "bible_version"}:
+                    versions = {item.id: item.version for item in project_document.bible_versions}
+                elif runtime_ref.artifact_type == "asset_version":
+                    versions = {item.id: item.version for asset in project_document.assets for item in asset.versions}
+                elif runtime_ref.artifact_type == "production_document_version":
+                    versions = {item.id: item.version for doc in project_document.production_documents for item in doc.versions}
+                if runtime_ref.artifact_id in versions:
+                    runtime_ref = runtime_ref.model_copy(update={"version": versions[runtime_ref.artifact_id]})
             if runtime_ref.requires_explicit_version() and runtime_ref.version is None:
                 raise WorkflowConflictError(
                     "Production document source artifact requires an explicit version: "
@@ -10406,6 +10281,8 @@ class ShortDramaService:
                     f"current project: {runtime_ref.artifact_type}:"
                     f"{runtime_ref.artifact_id}{suffix}"
                 )
+            normalized.append(ProductionDocumentArtifactRef.model_validate(runtime_ref.model_dump(mode="json")))
+        return normalized
 
     def bind_master_audio(
         self,
@@ -10416,7 +10293,7 @@ class ShortDramaService:
 
         with self._lock:
             project_document = self._require_project_document(project_id)
-            asset, version, audio_path = self._require_current_approved_audio_version(
+            asset, version, audio_path = self._require_usable_audio_version(
                 project_document,
                 request.asset_version_id,
             )
@@ -10464,7 +10341,7 @@ class ShortDramaService:
         with self._lock:
             project_document = self._require_project_document(project_id)
             current_asset, current_version, current_path = (
-                self._require_current_approved_audio_version(
+                self._require_usable_audio_version(
                     project_document,
                     request.asset_version_id,
                 )
@@ -10624,7 +10501,7 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "Music analysis is based on a stale Master Audio binding version"
                 )
-            _, _, audio_path = self._require_current_approved_audio_version(
+            _, _, audio_path = self._require_usable_audio_version(
                 project_document,
                 binding.asset_version_id,
             )
@@ -10654,7 +10531,7 @@ class ShortDramaService:
                 raise WorkflowConflictError(
                     "Master Audio binding changed while music analysis was running"
                 )
-            self._require_current_approved_audio_version(
+            self._require_usable_audio_version(
                 project_document,
                 binding_snapshot.asset_version_id,
             )
@@ -10761,7 +10638,7 @@ class ShortDramaService:
         return document, version, binding
 
     @staticmethod
-    def _require_current_approved_audio_version(
+    def _require_usable_audio_version(
         project_document: ProjectDocument,
         asset_version_id: str,
     ) -> tuple[Asset, AssetVersion, Path]:
@@ -10770,23 +10647,23 @@ class ShortDramaService:
             asset_version_id,
         )
         if (
-            asset.current_version_id != version.id
-            or asset.approved_version_id != version.id
-            or version.approval_status != ApprovalStatus.APPROVED
+            version.approval_status not in {
+                ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+            }
             or version.freshness != Freshness.CURRENT
             or version.media_type != AssetMediaType.AUDIO
         ):
             raise WorkflowConflictError(
-                f"AssetVersion {version.id} is not its asset's current approved audio"
+                f"AssetVersion {version.id} is not current usable audio"
             )
         if version.local_path is None:
             raise WorkflowConflictError(
-                "Master Audio currently requires a local approved audio AssetVersion"
+                "Master Audio currently requires a local audio AssetVersion"
             )
         path = Path(version.local_path).expanduser().resolve()
         if not path.is_file() or path.stat().st_size <= 0:
             raise WorkflowConflictError(
-                f"Approved audio AssetVersion {version.id} is missing its local media"
+                f"Audio AssetVersion {version.id} is missing its local media"
             )
         return asset, version, path
 
@@ -10931,6 +10808,7 @@ class ShortDramaService:
                 document,
                 request.generation_plan_document_id,
                 request.generation_plan_version_id,
+                unit_ids=[request.generation_unit_id] if request.generation_unit_id else None,
             )
             unit = next(
                 (
@@ -11037,8 +10915,10 @@ class ShortDramaService:
             raise WorkflowConflictError("语言模型 API key is not configured")
         try:
             client = self.language_provider_factory(api_key, base_url)
+            # xhigh reasoning shares this budget; the emitted H3 prompt still
+            # has its independent 7,000-character validation below.
             compiled_prompt = client.generate_text(
-                instructions=instructions, input_text=input_text, max_output_tokens=8_000,
+                instructions=instructions, input_text=input_text, max_output_tokens=32_000,
             )
         except LanguageProviderError as exc:
             raise ProviderOperationError(str(exc)) from exc
@@ -11093,11 +10973,13 @@ class ShortDramaService:
                 request.asset_version_id,
             )
             if (
-                source_version.approval_status != ApprovalStatus.APPROVED
+                source_version.approval_status not in {
+                    ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                }
                 or source_version.freshness != Freshness.CURRENT
             ):
                 raise WorkflowConflictError(
-                    "Only a current approved formal version or supplemental image "
+                    "Only a current usable formal version or supplemental image "
                     "can enter a reference pack"
                 )
             if source_version.media_type != AssetMediaType.IMAGE:
@@ -11108,13 +10990,9 @@ class ShortDramaService:
                 )
             lineage_root_version_id = request.lineage_root_version_id
             if request.role == ReferenceRole.CANONICAL_MASTER:
-                if (
-                    source_asset.id != subject.id
-                    or subject.approved_version_id != source_version.id
-                ):
+                if source_asset.id != subject.id:
                     raise WorkflowConflictError(
-                        "A CANONICAL_MASTER entry must use the subject asset's current "
-                        "approved canonical image"
+                        "A CANONICAL_MASTER entry must use an image owned by the subject asset"
                     )
                 if lineage_root_version_id not in {None, source_version.id}:
                     raise WorkflowConflictError(
@@ -11128,8 +11006,9 @@ class ShortDramaService:
                 )
                 if (
                     root_asset.id != subject.id
-                    or subject.approved_version_id != root_version.id
-                    or root_version.approval_status != ApprovalStatus.APPROVED
+                    or root_version.approval_status not in {
+                        ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                    }
                     or root_version.freshness != Freshness.CURRENT
                     or root_version.media_type != AssetMediaType.IMAGE
                     or (
@@ -11138,8 +11017,8 @@ class ShortDramaService:
                     )
                 ):
                     raise WorkflowConflictError(
-                        "Reference-pack lineage root must be the subject's current "
-                        "approved canonical image"
+                        "Reference-pack lineage root must be a current usable image "
+                        "owned by the subject"
                     )
 
             now = utc_now()
@@ -11373,11 +11252,13 @@ class ShortDramaService:
                 reference_version_id,
             )
             if (
-                reference_asset.approved_version_id != reference_version.id
-                or reference_version.approval_status != ApprovalStatus.APPROVED
+                reference_version.approval_status not in {
+                    ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                }
+                or reference_version.freshness != Freshness.CURRENT
             ):
                 raise WorkflowConflictError(
-                    "Explicit inspection references must be current approved masters: "
+                    "Explicit inspection references must be current usable images: "
                     f"{reference_version.id}"
                 )
             self._validate_asset_inspection_image(reference_version)
@@ -11479,13 +11360,9 @@ class ShortDramaService:
             != ImageReferenceAuthority.AUTHORITATIVE
         ):
             return False
-        # A user-provided exact source may be identity/wardrobe/scene/prop truth for
-        # the one declared role before it becomes an approved production asset. This
-        # does not approve the source or make unrelated draft images normative.
-        return version.origin_type == OriginType.UPLOAD or (
-            asset.kind == AssetKind.REFERENCE
-            and version.origin_type == OriginType.LIBRARY_IMPORT
-        )
+        # Explicit authority applies to this selected image and role. Its origin
+        # does not introduce another review step or select unrelated candidates.
+        return True
 
     def analyze_source_image(
         self,
@@ -11843,8 +11720,10 @@ class ShortDramaService:
         document: ProjectDocument,
         document_id: str | None,
         version_id: str | None,
+        *,
+        unit_ids: list[str] | None = None,
     ) -> GenerationPlanContent:
-        """Share exact source/version checks between prompt authoring and routing."""
+        """Validate the requested units while unrelated groups can keep changing."""
 
         if document_id is None or version_id is None:
             raise WorkflowConflictError("A generation plan document and version are required")
@@ -11861,72 +11740,11 @@ class ShortDramaService:
             generation_document,
             version_id,
         )
-        if generation_version.id != generation_document.current_version_id:
-            raise WorkflowConflictError(
-                "H3 route planning requires the current GenerationPlan version"
-            )
         generation_plan = self._parse_generation_plan(generation_version)
-        generation_slot = self._project_output_slot(
-            document,
-            GENERATION_PLAN_OUTPUT_SLOT_ID,
-        )
-        if (
-            generation_slot is None
-            or generation_slot.current_artifact_ref is None
-            or generation_slot.current_artifact_ref.artifact_id
-            != generation_document.id
-            or generation_slot.current_artifact_ref.version
-            != generation_version.version
-        ):
-            raise WorkflowConflictError(
-                "The GenerationPlan output slot is invalid; recompile it first"
-            )
-        if (
-            generation_plan.script_version_id
-            != document.project.current_script_version_id
-            or generation_plan.bible_version_id
-            != document.project.current_bible_version_id
-        ):
-            raise WorkflowConflictError(
-                "GenerationPlan references outdated story inputs"
-            )
-        if (
-            generation_plan.storyboard_document_id
-            != document.storyboard_document_id
-        ):
-            raise WorkflowConflictError(
-                "GenerationPlan references a different Storyboard"
-            )
-        storyboard_document = self._managed_project_document(
-            document,
-            generation_plan.storyboard_document_id,
-            STORYBOARD_DOCUMENT_KIND,
-        )
-        storyboard_version = self._production_document_version(
-            storyboard_document,
-            generation_plan.storyboard_version_id,
-        )
-        if storyboard_version.id != storyboard_document.current_version_id:
-            raise WorkflowConflictError(
-                "GenerationPlan references an outdated Storyboard version"
-            )
-        production_spec_document = self._managed_project_document(
-            document,
-            generation_plan.production_spec_document_id,
-            PRODUCTION_SPEC_DOCUMENT_KIND,
-        )
-        production_spec_version = self._production_document_version(
-            production_spec_document,
-            generation_plan.production_spec_version_id,
-        )
-        if (
-            production_spec_document.id != document.production_spec_document_id
-            or production_spec_version.id
-            != production_spec_document.current_version_id
-        ):
-            raise WorkflowConflictError(
-                "GenerationPlan references an outdated ProductionSpec version"
-            )
+        try:
+            validate_generation_units_current(document, generation_plan, unit_ids)
+        except ValueError as exc:
+            raise WorkflowConflictError(str(exc)) from exc
         return generation_plan
 
     def compile_h3_production_route_plan(
@@ -11946,6 +11764,7 @@ class ShortDramaService:
                     document,
                     request.generation_plan_document_id,
                     request.generation_plan_version_id,
+                    unit_ids=request.unit_ids,
                 )
                 selected_ids = set(request.unit_ids)
                 selected_generation_units = [
@@ -12104,7 +11923,7 @@ class ShortDramaService:
             ):
                 raise WorkflowConflictError(
                     f"H3 asset preparation {preparation.id} uses source asset versions "
-                    "that are no longer current approved inputs"
+                    "that are no longer current usable inputs"
                 )
 
             resolved_asset_id = request.asset_id
@@ -12137,7 +11956,9 @@ class ShortDramaService:
                         f"AssetVersion {version.id} does not belong to asset {asset.id}"
                     )
                 if (
-                    version.approval_status != ApprovalStatus.APPROVED
+                    version.approval_status not in {
+                        ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                    }
                     or version.freshness != Freshness.CURRENT
                     or version.media_type != AssetMediaType.IMAGE
                     or (
@@ -12146,13 +11967,13 @@ class ShortDramaService:
                     )
                 ):
                     raise WorkflowConflictError(
-                        f"AssetVersion {version.id} is not a current approved image"
+                        f"AssetVersion {version.id} is not a current usable image"
                     )
                 if version.local_path is not None and not Path(
                     version.local_path
                 ).expanduser().resolve().is_file():
                     raise WorkflowConflictError(
-                        f"Approved image AssetVersion {version.id} is missing its local media"
+                        f"Image AssetVersion {version.id} is missing its local media"
                     )
                 approved_version_id = version.id
                 approved_version_number = version.version
@@ -13024,7 +12845,7 @@ class ShortDramaService:
                 )
 
             asset = self._require_asset_in_document(document, request.asset_id)
-            self._require_approved_voice_audio(asset)
+            self._require_usable_voice_audio(asset)
             changed = existing is None or existing.asset_id != asset.id
             if existing is None:
                 document.voice_references.append(
@@ -13638,11 +13459,6 @@ class ShortDramaService:
                 raise WorkflowConflictError("A stale Take cannot be selected for the current timeline")
             if take.availability != TakeAvailability.AVAILABLE:
                 raise WorkflowConflictError("A missing Take cannot be selected")
-            evidence = self.repository.get_route_evidence_for_take(take_id)
-            if evidence is not None and evidence.purpose == EvidencePurpose.CONTRACT_SMOKE:
-                raise WorkflowConflictError(
-                    "A contract-smoke Take cannot be selected for the production timeline"
-                )
             selected = self.repository.select_take(take_id)
             if selected is None:
                 raise ArtifactNotFoundError(take_id)
@@ -13858,15 +13674,27 @@ class ShortDramaService:
         project_id: str,
         request: AudioInspectionRequest,
     ) -> AudioInspectionResponse:
-        document = self._require_project_document(project_id)
-        manifest = self._current_manifest(document)
+        from short_drama.studio_audio import editorial_audio_input
+
+        with self._lock:
+            document = self._require_project_document(project_id).model_copy(deep=True)
+        created_at = utc_now()
+        editorial = editorial_audio_input(self, document, created_at)
+        manifest = editorial[0] if editorial else self._current_manifest(document)
         report = self.audio_inspector.inspect_manifest(
             document=document,
             manifest=manifest,
             request=request,
             semantic_service=self.audio_semantic_service,
-            created_at=utc_now(),
+            created_at=created_at,
         )
+        if editorial:
+            report.source_editorial_revision = editorial[1]
+            report.source_editorial_timeline_id = editorial[2]
+            report.warnings.append(
+                f"Inspected saved Studio editorial revision {editorial[1]}; "
+                "manifest_id identifies this inspection input, not a new legacy TimelineManifest."
+            )
         self.repository.save_audio_inspection(report)
         return AudioInspectionResponse(
             report=report,
@@ -13955,17 +13783,26 @@ class ShortDramaService:
         project_id: str,
         request: EpisodeReviewRequest,
     ) -> EpisodeReviewResponse:
+        from short_drama.studio_episode_review import editorial_episode_input
+
         document = self._require_project_document(project_id)
-        manifest = self._current_manifest(document)
+        editorial = editorial_episode_input(document, utc_now())
+        manifest = editorial[0] if editorial is not None else self._current_manifest(document)
         report = self._get_or_create_episode_review(
             document,
             manifest,
             force_new=request.force_new,
+            editorial_revision=editorial[1] if editorial is not None else None,
+            editorial_project=editorial[2] if editorial is not None else None,
         )
         for _ in range(request.max_actions):
             if report.status != EpisodeReviewStatus.RUNNING:
                 break
             report = self._advance_episode_review_report_once(report.id)
+            # A failed step needs a new Agent decision, not identical model calls
+            # hidden inside this tool while user steering remains queued.
+            if report.active_stage_attempts:
+                break
         return EpisodeReviewResponse(
             report=report,
             project=self.get_project(project_id),
@@ -13977,6 +13814,8 @@ class ShortDramaService:
         manifest: TimelineManifest,
         *,
         force_new: bool,
+        editorial_revision: int | None = None,
+        editorial_project: dict[str, JsonValue] | None = None,
     ) -> EpisodeReviewReport:
         existing = [
             item
@@ -13991,6 +13830,9 @@ class ShortDramaService:
             project_id=document.project.id,
             manifest_id=manifest.id,
             source_script_version_id=manifest.script_version_id,
+            source_editorial_revision=editorial_revision,
+            source_editorial_project=editorial_project,
+            review_manifest=manifest if editorial_project is not None else None,
             status=EpisodeReviewStatus.RUNNING,
             created_at=now,
             updated_at=now,
@@ -14008,7 +13850,7 @@ class ShortDramaService:
         if report.status != EpisodeReviewStatus.RUNNING:
             return report
         document = self._require_project_document(report.project_id)
-        manifest = next(
+        manifest = report.review_manifest or next(
             (item for item in document.manifests if item.id == report.manifest_id),
             None,
         )
@@ -14032,6 +13874,11 @@ class ShortDramaService:
             document,
             script_version_id=manifest.script_version_id,
         )
+        if report.source_editorial_project is not None:
+            present = {clip.shot_id for clip in manifest.video_clips}
+            scene_groups = [(sequence, scene, [shot for shot in shots if shot.id in present])
+                            for sequence, scene, shots in scene_groups
+                            if any(shot.id in present for shot in shots)]
         if report.next_scene_index < len(scene_groups):
             scene_sequence, scene, shots = scene_groups[report.next_scene_index]
             stage_key = f"SCENE:{scene.id}:{scene_sequence}"
@@ -14052,6 +13899,7 @@ class ShortDramaService:
                     takes_by_id=takes_by_id,
                     latest_inspection_by_take=latest_inspection_by_take,
                     client=client,
+                    editorial_project=report.source_editorial_project,
                 )
             except (LanguageProviderError, ValueError) as exc:
                 return self._record_episode_review_failure(
@@ -14502,7 +14350,7 @@ class ShortDramaService:
         storyboard_document_id: str | None,
         storyboard_version_id: str | None,
     ) -> GenerationTask:
-        """Require every selected Take to prove its exact current story source."""
+        """Check the corresponding current story inputs before reusing a Take."""
 
         task = self.repository.get_task(take.task_id)
         if task is None or task.project_id != project_document.project.id:
@@ -14550,7 +14398,12 @@ class ShortDramaService:
                     ),
                     None,
                 )
-                scene_changed = source_scene != current_scene
+                # A current formal Storyboard describes each shot's treatment.
+                # Its matching content is checked below, so a change elsewhere
+                # in the same scene need not discard this unchanged shot.
+                scene_changed = (
+                    storyboard_document_id is None and source_scene != current_scene
+                )
             if (
                 source_script is None
                 or source_script.id not in ancestor_ids
@@ -14601,22 +14454,29 @@ class ShortDramaService:
                 )
             return task
 
-        if (
-            task.storyboard_document_id != storyboard_document_id
-            or task.storyboard_version_id != storyboard_version_id
-        ):
+        if task.storyboard_document_id != storyboard_document_id:
             raise WorkflowConflictError(
-                f"Selected Take {take.id} must reference the current exact Storyboard version"
+                f"Selected Take {take.id} references a different Storyboard"
             )
+        if task.storyboard_version_id != storyboard_version_id:
+            source_document = self._production_document(project_document, storyboard_document_id)
+            source_version = next((item for item in source_document.versions
+                                   if item.id == task.storyboard_version_id), None)
+            source_shot = next((item for item in self._parse_storyboard(source_version).shots
+                                if item.id == shot.id), None) if source_version else None
+            if source_shot is None or source_shot.model_dump(exclude={"revision"}) != shot.model_dump(exclude={"revision"}):
+                raise WorkflowConflictError(
+                    f"Selected Take {take.id} no longer matches this Shot's current Storyboard content"
+                )
         if (
             take.storyboard_document_id is not None
             or take.storyboard_version_id is not None
         ) and (
-            take.storyboard_document_id != storyboard_document_id
-            or take.storyboard_version_id != storyboard_version_id
+            take.storyboard_document_id != task.storyboard_document_id
+            or take.storyboard_version_id != task.storyboard_version_id
         ):
             raise WorkflowConflictError(
-                f"Selected Take {take.id} carries an outdated Storyboard version"
+                f"Selected Take {take.id} carries a different Storyboard source from its generation task"
             )
         return task
 
@@ -14652,7 +14512,7 @@ class ShortDramaService:
                 master_document, master_version, binding = (
                     self._current_master_audio_binding(document)
                 )
-                _, _, audio_path = self._require_current_approved_audio_version(
+                _, _, audio_path = self._require_usable_audio_version(
                     document,
                     binding.asset_version_id,
                 )
@@ -15707,22 +15567,12 @@ class ShortDramaService:
         return document
 
     def _require_project_mutation_allowed(self, project_id: str) -> ProjectDocument:
-        """Return the document unless its Agent-owned planning cursor is unfinished."""
+        """Planning is concurrent work, not a project-wide mutation lock.
 
-        document = self._require_project_document(project_id)
-        planning = document.planning
-        if (
-            planning is not None
-            and planning.run_id is not None
-            and planning.owner_agent_run_id is not None
-            and planning.status != PlanningRunStatus.COMPLETE
-        ):
-            raise WorkflowConflictError(
-                f"Project {project_id} has unfinished Content Planning Job "
-                f"{planning.run_id} ({planning.status.value}); direct mutation is "
-                "blocked until its AgentRun completes content planning"
-            )
-        return document
+        Scoped expected-text/revision checks and the repository merge protect
+        current edits. An unfinished planning cursor must not freeze the project.
+        """
+        return self._require_project_document(project_id)
 
     @staticmethod
     def _require_asset_in_document(document: ProjectDocument, asset_id: str) -> Asset:

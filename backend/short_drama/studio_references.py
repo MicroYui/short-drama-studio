@@ -13,6 +13,10 @@ def shot_cues(shot: ShotPlan) -> list[ShotReferenceCue]:
     return [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]
 
 
+def generation_cues(shot: ShotPlan) -> list[ShotReferenceCue]:
+    return [cue for cue in shot_cues(shot) if cue.usage == "GENERATION"]
+
+
 def project_legacy_references(document: ProjectDocument) -> None:
     """Enrich the returned view only; old files/trace do not acquire invented spans."""
     versions = {version.id: asset for asset in document.assets for version in asset.versions}
@@ -88,6 +92,8 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
             if cue.alias in aliases and aliases[cue.alias] != target:
                 raise ValueError("同一镜头中不同图片需要不同引用名称")
             aliases[cue.alias] = target
+            if cue.usage == "EDITORIAL":
+                continue
             asset, _version = versions[cue.asset_version_id]
             if cue.asset_version_id not in used_versions:
                 bindings.append(ReferenceBinding(kind=asset.kind, target_id=cue.asset_version_id, purpose=cue.purpose))
@@ -96,8 +102,6 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
                 binding = next(item for item in bindings if item.target_id == cue.asset_version_id)
                 if cue.purpose not in binding.purpose:
                     binding.purpose = f"{cue.purpose}；{binding.purpose}"[:500]
-    if sum(versions[item.target_id][1].media_type == AssetMediaType.IMAGE for item in bindings) > 9:
-        raise ValueError("当前 H3 单次最多支持 9 张图片，请减少引用或拆分镜头")
     plan = next((item for item in document.reference_plan if item.shot_id == shot.id), None)
     if plan is None:
         plan = ReferencePlanEntry(shot_id=shot.id, bindings=[], capability_valid=True, validation_notes=[])
@@ -105,8 +109,11 @@ def sync_shot_references(document: ProjectDocument, shot: ShotPlan) -> None:
     plan.bindings = bindings
     # Exact choices take precedence over a planner picking a different view for the same subject.
     plan.requirements = []
-    plan.max_reference_images = max(1, len(bindings))
-    plan.planning_notes = "镜头正文引用为当前图片选择；未定位到文字的引用作用于整镜。"
+    # This is the H3 selection capacity, not a limit on authoring or saving prose.
+    plan.max_reference_images = min(9, max(1, sum(
+        versions[item.target_id][1].media_type == AssetMediaType.IMAGE for item in bindings
+    )))
+    plan.planning_notes = "镜头正文中的生成参考为当前图片选择；剪辑用素材保留在正文，按用途用于后期。"
 
 
 def assert_current_script_structure(document: ProjectDocument, shot: ShotPlan) -> None:
@@ -118,6 +125,6 @@ def assert_current_script_structure(document: ProjectDocument, shot: ShotPlan) -
 def assert_generation_references(document: ProjectDocument, shot: ShotPlan, media: list[H3MediaInput]) -> None:
     assert_current_script_structure(document, shot)
     available = {item.asset_version_id for item in media}
-    missing = {cue.asset_version_id for cue in shot_cues(shot) if cue.asset_version_id and cue.asset_version_id not in available}
+    missing = {cue.asset_version_id for cue in generation_cues(shot) if cue.asset_version_id and cue.asset_version_id not in available}
     if missing:
-        raise ValueError("SHOT_REFERENCES_STALE: 当前文案绑定的图片没有全部进入生成请求，请按最新镜头引用重新编译。")
+        raise ValueError("SHOT_REFERENCES_STALE: 当前文案绑定的生成参考没有全部进入请求，请按最新镜头引用重新编译；剪辑用素材应明确标为EDITORIAL。")

@@ -42,8 +42,42 @@ class StudioWorkspaceService:
 
     def current_project(self, project_id: str) -> ProjectAggregate:
         result = self.service.get_project(project_id)
+        from short_drama.studio_storyboard import project_draft_shots
+        project_draft_shots(result.document)
         project_legacy_references(result.document)
         return result
+
+    def remember_initial_request(self, project_id: str, text: str) -> bool:
+        """Recover a blank workspace's brief without treating its scaffold as intent."""
+        with self.lock:
+            document = self._document(project_id)
+            changed = False
+            if not document.project.input_text.strip() and text.strip():
+                document.project.input_text = text
+                changed = True
+            first = min(document.script_versions, key=lambda item: item.version)
+            current = next(item for item in document.script_versions if item.id == document.project.current_script_version_id)
+            # Older empty Studio workspaces inherited the deterministic planner's
+            # 300-second placeholder. Only remove that unchanged, identifiable
+            # scaffold before production; preserve any authored story decisions.
+            if (
+                not first.original_text and not first.screenplay_text
+                and not first.structured_scenes
+                and first.story_intent is not None
+                and first.story_intent.protected_elements == ["等待创作要求"]
+                and current.story_intent == first.story_intent
+                and not document.production_spec_document_id and not document.shots
+            ):
+                current.story_intent = None
+                if current.ending_contract == first.ending_contract:
+                    current.ending_contract = None
+                changed = True
+            if not changed:
+                return False
+            document.project.updated_at = datetime.now(UTC).isoformat()
+            self.service.repository.save_project(document)
+            self.service.production_manager.refresh_project_memory(document)
+            return True
 
     def create_project(self, request: StudioProjectCreate) -> ProjectAggregate:
         created = self.service.create_project(CreateProjectRequest(
@@ -73,6 +107,10 @@ class StudioWorkspaceService:
         script.original_text = script.screenplay_text = script.spoken_text = script.subtitle_text = ""
         script.structured_scenes = []
         script.lines = []
+        # This is an empty editor, not an authored story. The Agent supplies
+        # creative and duration decisions after receiving the user's goal.
+        script.story_intent = None
+        script.ending_contract = None
         script.approval_status = ApprovalStatus.DRAFT
         bible = document.bible_versions[-1]
         bible.characters = []
@@ -173,6 +211,10 @@ class StudioWorkspaceService:
                 raise KeyError(request.scene_id)
             if scene is not None and request.expected_text is not None and scene.screenplay_text != request.expected_text:
                 raise StudioContentConflict("此场次已更新；你的编辑仍保留，请读取最新内容后合并。")
+            scene_shots = [shot for shot in document.shots if scene is not None and shot.scene_id == scene.id]
+            if request.affected_shot_ids is not None and set(request.affected_shot_ids) - {shot.id for shot in scene_shots}:
+                raise ValueError("受影响镜头必须属于当前修改的场次。")
+            previous_lines = {line.id: line for line in script.lines if scene is not None and line.id in scene.line_ids}
             if scene is None:
                 scene = StructuredScene(id=f"scene-{uuid4().hex[:12]}", heading=request.heading, summary="", line_ids=[])
                 script.structured_scenes.append(scene)
@@ -181,6 +223,10 @@ class StudioWorkspaceService:
             scene.screenplay_text = request.screenplay_text
             if request.summary is not None:
                 scene.summary = request.summary
+            if request.target_duration_seconds is not None:
+                scene.target_duration_seconds = request.target_duration_seconds
+            if request.narrative_purpose is not None:
+                scene.narrative_purpose = request.narrative_purpose
             if request.lines is not None:
                 for line in request.lines:
                     if line.spoken_text and line.spoken_text not in request.screenplay_text:
@@ -191,6 +237,7 @@ class StudioWorkspaceService:
                 script.structure_stale_scene_ids = [item for item in script.structure_stale_scene_ids if item != scene.id]
             elif changed_text and scene.id not in script.structure_stale_scene_ids:
                 script.structure_stale_scene_ids.append(scene.id)
+            script.order_lines_by_scenes()
             script.screenplay_text = "\n\n".join(f"{item.heading}\n{item.screenplay_text}" for item in script.structured_scenes)
             script.original_text = script.screenplay_text
             script.spoken_text = "\n".join(line.spoken_text for line in script.lines)
@@ -198,12 +245,17 @@ class StudioWorkspaceService:
             script.approval_status = ApprovalStatus.APPROVED
             document.script_versions.append(script)
             document.project.current_script_version_id = script.id
-            affected = [shot.id for shot in document.shots if shot.scene_id == scene.id]
+            affected = set(request.affected_shot_ids) if request.affected_shot_ids is not None else {shot.id for shot in scene_shots}
+            if request.lines is not None:
+                next_lines = {line.id: line for line in request.lines}
+                changed_lines = {line_id for line_id in previous_lines.keys() | next_lines.keys()
+                                 if previous_lines.get(line_id) != next_lines.get(line_id)}
+                affected.update(shot.id for shot in scene_shots if changed_lines.intersection(shot.dialogue_line_ids))
             for shot in document.shots:
                 if shot.id in affected:
                     shot.freshness = Freshness.STALE
                     shot.revision += 1
-            self.service.repository.mark_takes_stale(project_id, affected)
+            self.service.repository.mark_takes_stale(project_id, sorted(affected))
             document.project.updated_at = datetime.now(UTC).isoformat()
             self.service.repository.save_project(document)
             return StudioMutationResult(project=self.service.get_project(project_id), notices=["剧本已保存；相关镜头保留。下一次制作前由 Agent 按当前正文同步台词与分镜。"])
@@ -211,6 +263,9 @@ class StudioWorkspaceService:
     def save_shot(self, project_id: str, shot_id: str, request: StudioShotSave) -> StudioMutationResult:
         with self.lock:
             document = self._document(project_id)
+            from short_drama.studio_storyboard import save_draft_shot
+            if save_draft_shot(self.service, document, shot_id, request):
+                return StudioMutationResult(project=self.current_project(project_id), notices=["已保存到当前分镜组；其他组继续制作。"])
             current = next((item for item in document.shots if item.id == shot_id), None)
             if current is None:
                 raise KeyError(shot_id)

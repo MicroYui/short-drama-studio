@@ -13,7 +13,7 @@ from short_drama.image_models import (
     AssetReviewPurpose,
     AssetReviewRequest,
 )
-from short_drama.models import AssetKind, ReferenceBinding, ReferenceRole
+from short_drama.models import ApprovalStatus, AssetKind, Freshness, ReferenceBinding, ReferenceRole, ShotReferenceCue
 from short_drama.reference_planner import (
     ReferencePackEntryCreateRequest,
     ReferencePlanPreviewRequest,
@@ -213,6 +213,54 @@ def test_subject_image_keeps_independent_reference_pack_entry_across_canonicals(
         document,
         [explicit_independent],
     )[0].asset_version_id == independent_id
+
+
+def test_explicit_shot_choice_uses_current_draft_without_fabricating_review(tmp_path: Path) -> None:
+    from short_drama.h3_route_planner import generation_unit_media_candidates
+    from short_drama.studio_models import StudioShotSave
+
+    service = _service(tmp_path)
+    document = service.initialize_fixture().document
+    subject = next(asset for asset in document.assets if asset.kind == AssetKind.CHARACTER)
+    version_id = _import_image(service, tmp_path, project_id=document.project.id,
+        asset_id=subject.id, name="chosen-draft", color="blue")
+    document = service.get_project(document.project.id).document
+    media = _subject_input(subject.id, version_id)
+    with pytest.raises(WorkflowConflictError, match="not approved"):
+        service._resolve_approved_asset_inputs(document, [media])
+
+    shot = document.shots[0].model_copy(deep=True)
+    shot.references = [ShotReferenceCue(subject_asset_id=subject.id, asset_version_id=version_id,
+        alias="chosen_character", purpose="当前镜头明确选用的人物外观")]
+    for beat in shot.timeline_beats:
+        beat.references = []
+    saved = service.studio.save_shot(document.project.id, shot.id,
+        StudioShotSave(shot=shot, expected_revision=shot.revision)).project.document
+    version = next(version for asset in saved.assets for version in asset.versions if version.id == version_id)
+    assert version.approval_status == ApprovalStatus.DRAFT
+    assert not version.review_notes
+    assert service._resolve_approved_asset_inputs(saved, [media])[0].source.local_path
+    assert service._resolve_approved_asset_inputs(saved,
+        [media.model_copy(update={"subject_asset_id": None})])[0].source.local_path
+    candidates, _warnings = generation_unit_media_candidates(saved, [saved.shots[0]])
+    assert [item.media_input.asset_version_id for item in candidates] == [version_id]
+
+    saved.shots[0].references[0].usage = "EDITORIAL"
+    with pytest.raises(WorkflowConflictError, match="not approved"):
+        service._resolve_approved_asset_inputs(saved, [media])
+    saved.shots[0].references[0].usage = "GENERATION"
+    version.freshness = Freshness.STALE
+    with pytest.raises(WorkflowConflictError, match="not current"):
+        service._resolve_approved_asset_inputs(saved, [media])
+    version.freshness = Freshness.CURRENT
+    version.approval_status = ApprovalStatus.REJECTED
+    with pytest.raises(WorkflowConflictError, match="not approved"):
+        service._resolve_approved_asset_inputs(saved, [media])
+    version.approval_status = ApprovalStatus.DRAFT
+    version.local_path = None
+    version.external_url = None
+    with pytest.raises(WorkflowConflictError, match="no usable media"):
+        service._resolve_approved_asset_inputs(saved, [media])
 
 
 def test_reference_binding_rejects_asset_kind_mismatch_during_preview(

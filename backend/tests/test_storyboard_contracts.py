@@ -291,6 +291,24 @@ def test_storyboard_patch_only_revises_the_target_and_preserves_history(
     assert storyboard.shots[1].visual != revised.shots[1].visual
 
 
+def test_clip_group_patch_preserves_unmentioned_groups_and_shots(tmp_path: Path) -> None:
+    _, original = _spec_and_storyboard(_fixture_document(tmp_path))
+    template = original.clip_groups[0]
+    groups = [template.model_copy(update={"id": f"group-{index}", "shot_ids": [shot.id],
+        "duration_seconds": shot.duration_seconds}) for index, shot in enumerate(original.shots)]
+    original = StoryboardContent.model_validate({**original.model_dump(), "clip_groups": groups})
+    replacement = groups[0].model_copy(update={"reference_notes": ["使用当前已选图片；标题在剪辑中合成。"]})
+    request = StoryboardPatchRequest(base_version_id="current", clip_groups=[replacement], origin=ProductionDocumentOrigin.AGENT)
+    revised = apply_storyboard_patch(original, request)
+    assert revised.clip_groups == [replacement, groups[1]]
+    assert revised.shots == original.shots
+    assert original.clip_groups == groups
+    with pytest.raises(ValueError, match="unknown clip groups"):
+        apply_storyboard_patch(original, request.model_copy(update={"clip_groups": [replacement.model_copy(update={"id": "unknown"})]}))
+    with pytest.raises(ValueError, match="clip group only once"):
+        StoryboardPatchRequest(base_version_id="current", clip_groups=[replacement, replacement], origin=ProductionDocumentOrigin.AGENT)
+
+
 def test_output_slot_bind_invalidate_and_rebind_retains_artifact_history() -> None:
     project_id = "project-contract-test"
     first_ref = ProductionDocumentArtifactRef(

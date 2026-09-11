@@ -1282,7 +1282,7 @@ def test_missing_recommended_reference_is_advisory_and_does_not_block_compile(
     assert "未提供视觉参考图" in brief_body["prompt"]
 
 
-def test_reference_pack_rejects_wrong_subject_role_and_unapproved_version(
+def test_reference_pack_preserves_subject_roles_and_uses_explicit_draft(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
@@ -1318,13 +1318,22 @@ def test_reference_pack_rejects_wrong_subject_role_and_unapproved_version(
         draft_asset.id,
         AssetImportLocalRequest(local_path=str(source), descriptor="draft"),
     ).version
-    with pytest.raises(WorkflowConflictError, match="current approved formal version"):
-        service.add_reference_pack_entry(
-            project_id,
-            ReferencePackEntryCreateRequest(
-                subject_asset_id=store_asset_id,
-                asset_version_id=draft.id,
-                role="LOCATION_INTERACTION",
-                description="draft must not enter pack",
-            ),
-        )
+    selected = service.add_reference_pack_entry(
+        project_id,
+        ReferencePackEntryCreateRequest(
+            subject_asset_id=store_asset_id,
+            asset_version_id=draft.id,
+            role="LOCATION_INTERACTION",
+            description="Use this selected image without a separate review",
+        ),
+    )
+    assert selected.entry.asset_version_id == draft.id
+    from short_drama.reference_planner import usable_reference_pack_entries
+    document = service.get_project(project_id).document
+    assert any(entry.id == selected.entry.id for _, entry in usable_reference_pack_entries(document))
+    source_asset = next(asset for asset in document.assets if asset.id == draft_asset.id)
+    assert next(v for v in source_asset.versions if v.id == draft.id).approval_status.value == "DRAFT"
+    service.review_asset_version(project_id, draft_asset.id, draft.id,
+        AssetReviewRequest(decision="REJECTED", purpose="SUPPLEMENTAL_REFERENCE", notes="Explicitly rejected"))
+    assert not any(entry.id == selected.entry.id for _, entry in
+                   usable_reference_pack_entries(service.get_project(project_id).document))

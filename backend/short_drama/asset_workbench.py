@@ -177,12 +177,14 @@ class AssetWorkbench:
         workspace_root: Path,
         config_store: ImageProviderConfigStore,
         provider_factory: ImageProviderFactory = default_image_provider_factory,
+        lock: threading.RLock | None = None,
     ) -> None:
         self.repository = repository
         self.workspace_root = workspace_root
         self.config_store = config_store
         self.provider_factory = provider_factory
-        self._lock = threading.RLock()
+        self._lock = lock if lock is not None else threading.RLock()
+        self._image_advance_locks: dict[str, threading.Lock] = {}
         self.recovered_submissions = self.repository.recover_interrupted_image_tasks()
 
     def get_config(self) -> ImageProviderConfigResponse:
@@ -624,6 +626,7 @@ class AssetWorkbench:
         try:
             background = ImageColor.getrgb(request.background_color)
             foreground = ImageColor.getrgb(request.foreground_color)
+            ImageColor.getrgb(request.stroke_color)
         except ValueError as exc:
             raise AssetWorkbenchConflict(
                 "Text plate colors must be recognized image colors"
@@ -679,6 +682,11 @@ class AssetWorkbench:
                         size=request.size,
                         background_color=request.background_color,
                         foreground_color=request.foreground_color,
+                        content_box=request.content_box,
+                        text_align=request.text_align,
+                        vertical_align=request.vertical_align,
+                        stroke_width=request.stroke_width,
+                        stroke_color=request.stroke_color,
                         title=request.title,
                         exact_lines=list(request.exact_lines),
                         layout_description=request.layout_description,
@@ -1126,17 +1134,23 @@ class AssetWorkbench:
         return self.repository.list_image_tasks(project_id, asset_id)
 
     def advance_image_task(self, task_id: str) -> ImageGenerationTask:
-        task = self._require_image_task(task_id)
-        if task.status == ImageTaskStatus.QUEUED:
-            task.status = ImageTaskStatus.SUBMITTING
-            task.updated_at = utc_now()
-            self.repository.save_image_task(task)
-            return task
-        if task.status != ImageTaskStatus.SUBMITTING:
-            raise AssetWorkbenchConflict(
-                f"Image task {task.id} cannot advance from {task.status.value}"
-            )
-        return self._submit_image_task(task)
+        initial = self._require_image_task(task_id)
+        with self._lock:
+            task_lock = self._image_advance_locks.setdefault(task_id, threading.Lock())
+        with task_lock:
+            task = self._require_image_task(task_id)
+            if task.status != initial.status:
+                return task
+            if task.status == ImageTaskStatus.QUEUED:
+                task.status = ImageTaskStatus.SUBMITTING
+                task.updated_at = utc_now()
+                self.repository.save_image_task(task)
+                return task
+            if task.status != ImageTaskStatus.SUBMITTING:
+                raise AssetWorkbenchConflict(
+                    f"Image task {task.id} cannot advance from {task.status.value}"
+                )
+            return self._submit_image_task(task)
 
     def cancel_image_task(self, task_id: str) -> ImageGenerationTask:
         task = self._require_image_task(task_id)
@@ -1680,6 +1694,7 @@ class AssetWorkbench:
         if layout_profile in {
             AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
             AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+            AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1,
         } and kind != AssetKind.CHARACTER:
             raise AssetWorkbenchConflict(
                 f"{layout_profile.value} can only be used for a character asset"
@@ -1783,6 +1798,7 @@ class AssetWorkbench:
             AssetLayoutProfile.LIGHTWEIGHT_SINGLE: 1,
             AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9: 2,
             AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2: 3,
+            AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1: 4,
             AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2: 2,
             AssetLayoutProfile.PROP_MASTER_SINGLE: 1,
         }
@@ -1809,6 +1825,8 @@ class AssetWorkbench:
             AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2,
         }:
             width, height = _REFERENCE_SHEET_WIDE_SIZE
+        elif layout_profile == AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1:
+            width, height = (2048, 1152)
         elif layout_profile == AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2:
             width, height = (1536, 1024)
         elif layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE:
@@ -1909,6 +1927,8 @@ class AssetWorkbench:
 
         if layout_profile == AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2:
             columns = 2
+        elif layout_profile == AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1:
+            columns = 4
         elif layout_profile == AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2:
             columns = 3
         elif layout_profile == AssetLayoutProfile.PROP_MASTER_SINGLE:
@@ -1951,9 +1971,14 @@ class AssetWorkbench:
             raise AssetWorkbenchConflict(
                 "SCREEN_CONTENT_PLATE brief must declare required_visible_text"
             )
-        if request.required_visible_text() != brief.required_visible_text:
+        # The brief owns the wording; title/body containers own its line layout.
+        # Reflowing the same ordered characters must not require changing the brief.
+        received = request.required_visible_text()
+        if "".join(received) != "".join(brief.required_visible_text):
             raise AssetWorkbenchConflict(
-                "Text plate title and exact_lines must exactly match required_visible_text"
+                "Text plate title and exact_lines must exactly match required_visible_text "
+                f"in wording; line segmentation may differ. Expected {brief.required_visible_text!r}; "
+                f"received {received!r}"
             )
 
     @staticmethod
@@ -1982,11 +2007,17 @@ class AssetWorkbench:
     ) -> tuple[int, int]:
         raw_width, raw_height = request.size.split("x", maxsplit=1)
         width, height = int(raw_width), int(raw_height)
-        horizontal_margin = max(32, width // 12)
-        vertical_margin = max(32, height // 12)
-        available_width = width - horizontal_margin * 2
-        available_height = height - vertical_margin * 2
-        sheet = Image.new("RGB", (width, height), request.background_color)
+        x, y, box_width, box_height = request.content_box
+        left, top = round(x * width), round(y * height)
+        region_width, region_height = round(box_width * width), round(box_height * height)
+        minimum_margin = 32 if request.content_box == (0, 0, 1, 1) else 8
+        horizontal_margin = max(minimum_margin, region_width // 12) + request.stroke_width
+        vertical_margin = max(minimum_margin, region_height // 12) + request.stroke_width
+        available_width = region_width - horizontal_margin * 2
+        available_height = region_height - vertical_margin * 2
+        rgba = ImageColor.getcolor(request.background_color, "RGBA")
+        assert isinstance(rgba, tuple) and len(rgba) == 4
+        sheet = Image.new("RGBA" if rgba[3] < 255 else "RGB", (width, height), request.background_color)
         draw = ImageDraw.Draw(sheet)
         selected: tuple[
             ImageFont.FreeTypeFont,
@@ -1995,7 +2026,13 @@ class AssetWorkbench:
             int,
             int,
         ] | None = None
-        starting_size = min(96, max(18, height // max(5, len(request.exact_lines) + 3)))
+        if request.content_box == (0, 0, 1, 1):
+            starting_size = min(96, max(18, region_height // max(5, len(request.exact_lines) + 3)))
+        else:
+            # A content box already describes the intended text area. Do not
+            # reserve five poster rows inside a single caption or price label.
+            row_count = max(1, len(request.exact_lines) + (1 if request.title else 0))
+            starting_size = max(12, min(available_width, available_height // row_count))
         try:
             for body_size in range(starting_size, 11, -1):
                 body_font = ImageFont.truetype(font_source, body_size)
@@ -2029,7 +2066,7 @@ class AssetWorkbench:
                         title_size -= 1
                     if title_font is None:
                         continue
-                    title_gap = max(16, body_size)
+                    title_gap = max(16, body_size) if request.exact_lines else 0
                 total_height = title_height + title_gap + body_height
                 if total_height <= available_height:
                     selected = (
@@ -2045,30 +2082,40 @@ class AssetWorkbench:
                     "Exact text does not fit the requested plate size; enlarge or split it"
                 )
             body_font, title_font, line_heights, line_spacing, total_height = selected
-            cursor_y = vertical_margin + (available_height - total_height) // 2
+            free_height = available_height - total_height
+            offset_y = 0 if request.vertical_align == "top" else free_height if request.vertical_align == "bottom" else free_height // 2
+            cursor_y = top + vertical_margin + offset_y
             if request.title is not None:
                 assert title_font is not None
                 title_bounds = draw.textbbox((0, 0), request.title, font=title_font)
+                title_align = "center" if request.content_box == (0, 0, 1, 1) else request.text_align
+                title_x = (left + horizontal_margin if title_align == "left"
+                           else left + region_width - horizontal_margin if title_align == "right"
+                           else left + region_width // 2)
                 draw.text(
-                    (width // 2, cursor_y - title_bounds[1]),
+                    (title_x, cursor_y),
                     request.title,
                     font=title_font,
                     fill=request.foreground_color,
-                    anchor="mt",
+                    anchor={"left": "lt", "center": "mt", "right": "rt"}[title_align],
+                    stroke_width=request.stroke_width,
+                    stroke_fill=request.stroke_color,
                 )
-                cursor_y += title_bounds[3] - title_bounds[1] + max(
-                    16, body_font.size
-                )
+                cursor_y += title_bounds[3] - title_bounds[1] + (max(16, body_font.size) if request.exact_lines else 0)
             for index, (line, line_height) in enumerate(
                 zip(request.exact_lines, line_heights, strict=True)
             ):
-                bounds = draw.textbbox((0, 0), line, font=body_font)
+                text_x = (left + horizontal_margin if request.text_align == "left"
+                          else left + region_width - horizontal_margin if request.text_align == "right"
+                          else left + region_width // 2)
                 draw.text(
-                    (horizontal_margin, cursor_y - bounds[1]),
+                    (text_x, cursor_y),
                     line,
                     font=body_font,
                     fill=request.foreground_color,
-                    anchor="lt",
+                    anchor={"left": "lt", "center": "mt", "right": "rt"}[request.text_align],
+                    stroke_width=request.stroke_width,
+                    stroke_fill=request.stroke_color,
                 )
                 cursor_y += line_height
                 if index != len(request.exact_lines) - 1:

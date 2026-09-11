@@ -11,6 +11,7 @@ import imageio_ffmpeg
 import pytest
 from PIL import Image
 
+from short_drama.agent_runtime import ArtifactRef
 from short_drama.agent_runtime.artifact_resolver import ProjectArtifactResolver
 
 from short_drama.h3_models import (
@@ -1341,6 +1342,19 @@ def test_route_plan_can_enqueue_production_tasks_without_calling_provider(
             shot_directives=[_direct_route_directive(shot.id)],
         ),
     )
+    run = service.agent_runtime.create_run(
+        project_id=project.document.project.id,
+        objective="Produce this video.", root_agent="production-manager",
+    )
+    order = service.agent_runtime.create_work_order(
+        run.id, sender="production-manager", recipient_role="video-executor",
+        objective="Execute the saved route and continue the resulting tasks.",
+        why_now="The route is ready.",
+        scope=[ArtifactRef(
+            project_id=project.document.project.id, artifact_type="h3_route_plan",
+            artifact_id=compiled.plan.id, version=compiled.plan.state_revision,
+        )],
+    )
 
     executed = service.execute_h3_production_route_plan(
         project.document.project.id,
@@ -1359,6 +1373,14 @@ def test_route_plan_can_enqueue_production_tasks_without_calling_provider(
     assert all(item.status == TaskStatus.QUEUED for item in executed.queued_tasks)
     saved_evidence = service.repository.list_route_evidence(project.document.project.id)
     assert {item.purpose for item in saved_evidence} == {EvidencePurpose.PRODUCTION}
+    context = service.agent_runtime.work_order_context(order.id)
+    route_state = context.artifacts[0]
+    assert route_state.ref.version is None
+    assert route_state.title == (
+        f"H3 route plan v{compiled.plan.version} state {executed.plan.state_revision}"
+    )
+    assert all(task.id in route_state.summary for task in executed.queued_tasks)
+    assert service.agent_runtime.unresolved_artifact_refs(run.id, order.scope) == []
 
 
 def test_route_plan_reexecution_is_idempotent_after_all_candidates_are_established(

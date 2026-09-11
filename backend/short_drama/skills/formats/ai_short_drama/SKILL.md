@@ -11,6 +11,6 @@ user_overridable: true
 
 创作方法由用户需求和 Agent 语义选中的上游 Method 提供：MiniMax Design `drama-series` 作为通用短剧/漫剧项目主骨架，MiniMax-H3 任务方法按具体表达需要组合。具体题材、节奏、爽点、幽默与媒介仍服从 `StoryIntent`、`EndingContract`、项目 Style 和用户要求，不在这个格式适配器中另写一套固定方法。
 
-团队运行只使用 `Leader → Worker → Verifier`：Leader 根据当前工件分解任务，Worker 使用所选上游 Skill 产出工件，Verifier 按用户要求、该 Skill 自带检查项和实际成果验收。未通过时由 Leader 将具体问题退回原 Worker；不再拆出职责重叠的多套审校与返修 Agent。
+Leader 依据用户目标安排分工，Worker 使用当前需要的方法完成并保存内容。独立检查按实际需要安排，也可以由制作者自查；无需先获得 Verifier 的通过标记。发现问题时给出具体内容与影响，由负责的 Agent 定向修复。
 
 Provider 限制只从当前 Tool Schema 与 Capability 获取。上游 Skill 中属于 Hub/Canvas 的产品操作，由薄适配层映射到当前工件和 Tool，不创建本 Harness 的固定门禁或重试次数。

@@ -57,7 +57,8 @@ def test_shared_workflow_extracts_general_patterns_without_freezing_one_example(
     workflow = production_workflow()
 
     assert "可复用的视频生成范式" in workflow
-    assert "默认先形成一份可完整阅读和批准的 ScriptVersion" in workflow
+    assert "需要检查时，由作者或受委派的检查角色" in workflow
+    assert "不把可选检查变成固定责任链或必经审批" in workflow
     assert "剧情重要度、复用范围、跨镜连续性风险" in workflow
     assert workflow.index("设计场次与分镜") < workflow.index(
         "形成 AssetPlan 并准备核心资产"

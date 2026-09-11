@@ -82,7 +82,7 @@ def read_shot_editorial(service: ShortDramaService, project_id: str, shot_id: st
     start = window.start if window else max((item.startTime + item.duration for item in timeline.clips if item.type == "video"), default=0.0)
     if window is None:
         # A new video, or a shot explicitly removed from the film, may be edited before adoption.
-        projected = EditorProject.model_validate(project_editorial(aggregate))
+        projected = EditorProject.model_validate(project_editorial(aggregate, preview_shot_id=shot_id))
         source = _timeline(projected)
         window, _ = _select_window(source, shot_id, None)
         for following in sorted(aggregate.document.shots, key=lambda item: item.sequence):
@@ -115,8 +115,14 @@ def read_shot_editorial(service: ShortDramaService, project_id: str, shot_id: st
                 take = candidate
         source_window = next((item for item in take.shot_windows if item.shot_id == shot_id), None) if take else None
         if source_window and clip.model_extra is not None:
+            source_end = source_window.source_in_seconds + source_window.duration_seconds
+            # A provider can return extra footage after the final assigned shot.
+            # Keep it available for editing without crossing another shot's range.
+            if take and not any(item.source_in_seconds + item.duration_seconds > source_end + 0.001
+                                for item in take.shot_windows if item.shot_id != shot_id):
+                source_end = take.duration_seconds
             clip.model_extra["sourceWindowStart"] = source_window.source_in_seconds
-            clip.model_extra["sourceWindowEnd"] = source_window.source_in_seconds + source_window.duration_seconds
+            clip.model_extra["sourceWindowEnd"] = source_end
     for cue in local_timeline.subtitles:
         cue.startTime = max(0.0, cue.startTime - origin)
         cue.endTime -= origin

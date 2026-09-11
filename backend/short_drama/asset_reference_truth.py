@@ -22,11 +22,13 @@ def resolve_current_asset_media(
     asset_version_id: str,
     subject_asset_id: str | None,
 ) -> tuple[Asset, AssetVersion]:
-    """Resolve an H3 media reference against canonical and ReferencePack truth.
+    """Resolve an H3 media reference against current explicit project choices.
 
     Images without a semantic subject may use any current approved image. Once a
-    subject is declared, the image must be that subject's current canonical image
-    or an entry in its currently valid ReferencePack. Audio and video remain tied
+    subject is declared, its current canonical image, valid ReferencePack entries
+    and exact images explicitly selected in shot prose can be used. Selecting a
+    current draft image does not require a second approval or imply a QA pass.
+    Audio and video remain tied
     to the owning asset's current canonical version.
     """
 
@@ -44,7 +46,20 @@ def resolve_current_asset_media(
             f"Unknown AssetVersion {asset_version_id}"
         )
     owner, version = version_owner
-    if version.approval_status != ApprovalStatus.APPROVED:
+    explicit_image_choice = (
+        version.media_type == AssetMediaType.IMAGE
+        and (subject_asset_id is None or subject_asset_id == owner.id)
+        and any(
+            cue.usage == "GENERATION"
+            and cue.subject_asset_id == owner.id
+            and cue.asset_version_id == version.id
+            for shot in document.shots
+            for cue in [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]
+        )
+    )
+    if version.approval_status != ApprovalStatus.APPROVED and not (
+        explicit_image_choice and version.approval_status == ApprovalStatus.DRAFT
+    ):
         raise AssetReferenceTruthError(
             f"AssetVersion {asset_version_id} is not approved"
         )
@@ -100,6 +115,15 @@ def resolve_current_asset_media(
         for pack in document.reference_packs
         for entry in pack.entries
     )
+    linked_pack_entry = any(
+        pack.project_id == document.project.id
+        and pack.subject_asset_id == subject.id
+        and entry.asset_version_id == version.id
+        and entry.lineage_root_version_id is not None
+        for pack in document.reference_packs for entry in pack.entries
+    )
+    if explicit_image_choice and (not linked_pack_entry or valid_pack_entry):
+        return owner, version
     if not valid_pack_entry:
         raise AssetReferenceTruthError(
             f"Image AssetVersion {asset_version_id} is neither subject {subject.id}'s "

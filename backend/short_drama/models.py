@@ -458,6 +458,7 @@ class AssetLayoutProfile(StrEnum):
     LIGHTWEIGHT_SINGLE = "LIGHTWEIGHT_SINGLE"
     DRAMA_CHARACTER_DUAL_ZONE_16_9 = "DRAMA_CHARACTER_DUAL_ZONE_16_9"
     CHARACTER_SIX_VIEW_3X2 = "CHARACTER_SIX_VIEW_3X2"
+    CHARACTER_FOUR_VIEW_4X1 = "CHARACTER_FOUR_VIEW_4X1"
     SCENE_FOUR_DIRECTION_2X2 = "SCENE_FOUR_DIRECTION_2X2"
     PROP_MASTER_SINGLE = "PROP_MASTER_SINGLE"
 
@@ -1232,6 +1233,22 @@ class ScriptVersion(DomainModel):
     change_reason: str | None = None
     created_at: str
 
+    def order_lines_by_scenes(self) -> ScriptVersion:
+        """Scene order is narrative order, including older per-scene edit saves."""
+        ordered_ids = [line_id for scene in self.structured_scenes for line_id in scene.line_ids]
+        by_id = {line.id: line for line in self.lines}
+        if (len(ordered_ids) == len(self.lines) == len(by_id)
+                and set(ordered_ids) == set(by_id)
+                and ordered_ids != [line.id for line in self.lines]):
+            self.lines = [by_id[line_id] for line_id in ordered_ids]
+            self.spoken_text = "\n".join(line.spoken_text for line in self.lines)
+            self.subtitle_text = "\n".join(line.subtitle_text for line in self.lines)
+        return self
+
+    @model_validator(mode="after")
+    def normalize_scene_line_order(self) -> ScriptVersion:
+        return self.order_lines_by_scenes()
+
 
 class CharacterProfile(DomainModel):
     id: str
@@ -1364,6 +1381,7 @@ class CoreAssetBrief(DomainModel):
         if self.layout_profile in {
             AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
             AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+            AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1,
         } and self.reference_strategy != AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS:
             raise ValueError(
                 "Character multi-view layouts require CHARACTER_STANDARD_VIEWS"
@@ -1391,7 +1409,7 @@ class AssetReferenceSheetCell(DomainModel):
 class AssetReferenceSheet(DomainModel):
     strategy: AssetReferenceStrategy
     input_policy: AssetSheetInputPolicy
-    columns: int = Field(ge=1, le=3)
+    columns: int = Field(ge=1)
     layout_profile: AssetLayoutProfile | None = None
     show_labels: bool = True
     background_color: str = Field(default="#FFFFFF", min_length=1, max_length=64)
@@ -1414,6 +1432,11 @@ class AssetTextPlate(DomainModel):
     size: str = Field(min_length=1, max_length=80)
     background_color: str = Field(min_length=1, max_length=64)
     foreground_color: str = Field(min_length=1, max_length=64)
+    content_box: tuple[float, float, float, float] = (0, 0, 1, 1)
+    text_align: Literal["left", "center", "right"] = "left"
+    vertical_align: Literal["top", "center", "bottom"] = "center"
+    stroke_width: int = 0
+    stroke_color: str = "#000000"
     title: str | None = Field(default=None, min_length=1, max_length=500)
     exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
     layout_description: str = Field(min_length=1, max_length=2000)
@@ -1534,11 +1557,27 @@ class ShotReferenceCue(DomainModel):
     id: str | None = None
     asset_version_id: str | None = None
     field: Literal["visual", "action", "performance", "camera"] | None = None
-    text_start: int | None = Field(default=None, ge=0)
-    text_end: int | None = Field(default=None, gt=0)
+    text_start: int | None = Field(default=None, ge=0, description=(
+        "正文 @ 引用在 field 指定文本中的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数）。"
+        "新分镜中的具体人物、场景或道具引用应定位到相应文字并填写起止位置；"
+        "仅不对应任何正文文字的整镜构图参考才省略。"
+    ))
+    text_end: int | None = Field(default=None, gt=0, description=(
+        "正文 @ 引用的结束 Unicode 字符位置（不包含终点），与 text_start 成对。"
+        "时段内引用放到对应 timeline_beat.references；它的偏移基于该时段的 field 文本。"
+    ))
     alias: str = Field(min_length=1, max_length=80)
     required_tags: list[str] = Field(default_factory=list[str], max_length=12)
     purpose: str = Field(min_length=1, max_length=500)
+
+    usage: Literal["GENERATION", "EDITORIAL"] = Field(
+        default="GENERATION",
+        description=(
+            "GENERATION 表示视频模型实际需要接收的参考媒体；"
+            "EDITORIAL 表示剪辑合成时使用的图片、标题或文字图版，保留正文绑定和预览，"
+            "不自动上传给视频模型。按本次实际用途显式选择，不从用途文字猜测。"
+        ),
+    )
 
     @field_validator("alias", mode="before")
     @classmethod
@@ -2292,6 +2331,7 @@ class ProjectDocument(DomainModel):
     manifests: list[TimelineManifest]
     editorial_timeline: dict[str, JsonValue] | None = None
     studio_exports: list[dict[str, JsonValue]] = Field(default_factory=list[dict[str, JsonValue]])
+    studio_changes: list[dict[str, JsonValue]] = Field(default_factory=list[dict[str, JsonValue]])
     comfy_workflows: list[dict[str, JsonValue]] = Field(default_factory=list[dict[str, JsonValue]])
     trace_sources: list[str] = Field(default_factory=list[str])
     reference_packs: list[ReferencePack] = Field(default_factory=list[ReferencePack])
@@ -2783,6 +2823,8 @@ class AudioInspectionReport(DomainModel):
     project_id: str
     manifest_id: str
     source_script_version_id: str
+    source_editorial_revision: int | None = None
+    source_editorial_timeline_id: str | None = None
     semantic_status: SemanticReviewStatus
     semantic_provider: str | None = None
     transcription_model: str | None = None
@@ -2833,6 +2875,9 @@ class EpisodeReviewReport(DomainModel):
     project_id: str
     manifest_id: str
     source_script_version_id: str
+    source_editorial_revision: int | None = None
+    source_editorial_project: dict[str, JsonValue] | None = None
+    review_manifest: TimelineManifest | None = None
     status: EpisodeReviewStatus
     semantic_model: str | None = None
     scene_reviews: list[SceneEpisodeReview] = Field(

@@ -1,6 +1,7 @@
 appId: com.shortdrama.studio
 productName: Short Drama Studio
 copyright: Copyright © 2026 Short Drama Studio contributors
+beforePack: scripts/check-studio-package.cjs
 
 directories:
   output: release

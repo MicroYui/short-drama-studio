@@ -57,9 +57,9 @@ def test_successful_unsaved_compilation_survives_handoff_and_supersedes_failed_r
     context = runtime.context(run.id)
     assert [(ref.attempt_id, ref.outcome_status) for ref in context.tool_attempt_refs] == [("compile-2", "SUCCEEDED")]
     assert "ACCEPTED_EXACT_PROMPT" not in json.dumps(context.model_context_dump())
-    recovered = service.tool_registry.invoke("agent.get_tool_attempt", {
+    recovered = service.production_manager._invoke_scoped_tool(project_id, "agent.get_tool_attempt", {
         "attempt_ref": context.tool_attempt_refs[0].model_dump(mode="json"), "payload": "RESULT",
-    })
+    }, agent_run_id=run.id)
     assert recovered.status == ToolCallStatus.SUCCEEDED
     assert "ACCEPTED_EXACT_PROMPT" in json.dumps(recovered.output)
     source.specialist_turns.append(SpecialistTurnRecord(

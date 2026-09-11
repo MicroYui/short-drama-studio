@@ -1563,7 +1563,7 @@ def test_manifest_preserves_boundary_semantics_while_loading_duplicate_ref_once(
 
 @pytest.mark.parametrize(
     "artifact_type",
-    ["shot", "h3_route_plan", "h3_route_asset_preparation"],
+    ["shot", "storyboard"],
 )
 def test_exact_context_manifest_rejects_missing_or_stale_versions(
     tmp_path: Path,
@@ -1604,6 +1604,47 @@ def test_exact_context_manifest_rejects_missing_or_stale_versions(
     )
     with pytest.raises(ContextManifestResolutionError, match="unresolved artifact"):
         compiler.compile_for_work_order(order.id)
+
+
+@pytest.mark.parametrize("artifact_type", ["h3_route_plan", "h3_route_asset_preparation"])
+@pytest.mark.parametrize("recorded_state", [None, 1])
+def test_worker_reads_current_execution_state_after_its_route_advances(
+    tmp_path: Path, artifact_type: str, recorded_state: int | None,
+) -> None:
+    original = ArtifactRef(
+        project_id="project-live-route", artifact_type=artifact_type,
+        artifact_id="route-1", version=recorded_state,
+    )
+    current = original.model_copy(update={"version": None})
+    resolver = FakeArtifactResolver([
+        ArtifactSummary(ref=current, summary='{"state_revision":3,"task_id":"task-1"}'),
+    ])
+    store, runtime, compiler = _runtime(tmp_path / "runtime.sqlite3", resolver)
+    assert compiler is not None
+    run = runtime.create_run(
+        project_id=original.project_id, objective="Continue the submitted video.",
+        root_agent="production-manager",
+    )
+    order = runtime.create_work_order(
+        run.id, sender="production-manager", recipient_role="video-executor",
+        objective="Continue this route to its video output.",
+        why_now="The task has been queued.", scope=[original],
+    )
+
+    context = compiler.compile_for_work_order(order.id)
+
+    assert json.loads(context.artifacts[0].summary) == {
+        "state_revision": 3, "task_id": "task-1",
+    }
+    assert context.artifacts[0].ref == current
+    assert store.get_work_order(order.id) == order
+    assert resolver.requested == [current]
+    assert runtime.unresolved_artifact_refs(run.id, [original]) == []
+    leader_context = runtime.context(
+        run.id, requested_artifact_refs=[original, current],
+    )
+    assert leader_context.unresolved_artifact_refs == []
+    assert [item.ref for item in leader_context.artifacts] == [current]
 
 
 def test_work_order_progress_is_append_only_and_survives_restart(tmp_path: Path) -> None:

@@ -276,7 +276,7 @@ def test_character_keeps_multiple_approved_image_references(
         current_project_id=project_id,
     )
     assert stale_catalog.candidates == []
-    with pytest.raises(WorkflowConflictError, match="current approved canonical image"):
+    with pytest.raises(WorkflowConflictError, match="current usable image"):
         service.add_reference_pack_entry(
             project_id,
             ReferencePackEntryCreateRequest(

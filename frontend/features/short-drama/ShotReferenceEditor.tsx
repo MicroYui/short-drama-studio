@@ -12,7 +12,7 @@ export function ReferencePreview({ project, cue, rect, scope }: { project: Proje
   const top = below + 292 < window.innerHeight ? below : Math.max(12, rect.top - 294)
   return createPortal(<div className="sd-reference-preview" role="tooltip" style={{ left, top }}>
     <div className="sd-reference-picture">{version ? <img src={mediaUrl(version.local_path, version.external_url)} alt={`${name}实际绑定的图片`} /> : <span>尚未绑定图片</span>}</div>
-    <div className="sd-reference-caption"><strong>{name}</strong><span>{scope || '整镜参考'}</span><p>{cue.purpose}</p><small>{version ? mediaTitle(project, version) : '待补充素材'}</small></div>
+    <div className="sd-reference-caption"><strong>{name}</strong><span>{scope || '整镜参考'}{cue.usage === 'EDITORIAL' ? ' · 剪辑中使用' : ' · 视频生成参考'}</span><p>{cue.purpose}</p><small>{version ? mediaTitle(project, version) : '待补充素材'}</small></div>
   </div>, document.body)
 }
 
@@ -82,6 +82,10 @@ function readContent(root: HTMLElement, lookup: Map<string, ReferenceCue>) {
   return { text, cues }
 }
 
+export function ReferenceUsagePicker({ value, onChange }: { value: NonNullable<ReferenceCue['usage']>; onChange: (value: NonNullable<ReferenceCue['usage']>) => void }) {
+  return <label className="sd-field">使用位置<select aria-label="素材使用位置" value={value} onChange={event => onChange(event.target.value === 'EDITORIAL' ? 'EDITORIAL' : 'GENERATION')}><option value="GENERATION">视频生成参考</option><option value="EDITORIAL">剪辑中使用</option></select></label>
+}
+
 export function ShotReferenceEditor({ project, text, cues, field, label, scope, onChange, readOnly = false }: {
   project: ProjectAggregate; text: string; cues: ReferenceCue[]; field: NonNullable<ReferenceCue['field']>; label: string; scope: string;
   readOnly?: boolean;
@@ -94,6 +98,7 @@ export function ShotReferenceEditor({ project, text, cues, field, label, scope, 
   const [picker, setPicker] = useState<{ query: string; cue?: ReferenceCue } | null>(null)
   const [hover, setHover] = useState<{ cue: ReferenceCue; rect: DOMRect } | null>(null)
   const [purpose, setPurpose] = useState('')
+  const [usage, setUsage] = useState<NonNullable<ReferenceCue['usage']>>('GENERATION')
 
   useLayoutEffect(() => {
     const normalized = cues.map((cue, index) => ({ ...cue, id: cue.id ?? `legacy-${field}-${index}` }))
@@ -123,6 +128,7 @@ export function ShotReferenceEditor({ project, text, cues, field, label, scope, 
     rangeRef.current = trigger
     setPicker({ query: match[1] })
     setPurpose('')
+    setUsage('GENERATION')
   }
 
   const editToken = (element: HTMLElement) => {
@@ -135,6 +141,7 @@ export function ShotReferenceEditor({ project, text, cues, field, label, scope, 
     setHover(null)
     setPicker({ query: '', cue })
     setPurpose(cue.purpose)
+    setUsage(cue.usage ?? 'GENERATION')
   }
 
   const select = (group: AssetGroup, version: AssetVersion) => {
@@ -144,7 +151,7 @@ export function ShotReferenceEditor({ project, text, cues, field, label, scope, 
       id: picker?.cue?.id ?? crypto.randomUUID(), subject_asset_id: group.id, asset_version_id: version.id,
       alias: `${group.name.replace(/[^\p{L}\p{N}_-]/gu, '_')}_${version.id.slice(-5)}`,
       purpose: purpose.trim() || ({ CHARACTER: '人物身份与外观', LOCATION: '场景与空间关系', PROP: '道具外观与使用', REFERENCE: '画面参考' }[group.kind]),
-      required_tags: [], field, text_start: 0, text_end: 1,
+      required_tags: [], field, text_start: 0, text_end: 1, usage,
     }
     lookup.current.set(cue.id!, cue)
     const span = document.createElement('span')
@@ -195,8 +202,9 @@ export function ShotReferenceEditor({ project, text, cues, field, label, scope, 
       onFocus={event => { const element = (event.target as HTMLElement).closest<HTMLElement>('[data-reference-id]'); const cue = lookup.current.get(element?.dataset.referenceId ?? ''); if (element && cue) setHover({ cue, rect: element.getBoundingClientRect() }) }}
       onMouseOut={() => setHover(null)} onBlur={() => setHover(null)} />
     {picker && <div className="sd-reference-editor-popover"><div className="sd-reference-purpose"><ImagePlus size={15} /><input aria-label="图片用途" placeholder="图片用途，例如：保持人物外观" value={purpose} onChange={e => setPurpose(e.target.value)} />{picker.cue && <button className="sd-text-button" onClick={remove}>解除引用</button>}</div>
+      <ReferenceUsagePicker value={usage} onChange={setUsage} />
       <AssetPicker project={project} query={picker.query} onSelect={select} onClose={() => setPicker(null)} />
-      {picker.cue && <button className="sd-button sd-purpose-save" onClick={() => { const cue = { ...picker.cue!, purpose: purpose.trim() || picker.cue!.purpose }; lookup.current.set(cue.id!, cue); publish(); setPicker(null) }}><Check size={14} />仅更新用途</button>}
+      {picker.cue && <button className="sd-button sd-purpose-save" onClick={() => { const cue = { ...picker.cue!, purpose: purpose.trim() || picker.cue!.purpose, usage }; lookup.current.set(cue.id!, cue); publish(); setPicker(null) }}><Check size={14} />仅更新用途</button>}
     </div>}
     {hover && !picker && <ReferencePreview project={project} cue={hover.cue} rect={hover.rect} scope={scope} />}
   </div>

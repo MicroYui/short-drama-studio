@@ -164,22 +164,22 @@ def test_production_document_sources_are_exact_resolvable_project_artifacts(
             ),
         )
 
-    with pytest.raises(WorkflowConflictError, match="explicit version"):
-        service.create_production_document(
-            project_id,
-            ProductionDocumentCreateRequest(
-                kind="invalid.unpinned-source",
-                title="Unpinned Source",
-                source_artifact_refs=[
-                    ProductionDocumentArtifactRef(
-                        project_id=project_id,
-                        artifact_type="script_version",
-                        artifact_id=script.id,
-                    )
-                ],
-                origin=ProductionDocumentOrigin.AGENT,
-            ),
-        )
+    resolved = service.create_production_document(
+        project_id,
+        ProductionDocumentCreateRequest(
+            kind="continuity.source-id",
+            title="Exact Source ID",
+            source_artifact_refs=[
+                ProductionDocumentArtifactRef(
+                    project_id=project_id,
+                    artifact_type="script_version",
+                    artifact_id=script.id,
+                )
+            ],
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    assert resolved.version.source_artifact_refs[0].version == script.version
 
     with pytest.raises(WorkflowConflictError, match="cannot be resolved"):
         service.revise_production_document(
@@ -202,6 +202,33 @@ def test_production_document_sources_are_exact_resolvable_project_artifacts(
     current = service.get_production_document(project_id, created.document.id)
     assert current.version.id == created.version.id
     assert len(current.document.versions) == 1
+
+
+def test_source_version_ids_resolve_without_requiring_redundant_numbers(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture().document
+    project_id = project.project.id
+    asset_version = project.assets[0].versions[0]
+    bible = project.bible_versions[0]
+    source = service.create_production_document(project_id, _create_request(project_id))
+    expected = [
+        ("asset_version", asset_version.id, asset_version.version),
+        ("bible_version", bible.id, bible.version),
+        ("production_document_version", source.version.id, source.version.version),
+    ]
+    created = service.create_production_document(
+        project_id,
+        ProductionDocumentCreateRequest(
+            kind="production.source-notes",
+            title="Sources already identify exact saved content",
+            source_artifact_refs=[ProductionDocumentArtifactRef(
+                project_id=project_id, artifact_type=kind, artifact_id=identity,
+            ) for kind, identity, _number in expected],
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    assert [(ref.artifact_type, ref.artifact_id, ref.version)
+            for ref in created.version.source_artifact_refs] == expected
 
 
 def test_project_document_accepts_legacy_json_without_production_documents(

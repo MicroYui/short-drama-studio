@@ -63,10 +63,8 @@ from short_drama.production_profiles import (
     ProductionSkillRole,
     compile_production_prompt,
 )
-from short_drama.production_contracts import (
-    GENERATION_PLAN_OUTPUT_SLOT_ID,
-    GenerationUnit,
-)
+from short_drama.production_contracts import GenerationPlanContent, GenerationUnit
+from short_drama.generation_plan_state import validate_generation_units_current
 from short_drama.language_models import H3GenerationUnitMediaCandidate
 from short_drama.providers.minimax_h3_compiler import (
     H3CapabilityError,
@@ -888,21 +886,56 @@ def generation_unit_media_candidates(
     document: ProjectDocument,
     shots: list[ShotPlan],
 ) -> tuple[list[H3GenerationUnitMediaCandidate], list[str]]:
-    """Expose scoped approved references before prompt compilation, without IO.
+    """Expose scoped selected or approved references before compilation, without IO.
 
     Reuse the same reference resolver and H3 mapping as route planning. This
     only exposes candidates; the Agent still chooses its route and media order.
     """
 
-    approved = _approved_media_inputs(document)
+    approved = _available_media_inputs(document)
     plans = {plan.shot_id: plan for plan in document.reference_plan}
     candidates: dict[tuple[str | None, str | None], H3GenerationUnitMediaCandidate] = {}
     aliases: set[str] = set()
     warnings: list[str] = []
     for shot in shots:
+        # Prose bindings are current user/Agent choices. They also exist before
+        # a legacy ReferencePlan has been materialized or ranked.
+        explicit_count = 0
+        for cue in [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]:
+            if cue.usage == "EDITORIAL" or cue.asset_version_id is None:
+                continue
+            key = (cue.subject_asset_id, cue.asset_version_id)
+            if key in candidates:
+                if shot.id not in candidates[key].serves_shot_ids:
+                    candidates[key].serves_shot_ids.append(shot.id)
+                explicit_count += 1
+                continue
+            try:
+                resolve_current_asset_media(document, asset_version_id=cue.asset_version_id,
+                                            subject_asset_id=cue.subject_asset_id)
+                media_type, source = approved[cue.asset_version_id]
+                kind, role = {
+                    AssetMediaType.IMAGE: (H3MediaKind.IMAGE, H3MediaRole.REFERENCE_IMAGE),
+                    AssetMediaType.VIDEO: (H3MediaKind.VIDEO, H3MediaRole.REFERENCE_VIDEO),
+                    AssetMediaType.AUDIO: (H3MediaKind.AUDIO, H3MediaRole.REFERENCE_AUDIO),
+                }[media_type]
+            except (AssetReferenceTruthError, KeyError) as exc:
+                warnings.append(f"{shot.id}: explicit reference {cue.asset_version_id} is unavailable: {exc}")
+                continue
+            alias = _unique_route_reference_alias(cue.alias, stable_id=cue.asset_version_id, used_aliases=aliases)
+            aliases.add(alias)
+            candidates[key] = H3GenerationUnitMediaCandidate(
+                media_input=H3MediaInput(kind=kind, role=role, source=source.model_copy(deep=True),
+                    asset_version_id=cue.asset_version_id, subject_asset_id=cue.subject_asset_id,
+                    reference_alias=alias, binding_purpose=cue.purpose,
+                    reference_tags=list(cue.required_tags)),
+                reference_role="SHOT_REFERENCE", serves_shot_ids=[shot.id],
+            )
+            explicit_count += 1
         plan = plans.get(shot.id)
         if plan is None:
-            warnings.append(f"No ReferencePlan for {shot.id}")
+            if not explicit_count:
+                warnings.append(f"No ReferencePlan for {shot.id}")
             continue
         try:
             selections, _limit, notes = build_reference_visual_candidates(
@@ -911,7 +944,8 @@ def generation_unit_media_candidates(
             )
             warnings.extend(notes)
         except VisualInputContractError as exc:
-            warnings.append(f"{shot.id}: {exc}")
+            if not explicit_count:
+                warnings.append(f"{shot.id}: {exc}")
             continue
         for selected in selections:
             key = (selected.subject_asset_id, selected.asset_version_id)
@@ -1007,7 +1041,10 @@ def validate_route_plan_freshness(
         raise RoutePlanningError("Route plan uses an outdated project Bible")
     if plan.input_voice_reference_revision != document.project.voice_reference_revision:
         raise RoutePlanningError("Route plan uses outdated character voice references")
-    if plan.input_storyboard_document_id is not None:
+    if (
+        plan.input_storyboard_document_id is not None
+        and plan.input_generation_plan_document_id is None
+    ):
         if plan.input_storyboard_document_id != document.storyboard_document_id:
             raise RoutePlanningError("Route plan uses a different Storyboard document")
         storyboard_document = next(
@@ -1040,13 +1077,9 @@ def validate_route_plan_freshness(
             ),
             None,
         )
-        if (
-            generation_document is None
-            or generation_document.current_version_id
-            != plan.input_generation_plan_version_id
-        ):
+        if generation_document is None:
             raise RoutePlanningError(
-                "Route plan uses an outdated GenerationPlan version"
+                "Route plan's GenerationPlan document is missing"
             )
         generation_version = next(
             (
@@ -1056,26 +1089,19 @@ def validate_route_plan_freshness(
             ),
             None,
         )
-        generation_slot = next(
-            (
-                item
-                for item in document.output_slots
-                if item.id == GENERATION_PLAN_OUTPUT_SLOT_ID
-            ),
-            None,
-        )
-        if (
-            generation_version is None
-            or generation_slot is None
-            or generation_slot.current_artifact_ref is None
-            or generation_slot.current_artifact_ref.artifact_id
-            != generation_document.id
-            or generation_slot.current_artifact_ref.version
-            != generation_version.version
-        ):
+        if generation_version is None:
             raise RoutePlanningError(
-                "Route plan's GenerationPlan output slot is no longer current"
+                "Route plan's GenerationPlan version is missing"
             )
+        try:
+            validate_generation_units_current(
+                document,
+                GenerationPlanContent.model_validate(generation_version.payload),
+                [item.generation_unit_id for item in plan.decisions
+                 if item.generation_unit_id is not None],
+            )
+        except ValueError as exc:
+            raise RoutePlanningError(str(exc)) from exc
     revision_by_shot = {item.id: item.revision for item in document.shots}
     stale: list[str] = []
     for item in plan.decisions:
@@ -1132,7 +1158,7 @@ def _build_candidates(
         duration_seconds=duration,
     )
     candidates: list[_RouteCandidate] = []
-    approved_inputs = _approved_media_inputs(document)
+    approved_inputs = _available_media_inputs(document)
     reusable: list[Take] = []
     for take in takes:
         if take.shot_id != shot.id or not _take_is_available_for_reuse(
@@ -1726,7 +1752,7 @@ def _materialize_reference_selection(
             "Unknown reference selection candidate IDs: " + ", ".join(unknown)
         )
 
-    approved_inputs = _approved_media_inputs(document)
+    approved_inputs = _available_media_inputs(document)
     selected_candidates = [
         candidates_by_id[item] for item in selection_candidate_ids
     ]
@@ -1877,7 +1903,7 @@ def _selected_reference_metadata(
         for start, cue in [(0.0, cue) for cue in shot.references] + [
             (beat.start_seconds, cue) for beat in shot.timeline_beats for cue in beat.references
         ]
-        if cue.subject_asset_id == selected.subject_asset_id
+        if cue.usage == "GENERATION" and cue.subject_asset_id == selected.subject_asset_id
         and (cue.asset_version_id is None or cue.asset_version_id == selected.asset_version_id)
         and set(cue.required_tags).issubset(selected.tags)
     ]
@@ -2189,17 +2215,21 @@ def _task_matches(
     )
 
 
-def _approved_media_inputs(
+def _available_media_inputs(
     document: ProjectDocument,
 ) -> dict[str, tuple[AssetMediaType, H3MediaSource]]:
     result: dict[str, tuple[AssetMediaType, H3MediaSource]] = {}
     for asset in document.assets:
         for version in asset.versions:
-            if (
-                version.approval_status != ApprovalStatus.APPROVED
-                or version.media_type == AssetMediaType.TEXT_REFERENCE
-            ):
+            if version.media_type == AssetMediaType.TEXT_REFERENCE:
                 continue
+            if version.approval_status != ApprovalStatus.APPROVED:
+                if version.media_type != AssetMediaType.IMAGE or version.approval_status != ApprovalStatus.DRAFT:
+                    continue
+                try:
+                    resolve_current_asset_media(document, asset_version_id=version.id, subject_asset_id=asset.id)
+                except AssetReferenceTruthError:
+                    continue
             if version.media_type == AssetMediaType.IMAGE:
                 if version.freshness != Freshness.CURRENT:
                     continue

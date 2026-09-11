@@ -51,7 +51,9 @@ class _RegisteredTool(Generic[InputT, OutputT]):
 
         tool_call_id = f"tool-{uuid4().hex[:12]}"
         try:
-            record_trace("tool.started", {"tool_call_id": tool_call_id, "tool_name": self._spec.id, "description": self._spec.description})
+            raw = typed_input.model_dump(mode="json")
+            scope = {key: value for key, value in raw.items() if key in {"scene_id", "shot_id", "asset_id", "work_order_id", "project_id"}}
+            record_trace("tool.started", {"tool_call_id": tool_call_id, "tool_name": self._spec.id, "description": self._spec.description, "scope": scope})
             execution = self._spec.handler(typed_input)
             output = self._spec.output_model.model_validate(execution.output)
         except Exception as exc:

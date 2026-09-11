@@ -332,6 +332,7 @@ def _asset_plan(
     *,
     spec: object,
     storyboard: object,
+    approve_sources: bool = True,
 ) -> AssetPlanContent:
     document = service.get_project(project_id).document
     character = next(item for item in document.assets if item.kind == AssetKind.CHARACTER)
@@ -345,16 +346,17 @@ def _asset_plan(
             media_type="IMAGE",
         ),
     ).version
-    service.review_asset_version(
-        project_id,
-        character.id,
-        character_version.id,
-        AssetReviewRequest(
-            decision="APPROVED",
-            purpose=AssetReviewPurpose.CANONICAL_MASTER,
-            notes="approved character image master",
-        ),
-    )
+    if approve_sources:
+        service.review_asset_version(
+            project_id,
+            character.id,
+            character_version.id,
+            AssetReviewRequest(
+                decision="APPROVED",
+                purpose=AssetReviewPurpose.CANONICAL_MASTER,
+                notes="approved character image master",
+            ),
+        )
     prop_version = service.import_url_asset_version(
         project_id,
         prop.id,
@@ -364,16 +366,17 @@ def _asset_plan(
             media_type="IMAGE",
         ),
     ).version
-    service.review_asset_version(
-        project_id,
-        prop.id,
-        prop_version.id,
-        AssetReviewRequest(
-            decision="APPROVED",
-            purpose=AssetReviewPurpose.CANONICAL_MASTER,
-            notes="approved prop image master",
-        ),
-    )
+    if approve_sources:
+        service.review_asset_version(
+            project_id,
+            prop.id,
+            prop_version.id,
+            AssetReviewRequest(
+                decision="APPROVED",
+                purpose=AssetReviewPurpose.CANONICAL_MASTER,
+                notes="approved prop image master",
+            ),
+        )
     document = service.get_project(project_id).document
     first_shot = document.shots[0]
     first_group_id = f"clip-{first_shot.id}"
@@ -1533,6 +1536,154 @@ def test_replace_asset_plan_rejects_undeclared_work_item_omissions(
     ] == ["work-linxia-master"]
 
 
+def test_asset_plan_can_be_saved_in_batches_and_resumed_without_rewriting(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, "incremental-plan")
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    created = service.create_asset_plan(
+        project_id,
+        AssetPlanCreateRequest(
+            asset_plan=plan.model_copy(update={"items": []}),
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    first = service.patch_asset_plan(
+        project_id,
+        AssetPlanPatchRequest(
+            base_version_id=created.version.id,
+            upsert_items=[plan.items[0]],
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+    index = service.get_asset_plan_index(project_id)
+    assert [item.id for item in index.items] == [plan.items[0].id]
+
+    resumed = _service(tmp_path, "incremental-plan")
+    continued = resumed.patch_asset_plan(
+        project_id,
+        AssetPlanPatchRequest(
+            base_version_id=first.version.id,
+            upsert_items=plan.items[1:],
+            origin=ProductionDocumentOrigin.AGENT,
+        ),
+    )
+
+    assert continued.document.id == created.document.id
+    assert continued.asset_plan == plan
+    assert resumed.get_asset_plan(project_id).asset_plan.items[0] == plan.items[0]
+
+
+@pytest.mark.parametrize("invalid_target", [False, True])
+def test_append_assets_and_patch_existing_fields_in_one_atomic_save(
+    tmp_path: Path, invalid_target: bool,
+) -> None:
+    service = _service(tmp_path, "mixed-plan-patch")
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    initial = plan.model_copy(update={"items": [plan.items[0]]})
+    created = service.create_asset_plan(
+        project_id,
+        AssetPlanCreateRequest(asset_plan=initial, origin=ProductionDocumentOrigin.AGENT),
+    )
+    added = plan.items[1]
+    call = service.tool_registry.invoke("artifact.patch_asset_plan", {
+        "project_id": project_id,
+        "request": {
+            "base_version_id": created.version.id,
+            "upsert_items": [added.model_dump(mode="json")],
+            "field_patches": [
+                {"item_id": plan.items[0].id, "op": "replace", "path": "/rationale",
+                 "value": "保留已采用角色图片，补充本次使用说明。"},
+                {"item_id": "missing-item" if invalid_target else added.id,
+                 "op": "replace", "path": "/rationale", "value": "新增道具与已有角色共同服务本集。"},
+            ],
+            "origin": ProductionDocumentOrigin.AGENT.value,
+        },
+    })
+    current = service.get_asset_plan(project_id)
+    if invalid_target:
+        assert call.status == ToolCallStatus.FAILED
+        assert current.version.id == created.version.id
+        assert current.asset_plan == initial
+    else:
+        assert call.status == ToolCallStatus.SUCCEEDED
+        assert [item.id for item in current.asset_plan.items] == [plan.items[0].id, added.id]
+        assert current.asset_plan.items[0].rationale == "保留已采用角色图片，补充本次使用说明。"
+        assert current.asset_plan.items[1].rationale == "新增道具与已有角色共同服务本集。"
+        assert current.asset_plan.items[0].work_items == plan.items[0].work_items
+        assert current.asset_plan.items[0].completed_asset_version_id == plan.items[0].completed_asset_version_id
+        assert current.version.version == created.version.version + 1
+
+
+def test_parallel_candidate_saves_merge_unrelated_work_without_global_version_conflict(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, "parallel-candidates")
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    created = service.create_asset_plan(project_id, AssetPlanCreateRequest(
+        asset_plan=plan, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    requests: list[AssetPlanPatchRequest] = []
+    expected: dict[str, tuple[str, str]] = {}
+    for item, work in [(plan.items[0], work) for work in plan.items[0].work_items]:
+        asset = service.create_asset(project_id, AssetCreateRequest(
+            kind=item.asset_kind, name=item.name + "候选", descriptor="已生成的参考图",
+        )).asset
+        version = service.import_url_asset_version(project_id, asset.id, AssetImportUrlRequest(
+            external_url=f"https://example.test/{work.id}.png", descriptor="已保存候选", media_type="IMAGE",
+        )).version
+        expected[work.id] = (asset.id, version.id)
+        requests.append(AssetPlanPatchRequest(
+            base_version_id=created.version.id,
+            field_patches=[AssetPlanFieldPatch(
+                work_item_id=work.id, op=AssetPlanFieldPatchOperation.ADD, path=path, value=value,
+            ) for path, value in [("/candidate_asset_id", asset.id), ("/candidate_asset_version_id", version.id)]],
+            origin=ProductionDocumentOrigin.AGENT,
+        ))
+    service.patch_asset_plan(project_id, requests[0])
+    saved = service.patch_asset_plan(project_id, requests[1])
+    actual = {work.id: (work.candidate_asset_id, work.candidate_asset_version_id)
+              for item in saved.asset_plan.items for work in item.work_items if work.id in expected}
+    assert actual == expected
+    assert saved.asset_plan.items[0].completed_asset_version_id == plan.items[0].completed_asset_version_id
+    # The same completed request can be delivered again without losing the other result.
+    repeated = service.patch_asset_plan(project_id, requests[0])
+    assert repeated.asset_plan == saved.asset_plan
+
+
+def test_parallel_field_edits_preserve_sibling_work_and_reject_changed_target(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, "parallel-work-fields")
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    created = service.create_asset_plan(project_id, AssetPlanCreateRequest(
+        asset_plan=plan, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    def field_edit(work_id: str, text: str) -> AssetPlanPatchRequest:
+        return AssetPlanPatchRequest(
+            base_version_id=created.version.id,
+            field_patches=[AssetPlanFieldPatch(work_item_id=work_id,
+                op=AssetPlanFieldPatchOperation.REPLACE, path="/final_prompt", value=text)],
+            origin=ProductionDocumentOrigin.AGENT,
+        )
+    first, second = plan.items[0].work_items[:2]
+    service.patch_asset_plan(project_id, field_edit(first.id, "保留用户刚保存的主图修改。"))
+    saved = service.patch_asset_plan(project_id, field_edit(second.id, "只调整另外一个补充视角。"))
+    assert [work.final_prompt for work in saved.asset_plan.items[0].work_items] == [
+        "保留用户刚保存的主图修改。", "只调整另外一个补充视角。",
+    ]
+    with pytest.raises(WorkflowConflictError, match="selected content changed"):
+        service.patch_asset_plan(project_id, field_edit(first.id, "过时任务试图覆盖主图。"))
+    with pytest.raises(WorkflowConflictError, match="selector must resolve exactly once"):
+        service.patch_asset_plan(project_id, field_edit("unknown-work", "不能猜测对象。"))
+    assert service.get_asset_plan(project_id).version.id == saved.version.id
+    assert service.get_asset_plan(project_id).asset_plan == saved.asset_plan
+
+
 def test_patch_asset_plan_merges_local_work_changes_and_versions_full_truth(
     tmp_path: Path,
 ) -> None:
@@ -1761,6 +1912,27 @@ def test_patch_asset_plan_aggregates_all_missing_served_clip_groups(
     unchanged = service.get_asset_plan(project_id)
     assert unchanged.version.id == created.version.id
     assert unchanged.asset_plan == plan
+
+
+def test_asset_planning_context_tool_works_before_spec_or_storyboard(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, "asset-context-before-storyboard")
+    project_id = service.initialize_fixture().document.project.id
+
+    call = service.tool_registry.invoke(
+        "artifact.get_asset_planning_context", {"project_id": project_id}
+    )
+
+    assert call.status == ToolCallStatus.SUCCEEDED
+    assert call.output is not None
+    assert call.output["production_spec"] is None
+    assert call.output["storyboard"] is None
+    assert call.output["existing_asset_plan_index"] is None
+    assert {ref.artifact_type for ref in call.artifact_refs} >= {
+        "project", "script_version", "bible_version"
+    }
+    assert not any(ref.artifact_type in {"production_spec", "storyboard"} for ref in call.artifact_refs)
 
 
 def test_asset_planning_context_returns_each_current_truth_once_without_histories(
@@ -3096,6 +3268,54 @@ def test_asset_plan_requires_served_shot_clip_groups(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize("adopt_latest_script", [False, True])
+def test_local_asset_plan_patch_remains_editable_during_script_revision(
+    tmp_path: Path, adopt_latest_script: bool,
+) -> None:
+    service = _service(tmp_path)
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard)
+    created = service.create_asset_plan(project_id, AssetPlanCreateRequest(
+        asset_plan=plan, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    document = service.get_project(project_id).document
+    script = next(value for value in document.script_versions
+                  if value.id == document.project.current_script_version_id)
+    line = script.lines[0]
+    service.revise_script_line(project_id, ReviseScriptLineRequest(
+        line_id=line.id, spoken_text=line.spoken_text + "！",
+        subtitle_text=line.subtitle_text + "！", change_reason="用户修改一句对白。",
+    ))
+    before = service.get_project(project_id).document
+    source_id = (before.project.current_script_version_id
+                 if adopt_latest_script else plan.script_version_id)
+    assert source_id is not None
+    patched = service.patch_asset_plan(project_id, AssetPlanPatchRequest(
+        base_version_id=created.version.id,
+        field_patches=[
+            AssetPlanFieldPatch(op=AssetPlanFieldPatchOperation.REPLACE,
+                                path="/script_version_id", value=source_id),
+            AssetPlanFieldPatch(item_id=plan.items[0].id,
+                                op=AssetPlanFieldPatchOperation.REPLACE,
+                                path="/rationale", value="只调整这一项的用途。"),
+        ],
+        origin=ProductionDocumentOrigin.AGENT,
+    ))
+    after = service.get_project(project_id).document
+    assert patched.asset_plan.script_version_id == source_id
+    assert patched.asset_plan.production_spec_version_id == spec.version.id
+    assert patched.asset_plan.storyboard_version_id == storyboard.version.id
+    assert patched.asset_plan.items[0].rationale == "只调整这一项的用途。"
+    assert patched.asset_plan.items[1:] == plan.items[1:]
+    assert after.script_versions == before.script_versions
+    assert after.shots == before.shots
+    assert after.assets == before.assets
+    assert after.editorial_timeline == before.editorial_timeline
+    script_refs = [ref for ref in patched.version.source_artifact_refs
+                   if ref.artifact_type == "script_version"]
+    assert [ref.artifact_id for ref in script_refs] == [source_id]
+
+
 def test_asset_plan_rejects_stale_sources_and_unknown_completed_versions(
     tmp_path: Path,
 ) -> None:
@@ -3314,3 +3534,21 @@ def test_asset_plan_slot_becomes_stale_when_upstream_truth_changes(
     stale_slot = _slot(service, project_id, ASSET_PLAN_OUTPUT_SLOT_ID)
     assert stale_slot.current_artifact_ref is None
     assert stale_slot.invalidation_reason is not None
+
+
+def test_explicit_draft_can_complete_plan_and_unblock_derived_work(tmp_path: Path) -> None:
+    service = _service(tmp_path, "selected-draft-completion")
+    project_id, spec, storyboard = _setup_story_truth(service)
+    plan = _asset_plan(service, project_id, spec=spec, storyboard=storyboard,
+                       approve_sources=False)
+    service.create_asset_plan(project_id, AssetPlanCreateRequest(
+        asset_plan=plan, origin=ProductionDocumentOrigin.AGENT,
+    ))
+    reopened = _service(tmp_path, "selected-draft-completion")
+    index = reopened.get_asset_plan_index(project_id)
+    assert [work.status.value for work in index.items[0].work_items] == ["COMPLETED", "READY"]
+    document = reopened.get_project(project_id).document
+    for item in plan.items[:2]:
+        asset = next(asset for asset in document.assets if asset.id == item.completed_asset_id)
+        version = next(version for version in asset.versions if version.id == item.completed_asset_version_id)
+        assert version.approval_status.value == "DRAFT"

@@ -747,6 +747,8 @@ class VideoInspector:
             instructions=instructions,
             input_text=json.dumps(payload, ensure_ascii=False, indent=2),
             image_urls=image_urls,
-            max_output_tokens=4000,
+            # The same allowance covers xhigh reasoning and the structured review.
+            # Match asset inspection so reasoning does not consume the whole response.
+            max_output_tokens=16000,
         )
         return SemanticVideoReview.model_validate_json(_strip_json_fence(output))

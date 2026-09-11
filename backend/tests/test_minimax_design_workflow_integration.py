@@ -12,6 +12,7 @@ from short_drama.production_profiles import (
 )
 from short_drama.skills.loader import (
     DEFAULT_OFFICIAL_MINIMAX_DESIGN_WORKFLOWS_ROOT,
+    DEFAULT_SHARED_SKILL_ROOT,
     load_production_method_skills,
 )
 from short_drama.skills.models import SkillProvenanceKind
@@ -106,6 +107,9 @@ def test_design_methods_share_the_local_interaction_precedence_preamble() -> Non
 
 
 def test_official_method_prompts_end_with_local_execution_precedence() -> None:
+    footer = (DEFAULT_SHARED_SKILL_ROOT / "official_task_method_footer.md").read_text(
+        encoding="utf-8"
+    ).strip()
     for method in load_production_method_skills():
         for role in method.role_prompts:
             role_prompt = compile_production_method_skill_prompt([method.id], roles=[role])
@@ -115,7 +119,8 @@ def test_official_method_prompts_end_with_local_execution_precedence() -> None:
             assert "创作数值和步骤数量" in role_prompt[footer_index:]
             assert "只是可选发想起点" in role_prompt[footer_index:]
             assert "H3 单个生成组的 4–15 秒能力" in role_prompt[footer_index:]
-            assert role_prompt.rstrip().endswith("不得使用关键词、正则、固定次数或额外审批门代替这个判断。")
+            assert "不得使用关键词、正则、固定次数或额外审批门代替这个判断。" in role_prompt[footer_index:]
+            assert role_prompt.rstrip().endswith(footer.rsplit("\n\n", 1)[-1])
 
 
 def test_design_methods_load_only_role_relevant_original_sections() -> None:
@@ -160,13 +165,14 @@ def test_design_methods_load_only_role_relevant_original_sections() -> None:
             assert section not in role_prompt
 
     planner_prompt = drama.role_prompts[ProductionSkillRole.PLANNER]
-    assert "## 镜头组：拆分整集" in planner_prompt
+    assert "## 渐进分镜与可选检查" in planner_prompt
+    assert "每组写完立即持久化并在内容页显示" in planner_prompt
 
     director_prompt = drama.role_prompts[ProductionSkillRole.DIRECTOR]
-    assert "## 镜头组：拆分整集" in director_prompt
-    assert "## 对白：语速、负载和拆分" in director_prompt
-    assert "一个镜头组就是未来一次视频生成" in director_prompt
-    assert "required_group_seconds" in director_prompt
+    assert "## 镜头语言服务故事" in director_prompt
+    assert "## 表演设计" in director_prompt
+    assert "## 渐进分镜与可选检查" in director_prompt
+    assert "不以固定语速、保留秒数或算法预算阻止写入" in director_prompt
 
     verifier_prompt = drama.role_prompts[
         ProductionSkillRole.REVISION_VERIFIER
@@ -177,14 +183,15 @@ def test_design_methods_load_only_role_relevant_original_sections() -> None:
         "## 开篇",
         "## 爽感",
         "## 合规",
-        "## 唯一编译路径：剧本 → 时长账本 → 完整分镜",
-        "## storyboard-confirm 前分组检查清单",
+        "## 渐进分镜与可选检查",
         "## 跨镜头空间连续性",
         "## 状态连续性",
     }:
         assert section in verifier_prompt
-    assert "每句必须完整出现一次并落到明确镜头" in verifier_prompt
-    assert "下一组起始快照逐项继承上一组末态" in verifier_prompt
+    assert "对白覆盖以及时长合计" in verifier_prompt
+    for prompt in (planner_prompt, director_prompt, verifier_prompt):
+        assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" not in prompt
+        assert "## storyboard-confirm 前分组检查清单" not in prompt
     assert "Clip N 的末态快照逐项成为 Clip N+1 的起始快照" in (
         verifier_prompt
     )

@@ -3,8 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { projectSchema } from '../../frontend/types/project-model'
-import { flattenTimeline, type ExportClip } from './timeline'
-import { buildVideoFilterGraph } from './video-filter'
+import { type ExportClip } from './timeline'
+import { buildStudioVideoFilterGraph } from './studio-video-filter'
 import { mixAudioToPcm } from './audio-mix'
 
 async function ffmpeg(executable: string, args: string[]) {
@@ -33,18 +33,16 @@ async function main() {
       flipV: clip.flipV, opacity: clip.opacity, trackIndex: clip.trackIndex,
       muted: track.muted || clip.muted, volume: clip.volume }]
   })
-  const segments = flattenTimeline(clips)
-  if (!segments.length) throw new Error('时间线尚无可导出的画面。')
+  if (!clips.some(clip => clip.type === 'video' || clip.type === 'image')) throw new Error('时间线尚无可导出的画面。')
   const duration = Math.max(...clips.map(clip => clip.startTime + clip.duration))
-  const pictureEnd = segments[segments.length - 1].startTime + segments[segments.length - 1].duration
-  if (duration > pictureEnd) segments.push({ filePath: '', type: 'gap', startTime: pictureEnd, duration: duration - pictureEnd, trimStart: 0, speed: 1, reversed: false, flipH: false, flipV: false, opacity: 100, muted: true, volume: 0 })
   const folder = path.dirname(input.outputPath)
   const filterFile = path.join(folder, 'video-filter.txt')
-  const video = path.join(folder, 'picture.mkv')
+  // Preserve fractional frame timestamps when copying H.264 into the final MP4.
+  const video = path.join(folder, 'picture.mp4')
   const raw = path.join(folder, 'audio.raw')
-  const { inputs, filterScript } = buildVideoFilterGraph(segments, { width: input.width, height: input.height, fps: input.fps })
+  const { inputs, filterScript } = buildStudioVideoFilterGraph(clips, { width: input.width, height: input.height, fps: input.fps, duration })
   fs.writeFileSync(filterFile, filterScript)
-  console.log(JSON.stringify({ progress: '渲染画面', segments: segments.length }))
+  console.log(JSON.stringify({ progress: '渲染画面', clips: clips.length }))
   try {
     await ffmpeg(input.ffmpegPath, ['-y', ...inputs, '-filter_complex_threads', '1', '-filter_complex_script', filterFile, '-map', '[outv]', '-an', '-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', video])
     console.log(JSON.stringify({ progress: '混合声音' }))

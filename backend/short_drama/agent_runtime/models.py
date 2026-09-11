@@ -112,7 +112,7 @@ class ArtifactRef(RuntimeModel):
         return (self.project_id, self.artifact_type, self.artifact_id, self.version)
 
     def requires_explicit_version(self) -> bool:
-        """Whether this artifact kind is mutable and needs a pinned version."""
+        """Whether this content kind identifies a stored source revision."""
 
         return self.artifact_type in _VERSIONED_CONTEXT_ARTIFACT_TYPES
 
@@ -148,8 +148,6 @@ _VERSIONED_CONTEXT_ARTIFACT_TYPES = frozenset(
         "output_slot",
         "timeline",
         "timeline_manifest",
-        "h3_route_plan",
-        "h3_route_asset_preparation",
     }
 )
 

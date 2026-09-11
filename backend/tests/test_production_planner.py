@@ -1200,7 +1200,9 @@ def test_production_skills_inject_distinct_policies_without_fixed_shot_count() -
     assert production_skill(ProductionProfile.AI_SHORT_DRAMA).writer == ""
     assert production_skill(ProductionProfile.AI_SHORT_DRAMA).critic == ""
     assert "不是 MiniMax 官方 Skill" in douyin_instructions
-    assert "Leader → Worker → Verifier" in douyin_instructions
+    assert "Leader 依据用户目标安排分工" in douyin_instructions
+    assert "独立检查按实际需要安排，也可以由制作者自查" in douyin_instructions
+    assert "Leader → Worker → Verifier" not in douyin_instructions
     assert "不得为提高密度而机械增加镜头" not in douyin_instructions
     assert len(douyin_instructions) < 20_000
     assert "真实皮肤" not in douyin_instructions

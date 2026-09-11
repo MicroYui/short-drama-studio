@@ -702,6 +702,8 @@ def _asset_planning_context_refs(
         ("production_spec", result.production_spec_identity),
         ("storyboard", result.storyboard_identity),
     ):
+        if identity is None:
+            continue
         refs.extend(
             (
                 ArtifactRef(
@@ -724,24 +726,26 @@ def _asset_planning_context_refs(
                 ),
             )
         )
-    refs.extend(
-        ArtifactRef(
-            project_id=project_id,
-            artifact_type="shot",
-            artifact_id=shot.id,
-            version=shot.revision,
+    if result.storyboard is not None:
+        refs.extend(
+            ArtifactRef(
+                project_id=project_id,
+                artifact_type="shot",
+                artifact_id=shot.id,
+                version=shot.revision,
+            )
+            for shot in result.storyboard.shots
         )
-        for shot in result.storyboard.shots
-    )
-    refs.extend(
-        ArtifactRef(
-            project_id=project_id,
-            artifact_type="clip_group",
-            artifact_id=group.id,
-            version=result.storyboard_identity.version,
-        )
-        for group in result.storyboard.clip_groups
-    )
+        if result.storyboard_identity is not None:
+            refs.extend(
+                ArtifactRef(
+                    project_id=project_id,
+                    artifact_type="clip_group",
+                    artifact_id=group.id,
+                    version=result.storyboard_identity.version,
+                )
+                for group in result.storyboard.clip_groups
+            )
     if result.existing_asset_plan_index is not None:
         refs.append(
             ArtifactRef(
@@ -1022,6 +1026,9 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
                 "基于当前精确 Script、ProjectBible、ProductionSpec 与 Storyboard，"
                 "创建版本化 AssetPlan。计划显式记录哪些主体需要锚点、仅保留文字"
                 "或复用既有资产，并携带稳定工作项、依赖、最终提示词和有序引用；"
+                "首次可只保存已确定的基础 items 或空清单，随后用 "
+                "artifact.patch_asset_plan.upsert_items 按依赖分批追加；"
+                "不要求一次写完整集，避免大型结构化输出截断。"
                 "只因后续确定性文字不同的同规格重复载体，优先共享一份"
                 "单件干净物理母版并分开计划 TEXT_PLATE；"
                 "不会调用图片 Provider。成功响应只返回新版本身份与项目/"
@@ -1120,10 +1127,17 @@ def register_tools(registry: ToolRegistry, service: ArtifactToolService) -> None
             description=(
                 "对当前精确 AssetPlan 做局部语义修改：按稳定 item/work-item ID "
                 "原位替换或追加，并显式移除指定 ID。服务端会把 patch 合并成完整"
-                "计划后执行结构、依赖、当前上游版本、媒体与完成引用校验。"
+                "计划后执行结构、依赖、来源存在性、媒体与完成引用校验。"
+                "上游剧本正在修改时仍可保存局部计划，保留实际声明的来源；"
+                "无需先重存所有上游文档。生成前再同步本次实际使用的内容。"
+                "也用于首次规划的分批写入：upsert_items 只携带这一批新项，"
+                "已保存项自动保留；依赖项先于引用它的工作保存。"
                 "跨多个 item 但只需修改局部字段时，使用 field_patches "
                 "按稳定 item_id/work_item_id 提交一组原子 RFC 6902 修订，避免"
-                "重传多个完整 item。校验成功后写入一个新版本；不会调用 Provider。局部完成"
+                "重传多个完整 item；work_item_id 在计划内唯一时可省略父 item_id。"
+                "仅提交字段修改且本次对象未变化时，会与其他工作项的并行保存合并，"
+                "可沿用最新已知 base_version_id；实际对象或制作来源发生变化才返回冲突。"
+                "校验成功后保存；不会调用 Provider。局部完成"
                 "回写、补参考或少量修复优先使用本 Tool，只有整体结构重构才提交"
                 " artifact.replace_asset_plan 的完整快照。成功响应只返回新版本身份与"
                 "本次变更 ID 摘要，不回传完整 AssetPlan；需要继续调度时读取轻量"

@@ -141,7 +141,8 @@ def register_tool_attempt_tools(
             category=ToolCategory.AGENT,
             description=(
                 "Read the exact arguments, result, or both from a persisted Tool "
-                "attempt explicitly handed to this WorkOrder. Use it to continue "
+                "attempt produced by this run. The Leader may read its Workers' "
+                "attempts; a Worker uses its own or explicitly handed references. Use it to continue "
                 "from a failed draft without reconstructing the draft from summaries."
             ),
             effect=ToolEffect.READ,

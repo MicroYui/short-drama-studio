@@ -83,7 +83,7 @@ def compile_h3_prompt_ir(
             duration=duration,
         )
     if len(prompt) > 7000:
-        raise ValueError("Compiled H3 prompt exceeds 7000 characters")
+        raise ValueError(f"Compiled H3 prompt exceeds 7000 characters: {len(prompt)} supplied, {len(prompt) - 7000} over the provider limit")
     return prompt
 
 
@@ -158,7 +158,7 @@ def compile_h3_generation_unit_prompt_ir(
             "non_diegetic_music: N/A"
         )
     if len(prompt) > 7000:
-        raise ValueError("Compiled H3 generation-unit prompt exceeds 7000 characters")
+        raise ValueError(f"Compiled H3 generation-unit prompt exceeds 7000 characters: {len(prompt)} supplied, {len(prompt) - 7000} over the provider limit")
     return prompt
 
 
@@ -177,7 +177,7 @@ def validate_h3_prompt_ir(
     if not stripped:
         raise ValueError("H3 prompt is empty")
     if len(stripped) > 7000:
-        raise ValueError("H3 prompt exceeds 7000 characters")
+        raise ValueError(f"H3 prompt exceeds 7000 characters: {len(stripped)} supplied, {len(stripped) - 7000} over the provider limit")
     if "```" in stripped:
         raise ValueError("H3 prompt contains Markdown fencing")
     if "9:16" not in stripped:
@@ -317,7 +317,7 @@ def validate_h3_generation_unit_prompt_ir(
     if not stripped:
         raise ValueError("H3 generation-unit prompt is empty")
     if len(stripped) > 7000:
-        raise ValueError("H3 generation-unit prompt exceeds 7000 characters")
+        raise ValueError(f"H3 generation-unit prompt exceeds 7000 characters: {len(stripped)} supplied, {len(stripped) - 7000} over the provider limit")
     if "```" in stripped:
         raise ValueError("H3 generation-unit prompt contains Markdown fencing")
     if "9:16" not in stripped:

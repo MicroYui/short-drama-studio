@@ -30,11 +30,9 @@
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/style-system.md::长 MV 展开与音画响应"
     ],
     "PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/mv/workflow.md::Stages",
       "../../sources/minimax_design/3.0.11/workflows/mv/workflow.md::Artifact Handoff",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/creative-and-plan.md::Stage 3 — 制作计划",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/music.md::目标时长与结构",
-      "../../sources/minimax_design/3.0.11/workflows/mv/reference/music.md::本地整数秒定稿",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/music.md::实际成歌反推与唯一时间轴",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::输入与时间权威",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::镜头密度、空间与表演",
@@ -43,7 +41,6 @@
     ],
     "REVISION_VERIFIER": [
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/storyboard.md::反模式",
-      "../../sources/minimax_design/3.0.11/workflows/mv/reference/video-generation.md::派单前 Gate",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::输入完整性",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::主音乐与片段声音",
       "../../sources/minimax_design/3.0.11/workflows/mv/reference/post.md::动态字体与准确文字"

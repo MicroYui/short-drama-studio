@@ -34,6 +34,7 @@ from short_drama.models import (
     AssetMediaType,
     Freshness,
     ProductionDocumentOrigin,
+    ShotReferenceCue,
     VideoGenerationRoute,
 )
 from short_drama.production_contracts import (
@@ -44,6 +45,8 @@ from short_drama.production_contracts import (
     ProductionSpecCreateRequest,
     StoryboardContent,
     StoryboardCreateRequest,
+    StoryboardPatchRequest,
+    StoryboardShotReplacement,
 )
 from short_drama.providers.h3_prompt_skill import validate_h3_generation_unit_prompt_ir
 from short_drama.providers.minimax_h3_compiler import build_h3_generation_unit_prompt
@@ -175,7 +178,7 @@ def test_long_source_can_be_compiled_without_truncating_locked_facts(tmp_path: P
     assert len(fake.calls[0][1]) > 7000
     assert len(result.compiled_prompt) <= 7000
     assert result.compiled_prompt == fake.output_text
-    assert fake.output_limits == [8000]
+    assert fake.output_limits == [32000]
 
 
 def test_compile_scope_keeps_creative_constraints_and_identifies_current_text_only_operation(tmp_path: Path) -> None:
@@ -258,6 +261,104 @@ def test_unit_context_rejects_stale_plan_before_returning_media(tmp_path: Path) 
             generation_plan_version_id=generation.version.id,
             generation_unit_id=unit.id,
         ))
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize("recompile_other_group", [False, True])
+def test_unrelated_clip_edits_keep_prepared_unit_and_route_usable(
+    tmp_path: Path, recompile_other_group: bool,
+) -> None:
+    service, fake, document, generation, unit, request = _fixture(tmp_path)
+    project_id = document.project.id
+    planned = service.compile_h3_production_route_plan(project_id, H3ProductionRoutePlanRequest(
+        generation_plan_document_id=generation.document.id,
+        generation_plan_version_id=generation.version.id,
+        unit_ids=[unit.id], use_language_agent=False, consider_video_guides=False,
+        shot_directives=[H3ShotRouteDirective(
+            generation_unit_id=unit.id, candidate_id=f"direct:{unit.id}",
+            prompt_override=fake.output_text,
+        )],
+    )).plan
+    board = service.get_storyboard(project_id)
+    other_shot = board.storyboard.shots[2]
+    changed = other_shot.model_copy(deep=True)
+    changed.camera = "A fixed composition for the other clip."
+    revised = service.patch_storyboard(project_id, StoryboardPatchRequest(
+        base_version_id=board.version.id, origin=ProductionDocumentOrigin.USER,
+        replacements=[StoryboardShotReplacement(
+            shot_id=other_shot.id, expected_revision=other_shot.revision, replacement=changed,
+        )],
+    ))
+    assert service.get_generation_plan(project_id).output_slot.current_artifact_ref is None
+    if recompile_other_group:
+        service.compile_generation_plan(project_id, GenerationPlanCompileRequest(
+            origin=ProductionDocumentOrigin.AGENT, base_version_id=generation.version.id,
+            storyboard_document_id=revised.document.id, storyboard_version_id=revised.version.id,
+            production_spec_document_id=generation.generation_plan.production_spec_document_id,
+            production_spec_version_id=generation.generation_plan.production_spec_version_id,
+        ))
+    # The original exact references remain usable for this unchanged clip,
+    # both before and after another worker recompiles the overall plan.
+    result = service.compile_h3_prompt_with_language_model(project_id, request)
+    assert result.compiled_prompt == fake.output_text
+    service.h3_config.update(H3ProviderConfigUpdate(api_key="test-token"))
+    executed = service.execute_h3_production_route_plan(project_id, planned.id, H3ProductionRouteExecuteRequest(
+        expected_state_revision=planned.state_revision, enqueue_new_generations=True,
+        inspect_reused_takes=False, semantic_review=False, rebuild_manifest=False,
+    ))
+    assert len(executed.queued_tasks) == 1
+    assert executed.queued_tasks[0].generation_unit_id == unit.id
+    assert service.h3_worker.input_staleness_reason(executed.queued_tasks[0]) is None
+    assert len(fake.calls) == 1
+    with pytest.raises(WorkflowConflictError, match="outdated shot"):
+        service.get_h3_generation_unit_context(project_id, H3GenerationUnitContextRequest(
+            generation_plan_document_id=generation.document.id,
+            generation_plan_version_id=generation.version.id,
+            generation_unit_id=generation.generation_plan.units[1].id,
+        ))
+
+
+def test_selected_clip_group_change_requires_new_input_before_execution(tmp_path: Path) -> None:
+    service, fake, document, generation, unit, request = _fixture(tmp_path)
+    board = service.get_storyboard(document.project.id)
+    group = board.storyboard.clip_groups[0].model_copy(deep=True)
+    group.transition_intent = "Hold the last reaction before cutting."
+    service.patch_storyboard(document.project.id, StoryboardPatchRequest(
+        base_version_id=board.version.id, origin=ProductionDocumentOrigin.USER,
+        clip_groups=[group],
+    ))
+    with pytest.raises(WorkflowConflictError, match="has changed"):
+        service.compile_h3_prompt_with_language_model(document.project.id, request)
+    assert fake.calls == []
+    assert service.repository.list_tasks(document.project.id) == []
+
+
+def test_unit_context_keeps_exact_prose_bindings_without_legacy_reference_plan(tmp_path: Path) -> None:
+    service, fake, document, generation, unit, _request = _fixture(tmp_path)
+    asset = document.assets[0]
+    version = asset.versions[0]
+    version.media_type = AssetMediaType.IMAGE
+    version.local_path = None
+    version.external_url = "https://example.test/user-selected.png"
+    version.approval_status = ApprovalStatus.APPROVED
+    version.freshness = Freshness.CURRENT
+    asset.approved_version_id = asset.current_version_id = version.id
+    document.reference_plan = []
+    for shot in document.shots[:2]:
+        shot.references = [ShotReferenceCue(subject_asset_id=asset.id,
+            asset_version_id=version.id, alias="当前人物", purpose="正文指定的人物身份")]
+    service.repository.save_project(document)
+    result = service.get_h3_generation_unit_context(document.project.id, H3GenerationUnitContextRequest(
+        generation_plan_document_id=generation.document.id,
+        generation_plan_version_id=generation.version.id, generation_unit_id=unit.id,
+    ))
+    assert len(result.media_candidates) == 1
+    candidate = result.media_candidates[0]
+    assert candidate.media_input.asset_version_id == version.id
+    assert candidate.media_input.source.external_url == version.external_url
+    assert candidate.media_input.reference_alias == "当前人物"
+    assert candidate.serves_shot_ids == unit.shot_ids
+    assert result.warnings == []
     assert fake.calls == []
 
 

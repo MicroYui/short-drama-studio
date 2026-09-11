@@ -197,7 +197,12 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
             id="video.inspect_take",
             version=1,
             category=ToolCategory.VIDEO,
-            description="Inspect a generated Take and persist its observation report.",
+            description=(
+                "Inspect a generated Take's technical metadata and sampled video frames; persist visual observations. "
+                "This tool does not listen to speech or provide dialogue timestamps. "
+                "Reuse video.get_take_inspection when a relevant report already exists. "
+                "After assembling current Takes, use audio.align_subtitles or audio.inspect_manifest for native audio."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=VideoInspectTakeInput,

@@ -44,10 +44,19 @@ def _unique_strings(values: Sequence[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
 
+def _context_read_ref(ref: ArtifactRef) -> ArtifactRef:
+    # Execution records are updated in place. Their saved state numbers remain
+    # in Trace, while both Leader and Worker read the current task lifecycle.
+    if ref.artifact_type in {"h3_route_plan", "h3_route_asset_preparation"}:
+        return ref.model_copy(update={"version": None})
+    return ref
+
+
 def _unique_artifact_refs(values: Sequence[ArtifactRef]) -> list[ArtifactRef]:
     selected: list[ArtifactRef] = []
     seen: set[tuple[str, str, str, int | None]] = set()
     for ref in values:
+        ref = _context_read_ref(ref)
         identity = ref.identity()
         if identity in seen:
             continue
@@ -641,7 +650,7 @@ class ContextCompiler:
         run_id: str,
         refs: Sequence[ArtifactRef],
     ) -> list[ArtifactRef]:
-        """Resolve exact artifact identities without applying a prompt budget."""
+        """Resolve content sources and live execution records before delegation."""
 
         run = self._store.get_run(run_id)
         if run is None:
@@ -713,7 +722,7 @@ class ContextCompiler:
             if ref.artifact_type in {"generation_plan", "generation_unit"}
         }
         candidates = [
-            current_generation.get((ref.artifact_type, ref.artifact_id), ref)
+            _context_read_ref(current_generation.get((ref.artifact_type, ref.artifact_id), ref))
             for ref in candidates
         ]
         candidates = _prioritize_current_asset_plan_indexes(candidates)

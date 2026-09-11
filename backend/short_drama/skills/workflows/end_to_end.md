@@ -4,7 +4,7 @@
 
 这是 Production Manager 在制定与修订计划时共享的制片方法，适用于通用视频、AI 短剧、数字人口播和动漫。它说明每个阶段要解决什么问题、应读取哪些权威工件、可以调用哪些 Tool、产出什么，以及何时应返工。
 
-它不是固定节点图。Agent 应根据用户目标、现有工件、已确认决定和实际检查结果跳过、合并、重排或并行步骤。用户只改一句台词时，不应从项目创建重新开始；用户已经交付完整剧本和批准资产时，也不应为了“走流程”重新生成它们。
+它不是固定节点图。Agent 应根据用户目标、现有工件、已确认决定和实际检查结果跳过、合并、重排或并行步骤。用户只改一句台词时，不应从项目创建重新开始；用户已经交付完整剧本和可用资产时，也不应为了“走流程”重新生成它们。
 
 运行时的基本循环是：
 
@@ -19,7 +19,7 @@
 
 `ProjectDocument + versioned Artifacts` 是项目内容真相。ProductionSpec、Storyboard、AssetPlan 和 GenerationPlan 使用有稳定 document ID 与不可变 version 的 ProductionDocument；Asset/AssetVersion、ReferencePlan、GenerationTask、Take、TimelineManifest 和 ExportRecord 继续保存各自领域事实并通过 ArtifactRef 交接。`ProjectDocument.shots` 是当前 Storyboard 的兼容投影，不是第二份分镜真相。`AgentRun` 是总调度，只记录当前目标、计划、进度和下一步，不复制第二份项目内容。
 
-当前后端验收边界是：不启用、不集成、不分发 LTX 模型，LTX 只作为后续桌面编辑与导出底座；本轮不调用真实付费 Provider，用 Fake Provider 和本地媒体验证状态、工件与时间线交接。`REAL_H3` Tool 的存在表示系统有这条执行路线，不等于 Agent 已获得本轮真实提交授权。
+LTX 提供桌面编辑与导出底座，不启用、不集成、不分发其模型。当前任务使用真实 Provider 还是测试 Provider，由用户本次要求、已有授权与实际配置决定；测试期间的 Fake Provider 限制不延续为所有任务的限制。`REAL_H3` Tool 的存在本身不代表执行授权，用户已授权完整真实制作时沿用该授权推进。
 
 首次剧本规划在概念上是 AgentRun 拥有的 **Content Planning Job**。当前代码和持久化模型仍使用兼容名称 `PlanningRun`；它只保存大纲、逐场写作、审校，以及目标需要时的导演规划所需的恢复游标与中间工件，通过 `planning.advance` 一次推进一个单元。只要系统负责原创或扩写且配置了语言 Provider，所属 AgentRun（包括 `AUTO_DRAFT` 和 `GUIDED`）就始终使用这个作业，不以 60、90 或 300 秒等时长阈值决定是否一次性生成。不带 AgentRun owner 的直接兼容创建仅建立本地结构骨架，不调用模型生成整稿。`SCRIPT_ONLY` 目标在内容审校完成后直接写入可完整阅读的 ScriptVersion，并以 `SCRIPT_READY` 作为本轮 AgentRun 的终点；`SCRIPT_AND_SHOTS` 才继续逐场导演并形成分镜。它不是另一份 `ProjectDocument`，也不自行决定资产、生成、检查或时间线等后续制片流程。当前只有这一种内容规划子作业，不提前抽象通用 `ChildJob`。场次数与跨场修订范围也由 Agent 根据内容决定；原先 40 场、跨场 12 场这类低常数创作上限已移除，长任务通过逐场、逐修订单元持久化推进，而不是把整个任务塞进一次模型调用。
 
@@ -42,15 +42,15 @@ Design 的 Hub/Canvas/Stage Plan 不是新的本地运行时：它们的项目�
 
 代码中的正则只可承担 Markdown/JSON 协议边界、SQLite 全文检索、资产搜索或媒体元数据读取等技术解析；这些检索结果仍由 Agent 阅读和选择，不能用匹配结果替代题材、Skill、修订、候选或 Provider 路线判断。
 
-内容作业采用轻量、可恢复的 `Leader → Worker → Verifier` 责任拓扑。Production Manager/AgentRun 作为 Leader，根据 `StorySourceContract`、`StoryIntent` 和当前工件定义写作或修订目标；Story Architect 和 Writer 是专业 Worker，先保存只包含核心承诺、因果主线、场次契约和 `EndingContract` 的故事蓝图，再逐场写作并在每场完成时持久化。Verifier 对照用户简报、来源承诺、创作意图和人类可读的完整稿验收，把具体问题以稳定 issue ID、文本证据、修订证据、已接受取舍、责任层和场次范围写入 Issue Ledger。未通过时，Leader 把 issue ID 和相关场次交还原 Worker 聚焦修订；即使需要全场调整也仍按 `SCENE_REVISION 1/N…N/N` 持久化，不用一次整集重写覆盖中间进展。严重度、问题数、关键词和修订次数都不会变成代码门槛。
+内容作业由 Leader 根据目标安排 Writer、Director 或其他必要分工，逐场、逐组保存当前结果。可以先规划场次再写作，也可以在足够明确时直接写入。作者可以自查；有具体问题需要独立判断时再安排检查角色。检查说明原文、实际问题和影响范围，修订只处理相关内容并保留其他结果。Issue Ledger 可记录较复杂的修订，但普通写入不需要检查通过标记或独立验收环节。
 
 `DurationContract` 先区分“用户明确目标”与“格式默认工作值”，再由 Agent 结合来源与已选 Method 判断时间权威：新原创或可自由扩写的项目通常以目标为创作尺度；用户要求完整保留的来源剧本以自然表演需要为准，除非用户授权改写短版；MV 等已绑定主音轨的项目以音频时间轴为准。这是 Agent 对完整语义的判断，不用关键词或来源模式单独代替。
 
-场次的目标秒数与总和是蓝图给 Writer 的内容 envelope，不是实际文本能自然演完的证明。Writer 写作前就应按契约的尺度和相对节奏功能决定事件、动作和对白承载量，写完后再自然演读；局部能通过合并、删重或重排收敛时自行处理，只有继续压缩会破坏用户承诺、来源保真、核心因果或结尾回报时才请求上游重规划。Verifier 按对白、动作、停顿、反应和观众读清信息的实际顺序判断，并在 `DurationFitAssessment` 中留下估计范围、压力点与处理结论。只有成稿明确写成同时发生、蒙太奇或可连续掠过时才按并行处理；不以字数、语速公式、场次数、固定容差或预设节奏配额代替 Agent 的语义判断。
+场次的目标秒数与总和是蓝图给 Writer 的内容尺度参考，不是实际文本能自然演完的证明。Writer 写作前就应按契约的尺度和相对节奏功能决定事件、动作和对白承载量，写完后再自然演读；局部能通过合并、删重或重排收敛时自行处理，只有继续压缩会破坏用户承诺、来源保真、核心因果或结尾回报时才请求上游重规划。Verifier 按对白、动作、停顿、反应和观众读清信息的实际顺序判断，并在 `DurationFitAssessment` 中留下估计范围、压力点与处理结论。只有成稿明确写成同时发生、蒙太奇或可连续掠过时才按并行处理；不以字数、语速公式、场次数、固定容差或预设节奏配额代替 Agent 的语义判断。
 
 逐场写作与审校还要继承前文已建立的人物关系、群体态度、资源与权限。换地点、换见证者、换道具，或把口头认可改成文件、挂牌，不会自动把同一次震惊、让位、授予或交接变成新升级；后续场应产生新的选择、代价或后果。
 
-Verifier 同时承担修订验收和自然通读：先对照 Issue Ledger 和修订证据，检查原问题是否解决、受保护的回报是否仍在、是否引入新回归；再脱离修订说明通读用户简报、`StoryIntent`、`EndingContract` 和人类可读的完整剧本，检查本集回报、最后一场、最后一句台词、最终画面、自然表演时长和跨场状态是否成立。Verifier 直接接受当前稿，或带具体 issue ID、场次范围和理由退回 Leader；Leader 再交还原 Worker 聚焦修订。这条责任链不设固定循环次数，也不重复叠加平行的审校角色。
+需要检查时，由作者或受委派的检查角色进行修订检查和自然通读：先对照 Issue Ledger 和修订证据，检查原问题是否解决、受保护的回报是否仍在、是否引入新回归；再脱离修订说明通读用户简报、`StoryIntent`、`EndingContract` 和人类可读的完整剧本，检查本集回报、最后一场、最后一句台词、最终画面、自然表演时长和跨场状态是否成立。检查结论可以直接用于继续制作，也可以带场次范围和具体理由交回负责作者修订。不把可选检查变成固定责任链或必经审批。
 
 `EndingContract` 显式保存本集必须兑现的最终状态、结尾画面/台词意图和续集策略，不是要求 Writer 把每个 closure 分别演成一次认可、授予、核验或交接仪式。多个 closure 若只在证明同一次人物状态变化，应由最有力的决定性动作统一兑现。Story Architect 直接阅读用户原始需求与项目上下文，通过语义理解判断用户是明确要求单篇完结、明确要求系列延续，还是把选择交给 Agent；不使用关键词正则或枚举短语替代这个创作判断。单篇完结时完成主要因果并不留续集钩子；系列延续时可在本集回报已完成后留下有前文根据的下一步动力；用户交由 Agent 判断时，Story Architect 根据题材、本集形态和当前承诺自主决定并记录理由，不必为此默认追问用户。三种情况都不允许用未完成的台词、无依据新人物或突然黑屏代替本集回报。选中 `drama-series` 不会降低这个合同的优先级：上游连载钩子、付费点或下集悬念只在当前续集策略允许时采用。
 
@@ -60,7 +60,7 @@ AgentRun 的一次 advance HTTP 最多成功执行一个 `planning.advance`。�
 
 高密度多模态 Prompt 案例的价值不在于复制其风格，而在于分离稳定事实、时间段和模型输入。本流程吸收以下通用方法：
 
-- 先定义并批准核心主体，再设计运动、镜头和环境；人物身份、造型、服装和其他连续性锚点不应在视频 Prompt 中临时改写。
+- 以当前采用的核心主体为参考设计运动、镜头和环境；人物身份、造型、服装和其他连续性锚点不应在视频 Prompt 中临时改写。
 - 把参数、主体定义、媒体职责和按播放顺序的时间段分开；每段说清镜头、动作、台词/声音、情绪或表演变化，以及所用媒体。
 - 让每个切点或镜内节拍承担可观察的作用，例如建立、揭示、反应、决定、冲击或收束；画面、文字和声音可交替主导，但不强求每层始终高强度。
 - 用景别、焦点、运镜、遮挡、图形匹配、动作或声音连续组织镜头转换；转场方式服务当前信息和情绪，不是必填特效清单。
@@ -73,13 +73,13 @@ AgentRun 的一次 advance HTTP 最多成功执行一个 `planning.advance`。�
 ## 每次规划前先回答的六个问题
 
 1. 用户这次真正要改变或完成什么，哪些内容明确不能动？
-2. 当前项目处于什么状态，当前 ProductionSpec、Storyboard、AssetPlan、GenerationPlan 输出槽位分别指向哪个精确版本，最新且已批准的资产、Take 和时间线又分别是哪一版？
+2. 当前项目处于什么状态，当前 ProductionSpec、Storyboard、AssetPlan、GenerationPlan 输出槽位分别指向哪个精确版本，当前选用的资产、Take 和时间线又分别是哪一版？
 3. 缺的是创作判断、可执行工件、Provider 结果，还是对已有结果的检查？
 4. 哪些下游确实依赖本次变化，哪些已完成内容可以原样复用？
 5. 下一步需要的是 Tool 的确定性能力，还是专业 Agent 的内容判断？
 6. 完成这一步后，什么可观察结果足以决定继续、停止或换路线？
 
-优先使用 `project.get` 读取完整当前聚合；局部修改先用 `change.preview` 得到受影响范围，再决定是否 `change.apply`。不要根据旧对话或 recent actions 猜测项目现状。
+优先用 `artifact.read_current` 读取相关内容，需要整体结构时才读完整项目；局部修改先用 `change.preview` 得到受影响范围，再决定是否 `change.apply`。不要根据旧对话或 recent actions 猜测项目现状。
 
 ## 不同输入从哪里进入
 
@@ -131,13 +131,13 @@ AgentRun 的一次 advance HTTP 最多成功执行一个 `planning.advance`。�
 - 对原创内容建立主题、观看承诺、人物欲望/信息目标、主要变化和结尾回报。
 - 对已有剧本检查场景目的、因果、对白可演性、信息重复、时长承载和来源忠实度。
 - 先做轻量全局蓝图、场次契约和 `EndingContract`，再逐场写作与持久化；不要让后写场次遗忘前文状态，也不因短于某个时长阈值而改回一次性整稿生成。
-- Story Architect 先按 `DurationContract` 将可表演内容分配为场次 envelope；目标主导时，蓝图已经显然放不下就应重做蓝图，不把超载转交给 Writer 或分镜；来源或音频主导时保留事实源，按契约记录自然时长或音频时间轴。蓝图的场次秒数只是分配；Writer 写前用它控制当前场的事件、动作和对白承载量，Verifier 再按实际顺序复核。除非成稿明确是同时发生、蒙太奇或可连续掠过，不假设未写出的快切，也不用字数、语速、场次数、固定偏差或节奏段数代替 Agent 判断。
+- Story Architect 先按 `DurationContract` 将可表演内容分配为场次时间估计；目标主导时，蓝图已经显然放不下就应重做蓝图，不把超载转交给 Writer 或分镜；来源或音频主导时保留事实源，按契约记录自然时长或音频时间轴。蓝图的场次秒数只是分配；Writer 写前用它控制当前场的事件、动作和对白承载量，Verifier 再按实际顺序复核。除非成稿明确是同时发生、蒙太奇或可连续掠过，不假设未写出的快切，也不用字数、语速、场次数、固定偏差或节奏段数代替 Agent 判断。
 - 每场都以前文已成立的人物关系、群体态度、资源和权限为入场状态；换地点、见证者、道具或交接形式不自动等于升级，后续场需要真正改变选择、代价或后果。
 - Story Architect 根据用户原始需求与 `StorySourceContract` 语义判断是否要求单篇完结、系列延续或交由 Agent 决定；不用关键词正则作为创作分类器，且所有情况都先完成本集承诺。
 - `EndingContract` 描述本篇要到达的最终状态，不是仪式清单；多个 closure 若只是反复证明同一次状态变化，应由最有力的决定性动作统一兑现。
-- 审校责任由一个 Verifier 承担：它既对照 Issue Ledger 验收修订和回归，也脱离修复说明对全稿自然通读。未通过时将具体证据交回 Leader，再由 Leader 退回原 Writer Worker 聚焦修订。不设固定修订次数、问题数或严重度门禁，也不安排重复的平行审校。
-- 默认先形成一份可完整阅读和批准的 ScriptVersion，再生成全量分镜；探索性预演、局部修改或用户明确要求可只规划受影响片段。
-- 已经批准的内容只在有明确问题或用户指令时修改。
+- 作者可以通读自查；需要独立视角时委派 Verifier，按具体问题检查当前文本与相关承接。发现影响本次目标的问题就定向修改，不要求先建立 Issue Ledger、取得通过标记或完成固定审校轮次。
+- 可以先形成完整可读的剧本，再展开全量分镜；探索性预演、局部修改或用户明确要求可只规划受影响片段。
+- 已经确认或采用的内容只在有明确问题或用户指令时修改。
 
 ### 可用能力
 
@@ -145,7 +145,7 @@ AgentRun 的一次 advance HTTP 最多成功执行一个 `planning.advance`。�
 - `script.revise_lines`：只修改选定对白行并形成新 ScriptVersion。
 - `change.preview`、`change.apply`：处理会影响人物、场景、镜头或下游媒体的语义修改。
 - `artifact.create_production_spec`、`artifact.replace_production_spec`、`artifact.get_production_spec`：在继续资产和分镜制作时，基于当前 Script/Bible 建立或读取版本化制作决策，包括语言、画幅、时长意图、视听方向和 Provider 偏好；Provider 偏好不是真实调用授权。
-- 内部责任：Production Manager/AgentRun 是 Leader；Story Orientation、Story Architect 和 Writer 是内容 Worker；Verifier 负责修订验收和完整稿通读。底层 Content Planning Job 以可恢复单元持久化进度，不因内部游标名称增加新的职责角色。
+- 内部责任：Production Manager/AgentRun 是 Leader；Story Orientation、Story Architect 和 Writer 是可选内容分工；Verifier 提供按需检查。也可以用 script.plan_scenes 和逐场写入直接完成当前剧本。旧 Content Planning Job 保持可恢复进度，不因内部游标名称要求所有任务经过它。
 
 ### 产物与完成信号
 
@@ -198,11 +198,11 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 
 ### 要解决的问题
 
-以当前精确 ScriptVersion、ProjectBibleVersion、ProductionSpec 和完整 Storyboard 为共同事实，把跨镜需要保持的内容从散落 Prompt 中提取为版本化 AssetPlan 和可复用工件。Bible 说明角色、场景、道具和风格是什么；AssetPlan 记录建锚点、仅文字或复用的取舍与执行依赖；AssetVersion 保存实际媒体版本；ReferencePack 说明哪些批准版本可以承担什么职责。
+以当前正文、Bible、用户参考和已有镜头为依据，把跨镜需要保持的内容提取为可复用工件。核心人物和场景可以先于完整分镜制作；ProductionSpec、Storyboard 或 AssetPlan 尚未产生不阻止这项工作。需要组织复杂资产依赖时再建立 AssetPlan。Bible 说明角色、场景、道具和风格是什么；AssetPlan 记录建锚点、仅文字或复用的取舍与执行依赖；AssetVersion 保存实际媒体版本；ReferencePack 说明哪些当前选用的可用版本承担什么职责。
 
 ### 计划职责
 
-- `ASSET_PLANNER` 独立承担全局资产取舍。在任何新的资产生成、编辑、导入或拼板之前先确认 `asset.plan.current`；没有当前计划时创建，少量变化时 patch；跨多个 item 同步 canonical、supplemental、lineage、权威参考或拆分物理载体与精确文字时，使用 `artifact.reconcile_asset_plan_execution_contract` 提交语义决定；若同时要修改任意 work-item 的执行尺寸或输出布局，使用该请求的 `execution_overrides`，由 Tool 联动 COMPOSE intent。不得把字段变更只写在 `notes` 中并宣称已完成。只有盘点、顺序或依赖网络整体变化时才读取并替换完整计划。写入精确 AssetPlan ArtifactRef 后结束 WorkOrder，不在同一 Worker 中继续生成或验收媒体。
+- `ASSET_PLANNER` 独立承担全局资产取舍。需要计划组织的资产任务使用 `asset.plan.current`；简单核心资产可以直接创建、导入和派生。使用计划时，少量变化用 patch；跨多个 item 同步 canonical、supplemental、lineage、权威参考或拆分物理载体与精确文字时，使用 `artifact.reconcile_asset_plan_execution_contract` 提交语义决定；若同时要修改任意 work-item 的执行尺寸或输出布局，使用该请求的 `execution_overrides`，由 Tool 联动 COMPOSE intent。不得把字段变更只写在 `notes` 中并宣称已完成。只有盘点、顺序或依赖网络整体变化时才读取并替换完整计划。本次分工只要求规划时，保存精确 AssetPlan ArtifactRef 后完成交接；目标还包括媒体制作时，依据已就绪的真实依赖继续。
 - 在编制计划前读取已登记的用户 source intake AssetVersion 和用户原始说明。完整角色卡可直接作为 `REUSE_EXISTING`/导入来源，不重绘；单脸、单角度或穿搭图作为明确的 identity/wardrobe 等参考派生标准资产。用户指定的人物身份必须保留；未指定用途的图片由 Agent 基于完整语义决定贡献或保持未用，不自动铺到所有 Shot/ClipGroup。
 - 每个 AssetPlan item 显式选择 `ANCHOR`、`TEXT_ONLY` 或 `REUSE_EXISTING`，记录服务的 Shot/ClipGroup、理由与完成工件。执行型 work item 使用稳定 ID，写入 operation、output role/view、最终 prompt、尺寸、有序 references 和 dependency IDs；工具不在执行时重新发明创意。
 - 根据剧情重要度、复用范围、跨镜连续性风险、空间/动作复杂度、已有素材和已选 Method，由 Agent 选择轻量单图、MiniMax 短剧双区角色卡、六视图卡、场景四向 coverage、道具 master 或不建卡。不用题材关键词、固定出场次数或“所有角色必须四视图”代替判断。
@@ -212,15 +212,15 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 
 ### 执行职责
 
-- Leader 在规划 WorkOrder 结束后的下一轮读取轻量 AssetPlan index，以稳定 item/work-item ID 和真实依赖组织自然任务簇。`ASSET_BUILDER` 对每个任务簇只读取 `artifact.get_asset_work_context` 切片：具体执行任务传 `scope.mode=WORK_ITEM + work_item_ids`，整个资产项任务才传 `scope.mode=ITEM + item_ids`，两者不混用也不传顶层旧式 selector。优先检索、复用或导入已有素材；需要新图时执行 work item 已编译的最终 prompt 和带 purpose/alias 的有序参考。Builder 持久化候选媒体后即交回，不批准自己的输出。
-- Builder 每次媒体落盘后通过局部 `artifact.patch_asset_plan` 写入该 work 的 `candidate_asset_id/candidate_asset_version_id`。轻量 index 的 `CANDIDATE_AVAILABLE` 表示媒体已经存在，Leader 应安排精确验收或依据拒绝证据安排返工，不能再次按未生成 READY 调度。候选尚未批准时不满足下游依赖；只有 Verifier 确认后填写 `completed_*`。候选绑定只存于版本化 AssetPlan，不依赖最近几条 Action 的临时记忆。
-- index 的 `candidate_approval_status/candidate_freshness` 直接反映精确候选版本当前事实。DRAFT 才需要首次验收；APPROVED 且 CURRENT 可进入 ReferencePack 和 completed 回写；REJECTED、SUPERSEDED 或 STALE 应先读取该版本已有意见及必要上下文，再判断局部修复或替代方案。不能因为近期 Action 摘要里没有旧验收过程就再次要求相同版本接受相同检查，也不能从缺少 completed 推断尚未批准。
+- Leader 在规划 WorkOrder 结束后的下一轮读取轻量 AssetPlan index，以稳定 item/work-item ID 和真实依赖组织自然任务簇。`ASSET_BUILDER` 对每个任务簇只读取 `artifact.get_asset_work_context` 切片：具体执行任务传 `scope.mode=WORK_ITEM + work_item_ids`，整个资产项任务才传 `scope.mode=ITEM + item_ids`，两者不混用也不传顶层旧式 selector。优先检索、复用或导入已有素材；需要新图时执行 work item 已编译的最终 prompt 和带 purpose/alias 的有序参考。Builder 可以观察实际输出并记录采用，不要求另一名 Agent 批准；已完成媒体不因候选指针尚未回写而重新生成。某个生成组所需输入就绪后即可继续编译和生成，不等待不相关资产、可选状态或整张计划完成。
+- Builder 每次媒体落盘后通过局部 `artifact.patch_asset_plan` 写入该 work 的 `candidate_asset_id/candidate_asset_version_id`。轻量 index 的 `CANDIDATE_AVAILABLE` 表示媒体已经存在，Leader 可以直接选用，或按具体疑问观察后处理，不能再次按未生成 READY 调度。选用后填写精确 `completed_*`；`artifact.review_version` 用于保留已有观察和采用决定，不作为继续制作的前置步骤。候选绑定只存于版本化 AssetPlan，不依赖最近几条 Action 的临时记忆。
+- index 的 `candidate_approval_status/candidate_freshness` 直接反映精确候选版本当前事实。DRAFT 表示没有单独的审核记录；当前明确选用、文件可用且来源有效的 DRAFT 与 APPROVED 都可进入 ReferencePack 和 completed 回写；REJECTED、SUPERSEDED 或 STALE 应先读取该版本已有意见及必要上下文，再判断局部修复或替代方案。不能因为近期 Action 摘要里没有旧验收过程就再次要求相同版本接受相同检查，也不能从缺少 completed 推断尚未批准。
 - ReferencePack 可保留同一语义资产的多张有效参考；面向一个具体 Shot/ClipGroup 时，只选择对当前身份、状态、空间和道具职责最少且充分的子集。身份/场景/服饰/道具一致性是 Subject reference；图片本身定义开场、结束或构图时才是 Picture/keyframe。
 
 ### 视觉验证职责
 
-- Leader 在实际媒体产生后另行委派 `ASSET_VERIFIER`，按单个资产或共享同一身份、空间、道具母版的自然任务簇读取任务切片与精确媒体。Verifier 对照 CoreAssetBrief、用户权威源图、当前 Shot 职责和已批准 references 观察实际输出并记录批准或拒绝；对用户人物图的派生资产，先核对同一人身份，再核对视图覆盖、服饰和版式，不用合法尺寸或版式掩盖换脸。
-- 检查结果是语义证据，不是固定分数、门禁或 Critic 循环。只将有具体证据的问题返回相应资产 work item，不因局部问题重做无关已批准媒体。
+- 实际媒体由当前制作者观察；确实需要独立判断时，Leader 可委派 `ASSET_VERIFIER`，按单个资产或共享同一身份、空间、道具母版的自然任务簇读取任务切片与精确媒体。Verifier 对照 CoreAssetBrief、用户权威源图、当前 Shot 职责和当前选用的 references 观察实际输出并记录采用或拒绝；对用户人物图的派生资产，先核对同一人身份，再核对视图覆盖、服饰和版式，不用合法尺寸或版式掩盖换脸。
+- 检查结果是语义证据，不是固定分数、门禁或 Critic 循环。只将有具体证据的问题返回相应资产 work item，不因局部问题重做无关已选用媒体。
 - Builder 与 Verifier 不读取或改写完整 AssetPlan；只有证据表明全局盘点、顺序或依赖网络失效时才交回 Leader，另建 ASSET_PLANNER WorkOrder。
 
 ### 可用能力
@@ -230,10 +230,10 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 - `qa.analyze_source_image`：在 AssetPlan 分配 source intake 用途前观察精确原图；Agent 显式传入从完整对话确定的 assignment，Tool 只判断可见覆盖、可直接复用、需派生或仅作辅助参考，不替 Agent 做关键词路由。
 - `image.capability`：在计划需要实际图像执行时读取当前本机 Provider、可用 operation、参考输入和尺寸能力；不暴露密钥，也不把历史不可用状态当作当前事实。
 - `image.enqueue` 与图像任务生命周期 Tools：在精确视图/状态和参考职责已决定后生成或编辑新版本；`enqueue` 只入队，`advance` 才推进一次外部状态。
-- `qa.inspect_asset_version`、`artifact.review_version`：前者对照 brief、Shot、已批准 references 与候选自身固化的权威派生来源生成语义建议，后者由 Agent 在看过媒体后记录结论；检查结果不是代码门禁。
+- `qa.inspect_asset_version`、`artifact.review_version`：前者对照 brief、Shot、当前选用的 references 与候选自身固化的权威派生来源生成语义建议，后者由 Agent 在看过媒体后记录结论；检查结果不是代码门禁。
 - `image.compose_reference_sheet`：把精确源 AssetVersion 按显式 `layout_profile` 确定性排成参考卡，不生成缺失视图，输出仍需观察与决策。
 - `image.compose_text_plate`：为 `SCREEN_CONTENT_PLATE` 在本地确定性排版精确标题与行文字，只在请求与 `required_visible_text` 逐项一致时产生 PNG DRAFT，不调用图像 Provider。
-- `artifact.add_reference_entry`、`artifact.inspect_coverage`：前者把已批准精确版本以明确职责加入 ReferencePack，后者只展示 Shot ReferencePlan 推导的覆盖缺口，不代替 Agent 核对 brief。
+- `artifact.add_reference_entry`、`artifact.inspect_coverage`：前者把当前选用的可用精确版本以明确职责加入 ReferencePack，后者只展示 Shot ReferencePlan 推导的覆盖缺口，不代替 Agent 核对 brief。
 
 ### 产物与完成信号
 
@@ -268,7 +268,7 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 - `qa.check_input_compatibility`、`qa.list_visual_input_reports`：检查输入间的身份、风格、空间或状态冲突。
 - `route.h3_capability_profile`：读取当前项目积累的 H3 能力证据。
 - `route.plan_h3`、`route.list_h3_plans`：生成并查看单 Shot 或 GenerationUnit 级 H3 路线计划。完整分镜主链优先传入 GenerationPlan document/version 和 Agent 选定的 unit；旧单 Shot 路线只作兼容及局部生成能力。
-- `route.update_h3_asset_preparation`：精确回写某个首/尾帧准备的生成、就绪或拒绝状态。写入 `READY` 后再调用 `route.plan_h3`，新计划才会消费该已批准版本；原 `NEEDS_ASSET` 计划不会被就地改写。
+- `route.update_h3_asset_preparation`：精确回写某个首/尾帧准备的生成、就绪或拒绝状态。写入 `READY` 后再调用 `route.plan_h3`，新计划会消费该已就绪的选定版本；原 `NEEDS_ASSET` 计划不会被就地改写。
 - 生成路线规划 Agent：解释选择理由、缺失输入和检查重点；不得把 Provider 参数编造成格式规则。
 
 ### 产物与完成信号
@@ -288,9 +288,9 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 
 - 用 `shot.compile_keyframe_brief` 形成镜头专用首帧、尾帧或拓扑说明。
 - 用 `image.enqueue` 生成或编辑必要图像；通过 `image.advance`、`image.retry`、`image.recover_output` 或通用 `task.*` 推进真实任务状态。`image.retry` 只处理 `retry_disposition=RETRY_SAME_REQUEST` 的瞬态技术失败或已确认未提交；内容安全、参数、引用或其他请求语义失败必须先由 Agent 修订，再建立新的 `image.enqueue` 任务。
-- 对图片候选先用 `qa.inspect_asset_version` 检查实际画面，再用 `artifact.review_version` 记录 Agent 的选择理由；被拒绝的版本保留为历史，不进入当前绑定。
-- 用 `qa.rerank_reference_visuals`、`qa.compare_keyframes` 和 `qa.check_input_compatibility` 检查身份、服装、场景、道具状态、构图、比例和输入间冲突。
-- 路线请求的首/尾帧批准后，用 `route.update_h3_asset_preparation` 回写精确 preparation，随后重新 `route.plan_h3`。
+- 根据已有观察、实际用途和已知问题决定是否需要 `qa.inspect_asset_version` 的辅助检查；它不是每张图使用前的强制步骤。用 `artifact.review_version` 记录实际采用或拒绝的理由，不把没有观察过的画面写成已经检查通过；被拒绝的版本不进入当前绑定。
+- 已有观察足以选定输入时直接编译。仅在身份、服装、场景、道具状态、构图或输入兼容性仍有具体疑问时，调用 `qa.rerank_reference_visuals`、`qa.compare_keyframes` 或 `qa.check_input_compatibility` 辅助判断；这些工具不是每组生成前的必经步骤。
+- 路线请求的首/尾帧文件就绪并选用后，用 `route.update_h3_asset_preparation` 回写精确 preparation，随后重新 `route.plan_h3`。
 - 若关键帧本身错误，先修图或更换资产；不要指望视频 Prompt 自动修复一个错误起点。
 
 ### 产物与完成信号
@@ -303,14 +303,14 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 
 ### 要解决的问题
 
-把 provider-neutral 的 GenerationUnit（或兼容的单 ShotPlan）、ReferencePlan 和已批准媒体翻译成当前模型的合法请求，并把外部生成过程保存为可恢复任务。
+把 provider-neutral 的 GenerationUnit（或兼容的单 ShotPlan）、ReferencePlan 和当前采用的可用媒体翻译成当前模型的合法请求，并把外部生成过程保存为可恢复任务。
 
 ### 执行方法
 
 - Provider Prompt Compiler 只翻译既定镜头：保留锁定对白、人物、动作顺序、情绪/表演变化、时长、画幅和媒体绑定，不在最后一刻重写剧情或增加镜头。多 Shot GenerationUnit 使用组内绝对时间窗逐段说清镜头、动作、台词、情绪和连续性，不把组内 Shot 合并成一个不可编辑的假镜头。
-- H3 参考模式中，创作稿的 `@食堂全景` 或 `@男主` 可来自 `ShotReferenceCue.alias`；Route 必须先把 cue 解析到已批准的实际 AssetVersion/媒体，并将语义 alias 与职责写入 `H3MediaInput.reference_alias` / `binding_purpose`。alias 方便人和 Agent 理解，不是文件路径或上传标识；真实上传绑定仍由 `H3MediaInput.source`、AssetVersion、媒体输入顺序及由顺序得到的 `<Picture N>`、`<Video N>`、`<Audio N>` 决定。Prompt 不得引用请求中没有发送的媒体，也不得用未批准候选静默替换。
+- H3 参考模式中，创作稿的 `@食堂全景` 或 `@男主` 可来自 `ShotReferenceCue.alias`；Route 必须先把 cue 解析到当前选中的实际 AssetVersion/媒体，并将语义 alias 与职责写入 `H3MediaInput.reference_alias` / `binding_purpose`。alias 方便人和 Agent 理解，不是文件路径或上传标识；真实上传绑定仍由 `H3MediaInput.source`、AssetVersion、媒体输入顺序及由顺序得到的 `<Picture N>`、`<Video N>`、`<Audio N>` 决定。Prompt 不得引用请求中没有发送的媒体，也不得静默替换已明确选择的图片。当前已绑定且可用的 DRAFT 图片不需要额外批准；被拒绝、已失效或文件缺失的媒体应更换。
 - 若锁定分镜的媒体绑定不完整、版本已失效或职责互相冲突，先返回上游修复；不通过删掉引用或改写人物来生成一条“能提交”的 Prompt。
-- REAL_H3 目标可先用 `route.compile_h3_prompt` 或 `route.preview_h3_probe` 查看最终 Prompt/请求。只有当用户已明确授权真实 Provider 执行时，才由 `route.execute_h3_plan` 建立 MiniMax-H3 任务并用 `task.advance` 逐步推进；当前后端验收只使用 Fake Provider，不提交付费任务。
+- REAL_H3 目标可先用 `route.compile_h3_prompt` 或 `route.preview_h3_probe` 查看最终 Prompt/请求。用户已授权真实 Provider 执行时，由 `route.execute_h3_plan` 建立 MiniMax-H3 任务并用 `task.advance` 逐步推进；沿用本任务已有授权，不在每个生成组前重复确认。
 - MOCK 目标使用 `video.enqueue` 建立确定性本地任务，并用 `task.drain` 批量推进；`task.reconcile` 也只处理 Mock 任务。`task.retry` 和 `task.recover_output` 则必须跟随原任务的 Provider。
 - H3 专属运行可通过 `route.list_h3_runs`、`route.list_h3_reconciliation` 和相应 resolve Tool 对账。
 - Route Agent 根据当前镜头、已有结果与实际证据，从全部合法候选中显式选择候选 ID，并决定本批生成一个或多个、复用 Take、改变输入或换路线；不以候选序号、QA 状态、分数、失败类别或固定数量自动停止或放行。同一 Route Plan 重复执行只对账并保持幂等；如果 Agent 根据新证据决定继续探索，建立新的 Route Plan 和显式候选批次。若没有语言 Route Agent 且调用方没有显式指定 `candidate_id` 或复用 Take，计划保持 `NEEDS_AGENT_DECISION/PARTIAL`，技术基线只供展示，不提交、不计费。
@@ -374,6 +374,7 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 - 使用 `timeline.rebuild` 从当前选定 Takes 重建 TimelineManifest。
 - 使用 `audio.inspect_manifest` 检查时长、响度、静音、对白覆盖和字幕时间关系。
 - 字幕应忠实于锁定文本、易读且不遮挡关键表演；具体排版依据用户要求、项目 Style 和 Agent 选中的上游 Method。
+- 已有可编辑剪辑时，用 `timeline.read_editorial` 和局部保存继续工作，保留用户裁剪与已对齐字幕。需要说明、菜价等图版时，`image.compose_text_plate` 可用透明背景、`content_box`、对齐和描边参数在完整画幅内排版；`timeline.add_asset_overlay` 将精确图片放进当前时间段，原视频与声音继续保留。这些本地操作与透明叠加导出不依赖 ComfyUI。
 
 ### 产物与完成信号
 
@@ -402,7 +403,7 @@ MiniMax Design storyboard 中的 `clip_group` 是生成组：多个分镜行可�
 
 ## Multi-Agent 交接方式
 
-真实子 Agent 只用于可以独立产出和独立验收的工作，例如并行调研、互不依赖的资产候选、方案变体或已经拆分清楚的镜头任务。Story Orientation、故事蓝图和逐场编剧共享同一条因果与状态链，作为 Writer Worker 在 Content Planning Job 内的可恢复单元执行；该工件再由 Verifier 验收，未通过时由 Leader 交回原 Worker。责任拓扑始终是 `Leader → Worker → Verifier`，但不为看起来“多 Agent”而强制拆成三个并行进程。
+真实子 Agent 只用于可以独立产出和独立验收的工作，例如并行调研、互不依赖的资产候选、方案变体或已经拆分清楚的镜头任务。Story Orientation、故事蓝图和逐场编剧共享同一条因果与状态链，作为 Writer Worker 在 Content Planning Job 内的可恢复单元执行；检查由当前任务的实际问题决定，可以自查或由其他 Worker 协助；发现问题时交还负责内容的 Worker。不为展示分工而固定角色链或拆成三个进程。
 
 专业 Agent 不应收到整段无界对话。主 Agent 发送的 WorkOrder 至少包含：
 
@@ -436,13 +437,13 @@ MiniMax Design 中用 Canvas 展示的剧本、生产计划、资产、storyboar
 
 本地 `TeamExecutor` 可同时认领多个当前 PlanRevision 中没有依赖冲突的 WorkOrders，在运行锁外并行执行专业判断与只读 Tool。每个 WorkOrder 持久化 `next_owner`：`WORKER_DECISION`、`WORKER_TOOL`、`LEADER_REPLAN` 或 `USER_INPUT`。无人值守统一 `advance` 每次只选择一个独立 Worker 批次；没有 Worker 批次时才推进一个 Leader Action/重规划单元。在同一 Worker 仍持有责任时，该批次可连续执行“模型决策 → Tool → 原 Worker”，但每个 turn 仍独立持久化且可被 Board/心跳读取；不跨越 Leader 重规划或用户输入边界。Worker 批次失败会以可见错误停止，下一次是否由 Leader 改计划由显式状态决定，不自动重放。写入和外部副作用无论来自 Leader 还是 Worker，都共用同一项目写通道串行进入唯一 ProjectDocument。计划被替换时，只有 Leader 显式写入 `carried_work_order_ids` 的未完成委派继续执行；其他委派停止自动执行，迟到结果仅作历史交接，不得合并到新计划。单用户桌面产品不需要 Redis、Celery、租约或分布式协调。
 
-当 Verifier 的多个 finding 只影响部分 ClipGroup 时，Leader 先按共同自然动作链、相邻连续性与道具状态、问题因果和单个任务的可清晰处理范围进行语义聚类。相同 finding 类型或抽象根因不自动等于一个 WorkOrder；跨场、非相邻、证据链不同或完整 Group 替换会令上下文过重时，应拆成带顺序依赖的多个 repair WorkOrder。每个 WorkOrder 携带冻结的 Verifier 证据，执行时读取前一项完成后的当前 draft，只处理所分配的 cluster 并返回最新 ArtifactRef、已处理范围与剩余问题。一个 cluster 可以包含一组或多组，不设置固定数量、关键词路由或程序化 splitter。
+当 Verifier 的多个 finding 只影响部分 ClipGroup 时，Leader 先按共同自然动作链、相邻连续性与道具状态、问题因果和单个任务的可清晰处理范围进行语义聚类。相同 finding 类型或抽象根因不自动等于一个 WorkOrder；跨场、非相邻、证据链不同或完整 Group 替换会令上下文过重时，应拆成带顺序依赖的多个 repair WorkOrder。每个 WorkOrder 携带当前检查的具体观察，执行时读取前一项完成后的当前 draft，只处理所分配的 cluster 并返回最新 ArtifactRef、已处理范围与剩余问题。一个 cluster 可以包含一组或多组，不设置固定数量、关键词路由或程序化 splitter。
 
 ## 已实现与待真实样本验证
 
-当前代码已实现 Story Orientation、`SCRIPT_LOCKED` 语义结构化与逐字/顺序保护、`StorySourceContract`/`StoryIntent`/`EndingContract` 持久化、紧凑 Tool Catalog 后按需加载 Schema、显式 `production_skill_role` 委派、`ContextManifest`、`specialist_turns` 单步持久化与中断恢复、append-only WorkOrder 进度、派生 ProductionBoard、轻量本地 TeamExecutor、计划 carry/stale handoff、Issue Ledger、定向逐场修订和 `planning.advance` 可恢复游标。活动 Method Catalog 已分为 3 个 MiniMax Design 项目 Workflow 与 8 个 MiniMax-H3 任务 Method；角色装载仍通过薄 adapter 映射到现有 ProjectDocument、ProductionDocument、WorkOrder 和 Tool。`AI_SHORT_DRAMA` 只保留本地 schema/profile adapter，通用短剧方法主骨架由 `drama-series` 提供。剧本活动责任已收敛为 Leader → Writer Worker → Verifier。ProductionSpec、Storyboard 和 GenerationPlan 已使用受管的版本化 ProductionDocument，`ProjectOutputSlot` 与 `expected_output_slot_ids` 提供稳定逻辑交付；Agent 可创建、替换或局部修改完整 Storyboard，将 ClipGroup 编译为带 Shot source windows 的 GenerationUnit，并交给 H3 Route/Task/Take 与时间线消费。Master Audio/音乐结构/TimedText 工件、资产结构化 brief、`image.compose_reference_sheet`、`image.compose_text_plate`、分镜 timeline beats、H3 五类路线与精确媒体交接也有对应工件/Tool 边界。这些是工程能力，不是成片质量证明。
+当前代码已实现 Story Orientation、`SCRIPT_LOCKED` 语义结构化与逐字/顺序保护、`StorySourceContract`/`StoryIntent`/`EndingContract` 持久化、紧凑 Tool Catalog 后按需加载 Schema、显式 `production_skill_role` 委派、`ContextManifest`、`specialist_turns` 单步持久化与中断恢复、append-only WorkOrder 进度、派生 ProductionBoard、轻量本地 TeamExecutor、计划 carry/stale handoff、Issue Ledger、定向逐场修订和 `planning.advance` 可恢复游标。活动 Method Catalog 已分为 3 个 MiniMax Design 项目 Workflow 与 8 个 MiniMax-H3 任务 Method；角色装载仍通过薄 adapter 映射到现有 ProjectDocument、ProductionDocument、WorkOrder 和 Tool。`AI_SHORT_DRAMA` 只保留本地 schema/profile adapter，通用短剧方法主骨架由 `drama-series` 提供。Leader 按当前目标安排必要角色，写作、导演、资产制作都可结合自查，不要求固定审校链。ProductionSpec、Storyboard 和 GenerationPlan 已使用受管的版本化 ProductionDocument，`ProjectOutputSlot` 与 `expected_output_slot_ids` 提供稳定逻辑交付；Agent 可创建、替换或局部修改完整 Storyboard，将 ClipGroup 编译为带 Shot source windows 的 GenerationUnit，并交给 H3 Route/Task/Take 与时间线消费。Master Audio/音乐结构/TimedText 工件、资产结构化 brief、`image.compose_reference_sheet`、`image.compose_text_plate`、分镜 timeline beats、H3 五类路线与精确媒体交接也有对应工件/Tool 边界。这些是工程能力，不是成片质量证明。
 
-当前先用 Fake Provider 和本地媒体验证上述后端闭环；仍需在用户明确授权真实 Provider 后，再用真实语言模型、图像和 H3 样本检验：Agent 是否选对 Design Workflow 与 H3 Method，`drama-series` 是否在不同短剧/漫剧题材中产生合适的节奏与回报，Verifier 是否正确识别与验收问题，局部修订是否保护原有优点，以及直接资产卡/拼板、ClipGroup/GenerationUnit、真实媒体绑定是否提高连贯性。文档、Prompt 和结构化测试只证明可执行性，不证明真实成片质量、耗时或费用。ComfyUI、语义画布和 LTX 编辑器双向桥接仍按 PRD 后置。
+已有校园案例完成真实语言、图片、H3 和成片制作；当前桌面入口、LTX 局部剪辑与项目回写、可选 ComfyUI 连接已有实现。主产品不采用语义画布。以产品交付清单及实际 Trace 为准，不把旧案例结果当作所有题材的质量或稳定性证明。
 
 ## 何时重新规划
 

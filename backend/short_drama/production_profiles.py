@@ -14,6 +14,7 @@ from functools import lru_cache
 
 from short_drama.models import ProductionProfile
 from short_drama.skill_ids import canonical_method_skill_id, canonical_skill_ids
+from short_drama.studio_trace import record_trace
 from short_drama.skills.loader import (
     load_narrative_skills,
     load_production_method_skills,
@@ -361,6 +362,15 @@ def compile_production_prompt(
     )
     if narrative_prompt:
         parts.append(narrative_prompt)
+    record_trace("skills.loaded", {
+        "profile": profile.value, "stage": None if stage is None else stage.value,
+        "roles": [role.value for role in resolved_roles],
+        "role_labels": [_ROLE_LABELS[role] for role in resolved_roles],
+        "skills": [{"id": selected.id, "label": selected.label, "path": selected.source_path}
+                   for selected in (*selected_method_skills, *selected_skills)],
+        "role_paths": [f"shared/roles/{role.value.lower()}.md" for role in resolved_roles],
+        "summary": "、".join(selected.label for selected in selected_method_skills) or skill.label,
+    })
     return CompiledProductionPrompt(
         profile=profile,
         roles=resolved_roles,

@@ -180,7 +180,7 @@ def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
             version=1,
             category=ToolCategory.AUDIO,
             description=(
-                "Bind a selected window from one current approved audio asset as "
+                "Bind a selected window from one current usable audio asset as "
                 "the project's versioned Master Audio."
             ),
             effect=ToolEffect.WRITE,
@@ -279,7 +279,14 @@ def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
             id="audio.inspect_manifest",
             version=1,
             category=ToolCategory.AUDIO,
-            description="Inspect the current timeline audio and persist its report.",
+            description=(
+                "Inspect audio and subtitles from the saved Studio editorial timeline, including "
+                "current trims, timing, mute, volume and speed, and persist a report tied to its "
+                "editorial revision. Does not rebuild or replace edits. Uses the current legacy "
+                "TimelineManifest only when no Studio edit has been saved. The Studio report's "
+                "manifest_id is an inspection snapshot; saved Studio subtitle changes use "
+                "timeline.read_editorial/save_editorial, not legacy manifest alignment."
+            ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=AudioInspectManifestInput,
@@ -328,7 +335,7 @@ def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
             id="audio.update_voice_reference",
             version=1,
             category=ToolCategory.AUDIO,
-            description="Bind or clear an existing approved audio asset for one character.",
+            description="Bind or clear the selected usable audio asset for one character.",
             effect=ToolEffect.WRITE,
             idempotent=True,
             input_model=AudioVoiceReferenceUpdateInput,

@@ -89,7 +89,7 @@ export const assetTakeSchema = z.object({
   smallThumbnailPath: z.string().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
-  createdAt: z.number(),
+  createdAt: z.number().optional(),
 })
 
 export const subtitleStyleSchema = z.object({
@@ -281,10 +281,10 @@ export const assetSchema = z.object({
   smallThumbnailPath: z.string().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
-  prompt: z.string(),
+  prompt: z.string().default(''),
   resolution: z.string(),
   duration: z.number().optional(),
-  createdAt: z.number(),
+  createdAt: z.number().optional(),
   favorite: z.boolean().optional(),
   binId: z.string().optional(),
   generationParams: generationParamsSchema.optional(),

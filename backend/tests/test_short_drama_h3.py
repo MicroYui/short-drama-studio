@@ -1204,6 +1204,15 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     assert run.estimated_cost_credits == 3.003541
     assert run.downloaded_path == take.media_path
 
+    evidence.purpose = EvidencePurpose.CONTRACT_SMOKE
+    service.repository.save_route_evidence(evidence)
+    selected_without_review = service.select_take(take.id)
+    selected_candidate = next(item for item in selected_without_review.takes if item.id == take.id)
+    assert selected_candidate.is_selected is True
+    assert selected_candidate.qa_status == QaStatus.PENDING
+    evidence.purpose = EvidencePurpose.QUALITY_PROBE
+    service.repository.save_route_evidence(evidence)
+
     reviewed = service.review_h3_take(
         take.id,
         H3TakeReviewRequest(
@@ -1213,7 +1222,7 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
         ),
     )
     assert reviewed.take.qa_status == QaStatus.PASSED
-    assert reviewed.take.is_selected is False
+    assert reviewed.take.is_selected is True
     assert reviewed.evidence.status == EvidenceStatus.REVIEWED
     assert reviewed.project.document.project.stage == ProjectStage.GENERATING
     first_rejection = service.review_h3_take(
@@ -1270,13 +1279,12 @@ def test_h3_lifecycle_download_review_and_take_selection(tmp_path: Path) -> None
     assert persisted_evidence.purpose == EvidencePurpose.QUALITY_PROBE
     persisted_evidence.purpose = EvidencePurpose.CONTRACT_SMOKE
     service.repository.save_route_evidence(persisted_evidence)
-    with pytest.raises(WorkflowConflictError, match="contract-smoke"):
-        service.select_take(take.id)
-    persisted_evidence.purpose = EvidencePurpose.QUALITY_PROBE
-    service.repository.save_route_evidence(persisted_evidence)
     selected = service.select_take(take.id)
     assert next(item for item in selected.takes if item.id == take.id).is_selected is True
     assert selected.document.project.stage == ProjectStage.GENERATING
+    evidence_after_selection = service.repository.get_route_evidence_for_take(take.id)
+    assert evidence_after_selection is not None
+    assert evidence_after_selection.purpose == EvidencePurpose.CONTRACT_SMOKE
 
 
 def test_running_h3_output_is_stale_after_director_changes_shot_plan(

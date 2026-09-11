@@ -227,6 +227,52 @@ def test_compose_reference_sheet_creates_traceable_draft_without_provider(
     assert persisted_version.reference_sheet.columns == 2
 
 
+def test_compose_different_props_with_the_same_product_view(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    source_ids: list[str] = []
+    cells: list[AssetReferenceSheetCellRequest] = []
+    for index, (label, color) in enumerate([
+        ("餐盘", "red"), ("菜勺", "green"),
+        ("鸡腿", "blue"), ("计算器", "yellow"),
+    ]):
+        source = service.create_asset(project_id, AssetCreateRequest(
+            kind=AssetKind.PROP, name=label, descriptor=f"{label}实体参考",
+        )).asset
+        version = _import_solid_image(
+            service, project_id=project_id, asset_id=source.id,
+            path=tmp_path / f"prop-{index}.png", color=color, descriptor=label,
+        )
+        source_ids.append(source.id)
+        cells.append(AssetReferenceSheetCellRequest(
+            asset_version_id=version.id, view=AssetStandardView.PROP_PRODUCT,
+            label=label,
+        ))
+    target = service.create_asset(project_id, AssetCreateRequest(
+        kind=AssetKind.REFERENCE, name="食堂道具参考卡",
+        descriptor="四件独立道具的商品图拼板",
+    )).asset
+
+    result = service.compose_asset_reference_sheet(
+        project_id, target.id, AssetReferenceSheetComposeRequest(
+            strategy=AssetReferenceStrategy.LIGHTWEIGHT, cells=cells,
+            descriptor="保留四件道具的原始视角", columns=2,
+            target_size="1024x1024", show_labels=False,
+        ),
+    )
+
+    assert result.version.reference_sheet is not None
+    assert result.version.approval_status == ApprovalStatus.DRAFT
+    assert [cell.source_asset_id for cell in result.version.reference_sheet.cells] == source_ids
+    assert [cell.view for cell in result.version.reference_sheet.cells] == [AssetStandardView.PROP_PRODUCT] * 4
+    assert result.version.local_path is not None
+    with Image.open(result.version.local_path).convert("RGB") as sheet:
+        assert sheet.size == (1024, 1024)
+        assert [sheet.getpixel(point) for point in [(256, 256), (768, 256), (256, 768), (768, 768)]] == [
+            (255, 0, 0), (0, 128, 0), (0, 0, 255), (255, 255, 0),
+        ]
+
+
 def test_compose_dual_zone_machine_reference_card_is_16_9_without_labels(
     tmp_path: Path,
 ) -> None:
@@ -653,3 +699,30 @@ def test_local_reference_sheet_rejects_tiny_canvas_before_rendering() -> None:
             columns=1,
             target_size="16x9",
         )
+
+
+def test_character_four_view_sheet_preserves_both_profiles_and_source_media(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    target = _fixture_character(service)
+    views = [
+        (AssetStandardView.CHARACTER_FRONT, "red"),
+        (AssetStandardView.CHARACTER_LEFT_PROFILE, "green"),
+        (AssetStandardView.CHARACTER_BACK, "blue"),
+        (AssetStandardView.CHARACTER_RIGHT_PROFILE, "yellow"),
+    ]
+    versions = [_import_solid_image(service, project_id=target.project_id,
+        asset_id=target.id, path=tmp_path / f"four-{index}.png", color=color,
+        descriptor=view.value) for index, (view, color) in enumerate(views)]
+    result = service.compose_asset_reference_sheet(target.project_id, target.id,
+        AssetReferenceSheetComposeRequest(strategy=AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS,
+            layout_profile=AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1, show_labels=False,
+            cells=[AssetReferenceSheetCellRequest(asset_version_id=version.id, view=view, label=view.value)
+                for (view, _), version in zip(views, versions, strict=True)],
+            descriptor="人物正面、左侧、背面、右侧"))
+    assert result.version.local_path is not None and result.version.reference_sheet is not None
+    meta = result.version.reference_sheet
+    assert meta.columns == 4 and {cell.source_version_id for cell in meta.cells} == {version.id for version in versions}
+    with Image.open(result.version.local_path).convert("RGB") as sheet:
+        assert sheet.size == (2048, 1152)
+        assert [sheet.getpixel((256 + 512 * index, 576)) for index in range(4)] == [
+            (255, 0, 0), (0, 128, 0), (0, 0, 255), (255, 255, 0)]

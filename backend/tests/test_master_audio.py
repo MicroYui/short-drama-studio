@@ -849,3 +849,31 @@ def test_timeline_export_replaces_take_audio_with_the_master_audio_clip(
         / manifest.id
         / "final-native-audio.mp4"
     ).is_file()
+
+
+def test_selected_draft_master_audio_needs_no_separate_review(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    source = tmp_path / "selected-audio.wav"
+    _write_wav(source)
+    asset = service.create_asset(project_id, AssetCreateRequest(
+        kind=AssetKind.REFERENCE, name="Selected audio", descriptor="User audio",
+    )).asset
+    draft = service.import_local_asset_version(project_id, asset.id, AssetImportLocalRequest(
+        local_path=str(source), descriptor="Use this audio directly",
+    )).version
+    bound = service.bind_master_audio(project_id, MasterAudioBindRequest(
+        asset_version_id=draft.id, source_out_seconds=4.0,
+        origin=ProductionDocumentOrigin.USER,
+    ))
+    assert bound.binding.asset_version_id == draft.id
+    saved = service.get_project(project_id).document
+    selected = next(asset for asset in saved.assets if asset.id == bound.binding.asset_id)
+    version = next(version for version in selected.versions if version.id == draft.id)
+    assert version.approval_status == ApprovalStatus.DRAFT
+    assert version.local_path is not None
+    Path(version.local_path).unlink()
+    with pytest.raises(WorkflowConflictError, match="missing its local media"):
+        service.bind_master_audio(project_id, MasterAudioBindRequest(
+            asset_version_id=draft.id, origin=ProductionDocumentOrigin.USER,
+        ))

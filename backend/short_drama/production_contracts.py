@@ -269,7 +269,7 @@ class StoryboardSceneNode(DomainModel):
     scene_id: str = Field(min_length=1, max_length=200)
     sequence: int = Field(ge=1)
     heading: str = Field(min_length=1, max_length=500)
-    summary: str = Field(min_length=1, max_length=2000)
+    summary: str = Field(default="", max_length=2000)
     source_target_duration_seconds: float | None = Field(
         default=None,
         gt=0.0,
@@ -380,53 +380,10 @@ class StoryboardTimingLedgerEntry(DomainModel):
     )
     planned_shot_id: str | None = Field(default=None, min_length=1, max_length=200)
 
-    @model_validator(mode="after")
-    def validate_timing_math(self) -> StoryboardTimingLedgerEntry:
-        if self.dialogue_units == 0:
-            if self.speech_rate_units_per_second is not None:
-                raise ValueError(
-                    "An action-only timing entry cannot declare a speech rate"
-                )
-            if self.minimum_spoken_duration_seconds > 0.001:
-                raise ValueError(
-                    "An action-only timing entry must have zero spoken duration"
-                )
-        else:
-            if self.speech_rate_units_per_second is None:
-                raise ValueError(
-                    "A dialogue timing entry requires a speech rate"
-                )
-            computed_spoken = (
-                Decimal(self.dialogue_units)
-                / Decimal(str(self.speech_rate_units_per_second))
-            )
-            if (
-                Decimal(str(self.minimum_spoken_duration_seconds))
-                < computed_spoken
-            ):
-                raise ValueError(
-                    "Timing-entry spoken duration cannot be shorter than dialogue "
-                    "units divided by speech rate"
-                )
-        if (
-            self.minimum_spoken_duration_seconds
-            + self.non_speech_reserve_seconds
-            > self.allocated_duration_seconds + 0.05
-        ):
-            raise ValueError(
-                "Timing-entry allocation cannot be shorter than spoken duration "
-                "plus non-speech reserve"
-            )
-        return self
 
 
 class StoryboardClipGroupOutline(DomainModel):
-    """One immutable row in the private whole-episode ClipGroup ledger.
-
-    The Agent derives this outline from the dialogue/action timing scratch pass
-    before any detailed Shot is authored. It is a factual authoring plan, not a
-    target-duration allocation: each later commit must land on the exact row.
-    """
+    """Optional planning notes for a provider-independent editorial group."""
 
     id: str = Field(min_length=1, max_length=200)
     title: str = Field(min_length=1, max_length=500)
@@ -434,7 +391,7 @@ class StoryboardClipGroupOutline(DomainModel):
     scene_group_sequence: int = Field(ge=1)
     source_range: StoryboardSourceRange
     timing_entry_ids: list[str] = Field(min_length=1)
-    duration_seconds: int = Field(ge=4, le=15)
+    duration_seconds: float = Field(gt=0.0)
     objective: str = Field(min_length=1, max_length=3000)
     continuity_in: list[str] = Field(default_factory=list[str])
     visible_changes: list[str] = Field(default_factory=list[str])
@@ -481,14 +438,6 @@ class StoryboardTimingAudit(DomainModel):
         ):
             raise ValueError(
                 "A passed timing audit cannot retain overloaded Shot or ClipGroup IDs"
-            )
-        if (
-            self.minimum_spoken_duration_s + self.non_speech_reserve_s
-            > self.computed_episode_duration_s + 0.05
-        ):
-            raise ValueError(
-                "Computed episode duration cannot be shorter than spoken duration "
-                "plus non-speech reserve"
             )
         if (
             self.assessment is not None
@@ -621,11 +570,10 @@ class StoryboardDraftSeed(DomainModel):
 
 
 class StoryboardDraftContent(DomainModel):
-    """Recoverable private plan assembled into one canonical Storyboard.
+    """Persist groups incrementally; timing notes and reviews are optional.
 
-    Planning is persisted in semantic segments so a long episode never needs to
-    fit in one model response. Segment boundaries are checkpoints only: the
-    sealed outline still defines the provider-bounded ClipGroups.
+    Legacy planning phases remain readable. Detailed groups do not require a
+    timing ledger, an outline, a passing review, or provider-sized durations.
     """
 
     phase: StoryboardDraftPhase
@@ -745,6 +693,36 @@ class StoryboardDraftContent(DomainModel):
         )
         nodes_by_id = {item.id: item for item in self.scene_nodes}
         node_order = {item.id: item.sequence for item in self.scene_nodes}
+
+        if self.phase == StoryboardDraftPhase.GROUP_AUTHORING:
+            authored_group_ids: set[str] = set()
+            authored_shot_ids: set[str] = set()
+            positions: set[tuple[str, int]] = set()
+            for group in self.committed_groups:
+                node = nodes_by_id.get(group.scene_node_id)
+                if node is None or group.source_range.scene_ids != [node.scene_id]:
+                    raise ValueError("Storyboard group must reference its actual scene node")
+                if group.clip_group.id in authored_group_ids:
+                    raise ValueError("Storyboard draft ClipGroup IDs must be unique")
+                authored_group_ids.add(group.clip_group.id)
+                position = (group.scene_node_id, group.scene_group_sequence)
+                if position in positions:
+                    raise ValueError("Storyboard groups cannot share one in-scene sequence")
+                positions.add(position)
+                for shot in group.shots:
+                    if shot.id in authored_shot_ids:
+                        raise ValueError("Storyboard draft Shot IDs must be globally unique")
+                    authored_shot_ids.add(shot.id)
+                if not source_metadata_deferred and any(
+                    line_id not in node.source_line_ids
+                    for line_id in group.source_range.script_line_ids
+                ):
+                    raise ValueError("Storyboard group contains a line outside its scene")
+            if self.verification is not None and any(
+                item not in authored_group_ids for item in self.verification.checked_clip_group_ids
+            ):
+                raise ValueError("Storyboard verification references uncommitted ClipGroups")
+            return self
 
         ledger_ids = [item.id for item in self.timing_ledger]
         if len(ledger_ids) != len(set(ledger_ids)):
@@ -883,7 +861,6 @@ class StoryboardDraftContent(DomainModel):
         planned_ids = [item.id for item in self.planned_clip_groups]
         if len(planned_ids) != len(set(planned_ids)):
             raise ValueError("Storyboard planned ClipGroup IDs must be unique")
-        plans_by_id = {item.id: item for item in self.planned_clip_groups}
         planned_positions = [
             (item.scene_node_id, item.scene_group_sequence)
             for item in self.planned_clip_groups
@@ -976,7 +953,6 @@ class StoryboardDraftContent(DomainModel):
             raise ValueError(
                 "Storyboard outline must consume a contiguous timing-ledger prefix"
             )
-        full_outline = planned_timing_entry_ids == ledger_ids
 
         if self.phase == StoryboardDraftPhase.OUTLINE_BUILDING:
             if (
@@ -989,119 +965,6 @@ class StoryboardDraftContent(DomainModel):
                     "or verification"
                 )
             return self
-        if not full_outline:
-            raise ValueError(
-                "Storyboard outline must consume the full timing ledger before "
-                "group authoring"
-            )
-        empty_scene_ids = [
-            node.id for node in self.scene_nodes if not plans_by_node[node.id]
-        ]
-        if empty_scene_ids:
-            raise ValueError(
-                "Every storyboard scene needs an outlined ClipGroup before authoring: "
-                + ", ".join(empty_scene_ids)
-            )
-        if self.timing_audit is None:
-            raise ValueError("Group-authoring drafts require a sealed timing audit")
-        planned_duration = sum(item.duration_seconds for item in ordered_plans)
-        if abs(
-            planned_duration - self.timing_audit.computed_episode_duration_s
-        ) > 0.05:
-            raise ValueError(
-                "Timing-audit episode duration must equal planned ClipGroup durations"
-            )
-        if self.timing_audit.clip_group_count != len(ordered_plans):
-            raise ValueError("Timing-audit ClipGroup count must equal the outline")
-        if self.timing_audit.dialogue_units_total != sum(
-            item.dialogue_units for item in self.timing_ledger
-        ):
-            raise ValueError(
-                "Timing-audit dialogue-unit total must equal the timing ledger"
-            )
-        if abs(
-            self.timing_audit.minimum_spoken_duration_s
-            - sum(
-                item.minimum_spoken_duration_seconds
-                for item in self.timing_ledger
-            )
-        ) > 0.05:
-            raise ValueError(
-                "Timing-audit minimum spoken duration must equal the timing ledger"
-            )
-        if abs(
-            self.timing_audit.non_speech_reserve_s
-            - sum(item.non_speech_reserve_seconds for item in self.timing_ledger)
-        ) > 0.05:
-            raise ValueError(
-                "Timing-audit non-speech reserve must equal the timing ledger"
-            )
-
-        if (
-            not self.timing_audit.timing_audit_passed
-            or self.timing_audit.overloaded_group_ids
-            or self.timing_audit.overloaded_shot_ids
-        ):
-            raise ValueError(
-                "A sealed storyboard outline requires a clean timing audit without "
-                "overloads"
-            )
-        if self.timing_audit.alignment in {
-            DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
-            DurationAlignment.UNRESOLVED,
-        }:
-            if self.phase != StoryboardDraftPhase.DURATION_RECONCILIATION:
-                raise ValueError(
-                    "An outline with an unresolved or out-of-range duration decision "
-                    "must return to duration reconciliation before group authoring"
-                )
-            if self.committed_groups or self.verification is not None:
-                raise ValueError(
-                    "Duration-reconciliation drafts cannot contain authored groups "
-                    "or verification"
-                )
-            return self
-        if self.phase == StoryboardDraftPhase.DURATION_RECONCILIATION:
-            raise ValueError(
-                "Duration reconciliation requires an unresolved or out-of-range audit"
-            )
-        group_ids: list[str] = []
-        shot_ids: list[str] = []
-        for commit in self.committed_groups:
-            planned = plans_by_id.get(commit.clip_group.id)
-            if planned is None:
-                raise ValueError(
-                    "Storyboard draft commit has no matching planned ClipGroup "
-                    f"{commit.clip_group.id}"
-                )
-            if (
-                commit.scene_node_id != planned.scene_node_id
-                or commit.scene_group_sequence != planned.scene_group_sequence
-                or commit.source_range != planned.source_range
-                or commit.clip_group.duration_seconds != planned.duration_seconds
-            ):
-                raise ValueError(
-                    "Storyboard draft commit must match its planned ClipGroup slot"
-                )
-            group_ids.append(commit.clip_group.id)
-            shot_ids.extend(item.id for item in commit.shots)
-        if len(group_ids) != len(set(group_ids)):
-            raise ValueError("Storyboard draft ClipGroup IDs must be unique")
-        if len(shot_ids) != len(set(shot_ids)):
-            raise ValueError("Storyboard draft Shot IDs must be globally unique")
-        if group_ids != planned_ids[: len(group_ids)]:
-            raise ValueError("Storyboard draft groups must be committed in planned order")
-        if self.verification is not None:
-            unknown_checked_ids = [
-                item
-                for item in self.verification.checked_clip_group_ids
-                if item not in group_ids
-            ]
-            if unknown_checked_ids:
-                raise ValueError(
-                    "Storyboard verification references uncommitted ClipGroups: "
-                    + ", ".join(unknown_checked_ids)
-                )
         return self
 
 
@@ -1393,32 +1256,7 @@ def populate_storyboard_scene_nodes(
 def assemble_storyboard_draft(draft: StoryboardDraftContent) -> StoryboardContent:
     """Deterministically assemble a complete draft into the canonical contract."""
 
-    if draft.phase != StoryboardDraftPhase.GROUP_AUTHORING:
-        raise ValueError(
-            "Storyboard draft must finish ledger and outline planning before assembly"
-        )
-    if draft.timing_audit is None:
-        raise ValueError("Storyboard draft requires a timing audit before assembly")
-    if (
-        not draft.timing_audit.timing_audit_passed
-        or draft.timing_audit.overloaded_shot_ids
-        or draft.timing_audit.overloaded_group_ids
-    ):
-        raise ValueError(
-            "Storyboard timing audit must pass without overloaded Shots or "
-            "ClipGroups before assembly"
-        )
     node_by_id = {item.id: item for item in draft.scene_nodes}
-    planned_ids = [
-        item.id
-        for item in sorted(
-            draft.planned_clip_groups,
-            key=lambda item: (
-                node_by_id[item.scene_node_id].sequence,
-                item.scene_group_sequence,
-            ),
-        )
-    ]
     commits = sorted(
         draft.committed_groups,
         key=lambda item: (
@@ -1426,14 +1264,6 @@ def assemble_storyboard_draft(draft: StoryboardDraftContent) -> StoryboardConten
             item.scene_group_sequence,
         ),
     )
-    committed_ids = [item.clip_group.id for item in commits]
-    if committed_ids != planned_ids:
-        missing_ids = [item for item in planned_ids if item not in committed_ids]
-        raise ValueError(
-            "Storyboard draft is incomplete: every planned ClipGroup must be "
-            "committed before assembly"
-            + (f"; missing {', '.join(missing_ids)}" if missing_ids else "")
-        )
     commits_by_node: dict[str, list[StoryboardClipGroupDraft]] = {
         item.id: [] for item in draft.scene_nodes
     }
@@ -1480,19 +1310,8 @@ def assemble_storyboard_draft(draft: StoryboardDraftContent) -> StoryboardConten
         raise ValueError("Storyboard draft has no editorial Shots")
     shot_duration = sum(item.duration_seconds for item in shots)
     group_duration = sum(item.duration_seconds for item in clip_groups)
-    outline_duration = sum(
-        item.duration_seconds for item in draft.planned_clip_groups
-    )
-    audit_duration = draft.timing_audit.computed_episode_duration_s
-    if (
-        abs(shot_duration - group_duration) > 0.05
-        or abs(group_duration - outline_duration) > 0.05
-        or abs(outline_duration - audit_duration) > 0.05
-    ):
-        raise ValueError(
-            "Storyboard Shot, ClipGroup, outline, and timing-audit durations "
-            "must agree before assembly"
-        )
+    if abs(shot_duration - group_duration) > 0.05:
+        raise ValueError("Storyboard Shot and ClipGroup durations must agree")
     return StoryboardContent(
         project_id=draft.project_id,
         title=draft.title,
@@ -1765,7 +1584,14 @@ class AssetPlanComposeIntent(DomainModel):
     cells: list[AssetPlanComposeCell] = Field(min_length=1, max_length=9)
     input_policy: AssetSheetInputPolicy = AssetSheetInputPolicy.EXPLICIT_VERSIONS
     columns: int = Field(ge=1, le=3)
-    layout_profile: AssetLayoutProfile | None = None
+    layout_profile: AssetLayoutProfile | None = Field(
+        default=None,
+        description=(
+            "普通多物件拼板留空，用 columns 排布；四件道具为 "
+            "LIGHTWEIGHT、columns=2、layout_profile=null，各格可同为 PROP_PRODUCT。"
+            "LIGHTWEIGHT_SINGLE 表示单格，不表示多图拼成一个输出文件。"
+        ),
+    )
     show_labels: bool
     background_color: str = Field(min_length=1, max_length=64)
     target_size: str | None = Field(default=None, min_length=1, max_length=80)
@@ -1781,6 +1607,7 @@ class AssetPlanComposeIntent(DomainModel):
             else {
                 AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9: 4,
                 AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2: 6,
+                AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1: 4,
                 AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2: 4,
                 AssetLayoutProfile.PROP_MASTER_SINGLE: 1,
             }.get(self.layout_profile)
@@ -1849,8 +1676,8 @@ class AssetPlanWorkItem(DomainModel):
     size: str = Field(min_length=1, max_length=80)
     review_purpose: AssetReviewPurpose = Field(
         description=(
-            "CANONICAL_MASTER 会把完成图像审核为主体资产的 canonical "
-            "母版；若同时提供 reference_pack_intent，其 role 必须为 "
+            "CANONICAL_MASTER 表示选作主体资产的 canonical 母版，"
+            "不要求额外审核；若同时提供 reference_pack_intent，其 role 必须为 "
             "CANONICAL_MASTER。SUPPLEMENTAL_REFERENCE 必须提供非 canonical "
             "的 ReferencePack 角色。"
         )
@@ -1874,13 +1701,13 @@ class AssetPlanWorkItem(DomainModel):
         default=None,
         min_length=1,
         max_length=200,
-        description="已实际生成的候选所属 Asset；不表示已经审核或可供下游依赖使用。",
+        description="已实际生成的候选所属 Asset；记录候选不会自动将它选为完成结果。",
     )
     candidate_asset_version_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=200,
-        description="候选媒体的精确版本。Builder 落盘后用局部 patch 记录，供后续验收和恢复复用。",
+        description="候选媒体的精确版本。Builder 落盘后用局部 patch 记录，供后续选择和恢复复用。",
     )
     completed_asset_id: str | None = Field(default=None, min_length=1, max_length=200)
     completed_asset_version_id: str | None = Field(
@@ -2018,6 +1845,7 @@ class AssetPlanWorkItem(DomainModel):
                 in {
                     AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
                     AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+                    AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1,
                 }
                 and self.output_view
                 not in {
@@ -2128,7 +1956,13 @@ class AssetPlanContent(DomainModel):
     production_spec_version_id: str = Field(min_length=1)
     storyboard_document_id: str = Field(min_length=1)
     storyboard_version_id: str = Field(min_length=1)
-    items: list[AssetPlanItem] = Field(default_factory=list[AssetPlanItem])
+    items: list[AssetPlanItem] = Field(
+        default_factory=list[AssetPlanItem],
+        description=(
+            "已确定的资产项；首次可为空或只保存基础项，后续通过 "
+            "patch_asset_plan.upsert_items 按依赖分批追加，不要求一次输出整集。"
+        ),
+    )
     notes: list[str] = Field(default_factory=list[str])
 
     @model_validator(mode="after")
@@ -2449,21 +2283,20 @@ class AssetPlanFieldPatch(DomainModel):
     """One compact field change selected by stable item/work-item identity."""
 
     item_id: str | None = Field(default=None, min_length=1, max_length=200)
-    work_item_id: str | None = Field(default=None, min_length=1, max_length=200)
+    work_item_id: str | None = Field(
+        default=None, min_length=1, max_length=200,
+        description="Stable work-item ID, unique within the plan; its parent item_id can be inferred.",
+    )
     op: AssetPlanFieldPatchOperation
     path: str = Field(max_length=1000)
     value: JsonValue = None
 
     @model_validator(mode="after")
     def validate_target(self) -> AssetPlanFieldPatch:
-        if self.work_item_id is not None and self.item_id is None:
-            raise ValueError(
-                "AssetPlan field patch work_item_id requires its parent item_id"
-            )
         if not self.path:
             if (
                 self.op != AssetPlanFieldPatchOperation.REMOVE
-                or self.item_id is None
+                or (self.item_id is None and self.work_item_id is None)
             ):
                 raise ValueError(
                     "An empty AssetPlan field patch path is only valid for removing "
@@ -2491,7 +2324,7 @@ class AssetPlanPatchRequest(DomainModel):
     """Local AssetPlan changes merged against one exact current version.
 
     Existing item and work-item IDs are replaced in place. New IDs are appended in
-    request order. The service validates the fully merged AssetPlan, so a local patch
+    request order; field patches are applied after these item changes. The service validates the fully merged AssetPlan, so a local patch
     cannot bypass dependency, source-version, media, or completion semantics.
     """
 
@@ -2504,6 +2337,7 @@ class AssetPlanPatchRequest(DomainModel):
         default_factory=list[AssetPlanFieldPatch],
         description=(
             "Atomic RFC 6902 field changes resolved by stable item/work-item IDs. "
+            "Applied after item/work-item upserts and removals in the same request. "
             "Use this for broad corrections that would otherwise retransmit full items."
         ),
     )
@@ -2543,12 +2377,6 @@ class AssetPlanPatchRequest(DomainModel):
             and self.notes is None
         ):
             raise ValueError("AssetPlan patch must contain a semantic change")
-        if self.field_patches and (
-            self.upsert_items or self.work_item_patches or self.removed_item_ids
-        ):
-            raise ValueError(
-                "AssetPlan field_patches cannot be mixed with full item/work-item upserts"
-            )
         return self
 
 
@@ -2867,6 +2695,22 @@ def apply_asset_plan_field_patches(
     if not isinstance(raw_items, list):
         raise ValueError("AssetPlan payload has no items array")
     for patch in patches:
+        if patch.work_item_id is not None and patch.item_id is None:
+            owners: list[JsonValue] = []
+            for raw_item in raw_items:
+                if not isinstance(raw_item, dict):
+                    continue
+                raw_works = raw_item.get("work_items")
+                if not isinstance(raw_works, list):
+                    continue
+                if any(isinstance(work, dict) and work.get("id") == patch.work_item_id
+                       for work in raw_works):
+                    owners.append(raw_item.get("id"))
+            if len(owners) != 1 or not isinstance(owners[0], str):
+                raise ValueError(
+                    "AssetPlan work-item selector must resolve exactly once: " + patch.work_item_id
+                )
+            patch = patch.model_copy(update={"item_id": owners[0]})
         if not patch.path:
             matching_item_indexes = [
                 index
@@ -2935,6 +2779,30 @@ def apply_asset_plan_field_patches(
                 target = cast(dict[str, JsonValue], matching_work_items[0])
         _apply_asset_plan_json_pointer_patch(target, patch)
     return AssetPlanContent.model_validate(payload)
+
+
+def asset_plan_field_patch_target(
+    plan: AssetPlanContent, patch: AssetPlanFieldPatch,
+) -> JsonValue:
+    """Selected content for comparing concurrent edits without other work items."""
+    if patch.work_item_id is not None:
+        matches = [
+            (item, work) for item in plan.items for work in item.work_items
+            if work.id == patch.work_item_id and (patch.item_id is None or item.id == patch.item_id)
+        ]
+        if not matches:
+            return None
+        if len(matches) != 1:
+            raise ValueError("AssetPlan work-item selector is ambiguous: " + patch.work_item_id)
+        item, work = matches[0]
+        return {
+            "parent": item.model_dump(mode="json", exclude={"work_items"}),
+            "work_item": work.model_dump(mode="json"),
+        }
+    if patch.item_id is not None:
+        item = next((item for item in plan.items if item.id == patch.item_id), None)
+        return None if item is None else item.model_dump(mode="json")
+    return plan.model_dump(mode="json")
 
 
 class AssetPlanExecutionStatus(StrEnum):
@@ -3160,10 +3028,10 @@ class AssetPlanningContextResponse(DomainModel):
     original_user_brief: str
     script: ScriptVersion
     bible: ProjectBibleVersion
-    production_spec_identity: AssetWorkContextVersion
-    production_spec: ProductionSpecContent
-    storyboard_identity: AssetWorkContextVersion
-    storyboard: StoryboardContent
+    production_spec_identity: AssetWorkContextVersion | None = None
+    production_spec: ProductionSpecContent | None = None
+    storyboard_identity: AssetWorkContextVersion | None = None
+    storyboard: StoryboardContent | None = None
     source_intake: list[AssetPlanningSourceIntake] = Field(
         default_factory=list[AssetPlanningSourceIntake]
     )
@@ -3171,6 +3039,8 @@ class AssetPlanningContextResponse(DomainModel):
         default_factory=list[AssetPlanningExistingAssetIndex]
     )
     existing_asset_plan_index: AssetPlanIndexResponse | None = None
+
+    notes: list[str] = Field(default_factory=list[str])
 
 
 class AssetWorkSourceIntake(DomainModel):
@@ -3295,7 +3165,17 @@ class StoryboardPatchRequest(DomainModel):
     replacements: list[StoryboardShotReplacement] = Field(
         default_factory=list[StoryboardShotReplacement]
     )
-    clip_groups: list[ClipGroup] | None = None
+    clip_groups: list[ClipGroup] | None = Field(default=None, description=(
+        "按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。"
+        "增加、删除或重排分组使用完整 StoryboardReplaceRequest。"
+    ))
+    scene_nodes: list[StoryboardSceneNode] | None = Field(default=None, description=(
+        "按稳定场次 ID 更新已读的场次摘要与衔接，未传入场次保留。"
+    ))
+    script_version_id: str | None = Field(default=None, min_length=1)
+    bible_version_id: str | None = Field(default=None, min_length=1)
+    production_spec_document_id: str | None = Field(default=None, min_length=1)
+    production_spec_version_id: str | None = Field(default=None, min_length=1)
     title: str | None = Field(default=None, min_length=1, max_length=240)
     timing_notes: list[str] | None = None
     notes: list[str] | None = None
@@ -3309,10 +3189,21 @@ class StoryboardPatchRequest(DomainModel):
         replacement_ids = [item.shot_id for item in self.replacements]
         if len(replacement_ids) != len(set(replacement_ids)):
             raise ValueError("A storyboard patch may replace each shot only once")
+        group_ids = [group.id for group in self.clip_groups or []]
+        if len(group_ids) != len(set(group_ids)):
+            raise ValueError("A storyboard patch may replace each clip group only once")
+        scene_ids = [scene.id for scene in self.scene_nodes or []]
+        if len(scene_ids) != len(set(scene_ids)):
+            raise ValueError("A storyboard patch may replace each scene only once")
         if not self.replacements and all(
             item is None
             for item in (
                 self.clip_groups,
+                self.scene_nodes,
+                self.script_version_id,
+                self.bible_version_id,
+                self.production_spec_document_id,
+                self.production_spec_version_id,
                 self.title,
                 self.timing_notes,
                 self.notes,
@@ -3562,14 +3453,19 @@ def apply_storyboard_patch(
             )
         )
 
-    next_clip_groups = (
-        request.clip_groups
-        if request.clip_groups is not None
-        else current.clip_groups
-    )
+    group_replacements = {group.id: group for group in request.clip_groups or []}
+    unknown_group_ids = set(group_replacements) - {group.id for group in current.clip_groups}
+    if unknown_group_ids:
+        raise ValueError("Storyboard patch references unknown clip groups: " + ", ".join(sorted(unknown_group_ids)))
+    next_clip_groups = [group_replacements.get(group.id, group) for group in current.clip_groups]
+    scene_replacements = {scene.id: scene for scene in request.scene_nodes or []}
+    unknown_scene_ids = set(scene_replacements) - {scene.id for scene in current.scene_nodes}
+    if unknown_scene_ids:
+        raise ValueError("Storyboard patch references unknown scenes: " + ", ".join(sorted(unknown_scene_ids)))
+    source_scene_nodes = [scene_replacements.get(scene.id, scene) for scene in current.scene_nodes]
     next_scene_nodes = (
         populate_storyboard_scene_nodes(
-            current.scene_nodes,
+            source_scene_nodes,
             next_shots,
             next_clip_groups,
         )
@@ -3580,10 +3476,10 @@ def apply_storyboard_patch(
     return StoryboardContent(
         project_id=current.project_id,
         title=request.title if request.title is not None else current.title,
-        script_version_id=current.script_version_id,
-        bible_version_id=current.bible_version_id,
-        production_spec_document_id=current.production_spec_document_id,
-        production_spec_version_id=current.production_spec_version_id,
+        script_version_id=request.script_version_id or current.script_version_id,
+        bible_version_id=request.bible_version_id or current.bible_version_id,
+        production_spec_document_id=request.production_spec_document_id or current.production_spec_document_id,
+        production_spec_version_id=request.production_spec_version_id or current.production_spec_version_id,
         script_line_ids=current.script_line_ids,
         scene_nodes=next_scene_nodes,
         shots=next_shots,

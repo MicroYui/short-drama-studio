@@ -267,7 +267,9 @@ def test_ai_short_drama_and_official_3d_are_composable_but_not_coupled() -> None
     assert unselected.selected_method_skill_ids == ()
     assert "AI 短剧（本地格式适配）" in unselected.text
     assert "`AI_SHORT_DRAMA` 数据边界" in unselected.text
-    assert "Leader → Worker → Verifier" in unselected.text
+    assert "Leader 依据用户目标安排分工" in unselected.text
+    assert "独立检查按实际需要安排，也可以由制作者自查" in unselected.text
+    assert "Leader → Worker → Verifier" not in unselected.text
     assert "## 全局视觉风格锁" not in unselected.text
     assert "皮克斯感 3D 卡通渲染" not in unselected.text
 

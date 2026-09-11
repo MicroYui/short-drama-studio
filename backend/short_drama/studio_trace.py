@@ -17,6 +17,10 @@ _writer: ContextVar[TraceWriter | None] = ContextVar("studio_trace_writer", defa
 _context: ContextVar[dict[str, JsonValue] | None] = ContextVar("studio_trace_context", default=None)
 
 
+def current_trace_context() -> dict[str, JsonValue]:
+    return dict(_context.get() or {})
+
+
 def record_trace(kind: str, payload: dict[str, JsonValue]) -> None:
     writer = _writer.get()
     if writer is not None:

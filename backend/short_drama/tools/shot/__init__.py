@@ -129,6 +129,8 @@ class ShotToolService(Protocol):
         self,
         project_id: str,
         request: StoryboardPatchRequest,
+        *,
+        current_content_edit: bool = False,
     ) -> StoryboardMutationResponse: ...
 
     def get_storyboard(
@@ -337,6 +339,12 @@ def _storyboard_draft_refs(
             artifact_id=progress.draft_ref.artifact_id,
             version=progress.draft_ref.version,
         ),
+        ArtifactRef(
+            project_id=project_id,
+            artifact_type="production_document",
+            artifact_id=progress.draft_ref.artifact_id,
+            version=progress.draft_ref.version,
+        ),
     )
 
 
@@ -347,11 +355,12 @@ def _storyboard_draft_group_segment_refs(
     return tuple(
         ArtifactRef(
             project_id=project_id,
-            artifact_type="storyboard_draft",
+            artifact_type=artifact_type,
             artifact_id=item.draft_ref.artifact_id,
             version=item.draft_ref.version,
         )
         for item in result.checkpoints
+        for artifact_type in ("storyboard_draft", "production_document")
     )
 
 
@@ -373,13 +382,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.begin_storyboard_draft",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "为已确认的剧本和 ProductionSpec 建立可恢复的分镜草稿。"
-                "输入只包含源版本锁定、标题和场次连续性等轻量 seed；场次标题、"
-                "摘要和台词归属会从当前 ScriptVersion 确定性回填。此时不要"
-                "一次输出整集时长账本或 outline；后续在同一 WorkOrder 内按语义"
-                "连续范围增量持久化，无固定片段数或次数。不会生成视频。"
-            ),
+            description='建立可逐组写入的分镜。seed 只需当前剧本、Bible、制作说明与场次 ID；正文由服务补全。随后直接 append_storyboard_group，页面会逐组显示。时长账本、总纲和独立审阅都是可选帮助，不是前置步骤。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftBeginInput,
@@ -408,26 +411,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.append_storyboard_ledger_segment",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "把已经稳定的一段私有时长账本追加到分镜草稿。每段按剧本"
-                "的语义连续范围选择，按对白与可见动作事实实算时长；不设"
-                "固定秒数、条目数、片段数或调用次数。片段边界只是可恢复的"
-                "运行检查点，不是 Scene、ClipGroup、Shot 或 ComfyUI 节点边界。"
-                "completes_scene 默认为 false；只有一个场次最后的 timing entry "
-                "显式设为 true，才表示该场次完整并把游标推进到下一场。"
-                "non_speech_reserve_seconds 只记录该条在组内并发表演后仍"
-                "不可重叠的增量时间，不是把 ClipGroup 的共享动作、反应、"
-                "停顿或换镜预留重复计入每条 entry。分组前要前瞻回算组级"
-                "的完整口播时间与共享表演预留；可并发的听者反应、道具动作、"
-                "镜头运动和环境变化只计一次。timing entry 是一段表演关键路径，"
-                "不是 Shot 或一句原文；allocated_duration_seconds 可以为小数，"
-                "只有完成后的 ClipGroup 总时长必须为 4–15 秒整数。"
-                "在封账前，Agent 还要从全场连续性检查 allocations 能否无遗漏、"
-                "不重叠地完整分区为各自精确 4–15 秒整数的 ClipGroup。如果不能，"
-                "可基于真实镜头需要调整可分割的动作、反应或停顿预留，但不得修改"
-                "台词内容，也不得用目标总时长倒推分配。"
-                "同一 WorkOrder 可连续追加多段。"
-            ),
+            description='可选：记录一段动作和对白的时间估计。用于复杂节奏的思考与回读，不限制后续镜头写入，也不要求估计已适配 Provider 时长。普通分镜可以直接逐组写入。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftLedgerSegmentAppendInput,
@@ -456,14 +440,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.complete_storyboard_ledger",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "在时长账本已完整覆盖源剧本后封存账本，转入 ClipGroup outline"
-                " 规划阶段。这是确定性阶段转换，不是用户审批门、Critic 循环或"
-                "固定调用次数限制。封账前必须确认每场 allocations 能按连续顺序"
-                "完整分区为精确 4–15 秒整数组；只能依据可分割的动作、反应和停顿"
-                "需要调整预留，不改台词，不用目标总时长倒推。未覆盖的源内容"
-                "不会被默认补齐。"
-            ),
+            description='可选：完成当前时间笔记并转到总纲整理。只有实际需要独立时间笔记时才使用；不必先做此步骤才能写镜头。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftLedgerCompleteInput,
@@ -492,13 +469,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.append_storyboard_outline_segment",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "基于已封存的完整时长账本，按账本顺序追加一段已稳定的"
-                "ClipGroup outline。Agent 先保持整集语义与连续性，再自主选择可恢复"
-                "的持久化边界；不设固定片段数、ClipGroup 数或调用次数。"
-                "每个 ClipGroup 是未来 H3 生成单元，时长必须是 4–15 秒整数。"
-                "片段边界不投影为用户可见节点。同一 WorkOrder 可连续追加多段。"
-            ),
+            description='可选：记录一段分镜总纲，保存动作和衔接想法。组时长是创作估计，实际 Provider 单元由后续路线编排确定。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftOutlineSegmentAppendInput,
@@ -527,11 +498,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.complete_storyboard_outline",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "在 outline 完整消费已封存账本后，写入整体 TimingAudit 并封存"
-                "ClipGroup 边界，转入逐组详细分镜阶段。这是确定性编译阶段"
-                "转换，不是用户审批门或 Critic 循环；不会强制固定分组数。"
-            ),
+            description='可选：保存整体时间观察。检查报告用于判断节奏，不作为分镜、资产或视频制作的审批。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftOutlineCompleteInput,
@@ -560,18 +527,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.append_storyboard_group",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "把一个语义 WorkOrder 已完成的 ClipGroup 和其中多个可编辑 Shot 增量写入"
-                "分镜草稿。WorkOrder 可以小于或大于场次，也可以连续提交多个 ClipGroup；"
-                "WorkOrder 仍按内容语义规划；只在已封存完整 outline 后，单用户"
-                "本地流程才按 outline 顺序提交下一个"
-                "计划组。ClipGroup 保持 H3 要求的 4–15 秒整数时长；内部 Shot "
-                "可以使用小数秒，但 Shot 时长之和必须等于组时长。来源映射和"
-                "时长用结构校验；continuity 与 visible_changes 是自然语言事实，"
-                "由语义 Verifier 判断是否一致，不要为通过字符串逐字相等而复制措辞。"
-                "成功组会立即形成可追踪"
-                "进度，其他组无需重写。"
-            ),
+            description='立即写入一组完整镜头并在产品中显示。包含场次、镜头设计、逐时段描述、对白与实际媒体引用。直接写入即可，不需要时长账本、预先确定全部组或检查通过。组时长应等于实际镜头时长之和；Provider 秒数限制在生成时处理。只返回当前进度及精确引用，后续按需要读取。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftAppendInput,
@@ -603,15 +559,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.append_storyboard_groups",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "把同一语义 WorkOrder 中已经完整设计好的相邻 ClipGroup 前缀一次交给"
-                "服务端。Agent 根据自然动作链、连续性和单次响应能否完整表达，自主选择"
-                "本段范围；不设固定组数，也不要为了批量而让内容截断或降质。服务端先"
-                "整体校验它们恰好对应已封存 outline 的下一个连续前缀，再按组逐个创建"
-                "不可变 storyboard_draft 版本和 checkpoint，因此一次模型创作可减少"
-                "往返，但每个 4–15 秒整数 H3 ClipGroup 仍独立可恢复、可追踪。只有一个"
-                "组或当前只能可靠完成一个组时，继续使用 shot.append_storyboard_group。"
-            ),
+            description='一次提交当前已完成的相邻镜头组，每组独立持久化。适合一起设计的一段表演，不需要先规划全片组数或时间账本。未完成的后续内容可继续逐组追加。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftGroupsAppendInput,
@@ -647,13 +595,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.replace_storyboard_draft_group",
             version=1,
             category=ToolCategory.SHOT,
-            description=(
-                "在 finalize 前只替换已经提交的一个计划 ClipGroup。计划中的组 ID、"
-                "场次、场内顺序、来源台词和实算时长保持不变，Shot、镜头语言、表演"
-                "细节可定向修订；不能借此修改时长账本、组边界或计划连续性事实。"
-                "自然语言连续性可以改写，其事实是否保持由语义 Verifier 判断；相关变化"
-                "需要重新建立完整草稿。任何旧 Verifier 结论会自动失效。"
-            ),
+            description='定向替换当前分镜中的一组，保留该组 ID 和其他组。允许修改镜头内容、时长和构图，不要求沿用旧时间估计。base_version_id 保护用户已经保存的更改；先读取相关当前内容再修改。旧检查观察会失效，Agent 自行决定是否需要重新检查。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftGroupReplaceInput,
@@ -715,16 +657,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.finalize_storyboard",
             version=2,
             category=ToolCategory.SHOT,
-            description=(
-                "在完整计划中的每个 ClipGroup 都已提交后进行确定性装配和结构校验，"
-                "产出唯一的版本化 canonical Storyboard，并绑定场次内的 ClipGroup 与"
-                " Shot。装配要求私有时长账本、Shot、ClipGroup、outline 与 TimingAudit"
-                "秒数一致且无超载；自然语言连续性与可见变化由 Verifier 做语义"
-                "判断，不做逐字等值匹配。Verifier 报告供 Agent 语义决策，不作为用户审批门；"
-                "不会调用 H3 或生成视频。成功时只返回 canonical "
-                "Storyboard 的版本身份和结构摘要；需要镜头正文时"
-                "显式读取 shot.get_storyboard。"
-            ),
+            description='把当前镜头组装配为完整分镜，检查实际镜头、对白覆盖和引用一致性，不要求时长预算、账本、总纲或检查通过。不会生成媒体。成功返回分镜身份和结构摘要，视频由后续实际生成工具创建。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftFinalizeInput,
@@ -750,13 +683,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.create_storyboard",
             version=2,
             category=ToolCategory.SHOT,
-            description=(
-                "兼容旧调用或导入已经完整存在的结构化分镜，一次写入镜头、"
-                "ClipGroup 和连续性信息；不会生成视频。新的 Agent 自主制片"
-                "默认使用轻量 begin → 增量账本 → 增量 outline → 逐组详细分镜 "
-                "→ finalize 的可恢复链路。成功响应只包含精确版本"
-                "与结构摘要，不回传分镜正文和历史。"
-            ),
+            description='一次写入已经完成的结构化分镜及镜头组，不会生成视频。也可以 begin_storyboard_draft 后逐组写入再 finalize，使长任务内容及时显示并持久化；两种方式都不需要独立审批。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardCreateInput,
@@ -799,7 +726,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
     def patch_storyboard(
         request: StoryboardPatchInput,
     ) -> ToolExecution[StoryboardMutationSummaryResponse]:
-        result = service.patch_storyboard(request.project_id, request.request)
+        result = service.patch_storyboard(request.project_id, request.request, current_content_edit=True)
         return ToolExecution(
             output=storyboard_mutation_summary(result),
             artifact_refs=_storyboard_refs(request.project_id, result),
@@ -813,6 +740,9 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             description=(
                 "只修改 Agent 明确选中的镜头或 ClipGroup，并通过 expected_revision"
                 " 保护其他已确认镜头；未修改镜头保持原修订号。"
+                "上游剧本正在修改时也可保存局部内容，并保留实际来源；生成前再同步所用输入。"
+                "核对新剧本或制作说明后，可只更新对应的 script_version_id、bible_version_id、"
+                "production_spec_document_id/version_id 和 scene_nodes；不必重写全片镜头。"
                 "成功响应不重放完整 Storyboard；按需显式读取新版本。"
             ),
             effect=ToolEffect.WRITE,

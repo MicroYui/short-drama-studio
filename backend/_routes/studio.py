@@ -23,6 +23,7 @@ from short_drama.studio_models import (
     StudioShotMediaSelect,
     StudioPreferences,
     StudioEditorial, StudioExport, StudioExportRequest,
+    StudioChangeSet, StudioChangeDecision, StudioChangeResult,
 )
 from short_drama.studio_service import StudioContentConflict
 from short_drama.studio_comfy import ComfyConfig, ComfyConfigUpdate, ComfyRun, ComfyRunRequest, comfy_config, run_comfy, get_comfy_run
@@ -68,6 +69,18 @@ def _execute(operation: Callable[[], T]) -> T:
 @router.get("/projects/{project_id}", response_model=ProjectAggregate)
 def current_project(project_id: str, service: StudioService) -> ProjectAggregate:
     return _execute(lambda: service.studio.current_project(project_id))
+
+
+@router.get("/projects/{project_id}/changes", response_model=list[StudioChangeSet])
+def read_changes(project_id: str, service: StudioService) -> list[StudioChangeSet]:
+    from short_drama.studio_changes import list_changes
+    return _execute(lambda: list_changes(service.studio.current_project(project_id).document))
+
+
+@router.post("/projects/{project_id}/changes/{change_id}/items/{item_id}", response_model=StudioChangeResult)
+def decide_text_change(project_id: str, change_id: str, item_id: str, request: StudioChangeDecision, service: StudioService) -> StudioChangeResult:
+    from short_drama.studio_changes import decide_change
+    return _execute(lambda: decide_change(service, project_id, change_id, item_id, request))
 
 
 @router.post("/projects", response_model=ProjectAggregate)

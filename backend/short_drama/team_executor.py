@@ -415,8 +415,9 @@ class LocalTeamExecutor:
                 tool_name=tool_name,
                 arguments={"task_id": task_id},
                 reason=(
-                    f"Continue the same persisted {media_label} task through its unambiguous "
-                    f"{task_status} provider lifecycle transition."
+                    "视频任务已受理，正在等待并查询结果；返回后继续制作。"
+                    if is_h3_poll
+                    else "图片任务已保存，继续准备并提交当前素材。"
                 ),
             )
         )
@@ -478,7 +479,9 @@ class LocalTeamExecutor:
             # Unknown calls remain serial until the normal Tool boundary reports
             # the missing registration; this avoids guessing that they are safe.
             return True
-        return descriptor.effect != ToolEffect.READ
+        # Provider I/O is not a project-wide write. External services guard
+        # their own short saves and task transitions after the slow operation.
+        return descriptor.effect == ToolEffect.WRITE
 
     def _project_lock(self, project_id: str) -> threading.Lock:
         with self._project_locks_guard:

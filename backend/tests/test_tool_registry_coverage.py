@@ -221,9 +221,10 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert "局部语义修改" in descriptors[
         "artifact.patch_asset_plan"
     ].description
-    assert "依赖、当前上游版本" in descriptors[
+    assert "依赖、来源存在性" in descriptors[
         "artifact.patch_asset_plan"
     ].description
+    assert "无需 ComfyUI" in descriptors["timeline.add_asset_overlay"].description
     assert descriptors["artifact.patch_asset_plan"].version == 2
     assert "不回传完整 AssetPlan" in descriptors[
         "artifact.patch_asset_plan"
@@ -289,7 +290,7 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert "不要求 Provider 一次生成多件像素级一致" in descriptors[
         "image.enqueue"
     ].description
-    assert "不同文案分别保存为独立 TEXT_PLATE" in descriptors[
+    assert "不同文案可以分别保存为 TEXT_PLATE" in descriptors[
         "image.compose_text_plate"
     ].description
     assert "再调用 route.plan_h3" in descriptors[
@@ -332,31 +333,18 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
             for definition in schema.get("$defs", {}).values()
         )
     assert "不会生成视频" in descriptors["shot.create_storyboard"].description
-    assert "轻量 seed" in descriptors[
-        "shot.begin_storyboard_draft"
-    ].description
     begin_schema = descriptors["shot.begin_storyboard_draft"].input_schema
     begin_request_schema = begin_schema["$defs"]["StoryboardDraftBeginRequest"]
     assert "seed" in begin_request_schema["properties"]
     assert "draft" not in begin_request_schema["properties"]
-    assert "不设固定秒数" in descriptors[
-        "shot.append_storyboard_ledger_segment"
-    ].description
-    assert "不是 Scene、ClipGroup、Shot 或 ComfyUI 节点边界" in descriptors[
-        "shot.append_storyboard_ledger_segment"
-    ].description
-    assert "completes_scene 默认为 false" in descriptors[
-        "shot.append_storyboard_ledger_segment"
-    ].description
-    assert "完整分区为各自精确 4–15 秒整数" in descriptors[
-        "shot.append_storyboard_ledger_segment"
-    ].description
-    assert "不得修改台词内容" in descriptors[
-        "shot.append_storyboard_ledger_segment"
-    ].description
-    assert "不得用目标总时长倒推分配" in descriptors[
-        "shot.append_storyboard_ledger_segment"
-    ].description
+    # Planning notes are available, but must not be advertised as required gates.
+    for optional_tool_id in (
+        "shot.append_storyboard_ledger_segment",
+        "shot.complete_storyboard_ledger",
+        "shot.append_storyboard_outline_segment",
+        "shot.complete_storyboard_outline",
+    ):
+        assert "可选" in descriptors[optional_tool_id].description
     ledger_schema = descriptors[
         "shot.append_storyboard_ledger_segment"
     ].input_schema["$defs"]["StoryboardTimingLedgerEntry"]
@@ -365,48 +353,14 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
         "title": "Completes Scene",
         "type": "boolean",
     }
-    assert "不是用户审批门" in descriptors[
-        "shot.complete_storyboard_ledger"
-    ].description
-    assert "每场 allocations 能按连续顺序完整分区" in descriptors[
-        "shot.complete_storyboard_ledger"
-    ].description
-    assert "不改台词，不用目标总时长倒推" in descriptors[
-        "shot.complete_storyboard_ledger"
-    ].description
-    assert "同一 WorkOrder 可连续追加多段" in descriptors[
-        "shot.append_storyboard_outline_segment"
-    ].description
-    assert "4–15 秒整数" in descriptors[
-        "shot.append_storyboard_outline_segment"
-    ].description
     outline_schema = descriptors[
         "shot.append_storyboard_outline_segment"
     ].input_schema["$defs"]["StoryboardClipGroupOutline"]
     assert outline_schema["properties"]["duration_seconds"] == {
-        "maximum": 15,
-        "minimum": 4,
+        "exclusiveMinimum": 0.0,
         "title": "Duration Seconds",
-        "type": "integer",
+        "type": "number",
     }
-    assert "不会强制固定分组数" in descriptors[
-        "shot.complete_storyboard_outline"
-    ].description
-    assert "WorkOrder 可以小于或大于场次" in descriptors[
-        "shot.append_storyboard_group"
-    ].description
-    assert "Shot 时长之和必须等于组时长" in descriptors[
-        "shot.append_storyboard_group"
-    ].description
-    assert "不要为通过字符串逐字相等而复制措辞" in descriptors[
-        "shot.append_storyboard_group"
-    ].description
-    assert "服务端先整体校验" in descriptors[
-        "shot.append_storyboard_groups"
-    ].description
-    assert "按组逐个创建" in descriptors[
-        "shot.append_storyboard_groups"
-    ].description
     # Authored timing supports decimals; provider request limits belong to its adapter.
     group_schema = descriptors["shot.append_storyboard_group"].input_schema
     assert group_schema["$defs"]["ClipGroup"]["properties"][
@@ -422,19 +376,14 @@ def test_default_registry_covers_the_existing_production_loop(tmp_path: Path) ->
     assert "maxItems" not in segment_schema["$defs"][
         "StoryboardDraftGroupsAppendRequest"
     ]["properties"]["groups"]
-    assert "旧 Verifier 结论会自动失效" in descriptors[
-        "shot.replace_storyboard_draft_group"
-    ].description
     assert "不是用户审批门" in descriptors[
         "shot.record_storyboard_draft_verification"
     ].description
-    assert "canonical Storyboard" in descriptors[
-        "shot.finalize_storyboard"
-    ].description
-    assert "不做逐字等值匹配" in descriptors[
-        "shot.finalize_storyboard"
-    ].description
-    assert "兼容旧调用" in descriptors["shot.create_storyboard"].description
+    finalize_schema = descriptors["shot.finalize_storyboard"].input_schema
+    finalize_request = finalize_schema["$defs"]["StoryboardDraftFinalizeRequest"]
+    assert set(finalize_request["required"]) == {
+        "draft_document_id", "draft_version_id", "origin"
+    }
     assert descriptors["route.compile_generation_plan"].effect == ToolEffect.WRITE
     assert "不调用 H3" in descriptors[
         "route.compile_generation_plan"
@@ -478,3 +427,25 @@ def test_read_adapters_use_the_real_service_without_bypassing_it(tmp_path: Path)
         "keyframe_comparisons": [],
         "compatibility_checks": [],
     }
+
+
+def test_current_shot_save_returns_the_persisted_revision(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project = service.initialize_fixture()
+    project_id = project.document.project.id
+    shot = project.document.shots[0]
+    replacement = shot.model_copy(update={"camera": "固定机位，保留原来构图。"})
+    result = service.tool_registry.invoke("shot.save_current", {
+        "project_id": project_id,
+        "shot_id": shot.id,
+        "request": {"expected_revision": shot.revision, "shot": replacement.model_dump(mode="json")},
+    })
+    assert result.status == ToolCallStatus.SUCCEEDED
+    saved = next(item for item in service.get_project(project_id).document.shots if item.id == shot.id)
+    assert saved.camera == replacement.camera
+    assert saved.revision > shot.revision
+    assert result.output is not None
+    assert result.output["shot_revisions"] == {shot.id: saved.revision}
+    assert [(ref.artifact_type, ref.artifact_id, ref.version) for ref in result.artifact_refs] == [
+        ("shot", shot.id, saved.revision)
+    ]

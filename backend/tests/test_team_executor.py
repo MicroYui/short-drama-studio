@@ -629,20 +629,24 @@ def test_drain_stops_at_non_worker_owner(
     assert batch.advances[0].work_order_status == DelegationStatus.NEEDS_ATTENTION
 
 
-def test_executor_allows_read_only_tool_turns_to_overlap(tmp_path: Path) -> None:
+@pytest.mark.parametrize("effect", [ToolEffect.READ, ToolEffect.EXTERNAL])
+def test_executor_allows_reads_and_external_tool_turns_to_overlap(tmp_path: Path, effect: ToolEffect) -> None:
     runtime, run_id = _runtime(tmp_path)
+    registry = _registry()
+    _register_empty_tool(registry, tool_id="project.concurrent-for-team", effect=effect,
+                         handler=lambda _request: ToolExecution(output=EmptyOutput()))
     work_order_ids = [
         _work_order_with_tool(
             runtime,
             run_id,
             "read-a",
-            "project.read-for-team",
+            "project.concurrent-for-team",
         ),
         _work_order_with_tool(
             runtime,
             run_id,
             "read-b",
-            "project.read-for-team",
+            "project.concurrent-for-team",
         ),
     ]
     barrier = threading.Barrier(2)
@@ -650,7 +654,7 @@ def test_executor_allows_read_only_tool_turns_to_overlap(tmp_path: Path) -> None
     executor = LocalTeamExecutor(
         RecordingManager(
             runtime,
-            _registry(),
+            registry,
             lambda _work_order_id: barrier.wait(timeout=2.0),
         ),
         max_workers=2,
@@ -663,7 +667,7 @@ def test_executor_allows_read_only_tool_turns_to_overlap(tmp_path: Path) -> None
     assert all(item.serialized_project_write is False for item in batch.advances)
 
 
-def test_executor_serializes_non_read_tool_turns_per_project(tmp_path: Path) -> None:
+def test_executor_serializes_direct_write_tool_turns_per_project(tmp_path: Path) -> None:
     runtime, run_id = _runtime(tmp_path)
     work_order_ids = [
         _work_order_with_tool(
@@ -850,7 +854,7 @@ def test_executor_uses_production_manager_lock_free_specialist_boundary(
     )
 
 
-def test_production_manager_serializes_project_writes_and_external_effects_but_not_reads(
+def test_production_manager_serializes_writes_without_blocking_external_io_or_reads(
     tmp_path: Path,
 ) -> None:
     store = AgentRuntimeStore(tmp_path / "runtime.sqlite3")
@@ -861,6 +865,7 @@ def test_production_manager_serializes_project_writes_and_external_effects_but_n
     release_write = threading.Event()
     external_started = threading.Event()
     external_entered = threading.Event()
+    second_write_entered = threading.Event()
     read_barrier = threading.Barrier(2)
 
     def hold_write(_request: EmptyInput) -> ToolExecution[EmptyOutput]:
@@ -871,6 +876,10 @@ def test_production_manager_serializes_project_writes_and_external_effects_but_n
 
     def enter_external(_request: EmptyInput) -> ToolExecution[EmptyOutput]:
         external_entered.set()
+        return ToolExecution(output=EmptyOutput())
+
+    def second_write(_request: EmptyInput) -> ToolExecution[EmptyOutput]:
+        second_write_entered.set()
         return ToolExecution(output=EmptyOutput())
 
     def overlap_read(_request: EmptyInput) -> ToolExecution[EmptyOutput]:
@@ -889,6 +898,8 @@ def test_production_manager_serializes_project_writes_and_external_effects_but_n
         effect=ToolEffect.EXTERNAL,
         handler=enter_external,
     )
+    _register_empty_tool(registry, tool_id="project.second-write",
+                         effect=ToolEffect.WRITE, handler=second_write)
     for tool_id in ("project.parallel-read-a", "project.parallel-read-b"):
         _register_empty_tool(
             registry,
@@ -918,6 +929,8 @@ def test_production_manager_serializes_project_writes_and_external_effects_but_n
     )
     write_thread.start()
     assert write_entered.wait(timeout=2.0)
+    second_write_thread = threading.Thread(target=invoke, args=("project.second-write",), daemon=True)
+    second_write_thread.start()
 
     def invoke_external() -> None:
         external_started.set()
@@ -926,13 +939,16 @@ def test_production_manager_serializes_project_writes_and_external_effects_but_n
     external_thread = threading.Thread(target=invoke_external, daemon=True)
     external_thread.start()
     assert external_started.wait(timeout=2.0)
-    assert not external_entered.wait(timeout=0.05)
+    assert external_entered.wait(timeout=1.0)
+    assert not second_write_entered.is_set()
     release_write.set()
     write_thread.join(timeout=2.0)
+    second_write_thread.join(timeout=2.0)
     external_thread.join(timeout=2.0)
 
     assert not write_thread.is_alive()
     assert not external_thread.is_alive()
+    assert second_write_entered.is_set()
     assert external_entered.is_set()
     assert errors == []
 

@@ -159,3 +159,54 @@ def test_legacy_method_preferences_load_and_save_through_current_http_api(studio
         assert project["preferred_method_skill_ids"] == ["method.brand_promo"]
         assert project["creative_direction"] == "保留用户的创作方向"
     assert studio.get_project(project_id).document.project.preferred_method_skill_ids == ["method.brand_promo"]
+
+
+def test_scoped_scene_revision_preserves_another_shots_manual_camera(studio: ShortDramaService) -> None:
+    initial = studio.initialize_fixture().document
+    scene = initial.script_versions[-1].structured_scenes[0]
+    affected, protected = initial.shots[:2]
+    affected.scene_id = scene.id
+    protected.scene_id = scene.id
+    protected.camera = "用户已保存的固定机位"
+    studio.repository.save_project(initial)
+    before = protected.model_copy(deep=True)
+    result = studio.studio.save_scene(initial.project.id, StudioSceneSave(
+        scene_id=scene.id, heading=scene.heading, screenplay_text=scene.screenplay_text + "\n先展示菜名。",
+        expected_text=scene.screenplay_text, affected_shot_ids=[affected.id],
+    ))
+    saved = {shot.id: shot for shot in result.project.document.shots}
+    assert saved[protected.id] == before
+    assert saved[affected.id].revision == affected.revision + 1
+    assert saved[affected.id].freshness.value == "STALE"
+
+
+def test_scoped_scene_revision_still_updates_shots_using_changed_dialogue(studio: ShortDramaService) -> None:
+    initial = studio.initialize_fixture().document
+    script = initial.script_versions[-1]
+    scene = script.structured_scenes[0]
+    line = next(item for item in script.lines if item.id in scene.line_ids)
+    protected = initial.shots[1]
+    protected.scene_id = scene.id
+    protected.dialogue_line_ids = [line.id]
+    studio.repository.save_project(initial)
+    revised = line.model_copy(update={"spoken_text": "改过的台词。", "subtitle_text": "改过的台词。"})
+    lines = [revised if item.id == line.id else item for item in script.lines if item.id in scene.line_ids]
+    text = "\n".join(item.spoken_text for item in lines)
+    result = studio.studio.save_scene(initial.project.id, StudioSceneSave(
+        scene_id=scene.id, heading=scene.heading, screenplay_text=text, expected_text=scene.screenplay_text,
+        lines=lines, affected_shot_ids=[],
+    ))
+    saved = next(shot for shot in result.project.document.shots if shot.id == protected.id)
+    assert saved.revision == protected.revision + 1
+    assert saved.freshness.value == "STALE"
+
+
+def test_scene_revision_rejects_shot_outside_its_scope(studio: ShortDramaService) -> None:
+    initial = studio.initialize_fixture().document
+    scene = initial.script_versions[-1].structured_scenes[0]
+    with pytest.raises(ValueError, match="受影响镜头必须属于"):
+        studio.studio.save_scene(initial.project.id, StudioSceneSave(
+            scene_id=scene.id, heading=scene.heading, screenplay_text="不会保存。",
+            affected_shot_ids=["not-in-this-scene"],
+        ))
+    assert studio.get_project(initial.project.id).document.project.current_script_version_id == initial.project.current_script_version_id

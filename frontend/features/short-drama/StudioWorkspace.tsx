@@ -7,12 +7,15 @@ import { StudioScript } from './StudioScript'
 import { StudioShots, type ShotDraft } from './StudioShots'
 import { StudioAssets } from './StudioAssets'
 import { StudioAgent } from './StudioAgent'
+import { StudioChangeReview } from './StudioChangeReview'
+import type { StudioChangeSet } from './studio-api'
 import { StudioSettings } from './StudioSettings'
 import { useStudioAppearance } from './StudioAppearance'
 import { StudioEditor } from './StudioEditor'
 import { StudioEditorialPreview } from './StudioEditorialPreview'
 import './studio-themes.css'
 import './studio.css'
+import './studio-review-team.css'
 
 type Page = 'script' | 'shots' | 'film' | 'assets'
 const pages = [{ id: 'script', title: '剧本', Icon: FileText }, { id: 'shots', title: '镜头', Icon: Film }, { id: 'film', title: '成片', Icon: Clapperboard }] as const
@@ -28,6 +31,8 @@ export function StudioWorkspace() {
   const [scriptFocus, setScriptFocus] = useState<string | null>(null)
   const [events, setEvents] = useState<StudioEvent[]>([])
   const [jobs, setJobs] = useState<StudioJob[]>([])
+  const [changes, setChanges] = useState<StudioChangeSet[]>([])
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [workers, setWorkers] = useState<StudioWorker[]>([])
   const [contextWindow, setContextWindow] = useState(258000)
   const [connected, setConnected] = useState(false)
@@ -47,6 +52,8 @@ export function StudioWorkspace() {
   const [renaming, setRenaming] = useState<string | null>(null)
   const cursor = useRef(0)
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activityRefresh = useRef<Promise<void> | null>(null)
+  const activityRequested = useRef(false)
   const currentIdRef = useRef(selectedId)
   currentIdRef.current = selectedId
   const onError = useCallback((value: unknown) => setError(value instanceof Error ? value.message : String(value)), [])
@@ -56,8 +63,8 @@ export function StudioWorkspace() {
   const refreshProject = useCallback(async () => {
     const id = currentIdRef.current
     if (!id) return
-    const [next, episodeList] = await Promise.all([StudioApi.getProject(id), StudioApi.episodes(id)])
-    if (id === currentIdRef.current) { setProject(next); setEpisodes(episodeList) }
+    const [next, episodeList, textChanges] = await Promise.all([StudioApi.getProject(id), StudioApi.episodes(id), StudioApi.changes(id)])
+    if (id === currentIdRef.current) { setProject(next); setEpisodes(episodeList); setChanges(textChanges) }
   }, [])
   const onProject = useCallback((next: ProjectAggregate) => {
     if (next.document.project.id === currentIdRef.current) setProject(next)
@@ -67,16 +74,26 @@ export function StudioWorkspace() {
     cursor.current = Math.max(cursor.current, ...incoming.map(event => event.id))
     setEvents(previous => [...new Map([...previous, ...incoming].map(event => [event.id, event])).values()].sort((a, b) => a.id - b.id))
   }, [])
-  const refreshActivity = useCallback(async () => {
-    const id = currentIdRef.current
-    if (!id) return
-    const value = await StudioApi.activity(id, cursor.current)
-    if (id !== currentIdRef.current) return
-    setJobs(value.jobs); setWorkers(value.workers ?? []); setContextWindow(value.context_window_tokens ?? 258000); appendEvents(value.events)
+  const refreshActivity = useCallback(() => {
+    activityRequested.current = true
+    if (activityRefresh.current) return activityRefresh.current
+    const refresh = async () => {
+      while (activityRequested.current) {
+        activityRequested.current = false
+        const id = currentIdRef.current
+        if (!id) return
+        const value = await StudioApi.activity(id, cursor.current)
+        if (id !== currentIdRef.current) continue
+        setJobs(value.jobs); setWorkers(value.workers ?? []); setContextWindow(value.context_window_tokens ?? 258000); appendEvents(value.events)
+      }
+    }
+    // Historical SSE replay and polling share one request, with one trailing refresh.
+    activityRefresh.current = refresh().finally(() => { activityRefresh.current = null })
+    return activityRefresh.current
   }, [appendEvents])
   useEffect(() => { void refreshList().then(list => { if (!currentIdRef.current && list.length) setSelectedId(list[0].id); if (!list.length) setSelectedId(null) }).catch(onError).finally(() => setLoading(false)) }, [refreshList, onError])
   useEffect(() => {
-    setProject(null); setEpisodes(null); setEvents([]); setJobs([]); setWorkers([]); cursor.current = 0; setConnected(false); setShotId(null); setScope({ kind: 'episode', label: '当前集' })
+    setProject(null); setEpisodes(null); setEvents([]); setJobs([]); setWorkers([]); setChanges([]); setReviewOpen(false); cursor.current = 0; setConnected(false); setShotId(null); setScope({ kind: 'episode', label: '当前集' })
     if (!selectedId) return
     localStorage.setItem('short-drama:selected-episode', selectedId)
     const abort = new AbortController()
@@ -85,14 +102,14 @@ export function StudioWorkspace() {
       try {
         await refreshProject(); await refreshActivity(); if (abort.signal.aborted) return
         setConnected(true)
-        await watchStudio(selectedId, cursor.current, abort.signal, event => {
+        await watchStudio(selectedId, cursor.current, abort.signal, incoming => {
           if (abort.signal.aborted) return
-          appendEvents([event])
-          if (event.kind === 'content.updated' || event.kind === 'assets.updated' || event.kind === 'export.updated' || event.kind === 'workflow.updated') {
+          appendEvents(incoming)
+          if (incoming.some(event => ['content.updated', 'assets.updated', 'export.updated', 'workflow.updated', 'change.proposed', 'change.decided'].includes(event.kind))) {
             if (refreshTimer.current) clearTimeout(refreshTimer.current)
             refreshTimer.current = setTimeout(() => { void refreshProject().catch(onError) }, 150)
           }
-          if (['job.updated', 'worker.updated', 'model.started'].includes(event.kind)) void refreshActivity().catch(onError)
+          if (incoming.some(event => ['job.updated', 'worker.updated', 'model.started'].includes(event.kind))) void refreshActivity().catch(onError)
         })
       } catch (value) { if (!abort.signal.aborted) { setConnected(false); if (!project) onError(value) } }
       if (!abort.signal.aborted) reconnect = setTimeout(() => { void connect() }, 2500)
@@ -139,7 +156,8 @@ export function StudioWorkspace() {
     <div className="sd-workspace"><header className="sd-topbar"><button className="sd-icon sd-mobile-menu" aria-label="打开项目侧栏" onClick={() => setSidebar(previous => !previous)}><Menu size={19} /></button><div className="sd-breadcrumb"><button className="sd-project-title" onClick={() => { if (root) setRenaming(root.name) }}>{root?.name ?? '我的工作台'}</button>{project && <><span>/</span><strong>{project.document.project.episode_title}</strong></>}</div><nav className="sd-main-nav" aria-label="创作内容">{pages.map(({ id, title, Icon }) => <button key={id} className={page === id ? 'is-active' : ''} onClick={() => { setPage(id); if (id === 'film') setScope({ kind: 'film', label: '本集成片' }) }} disabled={!project}><Icon size={15} />{title}</button>)}</nav><div className="sd-topbar-status">{draftCount ? <button className="sd-text-button" onClick={() => selectShot(Object.keys(episodeDrafts)[0])}>{draftCount} 个分镜待保存</button> : active ? <><Loader2 size={13} className="sd-spin" />制作中</> : <><Check size={14} />已保存</>}</div><button className="sd-icon sd-agent-toggle" aria-label="显示制作助手" onClick={() => setAgentVisible(previous => !previous)}><Sparkles size={19} /></button></header>
       <div className="sd-content-scroll">{!project ? <div className="sd-empty-page"><div className="sd-start-orb">{loading || selectedId ? <Loader2 className="sd-spin" size={30} /> : <Clapperboard size={30} />}</div><h1>{loading || selectedId ? '正在打开作品…' : '让想法，成为作品。'}</h1><p>{loading || selectedId ? '载入剧本、镜头和项目素材。' : '从一句话出发，和 Agent 一起完成故事、镜头与成片。'}</p><button className="sd-button sd-primary" onClick={() => { setCreate('project'); setNewName('') }}><Plus size={16} />新建作品</button>{selectedId && error && <button className="sd-text-button" onClick={() => setSelectedId(projects[0]?.id ?? null)}>回到已有项目</button>}</div> : page === 'script' ? <StudioScript project={project} onProject={onProject} onAsk={ask} onScope={setScope} onShots={() => setPage('shots')} onError={onError} /> : page === 'shots' ? <StudioShots drafts={episodeDrafts} onDraft={onShotDraft} onScript={id => { setPage('script'); setScriptFocus(id) }} project={project} selectedShotId={shotId} selectShot={selectShot} onProject={onProject} onAsk={ask} onScope={setScope} onEdit={id => { setScope({ kind: 'shot', id, label: `镜头 ${project.document.shots.find(item => item.id === id)?.sequence ?? ''}` }); setEditor({ shotId: id }) }} onAssets={() => setPage('assets')} onError={onError} /> : page === 'assets' ? <StudioAssets project={project} onProject={onProject} onAsk={ask} onScope={setScope} onShot={selectShot} onError={onError} /> : <StudioFilm project={project} onEdit={exportOnOpen => setEditor({ exportOnOpen })} onAsk={ask} onShot={selectShot} onError={onError} />}</div>
     </div>
-    {project && <StudioAgent unsavedEdit={editorDirty} unsavedDesign={draftCount > 0} key={project.document.project.id} projectId={project.document.project.id} events={events} jobs={jobs} workers={workers} contextWindow={contextWindow} scope={scope} setScope={setScope} connected={connected} suggested={suggested} clearSuggested={clearSuggested} onError={onError} onSent={() => void refreshActivity().catch(onError)} onClose={() => setAgentVisible(false)} />}
+    {project && <StudioAgent pendingChanges={changes.flatMap(change => change.items).filter(item => item.status === 'pending').length} onReview={() => setReviewOpen(true)} unsavedEdit={editorDirty} unsavedDesign={draftCount > 0} key={project.document.project.id} projectId={project.document.project.id} events={events} jobs={jobs} workers={workers} contextWindow={contextWindow} scope={scope} setScope={setScope} connected={connected} suggested={suggested} clearSuggested={clearSuggested} onError={onError} onSent={() => void refreshActivity().catch(onError)} onClose={() => setAgentVisible(false)} />}
+    {reviewOpen && project && <StudioChangeReview projectId={project.document.project.id} changes={changes.filter(change => change.items.some(item => item.status === 'pending') || change.id === changes.at(-1)?.id)} onChanged={(next, change) => { onProject(next); setChanges(previous => previous.map(item => item.id === change.id ? change : item)); void refreshActivity().catch(onError) }} onClose={() => setReviewOpen(false)} onError={onError} />}
     {error && <div className="sd-toast" role="alert"><span>{error}</span><button className="sd-icon" aria-label="关闭提示" onClick={() => setError(null)}><X size={16} /></button></div>}
     {settings && <StudioSettings project={project} theme={theme} onTheme={changeTheme} onProject={onProject} onClose={() => setSettings(false)} onError={onError} />}
     {notice && <div className="sd-toast sd-notice-toast" role="status">{notice}<button className="sd-icon" aria-label="关闭提示" onClick={() => setNotice(null)}><X size={16} /></button></div>}
@@ -167,7 +185,7 @@ function StudioFilm({ project, onEdit, onAsk, onShot, onError }: { project: Proj
   return <div className="sd-film-page"><header className="sd-page-header"><div><span className="sd-eyebrow">THE FILM</span><h1>让每个镜头，成为一个故事。</h1><p>{project.document.project.episode_title} · {ready}/{shots.length} 个镜头已有视频{` · 设计 ${durationLabel(plannedDuration)}`}{editDuration != null ? ` · 当前剪辑 ${Number(editDuration.toFixed(2))} 秒` : ''}</p></div><button className="sd-button sd-primary" disabled={!ready} onClick={() => onEdit(true)}><Download size={15} />导出成片</button></header>
     <div className="sd-film-stage">{hasCurrentEdit ? <StudioEditorialPreview projectId={project.document.project.id} revision={Number(project.document.editorial_timeline?.revision ?? 0)} aspectRatio={project.document.project.aspect_ratio === '9:16' ? 9 / 16 : project.document.project.aspect_ratio === '1:1' ? 1 : 16 / 9} showSubtitles={subtitled} /> : path ? <video key={path} className="sd-film-video" controls playsInline preload="metadata" src={mediaUrl(path)} aria-label="完整成片预览" /> : <div className="sd-film-empty"><Clapperboard size={36} /><h2>{ready ? '镜头就绪，开始组接。' : '你的作品，将在这里播放。'}</h2><p>{ready ? '进入剪辑排列镜头，或让 Agent 按故事节奏完成初剪。' : 'Agent 完成镜头后，可以继续配音、组接和导出。'}</p><button className="sd-button" onClick={() => onAsk('根据当前剧本和已完成的镜头，推进并完成本集完整成片。保留我已经完成的剪辑。', { kind: 'film', label: '本集成片' })}><Sparkles size={15} />继续完成成片</button></div>}</div>
     <div className="sd-film-controls"><div className="sd-film-name"><span className="sd-status-dot" /><strong>{hasCurrentEdit ? '当前成片剪辑' : path ? '最近导出的成片' : '本集剪辑'}</strong>{hasCurrentEdit ? <span>{Number((editDuration ?? 0).toFixed(2))} 秒</span> : path && <span>{exported?.duration_seconds ? durationLabel(exported.duration_seconds) : manifest ? durationLabel(manifest.duration_seconds) : ''}</span>}</div><div>{(hasCurrentEdit || record || exported) && <label className="sd-checkbox"><input type="checkbox" checked={subtitled} onChange={event => setSubtitled(event.target.checked)} />字幕</label>}<button className="sd-button" disabled={!ready} onClick={() => onEdit()}><Scissors size={15} />剪辑成片</button>{path && <button className="sd-button" onClick={() => void StudioApi.downloadMedia(project.document.project.id, path, `${project.document.project.name}.mp4`).catch(onError)}><Download size={15} />{editedSinceExport ? '下载上次导出' : '下载视频'}</button>}</div></div>
-    {editedSinceExport && <p className="sd-hint sd-film-edit-notice">当前预览已同步最新剪辑。上次导出的文件保持原样；下载或分享新文件前，请重新导出。</p>}<section className="sd-film-storyline"><div className="sd-section-label"><h3>故事顺序</h3><span>{script?.structured_scenes.length ?? 0} 场 · {shots.length} 个镜头</span></div><div className="sd-film-shot-strip">{shots.map(shot => { const source = shotMedia(project, shot); return <button key={shot.id} onClick={() => onShot(shot.id)}><div>{source.thumbnail ? <img src={mediaUrl(source.thumbnail)} alt={`镜头 ${shot.sequence}`} loading="lazy" /> : <Film size={22} />}<span>{String(shot.sequence).padStart(2, '0')}</span><small>{source.adoptedDuration != null ? `${Number(source.adoptedDuration.toFixed(2))} 秒` : '待生成'}</small></div><p>{shot.narrative_purpose}</p></button>})}</div><p className="sd-hint">单镜头剪辑保存后同步到本集成片。设计时长保留原意，成片采用时长随实际裁切变化。</p></section>
+    {editedSinceExport && <p className="sd-hint sd-film-edit-notice">当前预览已同步最新剪辑。上次导出的文件保持原样；下载或分享新文件前，请重新导出。</p>}<section className="sd-film-storyline"><div className="sd-section-label"><h3>故事顺序</h3><span>{script?.structured_scenes.length ?? 0} 场 · {shots.length} 个镜头</span></div><div className="sd-film-shot-strip">{shots.map(shot => { const source = shotMedia(project, shot); return <button key={shot.id} onClick={() => onShot(shot.id)}><div>{source.thumbnail ? <img src={mediaUrl(source.thumbnail)} alt={`镜头 ${shot.sequence}`} loading="lazy" /> : <Film size={22} />}<span>{String(shot.sequence).padStart(2, '0')}</span><small>{source.adoptedDuration != null ? `${Number(source.adoptedDuration.toFixed(2))} 秒` : source.path ? '尚未采用' : '待生成'}</small></div><p>{shot.narrative_purpose}</p></button>})}</div><p className="sd-hint">单镜头剪辑保存后同步到本集成片。设计时长保留原意，成片采用时长随实际裁切变化。</p></section>
     <div className="sd-film-next"><div><h3>再打磨一下？</h3><p>选定一个镜头，或告诉 Agent 整体节奏需要怎样调整。</p></div><button className="sd-text-button" onClick={() => onAsk('', { kind: 'film', label: '本集成片' })}>交给制作助手 <ArrowUpRight size={15} /></button></div>
   </div>
 }

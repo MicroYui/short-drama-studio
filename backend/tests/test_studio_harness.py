@@ -13,10 +13,10 @@ import pytest
 
 from short_drama.agent_runtime import DelegationStatus, SpecialistTurnStatus
 from short_drama.language_models import LanguageProviderConfigUpdate
-from short_drama.production_manager import AgentPlanProposal, AgentRunAdvanceRequest, AgentRunCreateRequest
+from short_drama.production_manager import AgentPlanProposal, AgentRunAdvanceRequest, AgentRunCreateRequest, AgentRunReplanRequest
 from short_drama.providers.openai_compatible_language_client import LanguageProviderTransportError
 from short_drama.service import ShortDramaService
-from short_drama.studio_models import StudioJob, StudioJobControl, StudioMessage, StudioScope
+from short_drama.studio_models import StudioJob, StudioJobControl, StudioMessage, StudioScope, StudioProjectCreate
 from short_drama.studio_runtime import StudioAgentRunner
 
 
@@ -85,6 +85,50 @@ def _saved_scenes(service: ShortDramaService, project_id: str) -> list[str]:
             if scene.heading == 'HARNESS 测试场次']
 
 
+@pytest.mark.parametrize('status', ['paused', 'waiting_user', 'completed', 'failed'])
+def test_pause_does_not_restart_inactive_job(tmp_path: Path, status: str) -> None:
+    client = HarnessLanguageClient(lambda _payload: _plan())
+    service, project_id = _service(tmp_path, client)
+    job = StudioJob.model_validate({
+        'id': 'already-inactive', 'project_id': project_id,
+        'objective': '保留当前任务，等待明确继续。', 'status': status, 'scope': {},
+        'created_at': '2026-09-09T00:00:00+00:00',
+        'updated_at': '2026-09-09T00:00:00+00:00',
+    })
+    service.repository.save_studio_job(job)
+    returned = service.studio_runtime.control(job.id, StudioJobControl(action='pause'))
+    assert returned.status == status
+    assert job.id not in service.studio_runtime.threads
+    assert client.inputs == []
+
+
+def test_blank_workspace_retains_first_goal_for_later_script_revision(tmp_path: Path) -> None:
+    service, _ = _service(tmp_path, HarnessLanguageClient(lambda _payload: _plan()))
+    project_id = service.studio.create_project(StudioProjectCreate(name='空白作品')).document.project.id
+    original = '做一个食堂里发生的短片，45–60秒，直接做到成片。'
+    job = service.studio_runtime.send(project_id, StudioMessage(text=original))
+    _wait_job(service, job.id, 'completed')
+    document = service.get_project(project_id).document
+    assert document.project.input_text == original
+    request = service._script_revision_request(document, document.script_versions[-1])
+    assert request.input_text == original
+    followup = service.studio_runtime.send(project_id, StudioMessage(text='主角自然一点。'))
+    _wait_job(service, followup.id, 'completed')
+    assert service.get_project(project_id).document.project.input_text == original
+
+
+def test_resume_repairs_legacy_blank_brief_with_original_job_goal(tmp_path: Path) -> None:
+    service, _ = _service(tmp_path, HarnessLanguageClient(lambda _payload: _plan()))
+    project_id = service.studio.create_project(StudioProjectCreate(name='已存在的空白作品')).document.project.id
+    job = StudioJob(id='studio-job-legacy-brief', project_id=project_id,
+                    objective='原始的完整短片要求。', scope=StudioScope(), status='paused',
+                    created_at='2026-09-09T00:00:00+00:00', updated_at='2026-09-09T00:00:00+00:00')
+    service.repository.save_studio_job(job)
+    service.studio_runtime.control(job.id, StudioJobControl(action='resume'))
+    _wait_job(service, job.id, 'completed')
+    assert service.get_project(project_id).document.project.input_text == job.objective
+
+
 def test_single_prompt_continues_across_plans_and_stops_at_agent_completion(tmp_path: Path) -> None:
     leader_turns = 0
     writer_turns = 0
@@ -128,6 +172,93 @@ def test_ready_siblings_reach_the_model_in_parallel(tmp_path: Path) -> None:
     job = service.studio_runtime.send(project_id, StudioMessage(text='并行核对两个独立场次，完成即停。'))
     _wait_job(service, job.id, 'completed')
     assert len(service.studio_runtime.activity(project_id).workers) == 2
+
+
+def test_fast_worker_saves_and_finishes_while_sibling_is_still_busy(tmp_path: Path) -> None:
+    slow_started, release_slow, writer_finished = threading.Event(), threading.Event(), threading.Event()
+    writer_turns = 0
+
+    def respond(payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal writer_turns
+        if 'work_order' not in payload:
+            return _plan('writer', 'slow-reviewer')
+        if payload['work_order']['recipient_role'] == 'slow-reviewer':
+            slow_started.set()
+            assert release_slow.wait(30)
+            return _done('较慢的观察结束')
+        writer_turns += 1
+        if writer_turns == 1:
+            return _scene('其他分工仍在观察时，这一场已经保存。')
+        writer_finished.set()
+        return _done('写作完成')
+
+    service, project_id = _service(tmp_path, HarnessLanguageClient(respond))
+    job = service.studio_runtime.send(project_id, StudioMessage(text='独立写作和观察同时进行，各自完成后交接。'))
+    try:
+        assert slow_started.wait(15)
+        assert writer_finished.wait(10), 'A slow sibling blocked the next write and decision'
+        assert _saved_scenes(service, project_id) == ['其他分工仍在观察时，这一场已经保存。']
+        assert not release_slow.is_set()
+    finally:
+        release_slow.set()
+    _wait_job(service, job.id, 'completed')
+
+
+def test_ready_leader_work_prepares_parallel_post_while_retained_worker_waits(tmp_path: Path) -> None:
+    slow_started, release_slow, post_finished = threading.Event(), threading.Event(), threading.Event()
+    retained_id = ''
+    leader_turns = 0
+
+    def respond(payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal leader_turns
+        if 'work_order' not in payload:
+            leader_turns += 1
+            assert _saved_scenes(service, project_id) == ['独立准备已经保存，后期可以开始。']
+            plan = _plan('parallel-post')
+            plan['carried_work_order_ids'] = [retained_id]
+            return plan
+        if payload['work_order']['recipient_role'] == 'slow-video':
+            slow_started.set()
+            assert release_slow.wait(25)
+            return _done('远端候选返回')
+        post_finished.set()
+        return _done('后期已利用现有素材完成')
+
+    service, project_id = _service(tmp_path, HarnessLanguageClient(respond))
+    initial = service.create_agent_run(project_id, AgentRunCreateRequest(
+        objective='候选继续等待，同时准备并完成现有素材后期。',
+        initial_plan=AgentPlanProposal.model_validate(_plan('slow-video', complete=False)),
+    ))
+    run_id = initial.snapshot.run.id
+    created = service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=1))
+    retained_id = created.created_work_order_ids[0]
+    service.replan_agent_run(run_id, AgentRunReplanRequest(
+        reason='先完成独立准备，再安排后期，保留仍在等待的候选。',
+        proposed_plan=AgentPlanProposal.model_validate({
+            'summary': '先保存独立准备结果，再决定后续并行分工。',
+            'goal_complete': False, 'carried_work_order_ids': [retained_id],
+            'steps': [{'id': 'prepare-post', 'title': '保存独立准备', 'kind': 'TOOL_CALL',
+                       'assigned_agent': 'LEADER', 'tool_name': 'script.save_scene',
+                       'instructions': '保存当前独立准备，不等待远端候选。',
+                       'arguments': {'project_id': project_id, 'request': {
+                           'heading': 'HARNESS 测试场次',
+                           'screenplay_text': '独立准备已经保存，后期可以开始。'}}}],
+        }),
+    ))
+    job = StudioJob(id='retained-work-parallel-post', project_id=project_id, run_id=run_id,
+                    objective='候选继续等待，同时准备并完成现有素材后期。', scope=StudioScope(),
+                    status='paused', created_at='2026-09-11T00:00:00+00:00',
+                    updated_at='2026-09-11T00:00:00+00:00')
+    service.repository.save_studio_job(job)
+    service.studio_runtime.control(job.id, StudioJobControl(action='resume'))
+    try:
+        assert post_finished.wait(12), 'Retained work starved independent preparation or the next Leader decision'
+        assert slow_started.wait(3)
+        assert not release_slow.is_set()
+        assert leader_turns == 1
+    finally:
+        release_slow.set()
+        _wait_job(service, job.id, 'completed')
 
 
 @pytest.mark.parametrize('restart', [False, True])

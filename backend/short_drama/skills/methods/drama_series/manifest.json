@@ -36,14 +36,9 @@
       "references/project-adaptation.md::叙事与时长"
     ],
     "PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/workflow.md::Stages",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/workflow.md::阶段计划契约",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::目标",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::从来源剧本工作",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::唯一编译路径：剧本 → 时长账本 → 完整分镜",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::镜头组：拆分整集",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::节奏标记（planner 内部，分组时应用）",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::对白：语速、负载和拆分"
+      "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "REVISION_VERIFIER": [
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::剧本落画布",
@@ -51,20 +46,21 @@
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::开篇",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::爽感",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::合规",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::唯一编译路径：剧本 → 时长账本 → 完整分镜",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::storyboard-confirm 前分组检查清单",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性",
-      "references/project-adaptation.md::叙事与时长"
+      "references/project-adaptation.md::叙事与时长",
+      "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::镜头组：拆分整集",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::对白：语速、负载和拆分",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::镜头语言服务故事",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::镜头与光学承载情绪",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::光影和时辰承载意义",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::表演设计",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::不通过视频串联保持连续性"
+      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::不通过视频串联保持连续性",
+      "references/project-adaptation.md::渐进分镜与可选检查",
+      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::站位质量",
+      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
+      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性"
     ],
     "ASSET_REVIEWER": [
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::时代与身份一致性",
@@ -106,16 +102,12 @@
   },
   "stage_role_source_sections": {
     "ORCHESTRATION.PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/workflow.md::Stages",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/workflow.md::阶段计划契约",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::目标",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::从来源剧本工作"
+      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::从来源剧本工作",
+      "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "STORYBOARD.PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::唯一编译路径：剧本 → 时长账本 → 完整分镜",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::镜头组：拆分整集",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::节奏标记（planner 内部，分组时应用）",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::对白：语速、负载和拆分"
+      "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "STORY.REVISION_VERIFIER": [
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::剧本落画布",
@@ -125,10 +117,9 @@
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::合规"
     ],
     "STORYBOARD.REVISION_VERIFIER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::唯一编译路径：剧本 → 时长账本 → 完整分镜",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::storyboard-confirm 前分组检查清单",
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性"
+      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性",
+      "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "ASSETS.ASSET_PLANNER": [
       "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::时代与身份一致性",

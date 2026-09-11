@@ -46,6 +46,11 @@ from short_drama.reference_planner import (
 from short_drama.video_inspection import image_data_url
 
 
+# Reasoning and the structured judgment share the provider's output allowance.
+# Multi-image comparisons need the same room as the asset inspection tools.
+_VISUAL_REVIEW_OUTPUT_TOKENS = 16_000
+
+
 class VisualInputContractError(ValueError):
     """The caller supplied visual inputs that do not belong to the requested project."""
 
@@ -539,7 +544,7 @@ def rerank_reference_visuals(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
         image_urls=image_urls,
-        max_output_tokens=5000,
+        max_output_tokens=_VISUAL_REVIEW_OUTPUT_TOKENS,
     )
     judgment = ReferenceVisualRerankJudgment.model_validate_json(_strip_json_fence(output))
     candidate_ids = {item.candidate_id for item in candidates}
@@ -673,7 +678,7 @@ def compare_keyframe_candidates(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
         image_urls=image_urls,
-        max_output_tokens=5000,
+        max_output_tokens=_VISUAL_REVIEW_OUTPUT_TOKENS,
     )
     judgment = KeyframeComparisonJudgment.model_validate_json(_strip_json_fence(output))
     review_ids = [item.asset_version_id for item in judgment.candidate_reviews]
@@ -777,7 +782,7 @@ def check_input_compatibility(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
         image_urls=image_urls or None,
-        max_output_tokens=4500,
+        max_output_tokens=_VISUAL_REVIEW_OUTPUT_TOKENS,
     )
     judgment = InputCompatibilityJudgment.model_validate_json(_strip_json_fence(output))
     known_input_ids = {

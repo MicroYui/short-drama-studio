@@ -17,7 +17,9 @@ from short_drama.h3_models import (
     H3ProductionRoutePlanRequest,
 )
 from short_drama.language_models import LanguageProviderConfigUpdate
-from short_drama.models import VideoGenerationRoute
+from short_drama.image_models import AssetCreateRequest, AssetImportLocalRequest
+from short_drama.models import ApprovalStatus, AssetKind, VideoGenerationRoute
+from short_drama.voice_models import VoiceReferenceUpdateRequest
 from short_drama.service import ShortDramaService, WorkflowConflictError
 
 
@@ -364,3 +366,23 @@ def test_route_planner_keeps_combined_character_voice_audio_within_h3_limit(
         "reference_audio"
     ]
     assert any("15-second combined audio limit" in item for item in decision.warnings)
+
+
+def test_existing_draft_voice_can_be_bound_without_a_review(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    source = tmp_path / 'voice.wav'
+    _render_audio(source)
+    asset = service.create_asset(project_id, AssetCreateRequest(
+        kind=AssetKind.REFERENCE, name='Voice', descriptor='Selected voice',
+    )).asset
+    version = service.import_local_asset_version(project_id, asset.id, AssetImportLocalRequest(
+        local_path=str(source), descriptor='Use this available voice clip',
+    )).version
+    result = service.update_character_voice_reference(
+        project_id, 'character-linxia', VoiceReferenceUpdateRequest(asset_id=asset.id),
+    )
+    assert result.binding is not None
+    assert result.binding.asset_id == asset.id
+    selected = next(a for a in result.project.document.assets if a.id == asset.id)
+    assert next(v for v in selected.versions if v.id == version.id).approval_status == ApprovalStatus.DRAFT

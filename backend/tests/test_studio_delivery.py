@@ -118,6 +118,56 @@ def test_editor_save_reopen_linked_trim_and_actual_export(studio: ShortDramaServ
     assert [(item.trimStart, item.duration) for item in replaced_clips] == [(0.5, 3.5), (0.5, 3.5)]
     assert replaced_clips[0].muted and replaced_clips[1].volume == 0.6
     assert all(item.asset and item.asset.path == new_version.local_path for item in replaced_clips)
+    # The native LTX reader requires resolution even for replacement audio.
+    assert all(isinstance(asset.get("resolution"), str)
+               for asset in cast(list[dict[str, JsonValue]], replaced.project["assets"]))
+
+
+def test_prose_saves_all_media_and_keeps_editorial_assets_out_of_h3_inputs(studio: ShortDramaService, tmp_path: Path) -> None:
+    from short_drama.h3_route_planner import generation_unit_media_candidates
+    from short_drama.models import VideoGenerationRoute
+    from short_drama.providers.minimax_h3_compiler import H3CapabilityError, validate_h3_probe
+
+    pid = studio.initialize_fixture().document.project.id
+    image = tmp_path / "reference.png"
+    Image.new("RGB", (64, 64), "blue").save(image)
+    cues: list[ShotReferenceCue] = []
+    media: list[H3MediaInput] = []
+    for index in range(10):
+        imported = import_studio_media(studio, pid, image, name=f"参考{index}", kind=AssetKind.REFERENCE, asset_id=None)
+        asset = imported.document.assets[-1]
+        version = asset.versions[-1]
+        cues.append(ShotReferenceCue(subject_asset_id=asset.id, asset_version_id=version.id,
+            alias=f"reference_{index}", purpose="标题图版" if index == 9 else "画面外观",
+            usage="EDITORIAL" if index == 9 else "GENERATION"))
+        media.append(H3MediaInput.model_validate({"kind": "IMAGE", "role": "reference_image",
+            "asset_version_id": version.id, "subject_asset_id": asset.id,
+            "source": {"local_path": version.local_path}}))
+    document = studio.get_project(pid).document
+    shot = document.shots[0].model_copy(deep=True)
+    shot.references = cues
+    for beat in shot.timeline_beats:
+        beat.references = []
+    result = studio.studio.save_shot(pid, shot.id, StudioShotSave(shot=shot, expected_revision=shot.revision))
+    current = result.project.document.shots[0]
+    assert len(current.references) == 10
+    assert current.references[-1].usage == "EDITORIAL"
+    plan = next(item for item in result.project.document.reference_plan if item.shot_id == shot.id)
+    assert len(plan.bindings) == 9
+    assert_generation_references(result.project.document, current, media[:9])
+    with pytest.raises(ValueError, match="SHOT_REFERENCES_STALE"):
+        assert_generation_references(result.project.document, current, media[1:9])
+    candidates, _warnings = generation_unit_media_candidates(result.project.document, [current])
+    assert {item.media_input.asset_version_id for item in candidates} == {item.asset_version_id for item in media[:9]}
+
+    # Saving an over-capacity design is allowed; only a concrete H3 request fails.
+    current.references[-1].usage = "GENERATION"
+    studio.studio.save_shot(pid, current.id, StudioShotSave(shot=current, expected_revision=current.revision))
+    reopened = studio.get_project(pid).document
+    assert len(reopened.shots[0].references) == 10
+    assert len(next(item for item in reopened.reference_plan if item.shot_id == shot.id).bindings) == 10
+    with pytest.raises(H3CapabilityError, match="nine reference images"):
+        validate_h3_probe(route=VideoGenerationRoute.REFERENCE, prompt="Use these references.", duration_seconds=5, media_inputs=media)
 
 
 def test_interrupted_local_export_is_retryable_and_trace_contains_current_edit(studio: ShortDramaService) -> None:

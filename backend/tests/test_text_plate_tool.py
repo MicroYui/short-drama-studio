@@ -117,6 +117,83 @@ def test_compose_text_plate_renders_chinese_without_provider_task(
     assert persisted_asset.versions[-1].text_plate is not None
 
 
+def test_text_plate_preserves_alpha_and_explicit_top_content_box(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    created = _create_plate_asset(service, project_id=project_id,
+        presentation_mode=AssetPresentationMode.SCREEN_CONTENT_PLATE)
+    arguments = _arguments(project_id, created.asset.id)
+    request = arguments["request"]
+    assert isinstance(request, dict)
+    request.update(size="720x1280", background_color="#00000000", foreground_color="#FFFFFF",
+                   content_box=[0.05, 0.04, 0.9, 0.24], text_align="center",
+                   vertical_align="top", stroke_width=2, stroke_color="#000000")
+    result = service.tool_registry.invoke("image.compose_text_plate", arguments)
+    assert result.status == ToolCallStatus.SUCCEEDED, result.error
+    assert result.output is not None
+    version = result.output["version"]
+    with Image.open(version["local_path"]) as plate:
+        assert plate.mode == "RGBA"
+        alpha = plate.getchannel("A")
+        bounds = alpha.getbbox()
+        assert bounds is not None
+        assert 36 <= bounds[0] < bounds[2] <= 684
+        assert 50 <= bounds[1] < bounds[3] <= 359
+        assert alpha.getpixel((360, 700)) == 0
+        assert alpha.getextrema() == (0, 255)
+    assert version["text_plate"]["content_box"] == [0.05, 0.04, 0.9, 0.24]
+
+
+def test_price_label_uses_the_requested_region_instead_of_poster_spacing(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    project_id = service.initialize_fixture().document.project.id
+    created = service.create_asset(project_id, AssetCreateRequest(
+        kind=AssetKind.PROP, name="菜价字幕", descriptor="当前镜头的菜价图版",
+        brief=CoreAssetBrief(identity_anchor="准确菜价", visual_attributes=["白字透明底"],
+            presentation_mode=AssetPresentationMode.SCREEN_CONTENT_PLATE,
+            required_visible_text=["土豆烧肉8元"]),
+    ))
+    for title in (None, "土豆烧肉8元"):
+        arguments = _arguments(project_id, created.asset.id)
+        request = arguments["request"]
+        assert isinstance(request, dict)
+        request.update(size="768x1344", background_color="#00000000", foreground_color="#FFFFFF",
+            content_box=[0.42, 0.13, 0.52, 0.085], text_align="left", vertical_align="top",
+            stroke_width=2, stroke_color="#202020", title=title,
+            exact_lines=[] if title else ["土豆烧肉8元"])
+        result = service.tool_registry.invoke("image.compose_text_plate", arguments)
+        assert result.status == ToolCallStatus.SUCCEEDED, result.error
+        assert result.output is not None
+        with Image.open(result.output["version"]["local_path"]) as image:
+            bounds = image.getchannel("A").getbbox()
+            assert bounds is not None
+            assert bounds[2] - bounds[0] > 250
+            assert bounds[3] - bounds[1] > 40
+            assert 322 <= bounds[0] < bounds[2] <= 722
+            assert 174 <= bounds[1] < bounds[3] <= 290
+
+
+def test_text_plate_can_reflow_lines_without_changing_the_declared_words(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    pid = service.initialize_fixture().document.project.id
+    created = service.create_asset(pid, AssetCreateRequest(kind=AssetKind.PROP,
+        name="付款提示", descriptor="付款金额文字",
+        brief=CoreAssetBrief(identity_anchor="正常付款", visual_attributes=["清晰文字"],
+            presentation_mode=AssetPresentationMode.SCREEN_CONTENT_PLATE,
+            required_visible_text=["支付成功，", "13.00元"])))
+    arguments = _arguments(pid, created.asset.id)
+    request = arguments["request"]
+    assert isinstance(request, dict)
+    request.update(title="支付成功，13.00元", exact_lines=[])
+    rendered = service.tool_registry.invoke("image.compose_text_plate", arguments)
+    assert rendered.status == ToolCallStatus.SUCCEEDED, rendered.error
+    assert rendered.output and Path(rendered.output["version"]["local_path"]).is_file()
+    request["title"] = "支付成功，13.10元"
+    mismatch = service.tool_registry.invoke("image.compose_text_plate", arguments)
+    assert mismatch.status == ToolCallStatus.FAILED
+    assert mismatch.error and "13.00元" in mismatch.error.message and "13.10元" in mismatch.error.message
+
+
 def test_compose_text_plate_rejects_non_screen_asset_and_copy_mismatch(
     tmp_path: Path,
 ) -> None:

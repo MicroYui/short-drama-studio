@@ -27,8 +27,6 @@
     ],
     "PLANNER": [
       "../../sources/minimax_design/3.0.11/workflows/ad-tvc/workflow.md::全链路",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/workflow.md::Stages",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/workflow.md::阶段计划契约",
       "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::输入与依赖",
       "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::模型、分辨率与声音锁",
       "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::规划编译",

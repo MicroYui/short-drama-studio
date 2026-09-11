@@ -28,6 +28,7 @@ from short_drama.production_profiles import (
     compile_production_prompt,
 )
 from short_drama.style_context import declared_style_value
+from short_drama.reference_planner import usable_reference_pack_entries
 
 
 class AssetCatalogSearchRequest(DomainModel):
@@ -144,18 +145,15 @@ def ensure_base_reference_pack_entries(
     *,
     now: str,
 ) -> bool:
-    """Register every approved canonical image as its subject's pack root."""
+    """Register the available selected image as its subject's default pack root."""
 
     changed = False
     for asset in document.assets:
         metadata = _DEFAULT_PACK_ROLE.get(asset.kind)
-        if metadata is None or asset.approved_version_id is None:
+        if metadata is None:
             continue
-        version = next(
-            (item for item in asset.versions if item.id == asset.approved_version_id),
-            None,
-        )
-        if not _usable_approved_image(asset, version):
+        version = _catalog_source_image(asset)
+        if not _usable_selected_image(asset, version):
             continue
         assert version is not None
         role, angle, framing, tags = metadata
@@ -232,7 +230,7 @@ def missing_reference_views(
             subject = assets.get(requirement.subject_asset_id)
             if subject is None or subject.kind not in _DEFAULT_PACK_ROLE:
                 continue
-            root = _approved_image(subject)
+            root = _catalog_source_image(subject)
             if root is None:
                 continue
             acceptable_roles = tuple(requirement.acceptable_roles)
@@ -313,7 +311,7 @@ def missing_canonical_assets(
             subject = assets.get(requirement.subject_asset_id)
             if subject is None or subject.kind not in _DEFAULT_PACK_ROLE:
                 continue
-            if _approved_image(subject) is not None:
+            if _catalog_source_image(subject) is not None:
                 continue
             existing = pending.get(subject.id)
             if existing is None:
@@ -474,18 +472,22 @@ def search_asset_catalog(
                 if resolved is None:
                     continue
                 source_asset, version = resolved
-                if not _usable_approved_image(source_asset, version):
+                if not _usable_selected_image(source_asset, version):
                     continue
                 if (
                     entry.lineage_root_version_id is not None
-                    and subject.approved_version_id != entry.lineage_root_version_id
+                    and not any(
+                        item.id == entry.lineage_root_version_id
+                        and _usable_selected_image(subject, item)
+                        for item in subject.versions
+                    )
                 ):
                     continue
                 rows.append((subject, source_asset, version, entry))
                 seen.add((entry.asset_version_id, entry.role))
         for subject in document.assets:
             metadata = _DEFAULT_PACK_ROLE.get(subject.kind)
-            version = _approved_image(subject)
+            version = _catalog_source_image(subject)
             if metadata is None or version is None:
                 continue
             role, angle, framing, tags = metadata
@@ -634,25 +636,7 @@ def _pack_for_subject(
 def _valid_pack_entries(
     document: ProjectDocument,
 ) -> list[tuple[ReferencePack, ReferencePackEntry]]:
-    subjects = {asset.id: asset for asset in document.assets}
-    approved = {
-        version.id
-        for asset in document.assets
-        for version in asset.versions
-        if _usable_approved_image(asset, version)
-    }
-    return [
-        (pack, entry)
-        for pack in document.reference_packs
-        for entry in pack.entries
-        if entry.asset_version_id in approved
-        and (
-            entry.lineage_root_version_id is None
-            or subjects.get(pack.subject_asset_id) is not None
-            and subjects[pack.subject_asset_id].approved_version_id
-            == entry.lineage_root_version_id
-        )
-    ]
+    return usable_reference_pack_entries(document)
 
 
 def _requirement_has_match(
@@ -681,27 +665,27 @@ def _requirement_has_match(
     return False
 
 
-def _approved_image(asset: Asset) -> AssetVersion | None:
-    if asset.approved_version_id is None:
-        return None
+def _catalog_source_image(asset: Asset) -> AssetVersion | None:
+    selected_id = asset.approved_version_id or asset.current_version_id
     version = next(
-        (item for item in asset.versions if item.id == asset.approved_version_id),
+        (item for item in asset.versions if item.id == selected_id),
         None,
     )
     return (
         version
         if version is not None
-        and asset.approved_version_id == version.id
-        and _usable_approved_image(asset, version)
+        and _usable_selected_image(asset, version)
         else None
     )
 
 
-def _usable_approved_image(asset: Asset, version: AssetVersion | None) -> bool:
+def _usable_selected_image(asset: Asset, version: AssetVersion | None) -> bool:
     del asset
     return bool(
         version is not None
-        and version.approval_status == ApprovalStatus.APPROVED
+        and version.approval_status in {
+            ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+        }
         and version.freshness == Freshness.CURRENT
         and version.media_type == AssetMediaType.IMAGE
         and (version.local_path is not None or version.external_url is not None)

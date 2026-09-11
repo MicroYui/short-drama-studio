@@ -6,7 +6,7 @@ from datetime import datetime, UTC
 from typing import TYPE_CHECKING, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
-from short_drama.models import ProjectAggregate
+from short_drama.models import ProjectAggregate, TakeAvailability
 from short_drama.studio_models import StudioEditorial, StudioEditorialEdit
 
 if TYPE_CHECKING:
@@ -19,6 +19,9 @@ class EditorAsset(BaseModel):
     path: str
     type: Literal["video", "image", "audio", "adjustment"]
     duration: float = 0
+    # LTX's shared asset schema requires this string, including for audio and
+    # replacement media whose dimensions have not been presented as a label.
+    resolution: str = ""
 
 
 class EditorTrack(BaseModel):
@@ -169,7 +172,7 @@ def edit_editorial(service: ShortDramaService, project_id: str, request: "Studio
     return read_editorial(service, project_id)
 
 
-def project_editorial(aggregate: ProjectAggregate) -> dict[str, JsonValue]:
+def project_editorial(aggregate: ProjectAggregate, *, preview_shot_id: str | None = None) -> dict[str, JsonValue]:
     """Project existing Take windows once; subsequent opens use saved editor content."""
     document = aggregate.document
     now = int(datetime.now(UTC).timestamp() * 1000)
@@ -198,6 +201,12 @@ def project_editorial(aggregate: ProjectAggregate) -> dict[str, JsonValue]:
         take = next((item for item in aggregate.takes if item.is_selected and shot.id in item.selected_shot_ids), None)
         if take is None and old_clip:
             take = next((item for item in aggregate.takes if item.id == old_clip.take_id), None)
+        if take is None and shot.id == preview_shot_id:
+            # Opening a local editor may preview a returned video before adoption.
+            # This projection does not select the Take or write the episode timeline.
+            take = next((item for item in reversed(aggregate.takes)
+                         if item.availability == TakeAvailability.AVAILABLE
+                         and (item.shot_id == shot.id or any(window.shot_id == shot.id for window in item.shot_windows))), None)
         if take is None:
             cursor += shot.duration_seconds
             continue

@@ -60,7 +60,7 @@ from short_drama.agent_runtime.models import utc_now
 from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary
 from short_drama.agent_runtime.model_input import ModelInputCompiler, generate_context_managed_text, json_text, pointer_value
-from short_drama.studio_trace import trace_context
+from short_drama.studio_trace import record_trace, trace_context
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
     ContentPlanningOutput,
@@ -494,9 +494,9 @@ class AgentPlanProposal(DomainModel):
             normalized_carried_ids
         ) != len(set(normalized_carried_ids)):
             raise ValueError("carried_work_order_ids must be trimmed and unique")
-        if not self.goal_complete and not self.steps:
+        if not self.goal_complete and not self.steps and not self.carried_work_order_ids:
             raise ValueError(
-                "An incomplete Agent plan must contain at least one next step"
+                "An incomplete Agent plan must contain at least one next step or retain pending work"
             )
         return self
 
@@ -1945,13 +1945,13 @@ class SpecialistToolRepairSnapshot(DomainModel):
 
 
 class SpecialistReadObservation(DomainModel):
-    """Latest successful observation from one read-only Tool.
+    """Latest successful observation of a read-only Tool's selected content.
 
     A stateless Worker often needs several independent facts at once (for
     example the current AssetPlan and the current image capability).  Keeping
     only the most recent Tool handoff makes those facts mutually exclusive and
     can cause the Worker to alternate between reads forever.  This whiteboard is
-    bounded by Tool identity rather than turn count, while ``source_sequence``
+    bounded by Tool and document identity rather than turn count, while ``source_sequence``
     makes the age of each observation explicit after later writes.
     """
 
@@ -1995,7 +1995,7 @@ class SpecialistWorkingSet(DomainModel):
     ``latest_handoff`` retains exact content only for the immediately useful
     successful read. Failed requests and successful writes are represented by
     identifiers, compact outcomes and stable references. Independent successful
-    read-only observations are retained once per Tool identity because one
+    read-only observations are retained once per Tool and selected scope because one
     decision may need several facts at the same time. Other earlier turns are
     folded by stable entity identity and Tool name; immutable content remains
     available through Artifact Tools and ``agent.get_tool_attempt``.
@@ -2028,6 +2028,71 @@ _WORK_ORDER_LIFECYCLE_PROGRESS = frozenset(
         "Specialist work started or resumed.",
     }
 )
+
+
+def _specialist_read_observation_key(turn: SpecialistTurnRecord) -> str:
+    """Keep independently selected documents together, replacing repeated reads.
+
+    A document version is deliberately not part of the identity: reading a newer
+    version replaces the earlier body without retaining a second full copy.
+    Other reads use their complete selectors, including nested scopes and page
+    positions. Tool-name-only keys lose one selected slice when another is read.
+    """
+
+    if turn.tool_name == "artifact.get_production_document":
+        document_id = turn.arguments.get("production_document_id")
+        if isinstance(document_id, str) and document_id:
+            return json.dumps(
+                [turn.tool_name, turn.arguments.get("project_id"), document_id],
+                ensure_ascii=False,
+            )
+    if turn.tool_name == "artifact.read_current":
+        return json.dumps(
+            [
+                turn.tool_name,
+                turn.arguments.get("project_id"),
+                turn.arguments.get("scene_id"),
+                turn.arguments.get("shot_id"),
+            ],
+            ensure_ascii=False,
+        )
+    return json.dumps(
+        [turn.tool_name, turn.arguments], ensure_ascii=False, sort_keys=True
+    )
+
+
+def _specialist_read_observation_result(
+    turn: SpecialistTurnRecord,
+) -> dict[str, JsonValue]:
+    assert turn.result is not None
+    result = _compact_specialist_tool_result(
+        turn.tool_name, turn.result, retain_exact_payload=True
+    )
+    if turn.tool_name != "artifact.read_current" or not (
+        turn.arguments.get("scene_id") or turn.arguments.get("shot_id")
+    ):
+        return result
+    output = result.get("output")
+    content = output.get("content") if isinstance(output, dict) else None
+    if not isinstance(output, dict) or not isinstance(content, dict):
+        return result
+    # The latest handoff has the current shared project index. Older selected
+    # scenes/shots retain their full content once, without repeating that index
+    # and the Bible in every independently selected observation.
+    return {
+        **result,
+        "output": {
+            **output,
+            "content": {
+                key: value
+                for key, value in content.items()
+                if key in {
+                    "project_id", "script_id", "episode_title", "editorial_revision",
+                    "scene", "lines", "shot",
+                }
+            },
+        },
+    }
 
 
 def _specialist_working_set(
@@ -2293,22 +2358,27 @@ def _specialist_working_set(
             # diagnostics. Replaying the large planning-context body after
             # every patch duplicates the same upstream truth and dominated
             # real Worker inputs.
-            read_observations.pop("artifact.get_asset_planning_context", None)
+            for key in [
+                key for key, observation in read_observations.items()
+                if observation.tool_name == "artifact.get_asset_planning_context"
+            ]:
+                read_observations.pop(key, None)
         if result_status == ToolCallStatus.SUCCEEDED.value:
             request_value = turn.arguments.get("request")
             request = request_value if isinstance(request_value, dict) else {}
             if turn.tool_name == "route.get_generation_unit_context":
-                plan_read = read_observations.get("route.get_generation_plan")
-                if plan_read is not None and (
-                    plan_read.request_identifiers.get("version_id")
-                    == request.get("generation_plan_version_id")
-                ):
-                    # The selected unit carries complete scoped facts. Other
-                    # units remain addressable through the plan's ArtifactRefs.
-                    read_observations.pop("route.get_generation_plan", None)
+                for key, plan_read in list(read_observations.items()):
+                    if plan_read.tool_name == "route.get_generation_plan" and (
+                        plan_read.request_identifiers.get("version_id")
+                        == request.get("generation_plan_version_id")
+                    ):
+                        # Selected units carry their own scoped facts; the full
+                        # plan remains available through its artifact reference.
+                        read_observations.pop(key, None)
             elif turn.tool_name == "route.plan_h3":
-                unit_read = read_observations.get("route.get_generation_unit_context")
-                if unit_read is not None:
+                for key, unit_read in list(read_observations.items()):
+                    if unit_read.tool_name != "route.get_generation_unit_context":
+                        continue
                     read_request = unit_read.request_identifiers.get("request")
                     saved_units = request.get("unit_ids")
                     if (
@@ -2318,24 +2388,23 @@ def _specialist_working_set(
                         and read_request.get("generation_plan_version_id")
                         == request.get("generation_plan_version_id")
                     ):
-                        read_observations.pop("route.get_generation_unit_context", None)
+                        read_observations.pop(key, None)
         if (
             turn.tool_name in read_tool_ids
+            # This complete result is already retained per Shot in entities,
+            # where subsequent Shot/media writes also invalidate it precisely.
+            and turn.tool_name != "shot.preview_reference_plan"
             and turn.status == SpecialistTurnStatus.COMPLETED
             and turn.result is not None
             and turn.result.get("status") == ToolCallStatus.SUCCEEDED.value
         ):
-            read_observations[turn.tool_name] = SpecialistReadObservation(
+            read_observations[_specialist_read_observation_key(turn)] = SpecialistReadObservation(
                 tool_name=turn.tool_name,
                 source_sequence=turn.sequence,
                 request_identifiers=_specialist_request_identifiers(
                     turn.arguments
                 ),
-                result=_compact_specialist_tool_result(
-                    turn.tool_name,
-                    turn.result,
-                    retain_exact_payload=True,
-                ),
+                result=_specialist_read_observation_result(turn),
             )
         if compact_result is not None:
             _fold_specialist_entities(
@@ -2353,7 +2422,7 @@ def _specialist_working_set(
         # The latest handoff already carries this exact payload.  Keep the
         # whiteboard free of duplicate copies while retaining every other
         # independent observation the Worker still needs for the decision.
-        read_observations.pop(latest_turn.tool_name, None)
+        read_observations.pop(_specialist_read_observation_key(latest_turn), None)
         latest_selected_ref = _selected_tool_attempt_ref(latest_turn)
         if latest_selected_ref is not None:
             tool_attempt_observations.pop(latest_selected_ref.identity(), None)
@@ -2383,7 +2452,8 @@ def _specialist_working_set(
             checkpoints.values(), key=lambda item: item.tool_name
         ),
         read_observations=sorted(
-            read_observations.values(), key=lambda item: item.tool_name
+            read_observations.values(),
+            key=lambda item: (item.tool_name, item.source_sequence),
         ),
         tool_attempt_observations=sorted(
             tool_attempt_observations.values(),
@@ -4630,6 +4700,14 @@ class LanguageSpecialistAgent:
                             else protocol_feedback.model_dump(mode="json")
                         ),
                     }
+            if self.context_compiler.store is not None:
+                run = self.context_compiler.store.get_run(work_order.work_order.parent_run_id)
+                if run is not None:
+                    payload["goal"] = {
+                        "original_request": run.objective,
+                        "current_goal": run.goal_summary,
+                        "latest_user_instructions": run.latest_user_instructions,
+                    }
             raw = generate_context_managed_text(
                 self._client, self.context_compiler,
                 run_id=work_order.work_order.parent_run_id, project_id=work_order.context.project_id,
@@ -5251,6 +5329,7 @@ class ProductionManager:
                     method_selection_rationale=(
                         snapshot.current_plan.method_selection_rationale
                     ),
+                    carried_work_order_ids=snapshot.current_plan.carried_work_order_ids,
                     goal_complete=snapshot.current_plan.goal_complete,
                 )
             )
@@ -5815,7 +5894,10 @@ class ProductionManager:
                 self.runtime.set_run_status(run_id, AgentRunStatus.RUNNING)
                 break
 
-            if carried_waiting:
+            local_plan_complete = PlanGraph(plan).is_complete(current.actions)
+            if carried_waiting and (
+                plan.goal_complete or not plan.steps or not local_plan_complete
+            ):
                 self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
                 notes.append(
                     "Waiting for carried WorkOrders in the current plan: "
@@ -5823,7 +5905,10 @@ class ProductionManager:
                 )
                 break
 
-            if PlanGraph(plan).is_complete(current.actions):
+            # New results from a nonempty local plan go back to the Leader even
+            # while retained work continues. The Leader can add independent
+            # work or explicitly wait with an empty plan that carries it.
+            if local_plan_complete:
                 if plan.goal_complete:
                     self.runtime.set_run_status(run_id, AgentRunStatus.COMPLETED)
                     notes.append("The Agent confirmed that the run objective is complete")
@@ -6130,6 +6215,7 @@ class ProductionManager:
             )
         except Exception as exc:
             self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
+            record_trace("agent.replan_failed", {"run_id": run_id, "error": str(exc)})
             self.runtime.checkpoint(
                 run_id,
                 current_focus=reason,
@@ -6149,6 +6235,7 @@ class ProductionManager:
             or (
                 not replanned_plan.goal_complete
                 and not self.runtime.ready_steps(run_id)
+                and not self._carried_work_order_state(replanned_plan)[0]
             )
         ):
             self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
@@ -7818,6 +7905,17 @@ class ProductionManager:
                     f"{tool_name} requires one exact ToolAttemptRef"
                 ) from exc
             ref = attempt_ref
+            source_work_order = self.runtime.store.get_work_order(ref.work_order_id)
+            leader_read = (
+                work_order_id is None
+                and tool_name == "agent.get_tool_attempt"
+                and agent_run_id is not None
+                and ref.project_id == project_id
+                and ref.agent_run_id == agent_run_id
+                and source_work_order is not None
+                and source_work_order.parent_run_id == agent_run_id
+                and _work_order_owns_tool_attempt_ref(project_id, source_work_order, ref)
+            )
             current_work_order = (
                 None
                 if work_order_id is None
@@ -7832,7 +7930,7 @@ class ProductionManager:
                     ref,
                 )
             )
-            if (
+            if not leader_read and (
                 agent_run_id is None
                 or current_work_order is None
                 or current_work_order.parent_run_id != agent_run_id
@@ -7925,14 +8023,14 @@ class ProductionManager:
             work_order_id=work_order_id,
         )
         descriptor = self.tools.describe(tool_name)
-        if descriptor.effect == ToolEffect.READ:
-            result = self.tools.invoke(tool_name, arguments)
-        else:
-            # A desktop project has one mutable content truth. Read-only Tools may
-            # run concurrently, while writes and external side effects share one
-            # short project lane whether invoked by the leader or a worker.
+        if descriptor.effect == ToolEffect.WRITE:
+            # Serialize direct content changes. External services synchronize
+            # their own saves and task transitions; their slow Provider I/O
+            # must not hold this project-wide lane.
             with self._project_tool_lock(project_id):
                 result = self.tools.invoke(tool_name, arguments)
+        else:
+            result = self.tools.invoke(tool_name, arguments)
         if any(ref.project_id != project_id for ref in result.artifact_refs):
             raise ProductionManagerError(
                 "Tool result contains an artifact outside the current run project"

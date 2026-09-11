@@ -904,7 +904,7 @@ export function selectSortedAssets(state: EditorState, filters: AssetListFilters
       case 'resolution':
         return dir * (parseResolutionHeight(a.resolution) - parseResolutionHeight(b.resolution))
       case 'date':
-        return dir * (a.createdAt - b.createdAt)
+        return dir * ((a.createdAt ?? 0) - (b.createdAt ?? 0))
       case 'color': {
         const order = COLOR_LABELS.map((color) => color.id)
         const idxA = a.colorLabel ? order.indexOf(a.colorLabel) : order.length

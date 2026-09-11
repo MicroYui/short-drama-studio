@@ -61,5 +61,7 @@ def test_old_run_and_work_order_select_the_same_storyboard_sections() -> None:
         ProductionProfile.AI_SHORT_DRAMA, roles=(ProductionSkillRole.PLANNER,),
         method_skill_ids=methods, stage=manifest.production_prompt_stage,
     )
-    assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" in prompt.text
+    assert "## 渐进分镜与可选检查" in prompt.text
+    assert "时长账本、全片总纲和独立审校是可选帮助" in prompt.text
+    assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" not in prompt.text
     assert "## 角色 Profile 维度" not in prompt.text

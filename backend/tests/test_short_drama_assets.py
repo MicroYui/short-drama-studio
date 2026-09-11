@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from io import BytesIO
 from pathlib import Path
+import threading
 
 import pytest
 from fastapi import FastAPI
@@ -108,6 +109,102 @@ def _service(tmp_path: Path, fake: FakeImageProvider) -> ShortDramaService:
 def _fixture_asset(service: ShortDramaService, suffix: str):
     project = service.initialize_fixture()
     return next(asset for asset in project.document.assets if asset.id.endswith(suffix))
+
+
+def test_concurrent_advances_submit_the_same_image_task_once(tmp_path: Path) -> None:
+    entered, release, second_started = threading.Event(), threading.Event(), threading.Event()
+
+    class HoldingProvider(FakeImageProvider):
+        submissions = 0
+
+        def create(self, request, inputs):
+            self.submissions += 1
+            entered.set()
+            assert release.wait(5)
+            return super().create(request, inputs)
+
+    fake = HoldingProvider()
+    service = _service(tmp_path, fake)
+    asset = _fixture_asset(service, "asset-linxia")
+    task = service.enqueue_image_task(asset.project_id, asset.id, ImageTaskCreateRequest(
+        operation=ImageOperation.GENERATE, prompt="角色参考图。", descriptor="并发请求")).task
+    service.advance_image_task(task.id)
+    results, errors = [], []
+
+    def advance(second=False):
+        if second:
+            second_started.set()
+        try:
+            results.append(service.advance_image_task(task.id).task)
+        except Exception as exc:
+            errors.append(exc)
+
+    first = threading.Thread(target=advance)
+    second = threading.Thread(target=lambda: advance(True))
+    first.start()
+    try:
+        assert entered.wait(2)
+        second.start()
+        assert second_started.wait(2)
+        second.join(.05)
+        assert fake.submissions == 1
+    finally:
+        release.set()
+        first.join(5)
+        if second.ident is not None:
+            second.join(5)
+    assert errors == []
+    assert len(results) == 2 and all(item.status == ImageTaskStatus.SUCCEEDED for item in results)
+    assert fake.submissions == 1
+    assert results[0].output_version_id == results[1].output_version_id
+
+
+def test_independent_image_calls_overlap_and_preserve_user_text(tmp_path: Path) -> None:
+    from short_drama.studio_models import StudioSceneSave
+
+    barrier = threading.Barrier(3, timeout=5)
+    release = threading.Event()
+
+    class ParallelProvider(FakeImageProvider):
+        def create(self, request, inputs):
+            barrier.wait()
+            assert release.wait(5)
+            return super().create(request, inputs)
+
+    fake = ParallelProvider()
+    service = _service(tmp_path, fake)
+    document = service.initialize_fixture().document
+    tasks = [service.enqueue_image_task(document.project.id, asset.id, ImageTaskCreateRequest(
+        operation=ImageOperation.GENERATE, prompt="生成当前角色参考。", descriptor="独立图片")).task
+        for asset in document.assets[:2]]
+    for task in tasks:
+        service.advance_image_task(task.id)
+    results, errors = [], []
+
+    def advance(task_id):
+        try:
+            results.append(service.advance_image_task(task_id).task)
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=advance, args=(task.id,)) for task in tasks]
+    for thread in threads:
+        thread.start()
+    try:
+        barrier.wait()
+        scene = document.script_versions[-1].structured_scenes[0]
+        service.studio.save_scene(document.project.id, StudioSceneSave(scene_id=scene.id,
+            heading=scene.heading, screenplay_text="用户在生成期间保存的内容。", affected_shot_ids=[]))
+    finally:
+        release.set()
+        for thread in threads:
+            thread.join(5)
+    assert errors == []
+    assert len(results) == 2 and all(item.status == ImageTaskStatus.SUCCEEDED for item in results)
+    saved = service.get_project(document.project.id).document
+    assert saved.script_versions[-1].structured_scenes[0].screenplay_text == "用户在生成期间保存的内容。"
+    saved_versions = {version.id for asset in saved.assets for version in asset.versions}
+    assert {task.output_version_id for task in tasks} <= saved_versions
 
 
 def test_local_url_import_version_lineage_and_approval(tmp_path: Path) -> None:

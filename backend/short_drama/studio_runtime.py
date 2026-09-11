@@ -17,7 +17,7 @@ from short_drama.production_manager import (
     AgentRunAdvanceRequest, AgentRunCreateRequest, AgentRunReplanRequest, AgentUserInputRequest,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderTransportError, is_language_transport_error
-from short_drama.studio_models import StudioActivity, StudioJob, StudioJobControl, StudioMessage, StudioWorker
+from short_drama.studio_models import StudioActivity, StudioJob, StudioJobControl, StudioMessage, StudioWorker, StudioChangeSet
 from short_drama.studio_trace import production_trace, record_trace, trace_context
 
 if TYPE_CHECKING:
@@ -47,9 +47,12 @@ class StudioAgentRunner:
             for work in self.service.agent_runtime.store.list_work_orders(run_id):
                 result = self.service.agent_runtime.store.get_agent_result(work.id)
                 workers.append(StudioWorker(id=work.id, run_id=run_id, role=work.recipient_role,
+                    skill_role=work.production_skill_role, stage=work.production_prompt_stage,
                     objective=work.objective, status=work.status.value,
                     next_owner=None if work.next_owner is None else work.next_owner.value,
-                    summary=None if result is None else result.concise_summary, tool_turns=len(work.specialist_turns)))
+                    summary=None if result is None else result.concise_summary, tool_turns=len(work.specialist_turns),
+                    latest_tool=work.specialist_turns[-1].tool_name if work.specialist_turns else None,
+                    latest_reason=work.specialist_turns[-1].reason if work.specialist_turns else None))
         return StudioActivity(jobs=jobs, workers=workers,
             context_window_tokens=ContextBudget().window_tokens,
             events=self.service.repository.list_studio_events(project_id, after=after, limit=2000))
@@ -94,13 +97,35 @@ class StudioAgentRunner:
             self.service.repository.save_studio_job(job)
             self._publish_job(job)
             self._wakeups.setdefault(job.id, threading.Event()).set()
-            self._launch(job.id)
+            if job.status in {"queued", "running", "retrying", "pausing"}:
+                self._launch(job.id)
             return job
 
     def resume_after_restart(self) -> None:
         for job in self.service.repository.list_studio_jobs():
             if job.status in {"queued", "running", "retrying", "pausing"}:
                 self._launch(job.id)
+
+    def review_resolved(self, project_id: str, change: StudioChangeSet) -> None:
+        """Deliver explicit review clicks back to the same goal, not as new chat."""
+        from short_drama.studio_changes import list_changes
+        if any(i.status == "pending" for c in list_changes(self.service.studio.current_project(project_id).document)
+               if c.run_id == change.run_id for i in c.items):
+            return
+        with self.lock:
+            jobs = self.service.repository.list_studio_jobs(project_id)
+            job = next((item for item in jobs if item.run_id == change.run_id), None)
+            if job is None or job.status == "completed":
+                return
+            decisions = "；".join(f"{item.title}：{'已接受并保存' if item.status == 'accepted' else '已拒绝，保留原文'}" for item in change.items)
+            job.pending_messages.append(StudioMessage(text=f"用户已逐项审阅修改提案 {change.id}。{decisions}。读取当前已生效内容，结合原目标继续；不要重做被拒绝的修改。", scope=job.scope))
+            job.status = "queued"
+            job.error = None
+            job.updated_at = _now()
+            self.service.repository.save_studio_job(job)
+            self._publish_job(job)
+            self._wakeups.setdefault(job.id, threading.Event()).set()
+            self._launch(job.id)
 
     def _job(self, job_id: str) -> StudioJob:
         job = next((item for item in self.service.repository.list_studio_jobs() if item.id == job_id), None)
@@ -144,6 +169,15 @@ class StudioAgentRunner:
                 return "User requested pause"
             if len(job.pending_messages) > self._processing_messages.get(job_id, 0):
                 return "User input is pending"
+            if job.run_id:
+                from short_drama.studio_changes import list_changes
+                document = self.service.repository.get_project(job.project_id)
+                if document is not None and any(
+                    change.run_id == job.run_id
+                    and any(item.status == "pending" for item in change.items)
+                    for change in list_changes(document)
+                ):
+                    return "User-requested text review is pending"
         return None
 
     def _wait_for_retry(self, job_id: str) -> None:
@@ -178,6 +212,10 @@ class StudioAgentRunner:
 
         try:
             with production_trace(directory, emit), execution_control(lambda: self._yield_reason(job_id)):
+                # Keep the original request and remove only an untouched legacy
+                # blank-workspace scaffold before asking the Agent to continue.
+                if self.service.studio.remember_initial_request(job.project_id, job.objective):
+                    record_trace("content.updated", {"reason": "Initial workspace request and placeholder metadata reconciled."})
                 while True:
                     self._wait_for_retry(job_id)
                     try:
@@ -276,6 +314,12 @@ class StudioAgentRunner:
                 self._save_state(job_id, "paused")
                 return
             self._apply_messages(job_id, run_id)
+            from short_drama.studio_changes import list_changes
+            pending = [item for change in list_changes(self.service.studio.current_project(self._job(job_id).project_id).document)
+                       if change.run_id == run_id for item in change.items if item.status == "pending"]
+            if pending:
+                self._save_state(job_id, "waiting_user", error=f"{len(pending)} 处修改等待审阅。逐项接受或保留原文后继续。")
+                return
             view = self.service.get_agent_run(run_id)
             if view.snapshot.current_plan is None or view.snapshot.run.status in {AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}:
                 self.service.replan_agent_run(run_id, AgentRunReplanRequest(reason="根据本次用户目标继续工作，并按目标决定交付边界。"))
@@ -302,12 +346,15 @@ class StudioAgentRunner:
                 self._save_state(job_id, "waiting_user")
                 record_trace("chat.assistant", {"text": waiting.input_summary, "needs_input": True, "run_id": run_id})
                 return
-            # Materialize independent siblings before running their decisions.
-            # The Agent-authored dependency graph still decides what is ready.
-            if view.ready_steps and view.ready_steps[0].kind == ActionKind.DELEGATION:
+            # Advance every ready Agent-authored step before draining Workers.
+            # A retained media poll may run for a long time; it must not starve
+            # independent reads or edits that prepare the next parallel task.
+            if view.ready_steps:
                 self.service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=1))
                 continue
-            batch = self.service.advance_agent_team(run_id)
+            # Each Worker continues its own persisted turns. A slow media
+            # observation must not hold its siblings at every decision boundary.
+            batch = self.service.advance_agent_team(run_id, continue_until_handoff=True)
             failures = [item for item in batch.advances if item.error_message]
             for failure in failures:
                 record_trace("worker.error", {"work_order_id": failure.work_order_id,
@@ -328,7 +375,8 @@ class StudioAgentRunner:
                 if (snapshot.run.status == AgentRunStatus.WAITING and not advanced.run.ready_steps
                     and not worker_can_continue and not waiting_input and not advanced.executed_action_ids
                     and snapshot.run.current_plan_revision_id == view.snapshot.run.current_plan_revision_id):
-                    reason = "; ".join(snapshot.memory.blockers) or snapshot.memory.current_focus or "当前计划没有可执行的下一步"
+                    replan_errors = [note for note in advanced.notes if note.startswith("Automatic replanning failed:")]
+                    reason = "; ".join(replan_errors or snapshot.memory.blockers) or snapshot.memory.current_focus or "当前计划没有可执行的下一步"
                     raise ValueError(f"制作任务暂时无法推进：{reason}")
             # Event-driven wakeup makes pause/new input responsive between operations.
             wakeup = self._wakeups[job_id]

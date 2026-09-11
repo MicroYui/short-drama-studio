@@ -151,7 +151,7 @@ def test_ai_short_drama_composes_with_an_explicit_official_method() -> None:
     for compiled in (format_only, composed):
         assert compiled.selected_skill_ids == ()
         assert "概念策划的通用职责" in compiled.text
-        assert "Leader → Worker → Verifier" in compiled.text
+        assert "独立检查按实际需要安排" in compiled.text
         assert "当前格式补充" not in compiled.text
 
 
@@ -300,7 +300,7 @@ def test_format_skills_change_role_behavior_without_changing_prompt_api() -> Non
         roles=(ProductionSkillRole.DIRECTOR,),
     )
 
-    assert "Leader → Worker → Verifier" in douyin.text
+    assert "独立检查按实际需要安排" in douyin.text
     assert "视线" in digital_human.text
     assert "轮廓" in anime.text
     assert "留白、静默" in general.text
@@ -324,14 +324,14 @@ def test_ai_short_drama_is_only_a_local_schema_adapter() -> None:
     assert "MiniMax Design `drama-series` 作为通用短剧/漫剧项目主骨架" in (
         skill.constitution
     )
-    assert "Leader → Worker → Verifier" in skill.constitution
-    assert "职责重叠的多套审校与返修 Agent" in skill.constitution
+    assert "独立检查按实际需要安排" in skill.constitution
+    assert "无需先获得 Verifier 的通过标记" in skill.constitution
     assert "Critic" not in skill.constitution
     assert "Final Cold Read" not in skill.constitution
     assert skill.recommended_playbook == (
         "Leader 对齐目标与工件",
         "Worker 按上游 Skill 产出",
-        "Verifier 验收并退回原 Worker",
+        "按需要检查实际结果",
     )
 
 
@@ -436,7 +436,8 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
     assert "不要叠加 `project.get`" in asset_builder.text
     assert "image.capability" in asset_builder.text
     assert "image.compose_reference_sheet" in asset_builder.text
-    assert "批准自己的输出" in asset_builder.text
+    assert "Builder 自行判断输出是否满足当前用途" in asset_builder.text
+    assert "不把审核标记或另一名 Verifier 当成继续制作的条件" in asset_builder.text
 
     assert "资产验收的通用职责" in asset_verifier.text
     assert "qa.inspect_asset_version" in asset_verifier.text
@@ -467,3 +468,23 @@ def test_new_formats_inject_medium_through_skill_instead_of_base_prompt() -> Non
         assert production_skill(profile).label in instructions
         assert "Mandarin live-action vertical" not in instructions
         assert '"output_schema"' in payload
+
+
+@pytest.mark.parametrize(
+    ("role", "stage"),
+    [
+        (ProductionSkillRole.PLANNER, ProductionPromptStage.ORCHESTRATION),
+        (ProductionSkillRole.PLANNER, ProductionPromptStage.STORYBOARD),
+        (ProductionSkillRole.REVISION_VERIFIER, ProductionPromptStage.STORYBOARD),
+    ],
+)
+def test_stage_specific_methods_keep_incremental_writing_optional_checks(
+    role: ProductionSkillRole, stage: ProductionPromptStage,
+) -> None:
+    prompt = compile_production_prompt(
+        ProductionProfile.AI_SHORT_DRAMA,
+        roles=(role,), stage=stage, method_skill_ids=("method.drama_series",),
+    )
+
+    assert "不先建立这些文档也能写镜头" in prompt.text
+    assert "作者可以自查" in prompt.text

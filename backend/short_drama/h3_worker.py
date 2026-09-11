@@ -21,6 +21,8 @@ from short_drama.h3_models import (
     H3UploadedInput,
 )
 from short_drama.media import H3MediaIngestor, MediaGenerationError
+from short_drama.generation_plan_state import validate_generation_units_current
+from short_drama.production_contracts import GenerationPlanContent
 from short_drama.models import (
     EvidenceStatus,
     Freshness,
@@ -295,12 +297,26 @@ class PersistentH3Worker:
             if task.generation_plan_document_id is None:
                 return "The H3 generation unit has no pinned generation plan"
 
+        generation_plan: GenerationPlanContent | None = None
+        if task.generation_unit_id is not None:
+            generation_document = next((item for item in document.production_documents
+                if item.id == task.generation_plan_document_id), None)
+            generation_version = next((item for item in generation_document.versions
+                if item.id == task.generation_plan_version_id), None) if generation_document else None
+            if generation_version is not None:
+                try:
+                    generation_plan = GenerationPlanContent.model_validate(generation_version.payload)
+                except ValueError:
+                    # Legacy tasks without typed units retain their exact-document check.
+                    pass
+
         pinned_storyboard_reason = self._pinned_document_staleness_reason(
             document=document,
             label="storyboard",
             project_document_id=document.storyboard_document_id,
             task_document_id=task.storyboard_document_id,
             task_version_id=task.storyboard_version_id,
+            require_current=generation_plan is None,
         )
         if pinned_storyboard_reason is not None:
             return pinned_storyboard_reason
@@ -310,9 +326,15 @@ class PersistentH3Worker:
             project_document_id=document.generation_plan_document_id,
             task_document_id=task.generation_plan_document_id,
             task_version_id=task.generation_plan_version_id,
+            require_current=generation_plan is None,
         )
         if pinned_generation_plan_reason is not None:
             return pinned_generation_plan_reason
+        if generation_plan is not None and task.generation_unit_id is not None:
+            try:
+                validate_generation_units_current(document, generation_plan, [task.generation_unit_id])
+            except ValueError as exc:
+                return str(exc)
 
         provider_run = run or self.repository.get_provider_run(task.id)
         if provider_run is None:
@@ -362,6 +384,7 @@ class PersistentH3Worker:
         project_document_id: str | None,
         task_document_id: str | None,
         task_version_id: str | None,
+        require_current: bool = True,
     ) -> str | None:
         if task_document_id is None and task_version_id is None:
             return None
@@ -383,7 +406,7 @@ class PersistentH3Worker:
             item.id == task_version_id for item in production_document.versions
         ):
             return f"The pinned {label} version no longer exists"
-        if production_document.current_version_id != task_version_id:
+        if require_current and production_document.current_version_id != task_version_id:
             return f"The {label} changed after this H3 task was compiled"
         return None
 
@@ -686,7 +709,7 @@ class PersistentH3Worker:
                 f"duration={media.duration_seconds:.3f}s",
                 f"fps={media.fps:.3f}",
                 f"audio={'present' if media.audio_present else 'missing'}",
-                "视觉风格、主体表现、对白、声音与项目声明的连续性等待人工审片",
+                "视觉、对白和连续性可按当前任务观察；尚未检查不阻止预览、选用或剪辑",
             ],
             created_at=now,
         )

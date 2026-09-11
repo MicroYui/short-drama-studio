@@ -85,8 +85,8 @@ def start_export(service: ShortDramaService, project_id: str, request: StudioExp
         for clip in timeline.clips:
             extra = clip.model_extra or {}
             transitions = [extra.get(key, {}) for key in ("transitionIn", "transitionOut")]
-            if clip.type in {"text", "adjustment"} or clip.opacity != 100 or any(isinstance(item, dict) and cast(dict[str, object], item).get("type") not in (None, "none") for item in transitions):
-                raise ValueError("当前导出支持镜头、多轨、裁切、变速、翻转、声音和字幕。请将文字转为字幕并移除尚未接通的视觉效果。")
+            if clip.type in {"text", "adjustment"} or any(isinstance(item, dict) and cast(dict[str, object], item).get("type") not in (None, "none") for item in transitions):
+                raise ValueError("当前导出支持镜头、多轨、透明度、PNG图层、裁切、变速、翻转、声音和字幕。请移除尚未接通的文字层、调整层或转场；画面文字可使用字幕或PNG图版。")
         for old in document.studio_exports:
             if old.get("status") == "running":
                 if old.get("editorial_revision") == request.expected_revision:

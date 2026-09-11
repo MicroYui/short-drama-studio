@@ -665,7 +665,9 @@ def _binding_selections(
             )
         if (
             version.id in seen
-            or version.approval_status != ApprovalStatus.APPROVED
+            or version.approval_status not in {
+                ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+            }
             or version.freshness != Freshness.CURRENT
             or version.media_type != AssetMediaType.IMAGE
             or (version.local_path is None and version.external_url is None)
@@ -673,7 +675,7 @@ def _binding_selections(
             if version.id not in seen and required:
                 missing.append(binding_id)
             if version.id not in seen:
-                warnings.append(f"{binding_id}: approved visual media is unavailable")
+                warnings.append(f"{binding_id}: selected visual media is unavailable")
             continue
         if len(selected) >= max_images:
             if required:
@@ -955,29 +957,29 @@ def _resolve_primary_canvas(
 def usable_reference_pack_entries(
     document: ProjectDocument,
 ) -> list[tuple[ReferencePack, ReferencePackEntry]]:
-    """Current approved entries shared by scoped reads and shot selection."""
+    """Usable, explicitly selected entries shared by reads and shot selection."""
 
-    subjects = {asset.id: asset for asset in document.assets}
-    approved_versions: dict[str, AssetVersion] = {}
+    usable_version_owners: dict[str, str] = {}
     for asset in document.assets:
         for version in asset.versions:
             if (
-                version.approval_status == ApprovalStatus.APPROVED
+                version.approval_status in {
+                    ApprovalStatus.DRAFT, ApprovalStatus.APPROVED,
+                }
                 and version.freshness == Freshness.CURRENT
                 and version.media_type == AssetMediaType.IMAGE
                 and (version.local_path is not None or version.external_url is not None)
             ):
-                approved_versions[version.id] = version
+                usable_version_owners[version.id] = asset.id
     return [
         (pack, entry)
         for pack in document.reference_packs
         for entry in pack.entries
-        if entry.asset_version_id in approved_versions
+        if entry.asset_version_id in usable_version_owners
         and (
             entry.lineage_root_version_id is None
-            or subjects.get(pack.subject_asset_id) is not None
-            and subjects[pack.subject_asset_id].approved_version_id
-            == entry.lineage_root_version_id
+            or usable_version_owners.get(entry.lineage_root_version_id)
+            == pack.subject_asset_id
         )
     ]
 

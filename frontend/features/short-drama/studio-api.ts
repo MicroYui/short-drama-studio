@@ -14,6 +14,8 @@ export type ReferenceCue = components['schemas']['ShotReferenceCue']
 export type ScriptScene = components['schemas']['StructuredScene']
 export type StudioEditorial = components['schemas']['StudioEditorial']
 export type StudioExport = components['schemas']['StudioExport']
+export type StudioChangeSet = components['schemas']['StudioChangeSet']
+export type StudioChangeResult = components['schemas']['StudioChangeResult']
 
 const base = '/api/short-drama/studio'
 const projectPath = (id: string) => `${base}/projects/${encodeURIComponent(id)}`
@@ -41,6 +43,8 @@ function json(method: string, value: unknown): RequestInit {
 
 export const StudioApi = {
   getProject: (id: string) => studioRequest<ProjectAggregate>(projectPath(id)),
+  changes: (id: string) => studioRequest<StudioChangeSet[]>(`${projectPath(id)}/changes`),
+  decideChange: (id: string, changeId: string, itemId: string, decision: 'accept' | 'reject') => studioRequest<StudioChangeResult>(`${projectPath(id)}/changes/${changeId}/items/${itemId}`, json('POST', { decision })),
   createProject: (name: string, brief = '') => studioRequest<ProjectAggregate>(`${base}/projects`, json('POST', { name, brief })),
   episodes: (id: string) => studioRequest<StudioEpisodes>(`${projectPath(id)}/episodes`),
   createEpisode: (id: string, title: string) => studioRequest<ProjectAggregate>(`${projectPath(id)}/episodes`, json('POST', { title })),
@@ -83,7 +87,7 @@ export async function downloadBackendFile(path: string, name: string): Promise<v
 }
 
 /** Authenticated SSE with a cursor. Cancellation is local to this page, never the job. */
-export async function watchStudio(id: string, cursor: number, signal: AbortSignal, onEvent: (event: StudioEvent) => void): Promise<void> {
+export async function watchStudio(id: string, cursor: number, signal: AbortSignal, onEvents: (events: StudioEvent[]) => void): Promise<void> {
   const response = await backendFetch(`${projectPath(id)}/events?after=${cursor}`, { signal })
   if (!response.ok || !response.body) throw new Error('实时连接暂不可用')
   const reader = response.body.getReader()
@@ -95,12 +99,14 @@ export async function watchStudio(id: string, cursor: number, signal: AbortSigna
       if (done) break
       buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
       let boundary: number
+      const events: StudioEvent[] = []
       while ((boundary = buffer.indexOf('\n\n')) >= 0) {
         const frame = buffer.slice(0, boundary)
         buffer = buffer.slice(boundary + 2)
         const data = frame.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n')
-        if (data) onEvent(JSON.parse(data) as StudioEvent)
+        if (data) events.push(JSON.parse(data) as StudioEvent)
       }
+      if (events.length) onEvents(events)
     }
   } finally {
     reader.releaseLock()

@@ -242,7 +242,8 @@ function getActiveLetterbox(adjustmentClips: TimelineClip[], tracks: Track[], ti
 }
 
 function getCompositingStack(mediaClips: TimelineClip[], tracks: Track[], activeClip: TimelineClip | null, time: number): TimelineClip[] {
-  if (!activeClip || (activeClip.opacity ?? 100) >= 100) return []
+  // An image may carry its own alpha even when the clip opacity is 100%.
+  if (!activeClip || ((activeClip.opacity ?? 100) >= 100 && activeClip.type !== 'image')) return []
 
   return mediaClips
     .filter(clip =>
@@ -482,7 +483,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
   const previewPanRef = React.useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 })
   const [isFullscreen, setIsFullscreen] = React.useState(false)
   const [playbackResOpen, setPlaybackResOpen] = React.useState(false)
-  const [playbackResolution, setPlaybackResolution] = React.useState<1 | 0.5 | 0.25>(0.5)
+  const [playbackResolution, setPlaybackResolution] = React.useState<1 | 0.5 | 0.25>(1)
   const [videoFrameSize, setVideoFrameSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const frameRenderCache = React.useMemo(() => buildFrameRenderCache(clips, subtitles), [clips, subtitles])
   const frameRenderCacheRef = React.useRef(frameRenderCache)
@@ -504,13 +505,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
   const playbackTimecodeRef = React.useRef<HTMLSpanElement | null>(null)
 
   const toggleFullscreen = React.useCallback(() => {
-    const el = previewContainerRef.current
-    if (!el) return
-    if (document.fullscreenElement === el) {
-      document.exitFullscreen().catch(() => {})
-      return
-    }
-    el.requestFullscreen().catch(() => {})
+    setIsFullscreen(value => !value)
   }, [])
 
   React.useImperativeHandle(ref, () => ({ toggleFullscreen }), [toggleFullscreen])
@@ -1056,10 +1051,15 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
   }, [clips, currentTime, isPlaying, renderFrame, subtitles, tracks])
 
   React.useEffect(() => {
-    const handler = () => setIsFullscreen(document.fullscreenElement === previewContainerRef.current)
-    document.addEventListener('fullscreenchange', handler)
-    return () => document.removeEventListener('fullscreenchange', handler)
-  }, [])
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !isFullscreen) return
+      event.preventDefault()
+      event.stopPropagation()
+      setIsFullscreen(false)
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [isFullscreen])
 
   React.useEffect(() => {
     if (!previewZoomOpen) return
@@ -1152,7 +1152,8 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
         {/* Preview (existing) */}
         <div
           ref={previewContainerRef}
-          className={`flex-1 relative overflow-hidden min-h-0 min-w-0 ${isFullscreen ? 'bg-black' : ''}`}
+          data-fullscreen-preview={isFullscreen ? 'true' : undefined}
+          className={`overflow-hidden min-h-0 min-w-0 ${isFullscreen ? 'fixed inset-0 z-[10000] bg-black' : 'flex-1 relative'}`}
           style={{ backgroundColor: isFullscreen ? '#000' : '#333', ...(previewZoom !== 'fit' ? { cursor: 'grab' } : {}) }}
           onMouseDown={(e) => {
             if (previewZoom === 'fit') return
@@ -1534,6 +1535,18 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
             </div>
           )}
 
+          {isFullscreen && (
+            <button
+              type="button"
+              aria-label="退出全屏预览"
+              onClick={toggleFullscreen}
+              className="absolute right-5 top-5 z-50 flex items-center gap-2 rounded-full bg-black/65 px-4 py-2 text-sm text-white shadow-lg transition-colors hover:bg-black/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <Shrink className="h-4 w-4" />
+              退出全屏
+            </button>
+          )}
+
           {/* Timecode + clip info moved to bottom status bar */}
         </div>
 
@@ -1885,6 +1898,7 @@ export const ProgramMonitor = React.forwardRef<ProgramMonitorHandle, ProgramMoni
           <Tooltip content={isFullscreen ? tooltipLabel('Exit fullscreen', getShortcutLabel(kbLayout, 'view.fullscreen')) : tooltipLabel('Fullscreen', getShortcutLabel(kbLayout, 'view.fullscreen'))} side="top">
             <button
               onClick={toggleFullscreen}
+              aria-label="切换全屏预览"
               className="p-1 rounded hover:bg-zinc-800 transition-colors text-zinc-500 hover:text-zinc-300"
             >
               {isFullscreen

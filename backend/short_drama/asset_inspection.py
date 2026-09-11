@@ -269,6 +269,15 @@ def build_base_asset_prompt(document: ProjectDocument, asset: Asset) -> str:
             "中性灰 #7c7c7c 背景和柔和影棚光；不要文字、视图名称、分隔说明、"
             "logo、水印、额外人物或场景道具。"
         )
+    elif layout_profile == AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1:
+        if asset.kind != AssetKind.CHARACTER:
+            raise ValueError("CHARACTER_FOUR_VIEW_4X1 requires a character asset")
+        layout = (
+            "同一人物的完整全身四视图，横向四列依次为正面、人物左侧、背面、人物右侧。"
+            "四个人物等高，头顶和脚底齐平，脸型、发型、服装、配饰、身材保持一致；"
+            "侧面是真正的侧身而不是重复正面或镜像。若提供身份原图，严格延续这张图中的人。"
+            "柔和均匀光线、干净中性背景，不添加剧情动作、文字、水印或第五个人物。"
+        )
     elif layout_profile == AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2:
         if asset.kind != AssetKind.CHARACTER:
             raise ValueError("CHARACTER_SIX_VIEW_3X2 requires a character asset")
@@ -593,7 +602,7 @@ def analyze_source_image(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
         image_urls=[_asset_image_url(version)],
-        max_output_tokens=3000,
+        max_output_tokens=16000,
     )
     return SemanticSourceImageAnalysis.model_validate_json(_strip_json_fence(output))
 
@@ -778,7 +787,7 @@ def inspect_asset_image(
             _asset_image_url(version),
             *(url for _reference, url in reference_images),
         ],
-        max_output_tokens=3000,
+        max_output_tokens=16000,
     )
     return SemanticAssetReview.model_validate_json(_strip_json_fence(output))
 

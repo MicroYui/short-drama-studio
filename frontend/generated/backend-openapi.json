@@ -2433,6 +2433,7 @@
           "LIGHTWEIGHT_SINGLE",
           "DRAMA_CHARACTER_DUAL_ZONE_16_9",
           "CHARACTER_SIX_VIEW_3X2",
+          "CHARACTER_FOUR_VIEW_4X1",
           "SCENE_FOUR_DIRECTION_2X2",
           "PROP_MASTER_SINGLE"
         ],
@@ -2499,7 +2500,6 @@
             "type": "array"
           },
           "columns": {
-            "maximum": 3.0,
             "minimum": 1.0,
             "title": "Columns",
             "type": "integer"
@@ -2829,6 +2829,32 @@
             "title": "Background Color",
             "type": "string"
           },
+          "content_box": {
+            "default": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Content Box",
+            "type": "array"
+          },
           "exact_lines": {
             "items": {
               "type": "string"
@@ -2861,6 +2887,26 @@
             "title": "Size",
             "type": "string"
           },
+          "stroke_color": {
+            "default": "#000000",
+            "title": "Stroke Color",
+            "type": "string"
+          },
+          "stroke_width": {
+            "default": 0,
+            "title": "Stroke Width",
+            "type": "integer"
+          },
+          "text_align": {
+            "default": "left",
+            "enum": [
+              "left",
+              "center",
+              "right"
+            ],
+            "title": "Text Align",
+            "type": "string"
+          },
           "title": {
             "anyOf": [
               {
@@ -2873,6 +2919,16 @@
               }
             ],
             "title": "Title"
+          },
+          "vertical_align": {
+            "default": "center",
+            "enum": [
+              "top",
+              "center",
+              "bottom"
+            ],
+            "title": "Vertical Align",
+            "type": "string"
           }
         },
         "required": [
@@ -3239,6 +3295,28 @@
           },
           "semantic_status": {
             "$ref": "#/components/schemas/SemanticReviewStatus"
+          },
+          "source_editorial_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Editorial Revision"
+          },
+          "source_editorial_timeline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Editorial Timeline Id"
           },
           "source_script_version_id": {
             "title": "Source Script Version Id",
@@ -6913,6 +6991,16 @@
             "title": "Repairs Complete",
             "type": "boolean"
           },
+          "review_manifest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimelineManifest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scene_reviews": {
             "items": {
               "$ref": "#/components/schemas/SceneEpisodeReview"
@@ -6931,6 +7019,31 @@
               }
             ],
             "title": "Semantic Model"
+          },
+          "source_editorial_project": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Editorial Project"
+          },
+          "source_editorial_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Editorial Revision"
           },
           "source_script_version_id": {
             "title": "Source Script Version Id",
@@ -17073,6 +17186,16 @@
             ],
             "title": "Storyboard Document Id"
           },
+          "studio_changes": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Studio Changes",
+            "type": "array"
+          },
           "studio_exports": {
             "items": {
               "additionalProperties": {
@@ -21431,6 +21554,7 @@
                 "type": "null"
               }
             ],
+            "description": "正文 @ 引用的结束 Unicode 字符位置（不包含终点），与 text_start 成对。时段内引用放到对应 timeline_beat.references；它的偏移基于该时段的 field 文本。",
             "title": "Text End"
           },
           "text_start": {
@@ -21443,7 +21567,18 @@
                 "type": "null"
               }
             ],
+            "description": "正文 @ 引用在 field 指定文本中的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数）。新分镜中的具体人物、场景或道具引用应定位到相应文字并填写起止位置；仅不对应任何正文文字的整镜构图参考才省略。",
             "title": "Text Start"
+          },
+          "usage": {
+            "default": "GENERATION",
+            "description": "GENERATION 表示视频模型实际需要接收的参考媒体；EDITORIAL 表示剪辑合成时使用的图片、标题或文字图版，保留正文绑定和预览，不自动上传给视频模型。按本次实际用途显式选择，不从用途文字猜测。",
+            "enum": [
+              "GENERATION",
+              "EDITORIAL"
+            ],
+            "title": "Usage",
+            "type": "string"
           }
         },
         "required": [
@@ -23439,7 +23574,7 @@
       },
       "StoryboardClipGroupOutline": {
         "additionalProperties": false,
-        "description": "One immutable row in the private whole-episode ClipGroup ledger.\n\nThe Agent derives this outline from the dialogue/action timing scratch pass\nbefore any detailed Shot is authored. It is a factual authoring plan, not a\ntarget-duration allocation: each later commit must land on the exact row.",
+        "description": "Optional planning notes for a provider-independent editorial group.",
         "properties": {
           "continuity_in": {
             "items": {
@@ -23456,10 +23591,9 @@
             "type": "array"
           },
           "duration_seconds": {
-            "maximum": 15.0,
-            "minimum": 4.0,
+            "exclusiveMinimum": 0.0,
             "title": "Duration Seconds",
-            "type": "integer"
+            "type": "number"
           },
           "id": {
             "maxLength": 200,
@@ -24681,6 +24815,18 @@
             "title": "Base Version Id",
             "type": "string"
           },
+          "bible_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bible Version Id"
+          },
           "clip_groups": {
             "anyOf": [
               {
@@ -24693,6 +24839,7 @@
                 "type": "null"
               }
             ],
+            "description": "按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。增加、删除或重排分组使用完整 StoryboardReplaceRequest。",
             "title": "Clip Groups"
           },
           "notes": {
@@ -24712,12 +24859,63 @@
           "origin": {
             "$ref": "#/components/schemas/ProductionDocumentOrigin"
           },
+          "production_spec_document_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production Spec Document Id"
+          },
+          "production_spec_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production Spec Version Id"
+          },
           "replacements": {
             "items": {
               "$ref": "#/components/schemas/StoryboardShotReplacement"
             },
             "title": "Replacements",
             "type": "array"
+          },
+          "scene_nodes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StoryboardSceneNode"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "按稳定场次 ID 更新已读的场次摘要与衔接，未传入场次保留。",
+            "title": "Scene Nodes"
+          },
+          "script_version_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Script Version Id"
           },
           "source_artifact_refs": {
             "items": {
@@ -24915,8 +25113,8 @@
             "title": "Source Target Duration Seconds"
           },
           "summary": {
+            "default": "",
             "maxLength": 2000,
-            "minLength": 1,
             "title": "Summary",
             "type": "string"
           }
@@ -24925,8 +25123,7 @@
           "id",
           "scene_id",
           "sequence",
-          "heading",
-          "summary"
+          "heading"
         ],
         "title": "StoryboardSceneNode",
         "type": "object"
@@ -25460,6 +25657,94 @@
           "events"
         ],
         "title": "StudioActivity",
+        "type": "object"
+      },
+      "StudioChangeDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "accept",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "StudioChangeDecision",
+        "type": "object"
+      },
+      "StudioChangeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "$ref": "#/components/schemas/StudioChangeSet"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectAggregate"
+          }
+        },
+        "required": [
+          "change",
+          "project"
+        ],
+        "title": "StudioChangeResult",
+        "type": "object"
+      },
+      "StudioChangeSet": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StudioTextChange"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "title",
+          "items",
+          "created_at"
+        ],
+        "title": "StudioChangeSet",
         "type": "object"
       },
       "StudioEditorial": {
@@ -25999,6 +26284,21 @@
       "StudioSceneSave": {
         "additionalProperties": false,
         "properties": {
+          "affected_shot_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "After reading current shots, identify which shots need a visual update for this scene edit. Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. Shots using changed structured dialogue are always included.",
+            "title": "Affected Shot Ids"
+          },
           "expected_text": {
             "anyOf": [
               {
@@ -26030,6 +26330,17 @@
             ],
             "title": "Lines"
           },
+          "narrative_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Narrative Purpose"
+          },
           "scene_id": {
             "anyOf": [
               {
@@ -26056,6 +26367,18 @@
               }
             ],
             "title": "Summary"
+          },
+          "target_duration_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Duration Seconds"
           }
         },
         "required": [
@@ -26163,6 +26486,118 @@
         "title": "StudioShotSave",
         "type": "object"
       },
+      "StudioTextChange": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_shot_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a scene edit, identify affected shots after reading their current content. Unlisted shots in that scene keep their current media and manual edits. Omit if the impact is unknown; use [] for no visual change. Shots using changed dialogue are always included.",
+            "title": "Affected Shot Ids"
+          },
+          "after": {
+            "maxLength": 50000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "description": "Exact, uniquely identifiable text in the current field. Include enough surrounding text to disambiguate.",
+            "maxLength": 50000,
+            "minLength": 1,
+            "title": "Before",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "explanation": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Explanation",
+            "type": "string"
+          },
+          "field": {
+            "description": "scene: screenplay_text/heading/summary; shot: visual/camera/framing/audio_intent or timeline_beats.<zero-based index>.<text field>",
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ScriptLine"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only changed/new dialogue lines from this edit. Keep stable IDs. On acceptance, other lines remain unchanged.",
+            "title": "Lines"
+          },
+          "status": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target": {
+            "enum": [
+              "scene",
+              "shot"
+            ],
+            "title": "Target",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "target_id",
+          "field",
+          "title",
+          "before",
+          "after",
+          "id"
+        ],
+        "title": "StudioTextChange",
+        "type": "object"
+      },
       "StudioTimelineSave": {
         "additionalProperties": false,
         "properties": {
@@ -26204,6 +26639,28 @@
             "title": "Id",
             "type": "string"
           },
+          "latest_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Reason"
+          },
+          "latest_tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Tool"
+          },
           "next_owner": {
             "anyOf": [
               {
@@ -26226,6 +26683,28 @@
           "run_id": {
             "title": "Run Id",
             "type": "string"
+          },
+          "skill_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Role"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
           },
           "status": {
             "title": "Status",
@@ -37490,6 +37969,144 @@
           }
         },
         "summary": "Activity",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/changes": {
+      "get": {
+        "operationId": "read_changes_api_short_drama_studio_projects__project_id__changes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StudioChangeSet"
+                  },
+                  "title": "Response Read Changes Api Short Drama Studio Projects  Project Id  Changes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Changes",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
+    "/api/short-drama/studio/projects/{project_id}/changes/{change_id}/items/{item_id}": {
+      "post": {
+        "operationId": "decide_text_change_api_short_drama_studio_projects__project_id__changes__change_id__items__item_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "change_id",
+            "required": true,
+            "schema": {
+              "title": "Change Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudioChangeDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioChangeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Decide Text Change",
         "tags": [
           "short-drama",
           "studio"

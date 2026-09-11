@@ -1902,6 +1902,214 @@ def test_specialist_working_set_keeps_latest_successful_read_per_tool() -> None:
     ) + 1500
 
 
+@pytest.mark.parametrize("finish_with_write", [False, True])
+def test_specialist_working_set_keeps_distinct_documents_and_replaces_versions(
+    finish_with_write: bool,
+) -> None:
+    def build(cycles: int) -> str:
+        turns: list[SpecialistTurnRecord] = []
+        for index in range(cycles):
+            for document_id in ("asset-preparation", "storyboard-draft"):
+                turns.append(SpecialistTurnRecord(
+                    id=f"read-{document_id}-{index}",
+                    sequence=len(turns) + 1,
+                    tool_name="artifact.get_production_document",
+                    arguments={
+                        "project_id": "project-documents",
+                        "production_document_id": document_id,
+                        "version_id": f"{document_id}-v{index + 1}",
+                    },
+                    reason="Read the selected current document.",
+                    status=SpecialistTurnStatus.COMPLETED,
+                    result={
+                        "tool_id": "artifact.get_production_document",
+                        "status": "SUCCEEDED",
+                        "output": {
+                            "document": {"id": document_id},
+                            "version": {
+                                "id": f"{document_id}-v{index + 1}",
+                                "version": index + 1,
+                                "payload": {"body": f"BODY_{document_id}_{index:04d}"},
+                            },
+                        },
+                        "artifact_refs": [{
+                            "project_id": "project-documents",
+                            "artifact_type": "production_document",
+                            "artifact_id": document_id,
+                            "version": index + 1,
+                        }],
+                    },
+                ))
+        if finish_with_write:
+            turns.append(SpecialistTurnRecord(
+                id="write-draft",
+                sequence=len(turns) + 1,
+                tool_name="shot.append_storyboard_group",
+                arguments={"project_id": "project-documents"},
+                reason="Save the new draft without changing asset preparation.",
+                status=SpecialistTurnStatus.COMPLETED,
+                result={
+                    "tool_id": "shot.append_storyboard_group",
+                    "status": "SUCCEEDED",
+                    "output": {},
+                    "artifact_refs": [{
+                        "project_id": "project-documents",
+                        "artifact_type": "production_document",
+                        "artifact_id": "storyboard-draft",
+                        "version": cycles + 1,
+                    }],
+                },
+            ))
+        result = _specialist_working_set(
+            WorkOrder(
+                id="work-order-documents", parent_run_id="run-documents",
+                sender="production-manager", recipient_role="storyboard-worker",
+                objective="Use the current assets and storyboard together.",
+                why_now="Both documents inform the next group.",
+                specialist_turns=turns,
+            ),
+            [],
+            read_tool_ids=frozenset({"artifact.get_production_document"}),
+            write_tool_ids=frozenset({"shot.append_storyboard_group"}),
+        )
+        assert len(result.read_observations) == 1
+        assert result.read_observations[0].request_identifiers[
+            "production_document_id"
+        ] == "asset-preparation"
+        return result.model_dump_json()
+
+    small = build(2)
+    large = build(40)
+    assert large.count("BODY_asset-preparation_0039") == 1
+    assert large.count("BODY_storyboard-draft_0039") == (0 if finish_with_write else 1)
+    assert "BODY_asset-preparation_0000" not in large
+    assert "BODY_storyboard-draft_0000" not in large
+    def read_payload_size(value: str) -> int:
+        state = json.loads(value)
+        return len(json.dumps({
+            "read_observations": state["read_observations"],
+            "latest_handoff": state["latest_handoff"],
+        }))
+
+    assert read_payload_size(large) < read_payload_size(small) + 1000
+
+
+@pytest.mark.parametrize("selector", ["shot_id", "scene_id"])
+def test_current_content_reads_keep_distinct_scopes_without_replaying_indexes(
+    selector: str,
+) -> None:
+    turns: list[SpecialistTurnRecord] = []
+    content_key = selector.removesuffix("_id")
+    for cycle in range(30):
+        for identity in ("first", "second"):
+            turns.append(SpecialistTurnRecord(
+                id=f"read-{identity}-{cycle}", sequence=len(turns) + 1,
+                tool_name="artifact.read_current",
+                arguments={"project_id": "project-scoped", selector: identity},
+                reason="Compare the two selected current contents.",
+                status=SpecialistTurnStatus.COMPLETED,
+                result={
+                    "tool_id": "artifact.read_current", "status": "SUCCEEDED",
+                    "output": {"content": {
+                        "project_id": "project-scoped",
+                        "bible": {"body": "SHARED_INDEX_BODY"},
+                        "shot_index": [{"id": "first"}, {"id": "second"}],
+                        content_key: {"id": identity, "body": f"BODY_{identity}_{cycle}"},
+                    }},
+                    "artifact_refs": [],
+                },
+            ))
+    state = _specialist_working_set(
+        WorkOrder(
+            id="work-scoped", parent_run_id="run-scoped", sender="production-manager",
+            recipient_role="asset-planner", objective="Plan related prop states.",
+            why_now="Both selected shots are needed together.", specialist_turns=turns,
+        ),
+        [], read_tool_ids=frozenset({"artifact.read_current"}),
+    )
+    assert len(state.read_observations) == 1
+    assert state.read_observations[0].request_identifiers[selector] == "first"
+    serialized = state.model_dump_json()
+    assert serialized.count("BODY_first_29") == 1
+    assert serialized.count("BODY_second_29") == 1
+    assert "BODY_first_0" not in serialized
+    assert "BODY_second_0" not in serialized
+    assert serialized.count("SHARED_INDEX_BODY") == 1
+    assert len(turns[0].result["output"]["content"]["shot_index"]) == 2  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "tool_name, selectors",
+    [
+        ("artifact.get_asset_work_context", [
+            {"scope": {"mode": "WORK_ITEM", "work_item_ids": ["work-props"]}, "shot_ids": ["shot-2", "shot-3"]},
+            {"scope": {"mode": "WORK_ITEM", "work_item_ids": ["work-props"]}, "shot_ids": ["shot-12", "shot-13"]},
+        ]),
+        ("agent.read_context", [
+            {"context_ref": "saved-dialogue", "json_pointer": "/lines", "offset": 0, "limit": 20},
+            {"context_ref": "saved-dialogue", "json_pointer": "/lines", "offset": 20, "limit": 20},
+        ]),
+    ],
+)
+def test_scoped_tool_reads_keep_distinct_slices_and_pages(
+    tool_name: str, selectors: list[dict[str, JsonValue]],
+) -> None:
+    turns: list[SpecialistTurnRecord] = []
+    for cycle in range(30):
+        for part, selector in enumerate(selectors):
+            turns.append(SpecialistTurnRecord(
+                id=f"scope-read-{part}-{cycle}", sequence=len(turns) + 1,
+                tool_name=tool_name, arguments={"project_id": "project-slices", **selector},
+                reason="Combine the requested independent content slices.",
+                status=SpecialistTurnStatus.COMPLETED,
+                result={"tool_id": tool_name, "status": "SUCCEEDED",
+                        "output": {"body": f"SCOPE_BODY_{part}_{cycle}"}, "artifact_refs": []},
+            ))
+    state = _specialist_working_set(WorkOrder(
+        id="work-slices", parent_run_id="run-slices", sender="production-manager",
+        recipient_role="asset-planner", objective="Use all selected shots together.",
+        why_now="The mapping needs more than one scoped read.", specialist_turns=turns,
+    ), [], read_tool_ids=frozenset({tool_name}))
+    value = state.model_dump_json()
+    assert len(state.read_observations) == 1
+    assert value.count("SCOPE_BODY_0_29") == 1
+    assert value.count("SCOPE_BODY_1_29") == 1
+    assert "SCOPE_BODY_0_0" not in value
+    assert "SCOPE_BODY_1_0" not in value
+    assert "SCOPE_BODY_0_0" in str(turns[0].result)
+
+
+def test_saving_one_route_consumes_only_its_unit_context() -> None:
+    turns = [SpecialistTurnRecord(
+        id=f"unit-read-{unit}", sequence=sequence,
+        tool_name="route.get_generation_unit_context",
+        arguments={"project_id": "project-units", "request": {
+            "generation_plan_version_id": "plan-v1", "generation_unit_id": unit,
+        }},
+        reason="Read each unit before choosing its media.",
+        status=SpecialistTurnStatus.COMPLETED,
+        result={"tool_id": "route.get_generation_unit_context", "status": "SUCCEEDED",
+                "output": {"body": f"UNIT_BODY_{unit}"}, "artifact_refs": []},
+    ) for sequence, unit in enumerate(["first", "second"], 1)]
+    turns.append(SpecialistTurnRecord(
+        id="save-first-route", sequence=3, tool_name="route.plan_h3",
+        arguments={"project_id": "project-units", "request": {
+            "generation_plan_version_id": "plan-v1", "unit_ids": ["first"],
+        }},
+        reason="The first route is saved; the second still needs its inputs.",
+        status=SpecialistTurnStatus.COMPLETED,
+        result={"tool_id": "route.plan_h3", "status": "SUCCEEDED", "output": {}, "artifact_refs": []},
+    ))
+    state = _specialist_working_set(WorkOrder(
+        id="work-units", parent_run_id="run-units", sender="production-manager",
+        recipient_role="video-compiler", objective="Prepare both units.",
+        why_now="Both are ready.", specialist_turns=turns,
+    ), [], read_tool_ids=frozenset({"route.get_generation_unit_context"}))
+    value = state.model_dump_json()
+    assert "UNIT_BODY_first" not in value
+    assert value.count("UNIT_BODY_second") == 1
+
+
 @pytest.mark.parametrize(
     "write_tool_name",
     ["artifact.patch_asset_plan", "artifact.replace_asset_plan"],
@@ -4128,6 +4336,36 @@ def test_configured_specialist_agent_completes_work_order_round_trip(
     assert completed.run.snapshot.run.status == AgentRunStatus.COMPLETED
 
 
+def test_resumed_specialist_reads_latest_user_instructions_with_an_old_work_view(tmp_path: Path) -> None:
+    from short_drama.agent_runtime.model_input import ModelInputCompiler
+    from short_drama.production_manager import LanguageSpecialistAgent
+
+    service = _service(tmp_path)
+    pid = service.initialize_fixture().document.project.id
+    run_id, work_order_id, _ = _start_pending_delegation(service, pid)
+    old_view = service.get_agent_work_order(work_order_id)
+    old_view.work_order.working_notes = "The earlier layout is already complete."
+    client = FakeSpecialistLanguageClient()
+    agent = LanguageSpecialistAgent(client)
+    agent.context_compiler = ModelInputCompiler(service.agent_runtime.store)
+    agent.execute(old_view)
+    run = service.agent_runtime.store.get_run(run_id)
+    assert run is not None
+    run.latest_user_instructions = ["The two price labels overlap. Fix their layout and preserve the edit."]
+    run.goal_summary = "Finish the film with the corrected opening labels."
+    service.agent_runtime.store.save_run(run)
+    # Reuse the same WorkOrder view, as during a resumed schema/decision cycle.
+    agent.execute(old_view)
+    first, resumed = [json.loads(value) for value in client.inputs]
+    assert first["goal"]["latest_user_instructions"] == []
+    assert resumed["goal"]["latest_user_instructions"] == run.latest_user_instructions
+    assert resumed["goal"]["original_request"] == run.objective
+    assert resumed["goal"]["current_goal"] == run.goal_summary
+    assert resumed["work_order"]["working_notes"] == old_view.work_order.working_notes
+    assert client.inputs[-1].count(run.latest_user_instructions[0]) == 1
+    assert "优先于旧任务说明" in client.instructions[-1]
+
+
 def test_language_specialist_receives_append_only_work_order_progress(
     tmp_path: Path,
 ) -> None:
@@ -4940,7 +5178,7 @@ def test_replan_supersedes_work_order_that_already_returned_to_leader(
     assert cancelled_action.status == ActionStatus.CANCELLED
 
 
-def test_carried_work_order_waits_without_replanning_after_current_steps_finish(
+def test_finished_local_plan_replans_once_then_explicit_carried_wait_stays_idle(
     tmp_path: Path,
 ) -> None:
     client = SequencedLanguageClient([])
@@ -4957,6 +5195,11 @@ def test_carried_work_order_waits_without_replanning_after_current_steps_finish(
         service,
         project_id,
     )
+
+    client.responses.append(json.dumps({
+        "summary": "The new checkpoint is saved; wait for the retained specialist.",
+        "steps": [], "carried_work_order_ids": [work_order_id], "goal_complete": False,
+    }))
 
     replanned = service.replan_agent_run(
         run_id,
@@ -4988,9 +5231,27 @@ def test_carried_work_order_waits_without_replanning_after_current_steps_finish(
 
     assert waiting.run.snapshot.run.status == AgentRunStatus.WAITING
     assert waiting.run.snapshot.current_plan is not None
-    assert waiting.run.snapshot.current_plan.id == plan.id
+    assert waiting.run.snapshot.current_plan.id != plan.id
+    wait_plan_id = waiting.run.snapshot.current_plan.id
     assert service.agent_runtime.store.get_work_order(work_order_id) is not None
-    assert client.inputs == []
+    assert len(client.inputs) == 1
+    again = service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=1))
+    assert again.run.snapshot.run.status == AgentRunStatus.WAITING
+    assert again.run.snapshot.current_plan is not None
+    assert again.run.snapshot.current_plan.id == wait_plan_id
+    assert len(client.inputs) == 1
+
+    client.responses.append(json.dumps({
+        "summary": "Keep the same specialist while incorporating the latest request.",
+        "steps": [], "carried_work_order_ids": [work_order_id], "goal_complete": False,
+    }))
+    resumed = service.replan_agent_run(run_id, AgentRunReplanRequest(
+        reason="Incorporate the user's update while continuing the existing specialist.",
+    ))
+    assert resumed.snapshot.current_plan is not None
+    assert resumed.snapshot.current_plan.carried_work_order_ids == [work_order_id]
+    assert len(client.inputs) == 2
+    assert service.agent_runtime.store.get_work_order(work_order_id) is not None
 
 
 def test_carried_work_order_return_to_leader_automatically_replans(tmp_path: Path) -> None:
@@ -5169,7 +5430,7 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
     assert "导演的通用职责" in work_order.system_prompt
     assert "品牌宣传片" in work_order.system_prompt
     assert "导演动效语言" in work_order.system_prompt
-    assert "把已批准的文本意图转成可见的表演、调度、构图、动作、声音与时间设计" in (
+    assert "把当前采用的文本意图转成可见的表演、调度、构图、动作、声音与时间设计" in (
         work_order.system_prompt
     )
     assert work_order.context.artifacts[0].ref.artifact_id == shot.id

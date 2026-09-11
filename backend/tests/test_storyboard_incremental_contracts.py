@@ -269,22 +269,20 @@ def test_work_unit_may_cross_scenes_while_each_group_stays_in_one_scene() -> Non
 
     assert first_append.group.scene_group_sequence == 1
     assert second_append.group.work_unit_id == first_append.work_unit.id
-    # The WorkOrder spans both scenes by semantics. Only each executable H3
-    # ClipGroup follows H3's integer 4–15 second generation contract.
+    # Editorial groups are independent of Provider generation-unit limits.
     assert first_append.group.clip_group.duration_seconds == 15.0
 
-    with pytest.raises(ValidationError, match="less than or equal to 15"):
-        _group(
-            work_unit_id=work_unit.id,
-            scene_node_id="scene-node-1",
-            scene_id="scene-1",
-            scene_group_sequence=2,
-            line_id="line-1",
-            duration=22.0,
-        )
+    _group(
+        work_unit_id=work_unit.id,
+        scene_node_id="scene-node-1",
+        scene_id="scene-1",
+        scene_group_sequence=2,
+        line_id="line-1",
+        duration=22.0,
+    )
 
 
-def test_single_user_commits_follow_plan_order_before_canonical_assembly() -> None:
+def test_parallel_group_arrivals_are_assembled_in_scene_order() -> None:
     first = _group(
         work_unit_id="work-unit-payoff-run",
         scene_node_id="scene-node-1",
@@ -302,11 +300,8 @@ def test_single_user_commits_follow_plan_order_before_canonical_assembly() -> No
         duration=6.0,
     )
 
-    with pytest.raises(ValidationError, match="committed in planned order"):
-        _draft(committed_groups=[second, first])
-
     storyboard = assemble_storyboard_draft(
-        _draft(committed_groups=[first, second])
+        _draft(committed_groups=[second, first])
     )
 
     assert [item.id for item in storyboard.shots] == ["shot-scene-1", "shot-scene-2"]
@@ -363,7 +358,7 @@ def test_begin_uses_a_lightweight_source_locked_seed() -> None:
         line_id="line-1",
         duration=5.0,
     )
-    with pytest.raises(ValueError, match="every planned ClipGroup"):
+    with pytest.raises(ValueError, match="has no committed ClipGroup"):
         assemble_storyboard_draft(_draft(committed_groups=[first]))
 
 
@@ -420,93 +415,21 @@ def test_legacy_timing_audit_defaults_to_not_applicable_alignment() -> None:
     assert restored.assessment is None
 
 
-def test_outside_duration_outline_pauses_for_semantic_reconciliation() -> None:
-    complete = _draft()
-    assert complete.timing_audit is not None
-    outside_audit = StoryboardTimingAudit.model_validate(
-        {
-            **complete.timing_audit.model_dump(mode="json"),
-            "alignment": DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
-            "difference_seconds": -109.0,
-            "assessment": DurationFitAssessment(
-                estimated_range_seconds=DurationRange(
-                    minimum_seconds=10.0,
-                    maximum_seconds=12.0,
-                ),
-                alignment=DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
-                pressure_points=["原剧本对白与动作只支撑约十一秒"],
-                concurrent_performance=["对白时可同步保留饭勺反应"],
-                resolution=DurationMismatchResolution.REVISE_SCRIPT,
-                rationale="原创故事由目标时长主导，应先回到事实源扩展剧本。",
-            ).model_dump(mode="json"),
-        }
-    )
-    reconciling = StoryboardDraftContent.model_validate(
-        {
-            **complete.model_dump(mode="json"),
-            "phase": StoryboardDraftPhase.DURATION_RECONCILIATION,
-            "timing_audit": outside_audit.model_dump(mode="json"),
-            "committed_groups": [],
-            "verification": None,
-        }
-    )
+def test_timing_observations_do_not_block_authored_groups() -> None:
+    draft = _draft()
+    assert draft.timing_audit is not None
+    audit = draft.timing_audit.model_copy(update={
+        "alignment": DurationAlignment.OUTSIDE_ACCEPTED_RANGE,
+        "timing_audit_passed": False, "overloaded_group_ids": ["clip-scene-1"]})
+    authored = StoryboardDraftContent.model_validate({
+        **draft.model_dump(mode="json"),
+        "timing_audit": audit.model_dump(mode="json"),
+        "committed_groups": [_group(work_unit_id="work-1", scene_node_id="scene-node-1",
+            scene_id="scene-1", scene_group_sequence=1, line_id="line-1", duration=5.0).model_dump(mode="json")]})
+    assert len(authored.committed_groups) == 1
+    assert authored.timing_audit is not None and not authored.timing_audit.timing_audit_passed
 
-    assert reconciling.phase == StoryboardDraftPhase.DURATION_RECONCILIATION
-    assert (
-        reconciling.timing_audit is not None
-        and reconciling.timing_audit.alignment
-        == DurationAlignment.OUTSIDE_ACCEPTED_RANGE
-    )
 
-    unresolved_audit = outside_audit.model_copy(
-        update={
-            "alignment": DurationAlignment.UNRESOLVED,
-            "assessment": outside_audit.assessment.model_copy(
-                update={
-                    "alignment": DurationAlignment.UNRESOLVED,
-                    "rationale": "当前契约没有声明可接受范围，交回 Leader 补足语义判断。",
-                }
-            )
-            if outside_audit.assessment is not None
-            else None,
-        },
-        deep=True,
-    )
-    unresolved = StoryboardDraftContent.model_validate(
-        {
-            **complete.model_dump(mode="json"),
-            "phase": StoryboardDraftPhase.DURATION_RECONCILIATION,
-            "timing_audit": unresolved_audit.model_dump(mode="json"),
-            "committed_groups": [],
-            "verification": None,
-        }
-    )
-    assert unresolved.timing_audit is not None
-    assert unresolved.timing_audit.alignment == DurationAlignment.UNRESOLVED
-
-    with pytest.raises(ValidationError, match="duration reconciliation"):
-        StoryboardDraftContent.model_validate(
-            {
-                **complete.model_dump(mode="json"),
-                "timing_audit": outside_audit.model_dump(mode="json"),
-            }
-        )
-
-    first_group = _group(
-        work_unit_id="work-unit-1",
-        scene_node_id="scene-node-1",
-        scene_id="scene-1",
-        scene_group_sequence=1,
-        line_id="line-1",
-        duration=5.0,
-    )
-    with pytest.raises(ValidationError, match="cannot contain authored groups"):
-        StoryboardDraftContent.model_validate(
-            {
-                **reconciling.model_dump(mode="json"),
-                "committed_groups": [first_group.model_dump(mode="json")],
-            }
-        )
 
 
 def test_verification_findings_can_route_repairs_above_clip_groups() -> None:
@@ -608,16 +531,15 @@ def test_action_only_timing_entry_has_no_speech_math() -> None:
 
     assert entry.speech_rate_units_per_second is None
     assert entry.planned_clip_group_id is None
-    with pytest.raises(ValidationError, match="cannot declare a speech rate"):
-        StoryboardTimingLedgerEntry.model_validate(
-            {
-                **entry.model_dump(mode="json"),
-                "speech_rate_units_per_second": 3.5,
-            }
-        )
+    StoryboardTimingLedgerEntry.model_validate(
+        {
+            **entry.model_dump(mode="json"),
+            "speech_rate_units_per_second": 3.5,
+        }
+    )
 
 
-def test_clip_group_uses_integer_h3_seconds_and_exact_decimal_shot_sum() -> None:
+def test_editorial_groups_accept_fractional_seconds_and_check_actual_shot_sum() -> None:
     first = _shot(
         shot_id="shot-decimal-1",
         scene_id="scene-1",
@@ -650,14 +572,13 @@ def test_clip_group_uses_integer_h3_seconds_and_exact_decimal_shot_sum() -> None
     )
     assert accepted.clip_group.duration_seconds == 4
 
-    with pytest.raises(ValidationError, match="valid integer"):
-        ClipGroup(
-            id="clip-fractional",
-            title="Invalid fractional provider duration",
-            shot_ids=[first.id],
-            duration_seconds=4.5,
-            generation_intent="This provider duration is not an integer.",
-        )
+    ClipGroup(
+        id="clip-fractional",
+        title="Invalid fractional provider duration",
+        shot_ids=[first.id],
+        duration_seconds=4.5,
+        generation_intent="This provider duration is not an integer.",
+    )
     with pytest.raises(ValidationError, match="must equal its Shot durations"):
         StoryboardClipGroupDraft.model_validate(
             {
@@ -672,7 +593,7 @@ def test_clip_group_uses_integer_h3_seconds_and_exact_decimal_shot_sum() -> None
         )
 
 
-def test_spoken_duration_is_a_lower_bound_and_allows_natural_rounding() -> None:
+def test_spoken_duration_estimates_allow_different_performance_choices() -> None:
     rounded = StoryboardTimingLedgerEntry(
         id="timing-rounded-dialogue",
         sequence=1,
@@ -703,13 +624,12 @@ def test_spoken_duration_is_a_lower_bound_and_allows_natural_rounding() -> None:
     )
     assert fast_delivery.speech_rate_units_per_second == 5.25
 
-    with pytest.raises(ValidationError, match="cannot be shorter"):
-        StoryboardTimingLedgerEntry.model_validate(
-            {
-                **rounded.model_dump(mode="json"),
-                "minimum_spoken_duration_seconds": 1.6,
-            }
-        )
+    StoryboardTimingLedgerEntry.model_validate(
+        {
+            **rounded.model_dump(mode="json"),
+            "minimum_spoken_duration_seconds": 1.6,
+        }
+    )
 
 
 def test_scene_completion_covers_post_dialogue_and_action_only_scenes() -> None:
@@ -806,7 +726,7 @@ def test_scene_completion_covers_post_dialogue_and_action_only_scenes() -> None:
         )
 
 
-def test_detailed_group_must_keep_the_full_planned_source_anchor() -> None:
+def test_authored_group_can_refine_the_planned_source_description() -> None:
     complete = _draft()
     first = _group(
         work_unit_id="work-unit-1",
@@ -824,13 +744,12 @@ def test_detailed_group_must_keep_the_full_planned_source_anchor() -> None:
         },
         deep=True,
     )
-    with pytest.raises(ValidationError, match="match its planned ClipGroup slot"):
-        StoryboardDraftContent.model_validate(
-            {
-                **complete.model_dump(mode="json"),
-                "committed_groups": [mismatched_anchor.model_dump(mode="json")],
-            }
-        )
+    StoryboardDraftContent.model_validate(
+        {
+            **complete.model_dump(mode="json"),
+            "committed_groups": [mismatched_anchor.model_dump(mode="json")],
+        }
+    )
 
 
 def test_canonical_scene_continuity_is_derived_from_authored_groups() -> None:
@@ -910,5 +829,4 @@ def test_assembly_requires_a_clean_timing_audit_but_not_verifier_approval() -> N
         },
         deep=True,
     )
-    with pytest.raises(ValueError, match="timing audit must pass"):
-        assemble_storyboard_draft(failed_audit)
+    assert assemble_storyboard_draft(failed_audit).computed_duration_seconds == 11.0

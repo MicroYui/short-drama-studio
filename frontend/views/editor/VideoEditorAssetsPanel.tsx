@@ -671,7 +671,7 @@ export const VideoEditorAssetsPanel = forwardRef<VideoEditorAssetsPanelHandle, V
                       )}
 
                       <div className="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-black/70 text-[9px] text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {new Date(take.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {take.createdAt === undefined ? '—' : new Date(take.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
 
                       {takes.length > 1 && (
@@ -998,7 +998,7 @@ export const VideoEditorAssetsPanel = forwardRef<VideoEditorAssetsPanelHandle, V
               {visibleAssets.map(asset => {
                 const cl = getColorLabel(asset.colorLabel)
                 const name = asset.path ? asset.path.split(/[/\\]/).pop() || asset.path : asset.type === 'adjustment' ? 'Adjustment Layer' : asset.type.charAt(0).toUpperCase() + asset.type.slice(1)
-                const dateStr = new Date(asset.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                const dateStr = asset.createdAt === undefined ? '—' : new Date(asset.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
                 return (
                   <div
                     key={asset.id}

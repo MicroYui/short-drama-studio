@@ -74,7 +74,11 @@ export function shotMedia(project: ProjectAggregate, shot: ShotPlan) {
   const take = takes.find(item => item.is_selected && ((item.selected_shot_ids ?? []).includes(shot.id) || !(item.selected_shot_ids ?? []).length && item.shot_id === shot.id)) ?? project.takes.find(item => item.id === clip?.take_id) ?? takes.at(-1)
   const selectedClip = clip?.take_id === take?.id ? clip : undefined
   const window = take?.shot_windows?.find(item => item.shot_id === shot.id)
-  const materialDuration = window?.duration_seconds ?? selectedClip?.duration_seconds ?? Math.min(take?.duration_seconds ?? shot.duration_seconds, shot.duration_seconds)
+  const windowEnd = window ? window.source_in_seconds + window.duration_seconds : 0
+  const hasFollowingWindow = take?.shot_windows?.some(item => item.shot_id !== shot.id && item.source_in_seconds + item.duration_seconds > windowEnd + 0.001)
+  const materialDuration = window && take
+    ? Math.max(0, Math.min(take.duration_seconds, hasFollowingWindow ? windowEnd : take.duration_seconds) - window.source_in_seconds)
+    : selectedClip?.duration_seconds ?? Math.min(take?.duration_seconds ?? shot.duration_seconds, shot.duration_seconds)
   const editorial = currentEditorial(project)
   const timeline = editorial?.timelines.find(item => item.id === editorial.activeTimelineId)
   const adopted = (timeline?.clips ?? []).filter(item => item.type === 'video' && item.sourceShotId === shot.id).sort((a, b) => a.startTime - b.startTime)
@@ -84,7 +88,7 @@ export function shotMedia(project: ProjectAggregate, shot: ShotPlan) {
     if (last && item.startTime <= last.end + 0.001) last.end = Math.max(last.end, item.startTime + item.duration)
     else occurrences.push({ start: item.startTime, end: item.startTime + item.duration })
   }
-  const adoptedDuration = editorial ? occurrences[0] ? occurrences[0].end - occurrences[0].start : null : take ? materialDuration : null
+  const adoptedDuration = editorial ? occurrences[0] ? occurrences[0].end - occurrences[0].start : null : clip?.duration_seconds ?? null
   return {
     take,
     materialDuration: take ? materialDuration : null,
@@ -93,7 +97,7 @@ export function shotMedia(project: ProjectAggregate, shot: ShotPlan) {
     hasEditorial: Boolean(editorial && adopted.length),
     path: take?.media_path ?? clip?.media_path,
     sourceIn: selectedClip?.source_in_seconds ?? window?.source_in_seconds ?? 0,
-    duration: selectedClip?.duration_seconds ?? window?.duration_seconds ?? Math.min(take?.duration_seconds ?? shot.duration_seconds, shot.duration_seconds),
+    duration: window ? materialDuration : selectedClip?.duration_seconds ?? Math.min(take?.duration_seconds ?? shot.duration_seconds, shot.duration_seconds),
     thumbnail: take?.thumbnail_path,
   }
 }

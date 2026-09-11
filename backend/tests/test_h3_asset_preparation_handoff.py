@@ -221,8 +221,13 @@ def test_api_and_tool_persist_ready_handoff_across_restart(tmp_path: Path) -> No
         scope=list(ready.artifact_refs),
     )
     context = service.agent_runtime.work_order_context(work_order.id)
+    expected_refs = [
+        item.model_copy(update={"version": None})
+        if item.artifact_type in {"h3_route_plan", "h3_route_asset_preparation"}
+        else item for item in ready.artifact_refs
+    ]
     assert {item.ref.identity() for item in context.artifacts} == {
-        item.identity() for item in ready.artifact_refs
+        item.identity() for item in expected_refs
     }
     first_updated_at = ready.output["plan"]["updated_at"]
 
@@ -332,7 +337,9 @@ def test_route_plan_and_execute_tool_refs_follow_exact_plan_state(tmp_path: Path
         scope=list(executed.artifact_refs),
     )
     context = service.agent_runtime.work_order_context(order.id)
-    assert [item.ref for item in context.artifacts] == executed.artifact_refs
+    assert [item.ref for item in context.artifacts] == [
+        item.model_copy(update={"version": None}) for item in executed.artifact_refs
+    ]
 
 
 def test_stale_execute_cannot_overwrite_a_newer_asset_preparation(tmp_path: Path) -> None:
@@ -442,7 +449,7 @@ def test_rejected_handoff_and_exact_identity_checks(tmp_path: Path) -> None:
     assert stale.state_revision == rejected.plan.state_revision + 1
 
 
-def test_ready_requires_the_asset_current_approved_image(tmp_path: Path) -> None:
+def test_ready_requires_a_current_usable_image(tmp_path: Path) -> None:
     service = _service(tmp_path)
     project_id, shot_id, plan_id, preparation_id = (
         _pending_start_frame_preparation(service)
@@ -456,7 +463,7 @@ def test_ready_requires_the_asset_current_approved_image(tmp_path: Path) -> None
         ),
     )
 
-    with pytest.raises(WorkflowConflictError, match="current approved image"):
+    with pytest.raises(WorkflowConflictError, match="current usable image"):
         service.update_h3_route_asset_preparation(
             project_id,
             plan_id,

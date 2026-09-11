@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from enum import StrEnum
+import math
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -141,6 +143,12 @@ _REFERENCE_SHEET_LAYOUT_VIEW_SLOTS: dict[
         ),
         ("back body", frozenset({AssetStandardView.CHARACTER_BACK})),
     ),
+    AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1: (
+        ("front body", frozenset({AssetStandardView.CHARACTER_FRONT})),
+        ("left profile", frozenset({AssetStandardView.CHARACTER_LEFT_PROFILE})),
+        ("back body", frozenset({AssetStandardView.CHARACTER_BACK})),
+        ("right profile", frozenset({AssetStandardView.CHARACTER_RIGHT_PROFILE})),
+    ),
     AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2: (
         ("canonical face", frozenset({AssetStandardView.CANONICAL_MASTER})),
         ("front body", frozenset({AssetStandardView.CHARACTER_FRONT})),
@@ -178,8 +186,15 @@ class AssetReferenceSheetComposeRequest(DomainModel):
     descriptor: str = Field(min_length=1, max_length=4000)
     parent_version_id: str | None = None
     input_policy: AssetSheetInputPolicy = AssetSheetInputPolicy.EXPLICIT_VERSIONS
-    columns: int = Field(default=2, ge=1, le=3)
-    layout_profile: AssetLayoutProfile | None = None
+    columns: int = Field(default=2, ge=1)
+    layout_profile: AssetLayoutProfile | None = Field(
+        default=None,
+        description=(
+            "普通多物件拼板留空，布局由 columns 决定；例如四件道具使用 "
+            "strategy=LIGHTWEIGHT、columns=2、layout_profile=null。"
+            "命名布局用于角色或场景的固定视图槽；LIGHTWEIGHT_SINGLE 仅含一个格子。"
+        ),
+    )
     show_labels: bool = True
     background_color: str = Field(default="#FFFFFF", min_length=1, max_length=64)
     target_size: str | None = None
@@ -188,7 +203,10 @@ class AssetReferenceSheetComposeRequest(DomainModel):
     def validate_layout(self) -> AssetReferenceSheetComposeRequest:
         layout_profile = self.layout_profile
         views = [cell.view for cell in self.cells]
-        if len(views) != len(set(views)):
+        if (
+            self.strategy != AssetReferenceStrategy.LIGHTWEIGHT
+            and len(views) != len(set(views))
+        ):
             raise ValueError("Reference sheet views must be unique")
         if layout_profile is None and self.columns > len(self.cells):
             raise ValueError("Reference sheet columns cannot exceed its cell count")
@@ -197,6 +215,7 @@ class AssetReferenceSheetComposeRequest(DomainModel):
             expected_cells = {
                 AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9: 4,
                 AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2: 6,
+                AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1: 4,
                 AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2: 4,
                 AssetLayoutProfile.PROP_MASTER_SINGLE: 1,
                 AssetLayoutProfile.LIGHTWEIGHT_SINGLE: 1,
@@ -247,6 +266,7 @@ class AssetReferenceSheetComposeRequest(DomainModel):
         if layout_profile in {
             AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9,
             AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2,
+            AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1,
         } and self.strategy != AssetReferenceStrategy.CHARACTER_STANDARD_VIEWS:
             raise ValueError("Character sheet layouts require CHARACTER_STANDARD_VIEWS")
         if (
@@ -325,11 +345,25 @@ class AssetTextPlateComposeRequest(DomainModel):
     size: str = "1536x864"
     background_color: str = Field(default="#F5F1E8", min_length=1, max_length=64)
     foreground_color: str = Field(default="#171717", min_length=1, max_length=64)
+    content_box: tuple[float, float, float, float] = Field(default=(0, 0, 1, 1), description="Normalized x/y/width/height of the text area. Set a full-frame transparent background with #00000000 for an overlay.")
+    text_align: Literal["left", "center", "right"] = "left"
+    vertical_align: Literal["top", "center", "bottom"] = "center"
+    stroke_width: int = Field(default=0, ge=0, le=16)
+    stroke_color: str = "#000000"
     title: str | None = Field(default=None, min_length=1, max_length=500)
     exact_lines: list[str] = Field(default_factory=list[str], max_length=64)
     layout_description: str = Field(min_length=1, max_length=2000)
     descriptor: str = Field(min_length=1, max_length=4000)
     parent_version_id: str | None = None
+
+    @field_validator("content_box")
+    @classmethod
+    def validate_content_box(cls, value: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        x, y, width, height = value
+        if (not all(math.isfinite(item) for item in value) or x < 0 or y < 0
+                or width <= 0 or height <= 0 or x + width > 1 or y + height > 1):
+            raise ValueError("Text content_box must stay inside the normalized canvas")
+        return value
 
     @field_validator("size")
     @classmethod

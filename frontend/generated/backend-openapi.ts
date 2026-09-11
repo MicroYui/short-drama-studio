@@ -2469,6 +2469,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/studio/projects/{project_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Changes */
+        get: operations["read_changes_api_short_drama_studio_projects__project_id__changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/short-drama/studio/projects/{project_id}/changes/{change_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Text Change */
+        post: operations["decide_text_change_api_short_drama_studio_projects__project_id__changes__change_id__items__item_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/studio/projects/{project_id}/editorial": {
         parameters: {
             query?: never;
@@ -3743,7 +3777,7 @@ export interface components {
          * @description Explicit machine-reference layout selected by the Asset Agent.
          * @enum {string}
          */
-        AssetLayoutProfile: "LIGHTWEIGHT_SINGLE" | "DRAMA_CHARACTER_DUAL_ZONE_16_9" | "CHARACTER_SIX_VIEW_3X2" | "SCENE_FOUR_DIRECTION_2X2" | "PROP_MASTER_SINGLE";
+        AssetLayoutProfile: "LIGHTWEIGHT_SINGLE" | "DRAMA_CHARACTER_DUAL_ZONE_16_9" | "CHARACTER_SIX_VIEW_3X2" | "CHARACTER_FOUR_VIEW_4X1" | "SCENE_FOUR_DIRECTION_2X2" | "PROP_MASTER_SINGLE";
         /**
          * AssetMediaType
          * @enum {string}
@@ -3868,6 +3902,21 @@ export interface components {
         AssetTextPlate: {
             /** Background Color */
             background_color: string;
+            /**
+             * Content Box
+             * @default [
+             *       0,
+             *       0,
+             *       1,
+             *       1
+             *     ]
+             */
+            content_box: [
+                number,
+                number,
+                number,
+                number
+            ];
             /** Exact Lines */
             exact_lines?: string[];
             /** Font Family */
@@ -3878,8 +3927,30 @@ export interface components {
             layout_description: string;
             /** Size */
             size: string;
+            /**
+             * Stroke Color
+             * @default #000000
+             */
+            stroke_color: string;
+            /**
+             * Stroke Width
+             * @default 0
+             */
+            stroke_width: number;
+            /**
+             * Text Align
+             * @default left
+             * @enum {string}
+             */
+            text_align: "left" | "center" | "right";
             /** Title */
             title?: string | null;
+            /**
+             * Vertical Align
+             * @default center
+             * @enum {string}
+             */
+            vertical_align: "top" | "center" | "bottom";
         };
         /** AssetVersion */
         AssetVersion: {
@@ -3975,6 +4046,10 @@ export interface components {
             /** Semantic Provider */
             semantic_provider?: string | null;
             semantic_status: components["schemas"]["SemanticReviewStatus"];
+            /** Source Editorial Revision */
+            source_editorial_revision?: number | null;
+            /** Source Editorial Timeline Id */
+            source_editorial_timeline_id?: string | null;
             /** Source Script Version Id */
             source_script_version_id: string;
             /** Speaker Checks */
@@ -5211,10 +5286,17 @@ export interface components {
              * @default false
              */
             repairs_complete: boolean;
+            review_manifest?: components["schemas"]["TimelineManifest"] | null;
             /** Scene Reviews */
             scene_reviews?: components["schemas"]["SceneEpisodeReview"][];
             /** Semantic Model */
             semantic_model?: string | null;
+            /** Source Editorial Project */
+            source_editorial_project?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Source Editorial Revision */
+            source_editorial_revision?: number | null;
             /** Source Script Version Id */
             source_script_version_id: string;
             status: components["schemas"]["EpisodeReviewStatus"];
@@ -8724,6 +8806,10 @@ export interface components {
             shots: components["schemas"]["ShotPlan-Output"][];
             /** Storyboard Document Id */
             storyboard_document_id?: string | null;
+            /** Studio Changes */
+            studio_changes?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
             /** Studio Exports */
             studio_exports?: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -10200,10 +10286,23 @@ export interface components {
             required_tags?: string[];
             /** Subject Asset Id */
             subject_asset_id: string;
-            /** Text End */
+            /**
+             * Text End
+             * @description 正文 @ 引用的结束 Unicode 字符位置（不包含终点），与 text_start 成对。时段内引用放到对应 timeline_beat.references；它的偏移基于该时段的 field 文本。
+             */
             text_end?: number | null;
-            /** Text Start */
+            /**
+             * Text Start
+             * @description 正文 @ 引用在 field 指定文本中的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数）。新分镜中的具体人物、场景或道具引用应定位到相应文字并填写起止位置；仅不对应任何正文文字的整镜构图参考才省略。
+             */
             text_start?: number | null;
+            /**
+             * Usage
+             * @description GENERATION 表示视频模型实际需要接收的参考媒体；EDITORIAL 表示剪辑合成时使用的图片、标题或文字图版，保留正文绑定和预览，不自动上传给视频模型。按本次实际用途显式选择，不从用途文字猜测。
+             * @default GENERATION
+             * @enum {string}
+             */
+            usage: "GENERATION" | "EDITORIAL";
         };
         /** ShotReferencePlanUpdateRequest */
         "ShotReferencePlanUpdateRequest-Input": {
@@ -10864,11 +10963,7 @@ export interface components {
         };
         /**
          * StoryboardClipGroupOutline
-         * @description One immutable row in the private whole-episode ClipGroup ledger.
-         *
-         *     The Agent derives this outline from the dialogue/action timing scratch pass
-         *     before any detailed Shot is authored. It is a factual authoring plan, not a
-         *     target-duration allocation: each later commit must land on the exact row.
+         * @description Optional planning notes for a provider-independent editorial group.
          */
         StoryboardClipGroupOutline: {
             /** Continuity In */
@@ -11255,13 +11350,29 @@ export interface components {
         StoryboardPatchRequest: {
             /** Base Version Id */
             base_version_id: string;
-            /** Clip Groups */
+            /** Bible Version Id */
+            bible_version_id?: string | null;
+            /**
+             * Clip Groups
+             * @description 按稳定 ClipGroup.id 更新选中的现有组，未传入的组及其顺序保持不变。增加、删除或重排分组使用完整 StoryboardReplaceRequest。
+             */
             clip_groups?: components["schemas"]["ClipGroup"][] | null;
             /** Notes */
             notes?: string[] | null;
             origin: components["schemas"]["ProductionDocumentOrigin"];
+            /** Production Spec Document Id */
+            production_spec_document_id?: string | null;
+            /** Production Spec Version Id */
+            production_spec_version_id?: string | null;
             /** Replacements */
             replacements?: components["schemas"]["StoryboardShotReplacement"][];
+            /**
+             * Scene Nodes
+             * @description 按稳定场次 ID 更新已读的场次摘要与衔接，未传入场次保留。
+             */
+            scene_nodes?: components["schemas"]["StoryboardSceneNode"][] | null;
+            /** Script Version Id */
+            script_version_id?: string | null;
             /** Source Artifact Refs */
             source_artifact_refs?: components["schemas"]["ProductionDocumentArtifactRef"][];
             /** Timing Notes */
@@ -11323,7 +11434,10 @@ export interface components {
              * @description The current Script scene's upstream pacing reference. It informs semantic redistribution across scenes but is not a hard scene cap; the episode DurationContract remains authoritative.
              */
             source_target_duration_seconds?: number | null;
-            /** Summary */
+            /**
+             * Summary
+             * @default
+             */
             summary: string;
         };
         /** StoryboardShotReplacement */
@@ -11499,6 +11613,39 @@ export interface components {
             jobs: components["schemas"]["StudioJob"][];
             /** Workers */
             workers?: components["schemas"]["StudioWorker"][];
+        };
+        /** StudioChangeDecision */
+        StudioChangeDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accept" | "reject";
+        };
+        /** StudioChangeResult */
+        StudioChangeResult: {
+            change: components["schemas"]["StudioChangeSet"];
+            project: components["schemas"]["ProjectAggregate"];
+        };
+        /** StudioChangeSet */
+        StudioChangeSet: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Items */
+            items: components["schemas"]["StudioTextChange"][];
+            /** Project Id */
+            project_id: string;
+            /** Run Id */
+            run_id?: string | null;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Title */
+            title: string;
         };
         /** StudioEditorial */
         StudioEditorial: {
@@ -11709,18 +11856,27 @@ export interface components {
         };
         /** StudioSceneSave */
         StudioSceneSave: {
+            /**
+             * Affected Shot Ids
+             * @description After reading current shots, identify which shots need a visual update for this scene edit. Omit when impact is unknown to refresh all shots in the scene. An empty list means no visual change. Shots using changed structured dialogue are always included.
+             */
+            affected_shot_ids?: string[] | null;
             /** Expected Text */
             expected_text?: string | null;
             /** Heading */
             heading: string;
             /** Lines */
             lines?: components["schemas"]["ScriptLine"][] | null;
+            /** Narrative Purpose */
+            narrative_purpose?: string | null;
             /** Scene Id */
             scene_id?: string | null;
             /** Screenplay Text */
             screenplay_text: string;
             /** Summary */
             summary?: string | null;
+            /** Target Duration Seconds */
+            target_duration_seconds?: number | null;
         };
         /** StudioScope */
         StudioScope: {
@@ -11760,6 +11916,55 @@ export interface components {
             expected_revision: number;
             shot: components["schemas"]["ShotPlan-Input"];
         };
+        /** StudioTextChange */
+        StudioTextChange: {
+            /**
+             * Affected Shot Ids
+             * @description For a scene edit, identify affected shots after reading their current content. Unlisted shots in that scene keep their current media and manual edits. Omit if the impact is unknown; use [] for no visual change. Shots using changed dialogue are always included.
+             */
+            affected_shot_ids?: string[] | null;
+            /** After */
+            after: string;
+            /**
+             * Before
+             * @description Exact, uniquely identifiable text in the current field. Include enough surrounding text to disambiguate.
+             */
+            before: string;
+            /** Decided At */
+            decided_at?: string | null;
+            /**
+             * Explanation
+             * @default
+             */
+            explanation: string;
+            /**
+             * Field
+             * @description scene: screenplay_text/heading/summary; shot: visual/camera/framing/audio_intent or timeline_beats.<zero-based index>.<text field>
+             */
+            field: string;
+            /** Id */
+            id: string;
+            /**
+             * Lines
+             * @description Only changed/new dialogue lines from this edit. Keep stable IDs. On acceptance, other lines remain unchanged.
+             */
+            lines?: components["schemas"]["ScriptLine"][] | null;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "scene" | "shot";
+            /** Target Id */
+            target_id: string;
+            /** Title */
+            title: string;
+        };
         /** StudioTimelineSave */
         StudioTimelineSave: {
             /** Anchor Clip Id */
@@ -11778,6 +11983,10 @@ export interface components {
         StudioWorker: {
             /** Id */
             id: string;
+            /** Latest Reason */
+            latest_reason?: string | null;
+            /** Latest Tool */
+            latest_tool?: string | null;
             /** Next Owner */
             next_owner?: string | null;
             /** Objective */
@@ -11786,6 +11995,10 @@ export interface components {
             role: string;
             /** Run Id */
             run_id: string;
+            /** Skill Role */
+            skill_role?: string | null;
+            /** Stage */
+            stage?: string | null;
             /** Status */
             status: string;
             /** Summary */
@@ -19088,6 +19301,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudioActivity"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    read_changes_api_short_drama_studio_projects__project_id__changes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioChangeSet"][];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
+    decide_text_change_api_short_drama_studio_projects__project_id__changes__change_id__items__item_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                change_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudioChangeDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioChangeResult"];
                 };
             };
             /** @description Client Error */

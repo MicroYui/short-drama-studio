@@ -149,6 +149,7 @@ def build_image_provider_capability(
                 AssetLayoutProfile.DRAMA_CHARACTER_DUAL_ZONE_16_9.value: "16:9",
                 AssetLayoutProfile.SCENE_FOUR_DIRECTION_2X2.value: "16:9",
                 AssetLayoutProfile.CHARACTER_SIX_VIEW_3X2.value: "3:2",
+                AssetLayoutProfile.CHARACTER_FOUR_VIEW_4X1.value: "16:9",
                 AssetLayoutProfile.PROP_MASTER_SINGLE.value: "1:1",
             },
             note=(

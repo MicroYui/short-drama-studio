@@ -174,7 +174,8 @@ def test_ai_short_drama_schema_adapter_composes_with_official_method() -> None:
     assert format_only.selected_method_skill_ids == ()
     assert "AI 短剧（本地格式适配）" in format_only.text
     assert "`AI_SHORT_DRAMA` 数据边界" in format_only.text
-    assert "Leader → Worker → Verifier" in format_only.text
+    assert "Leader → Worker → Verifier" not in format_only.text
+    assert "无需先获得 Verifier 的通过标记" in format_only.text
     assert "## 全局视觉风格锁" not in format_only.text
     assert "皮克斯感 3D 卡通渲染" not in format_only.text
 
@@ -351,16 +352,14 @@ def test_drama_method_role_sources_include_storyboard_execution_and_verification
         ]
 
     director_prompt = drama.role_prompts[ProductionSkillRole.DIRECTOR]
-    assert "## 镜头组：拆分整集" in director_prompt
-    assert "## 对白：语速、负载和拆分" in director_prompt
+    assert "## 镜头语言服务故事" in director_prompt
+    assert "## 表演设计" in director_prompt
 
     verifier_prompt = drama.role_prompts[
         ProductionSkillRole.REVISION_VERIFIER
     ]
-    assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" in (
-        verifier_prompt
-    )
-    assert "## storyboard-confirm 前分组检查清单" in verifier_prompt
+    assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" not in verifier_prompt
+    assert "## 渐进分镜与可选检查" in verifier_prompt
     assert "## 跨镜头空间连续性" in verifier_prompt
     assert "## 状态连续性" in verifier_prompt
 
@@ -395,9 +394,8 @@ def test_drama_method_compiles_only_the_explicit_stage_and_role_sections() -> No
         asset_planner.text
     )
     assert "## 剧本落画布" not in asset_planner.text
-    assert "## storyboard-confirm 前分组检查清单" in (
-        storyboard_verifier.text
-    )
+    assert "## 渐进分镜与可选检查" in storyboard_verifier.text
+    assert "## storyboard-confirm 前分组检查清单" not in storyboard_verifier.text
     assert "## 剧本落画布" not in storyboard_verifier.text
     assert "## 剧本落画布" in script_verifier.text
     assert "## storyboard-confirm 前分组检查清单" not in (
