@@ -9,7 +9,7 @@ import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from pydantic import JsonValue
 
 from short_drama.document_merge import merge_current_content
@@ -47,6 +47,9 @@ from short_drama.visual_input_quality import (
     KeyframeComparisonReport,
     ReferenceVisualRerankReport,
 )
+
+if TYPE_CHECKING:
+    from short_drama.h3_group_operation import H3GroupOperation
 
 
 _RUNNABLE_STATUSES: tuple[TaskStatus, ...] = (
@@ -276,6 +279,15 @@ class ShortDramaRepository:
                     ON h3_route_plans(project_id, version);
                 CREATE INDEX IF NOT EXISTS idx_h3_route_plans_project_updated
                     ON h3_route_plans(project_id, updated_at);
+
+                CREATE TABLE IF NOT EXISTS h3_group_operations (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    updated_at TEXT NOT NULL,
+                    record_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_h3_group_operations_project_updated
+                    ON h3_group_operations(project_id, updated_at);
 
                 CREATE TABLE IF NOT EXISTS planning_runs (
                     id TEXT PRIMARY KEY,
@@ -1075,7 +1087,7 @@ class ShortDramaRepository:
         return 0 if row is None else cast(int, row["count"])
 
     def recover_interrupted_submissions(self) -> int:
-        """Convert pre-acknowledgement submissions to the explicit reconciliation state."""
+        """Recover interrupted submits, preserving explicitly unsubmitted H3 inputs."""
 
         recovered = 0
         with self._lock:
@@ -1086,6 +1098,12 @@ class ShortDramaRepository:
                 ).fetchall()
             for row in rows:
                 task = GenerationTask.model_validate_json(cast(str, row["record_json"]))
+                if task.provider == "minimax":
+                    run = self.get_provider_run(task.id)
+                    if run is not None and run.submission_attempt_state == "PREPARED":
+                        # This marker is committed before the task becomes runnable
+                        # for submit, and replaced before the first provider POST.
+                        continue
                 task.status = TaskStatus.SUBMIT_UNKNOWN
                 task.error_code = "PROCESS_INTERRUPTED_DURING_SUBMIT"
                 task.error_message = "提交阶段进程中断，需要先按请求指纹对账。"
@@ -1703,6 +1721,31 @@ class ShortDramaRepository:
             EpisodeReviewReport.model_validate_json(cast(str, row["record_json"]))
             for row in rows
         ]
+
+    def save_h3_group_operation(self, operation: H3GroupOperation) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """INSERT INTO h3_group_operations(id, project_id, updated_at, record_json)
+                   VALUES(?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+                   updated_at=excluded.updated_at, record_json=excluded.record_json""",
+                (operation.id, operation.project_id, operation.updated_at, operation.model_dump_json()),
+            )
+
+    def get_h3_group_operation(self, operation_id: str) -> H3GroupOperation | None:
+        from short_drama.h3_group_operation import H3GroupOperation
+
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT record_json FROM h3_group_operations WHERE id=?", (operation_id,)).fetchone()
+        return H3GroupOperation.model_validate_json(cast(str, row["record_json"])) if row is not None else None
+
+    def list_h3_group_operations(self, project_id: str) -> list[H3GroupOperation]:
+        from short_drama.h3_group_operation import H3GroupOperation
+
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT record_json FROM h3_group_operations WHERE project_id=? ORDER BY updated_at, id", (project_id,),
+            ).fetchall()
+        return [H3GroupOperation.model_validate_json(cast(str, row["record_json"])) for row in rows]
 
     def save_h3_route_plan(self, plan: H3ProductionRoutePlan) -> None:
         with self._lock, self._connection() as connection:

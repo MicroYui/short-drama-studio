@@ -230,8 +230,59 @@ class AgentRuntimeStore:
                 (memory.run_id, _timestamp(memory.updated_at), memory.model_dump_json()),
             )
 
+    def remember_tool_schema_ids(
+        self, run_id: str, tool_ids: Sequence[str], *, work_order_id: str | None = None,
+    ) -> list[str]:
+        """Merge discovery state without overwriting concurrent lifecycle updates.
+
+        Only IDs are durable: every model request resolves current Registry
+        definitions. BEGIN IMMEDIATE also serializes other store instances.
+        """
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            table = "agent_runs" if work_order_id is None else "agent_work_orders"
+            record_id = run_id if work_order_id is None else work_order_id
+            row = connection.execute(
+                f"SELECT record_json FROM {table} WHERE id = ?", (record_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown schema owner: {record_id}")
+            record = cast(dict[str, JsonValue], json.loads(cast(str, row["record_json"])))
+            if work_order_id is not None and record.get("parent_run_id") != run_id:
+                raise ValueError("Tool discovery WorkOrder belongs to another run")
+            existing = record.get("loaded_tool_schema_ids")
+            current = [item for item in existing if isinstance(item, str)] if isinstance(existing, list) else []
+            selected = list(dict.fromkeys([*current, *tool_ids]))
+            if selected != current:
+                record["loaded_tool_schema_ids"] = cast(JsonValue, selected)
+                connection.execute(
+                    f"UPDATE {table} SET record_json = ? WHERE id = ?",
+                    (json.dumps(record, ensure_ascii=False), record_id),
+                )
+            return selected
+
+    @staticmethod
+    def _retain_tool_schema_ids(
+        connection: sqlite3.Connection, table: str, record: AgentRun | WorkOrder,
+    ) -> None:
+        # A caller may have loaded its lifecycle object before discovery finished.
+        # These monotonically accumulated IDs must survive that later save.
+        row = connection.execute(
+            f"SELECT record_json FROM {table} WHERE id = ?", (record.id,),
+        ).fetchone()
+        if row is not None:
+            stored = cast(dict[str, JsonValue], json.loads(cast(str, row["record_json"])))
+            previous = stored.get("loaded_tool_schema_ids")
+            if isinstance(previous, list):
+                record.loaded_tool_schema_ids = list(dict.fromkeys([
+                    *[item for item in previous if isinstance(item, str)],
+                    *record.loaded_tool_schema_ids,
+                ]))
+
     def save_run(self, run: AgentRun) -> None:
         with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._retain_tool_schema_ids(connection, "agent_runs", run)
             cursor = connection.execute(
                 """
                 UPDATE agent_runs
@@ -620,6 +671,8 @@ class AgentRuntimeStore:
         if self.get_run(work_order.parent_run_id) is None:
             raise KeyError(f"Unknown agent run: {work_order.parent_run_id}")
         with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._retain_tool_schema_ids(connection, "agent_work_orders", work_order)
             connection.execute(
                 """
                 INSERT INTO agent_work_orders(
@@ -704,6 +757,7 @@ class AgentRuntimeStore:
         """Save a specialist result and update its work order in one transaction."""
 
         with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT record_json FROM agent_work_orders WHERE id = ?",
                 (result.work_order_id,),

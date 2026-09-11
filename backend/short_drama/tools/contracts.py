@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Callable, Generic, TypeVar
+from typing import Callable, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from short_drama.agent_runtime.models import ArtifactRef
 
@@ -63,9 +63,31 @@ class ToolDescriptor(ToolModel):
     output_schema: dict[str, object]
 
 
+class ToolErrorDetail(ToolModel):
+    path: str
+    code: str
+    message: str
+    identifiers: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    constraints: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+
+
 class ToolError(ToolModel):
     kind: str
     message: str
+    phase: Literal["LOOKUP", "VALIDATION", "EXECUTION", "OUTPUT_VALIDATION"] | None = None
+    scope: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    details: list[ToolErrorDetail] = Field(default_factory=list[ToolErrorDetail])
+    suggested_actions: list[str] = Field(default_factory=list[str])
+    retryable: bool | None = None
+
+
+class ToolWriteReceipt(ToolModel):
+    """Facts returned after one operation, distinct from creative goal completion."""
+
+    operation_completed: Literal[True] = True
+    artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    current_state: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    changed_ids: dict[str, list[str]] = Field(default_factory=dict[str, list[str]])
 
 
 class ToolResult(ToolModel):
@@ -77,6 +99,7 @@ class ToolResult(ToolModel):
     artifact_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     warnings: list[str] = Field(default_factory=list[str])
     error: ToolError | None = None
+    receipt: ToolWriteReceipt | None = None
 
 
 InputT = TypeVar("InputT", bound=BaseModel)
@@ -90,6 +113,7 @@ class ToolExecution(Generic[OutputT]):
     output: OutputT
     artifact_refs: tuple[ArtifactRef, ...] = ()
     warnings: tuple[str, ...] = ()
+    receipt: ToolWriteReceipt | None = None
 
 
 @dataclass(frozen=True)

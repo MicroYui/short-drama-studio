@@ -504,10 +504,16 @@ def _load_role_prompts(
 
 def load_shared_role_prompts(
     root: Path = DEFAULT_SHARED_SKILL_ROOT,
+    *,
+    stage: ProductionPromptStage | None = None,
 ) -> dict[ProductionSkillRole, str]:
     """Load the medium-neutral Chinese responsibility of every Agent role."""
 
-    return _load_role_prompts(root)
+    prompts = _load_role_prompts(root)
+    if stage == ProductionPromptStage.POST:
+        _metadata, post_director = _read_markdown(root / "roles" / "post_director.md")
+        prompts[ProductionSkillRole.DIRECTOR] = post_director
+    return prompts
 
 
 def _load_composable_skill(skill_directory: Path) -> ComposableProductionSkill:

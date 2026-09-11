@@ -773,7 +773,8 @@ def test_language_api_compiles_h3_prompt_without_submitting_video(
     instructions, input_text = fake.generations[0]
     assert "visible_assets 是本镜头可见资产的权威清单" in instructions
     assert '"route": "REFERENCE"' in input_text
-    assert '"source_prompt"' in input_text
+    assert '"source_prompt"' not in input_text
+    assert '"locked_shot"' in input_text
     assert service.list_h3_provider_runs(project.document.project.id).runs == []
 
 
@@ -803,7 +804,9 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
     ] == ["林夏"]
     assert payload["visible_asset_bible_for_disambiguation_only"]["locations"] == []
     assert payload["visible_asset_bible_for_disambiguation_only"]["props"] == []
-    assert payload["previous_shot_terminal_state"] == {
+    assert payload["previous_shot_planned_terminal_state"] == {
+        "evidence_kind": "PLANNED_ONLY",
+        "shot_id": document.shots[0].id,
         "sequence": 1,
         "visual": "雨夜便利店外，镜头靠近带雨痕的玻璃门",
         "framing": "大全景",
@@ -813,11 +816,12 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
         "eyeline": "双方视线保持同一对话轴",
         "transition_out": "硬切",
     }
+    assert payload["actual_previous_media_boundary"] is None
     assert payload["production_rules"] == {
         "route_selected_upstream": True,
         "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
         "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
-        "continuity_handoff": "从上一镜终态自然承接，但不得携入当前镜头未列出的可见资产。",
+        "continuity_handoff": "有实际连续性依赖时使用已观察的采用媒体边界；未提供观察时只保留计划意图，不携入当前镜头未列出的可见资产。",
     }
 
     document.project.production_profile = ProductionProfile.GENERAL_VIDEO

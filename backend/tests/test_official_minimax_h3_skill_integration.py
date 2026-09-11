@@ -147,19 +147,19 @@ def test_retained_sources_keep_their_upstream_inventory_and_attribution() -> Non
             "method.minimalist_product_ad",
             "minimalist-product-ad-generator",
             "启动问询是强制 Gate",
-            "## 步骤 1：素材检查与产品事实摘要",
+            "## 产品事实与叙事",
         ),
         (
             "method.animation_short",
             "3d-animation-short-generator",
             "同一镜连续 3 次失败后",
-            "## 全局视觉风格锁",
+            "## 视觉设定",
         ),
         (
             "method.lyric_video",
             "music-video-subtitle-generator",
             "必须写入 Hub 画布文本节点",
-            "## 核心原则",
+            "## 创意与音乐依据",
         ),
     ),
 )
@@ -225,13 +225,13 @@ def test_official_3d_loads_only_explicit_sections_for_each_supported_role() -> N
 
     concept = prompts[ProductionSkillRole.CONCEPT]
     assert "<official_method_reference" not in concept
-    assert concept.count("## 全局视觉风格锁") == 1
-    assert "## 全局视觉风格锁" in concept
-    assert "## STEP 5：六列标准镜头信息表" not in concept
+    assert concept.count("## 视觉设定") == 1
+    assert "## 视觉设定" in concept
+    assert "## 镜头规划" not in concept
 
     planner = prompts[ProductionSkillRole.PLANNER]
-    assert planner.count("## STEP 5：六列标准镜头信息表") == 1
-    assert "## STEP 5：六列标准镜头信息表" in planner
+    assert planner.count("## 镜头规划") == 1
+    assert "## 镜头规划" in planner
     assert "## STEP 5.5：镜头表自检门（强制）" not in planner
 
     assert prompts[ProductionSkillRole.CRITIC] == ""
@@ -239,18 +239,24 @@ def test_official_3d_loads_only_explicit_sections_for_each_supported_role() -> N
 
     verifier = prompts[ProductionSkillRole.REVISION_VERIFIER]
     assert "<official_method_reference" not in verifier
-    assert "## STEP 9：最终复盘" in verifier
-    assert "## 步骤 9：最终审核" in verifier
+    assert "## 当前范围验收" in verifier
+    assert "最小处理方式" in verifier
+    assert "## STEP 9：最终复盘" not in verifier
+    assert "## 步骤 9：最终审核" not in verifier
 
     compiler = prompts[ProductionSkillRole.VIDEO_PROMPT_COMPILER]
     assert "<official_method_reference" not in compiler
-    assert "### 模型相关 prompt 形态" in compiler
+    assert "## 视频编译" in compiler
+    assert "挤压拉伸、跟随、节奏停顿和轮廓对比" in compiler
+    assert "### 模型相关 prompt 形态" not in compiler
     assert "# 视频模型选择与提示词塑形" not in compiler
     assert "# 生成失败与漂移回退策略" not in compiler
 
     episode_reviewer = prompts[ProductionSkillRole.EPISODE_REVIEWER]
-    assert "## STEP 9：最终复盘" in episode_reviewer
-    assert "## 步骤 9：最终审核" in episode_reviewer
+    assert "## 后期判断" in episode_reviewer
+    assert "预备动作是否保留" in episode_reviewer
+    assert "## STEP 9：最终复盘" not in episode_reviewer
+    assert "## 步骤 9：最终审核" not in episode_reviewer
 
     assert all(
         "# 3D动画短片生成器" not in prompt
@@ -270,8 +276,8 @@ def test_ai_short_drama_and_official_3d_are_composable_but_not_coupled() -> None
     assert "Leader 依据用户目标安排分工" in unselected.text
     assert "独立检查按实际需要安排，也可以由制作者自查" in unselected.text
     assert "Leader → Worker → Verifier" not in unselected.text
-    assert "## 全局视觉风格锁" not in unselected.text
-    assert "皮克斯感 3D 卡通渲染" not in unselected.text
+    assert "## 视觉设定" not in unselected.text
+    assert "次表面散射" not in unselected.text
 
     composed = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
@@ -283,6 +289,6 @@ def test_ai_short_drama_and_official_3d_are_composable_but_not_coupled() -> None
         "method.animation_short",
     )
     assert "AI 短剧（本地格式适配）" in composed.text
-    assert "## 全局视觉风格锁" in composed.text
-    assert "皮克斯感 3D 卡通渲染" in composed.text
+    assert "## 视觉设定" in composed.text
+    assert "次表面散射" in composed.text
     assert "# 3D动画短片生成器" not in composed.text

@@ -1664,6 +1664,7 @@ export function ShortDramaStudio() {
     void perform(
       '抽帧检查镜内与镜间连续性',
       () => ShortDramaApi.inspectTakeVideo(takeId, {
+        source_in_seconds: 0,
         previous_take_id: null,
         include_previous_boundary: true,
         semantic_review: true,

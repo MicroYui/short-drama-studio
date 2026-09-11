@@ -298,6 +298,7 @@ class AgentRun(RuntimeModel):
     objective: str = Field(min_length=1)
     goal_summary: str | None = Field(default=None, max_length=16000)
     latest_user_instructions: list[str] = Field(default_factory=list[str])
+    loaded_tool_schema_ids: list[str] = Field(default_factory=list[str])
     root_agent: str = Field(min_length=1)
     active_skill_ids: SkillIds = Field(default_factory=list[str])
     unattended: bool = False
@@ -547,7 +548,9 @@ class WorkOrder(RuntimeModel):
         default_factory=list[SpecialistTurnRecord]
     )
     pending_protocol_feedback: SpecialistProtocolFeedback | None = None
+    loaded_tool_schema_ids: list[str] = Field(default_factory=list[str])
     status: DelegationStatus = DelegationStatus.PENDING
+    continuation_not_before: datetime | None = None
     next_owner: WorkOrderNextOwner | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -701,6 +704,7 @@ class AgentResult(RuntimeModel):
         default_factory=dict[str, JsonValue]
     )
     created_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
+    completion_receipts: list[dict[str, JsonValue]] = Field(default_factory=list[dict[str, JsonValue]])
     updated_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     findings: list[str] = Field(default_factory=list[str])
     decisions: list[str] = Field(default_factory=list[str])
@@ -743,6 +747,7 @@ class AgentResultDigest(RuntimeModel):
         default_factory=dict[str, JsonValue]
     )
     findings: list[str] = Field(default_factory=list[str])
+    completion_receipts: list[dict[str, JsonValue]] = Field(default_factory=list[dict[str, JsonValue]])
     evidence_refs: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
 
 

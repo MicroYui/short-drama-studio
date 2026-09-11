@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -15,6 +16,7 @@ from short_drama.deps import get_short_drama_service
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     EnqueueRequest,
+    GenerationUnitShotWindow,
     QaStatus,
     SemanticReviewStatus,
     TakeComparisonDecision,
@@ -24,7 +26,8 @@ from short_drama.models import (
     VideoInspectionReport,
     VideoInspectionScope,
 )
-from short_drama.service import ShortDramaService
+from short_drama.service import ShortDramaService, WorkflowConflictError
+from short_drama.video_inspection import inspection_source_context
 
 
 NOW = "2026-08-27T12:00:00+00:00"
@@ -137,6 +140,10 @@ def _prepare_candidates(
                 project_id=project_id,
                 shot_id=shot.id,
                 take_id=take.id,
+                observed_source_out_seconds=take.duration_seconds,
+                covered_shot_ids=[shot.id],
+                full_take_coverage=True,
+                source_context=inspection_source_context(generated.document, take, [shot]),
                 scopes=[VideoInspectionScope.INTRA_SHOT],
                 duration_seconds=take.duration_seconds,
                 width=take.width,
@@ -326,3 +333,58 @@ def test_compare_takes_accepts_agent_explicit_candidate_set_larger_than_five(
     assert [item.take_id for item in response.report.candidate_reviews] == take_ids
     assert len(language.calls) == 1
     assert len(language.calls[0][2]) == 6
+
+
+def test_historical_or_local_complete_reports_do_not_establish_current_full_coverage(tmp_path: Path) -> None:
+    language = FakeTakeComparisonLanguageProvider(decision=TakeComparisonDecision.NONE_ACCEPTABLE)
+    service = _service(tmp_path, language)
+    project_id, shot_id, take_ids = _prepare_candidates(service, tmp_path)
+    old = service.repository.list_video_inspections(project_id)[0]
+    service.repository.save_video_inspection(old.model_copy(update={"source_context": {}}))
+    with pytest.raises(WorkflowConflictError, match="source range, focus"):
+        service.compare_takes(project_id, TakeComparisonRequest(shot_id=shot_id, take_ids=take_ids, inspect_missing=False))
+    service.repository.save_video_inspection(old.model_copy(update={"review_focus": "Only the bottom-left price label"}))
+    with pytest.raises(WorkflowConflictError, match="source range, focus"):
+        service.compare_takes(project_id, TakeComparisonRequest(shot_id=shot_id, take_ids=take_ids, inspect_missing=False))
+    assert not language.calls
+
+
+def test_group_comparison_accepts_nonrepresentative_shot_and_selects_only_requested_window(tmp_path: Path) -> None:
+    language = FakeTakeComparisonLanguageProvider(decision=TakeComparisonDecision.SELECT_TAKE, winner_index=1)
+    service = _service(tmp_path, language)
+    project_id, first_id, take_ids = _prepare_candidates(service, tmp_path)
+    document = service.get_project(project_id).document
+    first, second = document.shots[:2]
+    for take_id in take_ids:
+        take = service.repository.get_take(take_id)
+        assert take is not None
+        take.generation_unit_id = "shared-group"
+        half = take.duration_seconds / 2
+        take.shot_windows = [GenerationUnitShotWindow(shot_id=item.id, shot_revision=item.revision,
+            source_in_seconds=index * half, source_out_seconds=(index + 1) * half, duration_seconds=half)
+            for index, item in enumerate([first, second])]
+        service.repository.save_take(take)
+        old = next(report for report in service.repository.list_video_inspections(project_id) if report.take_id == take_id)
+        service.repository.save_video_inspection(old.model_copy(update={
+            "covered_shot_ids": [first.id, second.id], "source_context": inspection_source_context(document, take, [first, second]),
+        }))
+    group_result = service.compare_takes(project_id, TakeComparisonRequest(shot_id=second.id, take_ids=take_ids,
+        include_previous_boundary=False, inspect_missing=False))
+    assert group_result.report.covered_shot_ids == [first.id, second.id]
+    assert language.calls[0][1]["comparison_target"]["scope"] == "GENERATION_UNIT"
+    assert len(language.calls[0][1]["current_shots"]) == 2
+    assert "没有音频证据" in language.calls[0][0]
+    service.select_take(take_ids[0])
+    for take_id in take_ids:
+        take = service.repository.get_take(take_id)
+        assert take is not None
+        report = next(item for item in service.repository.list_video_inspections(project_id) if item.take_id == take_id)
+        service.repository.save_video_inspection(report.model_copy(update={
+            "observed_source_in_seconds": take.duration_seconds / 2,
+            "covered_shot_ids": [second.id], "full_take_coverage": False,
+            "source_context": inspection_source_context(document, take, [second]),
+        }))
+    selected = service.compare_takes(project_id, TakeComparisonRequest(shot_id=second.id, take_ids=take_ids,
+        scope="SHOT", include_previous_boundary=False, inspect_missing=False, apply_selection=True)).project.takes
+    assert next(item for item in selected if item.id == take_ids[0]).selected_shot_ids == [first_id]
+    assert next(item for item in selected if item.id == take_ids[1]).selected_shot_ids == [second.id]

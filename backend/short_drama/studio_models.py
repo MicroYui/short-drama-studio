@@ -73,12 +73,30 @@ class EditorialClipChange(DomainModel):
     remove: bool = False
 
 
+class EditorialSubtitleChange(DomainModel):
+    id: str = Field(min_length=1)
+    start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    end_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    text: str | None = None
+    style: dict[str, JsonValue] | None = None
+    remove: bool = False
+
+
 class StudioEditorialEdit(DomainModel):
     expected_revision: int = Field(ge=0)
+    timeline_id: str | None = Field(default=None, min_length=1,
+        description="Exact saved timeline from editor_selection/read_editorial. Omit only for unambiguous IDs on the current active timeline; duplicate IDs across timelines require this field. Explicit targets preserve the active selection.")
     clips: list[EditorialClipChange] = Field(default_factory=list[EditorialClipChange], max_length=200)
+    subtitles: list[EditorialSubtitleChange] = Field(default_factory=list[EditorialSubtitleChange], max_length=200)
     keep_linked_audio: bool = True
     shot_id: str | None = None
     anchor_clip_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_edit_scope(self) -> StudioEditorialEdit:
+        if self.anchor_clip_id and not self.shot_id:
+            raise ValueError("anchor_clip_id requires shot_id; FILM edits use timeline_id without either field.")
+        return self
 
 
 class StudioAssetOverlay(DomainModel):
@@ -129,6 +147,7 @@ class StudioChangeSet(DomainModel):
     id: str
     project_id: str
     run_id: str | None = None
+    work_order_id: str | None = None
     title: str
     summary: str = ""
     items: list[StudioTextChange]
@@ -153,10 +172,67 @@ class StudioProjectCreate(DomainModel):
     brief: str = Field(default="", max_length=50000)
 
 
+class StudioEditorSelectedClip(DomainModel):
+    id: str = Field(min_length=1)
+    asset_id: str | None = None
+    type: Literal["image", "video", "audio", "adjustment", "text"]
+    source_shot_id: str | None = None
+    source_take_id: str | None = None
+    track_index: int = Field(ge=0)
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    duration_seconds: float = Field(ge=0, allow_inf_nan=False)
+    source_in_seconds: float = Field(ge=0, allow_inf_nan=False)
+    source_window_start_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    source_window_end_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    speed: float = Field(default=1, gt=0, allow_inf_nan=False)
+    reversed: bool = False
+
+
+class StudioEditorSelectedGap(DomainModel):
+    track_index: int = Field(ge=0)
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> StudioEditorSelectedGap:
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError("Selected gap end_seconds must be after start_seconds")
+        return self
+
+
+class StudioEditorSelection(DomainModel):
+    """Saved editor selection, not an instruction to mutate every selected item."""
+
+    timeline_id: str = Field(min_length=1)
+    editorial_revision: int = Field(ge=0)
+    coordinate_space: Literal["FILM", "SHOT_LOCAL"] = Field(
+        description="Clip/playhead/marker/gap times use this view; source_in/window times always use the media file."
+    )
+    film_start_seconds: float = Field(default=0, ge=0, allow_inf_nan=False,
+        description="Add this offset to SHOT_LOCAL view times to locate them in the film.")
+    anchor_clip_id: str | None = None
+    focus: Literal["clips", "subtitle", "gap", "timeline"]
+    clips: list[StudioEditorSelectedClip] = Field(default_factory=list[StudioEditorSelectedClip])
+    subtitle_ids: list[str] = Field(default_factory=list[str])
+    playhead_seconds: float = Field(ge=0, allow_inf_nan=False)
+    in_point_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    out_point_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    gap: StudioEditorSelectedGap | None = None
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> StudioEditorSelection:
+        if (self.in_point_seconds is not None and self.out_point_seconds is not None
+                and self.out_point_seconds < self.in_point_seconds):
+            raise ValueError("Selected out_point_seconds must not precede in_point_seconds")
+        return self
+
+
 class StudioScope(DomainModel):
     kind: Literal["episode", "scene", "shot", "asset", "film"] = "episode"
     id: str | None = None
     label: str = "当前集"
+    editor_selection: StudioEditorSelection | None = Field(default=None,
+        description="Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow.")
 
 
 class StudioMessage(DomainModel):
@@ -200,6 +276,12 @@ class StudioWorker(DomainModel):
     tool_turns: int = 0
     latest_tool: str | None = None
     latest_reason: str | None = None
+    waiting_review: bool = False
+    waiting_until: str | None = None
+    latest_error: str | None = None
+    completed_artifact_count: int = 0
+    latest_receipt: dict[str, JsonValue] | None = None
+    selected_method_skill_ids: list[str] = Field(default_factory=list[str])
 
 
 class StudioActivity(DomainModel):

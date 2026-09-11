@@ -13,6 +13,7 @@ from short_drama.asset_plan_reconciler import assess_asset_plan_execution_contra
 from short_drama.agent_runtime.models import ArtifactRef, ArtifactSummary
 from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.h3_models import H3ProductionRoutePlan
+from short_drama.h3_group_operation import H3GroupOperation
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
     GenerationTask,
@@ -90,6 +91,8 @@ class ProjectArtifactRecordStore(Protocol):
     def get_episode_review(self, report_id: str) -> ArtifactRecordLike | None: ...
 
     def get_h3_route_plan(self, plan_id: str) -> H3ProductionRoutePlan | None: ...
+
+    def get_h3_group_operation(self, operation_id: str) -> H3GroupOperation | None: ...
 
     def list_h3_route_plans(
         self, project_id: str
@@ -1020,8 +1023,20 @@ class ProjectArtifactResolver:
     def __init__(self, projects: ProjectDocumentStore) -> None:
         self._projects = projects
 
+    def summarize_artifacts(self, refs: Sequence[ArtifactRef]) -> list[ArtifactSummary | None]:
+        """Read each project once within this context build, never across turns."""
+        documents: dict[str, ProjectDocument | None] = {}
+        summaries: list[ArtifactSummary | None] = []
+        for ref in refs:
+            if ref.project_id not in documents:
+                documents[ref.project_id] = self._projects.get_project(ref.project_id)
+            summaries.append(self._summarize_artifact(ref, documents[ref.project_id]))
+        return summaries
+
     def summarize_artifact(self, ref: ArtifactRef) -> ArtifactSummary | None:
-        document = self._projects.get_project(ref.project_id)
+        return self._summarize_artifact(ref, self._projects.get_project(ref.project_id))
+
+    def _summarize_artifact(self, ref: ArtifactRef, document: ProjectDocument | None) -> ArtifactSummary | None:
         if document is None:
             return None
         if ref.artifact_type == "project":
@@ -1032,6 +1047,29 @@ class ProjectArtifactResolver:
                 title=document.project.name,
                 summary=project_summary(document),
             )
+        if ref.artifact_type == "studio_export":
+            record = next((item for item in document.studio_exports if item.get("id") == ref.artifact_id
+                and (ref.version is None or item.get("editorial_revision") == ref.version)), None)
+            if record is None:
+                return None
+            return ArtifactSummary(ref=ref, title=f"Studio export {ref.artifact_id}", summary=json.dumps(record, ensure_ascii=False))
+        if ref.artifact_type == "editorial_timeline":
+            saved = document.editorial_timeline or {}
+            project = saved.get("project")
+            if not isinstance(project, dict):
+                return None
+            timelines = project.get("timelines")
+            timeline = next((item for item in timelines if isinstance(item, dict) and item.get("id") == ref.artifact_id), None) if isinstance(timelines, list) else None
+            revision = saved.get("revision", 0)
+            if timeline is None or (ref.version is not None and ref.version != revision):
+                return None
+            return ArtifactSummary(ref=ref, title=f"Current editorial r{revision}", summary=json.dumps({
+                "timeline_id": ref.artifact_id, "editorial_revision": revision,
+                "active": project.get("activeTimelineId") == ref.artifact_id,
+                "clip_count": len(cast(list[JsonValue], timeline.get("clips", []))),
+                "subtitle_count": len(cast(list[JsonValue], timeline.get("subtitles", []))),
+                "details_tool": "timeline.read_editorial",
+            }, ensure_ascii=False))
         if ref.artifact_type in {"content_planning_job", "planning_run"}:
             planning_run = self._projects.get_planning_run(ref.artifact_id)
             if (
@@ -1816,6 +1854,16 @@ class ProjectArtifactResolver:
                     for plan in plans
                 ], "details_tool": "route.get_h3_plan"}, ensure_ascii=False, separators=(",", ":")),
             )
+        if ref.artifact_type == "h3_group_operation":
+            operation = records.get_h3_group_operation(ref.artifact_id)
+            if operation is None or operation.project_id != ref.project_id:
+                return None
+            state = operation.public_response()
+            state.task_statuses = {
+                task.id: task.status.value for task_id in state.task_ids
+                if (task := self._projects.get_task(task_id)) is not None
+            }
+            return ArtifactSummary(ref=ref, title="H3 current group operation", summary=state.model_dump_json())
         if ref.artifact_type == "h3_route_plan":
             plan = records.get_h3_route_plan(ref.artifact_id)
             if (
@@ -1929,6 +1977,11 @@ def project_artifact_refs(document: ProjectDocument) -> list[ArtifactRef]:
             artifact_id=document.project.id,
         )
     ]
+    saved_editorial = document.editorial_timeline or {}
+    editor_project = saved_editorial.get("project")
+    if isinstance(editor_project, dict) and isinstance(editor_project.get("activeTimelineId"), str):
+        refs.append(ArtifactRef(project_id=document.project.id, artifact_type="editorial_timeline",
+            artifact_id=cast(str, editor_project["activeTimelineId"]), version=int(cast(int, saved_editorial.get("revision", 0)))))
     script = _current_script(document)
     if script is not None:
         refs.append(

@@ -811,7 +811,8 @@ def test_auto_draft_director_loop_applies_executable_repair(tmp_path: Path) -> N
     assert result.status_code == 200, result.text
     body = result.json()
     assert body["repair_applied"] is True
-    assert body["next_action"] == "REGENERATE_SHOT"
+    assert body["next_action"] == "PREPARE_H3_GROUP"
+    assert body["next_tool"] == "route.prepare_h3_group"
     updated_shot = next(
         item for item in body["project"]["document"]["shots"] if item["id"] == shot.id
     )
@@ -1077,7 +1078,7 @@ def test_director_parser_normalizes_persisted_fields_from_split_shots() -> None:
     assert parsed.proposed_repair.split_shots[1].inherits_source_dependencies is True
 
 
-def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
+def test_director_advice_is_read_only_and_user_can_ignore_without_mutation(
     tmp_path: Path,
 ) -> None:
     fake = FakeDirectorLanguageProvider(
@@ -1122,7 +1123,7 @@ def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
     shot = next(item for item in document.shots if item.sequence == 8)
 
     result = client.post(
-        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/director-loop",
+        f"/api/short-drama/projects/{project_id}/shots/{shot.id}/director-advice",
         json={},
     )
     assert result.status_code == 200, result.text
@@ -1133,10 +1134,9 @@ def test_guided_director_loop_waits_and_user_can_ignore_without_mutation(
     assert "根据预期体验判断调度与节奏" in director_instructions
     assert "AI 原生短剧" not in director_instructions
     assert json.loads(director_input)["production_profile"] == "GENERAL_VIDEO"
-    assert body["repair_applied"] is False
-    assert body["next_action"] == "AWAIT_USER"
+    assert body["proposed_repair"] is not None
     unchanged = next(
-        item for item in body["project"]["document"]["shots"] if item["id"] == shot.id
+        item.model_dump() for item in service.get_project(project_id).document.shots if item.id == shot.id
     )
     assert unchanged["revision"] == 1
     assert unchanged["camera"] == shot.camera

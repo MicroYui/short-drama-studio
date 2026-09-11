@@ -7,6 +7,9 @@
     "PLANNER",
     "REVISION_VERIFIER",
     "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
     "ASSET_REVIEWER",
     "VIDEO_PROMPT_COMPILER",
     "EPISODE_REVIEWER"
@@ -15,66 +18,35 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/workflow.md::Principle",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/intake-and-brief.md::高信息量问询",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/intake-and-brief.md::产品身份路由",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/intake-and-brief.md::输出",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/creative-brainstorm.md::1. 输入与模式",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/creative-brainstorm.md::2. Questions 与路线收敛",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/creative-brainstorm.md::5. 交接边界",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/visual-style-spec.md::3. 风格分析维度",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/visual-style-spec.md::4. Style Master 编译与输出"
+      "references/production-method.md::简报与传播证明",
+      "references/production-method.md::创意与风格判断"
     ],
     "PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/workflow.md::全链路",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::输入与依赖",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::模型、分辨率与声音锁",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::规划编译",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::Compact Downstream Capsule",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::唯一 Work Item 与完成合同"
+      "references/production-method.md::制作规划"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-execution.md::执行后 QC 与 Compact Downstream Capsule",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::输入",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::合成",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::唯一输出"
+      "references/production-method.md::当前范围验收"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/visual-style-spec.md::3. 风格分析维度",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/visual-techniques-library.md::Stage 作用",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/visual-techniques-library.md::目录",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-strategy.md::规划编译"
+      "references/production-method.md::镜头与视觉技法"
     ],
     "ASSET_REVIEWER": [
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/product-spec.md::2. 整理资产与 KV 边界",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/product-spec.md::3. `product_reference_routing`",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/product-spec.md::4. 穿戴类产品",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/product-spec.md::5. Anchors 唯一检查与交接",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/casting-spec.md::一、选角维度表",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/casting-spec.md::二、品牌匹配度校验规则",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/casting-spec.md::三、选角标准表模板",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/character-design-sheet.md::Output",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/character-design-sheet.md::Generation Guards",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/character-design-sheet.md::Prompt Skeleton",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/environment-anchors.md::Prompt 编译",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/environment-anchors.md::QC 与交接",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/prompt-templates.md::TPL-01 产品资料卡",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/prompt-templates.md::TPL-02 创意路线 KV"
+      "references/production-method.md::资产检查"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-execution.md::依赖",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-execution.md::Execution Locks",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-execution.md::Unit 编译",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-execution.md::Prompt 与 ref 合同",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-execution.md::Authorization Unit Record",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/video-generation-execution.md::执行后 QC 与 Compact Downstream Capsule"
+      "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::输入",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::依赖分支与 Work Item",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::合成",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::唯一输出",
-      "../../sources/minimax_design/3.0.11/workflows/ad-tvc/reference/post-production.md::Compact Downstream Capsule"
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::资产规划"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::资产制作"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::资产检查"
     ]
   },
   "provenance": "OFFICIAL_ORIGINAL_WITH_ADAPTER",
@@ -82,5 +54,15 @@
     "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/ad-tvc",
     "MiniMax Design 3.0.11 (1035) / agent-profiles/v2/config/workflows/_shared"
   ],
-  "user_overridable": true
+  "user_overridable": true,
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "POST.REVISION_VERIFIER": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ]
+  }
 }

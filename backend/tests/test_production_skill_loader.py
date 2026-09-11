@@ -141,12 +141,15 @@ def test_ai_short_drama_composes_with_an_explicit_official_method() -> None:
     assert format_only.selected_method_skill_ids == ()
     assert "3D 动画短片" not in format_only.text
     assert "皮克斯感 3D 卡通渲染" not in format_only.text
+    assert "## 视觉设定" not in format_only.text
+    assert "次表面散射" not in format_only.text
     assert composed.selected_method_skill_ids == (
         "method.animation_short",
     )
     assert "3D 动画短片" in composed.text
-    assert "全局视觉风格锁" in composed.text
-    assert "皮克斯感 3D 卡通渲染" in composed.text
+    assert "## 视觉设定" in composed.text
+    assert "次表面散射" in composed.text
+    assert "重心转移" in composed.text
 
     for compiled in (format_only, composed):
         assert compiled.selected_skill_ids == ()
@@ -423,10 +426,9 @@ def test_ai_short_drama_does_not_duplicate_worker_or_verifier_prompts() -> None:
     assert "artifact.get_asset_planning_context" in asset_planner.text
     assert "不再叠加 `project.get`" in asset_planner.text
     assert "artifact.get_asset_plan" in asset_planner.text
-    assert "写入精确 AssetPlan ArtifactRef 后立即结束 WorkOrder" in (
-        asset_planner.text
-    )
-    assert "不调用媒体 Provider" in asset_planner.text
+    assert "任务只要求计划时到此完成" in asset_planner.text
+    assert "若 WorkOrder 明确包含少量素材的完整准备" in asset_planner.text
+    assert "不为角色名称强制交接" in asset_planner.text
     assert "用户源素材" in asset_planner.text
     assert "ANCHOR" in asset_planner.text
     assert "委派 ASSET_BUILDER" in asset_planner.text

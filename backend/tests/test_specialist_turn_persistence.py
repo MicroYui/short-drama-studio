@@ -164,7 +164,9 @@ def test_asset_specialist_does_not_receive_storyboard_execution_manual(
     assert len(client.instructions) == 1
     instructions = client.instructions[0]
     assert "当前制片阶段：ASSETS" in instructions
-    assert "## 角色 Profile 维度" in instructions
+    assert "## 资产检查" in instructions
+    assert "多角色参考分别比对主要识别点" in instructions
+    assert "## 表演与物理动作" not in instructions
     assert "shot.append_storyboard_ledger_segment" not in instructions
     assert "storyboard-confirm 前分组检查清单" not in instructions
 

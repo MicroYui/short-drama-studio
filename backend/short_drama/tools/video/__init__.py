@@ -30,7 +30,8 @@ from short_drama.tools.registry import ToolRegistry
 class VideoToolService(Protocol):
     def enqueue(self, project_id: str, request: EnqueueRequest) -> ProjectAggregate: ...
 
-    def select_take(self, take_id: str) -> ProjectAggregate: ...
+    def select_take(self, take_id: str, *, shot_ids: list[str] | None = None,
+                    clip_ids: list[str] | None = None, expected_editorial_revision: int | None = None) -> ProjectAggregate: ...
 
     def inspect_take_video(
         self,
@@ -64,6 +65,9 @@ class VideoEnqueueInput(ToolModel):
 
 class VideoSelectTakeInput(ToolModel):
     take_id: str
+    shot_ids: list[str] | None = None
+    clip_ids: list[str] | None = None
+    expected_editorial_revision: int | None = None
 
 
 class VideoInspectTakeInput(ToolModel):
@@ -145,7 +149,8 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
     )
 
     def select(request: VideoSelectTakeInput) -> ToolExecution[ProjectAggregate]:
-        project = service.select_take(request.take_id)
+        project = service.select_take(request.take_id, shot_ids=request.shot_ids,
+            clip_ids=request.clip_ids, expected_editorial_revision=request.expected_editorial_revision)
         project_id = project.document.project.id
         return ToolExecution(
             output=project,
@@ -195,12 +200,12 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
     registry.register(
         ToolSpec(
             id="video.inspect_take",
-            version=1,
+            version=2,
             category=ToolCategory.VIDEO,
             description=(
-                "Inspect a generated Take's technical metadata and sampled video frames; persist visual observations. "
+                "Inspect a generated Take or explicit source_in/source_out interval; persist visual observations, exact scope and source revisions. "
                 "This tool does not listen to speech or provide dialogue timestamps. "
-                "Reuse video.get_take_inspection when a relevant report already exists. "
+                "Reuse a report only when its recorded range, focus and current sources match; COMPLETE alone does not establish whole-group coverage. "
                 "After assembling current Takes, use audio.align_subtitles or audio.inspect_manifest for native audio."
             ),
             effect=ToolEffect.EXTERNAL,
@@ -234,11 +239,12 @@ def register_tools(registry: ToolRegistry, service: VideoToolService) -> None:
     registry.register(
         ToolSpec(
             id="video.compare_takes",
-            version=1,
+            version=2,
             category=ToolCategory.VIDEO,
             description=(
-                "Compare the calling Agent's explicit same-shot candidate Take set and "
-                "optionally apply the selection."
+                "Compare candidates covering any requested shot: scope=GENERATION_UNIT compares matching complete groups; "
+                "scope=SHOT compares only the corresponding source windows. Reuses only current matching visual evidence. "
+                "Does not assess dialogue or audio. Optionally apply the selection."
             ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,

@@ -1913,11 +1913,13 @@ def test_story_orientation_method_selection_survives_restart_and_reaches_agents(
     assert "品牌宣传片" in (
         language.story_architect_instructions[-1]
     )
-    assert "步骤 2：建立品牌事实表" in language.story_architect_instructions[-1]
+    assert "## 品牌事实与创意" in language.story_architect_instructions[-1]
+    assert "区分已证实事实、用户主张和概念创作" in language.story_architect_instructions[-1]
 
     restarted.advance_planning_run(started.run.id)
     assert "品牌宣传片" in language.scene_writer_instructions[-1]
-    assert "选择故事脊柱" in language.scene_writer_instructions[-1]
+    assert "## 文案与故事结构" in language.scene_writer_instructions[-1]
+    assert "用产品专属细节建立可信度" in language.scene_writer_instructions[-1]
 
 
 def test_agent_owned_long_project_starts_as_scaffold_and_finalizes_without_legacy_run(

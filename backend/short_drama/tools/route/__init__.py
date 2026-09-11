@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from short_drama.h3_group_operation import H3GroupOperationRequest, H3GroupOperationResponse
+
 from short_drama.h3_models import (
     H3CompilePreviewResponse,
     H3NotSubmittedResolutionRequest,
@@ -43,11 +45,16 @@ from short_drama.tools.contracts import (
     ToolExecution,
     ToolModel,
     ToolSpec,
+    ToolWriteReceipt,
 )
 from short_drama.tools.registry import ToolRegistry
 
 
 class RouteToolService(Protocol):
+    def prepare_h3_group(self, project_id: str, request: H3GroupOperationRequest) -> H3GroupOperationResponse: ...
+
+    def get_h3_group_operation(self, project_id: str, operation_id: str) -> H3GroupOperationResponse: ...
+
     def get_h3_production_route_plan(
         self, project_id: str, plan_id: str,
     ) -> H3ProductionRoutePlanResponse: ...
@@ -212,6 +219,16 @@ class RouteReviewTakeInput(ToolModel):
     request: H3TakeReviewRequest
 
 
+class H3GroupOperationInput(ToolModel):
+    project_id: str
+    request: H3GroupOperationRequest
+
+
+class H3GroupOperationGetInput(ToolModel):
+    project_id: str
+    operation_id: str
+
+
 class GenerationPlanCompileInput(ToolModel):
     project_id: str
     request: GenerationPlanCompileRequest
@@ -247,6 +264,50 @@ def _generation_plan_refs(
 
 
 def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
+    def group_operation_refs(result: H3GroupOperationResponse) -> tuple[ArtifactRef, ...]:
+        refs = [ArtifactRef(project_id=result.project_id, artifact_type="h3_group_operation", artifact_id=result.operation_id)]
+        for kind, identifier, version in (
+            ("generation_plan", result.generation_plan_document_id, result.generation_plan_version),
+            ("generation_unit", result.generation_unit_id, result.generation_plan_version),
+            ("h3_route_plan", result.route_plan_id, result.route_plan_state_revision),
+        ):
+            if identifier is not None:
+                refs.append(ArtifactRef(project_id=result.project_id, artifact_type=kind, artifact_id=identifier, version=version))
+        refs.extend(ArtifactRef(project_id=result.project_id, artifact_type="generation_task", artifact_id=task_id) for task_id in result.task_ids)
+        return tuple(refs)
+
+    def prepare_group(request: H3GroupOperationInput) -> ToolExecution[H3GroupOperationResponse]:
+        result = service.prepare_h3_group(request.project_id, request.request)
+        refs = group_operation_refs(result)
+        return ToolExecution(output=result, artifact_refs=refs, warnings=tuple(result.warnings),
+            receipt=ToolWriteReceipt(
+                artifact_refs=list(refs), current_state=result.model_dump(mode="json")))
+
+    registry.register(ToolSpec(
+        id="route.prepare_h3_group", version=1, category=ToolCategory.ROUTE,
+        description=("Prepare one current shot/group through current plan, selected inputs, one H3 prompt compilation and saved route. "
+            "Use shot_id or clip_group_id; no manual plan IDs or prompt transfer. Defaults to preparation only; enqueue=true "
+            "explicitly queues real H3 generation. Repeat/resume by operation_id reuses completed prompt/route/tasks. "
+            "Existing selected bindings determine media unless an ordered media_inputs choice is supplied. "
+            "For rework identify source_take_id/source_repair_id; this creates a whole affected-group candidate, never video inpainting. "
+            "Blocked returns preserve exact phase and completed refs; retry_failed_step requests one retry."),
+        effect=ToolEffect.EXTERNAL, idempotent=True, input_model=H3GroupOperationInput,
+        output_model=H3GroupOperationResponse, handler=prepare_group,
+        tags=frozenset({"h3", "generation-group", "planning", "execution", "resume"}),
+    ))
+
+    def get_group_operation(request: H3GroupOperationGetInput) -> ToolExecution[H3GroupOperationResponse]:
+        result = service.get_h3_group_operation(request.project_id, request.operation_id)
+        return ToolExecution(output=result, artifact_refs=group_operation_refs(result))
+
+    registry.register(ToolSpec(
+        id="route.get_h3_group_operation", version=1, category=ToolCategory.ROUTE,
+        description="Read a saved H3 group operation and current task states. No language or video provider calls; no implicit retry.",
+        effect=ToolEffect.READ, idempotent=True, input_model=H3GroupOperationGetInput,
+        output_model=H3GroupOperationResponse, handler=get_group_operation,
+        tags=frozenset({"h3", "generation-group", "resume", "on-demand-payload"}),
+    ))
+
     def get_generation_unit_context(
         request: GenerationUnitContextInput,
     ) -> ToolExecution[H3GenerationUnitContextResponse]:

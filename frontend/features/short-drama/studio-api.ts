@@ -4,10 +4,11 @@ import type { ProjectAggregate, ShotPlan } from './api'
 
 export type StudioEvent = components['schemas']['StudioEvent']
 export type StudioJob = components['schemas']['StudioJob']
-export type StudioScope = components['schemas']['StudioScope']
+export type StudioScope = components['schemas']['StudioScope-Input']
 export type StudioEpisodes = components['schemas']['StudioEpisodes']
 export type StudioActivity = components['schemas']['StudioActivity']
 export type StudioWorker = components['schemas']['StudioWorker']
+export type StudioMethod = components['schemas']['StudioMethodDetail']
 export type StudioSceneSave = components['schemas']['StudioSceneSave']
 export type StudioMutation = components['schemas']['StudioMutationResult']
 export type ReferenceCue = components['schemas']['ShotReferenceCue']
@@ -42,6 +43,7 @@ function json(method: string, value: unknown): RequestInit {
 }
 
 export const StudioApi = {
+  method: (id: string) => studioRequest<StudioMethod>(`${base}/methods/${encodeURIComponent(id)}`),
   getProject: (id: string) => studioRequest<ProjectAggregate>(projectPath(id)),
   changes: (id: string) => studioRequest<StudioChangeSet[]>(`${projectPath(id)}/changes`),
   decideChange: (id: string, changeId: string, itemId: string, decision: 'accept' | 'reject') => studioRequest<StudioChangeResult>(`${projectPath(id)}/changes/${changeId}/items/${itemId}`, json('POST', { decision })),

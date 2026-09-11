@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BookOpen, Camera, Check, ChevronDown, CircleDot, Clapperboard, Layers3, Loader2, PenLine, ScanEye } from 'lucide-react'
 import type { StudioEvent, StudioJob, StudioWorker } from './studio-api'
+import { StudioMethodDetail } from './StudioMethodDetail'
 
 const roles: Record<string, { label: string; Icon: typeof PenLine }> = {
   WRITER: { label: '编剧', Icon: PenLine }, CONCEPT: { label: '故事策划', Icon: PenLine },
@@ -36,7 +37,8 @@ const toolLabels: Record<string, string> = {
   'artifact.update_brief': '保存素材设定', 'artifact.create_reference_pack': '整理素材引用',
   'route.compile_h3_prompt': '编译镜头输入', 'route.prepare_h3': '准备视频生成',
   'route.compile_generation_plan': '整理视频生成组', 'route.get_generation_plan': '读取视频生成组',
-  'route.get_generation_unit_context': '读取本组镜头与实际素材',
+  'route.get_generation_unit_context': '读取本组镜头与实际素材', 'route.prepare_h3_group': '准备当前镜头组制作',
+  'audio.align_subtitles': '对齐当前剪辑字幕', 'audio.inspect_episode': '检查当前原声与对白',
   'route.get_h3_plan': '读取已保存的视频路线', 'route.list_h3_plans': '查看已有视频路线',
   'route.list_h3_runs': '查看已有视频任务', 'route.get_h3_run': '读取视频生成记录',
   'route.preview_h3_probe': '核对视频输入', 'video.select_take': '采用镜头视频',
@@ -51,6 +53,8 @@ const stringField = (event: StudioEvent, key: string) => typeof event.data[key] 
 
 export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; events: StudioEvent[]; job: StudioJob }) {
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [methodDetail, setMethodDetail] = useState<{ id: string; worker: StudioWorker } | null>(null)
+  const [showCompleted, setShowCompleted] = useState(false)
   const [now, setNow] = useState(Date.now())
   const active = ['queued', 'running', 'retrying', 'pausing'].includes(job.status)
   useEffect(() => { if (!active) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer) }, [active])
@@ -58,19 +62,23 @@ export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; 
   const latestCompletedByRole = new Map<string, StudioWorker>()
   for (const worker of current) if (worker.status === 'COMPLETED') latestCompletedByRole.set(worker.skill_role || worker.role, worker)
   const visible = current
-    .filter(worker => worker.status !== 'COMPLETED' || latestCompletedByRole.get(worker.skill_role || worker.role)?.id === worker.id)
+    .filter(worker => showCompleted || worker.status !== 'COMPLETED' || latestCompletedByRole.get(worker.skill_role || worker.role)?.id === worker.id)
     .sort((a, b) => Number(a.status === 'COMPLETED') - Number(b.status === 'COMPLETED'))
-  const activeCount = visible.filter(worker => worker.status === 'IN_PROGRESS' && active).length
+  const activeCount = visible.filter(worker => worker.status === 'IN_PROGRESS' && !worker.waiting_review && !worker.waiting_until && active).length
   const loaded = events.filter(event => event.kind === 'skills.loaded')
   const methods = [...new Set(loaded.map(event => stringField(event, 'summary')).filter(Boolean))]
   return <section className="sd-team" aria-label="Agent 制作团队">
     <div className="sd-team-title"><span>制作团队</span><small>{activeCount > 1 ? `${activeCount} 项并行` : activeCount ? '正在创作' : active ? '安排下一步' : '本次分工'}</small></div>
+    {current.length > 0 && <div className="sd-team-progress"><span>已完成 {current.filter(worker => worker.status === 'COMPLETED').length} / {current.length} 项分工</span><button onClick={() => setShowCompleted(!showCompleted)}>{showCompleted ? '收起已完成分工' : '查看全部结果'}</button></div>}
+    {methodDetail && <StudioMethodDetail id={methodDetail.id} selected role={methodDetail.worker.skill_role} stage={methodDetail.worker.stage} onClose={() => setMethodDetail(null)} />}
     <div className="sd-team-leader"><span><Clapperboard size={15} /></span><div><strong>制片负责人</strong><small>{active && !activeCount ? '根据目标安排工作' : active ? '协调分工与当前目标' : '保留本次制作结果'}</small></div>{active && <span className="sd-team-live" />}</div>
     {!!methods.length && <div className="sd-team-methods"><BookOpen size={13} /><span>已加载</span>{methods.slice(-2).map(method => <strong key={method}>{method}</strong>)}</div>}
     <div className="sd-team-workers">{visible.map(worker => {
       const descriptor = roles[worker.skill_role ?? ''] ?? { label: worker.role, Icon: CircleDot }
       const Icon = descriptor.Icon
-      const running = active && worker.status === 'IN_PROGRESS'
+      const polling = Boolean(worker.waiting_until) && !worker.waiting_review && !['COMPLETED', 'CANCELLED'].includes(worker.status)
+      const review = worker.waiting_review && !['COMPLETED', 'CANCELLED'].includes(worker.status)
+      const running = active && worker.status === 'IN_PROGRESS' && !polling && !review
       const done = worker.status === 'COMPLETED'
       const workerEvents = events.filter(event => event.data.work_order_id === worker.id)
       const toolEvents = workerEvents.filter(event => ['tool.started', 'tool.finished'].includes(event.kind))
@@ -79,15 +87,17 @@ export function StudioTeam({ workers, events, job }: { workers: StudioWorker[]; 
       const phaseStart = [...workerEvents].reverse().find(event => event.kind === (deciding ? 'model.started' : 'tool.started'))
       const started = phaseStart && (!last || Date.parse(phaseStart.created_at) >= Date.parse(last.created_at)) ? phaseStart : undefined
       const elapsed = started ? Math.max(0, Math.floor((now - Date.parse(started.created_at)) / 1000)) : 0
-      const status = done ? '已完成' : job.status === 'paused' ? '已暂停' : running ? '进行中' : worker.next_owner === 'LEADER_REPLAN' ? '等待调整' : active && ['WORKER_DECISION', 'WORKER_TOOL'].includes(worker.next_owner ?? '') ? '已就绪' : '等待继续'
+      const status = done ? '已完成' : review ? '等待指定修改审阅' : polling ? '等待生成结果' : job.status === 'paused' ? '已暂停' : running ? '进行中' : worker.next_owner === 'LEADER_REPLAN' ? '等待调整' : active && ['WORKER_DECISION', 'WORKER_TOOL'].includes(worker.next_owner ?? '') ? '已就绪' : '等待继续'
       const completed = done ? [...workerEvents].reverse().find(event => event.kind === 'worker.updated' && stringField(event, 'status') === 'COMPLETED') : undefined
-      const detail = completed && stringField(completed, 'summary') || worker.latest_reason || worker.objective
+      const detail = worker.summary || completed && stringField(completed, 'summary') || worker.latest_reason || worker.objective
+      const pollSeconds = worker.waiting_until ? Math.max(0, Math.ceil((Date.parse(worker.waiting_until) - now) / 1000)) : 0
       const skills = workerEvents.filter(event => event.kind === 'skills.loaded')
       return <article className={`sd-team-worker ${running ? 'is-running' : ''} ${done ? 'is-done' : ''}`} key={worker.id}>
         <button className="sd-team-worker-head" aria-expanded={expanded === worker.id} onClick={() => setExpanded(expanded === worker.id ? null : worker.id)}><span className="sd-team-role-icon"><Icon size={16} /></span><strong>{descriptor.label}</strong><small>{running ? <Loader2 size={11} className="sd-spin" /> : done ? <Check size={12} /> : null}{status}</small><ChevronDown size={13} /></button>
         <p className="sd-team-objective" title={worker.objective}>{detail}</p>
-        <div className="sd-team-current"><span className={running ? 'sd-team-activity-dot' : ''} /><span>{deciding ? '组织内容与下一步' : labelTool(last ? stringField(last, 'tool_name') : worker.latest_tool || '准备任务')}</span><time>{running && elapsed > 2 ? `${elapsed}s` : `${worker.tool_turns} 次操作`}</time></div>
-        {expanded === worker.id && <div className="sd-team-expanded">{skills.length > 0 && <div className="sd-team-skill"><BookOpen size={13} /><span>读取方法：{stringField(skills[skills.length - 1], 'summary')}</span></div>}{toolEvents.filter(event => event.kind === 'tool.finished').slice(-4).map(event => <div className="sd-team-tool" key={event.id}>{stringField(event, 'status') === 'SUCCEEDED' ? <Check size={12} /> : <CircleDot size={12} />}<span>{labelTool(stringField(event, 'tool_name'))}</span></div>)}</div>}
+        <div className="sd-team-current"><span className={running ? 'sd-team-activity-dot' : ''} /><span>{review ? '相关内容审阅后继续，无关分工照常推进' : polling ? (pollSeconds ? `下次检查 ${pollSeconds} 秒后` : '准备查收生成结果') : deciding ? '组织内容与下一步' : labelTool(last ? stringField(last, 'tool_name') : worker.latest_tool || '准备任务')}</span><time>{done && worker.completed_artifact_count ? `已登记 ${worker.completed_artifact_count} 项结果` : running && elapsed > 2 ? `${elapsed}s` : `${worker.tool_turns} 次操作`}</time></div>
+        {worker.latest_error && <p className="sd-team-error" role="status">{worker.latest_error}</p>}
+        {expanded === worker.id && <div className="sd-team-expanded">{(worker.selected_method_skill_ids ?? []).filter(id => id.startsWith('method.')).map(id => <button className="sd-text-button" key={id} onClick={() => setMethodDetail({ id, worker })}><BookOpen size={12} />查看本项专业方法</button>)}{skills.length > 0 && <div className="sd-team-skill"><BookOpen size={13} /><span>读取方法：{stringField(skills[skills.length - 1], 'summary')}</span></div>}{toolEvents.filter(event => event.kind === 'tool.finished').slice(-4).map(event => <div className="sd-team-tool" key={event.id}>{stringField(event, 'status') === 'SUCCEEDED' ? <Check size={12} /> : <CircleDot size={12} />}<span>{labelTool(stringField(event, 'tool_name'))}</span></div>)}</div>}
       </article>
     })}</div>
   </section>

@@ -27,10 +27,16 @@ from short_drama.studio_models import (
 )
 from short_drama.studio_service import StudioContentConflict
 from short_drama.studio_comfy import ComfyConfig, ComfyConfigUpdate, ComfyRun, ComfyRunRequest, comfy_config, run_comfy, get_comfy_run
+from short_drama.studio_methods import StudioMethodDetail, method_detail
 
 router = APIRouter(prefix="/studio", tags=["studio"])
 StudioService = Annotated[ShortDramaService, Depends(get_short_drama_service)]
 T = TypeVar("T")
+
+
+@router.get("/methods/{skill_id}", response_model=StudioMethodDetail)
+def read_method(skill_id: str) -> StudioMethodDetail:
+    return _execute(lambda: method_detail(skill_id))
 
 
 @router.get("/comfyui", response_model=ComfyConfig)

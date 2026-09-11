@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-from pydantic import JsonValue, Field
+from typing import TYPE_CHECKING, Annotated, Self, cast
+from pydantic import JsonValue, Field, model_validator
 from short_drama.models import DomainModel
 from short_drama.studio_models import StudioSceneSave, StudioShotSave, StudioTimelineSave, StudioExportRequest, StudioExport, StudioEditorialEdit, StudioAssetOverlay
 from short_drama.tools.contracts import ArtifactRef, ToolCategory, ToolEffect, ToolExecution, ToolModel, ToolSpec
@@ -47,6 +47,19 @@ class TimelineReadInput(ToolModel):
     include_project: bool = False
     shot_id: str | None = None
     anchor_clip_id: str | None = None
+    timeline_id: str | None = Field(default=None, description="Copy the saved editor_selection timeline ID. Defaults to active only for unambiguous IDs; identical IDs across timelines require this field.")
+    subtitle_ids: list[Annotated[str, Field(min_length=1)]] = Field(default_factory=list, max_length=100,
+        description="Exact current subtitle IDs. Returns only selected rows in FILM coordinates plus actual shot-local intersections.")
+    clip_ids: list[Annotated[str, Field(min_length=1)]] = Field(default_factory=list, max_length=100,
+        description="Exact current clip IDs, including image/audio clips without sourceShotId. Can be combined with subtitle_ids.")
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> Self:
+        if self.include_project and (self.subtitle_ids or self.clip_ids):
+            raise ValueError("include_project cannot be combined with subtitle_ids/clip_ids; omit it for a compact exact read.")
+        if self.anchor_clip_id and not self.shot_id:
+            raise ValueError("anchor_clip_id requires shot_id; exact film IDs can be read without either field.")
+        return self
 
 
 class TimelineExportInput(ToolModel):
@@ -85,6 +98,9 @@ class CurrentWriteOutput(DomainModel):
     shot_ids: list[str]
     notices: list[str]
     shot_revisions: dict[str, int] = Field(default_factory=dict[str, int])
+    editorial_revision: int | None = None
+    timeline_id: str | None = None
+    changed_shot_ids: list[str] = Field(default_factory=list[str])
 
 
 class TextProposalInput(ToolModel):
@@ -95,6 +111,19 @@ class TextProposalInput(ToolModel):
 class SceneOutlineInput(ToolModel):
     project_id: str
     scenes: list[StudioSceneOutline] = Field(min_length=1, max_length=200)
+
+
+def _editorial_refs(project_id: str, project: JsonValue, revision: JsonValue,
+                    *, timeline_id: str | None = None) -> tuple[ArtifactRef, ...]:
+    if not isinstance(project, dict) or not isinstance(revision, int) or revision < 1:
+        return ()
+    target_id = timeline_id or project.get("activeTimelineId")
+    timelines = project.get("timelines")
+    if not isinstance(target_id, str) or not isinstance(timelines, list):
+        return ()
+    if not any(isinstance(item, dict) and item.get("id") == target_id for item in timelines):
+        return ()
+    return (ArtifactRef(project_id=project_id, artifact_type="editorial_timeline", artifact_id=target_id, version=revision),)
 
 
 def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
@@ -148,17 +177,23 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         saved = next(shot for shot in result.project.document.shots if shot.id == request.shot_id)
         return ToolExecution(output=CurrentWriteOutput(project_id=request.project_id,
             scene_ids=[], shot_ids=[saved.id], notices=result.notices,
-            shot_revisions={saved.id: saved.revision}),
+            shot_revisions={saved.id: saved.revision}, changed_shot_ids=[saved.id]),
             artifact_refs=(ArtifactRef(project_id=request.project_id, artifact_type="shot",
                 artifact_id=saved.id, version=saved.revision),))
 
     def save_timeline(request: TimelineWriteInput) -> ToolExecution[CurrentWriteOutput]:
         if request.shot_id:
             from short_drama.studio_shot_editorial import save_shot_editorial
-            save_shot_editorial(service, request.project_id, request.shot_id, request.request)
+            result = save_shot_editorial(service, request.project_id, request.shot_id, request.request)
         else:
-            service.studio.save_timeline(request.project_id, request.request)
-        return ToolExecution(output=CurrentWriteOutput(project_id=request.project_id, scene_ids=[], shot_ids=[], notices=["已保存当前剪辑。用户已有剪辑必须先读取、局部修改并保留。 "]))
+            result = service.studio.save_timeline(request.project_id, request.request)
+        saved = result.project.document.editorial_timeline or {}
+        project = saved.get("project")
+        refs = _editorial_refs(request.project_id, project, saved.get("revision"))
+        return ToolExecution(output=CurrentWriteOutput(project_id=request.project_id, scene_ids=[], shot_ids=[],
+            editorial_revision=refs[0].version if refs else None,
+            timeline_id=refs[0].artifact_id if refs else None,
+            notices=result.notices or ["已保存当前剪辑。"]), artifact_refs=refs)
 
     def add_overlay(request: TimelineOverlayInput) -> ToolExecution[CurrentReadOutput]:
         from short_drama.studio_overlays import add_asset_overlay
@@ -168,16 +203,28 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
             "overlay_id": request.request.overlay_id,
             "asset_version_id": request.request.asset_version_id,
             "saved": True,
-        }))
+        }), artifact_refs=_editorial_refs(request.project_id, result.project, result.revision))
 
     def read_timeline(request: TimelineReadInput) -> ToolExecution[CurrentReadOutput]:
         from short_drama.studio_editorial import read_editorial, EditorProject
         from short_drama.studio_shot_editorial import read_shot_editorial
-        value = read_shot_editorial(service, request.project_id, request.shot_id, request.anchor_clip_id) if request.shot_id else read_editorial(service, request.project_id)
+        if request.subtitle_ids or request.clip_ids:
+            from short_drama.studio_editorial_selection import read_editorial_selection
+            return ToolExecution(output=CurrentReadOutput(content=read_editorial_selection(
+                service, request.project_id, timeline_id=request.timeline_id,
+                subtitle_ids=request.subtitle_ids, clip_ids=request.clip_ids,
+                shot_id=request.shot_id, anchor_clip_id=request.anchor_clip_id)))
+        value = read_shot_editorial(service, request.project_id, request.shot_id, request.anchor_clip_id,
+            timeline_id=request.timeline_id) if request.shot_id else read_editorial(service, request.project_id)
         editor = EditorProject.model_validate(value.project)
-        timeline = next(item for item in editor.timelines if item.id == editor.activeTimelineId)
+        target_id = request.timeline_id or editor.activeTimelineId
+        timeline = next((item for item in editor.timelines if item.id == target_id), None)
+        if timeline is None:
+            raise ValueError(f"/timeline_id: {target_id!r} is not available in this editorial scope. Use current timeline_id or omit shot_id for a film read.")
         content: dict[str, JsonValue] = {"project_id": request.project_id, "editorial_revision": value.revision,
             "is_saved": value.revision > 0, "timeline_id": timeline.id,
+            "coordinate_space": "SHOT_LOCAL" if value.scope else "FILM",
+            "film_start_seconds": value.scope.film_start_seconds if value.scope else 0,
             "clips": [{"id": clip.id, "type": clip.type, "source_shot_id": (clip.model_extra or {}).get("sourceShotId"),
                 "start_seconds": clip.startTime, "duration_seconds": clip.duration, "source_in_seconds": clip.trimStart,
                 "speed": clip.speed, "reversed": clip.reversed,
@@ -190,6 +237,7 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
             content["shot_scope"] = cast(JsonValue, value.scope.model_dump(mode="json"))
             content["time_coordinates"] = "当前镜头内部时间，从 0 秒开始。素材入点仍是源文件时间。edit_clips 必须传递相同 shot_id 和 anchor_clip_id，保存后同步成片。"
         if request.include_project:
+            editor.activeTimelineId = timeline.id
             # Assets are present once in the library; save rehydrates each clip by assetId.
             for item in editor.timelines:
                 for clip in item.clips:
@@ -206,12 +254,31 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         record = start_export(service, request.project_id, request.request, background=False)
         if record.status != "completed":
             raise ValueError(record.error or "成片导出未完成。")
-        return ToolExecution(output=record)
+        return ToolExecution(output=record, artifact_refs=(ArtifactRef(project_id=record.project_id,
+            artifact_type="studio_export", artifact_id=record.id, version=record.editorial_revision),))
 
     def edit_timeline(request: TimelineEditInput) -> ToolExecution[CurrentReadOutput]:
-        from short_drama.studio_editorial import edit_editorial
+        from short_drama.studio_editorial import edit_editorial, EditorProject
         value = edit_editorial(service, request.project_id, request.request)
-        return ToolExecution(output=CurrentReadOutput(content={"editorial_revision": value.revision, "message": "所选片段已保存，其他剪辑与字幕保留。"}))
+        refs = _editorial_refs(request.project_id, value.project, value.revision, timeline_id=request.request.timeline_id)
+        editor = EditorProject.model_validate(value.project)
+        target_id = request.request.timeline_id or editor.activeTimelineId
+        timeline = next(item for item in editor.timelines if item.id == target_id)
+        cue_ids = {item.id for item in request.request.subtitles}
+        clip_ids = {item.id for item in request.request.clips}
+        if request.request.keep_linked_audio:
+            for item in timeline.clips:
+                if item.id in clip_ids:
+                    clip_ids.update(cast(list[str], (item.model_extra or {}).get("linkedClipIds", [])))
+        return ToolExecution(output=CurrentReadOutput(content={"project_id": request.project_id,
+            "editorial_revision": value.revision, "timeline_id": refs[0].artifact_id if refs else None,
+            "saved": True, "message": "指定片段与字幕的变化字段已保存，其余内容保留。",
+            "changed_clips": [{"id": clip.id, "start_seconds": clip.startTime, "duration_seconds": clip.duration,
+                "source_in_seconds": clip.trimStart, "volume": clip.volume, "muted": clip.muted, "speed": clip.speed}
+                for clip in timeline.clips if clip.id in clip_ids],
+            "changed_subtitles": [cast(JsonValue, item.model_dump(mode="json")) for item in timeline.subtitles if item.id in cue_ids],
+            "removed_subtitle_ids": [item.id for item in request.request.subtitles if item.remove],
+            "time_coordinates": "保存后的全片时间；字幕样式与文字仅更新显式字段。"}), artifact_refs=refs)
 
     def workflow(request: WorkflowInput) -> ToolExecution[ComfyRun]:
         from short_drama.studio_comfy import run_comfy
@@ -273,8 +340,8 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         description="把用户要求审阅的剧本或分镜修改写成逐项可接受/拒绝的真实文字差异。先读取当前内容，每项 before 必须是指定字段中唯一存在的原文；after 是该段替换文字。场次修改用 affected_shot_ids 指明实际影响的镜头，同场无关视频和人工修改保留；更改台词仍会自动关联对应镜头。可一次提出多处修改。不会改写正式内容；用户处理后原任务收到实际接受/拒绝结果再继续。初稿创作和无需审阅的自主制作直接用保存工具。",
         effect=ToolEffect.WRITE, idempotent=True, input_model=TextProposalInput, output_model=StudioChangeSet, handler=propose_text,
         tags=frozenset({"studio", "review", "partial-edit"})))
-    registry.register(ToolSpec(id="timeline.read_editorial", version=1, category=ToolCategory.TIMELINE,
-        description="读取当前剪辑的修订号、时间、声音、字幕与导出。单镜头编辑传 shot_id，返回仅该镜头的局部时间线与使用位置；多处采用时用 anchor_clip_id 定位。未传 shot_id 读取整集。默认摘要足够局部编辑，整体结构才需 include_project=true。实际文件用 read_export；revision=0 时先保存再导出。",
+    registry.register(ToolSpec(id="timeline.read_editorial", version=2, category=ToolCategory.TIMELINE,
+        description="读取当前剪辑。已有 editor_selection 时直接传 timeline_id 与 subtitle_ids/clip_ids：只返回这些对象的真实 FILM 起止、revision及实际镜头采用位置的 SHOT_LOCAL 相交映射；跨镜字幕保持完整本集边界，未知ID报具体错误，不需要先按shot_id猜测或读取全片。精确选择不能同时include_project。无具体ID时兼容：shot_id/anchor_clip_id读取镜头局部剪辑，不传shot_id读取本集摘要；整体结构才需include_project=true。后续timeline.edit_clips必须传相同timeline_id及当前expected_revision；按FILM字段修改不传shot_id，按局部映射修改传shot_id和anchor。实际文件用read_export。",
         effect=ToolEffect.READ, idempotent=True, input_model=TimelineReadInput, output_model=CurrentReadOutput, handler=read_timeline,
         tags=frozenset({"studio", "editorial", "current-content"})))
     registry.register(ToolSpec(id="timeline.read_export", version=1, category=ToolCategory.TIMELINE,
@@ -285,8 +352,8 @@ def register_tools(registry: ToolRegistry, service: ShortDramaService) -> None:
         description="把当前已保存的剪辑导出为实际 MP4，使用相同 LTX 时间线、声音和字幕。等待本地 FFmpeg 完成后返回媒体路径；存在用户剪辑时必须使用本工具，不能用重新组接覆盖用户修改。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineExportInput, output_model=StudioExport, handler=export_timeline,
         tags=frozenset({"studio", "editorial", "export"})))
-    registry.register(ToolSpec(id="timeline.edit_clips", version=1, category=ToolCategory.TIMELINE,
-        description="修改已读取片段的起点、素材入点、时长、音量或静音；只发送变化字段，默认同步原声。单镜头裁切在 request 中传 shot_id 与读取到的 anchor_clip_id，以局部时间编辑，保存后按时长差顺移后续镜头、声音、字幕。整集编辑不传 shot_id，保留其他片段的位置。设计时长用 shot.save_current 修改，裁切不改写分镜。clips=[] 可保存首次投影。",
+    registry.register(ToolSpec(id="timeline.edit_clips", version=3, category=ToolCategory.TIMELINE,
+        description="精确修改当前片段与字幕，只发变化字段，无需读取或回写整个LTX project。request.timeline_id使用editor_selection/read_editorial返回的准确时间线，保留用户当前active选择和其他时间线；省略仅兼容修改当前active。expected_revision必须是当前读取的全局剪辑revision，目标删除或对象不在范围会报错。clips按id修改起点、素材入点、时长、音量、静音或speed，默认同步原声；subtitles按id修改start_seconds/end_seconds/text/style（仅合并给定样式）或remove，保留其余内容，可与clips一次保存。只改字幕可以clips=[]。SHOT_LOCAL修改同时传shot_id与anchor_clip_id；FILM修改不传shot_id。返回实际目标变化和新revision。设计时长用shot.save_current。",
         effect=ToolEffect.WRITE, idempotent=False, input_model=TimelineEditInput, output_model=CurrentReadOutput, handler=edit_timeline,
         tags=frozenset({"studio", "editorial", "partial-edit"})))
     registry.register(ToolSpec(id="task.read_workflow", version=1, category=ToolCategory.TASK,

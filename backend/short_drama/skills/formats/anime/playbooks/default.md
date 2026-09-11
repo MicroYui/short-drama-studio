@@ -2,6 +2,8 @@
 
 以下十步与共享 `end_to_end` 阶段对齐，说明动画叙事在各阶段需要额外维护的视觉语言、关键姿势和风格连续性。Agent 可按项目媒介、已有设定和修改范围跳过、合并或并行步骤。
 
+当前可用且明确选用的媒体可直接使用；检查结论按实际观察记录，不增加批准标记或逐阶段确认。后期以项目当前编辑时间线为准，精确修改保护已有裁切、字幕与声音，不为同步流程重建旧 Manifest。
+
 1. **锁定故事目标、动画媒介与视觉边界**
 
    - **输入：** 用户目标、来源剧本/设定、参考作品或素材、目标受众、交付画幅、当前 `ProjectDocument` 和锁定项。
@@ -23,12 +25,12 @@
    - **输入：** 当前剧本、用户设定图、角色/场景/道具/风格资产和可复用目录。
    - **决策：** 固定世界规则、角色轮廓和比例、脸型发型、服装、色板、线条、材质、背景、光影、道具状态与运动风格；将 canonical 设定与单镜关键帧分离。
    - **可调用 Tool：** `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`image.enqueue`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry`。
-   - **产物：** ProjectBibleVersion、批准的角色/场景/道具/风格 AssetVersion 和用途明确的 ReferencePack。
+   - **产物：** ProjectBibleVersion、当前明确选用的角色/场景/道具/风格 AssetVersion 和用途明确的 ReferencePack。
    - **检查与返工：** 只补齐实际镜位所需视角和状态；临时镜头图不能未经审核覆盖角色造型基准，有意变形或换装需记录触发条件。
 
 4. **用布局、姿势和关键动作设计镜头**
 
-   - **输入：** ScriptVersion、动画 Bible、批准资产、视觉节拍和目标画幅。
+   - **输入：** ScriptVersion、动画 Bible、可用资产、视觉节拍和目标画幅。
    - **决策：** 为每镜确定画面作用、布局、景别、角色轮廓、姿势、表情、视线、关键动作、停顿、相机/画面运动、开场与终态；决定采用完整运动、有限动画、循环或静止保持。
    - **可调用 Tool：** 动画导演/镜头规划 Agent；`shot.update_reference_plan`、`shot.preview_reference_plan`、`shot.compile_keyframe_brief`、`shot.director_advice`。
    - **产物：** 连接剧情、设定、关键姿势、运动段落、声音和转场的 ShotPlan。
@@ -36,7 +38,7 @@
 
 5. **按身份、风格和运动风险选择路线**
 
-   - **输入：** ShotPlan、批准设定、布局/关键帧候选、已有 Take 和 Provider Capability。
+   - **输入：** ShotPlan、当前设定、布局/关键帧候选、已有 Take 和 Provider Capability。
    - **决策：** 低连续性探索可用纯文本；角色造型和开场布局重要时使用首帧；明确姿势/构图终态时考虑首尾帧；风格、角色或运动特征复用更重要时选择参考路线；合格旧 Take 优先复用。
    - **可调用 Tool：** `qa.rerank_reference_visuals`、`qa.compare_keyframes`、`qa.check_input_compatibility`、`route.h3_capability_profile`、`route.plan_h3`、`route.list_h3_plans`。
    - **产物：** 路线、每份参考的职责、关键帧策略、候选范围、检查重点和回退方案。
@@ -52,9 +54,9 @@
 
 7. **编译动画表演指令并生成候选**
 
-   - **输入：** ShotPlan、动作节拍、ReferencePlan、批准媒体和当前路线。
+   - **输入：** ShotPlan、动作节拍、ReferencePlan、可用媒体和当前路线。
    - **决策：** Prompt 表达角色身份、姿势变化、表情、动作时序、画面/相机运动、风格和声音，不自行增加镜头或改变设定；候选数量按高风险维度动态决定。
-   - **可调用 Tool：** REAL_H3 使用 `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`task.advance`、`task.recover_output`；MOCK 使用 `video.enqueue`、`task.drain`、`task.reconcile`。
+   - **可调用 Tool：** REAL_H3 可用 `route.prepare_h3_group` 组合准备、编译与提交；需要逐项控制时使用 `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`task.advance`、`task.recover_output`；MOCK 使用 `video.enqueue`、`task.drain`、`task.reconcile`。
    - **产物：** 可追溯 GenerationTask、实际请求和一个或多个动画 Take。
    - **检查与返工：** 首个候选出现后先看造型、动作路径和背景稳定性；若问题来自关键帧或冲突参考，先修输入，再决定是否继续生成。
 
@@ -70,14 +72,14 @@
 
    - **输入：** 选定 Takes、锁定对白、角色声线、动作落点、音乐/音效、字幕和图形需求。
    - **决策：** 让对白、音效、音乐和停顿跟随动作与情绪节拍；决定字幕、拟声字、图形和转场如何融入既定画面语言。
-   - **可调用 Tool：** `audio.update_voice_reference`、`timeline.rebuild`、`audio.inspect_manifest`；其他合成/后期能力只在 Tool Catalog 已注册时使用。
-   - **产物：** 可重建 TimelineManifest、声音与动作关系、字幕/图形布局和镜头边界。
+   - **可调用 Tool：** `audio.update_voice_reference`、`timeline.read_editorial`、`timeline.edit_clips`、`timeline.save_editorial`、`audio.inspect_manifest`、`audio.align_subtitles`；其他合成/后期能力只在 Tool Catalog 已注册时使用。
+   - **产物：** 当前编辑时间线、声音与动作关系、字幕/图形布局和镜头边界。
    - **检查与返工：** 检查对白身份、声音来源、动作落点、字幕遮挡、闪烁和色彩/合成连续性；能由时间线修复的问题不重做完整动画镜头。
 
 10. **从完整作品验收视觉语言与叙事并导出**
 
-   - **输入：** 当前 TimelineManifest、最新 ScriptVersion/BibleVersion、选定 Takes 和交付要求。
+   - **输入：** 当前已保存编辑时间线、最新 ScriptVersion/BibleVersion、选定 Takes 和交付要求。
    - **决策：** 判断故事是否可理解、角色表演是否成立、视觉语言是否统一、风格化是否有意且一致、角色/场景/道具和音画是否连续。
-   - **可调用 Tool：** `qa.review_episode`、`timeline.export`；发现问题时使用 `change.preview` 或对应剧本、资产、镜头、视频 Tool 建立最小返工。
+   - **可调用 Tool：** 按需使用 `qa.review_episode`；当前剪辑使用 `timeline.export_editorial`、`timeline.read_export`；发现问题时使用 `change.preview` 或对应剧本、资产、镜头、视频 Tool 建立最小返工。
    - **产物：** 整片审核记录、当前 ExportRecord、系列连续性状态和可选优化项。
    - **检查与返工：** 修复后只复核受影响镜头和相邻边界；导出必须对应最新时间线，且真正阻断的问题解决后才结束。

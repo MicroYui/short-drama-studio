@@ -151,16 +151,19 @@ def test_minimax_methods_load_selected_chinese_source_sections() -> None:
         == SkillProvenanceKind.UPSTREAM_COMMUNITY_WITH_ADAPTER
     )
     assert "# 双人游戏开场视频生成器" not in game_intro.constitution
-    assert "## STEP 1：询问视觉风格" in game_intro.role_prompts[
+    assert "## 创意与玩家信息" in game_intro.role_prompts[
         ProductionSkillRole.CONCEPT
     ]
-    assert "## 提示词原则" in game_intro.role_prompts[
+    assert "## 视频编译" in game_intro.role_prompts[
         ProductionSkillRole.VIDEO_PROMPT_COMPILER
     ]
-    assert "## STEP 5：六列标准镜头信息表" in animation.role_prompts[
+    assert "身份、昵称、位置与装备对应" in game_intro.role_prompts[
+        ProductionSkillRole.VIDEO_PROMPT_COMPILER
+    ]
+    assert "## 镜头规划" in animation.role_prompts[
         ProductionSkillRole.PLANNER
     ]
-    assert "## STEP 5：六列标准镜头信息表" not in animation.role_prompts[
+    assert "## 镜头规划" not in animation.role_prompts[
         ProductionSkillRole.CONCEPT
     ]
 
@@ -176,8 +179,8 @@ def test_ai_short_drama_schema_adapter_composes_with_official_method() -> None:
     assert "`AI_SHORT_DRAMA` 数据边界" in format_only.text
     assert "Leader → Worker → Verifier" not in format_only.text
     assert "无需先获得 Verifier 的通过标记" in format_only.text
-    assert "## 全局视觉风格锁" not in format_only.text
-    assert "皮克斯感 3D 卡通渲染" not in format_only.text
+    assert "## 视觉设定" not in format_only.text
+    assert "次表面散射" not in format_only.text
 
     composed = compile_production_prompt(
         ProductionProfile.AI_SHORT_DRAMA,
@@ -189,8 +192,8 @@ def test_ai_short_drama_schema_adapter_composes_with_official_method() -> None:
         "method.animation_short",
     )
     assert "AI 短剧（本地格式适配）" in composed.text
-    assert "## 全局视觉风格锁" in composed.text
-    assert "皮克斯感 3D 卡通渲染" in composed.text
+    assert "## 视觉设定" in composed.text
+    assert "次表面散射" in composed.text
     assert "# 3D动画短片生成器" not in composed.text
 
 
@@ -275,93 +278,61 @@ def test_official_method_uses_declared_roles_without_local_role_files() -> None:
     assert animation.supports(ProductionSkillRole.CONCEPT)
     assert not animation.supports(ProductionSkillRole.WRITER)
     assert not (source_directory / "roles").exists()
-    assert "## 全局视觉风格锁" in animation.role_prompts[
+    assert "## 视觉设定" in animation.role_prompts[
         ProductionSkillRole.CONCEPT
     ]
 
 
 def test_drama_method_role_sources_include_storyboard_execution_and_verification() -> None:
     drama = production_method_skill("method.drama_series")
-
-    asset_prompt = drama.role_prompts[ProductionSkillRole.ASSET_REVIEWER]
-    assert "# 用户源图片的登记与人物锚定" in asset_prompt
-    assert "权威 identity reference" in asset_prompt
-    assert "完整角色卡" in asset_prompt
-    assert "不默认将它绑定所有镜头" in asset_prompt
-    assert "# 官方角色卡布局参考的本地映射" in asset_prompt
-    assert "reference_role=LAYOUT_GUIDE" in asset_prompt
-    assert "drama-character-sheet-three-view-20260701.png" in asset_prompt
-    assert "不得只在计划中备注“没有模板”就继续" in asset_prompt
-    assert "路线 A：布局 guide 引导的一图成卡" in asset_prompt
-    assert "路线 B：分视图生成/导入后本地确定性拼板" in asset_prompt
-    assert "不扮演像素级测量门禁" in asset_prompt
-    assert "image.compose_reference_sheet" in asset_prompt
-    assert "旧版 AssetPlan 或中断恢复时都重新语义核对" in asset_prompt
-    assert "转成真实 `reference_inputs`" in asset_prompt
-    assert "不得仍把无参考 `GENERATE` 称为官方标准一图成卡" in (
-        asset_prompt
-    )
-    assert "只有左右存在可识别的非对称身份特征" in asset_prompt
-    assert "不仅因 `requested_views` 中使用了 LEFT/RIGHT 枚举名" in (
-        asset_prompt
-    )
-    assert "定向修复保留已有身份" in asset_prompt
-    assert "作为 `parent_version_id` 和精确 identity `reference_input`" in (
-        asset_prompt
-    )
-    assert "一件可干净裁用的无字物理母版" in asset_prompt
-    assert "各使用处引用同一精确版本" in asset_prompt
-    assert "多件像素级一致" in asset_prompt
-    assert "轻微尺寸或透视差不是全量返修理由" in asset_prompt
-
-    planner_prompt = drama.prompt_for(
-        ProductionSkillRole.ASSET_PLANNER,
-        stage=ProductionPromptStage.ASSETS,
-    )
-    builder_prompt = drama.prompt_for(
-        ProductionSkillRole.ASSET_BUILDER,
-        stage=ProductionPromptStage.ASSETS,
-    )
-    asset_verifier_prompt = drama.prompt_for(
-        ProductionSkillRole.ASSET_VERIFIER,
-        stage=ProductionPromptStage.ASSETS,
-    )
-    assert planner_prompt is not None
-    assert builder_prompt is not None
-    assert asset_verifier_prompt is not None
-    assert "## 建卡启发式规则" in planner_prompt
-    assert "## Base-First Dependency Chain" in planner_prompt
-    assert "## 角色设定图 Prompt 模板" in builder_prompt
-    assert "## 站位质量" not in builder_prompt
-    assert "## 站位质量" in asset_verifier_prompt
-    assert "## 角色设定图 Prompt 模板" not in asset_verifier_prompt
-    assert "# 用户源图片的登记与人物锚定" in planner_prompt
-    assert "# 用户源图片的登记与人物锚定" in builder_prompt
-    assert "# 用户源图片的登记与人物锚定" in asset_verifier_prompt
-    assert len(builder_prompt) < len(asset_prompt)
-    assert len(asset_verifier_prompt) < len(asset_prompt)
+    planner = drama.prompt_for(ProductionSkillRole.ASSET_PLANNER, stage=ProductionPromptStage.ASSETS)
+    builder = drama.prompt_for(ProductionSkillRole.ASSET_BUILDER, stage=ProductionPromptStage.ASSETS)
+    verifier = drama.prompt_for(ProductionSkillRole.ASSET_VERIFIER, stage=ProductionPromptStage.ASSETS)
+    assert planner is not None and builder is not None and verifier is not None
+    assert "## 资产规划" in planner
+    assert "生命周期道具" in planner
+    assert "# 用户源图片的登记与人物锚定" in planner
+    assert "单张脸照或单角度人像也可以足够" in planner
+    assert "## 资产制作" in builder
+    assert "# 可选角色卡与布局参考" in builder
+    assert "LAYOUT_GUIDE/GUIDE_ONLY" in builder
+    assert "SUBJECT_IDENTITY/AUTHORITATIVE" in builder
+    assert "drama-character-sheet-three-view-20260701.png" in builder
+    assert "只有确实发送的 guide 才能" in builder
+    assert "没有规定每个人物都要双区卡" in builder
+    assert "image.compose_reference_sheet" in builder
+    assert "不能仅因 LEFT/RIGHT 枚举名" in builder
+    assert "保留精确当前版本作为身份输入" in builder
+    assert "独立 TEXT_PLATE" in builder
+    assert "不得只在计划中备注“没有模板”就继续" not in builder
+    assert "## 资产检查" in verifier
+    assert "多角色参考分别比对主要识别点" in verifier
+    assert "# 可选角色卡与布局参考" not in verifier
+    assert "## 资产规划" not in builder
+    assert "## 资产制作" not in verifier
 
     animation = production_method_skill("method.animation_short")
-    for role in (
+    for role, heading in (
+        (ProductionSkillRole.ASSET_PLANNER, "## 资产规划"),
+        (ProductionSkillRole.ASSET_BUILDER, "## 资产制作"),
+        (ProductionSkillRole.ASSET_VERIFIER, "## 资产检查"),
+    ):
+        assert heading in animation.role_prompts[role]
+    assert len({animation.role_prompts[role] for role in (
         ProductionSkillRole.ASSET_PLANNER,
         ProductionSkillRole.ASSET_BUILDER,
         ProductionSkillRole.ASSET_VERIFIER,
-    ):
-        assert animation.role_prompts[role] == animation.role_prompts[
-            ProductionSkillRole.ASSET_REVIEWER
-        ]
+    )}) == 3
 
-    director_prompt = drama.role_prompts[ProductionSkillRole.DIRECTOR]
-    assert "## 镜头语言服务故事" in director_prompt
-    assert "## 表演设计" in director_prompt
-
-    verifier_prompt = drama.role_prompts[
-        ProductionSkillRole.REVISION_VERIFIER
-    ]
-    assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" not in verifier_prompt
-    assert "## 渐进分镜与可选检查" in verifier_prompt
-    assert "## 跨镜头空间连续性" in verifier_prompt
-    assert "## 状态连续性" in verifier_prompt
+    director = drama.role_prompts[ProductionSkillRole.DIRECTOR]
+    assert "## 镜头语言与情绪" in director
+    assert "## 表演与物理动作" in director
+    assert "## 空间与状态连续性" in director
+    verifier = drama.role_prompts[ProductionSkillRole.REVISION_VERIFIER]
+    assert "## 当前范围验收" in verifier
+    assert "## 渐进分镜与可选检查" in verifier
+    assert "## 空间与状态连续性" in verifier
+    assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" not in verifier
 
 
 def test_drama_method_compiles_only_the_explicit_stage_and_role_sections() -> None:
@@ -389,15 +360,15 @@ def test_drama_method_compiles_only_the_explicit_stage_and_role_sections() -> No
     )
 
     assert asset_planner.stage == ProductionPromptStage.ASSETS
-    assert "## 角色 Profile 维度" in asset_planner.text
+    assert "## 资产规划" in asset_planner.text
     assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" not in (
         asset_planner.text
     )
-    assert "## 剧本落画布" not in asset_planner.text
+    assert "## 剧本写入当前项目" not in asset_planner.text
     assert "## 渐进分镜与可选检查" in storyboard_verifier.text
     assert "## storyboard-confirm 前分组检查清单" not in storyboard_verifier.text
-    assert "## 剧本落画布" not in storyboard_verifier.text
-    assert "## 剧本落画布" in script_verifier.text
+    assert "## 剧本写入当前项目" not in storyboard_verifier.text
+    assert "## 剧本写入当前项目" in script_verifier.text
     assert "## storyboard-confirm 前分组检查清单" not in (
         script_verifier.text
     )
@@ -428,7 +399,7 @@ def test_method_loader_rejects_duplicate_ids_and_missing_source_sections(
     )
     invalid_section_path.write_text(
         invalid_section_path.read_text(encoding="utf-8").replace(
-            "::全局视觉风格锁",
+            "::视觉设定",
             "::不存在的官方章节",
             1,
         ),

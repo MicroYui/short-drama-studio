@@ -8,6 +8,9 @@
     "PLANNER",
     "REVISION_VERIFIER",
     "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
     "ASSET_REVIEWER",
     "VIDEO_PROMPT_COMPILER",
     "EPISODE_REVIEWER"
@@ -16,30 +19,37 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 1：素材检查与产品事实摘要",
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 3：选择产品叙事脊柱"
+      "references/production-method.md::产品事实与叙事"
     ],
     "WRITER": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::文字规范",
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 5：生成或确认 Apple 风英文文案"
+      "references/production-method.md::文案与文字层"
     ],
     "PLANNER": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 7：精确节拍与文字分镜表"
+      "references/production-method.md::节拍与生成规划"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 10：音乐分析、卡点剪辑与交付验证"
+      "references/production-method.md::当前范围验收"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 4：导演动效语言"
+      "references/production-method.md::产品运动与构图"
     ],
     "ASSET_REVIEWER": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 6：生成三张独立产品锚定照片"
+      "references/production-method.md::资产检查"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 8：视频生成"
+      "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_h3/original/minimalist-product-ad-generator/SKILL.cn.md::步骤 10：音乐分析、卡点剪辑与交付验证"
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::资产规划"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::资产制作"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::资产检查"
     ]
   },
   "provenance": "UPSTREAM_COMMUNITY_WITH_ADAPTER",
@@ -47,5 +57,15 @@
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/minimalist-product-ad-generator/SKILL.cn.md",
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/minimalist-product-ad-generator/meta.yaml [source=community; author-en=User]"
   ],
-  "user_overridable": true
+  "user_overridable": true,
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "POST.REVISION_VERIFIER": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ]
+  }
 }

@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import imageio_ffmpeg
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageStat
-from pydantic import Field
+from pydantic import Field, JsonValue
 
 from short_drama.media import MediaGenerationError, probe_media_with_ffmpeg
 from short_drama.models import (
@@ -26,6 +26,7 @@ from short_drama.models import (
     AssetMediaType,
     AssetVersion,
     DomainModel,
+    Freshness,
     ObservationConfidence,
     ProjectDocument,
     QaFailureCategory,
@@ -120,6 +121,33 @@ def _semantic_reference_images(
     document: ProjectDocument,
     reference_plan: ReferencePlanEntry | None,
 ) -> list[tuple[str, str]]:
+    return [(label, url) for _version_id, label, url in semantic_reference_entries(document, reference_plan)]
+
+
+def selected_generation_reference_ids(document: ProjectDocument, plan: ReferencePlanEntry) -> list[str]:
+    shot = next((item for item in document.shots if item.id == plan.shot_id), None)
+    cues = [] if shot is None else [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]
+    selected = [cue.asset_version_id for cue in cues if cue.usage == "GENERATION" and cue.asset_version_id is not None]
+    explicit_subjects = {cue.subject_asset_id for cue in cues}
+    # Current prose selects both the version and its use. An old plan can still
+    # bind an earlier image of an object now used only in editorial, or replaced
+    # by a different generation image. It must not revive either old choice.
+    superseded_versions = {version.id for asset in document.assets if asset.id in explicit_subjects
+                           for version in asset.versions}
+    superseded_versions.update(entry.asset_version_id for pack in document.reference_packs
+                               if pack.subject_asset_id in explicit_subjects for entry in pack.entries)
+    superseded_versions.update(cue.asset_version_id for cue in cues if cue.asset_version_id is not None)
+    return list(dict.fromkeys([*selected, *(binding.target_id for binding in plan.bindings
+                                          if binding.target_id not in superseded_versions)]))
+
+
+def semantic_reference_entries(
+    document: ProjectDocument,
+    reference_plan: ReferencePlanEntry | None,
+    *,
+    load_images: bool = True,
+) -> list[tuple[str, str, str]]:
+    """Observe selected generation media first; canonical images only fill missing subjects."""
     if reference_plan is None:
         return []
     plan = reference_plan
@@ -137,12 +165,30 @@ def _semantic_reference_images(
         subject_ids.add(interaction.actor_asset_id)
         subject_ids.add(interaction.target_asset_id)
 
-    candidates: list[tuple[Asset, AssetVersion]] = []
+    shot = next((item for item in document.shots if item.id == plan.shot_id), None)
+    cues = [] if shot is None else [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]
+    generation_ids = set(selected_generation_reference_ids(document, plan))
+    candidates: list[tuple[Asset, AssetVersion, str]] = []
+    # Explicit editorial use or a not-yet-available generation choice must not
+    # be replaced with an older canonical image during visual inspection.
+    selected_subjects = {cue.subject_asset_id for cue in cues}
+    for cue in cues:
+        if cue.usage != "GENERATION" or cue.asset_version_id is None:
+            continue
+        resolved = version_index.get(cue.asset_version_id)
+        if resolved is not None:
+            asset, version = resolved
+            candidates.append((asset, version, f"selected GENERATION reference; purpose={cue.purpose}"))
+            selected_subjects.add(cue.subject_asset_id)
     for binding in plan.bindings:
+        if binding.target_id not in generation_ids:
+            continue
         resolved = version_index.get(binding.target_id)
         if resolved is not None:
-            candidates.append(resolved)
-    for asset_id in subject_ids:
+            asset, version = resolved
+            candidates.append((asset, version, f"selected GENERATION binding; purpose={binding.purpose}"))
+            selected_subjects.add(asset.id)
+    for asset_id in sorted(subject_ids - selected_subjects):
         asset = asset_by_id.get(asset_id)
         if asset is None or asset.approved_version_id is None:
             continue
@@ -154,15 +200,16 @@ def _semantic_reference_images(
             ),
             None,
         )
-        if version is not None:
-            candidates.append((asset, version))
+        if version is not None and version.approval_status == ApprovalStatus.APPROVED:
+            candidates.append((asset, version, "canonical reference fallback"))
 
-    result: list[tuple[str, str]] = []
+    result: list[tuple[str, str, str]] = []
     seen: set[str] = set()
-    for asset, version in candidates:
+    for asset, version, purpose in candidates:
         if (
             version.id in seen
-            or version.approval_status != ApprovalStatus.APPROVED
+            or version.approval_status == ApprovalStatus.REJECTED
+            or version.freshness != Freshness.CURRENT
             or version.media_type != AssetMediaType.IMAGE
         ):
             continue
@@ -170,21 +217,20 @@ def _semantic_reference_images(
         if version.local_path is not None:
             path = Path(version.local_path).expanduser().resolve()
             if path.is_file() and path.stat().st_size > 0:
-                url = _image_data_url(path)
-        elif version.external_url is not None:
+                url = _image_data_url(path) if load_images else str(path)
+        if url is None and version.external_url is not None:
             url = version.external_url
         if url is None:
             continue
         result.append(
             (
-                f"{asset.kind.value} canonical reference: {asset.name}; "
-                f"approved version={version.id}; descriptor={version.descriptor}",
+                version.id,
+                f"{asset.kind.value} {purpose}: {asset.name}; shot={plan.shot_id}; "
+                f"version={version.id}; state={version.approval_status.value}; descriptor={version.descriptor}",
                 url,
             )
         )
         seen.add(version.id)
-        if len(result) >= 8:
-            break
     return result
 
 
@@ -192,9 +238,101 @@ def semantic_reference_images(
     document: ProjectDocument,
     reference_plan: ReferencePlanEntry | None,
 ) -> list[tuple[str, str]]:
-    """Return the same bounded canonical reference set used by video inspection."""
+    """Return the selected, available generation references used by video inspection."""
 
     return _semantic_reference_images(document, reference_plan)
+
+
+def inspection_shots(document: ProjectDocument, take: Take, start: float, end: float) -> list[ShotPlan]:
+    ids = [window.shot_id for window in take.shot_windows
+           if window.source_out_seconds > start and window.source_in_seconds < end]
+    if not take.shot_windows:
+        ids = [take.shot_id]
+    by_id = {shot.id: shot for shot in document.shots}
+    if any(shot_id not in by_id for shot_id in ids):
+        raise ValueError("A grouped Take is missing a declared source shot for inspection")
+    return [by_id[shot_id] for shot_id in ids]
+
+
+def inspection_source_context(
+    document: ProjectDocument, take: Take, shots: list[ShotPlan], previous_take: Take | None = None,
+) -> dict[str, JsonValue]:
+    """Small revision/file snapshot for ordinary report reuse, never a quality verdict."""
+    ids = {shot.id for shot in shots}
+    plans = [plan for plan in document.reference_plan if plan.shot_id in ids]
+    versions = {version.id: version for asset in document.assets for version in asset.versions}
+    reference_ids = list(dict.fromkeys(version_id for plan in plans
+                                      for version_id, _label, _url in semantic_reference_entries(document, plan, load_images=False)))
+
+    def media_state(path_value: str | None) -> dict[str, JsonValue]:
+        if path_value is None:
+            return {}
+        path = Path(path_value).expanduser().resolve()
+        if not path.is_file():
+            return {"path": str(path), "available": False}
+        stat = path.stat()
+        return {"path": str(path), "size": stat.st_size, "modified_ns": stat.st_mtime_ns}
+
+    return {
+        "take_media": media_state(take.media_path),
+        "shot_revisions": {shot.id: shot.revision for shot in shots},
+        "shot_windows": [window.model_dump(mode="json") for window in take.shot_windows],
+        "bible_version_id": document.project.current_bible_version_id,
+        "reference_plans": [plan.model_dump(mode="json") for plan in plans],
+        "unobserved_reference_version_ids": [version_id for plan in plans
+                                              for version_id in selected_generation_reference_ids(document, plan)
+                                              if version_id not in reference_ids
+                                              and (version_id not in versions or versions[version_id].media_type == AssetMediaType.IMAGE)],
+        "reference_media": [{"id": version_id, "media": media_state(versions[version_id].local_path),
+                             "external_url": versions[version_id].external_url}
+                            for version_id in reference_ids],
+        "previous_take_id": previous_take.id if previous_take is not None else None,
+        "previous_media": media_state(previous_take.media_path) if previous_take is not None else None,
+        "previous_shot_revisions": {shot.id: shot.revision for shot in document.shots
+                                    if previous_take is not None and shot.id in previous_take.covered_shot_ids()},
+        "previous_shot_windows": [window.model_dump(mode="json") for window in previous_take.shot_windows]
+        if previous_take is not None else [],
+    }
+
+
+def inspection_matches_request(
+    report: VideoInspectionReport, *, document: ProjectDocument, take: Take,
+    request: VideoInspectionRequest, previous_take: Take | None = None,
+) -> bool:
+    end = request.source_out_seconds if request.source_out_seconds is not None else take.duration_seconds
+    shots = inspection_shots(document, take, request.source_in_seconds, end)
+    return (
+        report.take_id == take.id
+        and report.semantic_status == SemanticReviewStatus.COMPLETE
+        and report.review_focus == request.review_focus
+        and abs(report.observed_source_in_seconds - request.source_in_seconds) < 0.001
+        and report.observed_source_out_seconds is not None
+        and abs(report.observed_source_out_seconds - end) < 0.05
+        and report.covered_shot_ids == [shot.id for shot in shots]
+        and bool(report.source_context)
+        and report.source_context == inspection_source_context(document, take, shots, previous_take)
+        and Path(report.contact_sheet_path).is_file()
+        and (previous_take is None or (report.boundary_contact_sheet_path is not None
+                                      and Path(report.boundary_contact_sheet_path).is_file()))
+    )
+
+
+def boundary_frame_image_url(take: Take, source_end_seconds: float) -> str | None:
+    """Read a current boundary without a model round-trip or an older inspection."""
+    try:
+        with tempfile.TemporaryDirectory(prefix="studio-input-boundary-") as temporary:
+            directory = Path(temporary)
+            inspector = VideoInspector(directory)
+            media_path = Path(take.media_path).expanduser().resolve()
+            probe = inspector.probe_video(media_path)
+            samples = inspector.extract_exact_samples(
+                media_path=media_path, take_id=take.id, duration_seconds=probe.duration_seconds,
+                timestamps=[max(0.0, min(source_end_seconds, probe.duration_seconds) - max(0.05, 1.1 / probe.fps))],
+                output_dir=directory, prefix="selected-previous", reason="SELECTED_PREVIOUS_SHOT_END",
+            )
+            return image_data_url(Path(samples[0].image_path))
+    except (MediaGenerationError, OSError, ValueError):
+        return None
 
 
 class VideoInspector:
@@ -235,15 +373,22 @@ class VideoInspector:
         probe: VideoProbe,
         output_dir: Path,
         max_frames: int,
+        source_in_seconds: float = 0.0,
+        source_out_seconds: float | None = None,
     ) -> list[VideoFrameSample]:
         output_dir.mkdir(parents=True, exist_ok=True)
+        end = source_out_seconds if source_out_seconds is not None else probe.duration_seconds
+        if source_in_seconds >= probe.duration_seconds or end > probe.duration_seconds + 0.05 or end <= source_in_seconds:
+            raise ValueError("Inspection source range must lie within the available Take")
+        end = min(end, probe.duration_seconds)
+        span = end - source_in_seconds
         candidate_count = min(
             72,
-            max(max_frames * 3, math.ceil(probe.duration_seconds * 2.0)),
+            max(max_frames * 3, math.ceil(span * 2.0)),
         )
         sample_fps = min(
             8.0,
-            max(0.5, candidate_count / probe.duration_seconds),
+            max(0.5, candidate_count / span),
         )
         with tempfile.TemporaryDirectory(prefix="short-drama-frames-") as temp_value:
             temp_dir = Path(temp_value)
@@ -251,8 +396,12 @@ class VideoInspector:
             _run_ffmpeg(
                 [
                     "-y",
+                    "-ss",
+                    f"{source_in_seconds:.6f}",
                     "-i",
                     str(media_path),
+                    "-t",
+                    f"{span:.6f}",
                     "-an",
                     "-vf",
                     f"fps={sample_fps:.6f},scale=360:-2:flags=lanczos",
@@ -265,8 +414,10 @@ class VideoInspector:
             )
             candidates = sorted(temp_dir.glob("candidate-*.jpg"))
             if len(candidates) < 2:
-                raise MediaGenerationError(
-                    f"Adaptive sampling produced fewer than two frames for {media_path}"
+                return self.extract_exact_samples(
+                    media_path=media_path, take_id=take_id, duration_seconds=probe.duration_seconds,
+                    timestamps=[source_in_seconds, max(source_in_seconds, end - min(0.001, span / 2))],
+                    output_dir=output_dir, prefix="range-boundary", reason="SOURCE_RANGE_BOUNDARY",
                 )
             change_scores = self._change_scores(candidates)
             selected, uniform_indices, change_indices = self._select_indices(
@@ -276,8 +427,8 @@ class VideoInspector:
             samples: list[VideoFrameSample] = []
             for sequence, index in enumerate(selected, start=1):
                 timestamp = min(
-                    probe.duration_seconds,
-                    max(0.0, index / sample_fps),
+                    end,
+                    source_in_seconds + index / sample_fps,
                 )
                 destination = output_dir / (
                     f"frame-{sequence:02d}-{round(timestamp * 1000):06d}ms.jpg"
@@ -324,12 +475,15 @@ class VideoInspector:
 
         media_path = Path(take.media_path).expanduser().resolve()
         probe = self.probe_video(media_path)
+        source_end = request.source_out_seconds if request.source_out_seconds is not None else probe.duration_seconds
         current_samples = self.sample_video(
             media_path=media_path,
             take_id=take.id,
             probe=probe,
             output_dir=frames_dir,
             max_frames=request.max_frames,
+            source_in_seconds=request.source_in_seconds,
+            source_out_seconds=source_end,
         )
         contact_sheet = report_dir / "intra-shot-contact-sheet.jpg"
         self._build_contact_sheet(
@@ -345,15 +499,17 @@ class VideoInspector:
             previous_probe = self.probe_video(
                 Path(previous_take.media_path).expanduser().resolve()
             )
-            previous_boundary = self._extract_exact_samples(
+            previous_window = next((window for window in previous_take.shot_windows if window.shot_id == previous_shot.id), None)
+            previous_end = min(previous_probe.duration_seconds, previous_window.source_out_seconds) if previous_window is not None else previous_probe.duration_seconds
+            previous_boundary = self.extract_exact_samples(
                 media_path=Path(previous_take.media_path).expanduser().resolve(),
                 take_id=previous_take.id,
                 duration_seconds=previous_probe.duration_seconds,
                 timestamps=[
-                    max(0.0, previous_probe.duration_seconds - 0.4),
+                    max(0.0, previous_end - 0.4),
                     max(
                         0.0,
-                        previous_probe.duration_seconds
+                        previous_end
                         - max(0.05, 1.1 / previous_probe.fps),
                     ),
                 ],
@@ -361,13 +517,13 @@ class VideoInspector:
                 prefix="previous-boundary",
                 reason="PREVIOUS_SHOT_END",
             )
-            current_boundary = self._extract_exact_samples(
+            current_boundary = self.extract_exact_samples(
                 media_path=media_path,
                 take_id=take.id,
                 duration_seconds=probe.duration_seconds,
                 timestamps=[
-                    min(0.05, max(0.0, probe.duration_seconds - 0.01)),
-                    min(0.4, max(0.0, probe.duration_seconds - 0.01)),
+                    min(request.source_in_seconds + 0.05, max(request.source_in_seconds, source_end - 0.01)),
+                    min(request.source_in_seconds + 0.4, max(request.source_in_seconds, source_end - 0.01)),
                 ],
                 output_dir=frames_dir,
                 prefix="current-boundary",
@@ -399,7 +555,7 @@ class VideoInspector:
                 name="adaptive-sampling",
                 passed=len(current_samples) >= 2,
                 detail=(
-                    f"Selected {len(current_samples)} frames from the full temporal span; "
+                    f"Selected {len(current_samples)} frames from source {request.source_in_seconds:.3f}–{source_end:.3f}s; "
                     "coverage and high-change samples are both retained."
                 ),
             ),
@@ -408,6 +564,14 @@ class VideoInspector:
         observations: list[VideoObservation] = []
         issues: list[QaIssue] = []
         warnings: list[str] = []
+        source_context = inspection_source_context(
+            document, take, inspection_shots(document, take, request.source_in_seconds, source_end), previous_take,
+        )
+        missing_references = source_context.get("unobserved_reference_version_ids")
+        if missing_references:
+            warnings.append("部分选中生成参考未能提供可观察图片：" + json.dumps(missing_references, ensure_ascii=False))
+        if request.review_focus is not None or request.source_in_seconds > 0 or source_end < probe.duration_seconds - 0.05:
+            warnings.append("本报告仅覆盖所记录的源区间和关注点，不能作为整组全部内容的检查结论。")
         semantic_model: str | None = None
         summary = (
             "已完成媒体探测与适应性抽帧；该报告只提供可观察证据，不替代导演决策。"
@@ -447,6 +611,13 @@ class VideoInspector:
             shot_id=shot.id,
             take_id=take.id,
             previous_take_id=previous_take.id if previous_take is not None else None,
+            review_focus=request.review_focus,
+            observed_source_in_seconds=request.source_in_seconds,
+            observed_source_out_seconds=min(source_end, probe.duration_seconds),
+            covered_shot_ids=[item.id for item in inspection_shots(document, take, request.source_in_seconds, source_end)],
+            full_take_coverage=(request.review_focus is None and request.source_in_seconds == 0
+                                and source_end >= probe.duration_seconds - 0.05),
+            source_context=source_context,
             scopes=scopes,
             duration_seconds=probe.duration_seconds,
             width=probe.width,
@@ -521,7 +692,7 @@ class VideoInspector:
         return sorted(selected), uniform, change_selected
 
     @staticmethod
-    def _extract_exact_samples(
+    def extract_exact_samples(
         *,
         media_path: Path,
         take_id: str,
@@ -637,11 +808,8 @@ class VideoInspector:
             (item for item in document.reference_plan if item.shot_id == shot.id),
             None,
         )
-        shot_by_id = {item.id: item for item in document.shots}
-        covered_shots = [shot_by_id[window.shot_id] for window in take.shot_windows
-                         if window.shot_id in shot_by_id] if take.shot_windows else [shot]
-        if take.shot_windows and len(covered_shots) != len(take.shot_windows):
-            raise ValueError("A grouped Take is missing a declared source shot for inspection")
+        source_end = request.source_out_seconds if request.source_out_seconds is not None else take.duration_seconds
+        covered_shots = inspection_shots(document, take, request.source_in_seconds, source_end)
         covered_ids = {item.id for item in covered_shots}
         reference_plans = [item for item in document.reference_plan if item.shot_id in covered_ids]
         instructions = (
@@ -664,14 +832,16 @@ class VideoInspector:
             "核对总时长；不能拿第一个编辑镜头的时长判断整组超长，已声明的组内切镜不等于漂移。"
             "当前输入只有静态图像，不能据此验证对白、声线或音画同步；未观察音频记为 UNKNOWN，"
             "不能仅由缺少音频观察证据推定实际音频错误或缺失。"
+            "observed_source_range 是本次真正观察的源区间；review_focus 非空时仅回答该关注点。"
+            "不得对区间之外或未观察的内容下结论，也不得把局部检查称为全片已通过。"
         )
         reference_images: list[tuple[str, str]] = []
-        seen_reference_labels: set[str] = set()
+        seen_reference_ids: set[str] = set()
         for plan in reference_plans:
-            for label, url in _semantic_reference_images(document, plan):
-                if label not in seen_reference_labels and len(reference_images) < 8:
+            for version_id, label, url in semantic_reference_entries(document, plan):
+                if version_id not in seen_reference_ids:
                     reference_images.append((label, url))
-                    seen_reference_labels.add(label)
+                    seen_reference_ids.add(version_id)
         image_map: list[dict[str, object]] = [
             {
                 "index": 1,
@@ -693,7 +863,7 @@ class VideoInspector:
             image_map.append(
                 {
                     "index": next_image_index,
-                    "role": "CANONICAL_ASSET_REFERENCE",
+                    "role": "SELECTED_GENERATION_REFERENCE",
                     "description": label,
                 }
             )
@@ -706,6 +876,7 @@ class VideoInspector:
                 "requested_duration_seconds": max(window.source_out_seconds for window in take.shot_windows)
                 if take.shot_windows else shot.duration_seconds,
                 "shot_windows": [window.model_dump(mode="json") for window in take.shot_windows],
+                "observed_source_range": {"start_seconds": request.source_in_seconds, "end_seconds": source_end},
             },
             "current_shot": None if take.shot_windows else shot.model_dump(mode="json"),
             "current_shots": [item.model_dump(mode="json") for item in covered_shots]
@@ -733,6 +904,11 @@ class VideoInspector:
             "allowed_issue_categories": [item.value for item in QaFailureCategory],
             "confidence_values": [item.value for item in ObservationConfidence],
             "review_focus": request.review_focus,
+            "unobserved_reference_version_ids": [version_id for plan in reference_plans
+                                                  for version_id in selected_generation_reference_ids(document, plan)
+                                                  if version_id not in seen_reference_ids
+                                                  and any(version.id == version_id and version.media_type == AssetMediaType.IMAGE
+                                                          for asset in document.assets for version in asset.versions)],
             "image_map": image_map,
             "notes": (
                 "每张接触表中的帧标签按时间顺序排列。VISUAL_CHANGE 只标记局部画面"

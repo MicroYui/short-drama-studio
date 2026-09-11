@@ -85,6 +85,7 @@ def create_short_drama_app(auth_token: str) -> FastAPI:
         recover_interrupted_workflows(SERVICE)
         SERVICE.studio_runtime.resume_after_restart()
         yield
+        SERVICE.team_executor.shutdown()
 
     app = FastAPI(title="Short Drama Studio Product API", lifespan=lifespan)
     app.add_middleware(

@@ -1,0 +1,2515 @@
+{
+  "measured_at": "2026-09-11T08:35:26.307383+00:00",
+  "project_id": "project-974ca837e45e",
+  "database": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/studio-launch-2026-r2/runtime/short-drama.sqlite3",
+  "method": {
+    "database_mode": "SQLite mode=ro and PRAGMA query_only=ON",
+    "model_unit": "unique call_id; provider.language_generation is a completion record including unsuccessful completed requests",
+    "source_files": "Only exact job directories and *-model.output.json are read for response classification; no model inputs or app bundles scanned.",
+    "time": "Language elapsed sums overlap under concurrency. Interval unions use matching model.started and provider.language_generation timestamps. Job states integrate consecutive job.updated events.",
+    "usage": "Cached input is included in input, reasoning is included in output. No price inferred. A started request without completion has unknown usage."
+  },
+  "model_identity_check": {
+    "started_records": 1832,
+    "unique_started_ids": 1832,
+    "completion_records": 1831,
+    "unique_completion_ids": 1831,
+    "completion_ids_without_start": [],
+    "started_without_completion": [
+      {
+        "call_id": "model-ae30e1c30414",
+        "event_id": 12853,
+        "created_at": "2026-09-10T15:13:38.529033+00:00",
+        "agent_role": "episode-editor"
+      }
+    ]
+  },
+  "language": {
+    "calls": 1831,
+    "success": 1822,
+    "reported_usage": {
+      "input_tokens": 92995579,
+      "output_tokens": 1927855,
+      "cached_input_tokens": 14130744,
+      "reasoning_tokens": 880779
+    },
+    "usage_field_calls": {
+      "input_tokens": 1831,
+      "output_tokens": 1831,
+      "cached_input_tokens": 1831,
+      "reasoning_tokens": 1831
+    },
+    "elapsed_sum_seconds": 41751.646,
+    "elapsed_median_seconds": 9.065,
+    "input_median_tokens": 39163,
+    "input_max_tokens": 179555,
+    "failures": [
+      {
+        "event_id": 2046,
+        "call_id": "model-3931755b8718",
+        "created_at": "2026-09-10T07:08:31.307334+00:00",
+        "agent_role": "episode_asset_planner",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 6392,
+        "call_id": "model-8ea19e7d0bf0",
+        "created_at": "2026-09-10T10:10:26.124318+00:00",
+        "agent_role": "opening_video_compiler",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 8213,
+        "call_id": "model-4cefb472d940",
+        "created_at": "2026-09-10T11:25:29.257127+00:00",
+        "agent_role": "existing_video_reviewer",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 8277,
+        "call_id": "model-ef14065f2963",
+        "created_at": "2026-09-10T11:36:05.314162+00:00",
+        "agent_role": "existing_video_reviewer",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 12837,
+        "call_id": "model-5519f328526f",
+        "created_at": "2026-09-10T15:07:42.054990+00:00",
+        "agent_role": "episode-editor",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 12843,
+        "call_id": "model-4f44f355d193",
+        "created_at": "2026-09-10T15:09:40.306423+00:00",
+        "agent_role": "episode-editor",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 12847,
+        "call_id": "model-01a1e5d76243",
+        "created_at": "2026-09-10T15:11:36.143603+00:00",
+        "agent_role": "episode-editor",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 12851,
+        "call_id": "model-2fc2f7826390",
+        "created_at": "2026-09-10T15:13:38.386341+00:00",
+        "agent_role": "episode-editor",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      },
+      {
+        "event_id": 16639,
+        "call_id": "model-53bd27ba9b27",
+        "created_at": "2026-09-10T18:16:03.214971+00:00",
+        "agent_role": "ENDING_VIDEO",
+        "error_kind": "LanguageProviderIncompleteError",
+        "completion_type": "sse_incomplete_max_output_tokens"
+      }
+    ]
+  },
+  "configurations": [
+    {
+      "name": "gpt-6-astra/xhigh",
+      "count": 1831
+    }
+  ],
+  "jobs": [
+    {
+      "job_id": "studio-job-cf68cb9ca787",
+      "run_id": "agent-run-10a41769a74e4c51ba31a6e331b25cd5",
+      "status": "completed",
+      "created_at": "2026-09-10T05:13:14.487028+00:00",
+      "updated_at": "2026-09-10T05:33:57.950919+00:00",
+      "language": {
+        "calls": 33,
+        "success": 33,
+        "reported_usage": {
+          "input_tokens": 625184,
+          "output_tokens": 35947,
+          "cached_input_tokens": 193651,
+          "reasoning_tokens": 18179
+        },
+        "usage_field_calls": {
+          "input_tokens": 33,
+          "output_tokens": 33,
+          "cached_input_tokens": 33,
+          "reasoning_tokens": 33
+        },
+        "elapsed_sum_seconds": 898.277,
+        "elapsed_median_seconds": 11.766,
+        "input_median_tokens": 18309,
+        "input_max_tokens": 29773
+      },
+      "language_interval_union_seconds": 898.378,
+      "state_seconds": {
+        "queued": 0.065,
+        "running": 945.694,
+        "waiting_user": 297.698
+      },
+      "state_event_counts": {
+        "queued": 2,
+        "running": 6,
+        "waiting_user": 1,
+        "completed": 1
+      }
+    },
+    {
+      "job_id": "studio-job-d87986235dff",
+      "run_id": "agent-run-c55c074b5242480aa09f9ca3a5f3475b",
+      "status": "completed",
+      "created_at": "2026-09-10T05:40:29.190912+00:00",
+      "updated_at": "2026-09-10T21:52:44.128599+00:00",
+      "language": {
+        "calls": 1798,
+        "success": 1789,
+        "reported_usage": {
+          "input_tokens": 92370395,
+          "output_tokens": 1891908,
+          "cached_input_tokens": 13937093,
+          "reasoning_tokens": 862600
+        },
+        "usage_field_calls": {
+          "input_tokens": 1798,
+          "output_tokens": 1798,
+          "cached_input_tokens": 1798,
+          "reasoning_tokens": 1798
+        },
+        "elapsed_sum_seconds": 40853.369,
+        "elapsed_median_seconds": 9.05,
+        "input_median_tokens": 40174.0,
+        "input_max_tokens": 179555
+      },
+      "language_interval_union_seconds": 32780.254,
+      "state_seconds": {
+        "queued": 32.843,
+        "running": 42467.101,
+        "pausing": 1869.341,
+        "paused": 11836.148,
+        "failed": 619.989,
+        "waiting_user": 1509.513
+      },
+      "state_event_counts": {
+        "queued": 40,
+        "running": 74,
+        "pausing": 33,
+        "paused": 33,
+        "failed": 2,
+        "waiting_user": 3,
+        "completed": 1
+      }
+    }
+  ],
+  "roles": [
+    {
+      "role": "EDITORIAL_FINISH",
+      "calls": 270,
+      "success": 270,
+      "reported_usage": {
+        "input_tokens": 19596133,
+        "output_tokens": 150565,
+        "cached_input_tokens": 1294861,
+        "reasoning_tokens": 81768
+      },
+      "usage_field_calls": {
+        "input_tokens": 270,
+        "output_tokens": 270,
+        "cached_input_tokens": 270,
+        "reasoning_tokens": 270
+      },
+      "elapsed_sum_seconds": 4432.116,
+      "elapsed_median_seconds": 10.656,
+      "input_median_tokens": 67276.5,
+      "input_max_tokens": 115269
+    },
+    {
+      "role": "ENDING_VIDEO",
+      "calls": 121,
+      "success": 120,
+      "reported_usage": {
+        "input_tokens": 10442059,
+        "output_tokens": 212469,
+        "cached_input_tokens": 1016445,
+        "reasoning_tokens": 109657
+      },
+      "usage_field_calls": {
+        "input_tokens": 121,
+        "output_tokens": 121,
+        "cached_input_tokens": 121,
+        "reasoning_tokens": 121
+      },
+      "elapsed_sum_seconds": 4509.823,
+      "elapsed_median_seconds": 8.772,
+      "input_median_tokens": 81495,
+      "input_max_tokens": 179555
+    },
+    {
+      "role": "editorial_repair_worker",
+      "calls": 90,
+      "success": 90,
+      "reported_usage": {
+        "input_tokens": 7662234,
+        "output_tokens": 67561,
+        "cached_input_tokens": 425691,
+        "reasoning_tokens": 37663
+      },
+      "usage_field_calls": {
+        "input_tokens": 90,
+        "output_tokens": 90,
+        "cached_input_tokens": 90,
+        "reasoning_tokens": 90
+      },
+      "elapsed_sum_seconds": 1629.354,
+      "elapsed_median_seconds": 12.07,
+      "input_median_tokens": 98919.5,
+      "input_max_tokens": 116698
+    },
+    {
+      "role": "asset_planning_recovery",
+      "calls": 90,
+      "success": 90,
+      "reported_usage": {
+        "input_tokens": 5180036,
+        "output_tokens": 96416,
+        "cached_input_tokens": 1176669,
+        "reasoning_tokens": 35843
+      },
+      "usage_field_calls": {
+        "input_tokens": 90,
+        "output_tokens": 90,
+        "cached_input_tokens": 90,
+        "reasoning_tokens": 90
+      },
+      "elapsed_sum_seconds": 2267.157,
+      "elapsed_median_seconds": 10.589,
+      "input_median_tokens": 48223.5,
+      "input_max_tokens": 110365
+    },
+    {
+      "role": "ending_asset_planner",
+      "calls": 42,
+      "success": 42,
+      "reported_usage": {
+        "input_tokens": 5115611,
+        "output_tokens": 49462,
+        "cached_input_tokens": 543332,
+        "reasoning_tokens": 21843
+      },
+      "usage_field_calls": {
+        "input_tokens": 42,
+        "output_tokens": 42,
+        "cached_input_tokens": 42,
+        "reasoning_tokens": 42
+      },
+      "elapsed_sum_seconds": 1099.251,
+      "elapsed_median_seconds": 14.87,
+      "input_median_tokens": 132536.5,
+      "input_max_tokens": 141641
+    },
+    {
+      "role": "episode-editor",
+      "calls": 75,
+      "success": 71,
+      "reported_usage": {
+        "input_tokens": 4526271,
+        "output_tokens": 100286,
+        "cached_input_tokens": 489631,
+        "reasoning_tokens": 75503
+      },
+      "usage_field_calls": {
+        "input_tokens": 75,
+        "output_tokens": 75,
+        "cached_input_tokens": 75,
+        "reasoning_tokens": 75
+      },
+      "elapsed_sum_seconds": 2704.646,
+      "elapsed_median_seconds": 8.662,
+      "input_median_tokens": 61477,
+      "input_max_tokens": 91126
+    },
+    {
+      "role": "ending-video-compiler",
+      "calls": 65,
+      "success": 65,
+      "reported_usage": {
+        "input_tokens": 3770593,
+        "output_tokens": 83609,
+        "cached_input_tokens": 554783,
+        "reasoning_tokens": 34739
+      },
+      "usage_field_calls": {
+        "input_tokens": 65,
+        "output_tokens": 65,
+        "cached_input_tokens": 65,
+        "reasoning_tokens": 65
+      },
+      "elapsed_sum_seconds": 1478.299,
+      "elapsed_median_seconds": 6.987,
+      "input_median_tokens": 61219,
+      "input_max_tokens": 77312
+    },
+    {
+      "role": "remaining_reference_planner",
+      "calls": 21,
+      "success": 21,
+      "reported_usage": {
+        "input_tokens": 2561095,
+        "output_tokens": 28267,
+        "cached_input_tokens": 264420,
+        "reasoning_tokens": 10518
+      },
+      "usage_field_calls": {
+        "input_tokens": 21,
+        "output_tokens": 21,
+        "cached_input_tokens": 21,
+        "reasoning_tokens": 21
+      },
+      "elapsed_sum_seconds": 561.947,
+      "elapsed_median_seconds": 16.405,
+      "input_median_tokens": 132860,
+      "input_max_tokens": 143044
+    },
+    {
+      "role": "episode_storyboard_director",
+      "calls": 74,
+      "success": 74,
+      "reported_usage": {
+        "input_tokens": 2446918,
+        "output_tokens": 89748,
+        "cached_input_tokens": 581007,
+        "reasoning_tokens": 21031
+      },
+      "usage_field_calls": {
+        "input_tokens": 74,
+        "output_tokens": 74,
+        "cached_input_tokens": 74,
+        "reasoning_tokens": 74
+      },
+      "elapsed_sum_seconds": 1798.199,
+      "elapsed_median_seconds": 8.441,
+      "input_median_tokens": 31387.0,
+      "input_max_tokens": 67924
+    },
+    {
+      "role": "leader",
+      "calls": 100,
+      "success": 100,
+      "reported_usage": {
+        "input_tokens": 2427720,
+        "output_tokens": 238926,
+        "cached_input_tokens": 474529,
+        "reasoning_tokens": 128428
+      },
+      "usage_field_calls": {
+        "input_tokens": 100,
+        "output_tokens": 100,
+        "cached_input_tokens": 100,
+        "reasoning_tokens": 100
+      },
+      "elapsed_sum_seconds": 4955.426,
+      "elapsed_median_seconds": 35.978,
+      "input_median_tokens": 24137.0,
+      "input_max_tokens": 29773
+    },
+    {
+      "role": "student-reaction-video-compiler",
+      "calls": 47,
+      "success": 47,
+      "reported_usage": {
+        "input_tokens": 1862430,
+        "output_tokens": 54035,
+        "cached_input_tokens": 392106,
+        "reasoning_tokens": 20778
+      },
+      "usage_field_calls": {
+        "input_tokens": 47,
+        "output_tokens": 47,
+        "cached_input_tokens": 47,
+        "reasoning_tokens": 47
+      },
+      "elapsed_sum_seconds": 1020.997,
+      "elapsed_median_seconds": 6.457,
+      "input_median_tokens": 39413,
+      "input_max_tokens": 54430
+    },
+    {
+      "role": "text_plate_asset_builder",
+      "calls": 56,
+      "success": 56,
+      "reported_usage": {
+        "input_tokens": 1816197,
+        "output_tokens": 14295,
+        "cached_input_tokens": 538714,
+        "reasoning_tokens": 4481
+      },
+      "usage_field_calls": {
+        "input_tokens": 56,
+        "output_tokens": 56,
+        "cached_input_tokens": 56,
+        "reasoning_tokens": 56
+      },
+      "elapsed_sum_seconds": 410.401,
+      "elapsed_median_seconds": 7.122,
+      "input_median_tokens": 31884.0,
+      "input_max_tokens": 43682
+    },
+    {
+      "role": "director_media_binding",
+      "calls": 32,
+      "success": 32,
+      "reported_usage": {
+        "input_tokens": 1623124,
+        "output_tokens": 51125,
+        "cached_input_tokens": 227771,
+        "reasoning_tokens": 12934
+      },
+      "usage_field_calls": {
+        "input_tokens": 32,
+        "output_tokens": 32,
+        "cached_input_tokens": 32,
+        "reasoning_tokens": 32
+      },
+      "elapsed_sum_seconds": 1015.982,
+      "elapsed_median_seconds": 11.677,
+      "input_median_tokens": 41502.0,
+      "input_max_tokens": 80071
+    },
+    {
+      "role": "service_prop_asset_builder",
+      "calls": 47,
+      "success": 47,
+      "reported_usage": {
+        "input_tokens": 1596561,
+        "output_tokens": 16135,
+        "cached_input_tokens": 452098,
+        "reasoning_tokens": 4735
+      },
+      "usage_field_calls": {
+        "input_tokens": 47,
+        "output_tokens": 47,
+        "cached_input_tokens": 47,
+        "reasoning_tokens": 47
+      },
+      "elapsed_sum_seconds": 423.757,
+      "elapsed_median_seconds": 7.8,
+      "input_median_tokens": 33691,
+      "input_max_tokens": 45671
+    },
+    {
+      "role": "student_asset_builder",
+      "calls": 42,
+      "success": 42,
+      "reported_usage": {
+        "input_tokens": 1513184,
+        "output_tokens": 16875,
+        "cached_input_tokens": 394144,
+        "reasoning_tokens": 3878
+      },
+      "usage_field_calls": {
+        "input_tokens": 42,
+        "output_tokens": 42,
+        "cached_input_tokens": 42,
+        "reasoning_tokens": 42
+      },
+      "elapsed_sum_seconds": 417.635,
+      "elapsed_median_seconds": 8.065,
+      "input_median_tokens": 34351.5,
+      "input_max_tokens": 49396
+    },
+    {
+      "role": "cafeteria_reference_builder",
+      "calls": 54,
+      "success": 54,
+      "reported_usage": {
+        "input_tokens": 1432418,
+        "output_tokens": 40607,
+        "cached_input_tokens": 460086,
+        "reasoning_tokens": 24384
+      },
+      "usage_field_calls": {
+        "input_tokens": 54,
+        "output_tokens": 54,
+        "cached_input_tokens": 54,
+        "reasoning_tokens": 54
+      },
+      "elapsed_sum_seconds": 1042.201,
+      "elapsed_median_seconds": 7.891,
+      "input_median_tokens": 28469.5,
+      "input_max_tokens": 34823
+    },
+    {
+      "role": "device_asset_builder",
+      "calls": 37,
+      "success": 37,
+      "reported_usage": {
+        "input_tokens": 1262985,
+        "output_tokens": 12953,
+        "cached_input_tokens": 355703,
+        "reasoning_tokens": 3970
+      },
+      "usage_field_calls": {
+        "input_tokens": 37,
+        "output_tokens": 37,
+        "cached_input_tokens": 37,
+        "reasoning_tokens": 37
+      },
+      "elapsed_sum_seconds": 332.459,
+      "elapsed_median_seconds": 7.881,
+      "input_median_tokens": 33650,
+      "input_max_tokens": 45086
+    },
+    {
+      "role": "opening_video_compiler",
+      "calls": 33,
+      "success": 32,
+      "reported_usage": {
+        "input_tokens": 1201000,
+        "output_tokens": 60380,
+        "cached_input_tokens": 229433,
+        "reasoning_tokens": 32760
+      },
+      "usage_field_calls": {
+        "input_tokens": 33,
+        "output_tokens": 33,
+        "cached_input_tokens": 33,
+        "reasoning_tokens": 33
+      },
+      "elapsed_sum_seconds": 1209.934,
+      "elapsed_median_seconds": 12.767,
+      "input_median_tokens": 33590,
+      "input_max_tokens": 52639
+    },
+    {
+      "role": "remaining_video_preparation",
+      "calls": 30,
+      "success": 30,
+      "reported_usage": {
+        "input_tokens": 1186753,
+        "output_tokens": 20990,
+        "cached_input_tokens": 250320,
+        "reasoning_tokens": 9982
+      },
+      "usage_field_calls": {
+        "input_tokens": 30,
+        "output_tokens": 30,
+        "cached_input_tokens": 30,
+        "reasoning_tokens": 30
+      },
+      "elapsed_sum_seconds": 427.92,
+      "elapsed_median_seconds": 9.152,
+      "input_median_tokens": 39309.5,
+      "input_max_tokens": 66219
+    },
+    {
+      "role": "following_video_compiler",
+      "calls": 20,
+      "success": 20,
+      "reported_usage": {
+        "input_tokens": 1061387,
+        "output_tokens": 16870,
+        "cached_input_tokens": 166880,
+        "reasoning_tokens": 4502
+      },
+      "usage_field_calls": {
+        "input_tokens": 20,
+        "output_tokens": 20,
+        "cached_input_tokens": 20,
+        "reasoning_tokens": 20
+      },
+      "elapsed_sum_seconds": 299.246,
+      "elapsed_median_seconds": 6.965,
+      "input_median_tokens": 56703.0,
+      "input_max_tokens": 97129
+    },
+    {
+      "role": "principal_asset_builder",
+      "calls": 26,
+      "success": 26,
+      "reported_usage": {
+        "input_tokens": 926165,
+        "output_tokens": 10252,
+        "cached_input_tokens": 249619,
+        "reasoning_tokens": 2603
+      },
+      "usage_field_calls": {
+        "input_tokens": 26,
+        "output_tokens": 26,
+        "cached_input_tokens": 26,
+        "reasoning_tokens": 26
+      },
+      "elapsed_sum_seconds": 246.584,
+      "elapsed_median_seconds": 8.337,
+      "input_median_tokens": 34627.5,
+      "input_max_tokens": 43038
+    },
+    {
+      "role": "shared_video_compiler",
+      "calls": 19,
+      "success": 19,
+      "reported_usage": {
+        "input_tokens": 839235,
+        "output_tokens": 42632,
+        "cached_input_tokens": 166818,
+        "reasoning_tokens": 19402
+      },
+      "usage_field_calls": {
+        "input_tokens": 19,
+        "output_tokens": 19,
+        "cached_input_tokens": 19,
+        "reasoning_tokens": 19
+      },
+      "elapsed_sum_seconds": 750.501,
+      "elapsed_median_seconds": 9.007,
+      "input_median_tokens": 40729,
+      "input_max_tokens": 68795
+    },
+    {
+      "role": "video_group_02",
+      "calls": 29,
+      "success": 29,
+      "reported_usage": {
+        "input_tokens": 839178,
+        "output_tokens": 9176,
+        "cached_input_tokens": 241976,
+        "reasoning_tokens": 2677
+      },
+      "usage_field_calls": {
+        "input_tokens": 29,
+        "output_tokens": 29,
+        "cached_input_tokens": 29,
+        "reasoning_tokens": 29
+      },
+      "elapsed_sum_seconds": 195.401,
+      "elapsed_median_seconds": 5.658,
+      "input_median_tokens": 31138,
+      "input_max_tokens": 36639
+    },
+    {
+      "role": "group_06_reference_editor",
+      "calls": 23,
+      "success": 23,
+      "reported_usage": {
+        "input_tokens": 684434,
+        "output_tokens": 34491,
+        "cached_input_tokens": 188968,
+        "reasoning_tokens": 11318
+      },
+      "usage_field_calls": {
+        "input_tokens": 23,
+        "output_tokens": 23,
+        "cached_input_tokens": 23,
+        "reasoning_tokens": 23
+      },
+      "elapsed_sum_seconds": 501.599,
+      "elapsed_median_seconds": 6.928,
+      "input_median_tokens": 31469,
+      "input_max_tokens": 38422
+    },
+    {
+      "role": "food_asset_builder",
+      "calls": 21,
+      "success": 21,
+      "reported_usage": {
+        "input_tokens": 677635,
+        "output_tokens": 7595,
+        "cached_input_tokens": 201579,
+        "reasoning_tokens": 2340
+      },
+      "usage_field_calls": {
+        "input_tokens": 21,
+        "output_tokens": 21,
+        "cached_input_tokens": 21,
+        "reasoning_tokens": 21
+      },
+      "elapsed_sum_seconds": 188.534,
+      "elapsed_median_seconds": 6.915,
+      "input_median_tokens": 31869,
+      "input_max_tokens": 42007
+    },
+    {
+      "role": "video_group_01",
+      "calls": 22,
+      "success": 22,
+      "reported_usage": {
+        "input_tokens": 676616,
+        "output_tokens": 7822,
+        "cached_input_tokens": 183568,
+        "reasoning_tokens": 2302
+      },
+      "usage_field_calls": {
+        "input_tokens": 22,
+        "output_tokens": 22,
+        "cached_input_tokens": 22,
+        "reasoning_tokens": 22
+      },
+      "elapsed_sum_seconds": 175.997,
+      "elapsed_median_seconds": 6.246,
+      "input_median_tokens": 32669.5,
+      "input_max_tokens": 37805
+    },
+    {
+      "role": "ending_revision_director",
+      "calls": 16,
+      "success": 16,
+      "reported_usage": {
+        "input_tokens": 653808,
+        "output_tokens": 9319,
+        "cached_input_tokens": 123240,
+        "reasoning_tokens": 4379
+      },
+      "usage_field_calls": {
+        "input_tokens": 16,
+        "output_tokens": 16,
+        "cached_input_tokens": 16,
+        "reasoning_tokens": 16
+      },
+      "elapsed_sum_seconds": 214.54,
+      "elapsed_median_seconds": 6.739,
+      "input_median_tokens": 45389.0,
+      "input_max_tokens": 52113
+    },
+    {
+      "role": "ending_content_sync_director",
+      "calls": 16,
+      "success": 16,
+      "reported_usage": {
+        "input_tokens": 622755,
+        "output_tokens": 32613,
+        "cached_input_tokens": 123705,
+        "reasoning_tokens": 6466
+      },
+      "usage_field_calls": {
+        "input_tokens": 16,
+        "output_tokens": 16,
+        "cached_input_tokens": 16,
+        "reasoning_tokens": 16
+      },
+      "elapsed_sum_seconds": 541.909,
+      "elapsed_median_seconds": 11.54,
+      "input_median_tokens": 38467.0,
+      "input_max_tokens": 51659
+    },
+    {
+      "role": "opening_media_reviewer",
+      "calls": 18,
+      "success": 18,
+      "reported_usage": {
+        "input_tokens": 558423,
+        "output_tokens": 20551,
+        "cached_input_tokens": 82654,
+        "reasoning_tokens": 6653
+      },
+      "usage_field_calls": {
+        "input_tokens": 18,
+        "output_tokens": 18,
+        "cached_input_tokens": 18,
+        "reasoning_tokens": 18
+      },
+      "elapsed_sum_seconds": 396.854,
+      "elapsed_median_seconds": 9.55,
+      "input_median_tokens": 34357.5,
+      "input_max_tokens": 45509
+    },
+    {
+      "role": "group_04_reference_editor",
+      "calls": 19,
+      "success": 19,
+      "reported_usage": {
+        "input_tokens": 539938,
+        "output_tokens": 24116,
+        "cached_input_tokens": 156104,
+        "reasoning_tokens": 8694
+      },
+      "usage_field_calls": {
+        "input_tokens": 19,
+        "output_tokens": 19,
+        "cached_input_tokens": 19,
+        "reasoning_tokens": 19
+      },
+      "elapsed_sum_seconds": 377.629,
+      "elapsed_median_seconds": 6.905,
+      "input_median_tokens": 28759,
+      "input_max_tokens": 36630
+    },
+    {
+      "role": "post_editor",
+      "calls": 12,
+      "success": 12,
+      "reported_usage": {
+        "input_tokens": 524004,
+        "output_tokens": 2982,
+        "cached_input_tokens": 90354,
+        "reasoning_tokens": 1072
+      },
+      "usage_field_calls": {
+        "input_tokens": 12,
+        "output_tokens": 12,
+        "cached_input_tokens": 12,
+        "reasoning_tokens": 12
+      },
+      "elapsed_sum_seconds": 93.648,
+      "elapsed_median_seconds": 7.766,
+      "input_median_tokens": 47565.5,
+      "input_max_tokens": 59745
+    },
+    {
+      "role": "tray_asset_builder",
+      "calls": 17,
+      "success": 17,
+      "reported_usage": {
+        "input_tokens": 506344,
+        "output_tokens": 6251,
+        "cached_input_tokens": 163183,
+        "reasoning_tokens": 1783
+      },
+      "usage_field_calls": {
+        "input_tokens": 17,
+        "output_tokens": 17,
+        "cached_input_tokens": 17,
+        "reasoning_tokens": 17
+      },
+      "elapsed_sum_seconds": 151.651,
+      "elapsed_median_seconds": 5.97,
+      "input_median_tokens": 29404,
+      "input_max_tokens": 42184
+    },
+    {
+      "role": "group_05_reference_editor",
+      "calls": 18,
+      "success": 18,
+      "reported_usage": {
+        "input_tokens": 499549,
+        "output_tokens": 24372,
+        "cached_input_tokens": 147888,
+        "reasoning_tokens": 8651
+      },
+      "usage_field_calls": {
+        "input_tokens": 18,
+        "output_tokens": 18,
+        "cached_input_tokens": 18,
+        "reasoning_tokens": 18
+      },
+      "elapsed_sum_seconds": 393.534,
+      "elapsed_median_seconds": 8.056,
+      "input_median_tokens": 27767.0,
+      "input_max_tokens": 36445
+    },
+    {
+      "role": "prop-reference-card-builder",
+      "calls": 10,
+      "success": 10,
+      "reported_usage": {
+        "input_tokens": 488146,
+        "output_tokens": 7732,
+        "cached_input_tokens": 86796,
+        "reasoning_tokens": 2595
+      },
+      "usage_field_calls": {
+        "input_tokens": 10,
+        "output_tokens": 10,
+        "cached_input_tokens": 10,
+        "reasoning_tokens": 10
+      },
+      "elapsed_sum_seconds": 151.01,
+      "elapsed_median_seconds": 9.751,
+      "input_median_tokens": 59279.5,
+      "input_max_tokens": 63374
+    },
+    {
+      "role": "episode_asset_planner",
+      "calls": 8,
+      "success": 7,
+      "reported_usage": {
+        "input_tokens": 485369,
+        "output_tokens": 22621,
+        "cached_input_tokens": 90545,
+        "reasoning_tokens": 5395
+      },
+      "usage_field_calls": {
+        "input_tokens": 8,
+        "output_tokens": 8,
+        "cached_input_tokens": 8,
+        "reasoning_tokens": 8
+      },
+      "elapsed_sum_seconds": 512.388,
+      "elapsed_median_seconds": 14.727,
+      "input_median_tokens": 69998.5,
+      "input_max_tokens": 75128
+    },
+    {
+      "role": "existing_video_reviewer",
+      "calls": 22,
+      "success": 20,
+      "reported_usage": {
+        "input_tokens": 472527,
+        "output_tokens": 37481,
+        "cached_input_tokens": 77792,
+        "reasoning_tokens": 29084
+      },
+      "usage_field_calls": {
+        "input_tokens": 22,
+        "output_tokens": 22,
+        "cached_input_tokens": 22,
+        "reasoning_tokens": 22
+      },
+      "elapsed_sum_seconds": 858.481,
+      "elapsed_median_seconds": 11.225,
+      "input_median_tokens": 21725.0,
+      "input_max_tokens": 29455
+    },
+    {
+      "role": "group_03_reference_editor",
+      "calls": 14,
+      "success": 14,
+      "reported_usage": {
+        "input_tokens": 434472,
+        "output_tokens": 18024,
+        "cached_input_tokens": 106808,
+        "reasoning_tokens": 7217
+      },
+      "usage_field_calls": {
+        "input_tokens": 14,
+        "output_tokens": 14,
+        "cached_input_tokens": 14,
+        "reasoning_tokens": 14
+      },
+      "elapsed_sum_seconds": 295.167,
+      "elapsed_median_seconds": 9.337,
+      "input_median_tokens": 34285.5,
+      "input_max_tokens": 39272
+    },
+    {
+      "role": "group_05_video_compiler",
+      "calls": 15,
+      "success": 15,
+      "reported_usage": {
+        "input_tokens": 429697,
+        "output_tokens": 43305,
+        "cached_input_tokens": 125098,
+        "reasoning_tokens": 19330
+      },
+      "usage_field_calls": {
+        "input_tokens": 15,
+        "output_tokens": 15,
+        "cached_input_tokens": 15,
+        "reasoning_tokens": 15
+      },
+      "elapsed_sum_seconds": 767.971,
+      "elapsed_median_seconds": 48.043,
+      "input_median_tokens": 31324,
+      "input_max_tokens": 40307
+    },
+    {
+      "role": "aunt_asset_builder",
+      "calls": 14,
+      "success": 14,
+      "reported_usage": {
+        "input_tokens": 413773,
+        "output_tokens": 5865,
+        "cached_input_tokens": 124787,
+        "reasoning_tokens": 1626
+      },
+      "usage_field_calls": {
+        "input_tokens": 14,
+        "output_tokens": 14,
+        "cached_input_tokens": 14,
+        "reasoning_tokens": 14
+      },
+      "elapsed_sum_seconds": 140.773,
+      "elapsed_median_seconds": 7.659,
+      "input_median_tokens": 29179.5,
+      "input_max_tokens": 34909
+    },
+    {
+      "role": "group_04_video_compiler",
+      "calls": 14,
+      "success": 14,
+      "reported_usage": {
+        "input_tokens": 407001,
+        "output_tokens": 34435,
+        "cached_input_tokens": 125098,
+        "reasoning_tokens": 16600
+      },
+      "usage_field_calls": {
+        "input_tokens": 14,
+        "output_tokens": 14,
+        "cached_input_tokens": 14,
+        "reasoning_tokens": 14
+      },
+      "elapsed_sum_seconds": 605.553,
+      "elapsed_median_seconds": 8.009,
+      "input_median_tokens": 31603.5,
+      "input_max_tokens": 39226
+    },
+    {
+      "role": "linyi_reference_builder",
+      "calls": 18,
+      "success": 18,
+      "reported_usage": {
+        "input_tokens": 370656,
+        "output_tokens": 10846,
+        "cached_input_tokens": 152112,
+        "reasoning_tokens": 4986
+      },
+      "usage_field_calls": {
+        "input_tokens": 18,
+        "output_tokens": 18,
+        "cached_input_tokens": 18,
+        "reasoning_tokens": 18
+      },
+      "elapsed_sum_seconds": 256.924,
+      "elapsed_median_seconds": 7.221,
+      "input_median_tokens": 23123.0,
+      "input_max_tokens": 24764
+    },
+    {
+      "role": "reference_scope_director",
+      "calls": 10,
+      "success": 10,
+      "reported_usage": {
+        "input_tokens": 356350,
+        "output_tokens": 13026,
+        "cached_input_tokens": 73944,
+        "reasoning_tokens": 5367
+      },
+      "usage_field_calls": {
+        "input_tokens": 10,
+        "output_tokens": 10,
+        "cached_input_tokens": 10,
+        "reasoning_tokens": 10
+      },
+      "elapsed_sum_seconds": 244.42,
+      "elapsed_median_seconds": 9.102,
+      "input_median_tokens": 35338.5,
+      "input_max_tokens": 53273
+    },
+    {
+      "role": "group_06_video_compiler",
+      "calls": 8,
+      "success": 8,
+      "reported_usage": {
+        "input_tokens": 286829,
+        "output_tokens": 11460,
+        "cached_input_tokens": 66752,
+        "reasoning_tokens": 2734
+      },
+      "usage_field_calls": {
+        "input_tokens": 8,
+        "output_tokens": 8,
+        "cached_input_tokens": 8,
+        "reasoning_tokens": 8
+      },
+      "elapsed_sum_seconds": 210.165,
+      "elapsed_median_seconds": 7.361,
+      "input_median_tokens": 40906.5,
+      "input_max_tokens": 43798
+    },
+    {
+      "role": "group_four_generation",
+      "calls": 13,
+      "success": 13,
+      "reported_usage": {
+        "input_tokens": 285757,
+        "output_tokens": 4721,
+        "cached_input_tokens": 108472,
+        "reasoning_tokens": 1348
+      },
+      "usage_field_calls": {
+        "input_tokens": 13,
+        "output_tokens": 13,
+        "cached_input_tokens": 13,
+        "reasoning_tokens": 13
+      },
+      "elapsed_sum_seconds": 96.572,
+      "elapsed_median_seconds": 5.161,
+      "input_median_tokens": 22705,
+      "input_max_tokens": 24795
+    },
+    {
+      "role": "group_03_video_compiler",
+      "calls": 9,
+      "success": 9,
+      "reported_usage": {
+        "input_tokens": 250860,
+        "output_tokens": 12462,
+        "cached_input_tokens": 66752,
+        "reasoning_tokens": 4026
+      },
+      "usage_field_calls": {
+        "input_tokens": 9,
+        "output_tokens": 9,
+        "cached_input_tokens": 9,
+        "reasoning_tokens": 9
+      },
+      "elapsed_sum_seconds": 215.89,
+      "elapsed_median_seconds": 7.342,
+      "input_median_tokens": 30224,
+      "input_max_tokens": 33665
+    },
+    {
+      "role": "ending-storyboard-editor",
+      "calls": 7,
+      "success": 7,
+      "reported_usage": {
+        "input_tokens": 249538,
+        "output_tokens": 11720,
+        "cached_input_tokens": 49482,
+        "reasoning_tokens": 4595
+      },
+      "usage_field_calls": {
+        "input_tokens": 7,
+        "output_tokens": 7,
+        "cached_input_tokens": 7,
+        "reasoning_tokens": 7
+      },
+      "elapsed_sum_seconds": 192.415,
+      "elapsed_median_seconds": 7.322,
+      "input_median_tokens": 38534,
+      "input_max_tokens": 47547
+    },
+    {
+      "role": "episode_script_writer",
+      "calls": 13,
+      "success": 13,
+      "reported_usage": {
+        "input_tokens": 242903,
+        "output_tokens": 12397,
+        "cached_input_tokens": 76812,
+        "reasoning_tokens": 6445
+      },
+      "usage_field_calls": {
+        "input_tokens": 13,
+        "output_tokens": 13,
+        "cached_input_tokens": 13,
+        "reasoning_tokens": 13
+      },
+      "elapsed_sum_seconds": 304.154,
+      "elapsed_median_seconds": 7.056,
+      "input_median_tokens": 19074,
+      "input_max_tokens": 19534
+    },
+    {
+      "role": "group_five_generation",
+      "calls": 11,
+      "success": 11,
+      "reported_usage": {
+        "input_tokens": 229392,
+        "output_tokens": 4302,
+        "cached_input_tokens": 91784,
+        "reasoning_tokens": 1268
+      },
+      "usage_field_calls": {
+        "input_tokens": 11,
+        "output_tokens": 11,
+        "cached_input_tokens": 11,
+        "reasoning_tokens": 11
+      },
+      "elapsed_sum_seconds": 86.34,
+      "elapsed_median_seconds": 5.595,
+      "input_median_tokens": 21720,
+      "input_max_tokens": 24588
+    },
+    {
+      "role": "story_concept_worker",
+      "calls": 10,
+      "success": 10,
+      "reported_usage": {
+        "input_tokens": 162527,
+        "output_tokens": 8242,
+        "cached_input_tokens": 63675,
+        "reasoning_tokens": 3734
+      },
+      "usage_field_calls": {
+        "input_tokens": 10,
+        "output_tokens": 10,
+        "cached_input_tokens": 10,
+        "reasoning_tokens": 10
+      },
+      "elapsed_sum_seconds": 229.047,
+      "elapsed_median_seconds": 10.958,
+      "input_median_tokens": 16500.5,
+      "input_max_tokens": 16957
+    },
+    {
+      "role": "verification_payment_video_executor",
+      "calls": 7,
+      "success": 7,
+      "reported_usage": {
+        "input_tokens": 131120,
+        "output_tokens": 2759,
+        "cached_input_tokens": 58408,
+        "reasoning_tokens": 908
+      },
+      "usage_field_calls": {
+        "input_tokens": 7,
+        "output_tokens": 7,
+        "cached_input_tokens": 7,
+        "reasoning_tokens": 7
+      },
+      "elapsed_sum_seconds": 54.941,
+      "elapsed_median_seconds": 3.957,
+      "input_median_tokens": 18043,
+      "input_max_tokens": 22316
+    },
+    {
+      "role": "opening_video_executor",
+      "calls": 7,
+      "success": 7,
+      "reported_usage": {
+        "input_tokens": 130492,
+        "output_tokens": 2738,
+        "cached_input_tokens": 58408,
+        "reasoning_tokens": 826
+      },
+      "usage_field_calls": {
+        "input_tokens": 7,
+        "output_tokens": 7,
+        "cached_input_tokens": 7,
+        "reasoning_tokens": 7
+      },
+      "elapsed_sum_seconds": 50.58,
+      "elapsed_median_seconds": 4.333,
+      "input_median_tokens": 18027,
+      "input_max_tokens": 21988
+    },
+    {
+      "role": "group_04_video_executor",
+      "calls": 6,
+      "success": 6,
+      "reported_usage": {
+        "input_tokens": 114368,
+        "output_tokens": 1206,
+        "cached_input_tokens": 50064,
+        "reasoning_tokens": 369
+      },
+      "usage_field_calls": {
+        "input_tokens": 6,
+        "output_tokens": 6,
+        "cached_input_tokens": 6,
+        "reasoning_tokens": 6
+      },
+      "elapsed_sum_seconds": 33.485,
+      "elapsed_median_seconds": 5.584,
+      "input_median_tokens": 18635.0,
+      "input_max_tokens": 22219
+    },
+    {
+      "role": "generation_source_planner",
+      "calls": 5,
+      "success": 5,
+      "reported_usage": {
+        "input_tokens": 76893,
+        "output_tokens": 3945,
+        "cached_input_tokens": 9896,
+        "reasoning_tokens": 1595
+      },
+      "usage_field_calls": {
+        "input_tokens": 5,
+        "output_tokens": 5,
+        "cached_input_tokens": 5,
+        "reasoning_tokens": 5
+      },
+      "elapsed_sum_seconds": 75.282,
+      "elapsed_median_seconds": 6.67,
+      "input_median_tokens": 17007,
+      "input_max_tokens": 19110
+    },
+    {
+      "role": "group_05_video_executor",
+      "calls": 4,
+      "success": 4,
+      "reported_usage": {
+        "input_tokens": 76632,
+        "output_tokens": 794,
+        "cached_input_tokens": 33376,
+        "reasoning_tokens": 223
+      },
+      "usage_field_calls": {
+        "input_tokens": 4,
+        "output_tokens": 4,
+        "cached_input_tokens": 4,
+        "reasoning_tokens": 4
+      },
+      "elapsed_sum_seconds": 18.882,
+      "elapsed_median_seconds": 4.228,
+      "input_median_tokens": 19179.0,
+      "input_max_tokens": 22063
+    },
+    {
+      "role": "opening_revision_writer",
+      "calls": 4,
+      "success": 4,
+      "reported_usage": {
+        "input_tokens": 67484,
+        "output_tokens": 4028,
+        "cached_input_tokens": 25604,
+        "reasoning_tokens": 2771
+      },
+      "usage_field_calls": {
+        "input_tokens": 4,
+        "output_tokens": 4,
+        "cached_input_tokens": 4,
+        "reasoning_tokens": 4
+      },
+      "elapsed_sum_seconds": 86.074,
+      "elapsed_median_seconds": 10.304,
+      "input_median_tokens": 16904.5,
+      "input_max_tokens": 18651
+    }
+  ],
+  "tools": {
+    "started_records": 1143,
+    "finished_records": 1142,
+    "unique_finished_tool_call_ids": 1142,
+    "finished_statuses": {
+      "SUCCEEDED": 1055,
+      "FAILED": 87
+    },
+    "calls_by_tool": [
+      {
+        "name": "task.advance",
+        "count": 299
+      },
+      {
+        "name": "artifact.read_current",
+        "count": 157
+      },
+      {
+        "name": "timeline.read_editorial",
+        "count": 59
+      },
+      {
+        "name": "artifact.patch_asset_plan",
+        "count": 52
+      },
+      {
+        "name": "image.advance",
+        "count": 36
+      },
+      {
+        "name": "shot.save_current",
+        "count": 30
+      },
+      {
+        "name": "artifact.get_asset_plan_index",
+        "count": 29
+      },
+      {
+        "name": "route.compile_h3_prompt",
+        "count": 29
+      },
+      {
+        "name": "artifact.get_asset_work_context",
+        "count": 27
+      },
+      {
+        "name": "route.get_generation_unit_context",
+        "count": 27
+      },
+      {
+        "name": "agent.get_tool_attempt",
+        "count": 22
+      },
+      {
+        "name": "artifact.create_asset",
+        "count": 21
+      },
+      {
+        "name": "image.compose_text_plate",
+        "count": 21
+      },
+      {
+        "name": "route.get_h3_plan",
+        "count": 21
+      },
+      {
+        "name": "timeline.save_editorial",
+        "count": 20
+      },
+      {
+        "name": "image.enqueue",
+        "count": 18
+      },
+      {
+        "name": "route.list_h3_runs",
+        "count": 16
+      },
+      {
+        "name": "timeline.add_asset_overlay",
+        "count": 15
+      },
+      {
+        "name": "video.inspect_take",
+        "count": 14
+      },
+      {
+        "name": "image.capability",
+        "count": 13
+      },
+      {
+        "name": "route.get_generation_plan",
+        "count": 13
+      },
+      {
+        "name": "video.get_take_inspection",
+        "count": 13
+      },
+      {
+        "name": "qa.inspect_asset_version",
+        "count": 12
+      },
+      {
+        "name": "route.h3_capability_profile",
+        "count": 12
+      },
+      {
+        "name": "task.get",
+        "count": 11
+      },
+      {
+        "name": "route.execute_h3_plan",
+        "count": 10
+      },
+      {
+        "name": "agent.read_context",
+        "count": 10
+      },
+      {
+        "name": "shot.patch_storyboard",
+        "count": 8
+      },
+      {
+        "name": "route.plan_h3",
+        "count": 8
+      },
+      {
+        "name": "shot.append_storyboard_group",
+        "count": 7
+      },
+      {
+        "name": "artifact.get_production_document",
+        "count": 6
+      },
+      {
+        "name": "shot.get_storyboard",
+        "count": 6
+      },
+      {
+        "name": "artifact.get_asset_plan",
+        "count": 6
+      },
+      {
+        "name": "route.compile_generation_plan",
+        "count": 6
+      },
+      {
+        "name": "video.select_take",
+        "count": 6
+      },
+      {
+        "name": "audio.inspect_manifest",
+        "count": 6
+      },
+      {
+        "name": "script.save_scene",
+        "count": 5
+      },
+      {
+        "name": "shot.begin_storyboard_draft",
+        "count": 5
+      },
+      {
+        "name": "timeline.export_editorial",
+        "count": 5
+      },
+      {
+        "name": "change.propose_text",
+        "count": 4
+      },
+      {
+        "name": "artifact.get_asset_planning_context",
+        "count": 4
+      },
+      {
+        "name": "route.list_h3_plans",
+        "count": 4
+      },
+      {
+        "name": "route.get_h3_run",
+        "count": 4
+      },
+      {
+        "name": "artifact.replace_production_spec",
+        "count": 3
+      },
+      {
+        "name": "artifact.list_production_documents",
+        "count": 3
+      },
+      {
+        "name": "qa.check_input_compatibility",
+        "count": 3
+      },
+      {
+        "name": "route.preview_h3_probe",
+        "count": 3
+      },
+      {
+        "name": "qa.analyze_source_image",
+        "count": 2
+      },
+      {
+        "name": "image.list",
+        "count": 2
+      },
+      {
+        "name": "artifact.create_production_spec",
+        "count": 2
+      },
+      {
+        "name": "artifact.get_production_spec",
+        "count": 2
+      },
+      {
+        "name": "audio.align_subtitles",
+        "count": 2
+      },
+      {
+        "name": "timeline.edit_clips",
+        "count": 2
+      },
+      {
+        "name": "timeline.read_export",
+        "count": 2
+      },
+      {
+        "name": "qa.review_episode",
+        "count": 2
+      },
+      {
+        "name": "route.list_h3_reconciliation",
+        "count": 2
+      },
+      {
+        "name": "script.plan_scenes",
+        "count": 1
+      },
+      {
+        "name": "qa.list_visual_input_reports",
+        "count": 1
+      },
+      {
+        "name": "artifact.review_version",
+        "count": 1
+      },
+      {
+        "name": "shot.replace_storyboard_draft_group",
+        "count": 1
+      },
+      {
+        "name": "shot.finalize_storyboard",
+        "count": 1
+      },
+      {
+        "name": "artifact.create_asset_plan",
+        "count": 1
+      },
+      {
+        "name": "project.bind_output_slot",
+        "count": 1
+      },
+      {
+        "name": "image.compose_reference_sheet",
+        "count": 1
+      },
+      {
+        "name": "timeline.rebuild",
+        "count": 1
+      },
+      {
+        "name": "project.list_output_slots",
+        "count": 1
+      },
+      {
+        "name": "project.get_output_slot",
+        "count": 1
+      },
+      {
+        "name": "task.read_workflow",
+        "count": 1
+      },
+      {
+        "name": "artifact.create_production_document",
+        "count": 1
+      },
+      {
+        "name": "route.resolve_h3_not_submitted",
+        "count": 1
+      },
+      {
+        "name": "task.retry",
+        "count": 1
+      }
+    ],
+    "failures_by_tool": [
+      {
+        "name": "artifact.patch_asset_plan",
+        "count": 25
+      },
+      {
+        "name": "route.compile_h3_prompt",
+        "count": 21
+      },
+      {
+        "name": "route.get_generation_unit_context",
+        "count": 5
+      },
+      {
+        "name": "timeline.add_asset_overlay",
+        "count": 5
+      },
+      {
+        "name": "shot.begin_storyboard_draft",
+        "count": 4
+      },
+      {
+        "name": "shot.patch_storyboard",
+        "count": 3
+      },
+      {
+        "name": "timeline.export_editorial",
+        "count": 3
+      },
+      {
+        "name": "route.execute_h3_plan",
+        "count": 2
+      },
+      {
+        "name": "route.preview_h3_probe",
+        "count": 2
+      },
+      {
+        "name": "audio.inspect_manifest",
+        "count": 2
+      },
+      {
+        "name": "timeline.save_editorial",
+        "count": 2
+      },
+      {
+        "name": "image.compose_text_plate",
+        "count": 2
+      },
+      {
+        "name": "qa.review_episode",
+        "count": 2
+      },
+      {
+        "name": "artifact.create_production_spec",
+        "count": 1
+      },
+      {
+        "name": "shot.append_storyboard_group",
+        "count": 1
+      },
+      {
+        "name": "artifact.get_asset_plan_index",
+        "count": 1
+      },
+      {
+        "name": "shot.save_current",
+        "count": 1
+      },
+      {
+        "name": "route.get_generation_plan",
+        "count": 1
+      },
+      {
+        "name": "qa.check_input_compatibility",
+        "count": 1
+      },
+      {
+        "name": "artifact.get_asset_work_context",
+        "count": 1
+      },
+      {
+        "name": "audio.align_subtitles",
+        "count": 1
+      },
+      {
+        "name": "timeline.edit_clips",
+        "count": 1
+      }
+    ],
+    "top_tools_by_role": {
+      "opening_video_compiler": [
+        {
+          "name": "qa.check_input_compatibility",
+          "count": 3
+        },
+        {
+          "name": "route.compile_h3_prompt",
+          "count": 3
+        },
+        {
+          "name": "route.compile_generation_plan",
+          "count": 2
+        },
+        {
+          "name": "route.get_generation_unit_context",
+          "count": 2
+        },
+        {
+          "name": "artifact.read_current",
+          "count": 1
+        },
+        {
+          "name": "route.h3_capability_profile",
+          "count": 1
+        },
+        {
+          "name": "route.plan_h3",
+          "count": 1
+        },
+        {
+          "name": "route.get_h3_plan",
+          "count": 1
+        }
+      ],
+      "director_media_binding": [
+        {
+          "name": "shot.patch_storyboard",
+          "count": 4
+        },
+        {
+          "name": "artifact.read_current",
+          "count": 3
+        },
+        {
+          "name": "shot.get_storyboard",
+          "count": 3
+        },
+        {
+          "name": "shot.save_current",
+          "count": 2
+        },
+        {
+          "name": "qa.inspect_asset_version",
+          "count": 1
+        },
+        {
+          "name": "agent.get_tool_attempt",
+          "count": 1
+        },
+        {
+          "name": "route.list_h3_plans",
+          "count": 1
+        },
+        {
+          "name": "route.list_h3_runs",
+          "count": 1
+        }
+      ],
+      "EDITORIAL_FINISH": [
+        {
+          "name": "timeline.read_editorial",
+          "count": 35
+        },
+        {
+          "name": "timeline.add_asset_overlay",
+          "count": 15
+        },
+        {
+          "name": "image.compose_text_plate",
+          "count": 14
+        },
+        {
+          "name": "timeline.save_editorial",
+          "count": 11
+        },
+        {
+          "name": "artifact.read_current",
+          "count": 9
+        },
+        {
+          "name": "qa.inspect_asset_version",
+          "count": 5
+        },
+        {
+          "name": "audio.inspect_manifest",
+          "count": 4
+        },
+        {
+          "name": "timeline.export_editorial",
+          "count": 4
+        },
+        {
+          "name": "video.get_take_inspection",
+          "count": 3
+        },
+        {
+          "name": "agent.get_tool_attempt",
+          "count": 3
+        }
+      ],
+      "ENDING_VIDEO": [
+        {
+          "name": "task.advance",
+          "count": 168
+        },
+        {
+          "name": "route.compile_h3_prompt",
+          "count": 9
+        },
+        {
+          "name": "artifact.read_current",
+          "count": 6
+        },
+        {
+          "name": "shot.save_current",
+          "count": 4
+        },
+        {
+          "name": "route.get_generation_unit_context",
+          "count": 3
+        },
+        {
+          "name": "shot.patch_storyboard",
+          "count": 3
+        },
+        {
+          "name": "route.plan_h3",
+          "count": 2
+        },
+        {
+          "name": "route.get_h3_plan",
+          "count": 2
+        },
+        {
+          "name": "route.execute_h3_plan",
+          "count": 2
+        },
+        {
+          "name": "route.list_h3_reconciliation",
+          "count": 2
+        }
+      ],
+      "asset_planning_recovery": [
+        {
+          "name": "artifact.read_current",
+          "count": 18
+        },
+        {
+          "name": "artifact.patch_asset_plan",
+          "count": 9
+        },
+        {
+          "name": "artifact.get_asset_plan",
+          "count": 6
+        },
+        {
+          "name": "agent.get_tool_attempt",
+          "count": 4
+        },
+        {
+          "name": "artifact.get_asset_work_context",
+          "count": 4
+        },
+        {
+          "name": "artifact.get_asset_planning_context",
+          "count": 1
+        },
+        {
+          "name": "artifact.list_production_documents",
+          "count": 1
+        },
+        {
+          "name": "image.capability",
+          "count": 1
+        },
+        {
+          "name": "artifact.create_asset_plan",
+          "count": 1
+        },
+        {
+          "name": "artifact.get_production_document",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "chat_user_records": 22,
+  "work_orders": {
+    "count": 55,
+    "statuses": {
+      "CANCELLED": 22,
+      "COMPLETED": 33
+    }
+  },
+  "video_tasks": {
+    "count": 9,
+    "statuses": {
+      "FAILED": 1,
+      "RUNNING": 1,
+      "SUCCEEDED": 7
+    },
+    "successful_observed_turnaround_seconds": [
+      426.307,
+      602.137,
+      431.905,
+      493.587,
+      354.71,
+      615.695,
+      353.194
+    ],
+    "successful_interval_union_seconds": 2425.059,
+    "note": "Submitted-to-finished includes polling and local collection; unfinished extra candidate excluded, not treated as zero time."
+  },
+  "image_tasks": {
+    "count": 18,
+    "statuses": {
+      "SUCCEEDED": 18
+    }
+  },
+  "model_output_classification": {
+    "targeted_files_read": 1822,
+    "counts": {
+      "tool_request": 853,
+      "schema_request": 802,
+      "leader_plan": 63,
+      "worker_result": 43,
+      "observation_or_other": 28,
+      "not_plain_json": 33
+    },
+    "note": "Plain JSON only; unparsed output retained as not_plain_json rather than guessed."
+  },
+  "schema_discovery": {
+    "response_count": 802,
+    "responses_by_class": {
+      "all_first_discovery": 76,
+      "all_previously_discovered": 554,
+      "no_work_order": 37,
+      "mixed_new_and_repeated": 135
+    },
+    "tool_id_occurrences": 2869,
+    "unique_work_order_tool_pairs": 477,
+    "repeated_work_order_tool_occurrences": 2392,
+    "tool_ids_requested": [
+      {
+        "name": "artifact.read_current",
+        "count": 160
+      },
+      {
+        "name": "artifact.patch_asset_plan",
+        "count": 124
+      },
+      {
+        "name": "timeline.read_export",
+        "count": 110
+      },
+      {
+        "name": "timeline.read_editorial",
+        "count": 105
+      },
+      {
+        "name": "audio.inspect_manifest",
+        "count": 102
+      },
+      {
+        "name": "timeline.edit_clips",
+        "count": 95
+      },
+      {
+        "name": "timeline.save_editorial",
+        "count": 92
+      },
+      {
+        "name": "route.plan_h3",
+        "count": 88
+      },
+      {
+        "name": "video.inspect_take",
+        "count": 88
+      },
+      {
+        "name": "qa.review_episode",
+        "count": 88
+      },
+      {
+        "name": "route.compile_h3_prompt",
+        "count": 81
+      },
+      {
+        "name": "artifact.create_asset",
+        "count": 80
+      },
+      {
+        "name": "image.advance",
+        "count": 79
+      },
+      {
+        "name": "route.get_generation_unit_context",
+        "count": 77
+      },
+      {
+        "name": "shot.save_current",
+        "count": 74
+      },
+      {
+        "name": "timeline.export_editorial",
+        "count": 74
+      },
+      {
+        "name": "image.enqueue",
+        "count": 71
+      },
+      {
+        "name": "audio.align_subtitles",
+        "count": 68
+      },
+      {
+        "name": "image.compose_text_plate",
+        "count": 67
+      },
+      {
+        "name": "task.advance",
+        "count": 55
+      },
+      {
+        "name": "video.get_take_inspection",
+        "count": 55
+      },
+      {
+        "name": "route.h3_capability_profile",
+        "count": 50
+      },
+      {
+        "name": "route.execute_h3_plan",
+        "count": 48
+      },
+      {
+        "name": "task.get",
+        "count": 48
+      },
+      {
+        "name": "shot.patch_storyboard",
+        "count": 45
+      },
+      {
+        "name": "artifact.get_asset_work_context",
+        "count": 44
+      },
+      {
+        "name": "qa.inspect_asset_version",
+        "count": 43
+      },
+      {
+        "name": "artifact.get_asset_plan_index",
+        "count": 43
+      },
+      {
+        "name": "route.compile_generation_plan",
+        "count": 43
+      },
+      {
+        "name": "timeline.add_asset_overlay",
+        "count": 42
+      }
+    ],
+    "tool_ids_repeated_in_work_order": [
+      {
+        "name": "artifact.read_current",
+        "count": 128
+      },
+      {
+        "name": "artifact.patch_asset_plan",
+        "count": 113
+      },
+      {
+        "name": "timeline.read_export",
+        "count": 105
+      },
+      {
+        "name": "timeline.read_editorial",
+        "count": 98
+      },
+      {
+        "name": "audio.inspect_manifest",
+        "count": 94
+      },
+      {
+        "name": "timeline.edit_clips",
+        "count": 90
+      },
+      {
+        "name": "timeline.save_editorial",
+        "count": 87
+      },
+      {
+        "name": "qa.review_episode",
+        "count": 83
+      },
+      {
+        "name": "video.inspect_take",
+        "count": 81
+      },
+      {
+        "name": "route.plan_h3",
+        "count": 77
+      },
+      {
+        "name": "image.advance",
+        "count": 70
+      },
+      {
+        "name": "route.compile_h3_prompt",
+        "count": 70
+      },
+      {
+        "name": "artifact.create_asset",
+        "count": 69
+      },
+      {
+        "name": "timeline.export_editorial",
+        "count": 69
+      },
+      {
+        "name": "image.compose_text_plate",
+        "count": 63
+      },
+      {
+        "name": "image.enqueue",
+        "count": 62
+      },
+      {
+        "name": "audio.align_subtitles",
+        "count": 61
+      },
+      {
+        "name": "shot.save_current",
+        "count": 60
+      },
+      {
+        "name": "route.get_generation_unit_context",
+        "count": 60
+      },
+      {
+        "name": "video.get_take_inspection",
+        "count": 47
+      },
+      {
+        "name": "task.advance",
+        "count": 44
+      },
+      {
+        "name": "timeline.add_asset_overlay",
+        "count": 41
+      },
+      {
+        "name": "route.execute_h3_plan",
+        "count": 39
+      },
+      {
+        "name": "shot.patch_storyboard",
+        "count": 38
+      },
+      {
+        "name": "qa.inspect_asset_version",
+        "count": 37
+      },
+      {
+        "name": "route.h3_capability_profile",
+        "count": 37
+      },
+      {
+        "name": "task.get",
+        "count": 37
+      },
+      {
+        "name": "route.compile_generation_plan",
+        "count": 36
+      },
+      {
+        "name": "artifact.get_asset_plan_index",
+        "count": 33
+      },
+      {
+        "name": "artifact.get_asset_work_context",
+        "count": 29
+      }
+    ],
+    "completion_metrics_by_class": {
+      "all_first_discovery": {
+        "calls": 76,
+        "success": 76,
+        "reported_usage": {
+          "input_tokens": 2043221,
+          "output_tokens": 15402,
+          "cached_input_tokens": 434308,
+          "reasoning_tokens": 9433
+        },
+        "usage_field_calls": {
+          "input_tokens": 76,
+          "output_tokens": 76,
+          "cached_input_tokens": 76,
+          "reasoning_tokens": 76
+        },
+        "elapsed_sum_seconds": 494.784,
+        "elapsed_median_seconds": 4.647,
+        "input_median_tokens": 20030.0,
+        "input_max_tokens": 142940
+      },
+      "all_previously_discovered": {
+        "calls": 554,
+        "success": 554,
+        "reported_usage": {
+          "input_tokens": 32234652,
+          "output_tokens": 138896,
+          "cached_input_tokens": 4309278,
+          "reasoning_tokens": 88650
+        },
+        "usage_field_calls": {
+          "input_tokens": 554,
+          "output_tokens": 554,
+          "cached_input_tokens": 554,
+          "reasoning_tokens": 554
+        },
+        "elapsed_sum_seconds": 4717.652,
+        "elapsed_median_seconds": 7.126,
+        "input_median_tokens": 52913.5,
+        "input_max_tokens": 176670
+      },
+      "no_work_order": {
+        "calls": 37,
+        "success": 37,
+        "reported_usage": {
+          "input_tokens": 885054,
+          "output_tokens": 30885,
+          "cached_input_tokens": 158339,
+          "reasoning_tokens": 26546
+        },
+        "usage_field_calls": {
+          "input_tokens": 37,
+          "output_tokens": 37,
+          "cached_input_tokens": 37,
+          "reasoning_tokens": 37
+        },
+        "elapsed_sum_seconds": 744.656,
+        "elapsed_median_seconds": 18.518,
+        "input_median_tokens": 23546,
+        "input_max_tokens": 29072
+      },
+      "mixed_new_and_repeated": {
+        "calls": 135,
+        "success": 135,
+        "reported_usage": {
+          "input_tokens": 7114584,
+          "output_tokens": 36047,
+          "cached_input_tokens": 1052898,
+          "reasoning_tokens": 23020
+        },
+        "usage_field_calls": {
+          "input_tokens": 135,
+          "output_tokens": 135,
+          "cached_input_tokens": 135,
+          "reasoning_tokens": 135
+        },
+        "elapsed_sum_seconds": 1149.787,
+        "elapsed_median_seconds": 7.218,
+        "input_median_tokens": 42823,
+        "input_max_tokens": 175670
+      }
+    },
+    "all_repeat_samples": [
+      {
+        "call_id": "model-01b8cd8a16e3",
+        "created_at": "2026-09-10T05:15:01.213681+00:00",
+        "work_order_id": "work-order-54e7d272f4ed488d81ad049a79184fb7",
+        "agent_role": "story_concept_worker",
+        "tool_ids": [
+          "script.plan_scenes"
+        ]
+      },
+      {
+        "call_id": "model-8c95f8f14599",
+        "created_at": "2026-09-10T05:16:48.001192+00:00",
+        "work_order_id": "work-order-54e7d272f4ed488d81ad049a79184fb7",
+        "agent_role": "story_concept_worker",
+        "tool_ids": [
+          "artifact.read_current"
+        ]
+      },
+      {
+        "call_id": "model-274eadc719ee",
+        "created_at": "2026-09-10T05:20:17.136760+00:00",
+        "work_order_id": "work-order-c1bc472386c24bce8f9677725fa6a1e2",
+        "agent_role": "episode_script_writer",
+        "tool_ids": [
+          "script.save_scene"
+        ]
+      },
+      {
+        "call_id": "model-4e51036dd6a7",
+        "created_at": "2026-09-10T05:23:49.924127+00:00",
+        "work_order_id": "work-order-c1bc472386c24bce8f9677725fa6a1e2",
+        "agent_role": "episode_script_writer",
+        "tool_ids": [
+          "artifact.read_current"
+        ]
+      },
+      {
+        "call_id": "model-fcbda73fe88a",
+        "created_at": "2026-09-10T05:26:49.693233+00:00",
+        "work_order_id": "work-order-44b0e26ad53e4fa694c65de113afb636",
+        "agent_role": "opening_revision_writer",
+        "tool_ids": [
+          "change.propose_text"
+        ]
+      },
+      {
+        "call_id": "model-a7f521c96463",
+        "created_at": "2026-09-10T05:45:17.844806+00:00",
+        "work_order_id": "work-order-2147d46c808643439d8284ca088eab91",
+        "agent_role": "cafeteria_reference_builder",
+        "tool_ids": [
+          "image.capability",
+          "image.enqueue",
+          "image.advance",
+          "qa.inspect_asset_version",
+          "artifact.review_version"
+        ]
+      },
+      {
+        "call_id": "model-afcf3e052376",
+        "created_at": "2026-09-10T05:45:21.015838+00:00",
+        "work_order_id": "work-order-efd2d5082bab4cbdbbb6aa6419e24c36",
+        "agent_role": "linyi_reference_builder",
+        "tool_ids": [
+          "image.capability",
+          "image.enqueue",
+          "image.advance",
+          "qa.inspect_asset_version"
+        ]
+      },
+      {
+        "call_id": "model-fdb8bdb91340",
+        "created_at": "2026-09-10T05:45:36.064574+00:00",
+        "work_order_id": "work-order-efd2d5082bab4cbdbbb6aa6419e24c36",
+        "agent_role": "linyi_reference_builder",
+        "tool_ids": [
+          "image.enqueue",
+          "image.advance",
+          "qa.inspect_asset_version"
+        ]
+      }
+    ],
+    "uninterrupted_job_segment": {
+      "reset_states": [
+        "queued",
+        "paused",
+        "failed",
+        "waiting_user"
+      ],
+      "responses_by_class": {
+        "all_first_discovery": 128,
+        "all_previously_discovered": 458,
+        "no_work_order": 37,
+        "mixed_new_and_repeated": 179
+      },
+      "completion_metrics_by_class": {
+        "all_first_discovery": {
+          "calls": 128,
+          "success": 128,
+          "reported_usage": {
+            "input_tokens": 5454110,
+            "output_tokens": 30895,
+            "cached_input_tokens": 815877,
+            "reasoning_tokens": 20221
+          },
+          "usage_field_calls": {
+            "input_tokens": 128,
+            "output_tokens": 128,
+            "cached_input_tokens": 128,
+            "reasoning_tokens": 128
+          },
+          "elapsed_sum_seconds": 1023.382,
+          "elapsed_median_seconds": 6.109,
+          "input_median_tokens": 25413.5,
+          "input_max_tokens": 175670
+        },
+        "all_previously_discovered": {
+          "calls": 458,
+          "success": 458,
+          "reported_usage": {
+            "input_tokens": 25252726,
+            "output_tokens": 107971,
+            "cached_input_tokens": 3600498,
+            "reasoning_tokens": 66711
+          },
+          "usage_field_calls": {
+            "input_tokens": 458,
+            "output_tokens": 458,
+            "cached_input_tokens": 458,
+            "reasoning_tokens": 458
+          },
+          "elapsed_sum_seconds": 3718.231,
+          "elapsed_median_seconds": 6.847,
+          "input_median_tokens": 46155.5,
+          "input_max_tokens": 174972
+        },
+        "no_work_order": {
+          "calls": 37,
+          "success": 37,
+          "reported_usage": {
+            "input_tokens": 885054,
+            "output_tokens": 30885,
+            "cached_input_tokens": 158339,
+            "reasoning_tokens": 26546
+          },
+          "usage_field_calls": {
+            "input_tokens": 37,
+            "output_tokens": 37,
+            "cached_input_tokens": 37,
+            "reasoning_tokens": 37
+          },
+          "elapsed_sum_seconds": 744.656,
+          "elapsed_median_seconds": 18.518,
+          "input_median_tokens": 23546,
+          "input_max_tokens": 29072
+        },
+        "mixed_new_and_repeated": {
+          "calls": 179,
+          "success": 179,
+          "reported_usage": {
+            "input_tokens": 10685621,
+            "output_tokens": 51479,
+            "cached_input_tokens": 1380109,
+            "reasoning_tokens": 34171
+          },
+          "usage_field_calls": {
+            "input_tokens": 179,
+            "output_tokens": 179,
+            "cached_input_tokens": 179,
+            "reasoning_tokens": 179
+          },
+          "elapsed_sum_seconds": 1620.611,
+          "elapsed_median_seconds": 7.732,
+          "input_median_tokens": 53907,
+          "input_max_tokens": 176670
+        }
+      },
+      "meaning": "Discovery memory is deliberately cleared at every listed job-state event, excluding repetitions across repair/restart/pause/review boundaries. This is stricter than whole-WorkOrder counting. Schema content hashes were not read from large input payloads."
+    },
+    "interpretation": "All-previously-discovered responses repeat Tool IDs within a WorkOrder; some schemas may have changed during case repair/repackaging. Do not claim all 802 or all same-ID repeats are guaranteed removable. Retained schema must refresh on actual schema changes. Actual savings need protocol replay and cannot equal summed request elapsed under concurrency."
+  }
+}

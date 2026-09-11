@@ -608,6 +608,16 @@
             "title": "Assumptions",
             "type": "array"
           },
+          "completion_receipts": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Completion Receipts",
+            "type": "array"
+          },
           "concise_summary": {
             "minLength": 1,
             "title": "Concise Summary",
@@ -728,6 +738,16 @@
         "additionalProperties": false,
         "description": "Bounded semantic handoff from one completed delegated WorkOrder.\n\nThe full :class:`AgentResult` remains persisted in the runtime store.  This\nprojection carries only the fields the Leader needs when choosing the next\nplan, without replaying the Worker's complete conversational context.",
         "properties": {
+          "completion_receipts": {
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Completion Receipts",
+            "type": "array"
+          },
           "concise_summary": {
             "minLength": 1,
             "title": "Concise Summary",
@@ -846,6 +866,13 @@
             "title": "Latest User Instructions",
             "type": "array"
           },
+          "loaded_tool_schema_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Loaded Tool Schema Ids",
+            "type": "array"
+          },
           "objective": {
             "minLength": 1,
             "title": "Objective",
@@ -916,6 +943,21 @@
             "minimum": 1.0,
             "title": "Max Actions",
             "type": "integer"
+          },
+          "review_blocked_step_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "产品当前审阅所影响的步骤；非空值包括空列表都保留审阅完成边界。",
+            "title": "Review Blocked Step Ids"
           }
         },
         "title": "AgentRunAdvanceRequest",
@@ -5740,6 +5782,32 @@
             ],
             "title": "Max Images"
           },
+          "method_skill_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explicit method selection; omit to inherit the current WorkOrder, or pass [] for none.",
+            "title": "Method Skill Ids"
+          },
+          "production_prompt_stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductionPromptStage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current task stage; omitted values inherit the WorkOrder rather than a role-name guess."
+          },
           "requirement_ids": {
             "items": {
               "type": "string"
@@ -5791,6 +5859,13 @@
             "title": "Capability Profile Version",
             "type": "string"
           },
+          "method_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Method Skill Ids",
+            "type": "array"
+          },
           "model": {
             "default": "gpt-6-astra",
             "title": "Model",
@@ -5801,6 +5876,10 @@
             "default": true,
             "title": "Proceed Allowed",
             "type": "boolean"
+          },
+          "production_prompt_stage": {
+            "$ref": "#/components/schemas/ProductionPromptStage",
+            "default": "STORYBOARD"
           },
           "proposed_repair": {
             "anyOf": [
@@ -5922,12 +6001,31 @@
           },
           "next_action": {
             "enum": [
+              "PREPARE_H3_GROUP",
               "REGENERATE_SHOT",
               "AWAIT_USER",
               "NO_CHANGE"
             ],
             "title": "Next Action",
             "type": "string"
+          },
+          "next_tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Tool"
+          },
+          "next_tool_arguments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Next Tool Arguments",
+            "type": "object"
           },
           "project": {
             "$ref": "#/components/schemas/ProjectAggregate"
@@ -5959,6 +6057,19 @@
         "properties": {
           "decision": {
             "$ref": "#/components/schemas/DirectorRepairDecision"
+          },
+          "expected_shot_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "读取修复对象时的当前修订；仅保护该镜头，不阻挡无关修改。",
+            "title": "Expected Shot Revision"
           },
           "issue_codes": {
             "items": {
@@ -6031,6 +6142,19 @@
         "properties": {
           "decision": {
             "$ref": "#/components/schemas/DirectorRepairDecision"
+          },
+          "expected_shot_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "读取修复对象时的当前修订；仅保护该镜头，不阻挡无关修改。",
+            "title": "Expected Shot Revision"
           },
           "issue_codes": {
             "items": {
@@ -9282,6 +9406,17 @@
             "title": "Resolution",
             "type": "string"
           },
+          "source_operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Operation Id"
+          },
           "state_revision": {
             "default": 1,
             "description": "Monotonic revision of this plan record's mutable preparation and execution state. The plan version remains the compiled-plan ordinal.",
@@ -9400,6 +9535,18 @@
             "maxItems": 500,
             "title": "Shot Ids",
             "type": "array"
+          },
+          "source_operation_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Operation Id"
           },
           "unit_ids": {
             "items": {
@@ -9740,6 +9887,21 @@
               }
             ],
             "title": "Storyboard Version Id"
+          },
+          "submission_attempt_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "PREPARED",
+                  "STARTED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Attempt State"
           },
           "task_id": {
             "title": "Task Id",
@@ -12895,6 +13057,13 @@
             "title": "Confidence",
             "type": "number"
           },
+          "covered_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Covered Shot Ids",
+            "type": "array"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -12912,6 +13081,33 @@
               }
             ],
             "title": "End Version Id"
+          },
+          "full_input_set_observed": {
+            "default": false,
+            "title": "Full Input Set Observed",
+            "type": "boolean"
+          },
+          "generation_plan_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Plan Version Id"
+          },
+          "generation_unit_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Unit Id"
           },
           "id": {
             "title": "Id",
@@ -12932,6 +13128,11 @@
             "maxItems": 24,
             "title": "Observations",
             "type": "array"
+          },
+          "previous_boundary_observed": {
+            "default": false,
+            "title": "Previous Boundary Observed",
+            "type": "boolean"
           },
           "proceed_allowed": {
             "const": true,
@@ -12955,8 +13156,26 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 9,
+            "maxItems": 32,
             "title": "Reference Version Ids",
+            "type": "array"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
+          },
+          "reviewed_input_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reviewed Input Ids",
             "type": "array"
           },
           "route": {
@@ -12974,6 +13193,13 @@
           "shot_id": {
             "title": "Shot Id",
             "type": "string"
+          },
+          "shot_windows": {
+            "items": {
+              "$ref": "#/components/schemas/GenerationUnitShotWindow"
+            },
+            "title": "Shot Windows",
+            "type": "array"
           },
           "start_version_id": {
             "anyOf": [
@@ -12998,6 +13224,20 @@
             },
             "maxItems": 16,
             "title": "Technical Warnings",
+            "type": "array"
+          },
+          "unobserved_selected_reference_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unobserved Selected Reference Ids",
+            "type": "array"
+          },
+          "unreviewed_supplied_input_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unreviewed Supplied Input Ids",
             "type": "array"
           }
         },
@@ -13028,6 +13268,30 @@
             ],
             "title": "End Version Id"
           },
+          "generation_plan_version_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Plan Version Id"
+          },
+          "generation_unit_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Unit Id"
+          },
           "include_previous_boundary": {
             "default": true,
             "title": "Include Previous Boundary",
@@ -13037,7 +13301,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 9,
+            "maxItems": 32,
             "title": "Reference Version Ids",
             "type": "array"
           },
@@ -13055,6 +13319,16 @@
           },
           "route": {
             "$ref": "#/components/schemas/VideoGenerationRoute"
+          },
+          "scope": {
+            "default": "GENERATION_UNIT",
+            "description": "Use the current group containing the requested shot when available; SHOT explicitly requests a single-shot input review.",
+            "enum": [
+              "GENERATION_UNIT",
+              "SHOT"
+            ],
+            "title": "Scope",
+            "type": "string"
           },
           "start_version_id": {
             "anyOf": [
@@ -19058,6 +19332,21 @@
               }
             ]
           },
+          "references": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ShotReferenceCue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "显式指定拆分镜引用；省略时保留原镜当前选用媒体，不虚构正文锚点。",
+            "title": "References"
+          },
           "timeline_beats": {
             "items": {
               "$ref": "#/components/schemas/ShotTimelineBeat"
@@ -19166,6 +19455,21 @@
                 "type": "null"
               }
             ]
+          },
+          "references": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ShotReferenceCue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "显式指定拆分镜引用；省略时保留原镜当前选用媒体，不虚构正文锚点。",
+            "title": "References"
           },
           "timeline_beats": {
             "items": {
@@ -21281,6 +21585,20 @@
             ],
             "title": "Narrative Purpose"
           },
+          "references": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ShotReferenceCue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          },
           "timeline_beats": {
             "anyOf": [
               {
@@ -21432,6 +21750,20 @@
               }
             ],
             "title": "Narrative Purpose"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ShotReferenceCue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
           },
           "timeline_beats": {
             "anyOf": [
@@ -25735,6 +26067,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "work_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Order Id"
           }
         },
         "required": [
@@ -25745,6 +26088,267 @@
           "created_at"
         ],
         "title": "StudioChangeSet",
+        "type": "object"
+      },
+      "StudioEditorSelectedClip": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "duration_seconds": {
+            "minimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "reversed": {
+            "default": false,
+            "title": "Reversed",
+            "type": "boolean"
+          },
+          "source_in_seconds": {
+            "minimum": 0.0,
+            "title": "Source In Seconds",
+            "type": "number"
+          },
+          "source_shot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Shot Id"
+          },
+          "source_take_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Take Id"
+          },
+          "source_window_end_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Window End Seconds"
+          },
+          "source_window_start_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Window Start Seconds"
+          },
+          "speed": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "title": "Speed",
+            "type": "number"
+          },
+          "start_seconds": {
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "track_index": {
+            "minimum": 0.0,
+            "title": "Track Index",
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "image",
+              "video",
+              "audio",
+              "adjustment",
+              "text"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "track_index",
+          "start_seconds",
+          "duration_seconds",
+          "source_in_seconds"
+        ],
+        "title": "StudioEditorSelectedClip",
+        "type": "object"
+      },
+      "StudioEditorSelectedGap": {
+        "additionalProperties": false,
+        "properties": {
+          "end_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "start_seconds": {
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "track_index": {
+            "minimum": 0.0,
+            "title": "Track Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track_index",
+          "start_seconds",
+          "end_seconds"
+        ],
+        "title": "StudioEditorSelectedGap",
+        "type": "object"
+      },
+      "StudioEditorSelection": {
+        "additionalProperties": false,
+        "description": "Saved editor selection, not an instruction to mutate every selected item.",
+        "properties": {
+          "anchor_clip_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Clip Id"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/StudioEditorSelectedClip"
+            },
+            "title": "Clips",
+            "type": "array"
+          },
+          "coordinate_space": {
+            "description": "Clip/playhead/marker/gap times use this view; source_in/window times always use the media file.",
+            "enum": [
+              "FILM",
+              "SHOT_LOCAL"
+            ],
+            "title": "Coordinate Space",
+            "type": "string"
+          },
+          "editorial_revision": {
+            "minimum": 0.0,
+            "title": "Editorial Revision",
+            "type": "integer"
+          },
+          "film_start_seconds": {
+            "default": 0,
+            "description": "Add this offset to SHOT_LOCAL view times to locate them in the film.",
+            "minimum": 0.0,
+            "title": "Film Start Seconds",
+            "type": "number"
+          },
+          "focus": {
+            "enum": [
+              "clips",
+              "subtitle",
+              "gap",
+              "timeline"
+            ],
+            "title": "Focus",
+            "type": "string"
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioEditorSelectedGap"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "in_point_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Point Seconds"
+          },
+          "out_point_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Out Point Seconds"
+          },
+          "playhead_seconds": {
+            "minimum": 0.0,
+            "title": "Playhead Seconds",
+            "type": "number"
+          },
+          "subtitle_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Subtitle Ids",
+            "type": "array"
+          },
+          "timeline_id": {
+            "minLength": 1,
+            "title": "Timeline Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timeline_id",
+          "editorial_revision",
+          "coordinate_space",
+          "focus",
+          "playhead_seconds"
+        ],
+        "title": "StudioEditorSelection",
         "type": "object"
       },
       "StudioEditorial": {
@@ -26084,7 +26688,7 @@
           },
           "pending_messages": {
             "items": {
-              "$ref": "#/components/schemas/StudioMessage"
+              "$ref": "#/components/schemas/StudioMessage-Output"
             },
             "title": "Pending Messages",
             "type": "array"
@@ -26122,7 +26726,7 @@
             "title": "Run Id"
           },
           "scope": {
-            "$ref": "#/components/schemas/StudioScope"
+            "$ref": "#/components/schemas/StudioScope-Output"
           },
           "status": {
             "default": "queued",
@@ -26173,11 +26777,11 @@
         "title": "StudioJobControl",
         "type": "object"
       },
-      "StudioMessage": {
+      "StudioMessage-Input": {
         "additionalProperties": false,
         "properties": {
           "scope": {
-            "$ref": "#/components/schemas/StudioScope"
+            "$ref": "#/components/schemas/StudioScope-Input"
           },
           "text": {
             "maxLength": 12000,
@@ -26190,6 +26794,110 @@
           "text"
         ],
         "title": "StudioMessage",
+        "type": "object"
+      },
+      "StudioMessage-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/StudioScope-Output"
+          },
+          "text": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "StudioMessage",
+        "type": "object"
+      },
+      "StudioMethodDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "principles": {
+            "title": "Principles",
+            "type": "string"
+          },
+          "provenance": {
+            "title": "Provenance",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/StudioMethodSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "upstream_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Upstream Sources",
+            "type": "array"
+          },
+          "user_overridable": {
+            "title": "User Overridable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "principles",
+          "sections",
+          "provenance",
+          "upstream_sources",
+          "user_overridable"
+        ],
+        "title": "StudioMethodDetail",
+        "type": "object"
+      },
+      "StudioMethodSection": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "text"
+        ],
+        "title": "StudioMethodSection",
         "type": "object"
       },
       "StudioMutationResult": {
@@ -26388,9 +27096,66 @@
         "title": "StudioSceneSave",
         "type": "object"
       },
-      "StudioScope": {
+      "StudioScope-Input": {
         "additionalProperties": false,
         "properties": {
+          "editor_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioEditorSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow."
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "default": "episode",
+            "enum": [
+              "episode",
+              "scene",
+              "shot",
+              "asset",
+              "film"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "default": "当前集",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "StudioScope",
+        "type": "object"
+      },
+      "StudioScope-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "editor_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioEditorSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow."
+          },
           "id": {
             "anyOf": [
               {
@@ -26635,9 +27400,25 @@
       "StudioWorker": {
         "additionalProperties": false,
         "properties": {
+          "completed_artifact_count": {
+            "default": 0,
+            "title": "Completed Artifact Count",
+            "type": "integer"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "latest_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Error"
           },
           "latest_reason": {
             "anyOf": [
@@ -26649,6 +27430,20 @@
               }
             ],
             "title": "Latest Reason"
+          },
+          "latest_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Receipt"
           },
           "latest_tool": {
             "anyOf": [
@@ -26683,6 +27478,13 @@
           "run_id": {
             "title": "Run Id",
             "type": "string"
+          },
+          "selected_method_skill_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selected Method Skill Ids",
+            "type": "array"
           },
           "skill_role": {
             "anyOf": [
@@ -26725,6 +27527,22 @@
             "default": 0,
             "title": "Tool Turns",
             "type": "integer"
+          },
+          "waiting_review": {
+            "default": false,
+            "title": "Waiting Review",
+            "type": "boolean"
+          },
+          "waiting_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting Until"
           }
         },
         "required": [
@@ -27230,6 +28048,22 @@
             "title": "Candidate Take Ids",
             "type": "array"
           },
+          "comparison_scope": {
+            "default": "GENERATION_UNIT",
+            "enum": [
+              "GENERATION_UNIT",
+              "SHOT"
+            ],
+            "title": "Comparison Scope",
+            "type": "string"
+          },
+          "covered_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Covered Shot Ids",
+            "type": "array"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -27252,6 +28086,17 @@
           "project_id": {
             "title": "Project Id",
             "type": "string"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
           },
           "selected_take_id": {
             "anyOf": [
@@ -27340,6 +28185,16 @@
               }
             ],
             "title": "Review Focus"
+          },
+          "scope": {
+            "default": "GENERATION_UNIT",
+            "description": "Compare the complete generated group by default, or only each candidate's source window for shot_id.",
+            "enum": [
+              "GENERATION_UNIT",
+              "SHOT"
+            ],
+            "title": "Scope",
+            "type": "string"
           },
           "shot_id": {
             "title": "Shot Id",
@@ -27432,6 +28287,13 @@
       "TeamExecutionBatch": {
         "additionalProperties": false,
         "properties": {
+          "active_work_order_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Active Work Order Ids",
+            "type": "array"
+          },
           "advances": {
             "items": {
               "$ref": "#/components/schemas/TeamWorkAdvance"
@@ -27448,6 +28310,13 @@
               "type": "string"
             },
             "title": "Selected Work Order Ids",
+            "type": "array"
+          },
+          "waiting_work_order_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Waiting Work Order Ids",
             "type": "array"
           }
         },
@@ -28252,6 +29121,12 @@
             "title": "Audio Present",
             "type": "boolean"
           },
+          "audio_semantics_observed": {
+            "const": false,
+            "default": false,
+            "title": "Audio Semantics Observed",
+            "type": "boolean"
+          },
           "boundary_contact_sheet_path": {
             "anyOf": [
               {
@@ -28267,6 +29142,13 @@
             "title": "Contact Sheet Path",
             "type": "string"
           },
+          "covered_shot_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Covered Shot Ids",
+            "type": "array"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -28280,6 +29162,11 @@
             "exclusiveMinimum": 0.0,
             "title": "Fps",
             "type": "number"
+          },
+          "full_take_coverage": {
+            "default": false,
+            "title": "Full Take Coverage",
+            "type": "boolean"
           },
           "height": {
             "exclusiveMinimum": 0.0,
@@ -28304,6 +29191,24 @@
             "title": "Observations",
             "type": "array"
           },
+          "observed_source_in_seconds": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Observed Source In Seconds",
+            "type": "number"
+          },
+          "observed_source_out_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Source Out Seconds"
+          },
           "previous_take_id": {
             "anyOf": [
               {
@@ -28318,6 +29223,17 @@
           "project_id": {
             "title": "Project Id",
             "type": "string"
+          },
+          "review_focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Focus"
           },
           "samples": {
             "items": {
@@ -28354,6 +29270,13 @@
           "shot_id": {
             "title": "Shot Id",
             "type": "string"
+          },
+          "source_context": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Source Context",
+            "type": "object"
           },
           "summary": {
             "maxLength": 3000,
@@ -28449,6 +29372,26 @@
             "default": true,
             "title": "Semantic Review",
             "type": "boolean"
+          },
+          "source_in_seconds": {
+            "default": 0.0,
+            "description": "Start in the source Take, not the episode timeline.",
+            "minimum": 0.0,
+            "title": "Source In Seconds",
+            "type": "number"
+          },
+          "source_out_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exclusive source end; omit to observe through the end of the Take.",
+            "title": "Source Out Seconds"
           }
         },
         "title": "VideoInspectionRequest",
@@ -28758,6 +29701,18 @@
               }
             ]
           },
+          "continuation_not_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Not Before"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -28781,6 +29736,13 @@
             "minLength": 1,
             "title": "Id",
             "type": "string"
+          },
+          "loaded_tool_schema_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Loaded Tool Schema Ids",
+            "type": "array"
           },
           "next_owner": {
             "anyOf": [
@@ -37807,6 +38769,59 @@
         ]
       }
     },
+    "/api/short-drama/studio/methods/{skill_id}": {
+      "get": {
+        "operationId": "read_method_api_short_drama_studio_methods__skill_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioMethodDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Client Error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPErrorResponse"
+                }
+              }
+            },
+            "description": "Server Error"
+          }
+        },
+        "summary": "Read Method",
+        "tags": [
+          "short-drama",
+          "studio"
+        ]
+      }
+    },
     "/api/short-drama/studio/projects": {
       "post": {
         "operationId": "create_project_api_short_drama_studio_projects_post",
@@ -38608,7 +39623,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StudioMessage"
+                "$ref": "#/components/schemas/StudioMessage-Input"
               }
             }
           },

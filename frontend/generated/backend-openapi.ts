@@ -2418,6 +2418,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/short-drama/studio/methods/{skill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Method */
+        get: operations["read_method_api_short_drama_studio_methods__skill_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/short-drama/studio/projects": {
         parameters: {
             query?: never;
@@ -3208,6 +3225,10 @@ export interface components {
         AgentResult: {
             /** Assumptions */
             assumptions?: string[];
+            /** Completion Receipts */
+            completion_receipts?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
             /** Concise Summary */
             concise_summary: string;
             /** Created Artifacts */
@@ -3256,6 +3277,10 @@ export interface components {
          *     plan, without replaying the Worker's complete conversational context.
          */
         AgentResultDigest: {
+            /** Completion Receipts */
+            completion_receipts?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
             /** Concise Summary */
             concise_summary: string;
             /** Deliverable */
@@ -3293,6 +3318,8 @@ export interface components {
             id: string;
             /** Latest User Instructions */
             latest_user_instructions?: string[];
+            /** Loaded Tool Schema Ids */
+            loaded_tool_schema_ids?: string[];
             /** Objective */
             objective: string;
             /** Parent Run Id */
@@ -3323,6 +3350,11 @@ export interface components {
              * @default 1
              */
             max_actions: number;
+            /**
+             * Review Blocked Step Ids
+             * @description 产品当前审阅所影响的步骤；非空值包括空列表都保留审阅完成边界。
+             */
+            review_blocked_step_ids?: string[] | null;
         };
         /** AgentRunCreateRequest */
         AgentRunCreateRequest: {
@@ -4845,6 +4877,13 @@ export interface components {
             inspection_id?: string | null;
             /** Max Images */
             max_images?: number | null;
+            /**
+             * Method Skill Ids
+             * @description Explicit method selection; omit to inherit the current WorkOrder, or pass [] for none.
+             */
+            method_skill_ids?: string[] | null;
+            /** @description Current task stage; omitted values inherit the WorkOrder rather than a role-name guess. */
+            production_prompt_stage?: components["schemas"]["ProductionPromptStage"] | null;
             /** Requirement Ids */
             requirement_ids?: string[];
             /** Take Id */
@@ -4858,6 +4897,8 @@ export interface components {
             advisories?: components["schemas"]["DirectorAdvisory"][];
             /** Capability Profile Version */
             capability_profile_version: string;
+            /** Method Skill Ids */
+            method_skill_ids?: string[];
             /**
              * Model
              * @default gpt-6-astra
@@ -4869,6 +4910,8 @@ export interface components {
              * @constant
              */
             proceed_allowed: true;
+            /** @default STORYBOARD */
+            production_prompt_stage: components["schemas"]["ProductionPromptStage"];
             proposed_repair?: components["schemas"]["DirectorRepairDecisionRequest-Output"] | null;
             /**
              * Provider
@@ -4911,7 +4954,13 @@ export interface components {
              * Next Action
              * @enum {string}
              */
-            next_action: "REGENERATE_SHOT" | "AWAIT_USER" | "NO_CHANGE";
+            next_action: "PREPARE_H3_GROUP" | "REGENERATE_SHOT" | "AWAIT_USER" | "NO_CHANGE";
+            /** Next Tool */
+            next_tool?: string | null;
+            /** Next Tool Arguments */
+            next_tool_arguments?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
             project: components["schemas"]["ProjectAggregate"];
             /** Repair Applied */
             repair_applied: boolean;
@@ -4924,6 +4973,11 @@ export interface components {
         /** DirectorRepairDecisionRequest */
         "DirectorRepairDecisionRequest-Input": {
             decision: components["schemas"]["DirectorRepairDecision"];
+            /**
+             * Expected Shot Revision
+             * @description 读取修复对象时的当前修订；仅保护该镜头，不阻挡无关修改。
+             */
+            expected_shot_revision?: number | null;
             /** Issue Codes */
             issue_codes?: string[];
             /** Reason */
@@ -4939,6 +4993,11 @@ export interface components {
         /** DirectorRepairDecisionRequest */
         "DirectorRepairDecisionRequest-Output": {
             decision: components["schemas"]["DirectorRepairDecision"];
+            /**
+             * Expected Shot Revision
+             * @description 读取修复对象时的当前修订；仅保护该镜头，不阻挡无关修改。
+             */
+            expected_shot_revision?: number | null;
             /** Issue Codes */
             issue_codes?: string[];
             /** Reason */
@@ -6123,6 +6182,8 @@ export interface components {
              * @default 768P
              */
             resolution: string;
+            /** Source Operation Id */
+            source_operation_id?: string | null;
             /**
              * State Revision
              * @description Monotonic revision of this plan record's mutable preparation and execution state. The plan version remains the compiled-plan ordinal.
@@ -6163,6 +6224,8 @@ export interface components {
             shot_directives?: components["schemas"]["H3ShotRouteDirective"][];
             /** Shot Ids */
             shot_ids?: string[];
+            /** Source Operation Id */
+            source_operation_id?: string | null;
             /** Unit Ids */
             unit_ids?: string[];
             /**
@@ -6268,6 +6331,8 @@ export interface components {
             storyboard_document_id?: string | null;
             /** Storyboard Version Id */
             storyboard_version_id?: string | null;
+            /** Submission Attempt State */
+            submission_attempt_state?: ("PREPARED" | "STARTED") | null;
             /** Task Id */
             task_id: string;
             /** Updated At */
@@ -7369,17 +7434,33 @@ export interface components {
             advisory_only: true;
             /** Confidence */
             confidence: number;
+            /** Covered Shot Ids */
+            covered_shot_ids?: string[];
             /** Created At */
             created_at: string;
             decision: components["schemas"]["InputCompatibilityDecision"];
             /** End Version Id */
             end_version_id?: string | null;
+            /**
+             * Full Input Set Observed
+             * @default false
+             */
+            full_input_set_observed: boolean;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /** Id */
             id: string;
             /** Issues */
             issues?: components["schemas"]["VisualInputIssue"][];
             /** Observations */
             observations?: components["schemas"]["InputCompatibilityObservation"][];
+            /**
+             * Previous Boundary Observed
+             * @default false
+             */
+            previous_boundary_observed: boolean;
             /**
              * Proceed Allowed
              * @default true
@@ -7392,6 +7473,10 @@ export interface components {
             recommendations?: string[];
             /** Reference Version Ids */
             reference_version_ids?: string[];
+            /** Review Focus */
+            review_focus?: string | null;
+            /** Reviewed Input Ids */
+            reviewed_input_ids?: string[];
             route: components["schemas"]["VideoGenerationRoute"];
             /**
              * Semantic Model
@@ -7402,17 +7487,27 @@ export interface components {
             semantic_status: components["schemas"]["SemanticReviewStatus"];
             /** Shot Id */
             shot_id: string;
+            /** Shot Windows */
+            shot_windows?: components["schemas"]["GenerationUnitShotWindow"][];
             /** Start Version Id */
             start_version_id?: string | null;
             /** Summary */
             summary: string;
             /** Technical Warnings */
             technical_warnings?: string[];
+            /** Unobserved Selected Reference Ids */
+            unobserved_selected_reference_ids?: string[];
+            /** Unreviewed Supplied Input Ids */
+            unreviewed_supplied_input_ids?: string[];
         };
         /** InputCompatibilityRequest */
         InputCompatibilityRequest: {
             /** End Version Id */
             end_version_id?: string | null;
+            /** Generation Plan Version Id */
+            generation_plan_version_id?: string | null;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
             /**
              * Include Previous Boundary
              * @default true
@@ -7423,6 +7518,13 @@ export interface components {
             /** Review Focus */
             review_focus?: string | null;
             route: components["schemas"]["VideoGenerationRoute"];
+            /**
+             * Scope
+             * @description Use the current group containing the requested shot when available; SHOT explicitly requests a single-shot input review.
+             * @default GENERATION_UNIT
+             * @enum {string}
+             */
+            scope: "GENERATION_UNIT" | "SHOT";
             /** Start Version Id */
             start_version_id?: string | null;
         };
@@ -9455,6 +9557,11 @@ export interface components {
             /** Narrative Purpose */
             narrative_purpose: string;
             reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Input"] | null;
+            /**
+             * References
+             * @description 显式指定拆分镜引用；省略时保留原镜当前选用媒体，不虚构正文锚点。
+             */
+            references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
             timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
             /** Transition Out */
@@ -9492,6 +9599,11 @@ export interface components {
             /** Narrative Purpose */
             narrative_purpose: string;
             reference_plan?: components["schemas"]["ShotReferencePlanUpdateRequest-Output"] | null;
+            /**
+             * References
+             * @description 显式指定拆分镜引用；省略时保留原镜当前选用媒体，不虚构正文锚点。
+             */
+            references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
             timeline_beats?: components["schemas"]["ShotTimelineBeat"][];
             /** Transition Out */
@@ -10234,6 +10346,8 @@ export interface components {
             merge_candidate?: boolean | null;
             /** Narrative Purpose */
             narrative_purpose?: string | null;
+            /** References */
+            references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
             timeline_beats?: components["schemas"]["ShotTimelineBeat"][] | null;
             /** Transition Out */
@@ -10260,6 +10374,8 @@ export interface components {
             merge_candidate?: boolean | null;
             /** Narrative Purpose */
             narrative_purpose?: string | null;
+            /** References */
+            references?: components["schemas"]["ShotReferenceCue"][] | null;
             /** Timeline Beats */
             timeline_beats?: components["schemas"]["ShotTimelineBeat"][] | null;
             /** Transition Out */
@@ -11646,6 +11762,95 @@ export interface components {
             summary: string;
             /** Title */
             title: string;
+            /** Work Order Id */
+            work_order_id?: string | null;
+        };
+        /** StudioEditorSelectedClip */
+        StudioEditorSelectedClip: {
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Id */
+            id: string;
+            /**
+             * Reversed
+             * @default false
+             */
+            reversed: boolean;
+            /** Source In Seconds */
+            source_in_seconds: number;
+            /** Source Shot Id */
+            source_shot_id?: string | null;
+            /** Source Take Id */
+            source_take_id?: string | null;
+            /** Source Window End Seconds */
+            source_window_end_seconds?: number | null;
+            /** Source Window Start Seconds */
+            source_window_start_seconds?: number | null;
+            /**
+             * Speed
+             * @default 1
+             */
+            speed: number;
+            /** Start Seconds */
+            start_seconds: number;
+            /** Track Index */
+            track_index: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "image" | "video" | "audio" | "adjustment" | "text";
+        };
+        /** StudioEditorSelectedGap */
+        StudioEditorSelectedGap: {
+            /** End Seconds */
+            end_seconds: number;
+            /** Start Seconds */
+            start_seconds: number;
+            /** Track Index */
+            track_index: number;
+        };
+        /**
+         * StudioEditorSelection
+         * @description Saved editor selection, not an instruction to mutate every selected item.
+         */
+        StudioEditorSelection: {
+            /** Anchor Clip Id */
+            anchor_clip_id?: string | null;
+            /** Clips */
+            clips?: components["schemas"]["StudioEditorSelectedClip"][];
+            /**
+             * Coordinate Space
+             * @description Clip/playhead/marker/gap times use this view; source_in/window times always use the media file.
+             * @enum {string}
+             */
+            coordinate_space: "FILM" | "SHOT_LOCAL";
+            /** Editorial Revision */
+            editorial_revision: number;
+            /**
+             * Film Start Seconds
+             * @description Add this offset to SHOT_LOCAL view times to locate them in the film.
+             * @default 0
+             */
+            film_start_seconds: number;
+            /**
+             * Focus
+             * @enum {string}
+             */
+            focus: "clips" | "subtitle" | "gap" | "timeline";
+            gap?: components["schemas"]["StudioEditorSelectedGap"] | null;
+            /** In Point Seconds */
+            in_point_seconds?: number | null;
+            /** Out Point Seconds */
+            out_point_seconds?: number | null;
+            /** Playhead Seconds */
+            playhead_seconds: number;
+            /** Subtitle Ids */
+            subtitle_ids?: string[];
+            /** Timeline Id */
+            timeline_id: string;
         };
         /** StudioEditorial */
         StudioEditorial: {
@@ -11779,7 +11984,7 @@ export interface components {
             /** Objective */
             objective: string;
             /** Pending Messages */
-            pending_messages?: components["schemas"]["StudioMessage"][];
+            pending_messages?: components["schemas"]["StudioMessage-Output"][];
             /** Project Id */
             project_id: string;
             /** Retry At */
@@ -11791,7 +11996,7 @@ export interface components {
             retry_attempt: number;
             /** Run Id */
             run_id?: string | null;
-            scope: components["schemas"]["StudioScope"];
+            scope: components["schemas"]["StudioScope-Output"];
             /**
              * Status
              * @default queued
@@ -11810,8 +12015,42 @@ export interface components {
             action: "pause" | "resume";
         };
         /** StudioMessage */
-        StudioMessage: {
-            scope?: components["schemas"]["StudioScope"];
+        "StudioMessage-Input": {
+            scope?: components["schemas"]["StudioScope-Input"];
+            /** Text */
+            text: string;
+        };
+        /** StudioMessage */
+        "StudioMessage-Output": {
+            scope?: components["schemas"]["StudioScope-Output"];
+            /** Text */
+            text: string;
+        };
+        /** StudioMethodDetail */
+        StudioMethodDetail: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Principles */
+            principles: string;
+            /** Provenance */
+            provenance: string;
+            /** Sections */
+            sections: components["schemas"]["StudioMethodSection"][];
+            /** Upstream Sources */
+            upstream_sources: string[];
+            /** User Overridable */
+            user_overridable: boolean;
+        };
+        /** StudioMethodSection */
+        StudioMethodSection: {
+            /** Role */
+            role: string;
+            /** Stage */
+            stage?: string | null;
             /** Text */
             text: string;
         };
@@ -11879,7 +12118,27 @@ export interface components {
             target_duration_seconds?: number | null;
         };
         /** StudioScope */
-        StudioScope: {
+        "StudioScope-Input": {
+            /** @description Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow. */
+            editor_selection?: components["schemas"]["StudioEditorSelection"] | null;
+            /** Id */
+            id?: string | null;
+            /**
+             * Kind
+             * @default episode
+             * @enum {string}
+             */
+            kind: "episode" | "scene" | "shot" | "asset" | "film";
+            /**
+             * Label
+             * @default 当前集
+             */
+            label: string;
+        };
+        /** StudioScope */
+        "StudioScope-Output": {
+            /** @description Exact saved editor selection at handoff. Read current objects before editing; selection is context, not a fixed workflow. */
+            editor_selection?: components["schemas"]["StudioEditorSelection"] | null;
             /** Id */
             id?: string | null;
             /**
@@ -11981,10 +12240,21 @@ export interface components {
         };
         /** StudioWorker */
         StudioWorker: {
+            /**
+             * Completed Artifact Count
+             * @default 0
+             */
+            completed_artifact_count: number;
             /** Id */
             id: string;
+            /** Latest Error */
+            latest_error?: string | null;
             /** Latest Reason */
             latest_reason?: string | null;
+            /** Latest Receipt */
+            latest_receipt?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
             /** Latest Tool */
             latest_tool?: string | null;
             /** Next Owner */
@@ -11995,6 +12265,8 @@ export interface components {
             role: string;
             /** Run Id */
             run_id: string;
+            /** Selected Method Skill Ids */
+            selected_method_skill_ids?: string[];
             /** Skill Role */
             skill_role?: string | null;
             /** Stage */
@@ -12008,6 +12280,13 @@ export interface components {
              * @default 0
              */
             tool_turns: number;
+            /**
+             * Waiting Review
+             * @default false
+             */
+            waiting_review: boolean;
+            /** Waiting Until */
+            waiting_until?: string | null;
         };
         /** StyleProfile */
         StyleProfile: {
@@ -12188,6 +12467,14 @@ export interface components {
             candidate_reviews?: components["schemas"]["TakeComparisonCandidateReview"][];
             /** Candidate Take Ids */
             candidate_take_ids: string[];
+            /**
+             * Comparison Scope
+             * @default GENERATION_UNIT
+             * @enum {string}
+             */
+            comparison_scope: "GENERATION_UNIT" | "SHOT";
+            /** Covered Shot Ids */
+            covered_shot_ids?: string[];
             /** Created At */
             created_at: string;
             decision: components["schemas"]["TakeComparisonDecision"];
@@ -12197,6 +12484,8 @@ export interface components {
             inspection_ids: string[];
             /** Project Id */
             project_id: string;
+            /** Review Focus */
+            review_focus?: string | null;
             /** Selected Take Id */
             selected_take_id?: string | null;
             /** Semantic Model */
@@ -12228,6 +12517,13 @@ export interface components {
             inspect_missing: boolean;
             /** Review Focus */
             review_focus?: string | null;
+            /**
+             * Scope
+             * @description Compare the complete generated group by default, or only each candidate's source window for shot_id.
+             * @default GENERATION_UNIT
+             * @enum {string}
+             */
+            scope: "GENERATION_UNIT" | "SHOT";
             /** Shot Id */
             shot_id: string;
             /** Take Ids */
@@ -12261,12 +12557,16 @@ export interface components {
         TaskStatus: "QUEUED" | "SUBMITTING" | "ACKNOWLEDGED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "SUBMIT_UNKNOWN" | "OUTPUT_MISSING";
         /** TeamExecutionBatch */
         TeamExecutionBatch: {
+            /** Active Work Order Ids */
+            active_work_order_ids?: string[];
             /** Advances */
             advances?: components["schemas"]["TeamWorkAdvance"][];
             /** Run Id */
             run_id: string;
             /** Selected Work Order Ids */
             selected_work_order_ids?: string[];
+            /** Waiting Work Order Ids */
+            waiting_work_order_ids?: string[];
         };
         /** TeamWorkAdvance */
         TeamWorkAdvance: {
@@ -12545,16 +12845,29 @@ export interface components {
         VideoInspectionReport: {
             /** Audio Present */
             audio_present: boolean;
+            /**
+             * Audio Semantics Observed
+             * @default false
+             * @constant
+             */
+            audio_semantics_observed: false;
             /** Boundary Contact Sheet Path */
             boundary_contact_sheet_path?: string | null;
             /** Contact Sheet Path */
             contact_sheet_path: string;
+            /** Covered Shot Ids */
+            covered_shot_ids?: string[];
             /** Created At */
             created_at: string;
             /** Duration Seconds */
             duration_seconds: number;
             /** Fps */
             fps: number;
+            /**
+             * Full Take Coverage
+             * @default false
+             */
+            full_take_coverage: boolean;
             /** Height */
             height: number;
             /** Id */
@@ -12563,10 +12876,19 @@ export interface components {
             issues?: components["schemas"]["QaIssue"][];
             /** Observations */
             observations?: components["schemas"]["VideoObservation"][];
+            /**
+             * Observed Source In Seconds
+             * @default 0
+             */
+            observed_source_in_seconds: number;
+            /** Observed Source Out Seconds */
+            observed_source_out_seconds?: number | null;
             /** Previous Take Id */
             previous_take_id?: string | null;
             /** Project Id */
             project_id: string;
+            /** Review Focus */
+            review_focus?: string | null;
             /** Samples */
             samples: components["schemas"]["VideoFrameSample"][];
             /** Scopes */
@@ -12576,6 +12898,10 @@ export interface components {
             semantic_status: components["schemas"]["SemanticReviewStatus"];
             /** Shot Id */
             shot_id: string;
+            /** Source Context */
+            source_context?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
             /** Summary */
             summary: string;
             /** Take Id */
@@ -12608,6 +12934,17 @@ export interface components {
              * @default true
              */
             semantic_review: boolean;
+            /**
+             * Source In Seconds
+             * @description Start in the source Take, not the episode timeline.
+             * @default 0
+             */
+            source_in_seconds: number;
+            /**
+             * Source Out Seconds
+             * @description Exclusive source end; omit to observe through the end of the Take.
+             */
+            source_out_seconds?: number | null;
         };
         /** VideoInspectionResponse */
         VideoInspectionResponse: {
@@ -12695,6 +13032,8 @@ export interface components {
             /** Constraints */
             constraints?: string[];
             context_manifest?: components["schemas"]["ContextManifest"] | null;
+            /** Continuation Not Before */
+            continuation_not_before?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -12708,6 +13047,8 @@ export interface components {
             expected_output_slot_ids?: string[];
             /** Id */
             id: string;
+            /** Loaded Tool Schema Ids */
+            loaded_tool_schema_ids?: string[];
             next_owner?: components["schemas"]["WorkOrderNextOwner"] | null;
             /** Objective */
             objective: string;
@@ -19199,6 +19540,46 @@ export interface operations {
             };
         };
     };
+    read_method_api_short_drama_studio_methods__skill_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudioMethodDetail"];
+                };
+            };
+            /** @description Client Error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+            /** @description Server Error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPErrorResponse"];
+                };
+            };
+        };
+    };
     create_project_api_short_drama_studio_projects_post: {
         parameters: {
             query?: never;
@@ -19759,7 +20140,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StudioMessage"];
+                "application/json": components["schemas"]["StudioMessage-Input"];
             };
         };
         responses: {

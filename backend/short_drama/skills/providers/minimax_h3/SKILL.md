@@ -23,19 +23,21 @@ prompt_references: ["references/official_h3_prompt_writing_zh_cn.md", "reference
 
 1. 用户明确锁定的事实和当前项目版本；
 2. `locked_shot` 与 `locked_dialogue`；
-3. 已批准的 `route_media_bindings` 与 `visible_assets`；
-4. `structured_action_plan` 和 `previous_shot_terminal_state`；
+3. 当前明确选中且可用的 `route_media_bindings` 与 `visible_assets`；
+4. `structured_action_plan`、明确标为计划的 `previous_*_planned_terminal_state`，以及已提供的 `actual_previous_media_boundary`；
 5. 当前格式 Skill 提供的表达重点；
 6. `source_prompt` 中不与以上事实冲突的修辞建议。
+
+计划终态不能证明真实采用媒体中已发生该动作。实际边界只用于当前镜头确实依赖的状态，未观察部分仍为未知。
 
 低优先级内容只能补充表达，不能覆盖高优先级事实。项目 Bible 用于消歧，不得把本镜未声明可见的人物或道具带入画面。
 
 ## 当前项目支持的 H3 路线
 
 - `DIRECT`：编译为 T2VA，从文字完整建立起始画面、动作、摄影机和声音。
-- `FRAME_FIRST`：编译为 I2VA，严格从批准首帧开始发展。
-- `FRAME_LAST`：编译为 L2VA，根据已批准尾帧推导相容的前置状态，并让动作与构图在结尾精确收敛。
-- `FRAME_FIRST_LAST`：编译为 FL2VA，在批准首尾帧之间形成连续、可观察的变化路径。
+- `FRAME_FIRST`：编译为 I2VA，严格从本次选中的首帧开始发展。
+- `FRAME_LAST`：编译为 L2VA，根据本次选中的尾帧推导相容的前置状态，并让动作与构图在结尾精确收敛。
+- `FRAME_FIRST_LAST`：编译为 FL2VA，在本次选中的首尾帧之间形成连续、可观察的变化路径。
 - `REFERENCE`：编译为 Ref2VA，用图片、视频或音频锚定明确的身份、外观、运动、空间或声音。
 
 五种模式均必须来自上游已选定的 `VideoGenerationRoute`；编译器不得为了追求画面而自行换路线。

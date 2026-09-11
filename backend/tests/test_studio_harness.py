@@ -204,6 +204,53 @@ def test_fast_worker_saves_and_finishes_while_sibling_is_still_busy(tmp_path: Pa
     _wait_job(service, job.id, 'completed')
 
 
+def test_text_review_waits_for_affected_work_while_other_writer_completes(tmp_path: Path) -> None:
+    from short_drama.studio_changes import decide_change, list_changes
+    from short_drama.studio_models import StudioChangeDecision
+    reviewer_turns, writer_turns = 0, 0
+    shot_id, before_camera = '', ''
+
+    def respond(payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal reviewer_turns, writer_turns
+        if 'work_order' not in payload:
+            if payload.get('goal', {}).get('latest_user_instructions'):
+                return _plan()
+            return _plan('reviewer', 'independent-writer')
+        if payload['work_order']['recipient_role'] == 'reviewer':
+            reviewer_turns += 1
+            if reviewer_turns == 1:
+                return {'requested_tool_schema_ids': ['change.propose_text'], 'rationale': '取得定向修改提案结构'}
+            if reviewer_turns == 2:
+                return {'tool_name': 'change.propose_text', 'reason': '用户要求确认这一镜机位', 'arguments': {
+                    'project_id': 'project-dont-trust-me', 'request': {'title': '机位调整', 'items': [{
+                        'target': 'shot', 'target_id': shot_id, 'field': 'camera', 'title': '改为固定机位',
+                        'before': before_camera, 'after': '固定侧机位'}]}}}
+            pytest.fail('Affected reviewer continued before the requested review')
+        writer_turns += 1
+        if writer_turns == 1:
+            until = time.monotonic() + 5
+            while time.monotonic() < until and not list_changes(service.get_project(project_id).document):
+                threading.Event().wait(0.01)
+            return _scene('机位等待用户选择时，这个独立场次照常保存。')
+        return _done('独立场次已保存')
+
+    service, project_id = _service(tmp_path, HarnessLanguageClient(respond))
+    shot = service.get_project(project_id).document.shots[0]
+    shot_id, before_camera = shot.id, shot.camera
+    job = service.studio_runtime.send(project_id, StudioMessage(text='第一镜机位修改先让我选择，同时写一个无关的新场次。'))
+    waiting = _wait_job(service, job.id, 'waiting_user')
+    assert _saved_scenes(service, project_id) == ['机位等待用户选择时，这个独立场次照常保存。']
+    assert reviewer_turns == 2 and writer_turns == 2
+    change = list_changes(service.get_project(project_id).document)[0]
+    assert change.work_order_id and change.run_id == waiting.run_id
+    assert service.get_project(project_id).document.shots[0].camera == before_camera
+    decide_change(service, project_id, change.id, change.items[0].id, StudioChangeDecision(decision='accept'))
+    finished = _wait_job(service, job.id, 'completed')
+    assert finished.run_id == waiting.run_id
+    assert service.get_project(project_id).document.shots[0].camera == '固定侧机位'
+    assert len(_saved_scenes(service, project_id)) == 1
+
+
 def test_ready_leader_work_prepares_parallel_post_while_retained_worker_waits(tmp_path: Path) -> None:
     slow_started, release_slow, post_finished = threading.Event(), threading.Event(), threading.Event()
     retained_id = ''
@@ -298,6 +345,111 @@ def test_pause_preserves_requested_tool_and_resume_executes_it_once(tmp_path: Pa
     finished = _wait_job(service, job.id, 'completed')
     assert finished.run_id == paused.run_id
     assert _saved_scenes(service, project_id) == ['暂停恢复后只写一次。']
+
+
+def test_pause_inside_started_composite_tool_keeps_its_receipt_and_does_not_replay(tmp_path: Path) -> None:
+    from short_drama.agent_runtime.execution_control import execution_boundary
+    from short_drama.tools import ToolSpec, ToolCategory, ToolEffect, ToolModel, ToolExecution
+    from short_drama.studio_models import StudioSceneSave
+    started, release = threading.Event(), threading.Event()
+    calls: list[str] = []
+    turns = 0
+
+    class Request(ToolModel):
+        project_id: str
+
+    class Output(ToolModel):
+        saved: bool
+
+    def respond(payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal turns
+        if 'work_order' not in payload:
+            return _plan('writer')
+        turns += 1
+        if turns == 1:
+            return {'requested_tool_schema_ids': ['script.save_composite_test'], 'rationale': '保存一个复合制作操作'}
+        if turns == 2:
+            return {'tool_name': 'script.save_composite_test', 'reason': '保存完整操作结果', 'arguments': {'project_id': project_id}}
+        return _done()
+
+    service, project_id = _service(tmp_path, HarnessLanguageClient(respond))
+
+    def handler(request: Request) -> ToolExecution[Output]:
+        calls.append(request.project_id)
+        started.set()
+        assert release.wait(5)
+        # A nested model boundary after the operation started must not cancel a
+        # half-completed Tool. The outer runner takes the next turn's boundary.
+        execution_boundary()
+        service.studio.save_scene(request.project_id, StudioSceneSave(heading='HARNESS 测试场次', screenplay_text='复合操作完成。'))
+        return ToolExecution(output=Output(saved=True))
+
+    service.tool_registry.register(ToolSpec(id='script.save_composite_test', version=1,
+        category=ToolCategory.SCRIPT, description='测试已开始的复合保存', effect=ToolEffect.WRITE,
+        idempotent=False, input_model=Request, output_model=Output, handler=handler))
+    job = service.studio_runtime.send(project_id, StudioMessage(text='完成当前保存。'))
+    try:
+        assert started.wait(5)
+        service.studio_runtime.control(job.id, StudioJobControl(action='pause'))
+    finally:
+        release.set()
+    paused = _wait_job(service, job.id, 'paused')
+    assert paused.run_id is not None
+    work = service.agent_runtime.store.list_work_orders(paused.run_id)[0]
+    assert work.specialist_turns[-1].status == SpecialistTurnStatus.COMPLETED
+    assert _saved_scenes(service, project_id) == ['复合操作完成。']
+    service.studio_runtime.control(job.id, StudioJobControl(action='resume'))
+    _wait_job(service, job.id, 'completed')
+    assert calls == [project_id]
+
+
+def test_pause_yield_in_dispatch_drains_worker_before_restart(tmp_path: Path) -> None:
+    from short_drama.agent_runtime.execution_control import execution_boundary
+    from short_drama.team_executor import LocalTeamExecutor
+    started, pause_dispatched, release = threading.Event(), threading.Event(), threading.Event()
+    turns = 0
+
+    def respond(payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal turns
+        if 'work_order' not in payload:
+            return _plan('writer')
+        turns += 1
+        if turns == 1:
+            started.set()
+            assert release.wait(5)
+            return _scene('等待已开始决策落盘后才能确认暂停。')
+        return _done()
+
+    service, project_id = _service(tmp_path, HarnessLanguageClient(respond))
+
+    class YieldingDispatch(LocalTeamExecutor):
+        def collect_ready_work(self, run_id: str, *, blocked_work_order_ids: set[str] | None = None):
+            batch = super().collect_ready_work(run_id, blocked_work_order_ids=blocked_work_order_ids)
+            if batch.selected_work_order_ids:
+                assert pause_dispatched.wait(5)
+                execution_boundary()
+            return batch
+
+    service.team_executor = YieldingDispatch(service.production_manager)
+    job = service.studio_runtime.send(project_id, StudioMessage(text='保存这一场。'))
+    try:
+        assert started.wait(5)
+        service.studio_runtime.control(job.id, StudioJobControl(action='pause'))
+        pause_dispatched.set()
+        threading.Event().wait(0.1)
+        persisted = service.repository.list_studio_jobs(project_id)[0]
+        assert persisted.status == 'pausing'
+    finally:
+        release.set()
+        pause_dispatched.set()
+    paused = _wait_job(service, job.id, 'paused')
+    assert paused.run_id and not service.team_executor.has_active_work(paused.run_id)
+    assert not _saved_scenes(service, project_id)
+    restarted = ShortDramaService(database_path=service.repository.database_path,
+        workspace_root=service.workspace_root, language_provider_factory=lambda _key, _url: HarnessLanguageClient(respond))
+    restarted.studio_runtime.control(job.id, StudioJobControl(action='resume'))
+    _wait_job(restarted, job.id, 'completed')
+    assert _saved_scenes(restarted, project_id) == ['等待已开始决策落盘后才能确认暂停。']
 
 
 def test_mid_decision_user_input_supersedes_stale_write_and_is_not_truncated(tmp_path: Path) -> None:

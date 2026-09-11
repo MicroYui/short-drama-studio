@@ -6,6 +6,7 @@ from short_drama.language_defaults import LANGUAGE_MODEL
 
 import json
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import Field, model_validator
@@ -22,7 +23,7 @@ from short_drama.models import (
     VideoInspectionReport,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderClient
-from short_drama.video_inspection import image_data_url, semantic_reference_images
+from short_drama.video_inspection import image_data_url, semantic_reference_entries
 
 
 class TakeComparisonJudgment(DomainModel):
@@ -50,6 +51,7 @@ def compare_take_candidates(
     client: LanguageProviderClient,
     review_focus: str | None,
     created_at: str,
+    comparison_scope: Literal["GENERATION_UNIT", "SHOT"] = "GENERATION_UNIT",
 ) -> TakeComparisonReport:
     """Compare candidates in one model call and allow an explicit no-winner result."""
 
@@ -57,18 +59,21 @@ def compare_take_candidates(
         raise ValueError("Take comparison requires at least two candidates")
     if len({take.id for take in takes}) != len(takes):
         raise ValueError("Take comparison candidates must be unique")
-    if any(take.project_id != document.project.id or take.shot_id != shot.id for take in takes):
-        raise ValueError("All compared Takes must belong to the same project and shot")
+    if any(take.project_id != document.project.id or shot.id not in take.covered_shot_ids() for take in takes):
+        raise ValueError("All compared Takes must belong to the same project and cover the requested shot")
+    covered_ids = takes[0].covered_shot_ids() if comparison_scope == "GENERATION_UNIT" else [shot.id]
+    if comparison_scope == "GENERATION_UNIT" and any(take.covered_shot_ids() != covered_ids for take in takes):
+        raise ValueError("Full-group candidates must cover the same ordered shots")
+    shots_by_id = {item.id: item for item in document.shots}
+    if any(shot_id not in shots_by_id for shot_id in covered_ids):
+        raise ValueError("A compared group is missing a current source shot")
 
     reports_by_take = {report.take_id: report for report in inspections}
     missing = [take.id for take in takes if take.id not in reports_by_take]
     if missing:
         raise ValueError("Missing video inspections for Takes: " + ", ".join(missing))
 
-    reference_plan = next(
-        (item for item in document.reference_plan if item.shot_id == shot.id),
-        None,
-    )
+    reference_plans = [item for item in document.reference_plan if item.shot_id in covered_ids]
     image_urls: list[str] = []
     image_map: list[dict[str, str | int]] = []
     inspection_ids: list[str] = []
@@ -98,21 +103,23 @@ def compare_take_candidates(
                     }
                 )
 
-    for label, url in semantic_reference_images(document, reference_plan):
-        image_urls.append(url)
-        image_map.append(
-            {
-                "index": len(image_urls),
-                "role": "CANONICAL_ASSET_REFERENCE",
-                "description": label,
-            }
-        )
+    seen_references: set[str] = set()
+    for plan in reference_plans:
+        for version_id, label, url in semantic_reference_entries(document, plan):
+            if version_id in seen_references:
+                continue
+            seen_references.add(version_id)
+            image_urls.append(url)
+            image_map.append({"index": len(image_urls), "role": "SELECTED_GENERATION_REFERENCE", "description": label})
 
     instructions = (
         "你是服务于电影导演 Agent 的同镜头 Take 对比工具。只返回 JSON，并严格匹配"
-        "给定 schema。将所有候选时间线放在同一 ShotPlan、标准参考和前一镜边界下比较。"
+        "给定 schema。将所有候选时间线放在 comparison_target 指定的同一镜头组或源窗口、当前分镜、实际参考和前一镜边界下比较。"
         "阅读 QA 状态和问题作为证据，但不要把语义、连续性或审美标签当成不可覆盖的资格门禁。"
-        "比较角色身份与服装、场景与道具连续性、动作与屏幕方向、台词/声源语义和摄影的相对差异。"
+        "比较角色身份与服装、场景与道具连续性、动作与屏幕方向和摄影的相对差异。"
+        "输入只有静帧与视觉观察，没有音频证据；对白、声线、声源语义与音画同步一律 UNKNOWN，不能据此判断声音错误。"
+        "按每个候选的 shot_windows 定位相同叙事片段，合法的组内切镜不是漂移，不能用代表镜时长评价整组。"
+        "报告仅适用于记录的 observed_source_range 和 review_focus，不外推未覆盖的时段。"
         "不要只因为某个候选‘没那么差’就选它；当所有候选都有会破坏当前剪辑意图的可见矛盾时，"
         "返回 NONE_ACCEPTABLE。若你选择一个带有 QA 警告的 Take，必须在该候选的 strengths/weaknesses "
         "和 summary 中说明为何这个创作取舍在当前目标下可接受。稀疏抽帧不能证明未被看到的事件。"
@@ -122,12 +129,17 @@ def compare_take_candidates(
     payload = {
         "output_schema": TakeComparisonJudgment.model_json_schema(),
         "shot": shot.model_dump(mode="json"),
+        "comparison_target": {"scope": comparison_scope, "requested_shot_id": shot.id, "covered_shot_ids": covered_ids},
+        "current_shots": [shots_by_id[shot_id].model_dump(mode="json") for shot_id in covered_ids],
+        "reference_plans": [plan.model_dump(mode="json") for plan in reference_plans],
         "candidates": [
             {
                 "take": {
                     "id": take.id,
                     "candidate_index": take.candidate_index,
                     "route": take.route.value,
+                    "generation_unit_id": take.generation_unit_id,
+                    "shot_windows": [window.model_dump(mode="json") for window in take.shot_windows],
                     "qa_status": take.qa_status.value,
                     "qa_score": take.qa_report.score,
                     "qa_issues": [
@@ -137,6 +149,12 @@ def compare_take_candidates(
                 "inspection": {
                     "id": reports_by_take[take.id].id,
                     "summary": reports_by_take[take.id].summary,
+                    "observed_source_range": {
+                        "start_seconds": reports_by_take[take.id].observed_source_in_seconds,
+                        "end_seconds": reports_by_take[take.id].observed_source_out_seconds,
+                    },
+                    "review_focus": reports_by_take[take.id].review_focus,
+                    "audio_semantics_observed": False,
                     "issues": [
                         issue.model_dump(mode="json")
                         for issue in reports_by_take[take.id].issues
@@ -157,12 +175,12 @@ def compare_take_candidates(
         instructions=instructions,
         input_text=json.dumps(payload, ensure_ascii=False, indent=2),
         image_urls=image_urls,
-        max_output_tokens=4000,
+        max_output_tokens=16000,
     )
     judgment = TakeComparisonJudgment.model_validate_json(_strip_json_fence(output))
     known_ids = {take.id for take in takes}
     reviewed_ids = {item.take_id for item in judgment.candidate_reviews}
-    if reviewed_ids != known_ids:
+    if reviewed_ids != known_ids or len(judgment.candidate_reviews) != len(known_ids):
         raise ValueError("Take comparison must review every supplied candidate exactly once")
     if judgment.selected_take_id is not None:
         selected = next(
@@ -178,6 +196,9 @@ def compare_take_candidates(
         shot_id=shot.id,
         candidate_take_ids=[take.id for take in takes],
         inspection_ids=inspection_ids,
+        comparison_scope=comparison_scope,
+        covered_shot_ids=covered_ids,
+        review_focus=review_focus,
         decision=judgment.decision,
         selected_take_id=judgment.selected_take_id,
         semantic_status=SemanticReviewStatus.COMPLETE,

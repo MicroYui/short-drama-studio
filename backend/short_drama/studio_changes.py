@@ -76,16 +76,18 @@ def propose_changes(service: ShortDramaService, project_id: str, request: Studio
                 scene_shots = {shot.id for shot in document.shots if shot.scene_id == item.target_id}
                 if item.target != "scene" or set(item.affected_shot_ids) - scene_shots:
                     raise ValueError("受影响镜头必须属于当前修改的场次。")
-        # Identical retries return the same current proposal.
+        context = current_trace_context()
+        run_id = context.get("run_id")
+        work_order_id = context.get("work_order_id")
+        # Identical retries from the same task return the same current proposal.
         for previous in list_changes(document):
-            if all(i.status == "pending" for i in previous.items) and request.title == previous.title and [
+            if previous.run_id == run_id and previous.work_order_id == work_order_id and all(i.status == "pending" for i in previous.items) and request.title == previous.title and [
                 i.model_dump(exclude={"id", "status", "decided_at"}) for i in previous.items
             ] == [i.model_dump() for i in request.items]:
                 return previous
-        context = current_trace_context()
-        run_id = context.get("run_id")
         change = StudioChangeSet(id=f"change-{uuid4().hex[:12]}", project_id=project_id,
             run_id=run_id if isinstance(run_id, str) else None,
+            work_order_id=work_order_id if isinstance(work_order_id, str) else None,
             title=request.title, summary=request.summary, created_at=datetime.now(UTC).isoformat(),
             items=[StudioTextChange(**item.model_dump(), id=f"edit-{uuid4().hex[:12]}") for item in request.items])
         document.studio_changes.append(cast(dict[str, JsonValue], change.model_dump(mode="json")))

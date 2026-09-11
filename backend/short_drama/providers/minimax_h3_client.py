@@ -83,6 +83,33 @@ class H3TransientError(H3ClientError):
     """A query, list, cancel, upload, or download operation can be retried."""
 
 
+def encode_h3_media_data_uri(path: Path) -> str:
+    """Encode local media, padding out-of-range images without editing the source."""
+    if not path.is_file():
+        raise H3DefiniteRequestError(400, "LOCAL_FILE_MISSING", str(path))
+    mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise H3TransientError("H3 local input could not be read") from exc
+    if mime_type.startswith("image/"):
+        try:
+            raw, mime_type = _image_transport_bytes(raw, mime_type)
+        except (OSError, ValueError) as exc:
+            raise H3DefiniteRequestError(
+                400, "LOCAL_IMAGE_INVALID", f"H3 reference image could not be decoded: {path}"
+            ) from exc
+    encoded = base64.b64encode(raw).decode("ascii")
+    reference = f"data:{mime_type};base64,{encoded}"
+    if len(reference.encode("utf-8")) > 64 * 1024 * 1024:
+        raise H3DefiniteRequestError(
+            400,
+            "LOCAL_DATA_URI_TOO_LARGE",
+            "H3 request bodies are limited to 64 MB; use a public HTTPS URL for this input",
+        )
+    return reference
+
+
 class H3Client(Protocol):
     def submit(self, request: H3VideoRequest) -> str: ...
 
@@ -229,30 +256,7 @@ class MiniMaxH3Client:
             raise H3TransientError("AceData MiniMax cancel response was not valid") from exc
 
     def upload_file(self, path: Path) -> str:
-        """Encode local media, padding out-of-range images without editing the source."""
-        if not path.is_file():
-            raise H3DefiniteRequestError(400, "LOCAL_FILE_MISSING", str(path))
-        mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        try:
-            raw = path.read_bytes()
-        except OSError as exc:
-            raise H3TransientError("AceData local input could not be read") from exc
-        if mime_type.startswith("image/"):
-            try:
-                raw, mime_type = _image_transport_bytes(raw, mime_type)
-            except (OSError, ValueError) as exc:
-                raise H3DefiniteRequestError(
-                    400, "LOCAL_IMAGE_INVALID", f"H3 reference image could not be decoded: {path}"
-                ) from exc
-        encoded = base64.b64encode(raw).decode("ascii")
-        reference = f"data:{mime_type};base64,{encoded}"
-        if len(reference.encode("utf-8")) > 64 * 1024 * 1024:
-            raise H3DefiniteRequestError(
-                400,
-                "LOCAL_DATA_URI_TOO_LARGE",
-                "AceData request bodies are limited to 64 MB; use a public HTTPS URL for this input",
-            )
-        return reference
+        return encode_h3_media_data_uri(path)
 
     def download(self, url: str, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)

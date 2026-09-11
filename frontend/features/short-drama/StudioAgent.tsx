@@ -4,6 +4,7 @@ import { ArrowUp, Check, ChevronDown, Download, Loader2, Pause, Play, Sparkles, 
 import type { StudioEvent, StudioJob, StudioScope, StudioWorker } from './studio-api'
 import { StudioApi } from './studio-api'
 import { StudioTeam } from './StudioTeam'
+import { StudioGenerationDraft } from './StudioGenerationDraft'
 
 const statusLabels: Record<StudioJob['status'], string> = { queued: '准备开始', running: '正在制作', retrying: '正在恢复连接', pausing: '完成当前步骤后暂停', paused: '已暂停', waiting_user: '等待你的补充', completed: '已完成', failed: '需要处理后继续' }
 
@@ -57,11 +58,12 @@ function actionLabel(event: StudioEvent): string {
   return categories[name.split('.')[0]] || '梳理当前目标与制作结果'
 }
 
-export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false, unsavedDesign = false, projectId, events, jobs, workers = [], contextWindow = 258000, scope, setScope, connected, suggested, clearSuggested, onError, onSent, onClose }: {
+export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false, unsavedDesign = false, projectId, events, jobs, workers = [], contextWindow = 258000, scope, setScope, prepareScope, connected, suggested, clearSuggested, onError, onSent, onClose }: {
   pendingChanges?: number; onReview: () => void;
   unsavedEdit?: boolean; unsavedDesign?: boolean; projectId: string; events: StudioEvent[]; jobs: StudioJob[]; scope: StudioScope; setScope: (scope: StudioScope) => void;
   connected: boolean; suggested: string | null; clearSuggested: () => void; onError: (error: unknown) => void; onSent: () => void; onClose: () => void;
   workers?: StudioWorker[]; contextWindow?: number;
+  prepareScope?: () => Promise<StudioScope>;
 }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -74,22 +76,33 @@ export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false,
   const jobEvents = job ? events.filter(event => event.data.job_id === job.id || (job.run_id && event.data.run_id === job.run_id)) : []
   const tasks = latestTaskEvents(jobEvents)
   const lastTask = tasks[tasks.length - 1]
+  const latestDraftId = [...jobEvents].reverse().find(event => event.kind === 'model.draft')?.id
   const lastModel = [...jobEvents].reverse().find(event => event.kind === 'provider.language_generation')
   const lastContext = [...jobEvents].reverse().find(event => event.kind === 'context.prepared')
   const estimatedTokens = Number(lastContext?.data.estimated_input_tokens ?? 0)
   const liveWorkers = workers.filter(worker => worker.run_id === job?.run_id && !['COMPLETED', 'CANCELLED'].includes(worker.status))
-  const runningWorkers = liveWorkers.filter(worker => worker.status === 'IN_PROGRESS')
-  const currentAction = job?.status === 'retrying' ? '连接暂时中断，已完成的内容已保存，正在继续同一任务。' : runningWorkers.length > 1 ? `${runningWorkers.length} 项分工正在并行推进` : runningWorkers[0]?.latest_reason || (lastTask ? actionLabel(lastTask) : '梳理当前目标和已有内容')
-  useEffect(() => { if (suggested !== null) { if (suggested) setText(suggested); textarea.current?.focus(); clearSuggested() } }, [suggested, clearSuggested])
+  const runningWorkers = liveWorkers.filter(worker => worker.status === 'IN_PROGRESS' && !worker.waiting_review && !worker.waiting_until)
+  const waitingWorkers = liveWorkers.filter(worker => worker.waiting_until && !worker.waiting_review)
+  const reviewWorkers = liveWorkers.filter(worker => worker.waiting_review)
+  const currentAction = job?.status === 'retrying' ? '连接暂时中断，已完成的内容已保存，正在继续同一任务。' : runningWorkers.length > 1 ? `${runningWorkers.length} 项分工正在并行推进` : runningWorkers[0]?.latest_reason || runningWorkers[0]?.objective || (waitingWorkers.length ? `${waitingWorkers.length} 项分工等待生成结果，完成后自动继续` : reviewWorkers.length ? `${reviewWorkers.length} 项相关分工等待修改审阅` : '') || (lastTask ? actionLabel(lastTask) : '梳理当前目标和已有内容')
+  useEffect(() => { if (suggested !== null) { if (suggested) setText(previous => previous.trim() && previous.trim() !== suggested.trim() ? `${previous}\n\n${suggested}` : suggested); textarea.current?.focus(); clearSuggested() } }, [suggested, clearSuggested])
   useEffect(() => { if (nearBottom.current) scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'smooth' }) }, [messages.length, active, workers.length, tasks.length, pendingChanges])
+  useEffect(() => { if (nearBottom.current) scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'auto' }) }, [latestDraftId])
   const send = async () => {
     if (!text.trim() || sending) return
+    const submittedText = text
     setSending(true)
-    try { await StudioApi.send(projectId, text.trim(), scope); setText(''); onSent() } catch (error) { onError(error) } finally { setSending(false) }
+    try {
+      const selectedScope = prepareScope ? await prepareScope() : scope
+      setScope(selectedScope)
+      await StudioApi.send(projectId, submittedText.trim(), selectedScope)
+      setText(previous => previous === submittedText ? '' : previous)
+      onSent()
+    } catch (error) { onError(error) } finally { setSending(false) }
   }
   return <aside className="sd-agent-panel" aria-label="制作助手">
     <header className="sd-agent-header"><span className="sd-agent-symbol"><Sparkles size={17} /></span><div><strong>制作助手</strong><span><i className={connected ? 'sd-online' : 'sd-offline'} />{connected ? '已连接' : '正在重新连接'}</span></div><span className="sd-local-tag">Agent</span><button className="sd-icon sd-agent-dismiss" aria-label="收起制作助手" onClick={onClose}><X size={17} /></button></header>
-    {unsavedEdit ? <p className="sd-agent-draft-notice">当前剪辑尚未保存。Agent 使用已保存的剪辑，请先保存再发送针对这些改动的要求。</p> : unsavedDesign && <p className="sd-agent-draft-notice">有分镜草稿尚未保存。Agent 使用已保存内容；可在镜头页“保存并交给 Agent”。</p>}
+    {unsavedEdit ? <p className="sd-agent-draft-notice">{prepareScope ? '发送时会先保存当前剪辑，再交接所选内容。' : '当前剪辑尚未保存。Agent 使用已保存的剪辑，请先保存再发送针对这些改动的要求。'}</p> : unsavedDesign && <p className="sd-agent-draft-notice">有分镜草稿尚未保存。Agent 使用已保存内容；可在镜头页“保存并交给 Agent”。</p>}
     <div className="sd-agent-scroll" ref={scroll} onScroll={event => { const element = event.currentTarget; nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100 }}>
       {!messages.length && <div className="sd-agent-welcome"><span className="sd-agent-welcome-icon"><Sparkles size={22} /></span><h3>我们来做一部作品。</h3><p>告诉我这次想完成什么。你也可以选中某个场次、镜头或资产，让我定向修改。</p><small>要求只写剧本时，我会写完停下。要求成片时，我会继续推进制作。</small></div>}
       {messages.map(message => <div key={message.id} className={`sd-chat-message ${message.kind === 'chat.user' ? 'sd-chat-user' : 'sd-chat-assistant'}`}><div className="sd-chat-label">{message.kind === 'chat.user' ? '你' : '制作助手'}<time>{new Date(message.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</time></div><ChatText text={textField(message, 'text')} projectId={projectId} onError={onError} /></div>)}
@@ -101,10 +114,11 @@ export function StudioAgent({ pendingChanges = 0, onReview, unsavedEdit = false,
           <section className="sd-context-detail" aria-label="上下文管理"><div><span>上下文上限</span><strong>{tokenLabel(contextWindow)} tokens</strong></div>{lastContext && <><div><span>当前请求估算</span><strong>{tokenLabel(estimatedTokens)}</strong></div><progress value={estimatedTokens} max={contextWindow} aria-label="当前请求的上下文用量" /><small>另预留 {tokenLabel(Number(lastContext.data.reserved_output_tokens ?? 0))} 用于输出与推理</small>{Number(lastContext.data.offloaded_blocks ?? 0) > 0 && <p>已整理上下文：{tokenLabel(Number(lastContext.data.original_input_tokens ?? 0))} → {tokenLabel(estimatedTokens)}。完整结果已保存，可按需读取。</p>}</>}<small>接近 200k 时整理；实际用量见模型记录。</small></section>
           {lastModel && <div className="sd-model-detail"><p>{textField(lastModel, 'model')} · {textField(lastModel, 'reasoning_effort')}</p><small>输入 {String(lastModel.data.input_tokens ?? '未返回')} tokens · 输出 {String(lastModel.data.output_tokens ?? '未返回')} tokens · {Number(lastModel.data.elapsed_seconds ?? 0).toFixed(1)} 秒</small></div>}
         </details>
+        <StudioGenerationDraft events={jobEvents} job={job} />
         <div className="sd-job-controls">{active ? <button onClick={() => void StudioApi.control(job.id, 'pause').then(onSent).catch(onError)} disabled={job.status === 'pausing'}><Pause size={13} />暂停</button> : job.status !== 'completed' ? <button onClick={() => void StudioApi.control(job.id, 'resume').then(onSent).catch(onError)}><Play size={13} />继续</button> : null}<button onClick={() => void StudioApi.downloadTrace(projectId).catch(onError)}><Download size={13} />制作记录</button></div>
       </div>}
     </div>
-    <div className="sd-agent-compose"><div className="sd-scope"><span>作用范围</span><strong>{scope.label}</strong>{scope.kind !== 'episode' && <button className="sd-icon" aria-label="回到当前集范围" onClick={() => setScope({ kind: 'episode', label: '当前集' })}><X size={12} /></button>}</div><textarea ref={textarea} aria-label="给制作助手发送要求" placeholder={active ? '补充要求，或指出需要修改的地方…' : '描述你的想法，或者想修改什么…'} value={text} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send() } }} /><div className="sd-compose-footer"><span>⌘ Enter 发送</span><button className="sd-send" aria-label="发送给 Agent" disabled={!text.trim() || sending} onClick={() => void send()}>{sending ? <Loader2 size={16} className="sd-spin" /> : <ArrowUp size={17} />}</button></div></div>
+    <div className="sd-agent-compose"><div className="sd-scope"><span>作用范围</span><strong>{prepareScope ? '剪辑中的当前选择' : scope.label}</strong>{!prepareScope && scope.kind !== 'episode' && <button className="sd-icon" aria-label="回到当前集范围" onClick={() => setScope({ kind: 'episode', label: '当前集' })}><X size={12} /></button>}</div><textarea ref={textarea} aria-label="给制作助手发送要求" placeholder={active ? '补充要求，或指出需要修改的地方…' : '描述你的想法，或者想修改什么…'} value={text} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send() } }} /><div className="sd-compose-footer"><span>⌘ Enter 发送</span><button className="sd-send" aria-label="发送给 Agent" disabled={!text.trim() || sending} onClick={() => void send()}>{sending ? <Loader2 size={16} className="sd-spin" /> : <ArrowUp size={17} />}</button></div></div>
     <footer className="sd-agent-footer">内容保存在本机 · 可随时编辑</footer>
   </aside>
 }

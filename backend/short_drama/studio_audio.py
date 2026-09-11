@@ -50,6 +50,7 @@ def _edited_audio(clip: EditorClip, path: Path, folder: Path) -> tuple[str, floa
 
 def editorial_audio_input(
     service: ShortDramaService, document: ProjectDocument, created_at: str,
+    *, native_only: bool = False, clip_ids: set[str] | None = None,
 ) -> tuple[TimelineManifest, int, str] | None:
     """Project the exact saved clips, original audio and subtitles for this inspection."""
     saved = document.editorial_timeline or {}
@@ -68,6 +69,8 @@ def editorial_audio_input(
     folder = service.workspace_root / document.project.id / "inspections" / f"editorial-input-{uuid4().hex}"
     audio: list[TimelineAudioClip] = []
     for clip in timeline.clips:
+        if clip_ids is not None and clip.id not in clip_ids:
+            continue
         track = timeline.tracks[clip.trackIndex]
         if (clip.type not in {"video", "audio"} or not track.enabled or solo and not track.solo
                 or track.muted or clip.muted or clip.volume == 0):
@@ -87,6 +90,8 @@ def editorial_audio_input(
         if take is not None and take.media_path == asset.path and shot_id:
             audio_shot_id, audio_take_id = shot_id, take_id
             asset_id, version_id = None, None
+        elif native_only:
+            continue
         elif version_id is not None:
             audio_shot_id, audio_take_id = None, None
         else:

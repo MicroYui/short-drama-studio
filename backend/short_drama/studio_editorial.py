@@ -85,6 +85,20 @@ class EditorProject(BaseModel):
     activeTimelineId: str
 
 
+def require_unambiguous_editorial_ids(project: EditorProject, *, clip_ids: list[str], subtitle_ids: list[str]) -> None:
+    """Legacy active-timeline defaults cannot choose between equal object IDs."""
+    ambiguous: list[str] = []
+    for field, ids in (("clips", set(clip_ids)), ("subtitles", set(subtitle_ids))):
+        for identity in sorted(ids):
+            matches = [item.id for item in project.timelines
+                       if any(row.id == identity for row in (item.clips if field == "clips" else item.subtitles))]
+            if len(matches) > 1:
+                ambiguous.append(f"{field} id={identity!r} in {matches!r}")
+    if ambiguous:
+        raise ValueError("/timeline_id is required for ambiguous object IDs: " + "; ".join(ambiguous)
+                         + ". Copy the exact timeline_id from editor_selection/read_editorial.")
+
+
 def validate_editorial(service: ShortDramaService, project_id: str, value: dict[str, JsonValue]) -> EditorProject:
     from short_drama.studio_media import resolve_media_path
     project = EditorProject.model_validate(value)
@@ -101,6 +115,8 @@ def validate_editorial(service: ShortDramaService, project_id: str, value: dict[
     for timeline in project.timelines:
         if len({clip.id for clip in timeline.clips}) != len(timeline.clips):
             raise ValueError("同一时间线的片段标识重复。")
+        if len({cue.id for cue in timeline.subtitles}) != len(timeline.subtitles):
+            raise ValueError("同一时间线的字幕标识重复，请为不同字幕保留独立标识。")
         for clip in timeline.clips:
             if clip.trackIndex >= len(timeline.tracks):
                 raise ValueError("片段的轨道不存在。")
@@ -130,16 +146,28 @@ def edit_editorial(service: ShortDramaService, project_id: str, request: "Studio
     from short_drama.studio_models import StudioTimelineSave
     from short_drama.studio_service import StudioContentConflict
     from short_drama.studio_shot_editorial import read_shot_editorial, save_shot_editorial
-    current = read_shot_editorial(service, project_id, request.shot_id, request.anchor_clip_id) if request.shot_id else read_editorial(service, project_id)
+    current = read_editorial(service, project_id)
     if current.revision != request.expected_revision:
         raise StudioContentConflict("剪辑已更新，请读取当前片段后再次修改。")
     project = EditorProject.model_validate(current.project)
-    timeline = next(item for item in project.timelines if item.id == project.activeTimelineId)
+    if request.timeline_id is None:
+        require_unambiguous_editorial_ids(project, clip_ids=[change.id for change in request.clips],
+                                         subtitle_ids=[change.id for change in request.subtitles])
+    if request.shot_id:
+        current = read_shot_editorial(service, project_id, request.shot_id, request.anchor_clip_id,
+            timeline_id=request.timeline_id)
+        if current.revision != request.expected_revision:
+            raise StudioContentConflict("剪辑已更新，请读取当前片段后再次修改。")
+        project = EditorProject.model_validate(current.project)
+    target_id = request.timeline_id or project.activeTimelineId
+    timeline = next((item for item in project.timelines if item.id == target_id), None)
+    if timeline is None:
+        raise ValueError(f"/timeline_id: {target_id!r} is not a current editorial timeline. Re-read the selected timeline.")
     removed: set[str] = set()
     for change in request.clips:
         clip = next((item for item in timeline.clips if item.id == change.id), None)
         if clip is None:
-            raise KeyError(change.id)
+            raise KeyError(f"Clip {change.id!r} is not in timeline_id={target_id!r}, shot_id={request.shot_id!r}, anchor_clip_id={request.anchor_clip_id!r}.")
         linked = cast(list[str], (clip.model_extra or {}).get("linkedClipIds", [])) if request.keep_linked_audio else []
         ids = {clip.id, *linked}
         if change.remove:
@@ -163,10 +191,25 @@ def edit_editorial(service: ShortDramaService, project_id: str, request: "Studio
     for clip in timeline.clips:
         if clip.model_extra and isinstance(clip.model_extra.get("linkedClipIds"), list):
             clip.model_extra["linkedClipIds"] = [item for item in clip.model_extra["linkedClipIds"] if item not in removed]
+    explicit_subtitle_fields: dict[str, set[str]] = {}
+    for change in request.subtitles:
+        cue = next((item for item in timeline.subtitles if item.id == change.id), None)
+        if cue is None:
+            raise KeyError(f"Subtitle {change.id!r} is not in timeline_id={target_id!r}, shot_id={request.shot_id!r}, anchor_clip_id={request.anchor_clip_id!r}.")
+        explicit_subtitle_fields.setdefault(change.id, set()).update(
+            name for name in change.model_fields_set if getattr(change, name) is not None)
+        if change.remove:
+            timeline.subtitles = [item for item in timeline.subtitles if item.id != change.id]
+            continue
+        if change.start_seconds is not None: cue.startTime = change.start_seconds
+        if change.end_seconds is not None: cue.endTime = change.end_seconds
+        if change.text is not None: cue.text = change.text
+        if change.style is not None: cue.style.update(change.style)
     save = StudioTimelineSave(expected_revision=request.expected_revision, anchor_clip_id=request.anchor_clip_id,
         timeline={"project": cast(dict[str, JsonValue], project.model_dump(mode="json"))})
     if request.shot_id:
-        save_shot_editorial(service, project_id, request.shot_id, save)
+        save_shot_editorial(service, project_id, request.shot_id, save,
+            explicit_subtitle_fields=explicit_subtitle_fields, timeline_id=request.timeline_id)
     else:
         service.studio.save_timeline(project_id, save)
     return read_editorial(service, project_id)

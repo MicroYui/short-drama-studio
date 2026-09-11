@@ -8,6 +8,9 @@
     "PLANNER",
     "REVISION_VERIFIER",
     "DIRECTOR",
+    "ASSET_PLANNER",
+    "ASSET_BUILDER",
+    "ASSET_VERIFIER",
     "ASSET_REVIEWER",
     "VIDEO_PROMPT_COMPILER",
     "EPISODE_REVIEWER"
@@ -16,31 +19,37 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 2：建立品牌事实表",
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 4：选择故事脊柱"
+      "references/production-method.md::品牌事实与创意"
     ],
     "WRITER": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 4：选择故事脊柱",
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 5：规划精确节拍"
+      "references/production-method.md::文案与故事结构"
     ],
     "PLANNER": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 5：规划精确节拍"
+      "references/production-method.md::节拍规划"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 9：交付前验证"
+      "references/production-method.md::当前范围验收"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 6：导演动效语言"
+      "references/production-method.md::画面与动效"
     ],
     "ASSET_REVIEWER": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 2：建立品牌事实表",
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 3：创建来源清单"
+      "references/production-method.md::资产检查"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 6：导演动效语言"
+      "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_h3/original/brand-promo-video-generator/SKILL.cn.md::步骤 9：交付前验证"
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::资产规划"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::资产制作"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::资产检查"
     ]
   },
   "provenance": "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER",
@@ -48,5 +57,15 @@
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/brand-promo-video-generator/SKILL.cn.md",
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/brand-promo-video-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub]"
   ],
-  "user_overridable": true
+  "user_overridable": true,
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "POST.REVISION_VERIFIER": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ]
+  }
 }

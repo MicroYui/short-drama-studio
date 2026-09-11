@@ -21,10 +21,13 @@ from short_drama.image_models import (
 from short_drama.language_models import LanguageProviderConfigUpdate
 from short_drama.models import (
     AssetKind,
+    ApprovalStatus,
     ReferenceAngle,
     ReferenceFraming,
     ReferenceRequirement,
+    ReferenceBinding,
     ReferenceRole,
+    ShotReferenceCue,
     VideoGenerationRoute,
 )
 from short_drama.reference_planner import (
@@ -421,7 +424,8 @@ def test_input_compatibility_endpoint_is_advisory_and_rejects_cross_project_ids(
     assert result.json()["report"]["decision"] == InputCompatibilityDecision.CHANGE_KEYFRAME.value
     assert result.json()["report"]["advisory_only"] is True
     assert result.json()["report"]["proceed_allowed"] is True
-    assert result.json()["report"]["technical_warnings"] == []
+    assert result.json()["report"]["covered_shot_ids"] == [shot.id]
+    assert "No current generation group" in result.json()["report"]["technical_warnings"][0]
     assert listed.status_code == 200
     assert len(listed.json()["compatibility_checks"]) == 1
     with pytest.raises(WorkflowConflictError, match="cross-project AssetVersion"):
@@ -465,6 +469,52 @@ def test_input_compatibility_reports_provider_contract_as_warning_not_creative_g
 
     assert response.report.proceed_allowed is True
     assert response.report.advisory_only is True
-    assert response.report.technical_warnings == [
-        "同一次 H3 请求中不能混用帧模式和参考图模式。"
-    ]
+    assert "同一次 H3 请求中不能混用帧模式和参考图模式。" in response.report.technical_warnings
+
+
+def test_input_compatibility_resolves_complete_current_group_and_marks_partial_sets(tmp_path: Path) -> None:
+    # Reuse the public-service group setup used by H3's compilation tests.
+    from tests.test_h3_generation_unit_language import _fixture
+
+    service, _compiler, document, generation, unit, _request = _fixture(tmp_path)
+    language = FakeVisualInputLanguageProvider()
+    service.language_provider_factory = lambda _key, _url: language
+    project_id = document.project.id
+    chosen: list[tuple[str, str]] = []
+    for index in range(2):
+        chosen.append(_create_approved_image(service, tmp_path, project_id=project_id,
+            name=f"group input {index}", color=(80, 100 + index * 30, 120)))
+    document = service.get_project(project_id).document
+    for shot, (asset_id, version_id) in zip(document.shots[:2], chosen, strict=True):
+        asset = next(item for item in document.assets if item.id == asset_id)
+        next(item for item in asset.versions if item.id == version_id).approval_status = ApprovalStatus.DRAFT
+        shot.references = [ShotReferenceCue(subject_asset_id=asset_id, asset_version_id=version_id,
+                                           alias=f"ref{shot.sequence}", purpose=f"Visible state in shot {shot.sequence}")]
+        plan = next(item for item in document.reference_plan if item.shot_id == shot.id)
+        plan.bindings = [ReferenceBinding(kind=asset.kind, target_id=version_id, purpose=f"Group window {shot.sequence}")]
+    service.repository.save_project(document)
+    second = document.shots[1]
+    result = service.check_shot_input_compatibility(project_id, second.id, InputCompatibilityRequest(
+        route=VideoGenerationRoute.REFERENCE, include_previous_boundary=False))
+    assert result.report.generation_unit_id == unit.id
+    assert result.report.generation_plan_version_id == generation.version.id
+    assert result.report.covered_shot_ids == unit.shot_ids
+    assert result.report.shot_windows == unit.shot_windows
+    assert result.report.reference_version_ids == [item[1] for item in chosen]
+    assert result.report.full_input_set_observed
+    payload = language.calls[-1][1]
+    assert payload["generation_unit"]["id"] == unit.id
+    assert [item["id"] for item in payload["current_shots"]] == unit.shot_ids
+    assert len(language.calls[-1][2]) == 2
+    assert payload["image_map"][1]["uses"][0]["shot_id"] == second.id
+    partial = service.check_shot_input_compatibility(project_id, second.id, InputCompatibilityRequest(
+        route=VideoGenerationRoute.REFERENCE, reference_version_ids=[chosen[1][1]], include_previous_boundary=False))
+    assert not partial.report.full_input_set_observed
+    assert language.calls[-1][1]["unobserved_selected_reference_ids"] == [chosen[0][1]]
+    assert partial.report.proceed_allowed
+
+    document.shots[0].revision += 1
+    service.repository.save_project(document)
+    with pytest.raises(WorkflowConflictError, match="outdated shot revisions"):
+        service.check_shot_input_compatibility(project_id, second.id, InputCompatibilityRequest(
+            route=VideoGenerationRoute.REFERENCE, include_previous_boundary=False))

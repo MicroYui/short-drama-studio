@@ -19,9 +19,9 @@ chain remains the existing sequential Content Planning Job.
 from __future__ import annotations
 
 import threading
-import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from contextvars import copy_context
+from datetime import timedelta
 from enum import StrEnum
 from typing import Protocol
 
@@ -88,6 +88,8 @@ class TeamExecutionBatch(RuntimeModel):
     run_id: str
     selected_work_order_ids: list[str] = Field(default_factory=list[str])
     advances: list[TeamWorkAdvance] = Field(default_factory=list[TeamWorkAdvance])
+    active_work_order_ids: list[str] = Field(default_factory=list[str])
+    waiting_work_order_ids: list[str] = Field(default_factory=list[str])
 
 
 class LocalTeamExecutor:
@@ -111,6 +113,52 @@ class LocalTeamExecutor:
         self._claimed_work_order_ids: set[str] = set()
         self._project_locks_guard = threading.RLock()
         self._project_locks: dict[str, threading.Lock] = {}
+        self._background_pool: ThreadPoolExecutor | None = None
+        self._background_futures: dict[str, tuple[str, Future[TeamWorkAdvance]]] = {}
+
+    def has_active_work(self, run_id: str) -> bool:
+        """Include completed futures until their results have been collected."""
+        with self._claims_lock:
+            return any(parent == run_id for parent, _future in self._background_futures.values())
+
+    def collect_ready_work(self, run_id: str, *, blocked_work_order_ids: set[str] | None = None) -> TeamExecutionBatch:
+        """Start ready work and return completions without a batch barrier."""
+        execution_boundary()
+        with self._claims_lock:
+            finished = [key for key, (parent, future) in self._background_futures.items()
+                        if parent == run_id and future.done()]
+            advances = [self._background_futures.pop(key)[1].result() for key in finished]
+            selected = self._select_and_reserve(run_id, blocked_work_order_ids=blocked_work_order_ids)
+            if selected and self._background_pool is None:
+                self._background_pool = ThreadPoolExecutor(max_workers=self._max_workers,
+                                                           thread_name_prefix="studio-worker")
+            for work_order in selected:
+                assert self._background_pool is not None
+                future = self._background_pool.submit(copy_context().run, self._advance_reserved,
+                    work_order, drain_worker_ownership=True)
+                self._background_futures[work_order.id] = (run_id, future)
+            active = [key for key, (parent, _future) in self._background_futures.items() if parent == run_id]
+        waiting = [work.id for work in self._manager.runtime.store.list_work_orders(run_id)
+                   if work.continuation_not_before is not None and work.continuation_not_before > utc_now()
+                   and work.status in {DelegationStatus.PENDING, DelegationStatus.NEEDS_ATTENTION}
+                   and work.id not in (blocked_work_order_ids or set())
+                   and work.next_owner == WorkOrderNextOwner.WORKER_TOOL]
+        return TeamExecutionBatch(run_id=run_id, selected_work_order_ids=[work.id for work in selected],
+                                  advances=advances, active_work_order_ids=active,
+                                  waiting_work_order_ids=waiting)
+
+    def collect_finished_work(self, run_id: str) -> TeamExecutionBatch:
+        """Drain acknowledgements while user input prevents starting more work."""
+        with self._claims_lock:
+            finished = [key for key, (parent, future) in self._background_futures.items()
+                        if parent == run_id and future.done()]
+            advances = [self._background_futures.pop(key)[1].result() for key in finished]
+            active = [key for key, (parent, _future) in self._background_futures.items() if parent == run_id]
+        return TeamExecutionBatch(run_id=run_id, advances=advances, active_work_order_ids=active)
+
+    def shutdown(self) -> None:
+        if self._background_pool is not None:
+            self._background_pool.shutdown(wait=False, cancel_futures=False)
 
     def run_ready_work(self, run_id: str) -> TeamExecutionBatch:
         """Advance each currently ready WorkOrder once, without hidden retries."""
@@ -170,7 +218,7 @@ class LocalTeamExecutor:
             advances=[advances_by_id[work_order_id] for work_order_id in selected_ids],
         )
 
-    def _select_and_reserve(self, run_id: str) -> list[WorkOrder]:
+    def _select_and_reserve(self, run_id: str, *, blocked_work_order_ids: set[str] | None = None) -> list[WorkOrder]:
         execution_boundary()
         run = self._manager.runtime.store.get_run(run_id)
         if run is None:
@@ -188,6 +236,9 @@ class LocalTeamExecutor:
                 work_order
                 for work_order in candidates
                 if work_order.id not in self._claimed_work_order_ids
+                and work_order.id not in (blocked_work_order_ids or set())
+                and work_order.id not in self._background_futures
+                and (work_order.continuation_not_before is None or work_order.continuation_not_before <= utc_now())
                 and work_order.next_owner in {
                     WorkOrderNextOwner.WORKER_DECISION,
                     WorkOrderNextOwner.WORKER_TOOL,
@@ -235,6 +286,8 @@ class LocalTeamExecutor:
                 if run is None:
                     raise KeyError(f"Unknown agent run: {current.parent_run_id}")
                 if not self._worker_still_owns(current, run):
+                    break
+                if current.continuation_not_before is not None and current.continuation_not_before > utc_now():
                     break
 
                 # A long specialist model call should be visible as active work,
@@ -310,10 +363,10 @@ class LocalTeamExecutor:
         new request is appended to ``specialist_turns`` before execution, so a
         restart sees the same recoverable trace as a Worker-authored Tool request.
 
-        Image preparation may continue to submission. For H3, only an already
-        acknowledged remote task may continue polling; no H3 submission is
-        originated here. Failed, uncertain, transient-error and terminal states
-        return to the Worker for review, recovery, reconciliation or retry.
+        Image preparation may continue to submission. H3 video polling requires
+        an acknowledged remote task; a saved prompt operation retains its exact
+        original enqueue choice. No new generation choice is made here. Failed,
+        uncertain, transient-error and terminal states return to the Worker.
         """
 
         current = self._manager.runtime.store.get_work_order(work_order_id)
@@ -343,6 +396,7 @@ class LocalTeamExecutor:
             "image.enqueue",
             "image.advance",
             "task.advance",
+            "route.prepare_h3_group",
         }:
             return False
         result = completed_turn.result
@@ -355,6 +409,56 @@ class LocalTeamExecutor:
         output = result.get("output")
         if not isinstance(output, dict):
             return False
+        if completed_turn.tool_name == "route.prepare_h3_group":
+            from datetime import datetime
+
+            request = completed_turn.arguments.get("request")
+            operation_id = output.get("operation_id")
+            next_poll_at = output.get("next_poll_at")
+            enqueue = output.get("enqueue_requested")
+            if (
+                not isinstance(request, dict)
+                or completed_turn.arguments.get("project_id") != run.project_id
+                or output.get("project_id") != run.project_id
+                or output.get("status") != "WAITING_PROMPT"
+                or output.get("phase") != "PROMPT_COMPILATION"
+                or output.get("next_action") != "RESUME_SAVED_OPERATION"
+                or output.get("error") is not None
+                or not isinstance(operation_id, str) or not operation_id
+                or not isinstance(next_poll_at, str)
+                or not isinstance(enqueue, bool)
+                or request.get("enqueue", False) is not enqueue
+                or (request.get("operation_id") is not None and request.get("operation_id") != operation_id)
+                or any(not isinstance(output.get(key), str) or not output.get(key)
+                       for key in ("provider_prompt_cache_id", "provider_prompt_task_id"))
+            ):
+                return False
+            try:
+                not_before = datetime.fromisoformat(next_poll_at)
+            except ValueError:
+                return False
+            if not_before.utcoffset() != timedelta(0):
+                return False
+            sequence = max((turn.sequence for turn in current.specialist_turns), default=0) + 1
+            current.specialist_turns.append(SpecialistTurnRecord(
+                id=f"executor-h3-prompt-lifecycle-{work_order_id}-{sequence}",
+                sequence=sequence,
+                tool_name="route.prepare_h3_group",
+                arguments={"project_id": run.project_id,
+                           "request": {"operation_id": operation_id, "enqueue": enqueue}},
+                reason="专业提示词任务已保存，等待供应商结果后继续同一制作操作。",
+            ))
+            current.status = DelegationStatus.NEEDS_ATTENTION
+            current.next_owner = WorkOrderNextOwner.WORKER_TOOL
+            current.continuation_not_before = not_before
+            current.updated_at = utc_now()
+            self._manager.runtime.store.save_work_order(current)
+            self._manager.runtime.append_work_order_progress(
+                current.id, author="local-team-executor",
+                summary=f"Saved prompt task for {operation_id} will resume at {next_poll_at}; "
+                        "the original enqueue choice is retained without another model decision.",
+            )
+            return True
         is_h3_poll = completed_turn.tool_name == "task.advance"
         task = output if is_h3_poll else output.get("task")
         if not isinstance(task, dict):
@@ -386,21 +490,6 @@ class LocalTeamExecutor:
         ):
             return False
 
-        if is_h3_poll and self._video_poll_interval_seconds:
-            # No project write lock is held while waiting for the provider.
-            time.sleep(self._video_poll_interval_seconds)
-            refreshed = self._manager.runtime.store.get_work_order(work_order_id)
-            refreshed_run = self._manager.runtime.store.get_run(run.id)
-            if (
-                refreshed is None or refreshed_run is None
-                or not self._worker_still_owns(refreshed, refreshed_run)
-                or refreshed.next_owner != WorkOrderNextOwner.WORKER_DECISION
-                or not refreshed.specialist_turns
-                or refreshed.specialist_turns[-1].id != completed_turn.id
-            ):
-                return False
-            current = refreshed
-
         media_label = "h3" if is_h3_poll else "image"
         tool_name = "task.advance" if is_h3_poll else "image.advance"
 
@@ -423,6 +512,9 @@ class LocalTeamExecutor:
         )
         current.status = DelegationStatus.NEEDS_ATTENTION
         current.next_owner = WorkOrderNextOwner.WORKER_TOOL
+        current.continuation_not_before = (
+            utc_now() + timedelta(seconds=self._video_poll_interval_seconds) if is_h3_poll else None
+        )
         current.updated_at = utc_now()
         self._manager.runtime.store.save_work_order(current)
         self._manager.runtime.append_work_order_progress(

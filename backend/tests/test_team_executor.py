@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -20,6 +22,7 @@ from short_drama.agent_runtime import (
     SpecialistTurnStatus,
     WorkOrderNextOwner,
 )
+from short_drama.agent_runtime.models import utc_now
 from short_drama.agent_runtime.execution_control import execution_control
 from short_drama.fixture import build_dont_trust_me_fixture
 from short_drama.models import ProductionExecutionTarget
@@ -587,7 +590,7 @@ def test_h3_polling_returns_to_worker_only_for_result_or_recovery_and_resumes_tr
         ))
         order.next_owner = WorkOrderNextOwner.WORKER_DECISION
         runtime.store.save_work_order(order)
-    batch = LocalTeamExecutor(manager, max_workers=1, video_poll_interval_seconds=0.001).drain_ready_work_until_handoff(run.id)
+    batch = LocalTeamExecutor(manager, max_workers=1, video_poll_interval_seconds=0).drain_ready_work_until_handoff(run.id)
     assert batch.advances[0].status == TeamWorkAdvanceStatus.ADVANCED, batch.model_dump_json()
     assert specialist.calls == (1 if resume else 2)
     assert batch.advances[0].deterministic_continuation_count == len(sequence) - 1
@@ -596,6 +599,78 @@ def test_h3_polling_returns_to_worker_only_for_result_or_recovery_and_resumes_tr
     assert [turn.result["output"]["status"] for turn in persisted.specialist_turns if turn.result] == list(sequence)
     assert all(turn.tool_name == "task.advance" and turn.arguments == {"task_id": "task-h3"}
                for turn in persisted.specialist_turns)
+
+
+def test_completion_releases_successor_while_unrelated_worker_is_running(tmp_path: Path) -> None:
+    runtime, run_id = _runtime(tmp_path)
+    fast = _work_order(runtime, run_id, "fast")
+    slow = _work_order(runtime, run_id, "slow")
+    release = threading.Event()
+    slow_started = threading.Event()
+    calls: list[str] = []
+
+    def execute(work_id: str) -> None:
+        calls.append(work_id)
+        if work_id == slow:
+            slow_started.set()
+            assert release.wait(3)
+
+    executor = LocalTeamExecutor(RecordingManager(runtime, _registry(), execute), max_workers=2)
+
+    def await_result(work_id: str) -> None:
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            batch = executor.collect_ready_work(run_id)
+            if any(item.work_order_id == work_id for item in batch.advances):
+                return
+            release.wait(0.005)
+        pytest.fail(f"No completion for {work_id}")
+
+    try:
+        executor.collect_ready_work(run_id)
+        assert slow_started.wait(1)
+        await_result(fast)
+        successor = _work_order(runtime, run_id, "fast-successor")
+        await_result(successor)
+        assert not release.is_set()
+        assert calls.count(fast) == calls.count(slow) == calls.count(successor) == 1
+    finally:
+        release.set()
+        executor.shutdown()
+
+
+def test_media_wait_releases_slot_and_survives_executor_restart(tmp_path: Path) -> None:
+    runtime, run_id = _runtime(tmp_path)
+    work_id = _work_order(runtime, run_id, "video")
+    work = runtime.store.get_work_order(work_id)
+    assert work is not None
+    work.next_owner = WorkOrderNextOwner.WORKER_DECISION
+    work.specialist_turns.append(SpecialistTurnRecord(
+        id="already-polled", sequence=1, tool_name="task.advance", arguments={"task_id": "video-task"},
+        reason="Poll existing media", status=SpecialistTurnStatus.COMPLETED,
+        result={"tool_id": "task.advance", "status": "SUCCEEDED", "output": {
+            "id": "video-task", "project_id": "project-team", "provider": "minimax",
+            "model": "MiniMax-H3", "provider_task_id": "remote-video", "status": "RUNNING",
+        }},
+    ))
+    runtime.store.save_work_order(work)
+    calls: list[str] = []
+    manager = RecordingManager(runtime, _registry(), calls.append)
+    first = LocalTeamExecutor(manager, max_workers=1, video_poll_interval_seconds=60)
+    batch = first.drain_ready_work_until_handoff(run_id)
+    assert batch.advances[0].advance_count == 0
+    assert not calls
+    pending = runtime.store.get_work_order(work_id)
+    assert pending is not None and pending.continuation_not_before is not None
+    assert len(pending.specialist_turns) == 2
+    resumed = LocalTeamExecutor(manager, max_workers=1)
+    assert not resumed.run_ready_work(run_id).selected_work_order_ids
+    independent = _work_order(runtime, run_id, "independent")
+    assert resumed.run_ready_work(run_id).selected_work_order_ids == [independent]
+    pending.continuation_not_before = utc_now() - timedelta(seconds=1)
+    runtime.store.save_work_order(pending)
+    assert resumed.run_ready_work(run_id).selected_work_order_ids == [work_id]
+    assert calls == [independent, work_id]
 
 
 @pytest.mark.parametrize(

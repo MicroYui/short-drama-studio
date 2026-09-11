@@ -1797,7 +1797,36 @@ def test_concurrent_h3_advance_submits_once_per_request_fingerprint(
     ) == 1
 
 
-def test_interrupted_prepare_can_be_explicitly_resolved_as_not_submitted(
+def test_h3_restart_after_prepare_submits_same_task_once_without_reupload(
+    tmp_path: Path,
+) -> None:
+    fake = FakeH3Client()
+    first = _service(tmp_path, fake)
+    project = first.initialize_fixture()
+    probe = first.enqueue_h3_probe(
+        project.document.project.id,
+        H3ProbeRequest(shot_id=project.document.shots[0].id),
+    )
+    assert first.advance_task(probe.task.id).status == TaskStatus.SUBMITTING
+    prepared_run = first.get_h3_provider_run(probe.task.id)
+    assert prepared_run.submission_attempt_state == "PREPARED"
+    uploaded = list(fake.upload_calls)
+
+    restarted = _service(tmp_path, fake)
+    recovered = restarted.get_generation_task(probe.task.id)
+    assert recovered.status == TaskStatus.SUBMITTING
+    assert fake.submitted_requests == []
+    acknowledged = restarted.advance_task(probe.task.id)
+    assert acknowledged.id == probe.task.id
+    assert acknowledged.status == TaskStatus.ACKNOWLEDGED
+    assert len(fake.submitted_requests) == 1
+    assert fake.upload_calls == uploaded
+    assert restarted.get_h3_provider_run(probe.task.id).submission_attempt_state == "STARTED"
+    restarted.advance_task(probe.task.id)
+    assert len(fake.submitted_requests) == 1
+
+
+def test_legacy_interrupted_prepare_requires_explicit_not_submitted_resolution(
     tmp_path: Path,
 ) -> None:
     fake = FakeH3Client()
@@ -1809,6 +1838,11 @@ def test_interrupted_prepare_can_be_explicitly_resolved_as_not_submitted(
     )
     assert first.advance_task(probe.task.id).status == TaskStatus.SUBMITTING
     assert fake.submitted_requests == []
+    # Old records cannot prove whether the provider POST started. A missing
+    # submitted_at alone must not make them safe to resubmit after restart.
+    legacy_run = first.get_h3_provider_run(probe.task.id)
+    legacy_run.submission_attempt_state = None
+    first.repository.save_provider_run(legacy_run)
 
     restarted = _service(tmp_path, fake)
     recovered = restarted.get_project(project.document.project.id)
@@ -1850,7 +1884,14 @@ def test_h3_run_read_tool_returns_exact_saved_run_without_provider_io(tmp_path: 
 
 
 def test_h3_restart_reconciles_interrupted_submit_and_recovers_output(tmp_path: Path) -> None:
-    fake = FakeH3Client()
+    class InterruptedH3Client(FakeH3Client):
+        def submit(self, request: H3VideoRequest) -> str:
+            persisted = first.get_h3_provider_run(probe.task.id)
+            assert persisted.submission_attempt_state == "STARTED"
+            super().submit(request)
+            raise KeyboardInterrupt("process exited after provider accepted the request")
+
+    fake = InterruptedH3Client()
     fake.output_source = tmp_path / "provider" / "h3-5s.mp4"
     _render_h3_output(fake.output_source)
     first = _service(tmp_path, fake)
@@ -1861,6 +1902,9 @@ def test_h3_restart_reconciles_interrupted_submit_and_recovers_output(tmp_path: 
         H3ProbeRequest(shot_id=shot.id),
     )
     assert first.advance_task(probe.task.id).status == TaskStatus.SUBMITTING
+    with pytest.raises(KeyboardInterrupt):
+        first.advance_task(probe.task.id)
+    assert len(fake.submitted_requests) == 1
 
     second = _service(tmp_path, fake)
     recovered = second.repository.get_task(probe.task.id)
@@ -1869,13 +1913,14 @@ def test_h3_restart_reconciles_interrupted_submit_and_recovers_output(tmp_path: 
     recovered_evidence = second.repository.get_route_evidence_for_task(probe.task.id)
     assert recovered_evidence is not None
     assert recovered_evidence.status == EvidenceStatus.SUBMIT_UNKNOWN
-    fake.register_queued("remote-recovered", duration=5)
-    resolved = second.resolve_h3_submission(probe.task.id, "remote-recovered")
+    with pytest.raises(WorkflowConflictError, match="cannot advance"):
+        second.advance_task(probe.task.id)
+    resolved = second.resolve_h3_submission(probe.task.id, "remote-1")
     assert resolved.task.status == TaskStatus.ACKNOWLEDGED
-    assert fake.submitted_requests == []
+    assert len(fake.submitted_requests) == 1
 
     fake.fail_downloads = 1
-    fake.set_status("remote-recovered", H3RemoteStatus.SUCCEEDED)
+    fake.set_status("remote-1", H3RemoteStatus.SUCCEEDED)
     missing = second.advance_task(probe.task.id)
     assert missing.status == TaskStatus.OUTPUT_MISSING
     missing_evidence = second.repository.get_route_evidence_for_task(probe.task.id)
@@ -1886,7 +1931,7 @@ def test_h3_restart_reconciles_interrupted_submit_and_recovers_output(tmp_path: 
     succeeded_evidence = second.repository.get_route_evidence_for_task(probe.task.id)
     assert succeeded_evidence is not None
     assert succeeded_evidence.status == EvidenceStatus.AWAITING_REVIEW
-    assert fake.submitted_requests == []
+    assert len(fake.submitted_requests) == 1
 
 
 def test_h3_cancel_semantics_and_local_upload_cache(tmp_path: Path) -> None:

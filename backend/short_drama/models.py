@@ -2664,6 +2664,13 @@ class VideoInspectionReport(DomainModel):
     shot_id: str
     take_id: str
     previous_take_id: str | None = None
+    review_focus: str | None = None
+    observed_source_in_seconds: float = Field(default=0.0, ge=0.0)
+    observed_source_out_seconds: float | None = Field(default=None, gt=0.0)
+    covered_shot_ids: list[str] = Field(default_factory=list[str])
+    full_take_coverage: bool = False
+    source_context: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    audio_semantics_observed: Literal[False] = False
     scopes: list[VideoInspectionScope] = Field(min_length=1, max_length=2)
     duration_seconds: float = Field(gt=0.0)
     width: int = Field(gt=0)
@@ -2696,6 +2703,9 @@ class TakeComparisonReport(DomainModel):
     shot_id: str
     candidate_take_ids: list[str] = Field(min_length=2)
     inspection_ids: list[str] = Field(min_length=2)
+    comparison_scope: Literal["GENERATION_UNIT", "SHOT"] = "GENERATION_UNIT"
+    covered_shot_ids: list[str] = Field(default_factory=list[str])
+    review_focus: str | None = None
     decision: TakeComparisonDecision
     selected_take_id: str | None = None
     semantic_status: SemanticReviewStatus
@@ -3010,6 +3020,14 @@ class VideoInspectionRequest(DomainModel):
     semantic_review: bool = True
     max_frames: int = Field(default=14, ge=6, le=24)
     review_focus: str | None = Field(default=None, max_length=2000)
+    source_in_seconds: float = Field(default=0.0, ge=0.0, description="Start in the source Take, not the episode timeline.")
+    source_out_seconds: float | None = Field(default=None, gt=0.0, description="Exclusive source end; omit to observe through the end of the Take.")
+
+    @model_validator(mode="after")
+    def validate_source_range(self) -> VideoInspectionRequest:
+        if self.source_out_seconds is not None and self.source_out_seconds <= self.source_in_seconds:
+            raise ValueError("Video inspection requires a positive source time range")
+        return self
 
 
 class TakeComparisonRequest(DomainModel):
@@ -3019,6 +3037,10 @@ class TakeComparisonRequest(DomainModel):
     include_previous_boundary: bool = True
     review_focus: str | None = Field(default=None, max_length=2000)
     apply_selection: bool = False
+    scope: Literal["GENERATION_UNIT", "SHOT"] = Field(
+        default="GENERATION_UNIT",
+        description="Compare the complete generated group by default, or only each candidate's source window for shot_id.",
+    )
 
 
 class TakeComparisonResponse(DomainModel):

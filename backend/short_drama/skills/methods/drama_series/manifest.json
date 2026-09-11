@@ -19,151 +19,97 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/workflow.md::Principle",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::创作大纲",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::题材（Genre）",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::开篇",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::爽感",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::合规",
-      "references/project-adaptation.md::叙事与时长"
+      "references/story-development.md::创作大纲",
+      "references/story-development.md::题材与开篇",
+      "references/story-development.md::情绪与因果",
+      "references/story-development.md::本次制作范围"
     ],
     "WRITER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::剧本落画布",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::题材（Genre）",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::开篇",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::爽感",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::合规",
-      "references/project-adaptation.md::叙事与时长"
+      "references/story-development.md::剧本写入当前项目",
+      "references/story-development.md::题材与开篇",
+      "references/story-development.md::情绪与因果"
     ],
     "PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::目标",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::从来源剧本工作",
+      "references/story-development.md::本次制作范围",
       "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::剧本落画布",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::题材（Genre）",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::开篇",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::爽感",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::合规",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性",
-      "references/project-adaptation.md::叙事与时长",
+      "references/production-method.md::当前范围验收",
+      "references/production-method.md::空间与状态连续性",
       "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::镜头语言服务故事",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::镜头与光学承载情绪",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::光影和时辰承载意义",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::表演设计",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/storyboard.md::不通过视频串联保持连续性",
-      "references/project-adaptation.md::渐进分镜与可选检查",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::站位质量",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性"
+      "references/production-method.md::镜头语言与情绪",
+      "references/production-method.md::表演与物理动作",
+      "references/production-method.md::空间与状态连续性",
+      "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "ASSET_REVIEWER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::时代与身份一致性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::角色 Profile 维度",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::外观与选角参考",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::服装与状态",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::场景描述维度",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::建卡启发式规则",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::资产 Prompt 的风格相关性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::道具建卡判断",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::角色锚点",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::角色设定图 Prompt 模板",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::场景锚点",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::站位质量",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::生命周期道具主卡",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::Base-First Dependency Chain",
-      "references/project-adaptation.md::可复用资产与确定性文字",
-      "references/project-adaptation.md::镜头正文引用"
+      "references/production-method.md::资产检查"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::单一来源与编译边界",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::H3 唯一可执行填空骨架",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::参考图逐槽绑定",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::环境与空间只写起始事实",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::角色声音签名：服务连续剧情",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::H3 画面演进：连续剧情、镜头与表演合成一条叙事",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::面部颜色状态的自然化表达",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/h3-video-prompt.md::声音、风格与执行自检"
+      "references/video-compilation.md::当前事实与有序引用",
+      "references/video-compilation.md::连续表演与角色声音签名",
+      "references/video-compilation.md::真实连续性与修复"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/post.md::声音层",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/post.md::字幕层",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/post.md::整集情绪曲线（仅 `bgm_policy=generate`）",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/post.md::短剧精剪原则",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/post.md::精剪自检"
+      "references/post-production.md::声音与字幕",
+      "references/post-production.md::精剪与情绪",
+      "references/post-production.md::当前范围检查"
+    ],
+    "ASSET_PLANNER": [
+      "references/production-method.md::资产规划"
+    ],
+    "ASSET_BUILDER": [
+      "references/production-method.md::资产制作"
+    ],
+    "ASSET_VERIFIER": [
+      "references/production-method.md::资产检查"
     ]
   },
   "stage_role_source_sections": {
     "ORCHESTRATION.PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::目标",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/production-plan.md::从来源剧本工作",
+      "references/story-development.md::本次制作范围",
       "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "STORYBOARD.PLANNER": [
       "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "STORY.REVISION_VERIFIER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::剧本落画布",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::题材（Genre）",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::开篇",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::爽感",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/script-craft.md::合规"
+      "references/story-development.md::剧本写入当前项目",
+      "references/story-development.md::题材与开篇",
+      "references/story-development.md::情绪与因果"
     ],
     "STORYBOARD.REVISION_VERIFIER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性",
+      "references/production-method.md::空间与状态连续性",
       "references/project-adaptation.md::渐进分镜与可选检查"
     ],
     "ASSETS.ASSET_PLANNER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::时代与身份一致性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::角色 Profile 维度",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::外观与选角参考",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::服装与状态",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::场景描述维度",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::建卡启发式规则",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::道具建卡判断",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::角色锚点",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::场景锚点",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::生命周期道具主卡",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::Base-First Dependency Chain"
+      "references/production-method.md::资产规划"
     ],
     "ASSETS.ASSET_BUILDER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::资产 Prompt 的风格相关性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::角色设定图 Prompt 模板",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::场景锚点",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::生命周期道具主卡",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::Base-First Dependency Chain"
+      "references/production-method.md::资产制作"
     ],
     "ASSETS.ASSET_VERIFIER": [
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::时代与身份一致性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::外观与选角参考",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets.md::服装与状态",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::站位质量",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::跨镜头空间连续性",
-      "../../sources/minimax_design/3.0.11/workflows/drama-series/reference/assets-blocking.md::状态连续性"
+      "references/production-method.md::资产检查"
+    ],
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/post-production.md::声音与字幕",
+      "references/post-production.md::精剪与情绪",
+      "references/post-production.md::当前范围检查"
+    ],
+    "VISUAL_GEN.DIRECTOR": [
+      "references/video-compilation.md::当前事实与有序引用",
+      "references/video-compilation.md::连续表演与角色声音签名",
+      "references/video-compilation.md::真实连续性与修复"
     ]
   },
   "role_references": {
     "ASSET_PLANNER": [
-      "references/user-source-intake.md",
-      "references/official-layout-reference.md"
+      "references/user-source-intake.md"
     ],
     "ASSET_BUILDER": [
-      "references/user-source-intake.md",
-      "references/official-layout-reference.md"
-    ],
-    "ASSET_VERIFIER": [
-      "references/user-source-intake.md",
-      "references/official-layout-reference.md"
-    ],
-    "ASSET_REVIEWER": [
       "references/user-source-intake.md",
       "references/official-layout-reference.md"
     ]

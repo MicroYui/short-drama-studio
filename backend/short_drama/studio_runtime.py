@@ -11,14 +11,14 @@ from pydantic import JsonValue
 
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_control
 from short_drama.agent_runtime.models import ActionKind, ActionStatus, AgentRunStatus, DelegationStatus, WorkOrderNextOwner
-from short_drama.agent_runtime.token_budget import ContextBudget
 from short_drama.models import ProductionExecutionTarget
 from short_drama.production_manager import (
     AgentRunAdvanceRequest, AgentRunCreateRequest, AgentRunReplanRequest, AgentUserInputRequest,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderTransportError, is_language_transport_error
-from short_drama.studio_models import StudioActivity, StudioJob, StudioJobControl, StudioMessage, StudioWorker, StudioChangeSet
-from short_drama.studio_trace import production_trace, record_trace, trace_context
+from short_drama.studio_models import StudioActivity, StudioJob, StudioJobControl, StudioMessage, StudioChangeSet, StudioScope
+from short_drama.studio_trace import current_trace_context, production_trace, record_trace, trace_context
+from short_drama.studio_review_scope import ReviewScope, pending_review_scope
 
 if TYPE_CHECKING:
     from short_drama.service import ShortDramaService
@@ -40,22 +40,8 @@ class StudioAgentRunner:
         self.retry_delays = retry_delays
 
     def activity(self, project_id: str, after: int = 0) -> StudioActivity:
-        jobs = self.service.repository.list_studio_jobs(project_id)
-        workers: list[StudioWorker] = []
-        run_id = jobs[0].run_id if jobs else None
-        if run_id is not None:
-            for work in self.service.agent_runtime.store.list_work_orders(run_id):
-                result = self.service.agent_runtime.store.get_agent_result(work.id)
-                workers.append(StudioWorker(id=work.id, run_id=run_id, role=work.recipient_role,
-                    skill_role=work.production_skill_role, stage=work.production_prompt_stage,
-                    objective=work.objective, status=work.status.value,
-                    next_owner=None if work.next_owner is None else work.next_owner.value,
-                    summary=None if result is None else result.concise_summary, tool_turns=len(work.specialist_turns),
-                    latest_tool=work.specialist_turns[-1].tool_name if work.specialist_turns else None,
-                    latest_reason=work.specialist_turns[-1].reason if work.specialist_turns else None))
-        return StudioActivity(jobs=jobs, workers=workers,
-            context_window_tokens=ContextBudget().window_tokens,
-            events=self.service.repository.list_studio_events(project_id, after=after, limit=2000))
+        from short_drama.studio_activity import current_activity
+        return current_activity(self.service, project_id, after)
 
     def send(self, project_id: str, message: StudioMessage) -> StudioJob:
         self.service.studio.current_project(project_id)
@@ -108,9 +94,7 @@ class StudioAgentRunner:
 
     def review_resolved(self, project_id: str, change: StudioChangeSet) -> None:
         """Deliver explicit review clicks back to the same goal, not as new chat."""
-        from short_drama.studio_changes import list_changes
-        if any(i.status == "pending" for c in list_changes(self.service.studio.current_project(project_id).document)
-               if c.run_id == change.run_id for i in c.items):
+        if any(item.status == "pending" for item in change.items):
             return
         with self.lock:
             jobs = self.service.repository.list_studio_jobs(project_id)
@@ -169,16 +153,21 @@ class StudioAgentRunner:
                 return "User requested pause"
             if len(job.pending_messages) > self._processing_messages.get(job_id, 0):
                 return "User input is pending"
-            if job.run_id:
-                from short_drama.studio_changes import list_changes
-                document = self.service.repository.get_project(job.project_id)
-                if document is not None and any(
-                    change.run_id == job.run_id
-                    and any(item.status == "pending" for item in change.items)
-                    for change in list_changes(document)
-                ):
-                    return "User-requested text review is pending"
+            work_id = current_trace_context().get("work_order_id")
+            if job.run_id and isinstance(work_id, str) and work_id in self._review_scope(job).work_order_ids:
+                return "User-requested text review is pending for this work"
         return None
+
+    def _review_scope(self, job: StudioJob) -> ReviewScope:
+        if job.run_id is None:
+            return ReviewScope()
+        document = self.service.repository.get_project(job.project_id)
+        if document is None or not document.studio_changes:
+            return ReviewScope()
+        snapshot = self.service.agent_runtime.snapshot(job.run_id)
+        return pending_review_scope(document, job.run_id,
+            self.service.agent_runtime.store.list_work_orders(job.run_id),
+            snapshot.current_plan.steps if snapshot.current_plan else [], snapshot.actions)
 
     def _wait_for_retry(self, job_id: str) -> None:
         while True:
@@ -260,6 +249,8 @@ class StudioAgentRunner:
                 return
             self._processing_messages[job_id] = len(messages)
         try:
+            for message in messages:
+                self._remember_scope_tools(run_id, message.scope)
             view = self.service.get_agent_run(run_id)
             waiting = next((action for action in view.snapshot.actions
                 if action.kind == ActionKind.USER_INPUT and action.status == ActionStatus.RUNNING), None)
@@ -286,7 +277,9 @@ class StudioAgentRunner:
 
     def _execute(self, job_id: str) -> None:
         job = self._job(job_id)
-        if job.status == "pausing":
+        if job.status == "pausing" and (
+            job.run_id is None or not self.service.team_executor.has_active_work(job.run_id)
+        ):
             self._save_state(job_id, "paused")
             return
         if job.run_id is None:
@@ -303,23 +296,39 @@ class StudioAgentRunner:
         if job.run_id is None or self.service.agent_runtime.store.get_run(job.run_id) is None:
             raise ValueError("原制作任务未找到")
         run_id = job.run_id
+        self._remember_scope_tools(run_id, job.scope)
         self._save_state(job_id, "running")
         with trace_context(run_id=run_id, agent_role="leader", work_order_id=None):
             self._advance_until_handoff(job_id, run_id)
 
+    def _remember_scope_tools(self, run_id: str, scope: StudioScope) -> None:
+        # This is one starting read contract, not an execution route. The Agent
+        # still decides whether to inspect, edit, answer, or finish this request.
+        if scope.editor_selection is not None or scope.kind == "film":
+            self.service.agent_runtime.store.remember_tool_schema_ids(run_id, ["timeline.read_editorial"])
+
     def _advance_until_handoff(self, job_id: str, run_id: str) -> None:
         published_actions: dict[str, str] = {}
         while True:
+            # Started operations finish and persist before pause/input is
+            # acknowledged. Their next boundary sees the same control callback.
+            if self._yield_reason(job_id) is not None and self.service.team_executor.has_active_work(run_id):
+                batch = self.service.team_executor.collect_finished_work(run_id)
+                for failure in batch.advances:
+                    if failure.error_message:
+                        record_trace("worker.error", {"work_order_id": failure.work_order_id,
+                            "error": failure.error_message, "error_kind": failure.error_kind})
+                if batch.active_work_order_ids:
+                    self._wakeups[job_id].wait(0.05)
+                    self._wakeups[job_id].clear()
+                    continue
             if self._job(job_id).status == "pausing":
                 self._save_state(job_id, "paused")
                 return
             self._apply_messages(job_id, run_id)
-            from short_drama.studio_changes import list_changes
-            pending = [item for change in list_changes(self.service.studio.current_project(self._job(job_id).project_id).document)
-                       if change.run_id == run_id for item in change.items if item.status == "pending"]
-            if pending:
-                self._save_state(job_id, "waiting_user", error=f"{len(pending)} 处修改等待审阅。逐项接受或保留原文后继续。")
-                return
+            review = self._review_scope(self._job(job_id))
+            advance_request = AgentRunAdvanceRequest(max_actions=1,
+                review_blocked_step_ids=sorted(review.step_ids) if review.pending_count else None)
             view = self.service.get_agent_run(run_id)
             if view.snapshot.current_plan is None or view.snapshot.run.status in {AgentRunStatus.FAILED, AgentRunStatus.CANCELLED}:
                 self.service.replan_agent_run(run_id, AgentRunReplanRequest(reason="根据本次用户目标继续工作，并按目标决定交付边界。"))
@@ -330,6 +339,13 @@ class StudioAgentRunner:
                     record_trace("agent.action", cast(dict[str, JsonValue], action.model_dump(mode="json")))
                     published_actions[action.id] = state
             if view.snapshot.run.status == AgentRunStatus.COMPLETED:
+                if self.service.team_executor.has_active_work(run_id):
+                    self.service.team_executor.collect_finished_work(run_id)
+                    self._wakeups[job_id].wait(0.05)
+                    continue
+                if review.pending_count:
+                    self._save_state(job_id, "waiting_user", error=f"{review.pending_count} 处修改等待审阅，其他可执行工作已完成。")
+                    return
                 with self.lock:
                     if self._job(job_id).pending_messages:
                         continue
@@ -342,19 +358,16 @@ class StudioAgentRunner:
                 return
             waiting = next((action for action in view.snapshot.actions
                 if action.kind == ActionKind.USER_INPUT and action.status == ActionStatus.RUNNING), None)
-            if waiting:
-                self._save_state(job_id, "waiting_user")
-                record_trace("chat.assistant", {"text": waiting.input_summary, "needs_input": True, "run_id": run_id})
-                return
             # Advance every ready Agent-authored step before draining Workers.
             # A retained media poll may run for a long time; it must not starve
             # independent reads or edits that prepare the next parallel task.
-            if view.ready_steps:
-                self.service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=1))
+            if any(step.id not in review.step_ids for step in view.ready_steps):
+                self.service.advance_agent_run(run_id, advance_request, advance_workers=False)
                 continue
             # Each Worker continues its own persisted turns. A slow media
             # observation must not hold its siblings at every decision boundary.
-            batch = self.service.advance_agent_team(run_id, continue_until_handoff=True)
+            batch = self.service.advance_agent_team(run_id, continue_until_handoff=True, wait_for_completion=False,
+                blocked_work_order_ids=review.work_order_ids)
             failures = [item for item in batch.advances if item.error_message]
             for failure in failures:
                 record_trace("worker.error", {"work_order_id": failure.work_order_id,
@@ -364,8 +377,16 @@ class StudioAgentRunner:
                 worker = self.service.agent_runtime.store.get_work_order(failure.work_order_id)
                 if worker is None or worker.next_owner != WorkOrderNextOwner.LEADER_REPLAN:
                     raise ValueError(failure.error_message)
-            if failures or not batch.selected_work_order_ids:
-                advanced = self.service.advance_agent_run(run_id, AgentRunAdvanceRequest(max_actions=1))
+            if (review.pending_count or waiting) and not (batch.selected_work_order_ids or batch.active_work_order_ids or batch.waiting_work_order_ids):
+                reason = f"{review.pending_count} 处修改等待审阅，其他可执行工作已完成。" if review.pending_count else None
+                self._save_state(job_id, "waiting_user", error=reason)
+                if waiting:
+                    record_trace("chat.assistant", {"text": waiting.input_summary, "needs_input": True, "run_id": run_id})
+                return
+            if failures or batch.advances or not (
+                batch.selected_work_order_ids or batch.active_work_order_ids or batch.waiting_work_order_ids
+            ):
+                advanced = self.service.advance_agent_run(run_id, advance_request, advance_workers=False)
                 snapshot = advanced.run.snapshot
                 workers = self.service.agent_runtime.store.list_work_orders(run_id)
                 worker_can_continue = any(work.status == DelegationStatus.IN_PROGRESS or
@@ -374,6 +395,7 @@ class StudioAgentRunner:
                 waiting_input = any(action.kind == ActionKind.USER_INPUT and action.status == ActionStatus.RUNNING for action in snapshot.actions)
                 if (snapshot.run.status == AgentRunStatus.WAITING and not advanced.run.ready_steps
                     and not worker_can_continue and not waiting_input and not advanced.executed_action_ids
+                    and not self.service.team_executor.has_active_work(run_id)
                     and snapshot.run.current_plan_revision_id == view.snapshot.run.current_plan_revision_id):
                     replan_errors = [note for note in advanced.notes if note.startswith("Automatic replanning failed:")]
                     reason = "; ".join(replan_errors or snapshot.memory.blockers) or snapshot.memory.current_focus or "当前计划没有可执行的下一步"

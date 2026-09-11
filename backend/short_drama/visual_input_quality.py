@@ -21,6 +21,7 @@ from short_drama.models import (
     AssetVersion,
     DomainModel,
     Freshness,
+    GenerationUnitShotWindow,
     ProjectAggregate,
     ProjectDocument,
     ReferenceAngle,
@@ -36,6 +37,7 @@ from short_drama.models import (
     VideoInspectionReport,
 )
 from short_drama.providers.openai_compatible_language_client import LanguageProviderClient
+from short_drama.production_contracts import GenerationUnit
 from short_drama.reference_planner import (
     KeyframeBriefCompileRequest,
     KeyframePosition,
@@ -43,7 +45,7 @@ from short_drama.reference_planner import (
     preview_reference_plan,
     ReferencePlanPreviewRequest,
 )
-from short_drama.video_inspection import image_data_url
+from short_drama.video_inspection import boundary_frame_image_url, image_data_url, selected_generation_reference_ids
 
 
 # Reasoning and the structured judgment share the provider's output allowance.
@@ -272,9 +274,12 @@ class InputCompatibilityRequest(DomainModel):
     route: VideoGenerationRoute
     start_version_id: str | None = None
     end_version_id: str | None = None
-    reference_version_ids: list[str] = Field(default_factory=list[str], max_length=9)
+    reference_version_ids: list[str] = Field(default_factory=list[str], max_length=32)
     include_previous_boundary: bool = True
     review_focus: str | None = Field(default=None, max_length=2000)
+    generation_unit_id: str | None = Field(default=None, max_length=200)
+    generation_plan_version_id: str | None = Field(default=None, max_length=200)
+    scope: Literal["GENERATION_UNIT", "SHOT"] = Field(default="GENERATION_UNIT", description="Use the current group containing the requested shot when available; SHOT explicitly requests a single-shot input review.")
 
     @model_validator(mode="after")
     def validate_reference_versions(self) -> InputCompatibilityRequest:
@@ -305,10 +310,20 @@ class InputCompatibilityReport(DomainModel):
     id: str
     project_id: str
     shot_id: str
+    generation_unit_id: str | None = None
+    generation_plan_version_id: str | None = None
+    covered_shot_ids: list[str] = Field(default_factory=list[str])
+    shot_windows: list[GenerationUnitShotWindow] = Field(default_factory=list[GenerationUnitShotWindow])
+    reviewed_input_ids: list[str] = Field(default_factory=list[str])
+    review_focus: str | None = None
+    full_input_set_observed: bool = False
+    unobserved_selected_reference_ids: list[str] = Field(default_factory=list[str])
+    unreviewed_supplied_input_ids: list[str] = Field(default_factory=list[str])
+    previous_boundary_observed: bool = False
     route: VideoGenerationRoute
     start_version_id: str | None = None
     end_version_id: str | None = None
-    reference_version_ids: list[str] = Field(default_factory=list[str], max_length=9)
+    reference_version_ids: list[str] = Field(default_factory=list[str], max_length=32)
     decision: InputCompatibilityDecision
     observations: list[InputCompatibilityObservation] = Field(
         default_factory=list[InputCompatibilityObservation],
@@ -631,6 +646,7 @@ def compare_keyframe_candidates(
         )
     candidate_ids = set(request.candidate_version_ids)
     version_index = _version_index(document)
+    references_by_id = {item.asset_version_id: item for item in brief.selected}
     for version_id in brief.input_version_ids:
         if version_id in candidate_ids:
             continue
@@ -638,14 +654,20 @@ def compare_keyframe_candidates(
         if resolved is None:
             continue
         asset, version = resolved
+        reference = references_by_id[version_id]
         image_urls.append(_asset_version_image_url(version))
         image_map.append(
             {
                 "image": len(image_urls),
-                "role": "APPROVED_CANONICAL_REFERENCE",
+                "role": "KEYFRAME_GENERATION_REFERENCE",
                 "asset_id": asset.id,
+                "subject_asset_id": reference.subject_asset_id,
                 "asset_version_id": version.id,
                 "description": asset.name,
+                "purpose": reference.description,
+                "reference_role": reference.role.value,
+                "approval_status": version.approval_status.value,
+                "selection_reasons": reference.reasons,
             }
         )
 
@@ -716,7 +738,23 @@ def check_input_compatibility(
     client: LanguageProviderClient,
     previous_boundary_url: str | None,
     created_at: str,
+    generation_unit: GenerationUnit | None = None,
+    generation_plan_version_id: str | None = None,
 ) -> InputCompatibilityReport:
+    covered_ids = generation_unit.shot_ids if generation_unit is not None else [shot.id]
+    shots_by_id = {item.id: item for item in document.shots}
+    if any(shot_id not in shots_by_id for shot_id in covered_ids):
+        raise VisualInputContractError("The input compatibility group contains missing current shots")
+    plans = [item for item in document.reference_plan if item.shot_id in covered_ids]
+    version_index = _version_index(document)
+    expected_references = list(dict.fromkeys(version_id for item in plans
+        for version_id in selected_generation_reference_ids(document, item)
+        if version_id not in version_index or version_index[version_id][1].media_type == AssetMediaType.IMAGE))
+    # An explicit set is a proposed input change; omission resolves all currently selected group inputs.
+    if not request.reference_version_ids and request.start_version_id is None and request.end_version_id is None:
+        if len(expected_references) > 32:
+            raise VisualInputContractError("This group has more than 32 selected images; narrow the current generation input set before a joint compatibility review")
+        request = request.model_copy(update={"reference_version_ids": expected_references})
     requested_version_ids = [
         *([request.start_version_id] if request.start_version_id is not None else []),
         *([request.end_version_id] if request.end_version_id is not None else []),
@@ -739,6 +777,17 @@ def check_input_compatibility(
                 "role": role,
                 "asset_id": asset.id,
                 "asset_name": asset.name,
+                "uses": [
+                    {"shot_id": item.shot_id, "purpose": binding.purpose}
+                    for item in plans for binding in item.bindings if binding.target_id == version_id
+                ] + [
+                    {"shot_id": current.id, "purpose": cue.purpose, "usage": cue.usage,
+                     "start_seconds": start, "end_seconds": end}
+                    for current in (shots_by_id[shot_id] for shot_id in covered_ids)
+                    for cues, start, end in [(current.references, 0.0, current.duration_seconds),
+                        *((beat.references, beat.start_seconds, beat.end_seconds) for beat in current.timeline_beats)]
+                    for cue in cues if cue.asset_version_id == version_id and cue.usage == "GENERATION"
+                ],
             }
         )
 
@@ -759,6 +808,11 @@ def check_input_compatibility(
         )
 
     technical_warnings = _technical_route_warnings(request)
+    omitted = [version_id for version_id in expected_references if version_id not in requested_version_ids]
+    if omitted:
+        technical_warnings.append("This proposed subset does not observe these currently selected group references: " + ", ".join(omitted))
+    if generation_unit is None and request.scope == "GENERATION_UNIT":
+        technical_warnings.append("No current generation group exists; this report covers only the requested shot and cannot establish group compatibility.")
     instructions = (
         "你是供电影导演 Agent 调用的输入兼容性检查 Tool。只返回 JSON，并严格匹配所给 schema。"
         "这不是标准答案校验器。先记录每张输入图片中的可见状态，不要先寻找预期结论；随后再把这些"
@@ -768,11 +822,19 @@ def check_input_compatibility(
         "路线或拆分镜头确实能调整与已观察问题最相关的控制变量时，才建议 CHANGE_KEYFRAME、"
         "CHANGE_ROUTE 或 SPLIT_SHOT。不要虚构门、把手或区域专属字段。所有创作建议都只是建议，"
         "用户可以覆盖；Provider 的时长和媒体组合契约由 H3 adapter 在后续阶段执行。"
+        "generation_unit 非空时必须联合检查整组、current_shots 和 source windows，而非只看代表镜。"
+        "image_map 标明每张图的实际用途；区分身份参考、起止帧与场景参考，不要求身份图复现每个动作。"
+        "未提供的图片和时段必须列为未观察，不能把拆开的多个局部检查称为所有输入已联合兼容。"
     )
     payload = {
         "output_schema": InputCompatibilityJudgment.model_json_schema(),
         "shot": shot.model_dump(mode="json"),
         "reference_plan": plan.model_dump(mode="json"),
+        "generation_unit": generation_unit.model_dump(mode="json") if generation_unit is not None else None,
+        "generation_plan_version_id": generation_plan_version_id,
+        "current_shots": [shots_by_id[shot_id].model_dump(mode="json") for shot_id in covered_ids],
+        "reference_plans": [item.model_dump(mode="json") for item in plans],
+        "unobserved_selected_reference_ids": omitted,
         "route": request.route.value,
         "technical_warnings": technical_warnings,
         "review_focus": request.review_focus,
@@ -785,17 +847,28 @@ def check_input_compatibility(
         max_output_tokens=_VISUAL_REVIEW_OUTPUT_TOKENS,
     )
     judgment = InputCompatibilityJudgment.model_validate_json(_strip_json_fence(output))
-    known_input_ids = {
-        item["input_id"]
-        for item in image_map
-        if isinstance(item.get("input_id"), str)
-    }
+    known_input_ids = {input_id for item in image_map
+                       if isinstance(input_id := item.get("input_id"), str)}
     if any(item.input_id not in known_input_ids for item in judgment.observations):
         raise ValueError("Input compatibility observation refers to an unknown image input")
+    reviewed_ids = {item.input_id for item in judgment.observations}
+    unreviewed = sorted(known_input_ids - reviewed_ids)
+    if unreviewed:
+        technical_warnings.append("The semantic result did not record observations for these supplied inputs: " + ", ".join(unreviewed))
     return InputCompatibilityReport(
         id=f"input-compatibility-{uuid4().hex}",
         project_id=document.project.id,
         shot_id=shot.id,
+        generation_unit_id=generation_unit.id if generation_unit is not None else None,
+        generation_plan_version_id=generation_plan_version_id,
+        covered_shot_ids=covered_ids,
+        shot_windows=list(generation_unit.shot_windows) if generation_unit is not None else [],
+        reviewed_input_ids=list(dict.fromkeys(requested_version_ids)),
+        review_focus=request.review_focus,
+        full_input_set_observed=not omitted and not unreviewed,
+        unobserved_selected_reference_ids=omitted,
+        unreviewed_supplied_input_ids=unreviewed,
+        previous_boundary_observed=previous_boundary_url is not None and "previous-shot-boundary" in reviewed_ids,
         route=request.route,
         start_version_id=request.start_version_id,
         end_version_id=request.end_version_id,
@@ -829,29 +902,38 @@ def previous_shot_boundary_image_url(
         (
             item
             for item in reversed(takes)
-            if item.shot_id == previous_shot.id
-            and item.is_selected
+            if previous_shot.id in item.selected_shot_ids
             and item.freshness == Freshness.CURRENT
         ),
         None,
     )
     if previous_take is None:
         return None
+    window = next((item for item in previous_take.shot_windows if item.shot_id == previous_shot.id), None)
+    boundary_end = window.source_out_seconds if window is not None else previous_take.duration_seconds
     report = next(
         (
             item
             for item in reversed(inspections)
-            if item.take_id == previous_take.id and item.samples
+            if item.take_id == previous_take.id and any(
+                sample.source_take_id == previous_take.id and boundary_end - 0.5 <= sample.timestamp_seconds <= boundary_end
+                for sample in item.samples)
         ),
         None,
     )
-    if report is None:
+    media_path = Path(previous_take.media_path).expanduser().resolve()
+    if not media_path.is_file() or media_path.stat().st_size == 0:
         return None
-    sample = max(report.samples, key=lambda item: item.timestamp_seconds)
-    path = Path(sample.image_path).expanduser().resolve()
-    if not path.is_file():
-        return None
-    return image_data_url(path)
+    stat = media_path.stat()
+    if report is not None and report.source_context.get("take_media") == {
+        "path": str(media_path), "size": stat.st_size, "modified_ns": stat.st_mtime_ns,
+    }:
+        sample = max((item for item in report.samples if item.source_take_id == previous_take.id
+                      and boundary_end - 0.5 <= item.timestamp_seconds <= boundary_end), key=lambda item: item.timestamp_seconds)
+        path = Path(sample.image_path).expanduser().resolve()
+        if path.is_file() and path.stat().st_size > 0:
+            return image_data_url(path)
+    return boundary_frame_image_url(previous_take, boundary_end)
 
 
 def _filtered_requirements(
@@ -970,6 +1052,8 @@ def _resolve_image_versions(
         asset, version = resolved
         if version.media_type != AssetMediaType.IMAGE:
             raise VisualInputContractError(f"AssetVersion {version_id} is not an image")
+        if version.approval_status == ApprovalStatus.REJECTED or version.freshness != Freshness.CURRENT:
+            raise VisualInputContractError(f"AssetVersion {version_id} is rejected or stale")
         if version.local_path is None and version.external_url is None:
             raise VisualInputContractError(f"AssetVersion {version_id} has no usable media")
         result.append((asset, version))
@@ -1000,6 +1084,8 @@ def _asset_version_image_url(version: AssetVersion) -> str:
 
 def _technical_route_warnings(request: InputCompatibilityRequest) -> list[str]:
     warnings: list[str] = []
+    if len(request.reference_version_ids) > 9:
+        warnings.append("本次联合观察超过 9 张参考图；实际 H3 请求仍须在适配层满足单次图片数量限制。")
     if request.route == VideoGenerationRoute.DIRECT:
         if (
             request.start_version_id is not None

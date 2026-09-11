@@ -3530,7 +3530,9 @@ def test_configured_language_agent_authors_the_initial_dynamic_plan(
     assert "execution_contract 是对当前内容" in instructions
     assert "不是版本号门禁" in instructions
     assert "不得自称该切片可执行" in instructions
-    assert "不再叠加 project.get 和完整资产计划" in instructions
+    assert "不叠加 project.get 或重新读取完整资产计划" in instructions
+    assert "已明确的少量素材可以由一个 Worker 完成准备、制作与自查" in instructions
+    assert "实际媒体产生后另交 ASSET_VERIFIER" not in instructions
     assert "不在 Manager 内重复一套全流程手册" in instructions
     assert "video_execution_target 只选择视频生成执行器" in instructions
     assert "图片能力必须由 image.capability 的实际结果独立判断" in instructions
@@ -3987,7 +3989,7 @@ def test_language_planner_repairs_invalid_plan_contract_before_persisting(
     assert current_plan.steps[0].assigned_agent == "storyboard-director"
 
 
-def test_language_planner_loads_only_explicitly_requested_tool_schema(
+def test_language_planner_preloads_small_hot_set_and_discovers_long_tail(
     tmp_path: Path,
 ) -> None:
     client = SequencedLanguageClient(
@@ -4035,14 +4037,14 @@ def test_language_planner_loads_only_explicitly_requested_tool_schema(
     assert run.snapshot.current_plan.steps[0].tool_name == "project.get"
     assert len(client.inputs) == 2
     first_payload, second_payload = [json.loads(value) for value in client.inputs]
-    assert first_payload["tool_schemas"] == {}
+    assert set(first_payload["tool_schemas"]) == {"artifact.read_current", "agent.read_context", "artifact.get_production_document"}
     assert all(
         "input_schema" not in descriptor
         and "output_schema" not in descriptor
         and "description" not in descriptor
         for descriptor in first_payload["available_tools"]
     )
-    assert set(second_payload["tool_schemas"]) == {"project.get"}
+    assert set(second_payload["tool_schemas"]) == {*first_payload["tool_schemas"], "project.get"}
     assert "description" in second_payload["tool_schemas"]["project.get"]
     assert "input_schema" in second_payload["tool_schemas"]["project.get"]
     assert "output_schema" not in second_payload["tool_schemas"]["project.get"]
@@ -4059,7 +4061,7 @@ def test_language_planner_rejects_unknown_tool_schema_request(
                     "rationale": "This ID must be rejected instead of inferred.",
                 }
             )
-        ]
+        ] * 2
     )
     service = ShortDramaService(
         database_path=tmp_path / "app-data" / "short-drama.sqlite3",
@@ -4432,7 +4434,7 @@ def test_language_specialist_receives_append_only_work_order_progress(
         "Loaded the current staging and marked the eyeline for review."
     )
     assert second_payload["working_set"]["progress"] == progress
-    assert first_payload["tool_schemas"] == {}
+    assert set(first_payload["tool_schemas"]) == {"artifact.read_current", "agent.read_context", "shot.save_current", "shot.get_storyboard"}
     assert set(first_payload["response_schemas"]) == {
         "final_result",
         "tool_request",
@@ -4459,7 +4461,7 @@ def test_language_specialist_receives_append_only_work_order_progress(
         and "description" not in descriptor
         for descriptor in first_payload["available_tools"]
     )
-    assert set(second_payload["tool_schemas"]) == {"project.get"}
+    assert set(second_payload["tool_schemas"]) == {*first_payload["tool_schemas"], "project.get"}
     assert "description" in second_payload["tool_schemas"]["project.get"]
     assert "input_schema" in second_payload["tool_schemas"]["project.get"]
     assert "output_schema" not in second_payload["tool_schemas"]["project.get"]
@@ -4531,7 +4533,7 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
     assert failed.status == DelegationStatus.NEEDS_ATTENTION
     assert failed.next_owner == WorkOrderNextOwner.WORKER_DECISION
     assert failed.pending_protocol_feedback is not None
-    assert failed.pending_protocol_feedback.loaded_tool_schema_ids == ["project.get"]
+    assert set(failed.pending_protocol_feedback.loaded_tool_schema_ids) == {"artifact.read_current", "agent.read_context", "shot.save_current", "shot.get_storyboard", "project.get"}
     assert set(failed.pending_protocol_feedback.validation_issues) == {
         "agent_result",
         "tool_request",
@@ -4560,11 +4562,11 @@ def test_invalid_specialist_response_protocol_returns_to_same_worker(
     assert corrected.pending_protocol_feedback is None
     assert len(client.inputs) == 3
     correction_payload = json.loads(client.inputs[2])
-    assert set(correction_payload["tool_schemas"]) == {"project.get"}
+    assert set(correction_payload["tool_schemas"]) == set(failed.loaded_tool_schema_ids)
     assert "input_schema" in correction_payload["tool_schemas"]["project.get"]
     assert "output_schema" not in correction_payload["tool_schemas"]["project.get"]
     protocol_feedback = correction_payload["response_protocol_feedback"]
-    assert protocol_feedback["loaded_tool_schema_ids"] == ["project.get"]
+    assert protocol_feedback["loaded_tool_schema_ids"] == failed.loaded_tool_schema_ids
     assert marker in protocol_feedback["rejected_response"]
     assert "不是剧情、创意或任务拆分意见" in client.instructions[2]
     progress = service.list_agent_work_order_progress(work_order_id).entries
@@ -5429,7 +5431,8 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
     assert "当前制片技能：AI 短剧（本地格式适配）" in work_order.system_prompt
     assert "导演的通用职责" in work_order.system_prompt
     assert "品牌宣传片" in work_order.system_prompt
-    assert "导演动效语言" in work_order.system_prompt
+    assert "## 画面与动效" in work_order.system_prompt
+    assert "产品边缘、高光、光标路径" in work_order.system_prompt
     assert "把当前采用的文本意图转成可见的表演、调度、构图、动作、声音与时间设计" in (
         work_order.system_prompt
     )
@@ -5446,9 +5449,10 @@ def test_delegation_uses_compact_work_order_and_profile_specific_role_prompt(
     assert "method.brand_promo" in (
         snapshotted_work_order.context.active_skill_ids
     )
-    assert "导演动效语言" in (
+    assert "## 画面与动效" in (
         snapshotted_work_order.system_prompt
     )
+    assert "产品边缘、高光、光标路径" in snapshotted_work_order.system_prompt
 
     returned = service.submit_agent_work_order_result(
         work_order_id,
@@ -6586,6 +6590,7 @@ def test_builtin_specialist_preloads_source_schemas_for_attempt_handoff(
     assert response.result.status == AgentResultStatus.COMPLETED
     first_payload = json.loads(client.inputs[0])
     assert set(first_payload["tool_schemas"]) == {
+        "artifact.read_current", "agent.read_context",
         "agent.get_tool_attempt",
         "artifact.patch_asset_plan",
         "artifact.retry_asset_plan_attempt",
@@ -6692,6 +6697,7 @@ def test_builtin_specialist_corrects_tool_contract_in_same_work_order(
         "INVALID_ARGUMENTS"
     )
     assert set(correction_payload["tool_schemas"]) == {
+        "artifact.read_current", "agent.read_context",
         "agent.get_tool_attempt",
         "project.get",
     }

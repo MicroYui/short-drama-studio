@@ -3280,7 +3280,7 @@ export function VideoEditorTimelineEditingPanel(props: VideoEditorTimelineEditin
         />
       )}
       {selectedGap && props.agentMode && tracks[selectedGap.trackIndex]?.kind !== 'audio' && (
-        <div className="sd-editor-gap"><span>{selectedGap.startTime.toFixed(1)}–{selectedGap.endTime.toFixed(1)} 秒空隙</span><button onClick={() => { props.onAgentGap?.(selectedGap); handleCloseGap() }}>让 Agent 补充镜头</button><button onClick={handleCloseGap}>关闭</button></div>
+        <div className="sd-editor-gap"><span>{selectedGap.startTime.toFixed(1)}–{selectedGap.endTime.toFixed(1)} 秒空隙</span><button onClick={() => props.onAgentGap?.(selectedGap)}>让 Agent 补充镜头</button><button onClick={handleCloseGap}>关闭</button></div>
       )}
       {selectedGap && !props.agentMode && tracks[selectedGap.trackIndex]?.kind !== 'audio' && (
         <GapGenerationModal

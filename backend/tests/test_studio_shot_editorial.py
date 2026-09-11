@@ -179,6 +179,92 @@ def test_returned_video_can_be_trimmed_before_adoption_without_changing_the_film
     assert service.get_project(pid).document.shots == aggregate.document.shots
 
 
+def test_select_group_candidate_changes_only_current_requested_shot(episode: tuple[ShortDramaService, str, list[str]]) -> None:
+    service, pid, ids = episode
+    aggregate = service.get_project(pid)
+    old = next(item for item in aggregate.takes if item.shot_id == ids[1])
+    candidate = old.model_copy(deep=True, update={"id": "new-group-candidate", "shot_id": ids[0], "candidate_index": 20, "generation_unit_id": "candidate-unit",
+        "is_selected": False, "selected_shot_ids": [], "shot_windows": [
+            GenerationUnitShotWindow(shot_id=ids[0], shot_revision=1, duration_seconds=4, source_in_seconds=0, source_out_seconds=4),
+            GenerationUnitShotWindow(shot_id=ids[1], shot_revision=1, duration_seconds=4, source_in_seconds=4, source_out_seconds=8)]})
+    service.repository.save_take(candidate)
+    before = EditorProject.model_validate(read_editorial(service, pid).project)
+    service.select_take(candidate.id, shot_ids=[ids[1]], expected_editorial_revision=1)
+    current = read_editorial(service, pid)
+    assert current.revision == 2
+    after = EditorProject.model_validate(current.project)
+    for clip in before.timelines[0].clips:
+        changed = next(item for item in after.timelines[0].clips if item.id == clip.id)
+        if (clip.model_extra or {}).get("sourceShotId") == ids[1]:
+            assert (changed.model_extra or {}).get("sourceTakeId") == candidate.id
+            assert changed.trimStart == 4 and changed.startTime == 4 and changed.duration == 4
+        else:
+            assert changed == clip
+    assert after.timelines[0].subtitles == before.timelines[0].subtitles
+    exported = start_export(service, pid, StudioExportRequest(expected_revision=2, width=480, height=270), background=False)
+    assert exported.status == "completed", exported.error
+    assert exported.duration_seconds == 12
+
+
+def test_select_candidate_requires_position_for_multiple_uses(episode: tuple[ShortDramaService, str, list[str]]) -> None:
+    from short_drama.service import WorkflowConflictError
+    service, pid, ids = episode
+    current = read_editorial(service, pid)
+    editor = EditorProject.model_validate(current.project)
+    first = next(item for item in editor.timelines[0].clips if item.type == "video")
+    editor.timelines[0].clips.append(first.model_copy(deep=True, update={"id": "repeat-use", "startTime": 12, "linkedClipIds": []}))
+    service.studio.save_timeline(pid, StudioTimelineSave(expected_revision=1, timeline={"project": as_json(editor)}))
+    old = next(item for item in service.get_project(pid).takes if item.id == (first.model_extra or {}).get("sourceTakeId"))
+    candidate = old.model_copy(deep=True, update={"id": "candidate-repeat", "candidate_index": 21, "is_selected": False, "selected_shot_ids": []})
+    service.repository.save_take(candidate)
+    with pytest.raises(WorkflowConflictError, match="clip_ids"):
+        service.select_take(candidate.id)
+    assert read_editorial(service, pid).revision == 2
+    service.select_take(candidate.id, clip_ids=["repeat-use"], expected_editorial_revision=2)
+    after = EditorProject.model_validate(read_editorial(service, pid).project).timelines[0]
+    assert next(item for item in after.clips if item.id == first.id) == first
+    assert (next(item for item in after.clips if item.id == "repeat-use").model_extra or {}).get("sourceTakeId") == candidate.id
+
+
+def test_design_split_keeps_adopted_frames_audio_and_human_subtitles(episode: tuple[ShortDramaService, str, list[str]]) -> None:
+    from short_drama.models import DirectorRepairDecision, DirectorRepairStrategy
+    from short_drama.reference_planner import DirectorRepairDecisionRequest, ReplacementShotDraft
+    service, pid, ids = episode
+    shot = next(item for item in service.get_project(pid).document.shots if item.id == ids[1])
+    before = EditorProject.model_validate(read_editorial(service, pid).project)
+    parts = [ReplacementShotDraft(id=f"{shot.id}-{index}", duration_seconds=shot.duration_seconds / 2,
+        narrative_purpose=shot.narrative_purpose, visual=shot.visual, framing=shot.framing, camera=shot.camera,
+        audio_intent=shot.audio_intent, dialogue_line_ids=shot.dialogue_line_ids if index == 1 else [],
+        continuity=shot.continuity, transition_out=shot.transition_out, local_rework_risk=shot.local_rework_risk) for index in (1, 2)]
+    service.decide_director_repair(pid, shot.id, DirectorRepairDecisionRequest(decision=DirectorRepairDecision.APPLIED,
+        strategy=DirectorRepairStrategy.SPLIT_SHOT, reason="分别呈现动作和反应", split_shots=parts))
+    current = read_editorial(service, pid)
+    after = EditorProject.model_validate(current.project).timelines[0]
+    for source in before.timelines[0].clips:
+        if (source.model_extra or {}).get("sourceShotId") != ids[1]:
+            assert next(item for item in after.clips if item.id == source.id) == source
+    clips = [item for item in after.clips if (item.model_extra or {}).get("sourceShotId") in {part.id for part in parts}]
+    assert len(clips) == 4
+    assert sorted((item.startTime, item.trimStart, item.duration) for item in clips) == [(4, 0, 2), (4, 0, 2), (6, 2, 2), (6, 2, 2)]
+    assert [(item.text, item.startTime, item.endTime, item.style) for item in after.subtitles] == [(item.text, item.startTime, item.endTime, item.style) for item in before.timelines[0].subtitles]
+    # A later regenerated replacement starts its own source at zero. The old
+    # second half's offset must not be carried across as a new two-second crop.
+    from short_drama.models import Freshness
+    original = next(item for item in service.get_project(pid).takes if item.shot_id == ids[1])
+    replacement = original.model_copy(deep=True, update={"id": "split-reaction-candidate",
+        "shot_id": parts[1].id, "candidate_index": 30, "freshness": Freshness.CURRENT,
+        "is_selected": False, "selected_shot_ids": [], "shot_windows": []})
+    service.repository.save_take(replacement)
+    service.select_take(replacement.id, expected_editorial_revision=current.revision)
+    current = read_editorial(service, pid)
+    adopted = EditorProject.model_validate(current.project).timelines[0]
+    assert [(clip.startTime, clip.duration, clip.trimStart) for clip in adopted.clips
+            if (clip.model_extra or {}).get("sourceShotId") == parts[1].id] == [(6, 2, 0), (6, 2, 0)]
+    exported = start_export(service, pid, StudioExportRequest(expected_revision=current.revision, width=480, height=270), background=False)
+    assert exported.status == "completed", exported.error
+    assert exported.duration_seconds == 12
+
+
 def test_agent_speed_keeps_source_span_and_linked_audio(episode: tuple[ShortDramaService, str, list[str]]) -> None:
     service, pid, ids = episode
     local = read_shot_editorial(service, pid, ids[0])
@@ -255,3 +341,30 @@ def test_unused_source_tail_is_editable_without_entering_another_shot(
             assert clip.startTime == 9.5 and clip.duration == 4
     assert next(cue for cue in full.subtitles if cue.id == "cue-2").startTime == 10.25
     assert service.get_project(pid).document.shots == aggregate.document.shots
+
+
+def test_tool_patches_subtitle_and_volume_together_without_rewriting_other_content(episode: tuple[ShortDramaService, str, list[str]]) -> None:
+    service, pid, ids = episode
+    before = EditorProject.model_validate(read_editorial(service, pid).project).timelines[0]
+    video = next(item for item in before.clips if item.type == "video" and (item.model_extra or {}).get("sourceShotId") == ids[1])
+    result = service.tool_registry.invoke("timeline.edit_clips", {"project_id": pid, "request": {
+        "expected_revision": 1, "clips": [{"id": video.id, "volume": 0.8}],
+        "subtitles": [{"id": "cue-1", "start_seconds": 4.85, "end_seconds": 7.6}]}})
+    assert result.error is None
+    assert result.output and result.output["content"]["editorial_revision"] == 2
+    assert result.output["content"]["changed_subtitles"][0]["id"] == "cue-1"
+    after = EditorProject.model_validate(read_editorial(service, pid).project).timelines[0]
+    linked = set((video.model_extra or {}).get("linkedClipIds", []))
+    for clip in before.clips:
+        current = next(item for item in after.clips if item.id == clip.id)
+        assert current == (clip.model_copy(update={"volume": 0.8}) if clip.id in linked else clip)
+    for cue in before.subtitles:
+        current = next(item for item in after.subtitles if item.id == cue.id)
+        assert current == (cue.model_copy(update={"startTime": 4.85, "endTime": 7.6}) if cue.id == "cue-1" else cue)
+    # A bad cue must not commit the otherwise valid clip mutation.
+    failed = service.tool_registry.invoke("timeline.edit_clips", {"project_id": pid, "request": {
+        "expected_revision": 2, "clips": [{"id": video.id, "volume": 0.2}],
+        "subtitles": [{"id": "missing-cue", "text": "cannot save"}]}})
+    assert failed.error is not None
+    assert read_editorial(service, pid).revision == 2
+    assert EditorProject.model_validate(read_editorial(service, pid).project).timelines[0] == after

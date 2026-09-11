@@ -124,21 +124,28 @@ def _production_document_refs(
 def register_tools(registry: ToolRegistry, service: AudioToolService) -> None:
     def align_subtitles(request: AudioAlignNativeSubtitlesInput) -> ToolExecution[NativeSubtitleAlignmentResponse]:
         result = service.align_current_native_subtitles(request.project_id, request.request)
-        return ToolExecution(output=result, artifact_refs=(ArtifactRef(
-            project_id=request.project_id, artifact_type="timeline_manifest",
-            artifact_id=result.manifest.id, version=result.manifest.version,
-        ), ArtifactRef.model_validate(result.alignment_document_ref.model_dump()),
-           ArtifactRef.model_validate(result.alignment_version_ref.model_dump())), warnings=tuple(result.warnings))
+        if result.editorial_timeline_id is not None:
+            content_ref = ArtifactRef(project_id=request.project_id, artifact_type="editorial_timeline",
+                artifact_id=result.editorial_timeline_id, version=result.editorial_revision)
+        else:
+            assert result.manifest is not None
+            content_ref = ArtifactRef(project_id=request.project_id, artifact_type="timeline_manifest",
+                artifact_id=result.manifest.id, version=result.manifest.version)
+        return ToolExecution(output=result, artifact_refs=(content_ref,
+            ArtifactRef.model_validate(result.alignment_document_ref.model_dump()),
+            ArtifactRef.model_validate(result.alignment_version_ref.model_dump())), warnings=tuple(result.warnings))
 
     registry.register(ToolSpec(
-        id="audio.align_subtitles", version=1, category=ToolCategory.AUDIO,
+        id="audio.align_subtitles", version=2, category=ToolCategory.AUDIO,
         description=(
-            "Align existing script subtitles to native Take audio using local ASR token timestamps. "
-            "Creates a new TimelineManifest with corrected cue times and an observation report; "
-            "video/audio windows and subtitle text stay unchanged. Review ASR differences and warnings. "
-            "The versioned alignment document contains complete cue changes, ASR observations and media invariants; "
-            "read it with artifact.get_production_document when handing off to another Worker. "
-            "Use the returned manifest for checks and export with rebuild_manifest=false."
+            "Align selected existing captions to audible native Take audio using local ASR. "
+            "Uses the saved Studio editorial timeline with actual trim, speed, reverse and volume; "
+            "music and separate narration are excluded. Pass expected_editorial_revision from timeline.read_editorial, "
+            "and optional cue_ids/shot_ids. Saves only the selected caption time windows, preserving current text, "
+            "styles and unrelated edits; returns editorial_revision and changed_cue_ids for current export. "
+            "Relevant caption/audio changes during ASR produce a specific conflict instead of overwriting them. "
+            "Only projects without a saved Studio timeline use the legacy exact manifest_id fallback. "
+            "The alignment document preserves observations and warnings; ASR timing is not lip-sync verification."
         ),
         effect=ToolEffect.EXTERNAL, idempotent=False,
         input_model=AudioAlignNativeSubtitlesInput, output_model=NativeSubtitleAlignmentResponse,

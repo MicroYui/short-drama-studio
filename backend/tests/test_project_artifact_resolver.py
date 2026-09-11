@@ -34,6 +34,7 @@ from short_drama.models import (
     ProductionDocumentVersion,
     ProjectPlanningMetadata,
     ProjectOutputSlot,
+    ProjectDocument,
     ReviewRepairOwner,
     ScriptReviewIssue,
     ScriptReviewReport,
@@ -96,6 +97,31 @@ def test_production_manager_reexports_extracted_resolver(tmp_path: Path) -> None
     assert summary.summary == project_summary(document)
     assert f"Project {document.project.name} ({document.project.id})" in summary.summary
     assert "Current script DurationContract: none" in summary.summary
+
+
+def test_batch_context_reads_project_once_and_observes_next_decision_changes(tmp_path: Path) -> None:
+    class CountingRepository(ShortDramaRepository):
+        reads = 0
+
+        def get_project(self, project_id: str) -> ProjectDocument | None:
+            self.reads += 1
+            return super().get_project(project_id)
+
+    repository = CountingRepository(tmp_path / "context.sqlite3")
+    document = build_dont_trust_me_fixture("2026-09-02T00:00:00+00:00")
+    repository.save_project(document)
+    resolver = RuntimeProjectArtifactResolver(repository)
+    refs = [ArtifactRef(project_id=document.project.id, artifact_type="project", artifact_id=document.project.id),
+        *[ArtifactRef(project_id=document.project.id, artifact_type="shot", artifact_id=shot.id) for shot in document.shots]]
+    repository.reads = 0
+    assert all(summary is not None for summary in resolver.summarize_artifacts(refs))
+    assert repository.reads == 1
+    document.project.name = "用户刚刚保存的标题"
+    repository.save_project(document)
+    repository.reads = 0
+    current = resolver.summarize_artifacts(refs)
+    assert repository.reads == 1
+    assert current[0] is not None and current[0].title == document.project.name
 
 
 def test_resolver_preserves_focused_document_summaries(tmp_path: Path) -> None:

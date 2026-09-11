@@ -34,7 +34,9 @@ def test_old_method_names_resolve_into_one_current_catalog_entry() -> None:
     )
     assert prompt.selected_method_skill_ids == ("method.brand_promo",)
     assert prompt.text.count("（method.brand_promo）") == 1
-    assert "## 步骤 2：建立品牌事实表" in prompt.text
+    assert prompt.text.count("## 品牌事实与创意") == 1
+    assert "区分已证实事实、用户主张和概念创作" in prompt.text
+    assert current.role_prompts[ProductionSkillRole.CONCEPT] in prompt.text
 
 
 def test_old_run_and_work_order_select_the_same_storyboard_sections() -> None:

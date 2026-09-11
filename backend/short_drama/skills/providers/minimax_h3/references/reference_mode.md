@@ -17,7 +17,7 @@ Prompt 中还要区分“上传的源文件”和“从源文件提取的可复�
 
 - `REFERENCE_IMAGE` 上传后仍由 `<Picture N>` 追踪实际文件，但角色、场景、道具、服饰或风格等可复用内容必须定义为 `<Subject N>`，并说明它从哪个 `<Picture N>` 提取。
 - 只有图片本身就是当前镜头的首帧、关键帧、尾帧、编辑目标帧或构图锚点时，才在时间线中直接把 `<Picture N>` 当作具体画面。
-- `<Video N>` 和 `<Audio N>` 继续表示实际视频或音频源。当前 `REFERENCE_VIDEO` binding 仅把视频用作已声明的运动、时序、机位或连续性参考；需要稳定人物、物件或场景身份时，应另外绑定经批准的 `REFERENCE_IMAGE` 来建立 `<Subject N>`。
+- `<Video N>` 和 `<Audio N>` 继续表示实际视频或音频源。当前 `REFERENCE_VIDEO` binding 仅把视频用作已声明的运动、时序、机位或连续性参考；需要稳定人物、物件或场景身份时，应另外绑定当前选中且可用的 `REFERENCE_IMAGE` 来建立 `<Subject N>`。
 
 ## subject_definitions
 

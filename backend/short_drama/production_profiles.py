@@ -68,9 +68,11 @@ def _production_method_skill_library() -> tuple[ComposableProductionSkill, ...]:
     return load_production_method_skills()
 
 
-@lru_cache(maxsize=1)
-def _shared_role_library() -> dict[ProductionSkillRole, str]:
-    return load_shared_role_prompts()
+@lru_cache(maxsize=16)
+def _shared_role_library(
+    stage: ProductionPromptStage | None = None,
+) -> dict[ProductionSkillRole, str]:
+    return load_shared_role_prompts(stage=stage)
 
 
 def production_skill(profile: ProductionProfile) -> ProductionSkill:
@@ -142,10 +144,14 @@ def production_method_skill_catalog() -> tuple[ProductionMethodSkillDescriptor, 
     )
 
 
-def shared_role_prompt(role: ProductionSkillRole) -> str:
+def shared_role_prompt(
+    role: ProductionSkillRole,
+    *,
+    stage: ProductionPromptStage | None = None,
+) -> str:
     """Return the format-neutral Chinese responsibility for one Agent role."""
 
-    return _shared_role_library()[role]
+    return _shared_role_library(stage)[role]
 
 
 def _resolve_narrative_skills(
@@ -332,7 +338,7 @@ def compile_production_prompt(
     if stage is not None:
         parts.append(f"当前制片阶段：{stage.value}。只装载该阶段与当前角色需要的方法。")
     parts.extend(
-        f"{_ROLE_LABELS[role]}的通用职责：{shared_role_prompt(role)}"
+        f"{_ROLE_LABELS[role]}的通用职责：{shared_role_prompt(role, stage=stage)}"
         for role in resolved_roles
     )
     if include_constitution:
@@ -348,6 +354,7 @@ def compile_production_prompt(
         f"{_ROLE_LABELS[role]}的当前格式补充：{policy_by_role[role]}"
         for role in resolved_roles
         if policy_by_role[role].strip()
+        and not (stage == ProductionPromptStage.POST and role == ProductionSkillRole.DIRECTOR)
     )
     method_prompt = _render_production_method_skill_prompt(
         selected_method_skills,
@@ -368,7 +375,12 @@ def compile_production_prompt(
         "role_labels": [_ROLE_LABELS[role] for role in resolved_roles],
         "skills": [{"id": selected.id, "label": selected.label, "path": selected.source_path}
                    for selected in (*selected_method_skills, *selected_skills)],
-        "role_paths": [f"shared/roles/{role.value.lower()}.md" for role in resolved_roles],
+        "role_paths": [
+            "shared/roles/post_director.md"
+            if stage == ProductionPromptStage.POST and role == ProductionSkillRole.DIRECTOR
+            else f"shared/roles/{role.value.lower()}.md"
+            for role in resolved_roles
+        ],
         "summary": "、".join(selected.label for selected in selected_method_skills) or skill.label,
     })
     return CompiledProductionPrompt(

@@ -16,34 +16,28 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::核心原则",
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 2：Creative Contract"
+      "references/runtime-adaptation.md::创意与音乐依据"
     ],
     "WRITER": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::1.3.0 歌词锁定与歌词先行补全"
+      "references/runtime-adaptation.md::歌词与表演文本"
     ],
     "PLANNER": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::1.2 目标时长与多镜头拆解架构",
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::1.3 音乐窗口",
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 3：参考图分工与场景采样",
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 6：BGM 连续性与多镜头自然衔接系统"
+      "references/runtime-adaptation.md::音乐窗口与分镜规划"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 7：审查清单（Checklist）"
+      "references/runtime-adaptation.md::修订判断"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::视觉与剪辑语言",
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::文字包装规则",
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::6.2 多镜头自然衔接系统（Natural Stitching Protocol）"
+      "references/runtime-adaptation.md::导演与文字运动"
     ],
     "ASSET_REVIEWER": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 3：参考图分工与场景采样"
+      "references/runtime-adaptation.md::参考素材分工"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 5：Prompt 结构模板"
+      "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_h3/original/music-video-subtitle-generator/SKILL.cn.md::STEP 7：审查清单（Checklist）"
+      "references/runtime-adaptation.md::后期判断"
     ]
   },
   "provenance": "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER",
@@ -51,5 +45,15 @@
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/music-video-subtitle-generator/SKILL.cn.md",
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/music-video-subtitle-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub User]"
   ],
-  "user_overridable": true
+  "user_overridable": true,
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "POST.REVISION_VERIFIER": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ]
+  }
 }

@@ -30,13 +30,17 @@
 | [纸张拼贴讲解](methods/paper_collage_explainer/SKILL.md) | `method.paper_collage_explainer` |
 | [纸艺定格讲解](methods/papercraft_stop_motion/SKILL.md) | `method.papercraft_stop_motion` |
 
-目录名、Skill ID 和产品名称表达创作用途。上游归属继续保存在各方法的“来源与加载”、manifest 的 `provenance` / `upstream_sources`、[来源说明](sources/README.md)及项目 NOTICES 中。H3 专用适配保留供应商名称。
+目录名、Skill ID 和产品名称表达创作用途。上游归属继续保存在各方法的“来源”、manifest 的 `provenance` / `upstream_sources`、[来源说明](sources/README.md)及项目 NOTICES 中。H3 专用适配保留供应商名称。
 
 ## 一次调用实际读取什么
 
 `loader._read_markdown` 读取独立 JSON manifest；`ComposableProductionSkill.prompt_for(role, stage)` 优先选择精确阶段片段。`production_profiles` 将多个方法共用的前言和后记按来源路径只注入一次，方法中间部分包含当前角色需要的知识。
 
-SKILL 正文统一为用途、输入、方法、交付、检查、来源与加载六部分，供维护者阅读，不会自动整篇注入所有角色。本地有效经验必须进入实际角色/阶段映射，例如短剧方法的 `references/project-adaptation.md`。产品方法页目前显示名称、简介和偏好选择，完整正文与来源详情仍待接通。
+11 个方法的全部默认角色和阶段映射均指向本地运行章节，保留各方法的摄影、表演、资产、视觉、声音和剪辑知识；来源中的私有 Tool、固定确认轮次和不适用的时长/画幅要求不进入当前运行正文。实际组装检查覆盖 110 份默认角色正文与 770 个有效角色/阶段组合。体裁补充也遵循当前工作范围、明确选择的可用素材和当前编辑时间线，不要求先读取整份项目或取得素材批准标签。
+
+11 个方法的 `POST.DIRECTOR` 都有明确映射；后期导演使用 `shared/roles/post_director.md`，不回退加载分镜导演职责或体裁中的分镜补充。短剧 `VIDEO_PROMPT_COMPILER` 与 `VISUAL_GEN.DIRECTOR` 使用本地 `references/video-compilation.md` 的叙事、声音与真实边界方法；Design 的 H3 固定中文骨架保留在来源目录，但不再作为当前 API 的实际编译格式注入。当前 H3 Provider Skill 是唯一输出语法来源。
+
+SKILL 正文统一为用途、输入、方法、交付、检查、来源六部分，供阅读，不会自动整篇注入所有角色。本地有效经验必须进入实际角色/阶段映射，例如短剧方法的 `references/project-adaptation.md`。产品方法页已提供方法概览、实际角色/阶段章节及来源说明；打开详情不改变方法选择。
 
 ## 已清理内容与旧项目读取
 

@@ -1,4 +1,4 @@
-"""MiniMax Design workflow vendoring and thin role-adapter coverage."""
+"""MiniMax Design source retention and local role/stage knowledge coverage."""
 
 from __future__ import annotations
 
@@ -97,10 +97,10 @@ def test_design_methods_share_the_local_interaction_precedence_preamble() -> Non
         role_prompt = compile_production_method_skill_prompt([method_id], roles=[role])
 
         assert method.provenance == SkillProvenanceKind.OFFICIAL_ORIGINAL_WITH_ADAPTER
-        assert "交互按以下优先级解释上游步骤" in role_prompt
-        assert "用户已明确给出的值直接采用，不重复询问" in role_prompt
-        assert "用户明确要求不交互或交由 Agent 决定时" in role_prompt
-        assert "用户明确要求在某个工件或阶段确认时" in role_prompt
+        assert role_prompt.count("根据完整用户目标、当前对象与已有效结果选择方法") == 1
+        assert "已给信息直接采用" in role_prompt
+        assert "交给 Agent 决定的内容自主完成" in role_prompt
+        assert "用户指定确认点时只在该处停靠" in role_prompt
         assert "<official_method_reference" not in role_prompt
         assert "source=\"" not in role_prompt
         assert "MiniMax-H3 上游 Markdown" not in role_prompt
@@ -116,147 +116,72 @@ def test_official_method_prompts_end_with_local_execution_precedence() -> None:
             footer_index = role_prompt.rfind("上游原文提供成熟的制片经验")
 
             assert footer_index >= 0
-            assert "创作数值和步骤数量" in role_prompt[footer_index:]
-            assert "只是可选发想起点" in role_prompt[footer_index:]
-            assert "H3 单个生成组的 4–15 秒能力" in role_prompt[footer_index:]
-            assert "不得使用关键词、正则、固定次数或额外审批门代替这个判断。" in role_prompt[footer_index:]
+            assert "创作数值、方案数量、节奏比例、全局语速、重试次数是可选参考" in role_prompt[footer_index:]
+            assert "不设置冻结、预算门槛或必须由另一名 Agent 批准的顺序" in role_prompt[footer_index:]
+            assert "明确选中且可用的媒体不因 DRAFT 标记而另起批准流程" in role_prompt[footer_index:]
+            assert "工具返回的具体范围决定检查结论覆盖哪里" in role_prompt[footer_index:]
             assert role_prompt.rstrip().endswith(footer.rsplit("\n\n", 1)[-1])
 
 
-def test_design_methods_load_only_role_relevant_original_sections() -> None:
+def test_design_methods_load_only_role_relevant_adapted_sections() -> None:
     drama = production_method_skill("method.drama_series")
-    assert "DurationContract.rhythm_shape" in drama.constitution
-    assert "可根据当前题材、单篇时长" in drama.constitution
-    assert "不把原文的秒数、百分比、集数或连续次数变成剧本配额" in (
-        drama.constitution
-    )
-    assert "单篇完结的“尾”可以是已兑现的收束按钮" in (
-        drama.constitution
-    )
-    script_role_sections = {
-        ProductionSkillRole.CONCEPT: {
-            "## 创作大纲",
-            "## 题材（Genre）",
-            "## 开篇",
-            "## 爽感",
-            "## 合规",
-        },
-        ProductionSkillRole.WRITER: {
-            "## 剧本落画布",
-            "## 题材（Genre）",
-            "## 开篇",
-            "## 爽感",
-            "## 合规",
-        },
-    }
-    downstream_or_series_sections = {
-        "## 系列节奏骨架",
-        "## 钩子和悬念结尾",
-        "## 反派",
-        "## storyboard-confirm 前分组检查清单",
-        "## 宫格定稿检查",
-        "## 精剪自检",
-    }
-    for role, expected_sections in script_role_sections.items():
-        role_prompt = drama.role_prompts[role]
-        for section in expected_sections:
-            assert section in role_prompt
-        for section in downstream_or_series_sections:
-            assert section not in role_prompt
+    assert "制作时只读取与当前任务有关的知识和素材" in drama.constitution
+    assert "时长、场次和反转次数随故事调整" in drama.constitution
+    for role, headings in (
+        (ProductionSkillRole.CONCEPT, ("创作大纲", "题材与开篇", "情绪与因果", "本次制作范围")),
+        (ProductionSkillRole.WRITER, ("剧本写入当前项目", "题材与开篇", "情绪与因果")),
+        (ProductionSkillRole.PLANNER, ("本次制作范围", "渐进分镜与可选检查")),
+        (ProductionSkillRole.DIRECTOR, ("镜头语言与情绪", "表演与物理动作", "空间与状态连续性")),
+        (ProductionSkillRole.REVISION_VERIFIER, ("当前范围验收", "空间与状态连续性")),
+    ):
+        body = drama.role_prompts[role]
+        for heading in headings:
+            assert f"## {heading}" in body
+        assert "两轮轻交互" not in body
+        assert "target_episode_scope" not in body
+        assert "## storyboard-confirm 前分组检查清单" not in body
+    assert "不能用设计终态冒充已拍事实" in drama.role_prompts[ProductionSkillRole.DIRECTOR]
+    assert "互补的屏幕视线" in drama.role_prompts[ProductionSkillRole.DIRECTOR]
+    assert "每组写完立即持久化并在内容页显示" in drama.role_prompts[ProductionSkillRole.PLANNER]
+    assert "对白覆盖以及时长合计" in drama.role_prompts[ProductionSkillRole.REVISION_VERIFIER]
+    for role, heading in (
+        (ProductionSkillRole.ASSET_PLANNER, "资产规划"),
+        (ProductionSkillRole.ASSET_BUILDER, "资产制作"),
+        (ProductionSkillRole.ASSET_VERIFIER, "资产检查"),
+    ):
+        assert f"## {heading}" in (drama.prompt_for(role, stage=ProductionPromptStage.ASSETS) or "")
+    assert "## 连续表演与角色声音签名" in drama.role_prompts[ProductionSkillRole.VIDEO_PROMPT_COMPILER]
+    assert "只精简当前超长字段的重复修辞" in drama.role_prompts[ProductionSkillRole.VIDEO_PROMPT_COMPILER]
+    assert "## 资产规划" not in drama.role_prompts[ProductionSkillRole.WRITER]
 
-    planner_prompt = drama.role_prompts[ProductionSkillRole.PLANNER]
-    assert "## 渐进分镜与可选检查" in planner_prompt
-    assert "每组写完立即持久化并在内容页显示" in planner_prompt
-
-    director_prompt = drama.role_prompts[ProductionSkillRole.DIRECTOR]
-    assert "## 镜头语言服务故事" in director_prompt
-    assert "## 表演设计" in director_prompt
-    assert "## 渐进分镜与可选检查" in director_prompt
-    assert "不以固定语速、保留秒数或算法预算阻止写入" in director_prompt
-
-    verifier_prompt = drama.role_prompts[
-        ProductionSkillRole.REVISION_VERIFIER
-    ]
-    for section in {
-        "## 剧本落画布",
-        "## 题材（Genre）",
-        "## 开篇",
-        "## 爽感",
-        "## 合规",
-        "## 渐进分镜与可选检查",
-        "## 跨镜头空间连续性",
-        "## 状态连续性",
-    }:
-        assert section in verifier_prompt
-    assert "对白覆盖以及时长合计" in verifier_prompt
-    for prompt in (planner_prompt, director_prompt, verifier_prompt):
-        assert "## 唯一编译路径：剧本 → 时长账本 → 完整分镜" not in prompt
-        assert "## storyboard-confirm 前分组检查清单" not in prompt
-    assert "Clip N 的末态快照逐项成为 Clip N+1 的起始快照" in (
-        verifier_prompt
-    )
-
-    assert "## 角色 Profile 维度" in drama.role_prompts[
-        ProductionSkillRole.ASSET_REVIEWER
-    ]
-    assert "## 建卡启发式规则" in (
-        drama.prompt_for(
-            ProductionSkillRole.ASSET_PLANNER,
-            stage=ProductionPromptStage.ASSETS,
-        )
-        or ""
-    )
-    assert "## 角色设定图 Prompt 模板" in (
-        drama.prompt_for(
-            ProductionSkillRole.ASSET_BUILDER,
-            stage=ProductionPromptStage.ASSETS,
-        )
-        or ""
-    )
-    assert "## 站位质量" in (
-        drama.prompt_for(
-            ProductionSkillRole.ASSET_VERIFIER,
-            stage=ProductionPromptStage.ASSETS,
-        )
-        or ""
-    )
-    assert "## H3 唯一可执行填空骨架" in drama.role_prompts[
-        ProductionSkillRole.VIDEO_PROMPT_COMPILER
-    ]
-    assert "## 角色 Profile 维度" not in drama.role_prompts[
-        ProductionSkillRole.WRITER
-    ]
-
-    ad_tvc = production_method_skill("method.advertising")
-    assert "## 高信息量问询" in ad_tvc.role_prompts[
-        ProductionSkillRole.CONCEPT
-    ]
-    assert "## Prompt Skeleton" in ad_tvc.role_prompts[
-        ProductionSkillRole.ASSET_REVIEWER
-    ]
-    assert "## Prompt Skeleton" in ad_tvc.role_prompts[
-        ProductionSkillRole.ASSET_BUILDER
-    ]
-    assert "## Unit 编译" in ad_tvc.role_prompts[
-        ProductionSkillRole.VIDEO_PROMPT_COMPILER
-    ]
-    assert "## Unit 编译" not in ad_tvc.role_prompts[
-        ProductionSkillRole.CONCEPT
-    ]
+    advertising = production_method_skill("method.advertising")
+    assert "## 简报与传播证明" in advertising.role_prompts[ProductionSkillRole.CONCEPT]
+    assert "观众价值—可见动作—产品反应—结果" in advertising.role_prompts[ProductionSkillRole.CONCEPT]
+    assert "## 镜头与视觉技法" in advertising.role_prompts[ProductionSkillRole.DIRECTOR]
+    assert "## 资产检查" in advertising.role_prompts[ProductionSkillRole.ASSET_REVIEWER]
+    assert "## 资产制作" in advertising.role_prompts[ProductionSkillRole.ASSET_BUILDER]
+    assert "## Prompt Skeleton" not in advertising.role_prompts[ProductionSkillRole.ASSET_BUILDER]
+    assert "产品动作、卖点因果" in advertising.role_prompts[ProductionSkillRole.VIDEO_PROMPT_COMPILER]
 
     mv = production_method_skill("method.music_video")
-    assert "# Script Writing — 故事与剧本写作" in mv.role_prompts[
-        ProductionSkillRole.WRITER
-    ]
-    assert "## 字体运动机制" in mv.role_prompts[
-        ProductionSkillRole.DIRECTOR
-    ]
-    assert "## 固定六段骨架" in mv.role_prompts[
-        ProductionSkillRole.VIDEO_PROMPT_COMPILER
-    ]
-    assert "## 固定六段骨架" not in mv.role_prompts[
-        ProductionSkillRole.CONCEPT
-    ]
+    assert "## 歌词与内容写作" in mv.role_prompts[ProductionSkillRole.WRITER]
+    assert "## 字体与空间包装" in mv.role_prompts[ProductionSkillRole.DIRECTOR]
+    assert "揭示—附着—跟随—遮挡—传递—落稳" in mv.role_prompts[ProductionSkillRole.DIRECTOR]
+    assert "主音乐绝对时间与本组局部时间建立对应" in mv.role_prompts[ProductionSkillRole.VIDEO_PROMPT_COMPILER]
+    for method in (drama, advertising, mv):
+        compiler = method.role_prompts[ProductionSkillRole.VIDEO_PROMPT_COMPILER]
+        post = compile_production_method_skill_prompt(
+            [method.id], roles=[ProductionSkillRole.DIRECTOR], stage=ProductionPromptStage.POST,
+        )
+        assert "## 当前作品与最小修复" in post
+        assert method.role_prompts[ProductionSkillRole.DIRECTOR] not in post
+        assert method.role_prompts[ProductionSkillRole.CONCEPT] not in post
+        for prompt in (compiler, post):
+            for old_contract in (
+                "H3 唯一可执行填空骨架", "固定六段骨架", "hub_canvas_write_node",
+                "execution_locks", "prompt_section_titles", "review.before_execution",
+            ):
+                assert old_contract not in prompt
 
 
 def test_root_routing_index_is_snapshot_only_not_a_method_prompt_source() -> None:

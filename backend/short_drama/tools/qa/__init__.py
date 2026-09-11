@@ -392,9 +392,11 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
     registry.register(
         ToolSpec(
             id="qa.check_input_compatibility",
-            version=1,
+            version=2,
             category=ToolCategory.QA,
-            description="Assess whether prepared visual inputs are mutually compatible.",
+            description=("Jointly assess selected generation images against the current generation group and its shot windows. "
+                         "Omit image IDs to resolve current group references, or supply a proposed set; omitted current inputs are reported as unobserved. "
+                         "Use scope=SHOT for an explicit single-shot check. Reports are advice, not approval gates."),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
             input_model=QaInputCompatibilityInput,

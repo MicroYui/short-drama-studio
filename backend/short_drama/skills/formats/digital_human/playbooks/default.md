@@ -2,6 +2,8 @@
 
 以下十步与共享 `end_to_end` 阶段对齐，说明数字人口播在每一步需要增加的输入、判断和检查。Agent 可根据已有文案、音频、数字人素材和用户修改范围跳过或重排步骤。
 
+当前可用且明确选用的媒体可直接使用；检查结论按实际观察记录，不增加批准标记或逐阶段确认。后期以项目当前编辑时间线为准，精确修改保护已有裁切、字幕与声音，不为同步流程重建旧 Manifest。
+
 1. **锁定沟通目标、事实来源与主播关系**
 
    - **输入：** 用户目标、来源文档、品牌或产品事实、目标观众、语言、发布场景、现有 `ProjectDocument` 和不可修改项。
@@ -23,7 +25,7 @@
    - **输入：** 主播定位、已有人像/数字人/声音参考、品牌视觉、背景需求、图表、演示素材和 B-roll。
    - **决策：** 分开管理主播身份、服装造型、声音身份、背景、产品/演示物、图形和补充画面；只准备当前稿件真正需要的素材。
    - **可调用 Tool：** `artifact.create_asset`、`artifact.update_brief`、`artifact.search_catalog`、`artifact.import_catalog`、`artifact.import_local_version`、`artifact.import_url_version`、`artifact.inspect_coverage`、`image.enqueue`、`image.compose_reference_sheet`、`qa.inspect_asset_version`、`artifact.review_version`、`artifact.add_reference_entry`、`audio.update_voice_reference`。
-   - **产物：** 主播与声音的批准版本、背景/图形/B-roll 清单以及每项资产的用途。
+   - **产物：** 主播与声音的可用版本、背景/图形/B-roll 清单以及每项资产的用途。
    - **检查与返工：** 人脸、服装、声线、品牌样式或产品外观不一致时先修复资产；没有表达作用的 B-roll 不进入生产清单。
 
 4. **按自然语音边界设计表演段与镜头**
@@ -52,9 +54,9 @@
 
 7. **编译表达指令并生成可比较候选**
 
-   - **输入：** 当前台词/音频版本、ShotPlan、ReferencePlan、批准媒体和当前路线。
+   - **输入：** 当前台词/音频版本、ShotPlan、ReferencePlan、可用媒体和当前路线。
    - **决策：** Prompt 忠实表达说话人、台词、情绪、表情、目光、身体动作、摄影机和背景，不自行增加新主张；候选数量按口型、身份和表演不确定性动态决定。
-   - **可调用 Tool：** REAL_H3 使用 `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`task.advance`、`task.recover_output`；MOCK 使用 `video.enqueue`、`task.drain`、`task.reconcile`。
+   - **可调用 Tool：** REAL_H3 可用 `route.prepare_h3_group` 组合准备、编译与提交；需要逐项控制时使用 `route.compile_h3_prompt`、`route.preview_h3_probe`、`route.execute_h3_plan`、`task.advance`、`task.recover_output`；MOCK 使用 `video.enqueue`、`task.drain`、`task.reconcile`。
    - **产物：** 可追溯 GenerationTask 与一个或多个数字人口播 Take。
    - **检查与返工：** 第一条候选出现后立即抽查台词、声音、身份和口型。输入版本错误先停止后续候选；随机表演缺陷才考虑同路线再生成。
 
@@ -70,14 +72,14 @@
 
    - **输入：** 选定 Takes、锁定显示文本、图形/B-roll、音乐与音效需求、交付画幅。
    - **决策：** 按语义和呼吸断字幕；在不打断表达的前提下安排图形与 B-roll；统一对白可懂度、响度、环境声和段间停顿。
-   - **可调用 Tool：** `timeline.rebuild`、`audio.inspect_manifest`、`audio.update_voice_reference`；其他后期能力仅在 Tool Catalog 已注册时使用。
-   - **产物：** 可重建 TimelineManifest、字幕/图形布局、辅助画面入出点和音频关系。
+   - **可调用 Tool：** `timeline.read_editorial`、`timeline.edit_clips`、`timeline.save_editorial`、`audio.inspect_manifest`、`audio.update_voice_reference`；其他后期能力仅在 Tool Catalog 已注册时使用。
+   - **产物：** 当前编辑时间线、字幕/图形布局、辅助画面入出点和音频关系。
    - **检查与返工：** 字幕不得改写事实或遮挡嘴部/手势/演示物；B-roll 与口播不一致时替换画面，不修改正确台词迁就素材。
 
 10. **完成整片沟通效果验收与导出**
 
-   - **输入：** 当前 TimelineManifest、最新口播稿、主播/声音基准和交付要求。
+   - **输入：** 当前已保存编辑时间线、最新口播稿、主播/声音基准和交付要求。
    - **决策：** 从完整观看判断信息是否准确易懂、主播是否可信、形象和声线是否连续、口型是否可接受、辅助画面是否真正帮助理解。
-   - **可调用 Tool：** `qa.review_episode`、`timeline.export`；发现问题时用 `change.preview` 或相应稿件、资产、镜头、视频 Tool 建立局部返工。
+   - **可调用 Tool：** 按需使用 `qa.review_episode`；当前剪辑使用 `timeline.export_editorial`、`timeline.read_export`；发现问题时用 `change.preview` 或相应稿件、资产、镜头、视频 Tool 建立局部返工。
    - **产物：** 整片审核记录、当前 ExportRecord 和可选优化项。
    - **检查与返工：** 局部改词后只重做依赖该台词/音频的段落并复核相邻剪辑点；导出对应最新时间线且满足内容和技术规格后才结束。

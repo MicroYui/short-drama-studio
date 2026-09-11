@@ -149,10 +149,12 @@ class OpenAICompatibleLanguageClient:
         max_output_tokens: int = 2200,
     ) -> str:
         from short_drama.studio_trace import clean_trace_text, record_trace
+        from short_drama.studio_generation_draft import StreamedCreativeDraft
         from short_drama.agent_runtime.token_budget import ContextBudget, count_text_tokens
         from uuid import uuid4
 
         call_id = f"model-{uuid4().hex[:12]}"
+        draft = StreamedCreativeDraft(call_id)
         record_trace("model.input", {
             "call_id": call_id, "model": self.model, "reasoning_effort": self.reasoning_effort,
             "instructions": clean_trace_text(instructions), "input_text": clean_trace_text(input_text),
@@ -178,6 +180,7 @@ class OpenAICompatibleLanguageClient:
         def capture_text_delta(delta: str) -> None:
             nonlocal partial_output_characters
             partial_output_characters += len(delta)
+            draft.receive(delta)
             if self.text_delta_observer is not None:
                 self.text_delta_observer(delta)
 
@@ -279,6 +282,7 @@ class OpenAICompatibleLanguageClient:
             error_kind = type(exc).__name__
             raise
         finally:
+            draft.finish(success=success)
             finished_at = self._monotonic_clock()
             log_language_generation(
                 call_id=call_id,

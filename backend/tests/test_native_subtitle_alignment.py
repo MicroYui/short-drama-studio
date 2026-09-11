@@ -119,6 +119,7 @@ def test_alignment_tool_preserves_media_and_text_and_survives_restart(tmp_path: 
     })
     assert result.status == ToolCallStatus.SUCCEEDED, result.error
     aligned = NativeSubtitleAlignmentResponse.model_validate(result.output)
+    assert aligned.manifest is not None
     assert aligned.manifest.version == 2
     assert result.artifact_refs[0].artifact_id == aligned.manifest.id
     assert aligned.manifest.video_clips == before.video_clips
@@ -202,6 +203,7 @@ def test_missing_lexical_anchors_preserves_windows_and_reports_uncertainty(tmp_p
     })
     assert result.status == ToolCallStatus.SUCCEEDED, result.error
     aligned = NativeSubtitleAlignmentResponse.model_validate(result.output)
+    assert aligned.manifest is not None
     assert aligned.manifest.subtitle_cues == before.subtitle_cues
     assert aligned.adjustments == []
     assert len(aligned.warnings) == 2

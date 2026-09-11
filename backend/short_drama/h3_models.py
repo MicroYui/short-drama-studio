@@ -389,6 +389,7 @@ class H3ProductionRoutePlan(DomainModel):
     created_at: str
     updated_at: str
     executed_at: str | None = None
+    source_operation_id: str | None = None
 
 
 class H3RouteAssetPreparationUpdateRequest(DomainModel):
@@ -477,6 +478,7 @@ class H3ShotRouteDirective(DomainModel):
 
 
 class H3ProductionRoutePlanRequest(DomainModel):
+    source_operation_id: str | None = Field(default=None, min_length=1)
     shot_ids: list[str] = Field(default_factory=list[str], max_length=500)
     generation_plan_document_id: str | None = Field(
         default=None,
@@ -718,6 +720,9 @@ class H3ProviderRun(DomainModel):
     prompt: str
     media_inputs: list[H3MediaInput] = Field(default_factory=list[H3MediaInput])
     request: H3VideoRequest | None = None
+    # None preserves conservative recovery for runs written before this marker.
+    # PREPARED is only local input work; STARTED is persisted before provider IO.
+    submission_attempt_state: Literal["PREPARED", "STARTED"] | None = None
     uploaded_inputs: list[H3UploadedInput] = Field(default_factory=list[H3UploadedInput])
     latest_remote_task: H3RemoteTask | None = None
     pricing: H3PricingSnapshot

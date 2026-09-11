@@ -1,7 +1,7 @@
 # Agent、Skills、模型与实时进度重构方案
 
-> 日期：2026-09-09
-> 状态：核心重构已落地，整份方案尚未逐项完成。2026-09-09 根据当前代码、真实请求快照和相关测试重新核对，下面明确区分已完成项、兼容选择与剩余工作。此前将本文整体概括为“已完成”不准确。镜头编辑以 [局部剪辑与时长规则](shot-editing-and-timing.md) 为准。
+> 日期：2026-09-11
+> 状态：本方案的运行职责、方法加载、模型配置、方法详情与真实文字增量链路已实现。2026-09-11 按实际调用入口、离线测试和本地 HTTP/React 检查更新；全产品验收和真实运行结果以交付清单为准。镜头编辑以 [局部剪辑与时长规则](shot-editing-and-timing.md) 为准。
 > 产品依据：[产品页面方案](product-interface-spec.md)、[用户修改记录](product-redesign-notes.md)。
 
 ## 0. 当前完成情况
@@ -11,18 +11,18 @@
 | 模型与推理强度 | 已完成。语言默认统一为 `gpt-6-astra / xhigh`，请求体实际发送该配置 | `language_defaults.py`、`language_models.py`、`providers/openai_compatible_language_client.py`；Leader/Worker 经同一客户端 resolver 创建 |
 | 运行职责与输出协议分离 | 已完成。共同原则、Leader、Worker 与结构化输出协议拆成独立 Markdown，并由运行时读取 | `prompts/runtime/{common,leader,worker,leader_protocol,worker_protocol}.md`；`production_manager.py` 的两个运行提示词入口 |
 | 方法元数据、选择与共享说明去重 | 已完成。11 个方法使用独立 manifest，按角色和阶段读取相关片段；多个方法共享的前言/后记按来源路径只加载一次。用途名称及新 ID 已启用，旧 ID 读取时兼容解析 | `skills/loader.py`、`skills/models.py`、`production_profiles.py`、`skill_ids.py`；不是对所有章节正文进行全局去重 |
-| 本地经验进入实际提示词 | 已接通。叙事时长、可复用道具、确定性文字及正文引用经验有实际章节映射 | 短剧方法的 `references/project-adaptation.md` 与 `manifest.json`；原文、体裁和 Provider 方法继续保留 |
+| 本地经验进入实际提示词 | 已接通。11 个方法的全部默认角色与阶段覆盖均使用本地有效章节，保留具体专业判断和正常失败例；去私有工具、固定确认流程与能力假定，POST 不误载分镜职责 | 各方法 `manifest.json`、`references/runtime-adaptation.md`、`references/production-method.md`；短剧另有故事、编译、后期专段；来源原文保留 |
 | Skill 正文统一排版及目录清理 | 已完成。11 个方法统一为用途、输入、方法、交付、检查、来源与加载；删除 22 份重复/闲置文件及 25 个空目录，保留方法片段和出处 | [当前方法目录](../backend/short_drama/skills/README.md)、`skills/methods/*/SKILL.md` |
-| 产品内方法详情 | 部分完成。当前能看名称、简介、指定偏好并保存；还不能展开完整正文、来源与实际加载片段 | `frontend/features/short-drama/StudioSettings.tsx` 只呈现 `label`、`description` |
-| 实时更新 | 逐场保存、实际任务事件和内容刷新已接通；逐字生成草稿尚未接通产品前端 | `/studio/projects/{project_id}/events`、`StudioWorkspace.tsx`；语言客户端已有 `text_delta_observer`，当前产品未设置该回调 |
+| 产品内方法详情 | 已完成。可查看正文、来源与按职责/阶段加载的片段，区分项目偏好和本次 Worker 实际选用 | `studio_methods.py`、`GET /studio/methods/{id}`、`StudioMethodDetail.tsx`，设置与制作任务入口 |
+| 实时更新 | 逐场保存、实际任务事件、内容刷新与供应商真实文字增量均已接通。未解析完整的内容仅显示为生成中草稿 | `studio_generation_draft.py`、`model.draft`、`StudioGenerationDraft.tsx`、`/studio/projects/{project_id}/events`；非流式返回不伪造增量 |
 | 普通产品 Trace | 已完成模型输入/输出、实际配置、耗时和供应商用量记录，并可导出；保留失败和恢复事实 | `studio_trace.py`、`observability.py`、`studio_trace_export.py` |
 | 本文涉及的编辑桥 | 已接通，采用后续确认的单镜头局部剪辑与整集时间线合并方案 | [镜头编辑与时长](shot-editing-and-timing.md)、[交付清单](product-delivery-checklist.md) |
 
-本次离线重跑四份相关测试，共 **65 项通过**：`test_production_method_skill_loader.py`、`test_production_skill_loader.py`、`test_minimax_design_workflow_integration.py`、`test_language_provider.py`。它们验证已实现的加载和请求行为，不代表未接通的界面已通过验收。
+2026-09-09 离线重跑四份相关测试，共 **65 项通过**：`test_production_method_skill_loader.py`、`test_production_skill_loader.py`、`test_minimax_design_workflow_integration.py`、`test_language_provider.py`。它们验证已实现的加载和请求行为，不代表未接通的界面已通过验收。
 
-重新读取既有验收记录：仅剧本任务的 13 次调用均为 Astra/xhigh；成片任务 Trace 中 36 份完整请求快照也全部使用此配置，其中 20 次包含 Leader 提示词、16 次包含 Worker 提示词，并有 36 份供应商用量记录。本次核对没有重新调用模型。
+重新读取既有验收记录：仅剧本任务的 13 次调用均为 Astra/xhigh；成片任务 Trace 中 36 份完整请求快照也全部使用此配置，其中 20 次包含 Leader 提示词、16 次包含 Worker 提示词，并有 36 份供应商用量记录。该次核对没有重新调用模型。
 
-原目录树是职责归属建议，没有逐个照搬：当前方法使用 `methods/drama_series`、`brand_promo`、`music_video` 等用途名称；上游原文和实际使用的译文集中在 `sources/`。旧方法 ID 在 `skill_ids.py` 解析为新 ID，不保留重复的方法目录；旧 Trace 不改写。检查职责继续位于共享角色/阶段方法中，没有单独的 `runtime/verifier.md`。这些兼容选择与下述未完成项分开记录。
+原目录树是职责归属建议，没有逐个照搬：当前方法使用 `methods/drama_series`、`brand_promo`、`music_video` 等用途名称；上游原文和实际使用的译文集中在 `sources/`。旧方法 ID 在 `skill_ids.py` 解析为新 ID，不保留重复的方法目录；旧 Trace 不改写。检查职责继续位于共享角色/阶段方法中，没有单独的 `runtime/verifier.md`。Leader 可按实际职责合并或并行工作，简单任务不强制拆为 Planner、Builder、Verifier；检查角色按实际需要使用。
 
 ## 1. 目标与保留基础
 
@@ -76,7 +76,7 @@ skills/sources/             上游原文、翻译、来源与本地经验索引
 5. 必要检查和具体例子。
 6. 来源与本地经验说明。
 
-元数据已放入独立 manifest.json，列明 ID、适用任务、片段路径和来源，并用 Python 标准 JSON 读取。产品“创作方法”页目前呈现简介和选择操作；完整正文、片段、来源与实际加载入口的展开视图尚待实现。
+元数据已放入独立 manifest.json，列明 ID、适用任务、片段路径和来源，并用 Python 标准 JSON 读取。产品“创作方法”页和制作任务已提供详情：后端读取实际 `production_method_skill` 的正文、来源、角色与阶段片段；前端可按本次 Worker 实际选中的方法查看，项目偏好单独展示。
 
 ## 4. 保留、合并与迁移清单
 
@@ -152,7 +152,7 @@ skills/sources/             上游原文、翻译、来源与本地经验索引
 
 当前产品入口为 `StudioWorkspace.tsx`。它通过 `backendFetch` 读取 SSE，按游标重连，并依据 `content.updated`、`assets.updated` 等事件刷新内容；Agent 动作与结果持续呈现在右侧。真实仅剧本任务已验证每个完整场次保存后出现，无需等待整个任务结束。
 
-尚缺的是实际文本 delta 到前端“生成中草稿”的完整链路。客户端虽支持 `text_delta_observer`，产品创建客户端时还没有设置该回调，前端也没有对应草稿事件处理。不能把逐场刷新或 SSE 存在等同于逐字预览已完成。下表保留目标行为，其中 delta 一行待接通。
+实际文本 delta 已从语言客户端 `text_delta_observer` 接到 `studio_generation_draft.py`，写出 `model.draft` Trace/事件并在 `StudioGenerationDraft` 中显示。草稿仅投影结构化创作字段，带调用及任务标识；正式正文仍等待完整解析和保存。Fake SSE 经实际 HTTP 和 React 页面验证多次文字增长时，正式场次仍为空；非流式 JSON 响应不会被伪装成逐字生成。
 
 | 事件 | 正文 | 右侧 |
 | --- | --- | --- |
@@ -185,10 +185,11 @@ skills/sources/             上游原文、翻译、来源与本地经验索引
 
 ## 11. 验证与剩余工作
 
-第 0 节记录前次状态核对通过的 65 项检查；目录清理和命名调整的检查记录在 `output/skill-cleanup/`，编辑、事件及 Trace 的既有真实验收记录见 [交付清单](product-delivery-checklist.md)。正文整理已补齐，以下两项仍需实现后才能将整份方案标记完成：
+第 0 节记录前次状态核对通过的 65 项检查；目录清理和命名调整的检查记录在 `output/skill-cleanup/`。2026-09-11 已补齐方法详情和真实文字增量链路，`test_studio_method_activity_drafts.py` 的 5 项检查及本地 HTTP/React 交互验证通过；前端类型检查和构建通过。当前整产品验收及真实调用统计由 [交付清单](product-delivery-checklist.md) 统一记录。
 
-1. 为产品中的方法卡增加正文、来源和实际加载入口的详情。当前简介和偏好保存继续保留。
-2. 将实际文本增量接入带调用/对象标识的草稿事件与前端预览；草稿与正式正文分开，验证断线、完成、失败和用户编辑时的表现。
+本轮新增实际加载回归遍历 11 个方法的全部角色与阶段组合，检查组装后实际输入中的本地章节、专业知识、正常失败例与职责隔离；所有 `role_source_sections`、`stage_role_source_sections` 和 `role_references` 均不再直接载入上游私有运行正文。上游原文、作者与来源仍在 sources 和 manifest 保留。广告的传播证明、MV 的主音乐/歌词时间与空间字体、短剧的摄影/表演/连续性，以及动画、品牌、产品、剪纸等体裁工艺均有可执行判断。资产规划、制作和检查按各自职责加载，不再把整份旧资产流程复制给三种角色。
+
+相关回归还覆盖单一 H3 输出格式、确定性字段顺序、原文 Trace、超长字段局部修复、导演嵌套调用的方法/阶段继承和真实采用边界。方法详情直接显示这些实际片段，11 个概览同步说明本地适配与可选参考策略。当前方法和 Prompt 测试为本地无收费验证；必要真实 H3 编译、回收和一次画面观察另见 [H3 生成组准备](h3-group-operation.md)，候选发现的身份疑点和空间/道具问题如实保留，不把测试通过或技术回收等同于视频质量提升。
 
 验证原则继续采用原方案：
 
@@ -199,3 +200,13 @@ skills/sources/             上游原文、翻译、来源与本地经验索引
 5. 核对 Trace 导出仍能定位原始剧本、素材、调用和最终视频。
 
 测试与实际功能检查通过后再交付，不因迁模型扩建质量竞赛、强制审批或独立稳定性实验。未验证的代理能力和上游导出差异如实记录并在对应实现中解决。
+
+## 12. 2026-09-11 生成准备与提示词编译
+
+H3 输入保留逐镜事实、对白原文、有序媒体与真实时窗，Provider 标签和顶层字段顺序由代码组装。视频编译角色不再同时接收 Design 的固定六段骨架与本地 Prompt IR；11 个方法只提供当前体裁需要的动作、声音、字体与连续性知识。超长输出只请求修复可压缩的正文段，保留其余原文；初始输出、修复输入和完整装配结果进入 Trace，最终仍验证全部镜头和对白。
+
+导演建议读取本次 WorkOrder 的方法与阶段，POST 使用实际采用媒体和当前剪辑职责。前镜设计末态明确标为计划；真实前镜边界从当前时间线的采用 Take 和源区间确定，只有匹配当前文件、镜头修订和观察范围的报告才提供实际末态证据。没有这类观察时返回未知，静态观察不代表听审。
+
+`route.prepare_h3_group` 把当前生成组、按需更新的生成计划、输入解析、一次提示词编译、Route 保存与可选任务入队组成可恢复操作，交接稳定的 operation、plan、unit、route 和 task 引用。未变的组可复用保存的 Prompt；其他组或全片计划更新不强制重复扩写。返工关联原 Take 和修复记录，生成受影响组的新候选，不能称为视频局部重绘。详见 [H3 生成组准备](h3-group-operation.md)。
+
+可选官方 `H3_CONTEXT_IR` 与默认 Astra 编译互斥，异步任务等待使用保存的 operation 和下次查询时间恢复；当前没有进行真实收费调用、没有验证官方账户鉴权，也没有宣称质量或速度收益。细节见 [官方编译适配](h3-context-ir-adapter.md)。

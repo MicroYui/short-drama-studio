@@ -21,8 +21,12 @@ class ShotWindow:
     clips: list[EditorClip]
 
 
-def _timeline(project: EditorProject) -> EditorTimeline:
-    return next(item for item in project.timelines if item.id == project.activeTimelineId)
+def _timeline(project: EditorProject, timeline_id: str | None = None) -> EditorTimeline:
+    target_id = timeline_id or project.activeTimelineId
+    timeline = next((item for item in project.timelines if item.id == target_id), None)
+    if timeline is None:
+        raise ValueError(f"/timeline_id: {target_id!r} is not a current editorial timeline. Re-read the selected timeline.")
+    return timeline
 
 
 def _json(project: EditorProject) -> dict[str, JsonValue]:
@@ -49,6 +53,11 @@ def _select_window(timeline: EditorTimeline, shot_id: str, anchor: str | None) -
     return selected, windows
 
 
+def editorial_shot_windows(timeline: EditorTimeline, shot_id: str) -> list[ShotWindow]:
+    """Actual contiguous uses of a shot, shared by adoption and structural edits."""
+    return _windows(timeline, shot_id)
+
+
 def _owned(timeline: EditorTimeline, window: ShotWindow, shot_id: str) -> tuple[set[str], set[str]]:
     ids = {clip.id for clip in window.clips}
     for clip in timeline.clips:
@@ -64,19 +73,22 @@ def _owned(timeline: EditorTimeline, window: ShotWindow, shot_id: str) -> tuple[
                 additions = {clip.id, *linked} - ids
                 ids.update(additions)
                 changed = changed or bool(additions)
-    cue_ids = {cue.id for cue in timeline.subtitles if cue.startTime >= window.start - 0.001 and cue.endTime <= window.end + 0.001
-        and (cue.model_extra or {}).get("sourceShotId", shot_id) == shot_id}
+    # A subtitle can bridge a cut. Its visible interval, rather than a historical
+    # sourceShotId, determines which local views must show the same current cue.
+    cue_ids = {cue.id for cue in timeline.subtitles
+               if cue.startTime < window.end and cue.endTime > window.start}
     return ids, cue_ids
 
 
-def read_shot_editorial(service: ShortDramaService, project_id: str, shot_id: str, anchor_clip_id: str | None = None) -> StudioEditorial:
+def read_shot_editorial(service: ShortDramaService, project_id: str, shot_id: str, anchor_clip_id: str | None = None,
+                        *, timeline_id: str | None = None) -> StudioEditorial:
     aggregate = service.get_project(project_id)
     shot = next((item for item in aggregate.document.shots if item.id == shot_id), None)
     if shot is None:
         raise KeyError(shot_id)
     current = read_editorial(service, project_id)
     full = EditorProject.model_validate(current.project)
-    timeline = _timeline(full)
+    timeline = _timeline(full, timeline_id)
     window, windows = _select_window(timeline, shot_id, anchor_clip_id)
     insertion = window is None
     start = window.start if window else max((item.startTime + item.duration for item in timeline.clips if item.type == "video"), default=0.0)
@@ -125,7 +137,7 @@ def read_shot_editorial(service: ShortDramaService, project_id: str, shot_id: st
             clip.model_extra["sourceWindowEnd"] = source_end
     for cue in local_timeline.subtitles:
         cue.startTime = max(0.0, cue.startTime - origin)
-        cue.endTime -= origin
+        cue.endTime = min(window.end, cue.endTime) - origin if window else cue.endTime - origin
     used_assets = {item.assetId for item in local_timeline.clips}
     local.assets = [item for item in local.assets if item.id in used_assets]
     for asset in local.assets:
@@ -182,13 +194,87 @@ def _retime_subtitles(before: EditorTimeline, after: EditorTimeline, duration: f
     return result
 
 
-def save_shot_editorial(service: ShortDramaService, project_id: str, shot_id: str, request: StudioTimelineSave) -> StudioMutationResult:
+def _merge_local_subtitles(
+    before: EditorTimeline, after: EditorTimeline, global_timeline: EditorTimeline,
+    *, start: float, old_duration: float, duration: float,
+    explicit_fields: dict[str, set[str]] | None,
+) -> list[EditorSubtitle]:
+    """Restore unseen cue edges, while following source edits in this window.
+
+    The server recomputes the baseline from the requested editorial revision;
+    neither a browser-only extra field nor a second subtitle record is needed.
+    """
+    local_originals = {cue.id: cue for cue in before.subtitles}
+    global_originals = {cue.id: cue for cue in global_timeline.subtitles}
+    reserved_ids = {*global_originals, *(cue.id for cue in after.subtitles)}
+    old_end, delta = start + old_duration, duration - old_duration
+
+    def geometry(timeline: EditorTimeline) -> list[tuple[str, str | None, float, float, float, float, bool]]:
+        return sorted((clip.id, clip.assetId, clip.startTime, clip.duration, clip.trimStart, clip.speed, clip.reversed)
+                      for clip in timeline.clips if clip.type == "video")
+
+    same_frames = geometry(before) == geometry(after)
+    result: list[EditorSubtitle] = []
+    for cue in after.subtitles:
+        local_original, original = local_originals.get(cue.id), global_originals.get(cue.id)
+        fields = (explicit_fields or {}).get(cue.id, set[str]())
+        start_changed = "start_seconds" in fields or local_original is None or cue.startTime != local_original.startTime
+        end_changed = "end_seconds" in fields or local_original is None or cue.endTime != local_original.endTime
+        keep_prefix = original is not None and original.startTime < start and not start_changed
+        keep_suffix = original is not None and original.endTime > old_end and not end_changed
+        single = after.model_copy(update={"subtitles": [cue]})
+        # Unchanged geometry also covers an existing multi-clip shot: opening
+        # and saving must not split one cue into several identical captions.
+        if same_frames:
+            candidates = [cue.model_copy(deep=True, update={"startTime": max(0.0, cue.startTime), "endTime": min(duration, cue.endTime)})]
+        else:
+            baseline = before.model_copy(update={"subtitles": []}) if start_changed or end_changed else before
+            candidates = _retime_subtitles(baseline, single, duration)
+        if not candidates and (keep_prefix or keep_suffix):
+            # The selected frames may all have been removed, while part of this
+            # cue still accompanies the material before/after the removed use.
+            candidates = [cue.model_copy(deep=True, update={"startTime": 0.0, "endTime": duration})]
+        joined: list[EditorSubtitle] = []
+        for candidate in sorted(candidates, key=lambda item: item.startTime):
+            if joined and candidate.startTime <= joined[-1].endTime + 0.001:
+                joined[-1].endTime = max(joined[-1].endTime, candidate.endTime)
+            else:
+                candidate.id = cue.id
+                if joined:
+                    part = len(joined)
+                    while f"{cue.id}-part-{part}" in reserved_ids:
+                        part += 1
+                    candidate.id = f"{cue.id}-part-{part}"
+                    reserved_ids.add(candidate.id)
+                joined.append(candidate)
+        candidates = joined
+        for index, candidate in enumerate(candidates):
+            candidate.startTime += start
+            candidate.endTime += start
+            if original is not None:
+                merged = original.model_copy(deep=True)
+                merged.id, merged.text, merged.trackIndex = candidate.id, candidate.text, candidate.trackIndex
+                merged.style = {**original.style, **candidate.style}
+                merged.startTime, merged.endTime = candidate.startTime, candidate.endTime
+                candidate = merged
+                if index == 0 and keep_prefix:
+                    candidate.startTime = original.startTime
+                if index == len(candidates) - 1 and keep_suffix:
+                    candidate.endTime = original.endTime + delta
+            if candidate.endTime > candidate.startTime:
+                result.append(candidate)
+    return result
+
+
+def save_shot_editorial(service: ShortDramaService, project_id: str, shot_id: str, request: StudioTimelineSave,
+                        *, explicit_subtitle_fields: dict[str, set[str]] | None = None,
+                        timeline_id: str | None = None) -> StudioMutationResult:
     from short_drama.studio_service import StudioContentConflict
     with service.studio.lock:
         current = read_editorial(service, project_id)
         if current.revision != request.expected_revision:
             raise StudioContentConflict("剪辑已有更新；你的镜头剪辑仍保留，请合并后保存。")
-        before = read_shot_editorial(service, project_id, shot_id, request.anchor_clip_id)
+        before = read_shot_editorial(service, project_id, shot_id, request.anchor_clip_id, timeline_id=timeline_id)
         assert before.scope is not None
         raw = request.timeline.get("project")
         if not isinstance(raw, dict):
@@ -197,7 +283,9 @@ def save_shot_editorial(service: ShortDramaService, project_id: str, shot_id: st
         if len(local.timelines) != 1:
             raise ValueError("镜头剪辑只能包含一个局部时间线。")
         full = EditorProject.model_validate(current.project)
-        target, source = _timeline(full), _timeline(local)
+        target, source = _timeline(full, timeline_id), _timeline(local)
+        if timeline_id is not None and source.id != target.id:
+            raise ValueError(f"/timeline_id: local timeline {source.id!r} does not match selected timeline {target.id!r}.")
         old_local = _timeline(EditorProject.model_validate(before.project))
         window, _ = _select_window(target, shot_id, request.anchor_clip_id)
         owned, owned_cues = _owned(target, window, shot_id) if window else (set[str](), set[str]())
@@ -220,7 +308,8 @@ def save_shot_editorial(service: ShortDramaService, project_id: str, shot_id: st
         start = before.scope.film_start_seconds
         old_end = start + before.scope.duration_seconds
         delta = duration - before.scope.duration_seconds
-        source.subtitles = _retime_subtitles(old_local, source, duration)
+        source.subtitles = _merge_local_subtitles(old_local, source, target, start=start,
+            old_duration=before.scope.duration_seconds, duration=duration, explicit_fields=explicit_subtitle_fields)
         track_ids = {item.id: index for index, item in enumerate(target.tracks)}
         for track in source.tracks:
             if track.id not in track_ids:
@@ -252,13 +341,14 @@ def save_shot_editorial(service: ShortDramaService, project_id: str, shot_id: st
                 clip.model_extra["linkedClipIds"] = [item for item in linked if any(other.id == item for other in source.clips)]
             target.clips.append(clip)
         for cue in source.subtitles:
-            track_style = (source.tracks[cue.trackIndex].model_extra or {}).get("subtitleStyle")
-            if isinstance(track_style, dict):
+            source_track = source.tracks[cue.trackIndex]
+            track_style = (source_track.model_extra or {}).get("subtitleStyle")
+            old_track = next((track for track in old_local.tracks if track.id == source_track.id), None)
+            previous_style = (old_track.model_extra or {}).get("subtitleStyle") if old_track else None
+            if isinstance(track_style, dict) and track_style != previous_style:
                 cue.style = {**cast(dict[str, JsonValue], track_style), **cue.style}
-            cue.trackIndex = track_ids[source.tracks[cue.trackIndex].id]
-            cue.startTime += start
-            cue.endTime += start
-            if cue.model_extra is not None:
+            cue.trackIndex = track_ids[source_track.id]
+            if cue.model_extra is not None and "sourceShotId" not in cue.model_extra and cue.id not in owned_cues:
                 cue.model_extra["sourceShotId"] = shot_id
             target.subtitles.append(cue)
         asset_ids = {item.id for item in full.assets}

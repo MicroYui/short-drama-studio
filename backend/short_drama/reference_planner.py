@@ -8,7 +8,8 @@ import json
 from enum import StrEnum
 from typing import Literal, cast
 
-from pydantic import Field, model_validator
+from pydantic import Field, JsonValue, model_validator
+from short_drama.skill_ids import SkillIds
 
 from short_drama.models import (
     ActionBeat,
@@ -34,6 +35,7 @@ from short_drama.models import (
     ReferenceRequirement,
     ReferenceRole,
     ShotPlan,
+    ShotReferenceCue,
     ShotTimelineBeat,
     SpatialInteractionConstraint,
 )
@@ -44,6 +46,10 @@ from short_drama.production_profiles import (
 )
 from short_drama.quality_learning import H3CapabilityProfileResponse
 from short_drama.style_context import declared_style_value
+from short_drama.video_inspection import (
+    selected_generation_reference_ids,
+    semantic_reference_entries,
+)
 
 
 class KeyframePosition(StrEnum):
@@ -131,6 +137,12 @@ class DirectorAdviceRequest(ReferencePlanPreviewRequest):
     inspection_id: str | None = Field(default=None, max_length=200)
     audio_inspection_id: str | None = Field(default=None, max_length=200)
     episode_review_id: str | None = Field(default=None, max_length=200)
+    method_skill_ids: SkillIds | None = Field(
+        default=None, description="Explicit method selection; omit to inherit the current WorkOrder, or pass [] for none.",
+    )
+    production_prompt_stage: ProductionPromptStage | None = Field(
+        default=None, description="Current task stage; omitted values inherit the WorkOrder rather than a role-name guess.",
+    )
 
 
 class DirectorAdvisoryCategory(StrEnum):
@@ -171,6 +183,7 @@ class ShotPlanPatch(DomainModel):
     audio_intent: str | None = Field(default=None, min_length=1)
     dialogue_line_ids: list[str] | None = None
     timeline_beats: list[ShotTimelineBeat] | None = None
+    references: list[ShotReferenceCue] | None = None
     continuity: ContinuityState | None = None
     transition_out: str | None = Field(default=None, min_length=1)
     merge_candidate: bool | None = None
@@ -190,6 +203,7 @@ class ReplacementShotDraft(DomainModel):
         default_factory=list[ShotTimelineBeat],
         max_length=24,
     )
+    references: list[ShotReferenceCue] | None = Field(default=None, description="显式指定拆分镜引用；省略时保留原镜当前选用媒体，不虚构正文锚点。")
     continuity: ContinuityState
     transition_out: str = Field(min_length=1)
     merge_candidate: bool = False
@@ -203,6 +217,7 @@ class DirectorRepairDecisionRequest(DomainModel):
     strategy: DirectorRepairStrategy
     reason: str = Field(min_length=1, max_length=4000)
     source_take_id: str | None = Field(default=None, max_length=200)
+    expected_shot_revision: int | None = Field(default=None, ge=1, description="读取修复对象时的当前修订；仅保护该镜头，不阻挡无关修改。")
     issue_codes: list[str] = Field(default_factory=list[str], max_length=32)
     shot_patch: ShotPlanPatch | None = None
     reference_plan: ShotReferencePlanUpdateRequest | None = None
@@ -291,12 +306,16 @@ class DirectorAdviceResponse(DirectorAdvicePayload):
     capability_profile_version: str
     qa_issue_codes: list[str] = Field(default_factory=list[str])
     proceed_allowed: Literal[True] = True
+    method_skill_ids: list[str] = Field(default_factory=list[str])
+    production_prompt_stage: ProductionPromptStage = ProductionPromptStage.STORYBOARD
 
 
 class DirectorLoopResponse(DomainModel):
     advice: DirectorAdviceResponse
     repair_applied: bool
-    next_action: Literal["REGENERATE_SHOT", "AWAIT_USER", "NO_CHANGE"]
+    next_action: Literal["PREPARE_H3_GROUP", "REGENERATE_SHOT", "AWAIT_USER", "NO_CHANGE"]
+    next_tool: str | None = None
+    next_tool_arguments: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     project: ProjectAggregate
 
 
@@ -377,11 +396,36 @@ def preview_reference_plan(
     request: ReferencePlanPreviewRequest,
 ) -> ReferencePlanPreviewResponse:
     requirements = _filtered_requirements(plan, request.requirement_ids)
+    cues = [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]
+    explicit_subject_ids = {cue.subject_asset_id for cue in cues}
+    editorial_only_subject_ids = explicit_subject_ids - {
+        cue.subject_asset_id for cue in cues if cue.usage == "GENERATION"
+    }
+    editorial_requirement_ids = [
+        item.id for item in requirements if item.subject_asset_id in editorial_only_subject_ids
+    ]
+    requirements = [
+        item for item in requirements if item.subject_asset_id not in editorial_only_subject_ids
+    ]
     max_images = request.max_images or plan.max_reference_images
     valid_entries = usable_reference_pack_entries(document)
-    selected: list[ReferenceSelection] = []
-    missing: list[str] = []
-    warnings: list[str] = []
+    selected, missing, warnings = _current_cue_selections(
+        document, shot, plan, requirements, valid_entries,
+        max_images=max_images, restrict_subjects=bool(request.requirement_ids),
+    )
+    current_version_ids = {
+        cue.asset_version_id for cue in cues if cue.asset_version_id is not None
+    }
+    warnings.extend(
+        f"{requirement_id}: current subject is EDITORIAL-only; excluded from generation references"
+        for requirement_id in editorial_requirement_ids
+    )
+    # A current media choice also overrides older semantic views of that object.
+    # In particular, an EDITORIAL cue must not revive its previous generation image.
+    valid_entries = [
+        (pack, entry) for pack, entry in valid_entries
+        if pack.subject_asset_id not in explicit_subject_ids
+    ]
 
     for requirement in requirements:
         reusable = next(
@@ -460,6 +504,7 @@ def preview_reference_plan(
             document,
             plan,
             max_images=max(1, len(plan.bindings)),
+            excluded_version_ids=current_version_ids,
         )
         requirements_by_subject = {
             requirement.subject_asset_id: requirement
@@ -484,6 +529,8 @@ def preview_reference_plan(
         for fallback in ordered_bindings:
             if len(selected) >= max_images:
                 break
+            if request.requirement_ids and fallback.subject_asset_id not in requirements_by_subject:
+                continue
             if fallback.asset_version_id in selected_version_ids:
                 continue
             requirement = requirements_by_subject.get(fallback.subject_asset_id)
@@ -510,7 +557,8 @@ def preview_reference_plan(
         binding_selected, binding_missing, binding_warnings = _binding_selections(
             document,
             plan,
-            max_images=max_images,
+            max_images=max_images - len(selected),
+            excluded_version_ids=current_version_ids,
         )
         selected.extend(binding_selected)
         missing.extend(binding_missing)
@@ -524,6 +572,11 @@ def preview_reference_plan(
             selected=selected,
             max_images=max_images,
             warnings=warnings,
+            protected_version_ids=current_version_ids,
+            allowed_subject_ids=(
+                {item.subject_asset_id for item in requirements}
+                if request.requirement_ids else None
+            ),
         )
 
     complexity = _assess_complexity(shot, plan, selected)
@@ -546,6 +599,87 @@ def preview_reference_plan(
     )
 
 
+def _current_cue_selections(
+    document: ProjectDocument,
+    shot: ShotPlan,
+    plan: ReferencePlanEntry,
+    requirements: list[ReferenceRequirement],
+    entries: list[tuple[ReferencePack, ReferencePackEntry]],
+    *,
+    max_images: int,
+    restrict_subjects: bool,
+) -> tuple[list[ReferenceSelection], list[str], list[str]]:
+    """Project current cue choices into the existing reference-selection contract."""
+    cues = [*shot.references, *(cue for beat in shot.timeline_beats for cue in beat.references)]
+    if not cues:
+        return [], [], []
+    usable_ids = {
+        version_id for version_id, _label, _path in semantic_reference_entries(
+            document, plan, load_images=False,
+        )
+    }
+    subjects = {asset.id: asset for asset in document.assets}
+    scope = {item.subject_asset_id for item in requirements}
+    selected: list[ReferenceSelection] = []
+    missing: list[str] = []
+    warnings: list[str] = []
+    by_version: dict[str, ReferenceSelection] = {}
+    for index, cue in enumerate(cues, start=1):
+        if cue.usage != "GENERATION" or (restrict_subjects and cue.subject_asset_id not in scope):
+            continue
+        cue_id = cue.id or f"current-reference-{index}"
+        asset = subjects.get(cue.subject_asset_id)
+        if asset is None or cue.asset_version_id not in usable_ids:
+            missing.append(cue_id)
+            warnings.append(f"{cue_id}: current generation reference is unavailable; no older image substituted")
+            continue
+        version_id = cue.asset_version_id
+        assert version_id is not None
+        previous = by_version.get(version_id)
+        if previous is not None:
+            if cue.purpose not in previous.description:
+                previous.description += f"; {cue.purpose}"
+            continue
+        if len(selected) >= max_images:
+            missing.append(cue_id)
+            warnings.append(f"{cue_id}: current generation reference limit {max_images} reached")
+            continue
+        matching_entries = [
+            (pack, entry) for pack, entry in entries
+            if pack.subject_asset_id == asset.id and entry.asset_version_id == version_id
+        ]
+        matching_requirements = [item for item in requirements if item.subject_asset_id == asset.id]
+        ranked_entries = sorted(matching_entries, key=lambda item: -max(
+            (_entry_score(requirement, item[1], preferred_lineages=set())[0]
+             for requirement in matching_requirements
+             if item[1].role in requirement.acceptable_roles
+             and set(requirement.required_tags).issubset(item[1].tags)),
+            default=item[1].priority,
+        ))
+        pack, entry = ranked_entries[0] if ranked_entries else (None, None)
+        selection = ReferenceSelection(
+            pack_id=pack.id if pack is not None else f"current-shot-reference:{shot.id}",
+            entry_id=entry.id if entry is not None else f"current-shot-reference:{shot.id}:{cue_id}",
+            subject_asset_id=asset.id,
+            asset_version_id=version_id,
+            lineage_root_version_id=(
+                entry.lineage_root_version_id if entry is not None
+                else version_id if asset.kind == AssetKind.LOCATION else None
+            ),
+            role=entry.role if entry is not None else ReferenceRole.CANONICAL_MASTER,
+            angle=entry.angle if entry is not None else ReferenceAngle.NOT_APPLICABLE,
+            framing=entry.framing if entry is not None else ReferenceFraming.NOT_APPLICABLE,
+            tags=list(entry.tags) if entry is not None else [],
+            description=cue.purpose,
+            requirement_ids=[],
+            score=2000 - index,
+            reasons=["current ShotReferenceCue GENERATION media and purpose take priority"],
+        )
+        selected.append(selection)
+        by_version[version_id] = selection
+    return selected, missing, warnings
+
+
 def _ensure_required_subject_coverage(
     *,
     document: ProjectDocument,
@@ -554,12 +688,16 @@ def _ensure_required_subject_coverage(
     selected: list[ReferenceSelection],
     max_images: int,
     warnings: list[str],
+    protected_version_ids: set[str],
+    allowed_subject_ids: set[str] | None,
 ) -> None:
     """Reserve one approved reference for every visible subject before extra views."""
 
     required_subject_ids: list[str] = []
 
     def require(subject_id: str) -> None:
+        if allowed_subject_ids is not None and subject_id not in allowed_subject_ids:
+            return
         if subject_id not in required_subject_ids:
             required_subject_ids.append(subject_id)
 
@@ -578,6 +716,7 @@ def _ensure_required_subject_coverage(
         document,
         plan,
         max_images=max(1, len(plan.bindings)),
+        excluded_version_ids=protected_version_ids,
     )
     binding_by_subject = {item.subject_asset_id: item for item in bindings}
     counts: dict[str, int] = {}
@@ -607,6 +746,7 @@ def _ensure_required_subject_coverage(
                 (index, item)
                 for index, item in enumerate(selected)
                 if counts.get(item.subject_asset_id, 0) > 1
+                and item.asset_version_id not in protected_version_ids
             ]
             if not replaceable:
                 continue
@@ -630,6 +770,7 @@ def _binding_selections(
     plan: ReferencePlanEntry,
     *,
     max_images: int,
+    excluded_version_ids: set[str] | None = None,
 ) -> tuple[list[ReferenceSelection], list[str], list[str]]:
     version_index = {
         version.id: (asset, version)
@@ -648,7 +789,12 @@ def _binding_selections(
     missing: list[str] = []
     warnings: list[str] = []
     seen: set[str] = set()
+    current_generation_ids = set(selected_generation_reference_ids(document, plan))
     for index, binding in enumerate(plan.bindings, start=1):
+        if binding.target_id not in current_generation_ids or (
+            excluded_version_ids is not None and binding.target_id in excluded_version_ids
+        ):
+            continue
         binding_id = f"binding-{index}"
         resolved = version_index.get(binding.target_id)
         required = binding.required
@@ -1107,13 +1253,18 @@ def build_director_advice_input(
     reviewer_notes: list[str],
     capability_profile: H3CapabilityProfileResponse,
     prior_repairs: list[DirectorRepairRecord],
+    *,
+    current_group: dict[str, JsonValue] | None = None,
+    media_evidence: dict[str, JsonValue] | None = None,
+    actual_previous_media_boundary: dict[str, object] | None = None,
 ) -> tuple[str, str]:
     assets = {item.id: item for item in document.assets}
     skill_prompt = compile_production_prompt(
         document.project.production_profile,
         roles=(ProductionSkillRole.DIRECTOR,),
         include_constitution=False,
-        stage=ProductionPromptStage.STORYBOARD,
+        stage=request.production_prompt_stage or ProductionPromptStage.STORYBOARD,
+        method_skill_ids=request.method_skill_ids or (),
     )
     instructions = (
         "你是当前视频制作流程中的导演 Agent，负责基于真实制作上下文向用户提出建议。"
@@ -1125,6 +1276,9 @@ def build_director_advice_input(
         "同一套无效策略，必要时从修复策略库中选择更合适的方案。所有建议均可选、可忽略，"
         "不得声称生成被阻塞，也不得要求用户必须采纳。若没有能实质提升质量的建议，请返回空的 "
         "advisories 和 repair_options。"
+        "当前素材证据区分计划、已采用媒体与实际观察，检查只覆盖其文件、时间与问题。"
+        "抽帧或画面描述不能证明原声或两帧之间的运动。若当前阶段为 POST，优先给出可行的剪辑、"
+        "采用区间、声音或图版建议；不能把没有对应执行能力的建议伪装成 proposed_repair。"
     )
     payload = {
         "output_schema": {
@@ -1171,6 +1325,11 @@ def build_director_advice_input(
             },
         },
         "shot": shot.model_dump(mode="json"),
+        "current_group": current_group,
+        "media_evidence": media_evidence,
+        "actual_previous_media_boundary": actual_previous_media_boundary,
+        "selected_method_skill_ids": list(request.method_skill_ids or ()),
+        "production_prompt_stage": (request.production_prompt_stage or ProductionPromptStage.STORYBOARD).value,
         "reference_plan": plan.model_dump(mode="json"),
         "recommended_reference_selection": [
             {

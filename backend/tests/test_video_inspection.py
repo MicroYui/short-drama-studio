@@ -18,11 +18,13 @@ from short_drama.models import (
     EnqueueRequest,
     GenerationUnitShotWindow,
     ReferenceBinding,
+    ShotReferenceCue,
     VideoInspectionRequest,
 )
 from short_drama.reference_planner import DirectorAdviceRequest
 from short_drama.service import ShortDramaService
-from short_drama.video_inspection import VideoInspector, _semantic_reference_images
+from short_drama.video_inspection import VideoInspector, _semantic_reference_images, inspection_matches_request, boundary_frame_image_url
+from short_drama.visual_input_quality import previous_shot_boundary_image_url
 
 
 class FakeInspectionLanguageProvider:
@@ -135,8 +137,83 @@ def test_semantic_review_includes_approved_bound_asset_references(tmp_path: Path
     references = _semantic_reference_images(document, plan)
 
     assert len(references) == 1
-    assert "CHARACTER canonical reference" in references[0][0]
+    assert "CHARACTER selected GENERATION binding" in references[0][0]
     assert references[0][1].startswith("data:image/png;base64,")
+
+
+def test_selected_draft_references_override_canonical_and_exclude_editorial(tmp_path: Path) -> None:
+    document = build_dont_trust_me_fixture("2026-09-11T00:00:00Z")
+    shot, plan, asset = document.shots[0], document.reference_plan[0], document.assets[0]
+    image_path = tmp_path / "actual-reference.png"
+    Image.new("RGB", (80, 80), "blue").save(image_path)
+    for version_id, status in [("selected-draft", ApprovalStatus.DRAFT), ("older-canonical", ApprovalStatus.APPROVED), ("title-plate", ApprovalStatus.DRAFT)]:
+        asset.versions.append(asset.versions[0].model_copy(update={"id": version_id, "approval_status": status,
+            "media_type": AssetMediaType.IMAGE, "local_path": str(image_path)}))
+    asset.approved_version_id = "older-canonical"
+    shot.references = [ShotReferenceCue(subject_asset_id=asset.id, asset_version_id="selected-draft", alias="person",
+                                        purpose="Identity actually supplied to this generation"),
+                       ShotReferenceCue(subject_asset_id=asset.id, asset_version_id="title-plate", alias="title",
+                                        purpose="Title composited after generation", usage="EDITORIAL")]
+    plan.bindings = [ReferenceBinding(kind=asset.kind, target_id=version_id, purpose="Bound input")
+                     for version_id in ["selected-draft", "title-plate"]]
+    references = _semantic_reference_images(document, plan)
+    assert len(references) == 1
+    assert "selected-draft" in references[0][0] and "Identity actually supplied" in references[0][0]
+    assert "older-canonical" not in references[0][0] and "title-plate" not in references[0][0]
+
+
+def test_source_interval_records_coverage_and_cannot_be_reused_for_whole_take(tmp_path: Path) -> None:
+    fake = FakeInspectionLanguageProvider(['{"observations":[],"issues":[],"summary":"Observed only the requested interval."}'])
+    service = ShortDramaService(database_path=tmp_path / "state.sqlite3", workspace_root=tmp_path / "workspace",
+                                language_provider_factory=lambda _key, _url: fake)
+    service.update_language_provider_config(LanguageProviderConfigUpdate(base_url="http://localhost:4141/v1"))
+    document = service.initialize_fixture().document
+    first, second = document.shots[:2]
+    service.enqueue(document.project.id, EnqueueRequest(shot_ids=[first.id], candidate_count=1))
+    take = service.drain(document.project.id, 50).project.takes[0]
+    video = tmp_path / "ranged-group.mp4"
+    _render_video(video, 8)
+    take.media_path, take.duration_seconds, take.generation_unit_id = str(video), 8, "group-range"
+    take.shot_windows = [GenerationUnitShotWindow(shot_id=item.id, shot_revision=item.revision,
+        source_in_seconds=index * 4, source_out_seconds=(index + 1) * 4, duration_seconds=4)
+        for index, item in enumerate([first, second])]
+    service.repository.save_take(take)
+    request = VideoInspectionRequest(source_in_seconds=5, source_out_seconds=6, review_focus="Check the held prop",
+                                     include_previous_boundary=False, max_frames=6)
+    report = service.inspect_take_video(take.id, request).report
+    assert report.observed_source_in_seconds == 5 and report.observed_source_out_seconds == 6
+    assert report.covered_shot_ids == [second.id]
+    assert not report.full_take_coverage and not report.audio_semantics_observed
+    assert all(5 <= item.timestamp_seconds < 6 for item in report.samples)
+    assert report.review_focus == "Check the held prop"
+    payload = json.loads(fake.generations[0][1])
+    assert [item["id"] for item in payload["current_shots"]] == [second.id]
+    assert inspection_matches_request(report, document=document, take=take, request=request)
+    assert not inspection_matches_request(report, document=document, take=take,
+                                           request=VideoInspectionRequest(include_previous_boundary=False))
+    assert not inspection_matches_request(report, document=document, take=take,
+                                           request=request.model_copy(update={"review_focus": "Different question"}))
+    second.revision += 1
+    assert not inspection_matches_request(report, document=document, take=take, request=request)
+
+
+def test_input_boundary_uses_selected_group_window_without_an_extra_language_review(tmp_path: Path) -> None:
+    service = ShortDramaService(database_path=tmp_path / "state.sqlite3", workspace_root=tmp_path / "workspace")
+    document = service.initialize_fixture().document
+    first, second = document.shots[:2]
+    service.enqueue(document.project.id, EnqueueRequest(shot_ids=[first.id], candidate_count=1))
+    take = service.drain(document.project.id, 50).project.takes[0]
+    video = tmp_path / "boundary-group.mp4"
+    _render_video(video, 4)
+    take.media_path, take.duration_seconds, take.generation_unit_id = str(video), 4, "boundary-group"
+    take.shot_windows = [GenerationUnitShotWindow(shot_id=item.id, shot_revision=item.revision,
+        source_in_seconds=index * 2, source_out_seconds=(index + 1) * 2, duration_seconds=2)
+        for index, item in enumerate([first, second])]
+    take.selected_shot_ids = [first.id]
+    result = previous_shot_boundary_image_url(document=document, shot=second, takes=[take], inspections=[])
+    assert result is not None and result.startswith("data:image/jpeg;base64,")
+    assert result == boundary_frame_image_url(take, 2)
+    assert result != boundary_frame_image_url(take, 4)
 
 
 def test_grouped_take_inspection_receives_full_group_windows_and_later_shot_references(tmp_path: Path) -> None:

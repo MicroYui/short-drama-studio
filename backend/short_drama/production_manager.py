@@ -57,9 +57,11 @@ from short_drama.agent_runtime.artifact_resolver import (
     project_summary as _project_summary,
 )
 from short_drama.agent_runtime.models import utc_now
+from short_drama.agent_runtime.completion import verify_completion_claims
 from short_drama.agent_runtime.media_context import provider_media_model_view
-from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary
+from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary, execution_control
 from short_drama.agent_runtime.model_input import ModelInputCompiler, generate_context_managed_text, json_text, pointer_value
+from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
 from short_drama.studio_trace import record_trace, trace_context
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
@@ -551,6 +553,7 @@ class AgentRunReplanRequest(DomainModel):
 
 class AgentRunAdvanceRequest(DomainModel):
     max_actions: int = Field(default=1, ge=1, le=8)
+    review_blocked_step_ids: list[str] | None = Field(default=None, description="产品当前审阅所影响的步骤；非空值包括空列表都保留审阅完成边界。")
 
 
 class AgentUserInputRequest(DomainModel):
@@ -1548,6 +1551,7 @@ class LanguageProductionPlanner:
     def __init__(self, client: LanguageProviderClient) -> None:
         self._client = client
         self.context_compiler = ModelInputCompiler()
+        self._discovered_schema_ids: dict[str, list[str]] = {}
 
     def propose_plan(
         self,
@@ -1573,8 +1577,25 @@ class LanguageProductionPlanner:
             role_values=role_values,
             prompt_stage_values=prompt_stage_values,
         )
-        loaded_schema_ids: list[str] = []
+        schema_ids = [*initial_tool_schema_ids(), *self._discovered_schema_ids.get(context.run_id, [])]
+        if current_plan is not None:
+            schema_ids.extend(step.tool_name for step in current_plan.steps if step.tool_name is not None)
+        store = self.context_compiler.store
+        if store is not None:
+            run = store.get_run(context.run_id)
+            if run is not None:
+                schema_ids.extend(run.loaded_tool_schema_ids)
+        loaded_schema_ids = list(dict.fromkeys(tool_id for tool_id in schema_ids if tool_id in tools_by_id))
+
+        def remember_schemas() -> None:
+            self._discovered_schema_ids[context.run_id] = list(loaded_schema_ids)
+            if store is not None:
+                store.remember_tool_schema_ids(context.run_id, loaded_schema_ids)
+
+        remember_schemas()
         plan_validation_feedback: dict[str, JsonValue] | None = None
+        schema_feedback: dict[str, JsonValue] | None = None
+        rejected_schema_requests: set[tuple[str, ...]] = set()
         invalid_plan_signatures: set[str] = set()
         while True:
             execution_boundary()
@@ -1609,6 +1630,8 @@ class LanguageProductionPlanner:
                 if current_plan is None
                 else current_plan.model_dump(mode="json"),
             }
+            if schema_feedback is not None:
+                payload["tool_schema_feedback"] = schema_feedback
             if plan_validation_feedback is not None:
                 payload["plan_validation_feedback"] = plan_validation_feedback
             if self.context_compiler.store is not None:
@@ -1682,24 +1705,26 @@ class LanguageProductionPlanner:
                     for tool_id in schema_request.requested_tool_schema_ids
                     if tool_id not in tools_by_id
                 ]
-                if unknown_ids:
-                    raise ProductionManagerError(
-                        "Production Manager requested unknown Tool schemas: "
-                        + ", ".join(unknown_ids)
-                    ) from plan_error
-                new_ids = [
-                    tool_id
-                    for tool_id in schema_request.requested_tool_schema_ids
-                    if tool_id not in loaded_schema_ids
-                ]
-                if not new_ids:
-                    raise ProductionManagerError(
-                        "Production Manager repeated a Tool schema request without "
-                        "selecting any new Tool"
-                    ) from plan_error
+                new_ids = [tool_id for tool_id in schema_request.requested_tool_schema_ids
+                           if tool_id in tools_by_id and tool_id not in loaded_schema_ids]
                 loaded_schema_ids.extend(new_ids)
+                remember_schemas()
+                if unknown_ids or not new_ids:
+                    schema_feedback = schema_request_feedback(schema_request.requested_tool_schema_ids, list(tools_by_id), loaded_schema_ids)
+                    signature = tuple(schema_request.requested_tool_schema_ids)
+                    if signature in rejected_schema_requests:
+                        raise ProductionManagerError(
+                            "Production Manager requested unknown Tool schemas or repeated loaded contracts after correction: "
+                            + json_text(schema_feedback)
+                        ) from plan_error
+                    rejected_schema_requests.add(signature)
+                else:
+                    schema_feedback = None
                 continue
 
+            loaded_schema_ids.extend(step.tool_name for step in proposal.steps
+                                     if step.tool_name in tools_by_id and step.tool_name not in loaded_schema_ids)
+            remember_schemas()
             unknown_method_ids = [
                 skill_id
                 for skill_id in proposal.selected_method_skill_ids
@@ -2030,7 +2055,9 @@ _WORK_ORDER_LIFECYCLE_PROGRESS = frozenset(
 )
 
 
-def _specialist_read_observation_key(turn: SpecialistTurnRecord) -> str:
+def _specialist_read_observation_key(
+    turn: SpecialistTurnRecord, schema: Mapping[str, JsonValue] | None = None,
+) -> str:
     """Keep independently selected documents together, replacing repeated reads.
 
     A document version is deliberately not part of the identity: reading a newer
@@ -2057,7 +2084,7 @@ def _specialist_read_observation_key(turn: SpecialistTurnRecord) -> str:
             ensure_ascii=False,
         )
     return json.dumps(
-        [turn.tool_name, turn.arguments], ensure_ascii=False, sort_keys=True
+        [turn.tool_name, normalized_read_arguments(turn.arguments, schema)], ensure_ascii=False, sort_keys=True
     )
 
 
@@ -2102,6 +2129,7 @@ def _specialist_working_set(
     project_id: str | None = None,
     read_tool_ids: frozenset[str] = frozenset(),
     write_tool_ids: frozenset[str] = frozenset(),
+    read_schemas: Mapping[str, dict[str, JsonValue]] | None = None,
 ) -> SpecialistWorkingSet:
     """Fold durable history into the current decision state.
 
@@ -2110,6 +2138,7 @@ def _specialist_working_set(
     replace the prior snapshot, while genuinely distinct entities remain visible.
     """
 
+    read_schemas = {} if read_schemas is None else read_schemas
     # Route planning can consult a language provider (EXTERNAL), but its result
     # is a durable RoutePlan. A prompt compiler has no such saved artifact and
     # must continue handing off its exact result until the caller saves it.
@@ -2398,7 +2427,7 @@ def _specialist_working_set(
             and turn.result is not None
             and turn.result.get("status") == ToolCallStatus.SUCCEEDED.value
         ):
-            read_observations[_specialist_read_observation_key(turn)] = SpecialistReadObservation(
+            read_observations[_specialist_read_observation_key(turn, read_schemas.get(turn.tool_name))] = SpecialistReadObservation(
                 tool_name=turn.tool_name,
                 source_sequence=turn.sequence,
                 request_identifiers=_specialist_request_identifiers(
@@ -2422,7 +2451,7 @@ def _specialist_working_set(
         # The latest handoff already carries this exact payload.  Keep the
         # whiteboard free of duplicate copies while retaining every other
         # independent observation the Worker still needs for the decision.
-        read_observations.pop(_specialist_read_observation_key(latest_turn), None)
+        read_observations.pop(_specialist_read_observation_key(latest_turn, read_schemas.get(latest_turn.tool_name)), None)
         latest_selected_ref = _selected_tool_attempt_ref(latest_turn)
         if latest_selected_ref is not None:
             tool_attempt_observations.pop(latest_selected_ref.identity(), None)
@@ -2704,6 +2733,7 @@ def _specialist_turn_handoff(
                 "artifact_refs": turn.result.get("artifact_refs"),
                 "warnings": turn.result.get("warnings"),
                 "error": turn.result.get("error"),
+                "receipt": turn.result.get("receipt"),
             }
             if compact_write_result or (attempt_ref is not None and not retain_exact_payload)
             else _compact_specialist_tool_result(
@@ -4507,7 +4537,8 @@ def _interrupted_tool_result(turn: SpecialistTurnRecord) -> dict[str, JsonValue]
 
 def _specialist_runtime_instructions(*, may_call_tool: bool, system_prompt: str) -> str:
     tool_protocol = (
-        "available_tools 是紧凑目录；复杂参数先请求 requested_tool_schema_ids 和 rationale，"
+        "available_tools 是完整紧凑目录；tool_schemas 已含常用及本任务已发现的当前定义，可直接调用。"
+        "只有尚未加载的复杂参数才请求 requested_tool_schema_ids 和 rationale，"
         "已加载 schema 不重复请求。每次返回一个包含 tool_name、reason、arguments 的 Tool 请求；"
         "可附 working_notes 更新简洁的当前工作笔记，不复制工具历史；"
         "结果持久化后继续同一 WorkOrder。"
@@ -4529,6 +4560,7 @@ class LanguageSpecialistAgent:
         self._tools = tools
         self.context_compiler = ModelInputCompiler()
         self._tool_descriptors: list[ToolDescriptor] | None = None
+        self._discovered_schema_ids: dict[str, list[str]] = {}
 
     def bind_tools(
         self,
@@ -4551,7 +4583,8 @@ class LanguageSpecialistAgent:
             else (
                 self._tools.list()
                 if self._tool_descriptors is None
-                else self._tool_descriptors
+                else [self._tools.describe(item.id) for item in self._tool_descriptors
+                      if self._tools.contains(item.id)]
             )
         )
         tool_catalog = [
@@ -4567,11 +4600,12 @@ class LanguageSpecialistAgent:
                 item.id
                 for item in descriptors
                 if item.effect == ToolEffect.READ
-                and "on-demand-payload" not in item.tags
+                and (item.id == "agent.read_context" or "on-demand-payload" not in item.tags)
             ),
             write_tool_ids=frozenset(
                 item.id for item in descriptors if item.effect == ToolEffect.WRITE
             ),
+            read_schemas={item.id: cast(dict[str, JsonValue], item.input_schema) for item in descriptors},
         )
         instructions = _specialist_runtime_instructions(
             may_call_tool=may_call_tool,
@@ -4638,6 +4672,12 @@ class LanguageSpecialistAgent:
             )
         ]
         schema_ids_to_load = [
+            *initial_tool_schema_ids(work_order.work_order),
+            *work_order.work_order.loaded_tool_schema_ids,
+            *self._discovered_schema_ids.get(work_order.work_order.id, []),
+            # Old persisted runs predate discovery state. Successful calls still
+            # identify contracts this WorkOrder has already used.
+            *[turn.tool_name for turn in work_order.work_order.specialist_turns],
             *(
                 ["artifact.retry_asset_plan_attempt"]
                 if has_addressable_asset_plan_attempt
@@ -4657,12 +4697,26 @@ class LanguageSpecialistAgent:
                 else protocol_feedback.loaded_tool_schema_ids
             ),
         ]
-        loaded_schema_ids = list(
-            dict.fromkeys(
-                tool_id
-                for tool_id in schema_ids_to_load
-                if tool_id in tools_by_id
-            )
+        store = self.context_compiler.store
+        if store is not None:
+            saved_work = store.get_work_order(work_order.work_order.id)
+            if saved_work is not None:
+                schema_ids_to_load.extend(saved_work.loaded_tool_schema_ids)
+        loaded_schema_ids = list(dict.fromkeys(tool_id for tool_id in schema_ids_to_load if tool_id in tools_by_id))
+
+        def remember_schemas() -> None:
+            self._discovered_schema_ids[work_order.work_order.id] = list(loaded_schema_ids)
+            work_order.work_order.loaded_tool_schema_ids = list(loaded_schema_ids)
+            if store is not None:
+                store.remember_tool_schema_ids(work_order.work_order.parent_run_id, loaded_schema_ids,
+                                               work_order_id=work_order.work_order.id)
+
+        remember_schemas()
+        schema_feedback: dict[str, JsonValue] | None = None
+        rejected_schema_requests: set[tuple[str, ...]] = set()
+        working_set_payload = project_retained_read_results(
+            working_set.model_dump(mode="json"), store=store,
+            project_id=work_order.context.project_id, work_order=work_order.work_order,
         )
         while True:
             execution_boundary()
@@ -4673,10 +4727,11 @@ class LanguageSpecialistAgent:
                                 "specialist_turns",
                                 "pending_protocol_feedback",
                                 "context_manifest",
+                                "loaded_tool_schema_ids",
                             },
                         ),
                         "context": work_order.context.model_context_dump(),
-                        "working_set": working_set.model_dump(mode="json"),
+                        "working_set": working_set_payload,
                         "available_tools": tool_catalog,
                         "tool_schemas": {
                             tool_id: {
@@ -4694,6 +4749,7 @@ class LanguageSpecialistAgent:
                                 AgentToolSchemaRequest.model_json_schema()
                             ),
                         },
+                        "tool_schema_feedback": schema_feedback,
                         "response_protocol_feedback": (
                             None
                             if protocol_feedback is None
@@ -4737,7 +4793,11 @@ class LanguageSpecialistAgent:
                         )
                     ) from result_error
                 try:
-                    return SpecialistToolRequest.model_validate_json(payload)
+                    requested_tool = SpecialistToolRequest.model_validate_json(payload)
+                    if requested_tool.tool_name in tools_by_id and requested_tool.tool_name not in loaded_schema_ids:
+                        loaded_schema_ids.append(requested_tool.tool_name)
+                        remember_schemas()
+                    return requested_tool
                 except ValueError as tool_error:
                     try:
                         schema_request = AgentToolSchemaRequest.model_validate_json(
@@ -4763,22 +4823,21 @@ class LanguageSpecialistAgent:
                         for tool_id in schema_request.requested_tool_schema_ids
                         if tool_id not in tools_by_id
                     ]
-                    if unknown_ids:
-                        raise ProductionManagerError(
-                            "Specialist Agent requested unknown Tool schemas: "
-                            + ", ".join(unknown_ids)
-                        ) from tool_error
-                    new_ids = [
-                        tool_id
-                        for tool_id in schema_request.requested_tool_schema_ids
-                        if tool_id not in loaded_schema_ids
-                    ]
-                    if not new_ids:
-                        raise ProductionManagerError(
-                            "Specialist Agent repeated a Tool schema request without "
-                            "selecting any new Tool"
-                        ) from tool_error
+                    new_ids = [tool_id for tool_id in schema_request.requested_tool_schema_ids
+                               if tool_id in tools_by_id and tool_id not in loaded_schema_ids]
                     loaded_schema_ids.extend(new_ids)
+                    remember_schemas()
+                    if unknown_ids or not new_ids:
+                        schema_feedback = schema_request_feedback(schema_request.requested_tool_schema_ids, list(tools_by_id), loaded_schema_ids)
+                        signature = tuple(schema_request.requested_tool_schema_ids)
+                        if signature in rejected_schema_requests:
+                            raise ProductionManagerError(
+                                "Specialist Agent requested unknown Tool schemas or repeated loaded contracts after correction: "
+                                + json_text(schema_feedback)
+                            ) from tool_error
+                        rejected_schema_requests.add(signature)
+                    else:
+                        schema_feedback = None
 
         evidence_refs = _specialist_evidence_refs(work_order.work_order)
         if evidence_refs:
@@ -5819,6 +5878,9 @@ class ProductionManager:
                 plan,
             )
             if running_planning_stage is not None:
+                if request.review_blocked_step_ids is not None and running_planning_stage[1].id in request.review_blocked_step_ids:
+                    self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
+                    break
                 if planning_progress_boundary_reached or remaining_actions <= 0:
                     self.runtime.set_run_status(run_id, AgentRunStatus.RUNNING)
                     break
@@ -5838,6 +5900,8 @@ class ProductionManager:
                 continue
 
             ready = self.runtime.ready_steps(run_id)
+            if request.review_blocked_step_ids is not None:
+                ready = [step for step in ready if step.id not in request.review_blocked_step_ids]
             if ready and planning_progress_boundary_reached:
                 self.runtime.set_run_status(run_id, AgentRunStatus.RUNNING)
                 break
@@ -5892,6 +5956,11 @@ class ProductionManager:
 
             if ready:
                 self.runtime.set_run_status(run_id, AgentRunStatus.RUNNING)
+                break
+
+            if request.review_blocked_step_ids is not None:
+                self.runtime.set_run_status(run_id, AgentRunStatus.WAITING)
+                notes.append("Affected work is waiting for the user's requested text review; independent work may continue")
                 break
 
             local_plan_complete = PlanGraph(plan).is_complete(current.actions)
@@ -6385,6 +6454,13 @@ class ProductionManager:
                 f"Work order is already {work_order.status.value}"
             )
         try:
+            completion_receipts = (
+                verify_completion_claims(self.projects, project_id=run.project_id,
+                    artifact_refs=[*request.created_artifacts, *request.updated_artifacts],
+                    expected_output_slot_ids=work_order.expected_output_slot_ids,
+                    deliverable=request.deliverable)
+                if request.status == AgentResultStatus.COMPLETED else []
+            )
             result = self.runtime.record_agent_result(
                 work_order_id,
                 status=request.status,
@@ -6399,6 +6475,7 @@ class ProductionManager:
                 evidence_refs=request.evidence_refs,
                 recommended_next_actions=request.recommended_next_actions,
                 next_owner=request.next_owner,
+                completion_receipts=completion_receipts,
             )
         except AgentResultContractError as exc:
             raise ProductionManagerError(
@@ -6879,6 +6956,9 @@ class ProductionManager:
         work_order_id: str,
         turn_id: str,
     ) -> AgentWorkOrderResultResponse:
+        # Yield while the persisted request is still REQUESTED. Once marked
+        # IN_PROGRESS, this operation owns its completion and durable receipt.
+        execution_boundary()
         work_order = self.runtime.store.get_work_order(work_order_id)
         if work_order is None:
             raise ProductionManagerError(f"Unknown work order: {work_order_id}")
@@ -7435,7 +7515,7 @@ class ProductionManager:
                     self.runtime.fail_action(
                         action.id,
                         error_message=message,
-                        output_summary=message,
+                        output_summary=json.dumps(result.error.model_dump(mode="json"), ensure_ascii=False) if result.error else message,
                         error_kind=(
                             result.error.kind
                             if result.error is not None
@@ -7445,8 +7525,12 @@ class ProductionManager:
                     None,
                     "Tool failure recorded; the Agent can revise the plan",
                 )
-            summary = json.dumps(result.output or {}, ensure_ascii=False)
-            if len(summary) > 1600:
+            summary = json.dumps(result.receipt.model_dump(mode="json") if result.receipt else result.output or {}, ensure_ascii=False)
+            selected_editor_read = step.tool_name == "timeline.read_editorial" and bool(
+                step.arguments.get("subtitle_ids") or step.arguments.get("clip_ids"))
+            # An exact read already excludes unrelated editor content. Preserve
+            # the requested rows and coordinate mapping for the next decision.
+            if len(summary) > 1600 and not selected_editor_read:
                 summary = summary[:1597] + "..."
             if step.tool_name == "planning.advance":
                 planning_run_id = step.arguments.get("run_id")
@@ -8023,14 +8107,16 @@ class ProductionManager:
             work_order_id=work_order_id,
         )
         descriptor = self.tools.describe(tool_name)
-        if descriptor.effect == ToolEffect.WRITE:
-            # Serialize direct content changes. External services synchronize
-            # their own saves and task transitions; their slow Provider I/O
-            # must not hold this project-wide lane.
-            with self._project_tool_lock(project_id):
+        # Pause/steering takes ownership between Tools. A composite Tool may
+        # persist a partial operation before making a nested model call; yielding
+        # inside it would strand IN_PROGRESS or tempt a duplicate external write.
+        with execution_control(lambda: None):
+            if descriptor.effect == ToolEffect.WRITE:
+                # Slow external operations synchronize their own short saves.
+                with self._project_tool_lock(project_id):
+                    result = self.tools.invoke(tool_name, arguments)
+            else:
                 result = self.tools.invoke(tool_name, arguments)
-        else:
-            result = self.tools.invoke(tool_name, arguments)
         if any(ref.project_id != project_id for ref in result.artifact_refs):
             raise ProductionManagerError(
                 "Tool result contains an artifact outside the current run project"

@@ -444,6 +444,7 @@ class PersistentH3Worker:
         )
         now = utc_now()
         run.request = request
+        run.submission_attempt_state = "PREPARED"
         run.uploaded_inputs = uploaded_inputs
         run.last_error_code = None
         run.last_error_message = None
@@ -485,8 +486,12 @@ class PersistentH3Worker:
                 stale_reason,
                 now,
             )
+        client = self._client()
+        run.submission_attempt_state = "STARTED"
+        run.updated_at = now
+        self.repository.save_provider_run(run)
         try:
-            provider_task_id = self._client().submit(run.request)
+            provider_task_id = client.submit(run.request)
         except H3DefiniteRequestError as exc:
             return self._mark_failed(task, run, exc.code, str(exc), now)
         except H3SubmissionUnknown as exc:

@@ -36,6 +36,6 @@ user_overridable: true
 
 ## Agent 行为边界
 
-- 本 Skill 只描述稳定的动画类型差异；共享制片阶段由 `workflows/end_to_end.md` 定义。
+- 本 Skill 只描述稳定的动画类型差异；跨阶段方法可参考 `workflows/end_to_end.md`，实际工作顺序和完成边界由本次目标及当前依赖决定。
 - Provider 参数、模型版本、引导方式、参考数量、分辨率和时长从当前 Tool Schema 与 Capability 获取，不写死在类型规则。
 - 用户可以覆盖本 Skill。Agent 应解释覆盖会如何影响视觉语言、角色连续性、可生成性或剪辑，不增加固定风格门槛。

@@ -12,7 +12,7 @@ DELEGATION 的 arguments.adjacent_boundaries 是对象数组，不能写成字�
 
 可用阶段：{{stages}}。
 
-一个 WorkOrder 只承担一个完整责任：例如全局资产规划、指定切片的资产制作或已生成媒体验收，不将规划、生成和自审合并到同一 Worker。
+一个 WorkOrder 承担一个可交付的完整责任。范围清楚的素材准备可以包含必要规划、生成、保存和自查；只有独立判断、明显工作量或真实依赖带来价值时才拆分，不为角色名增加交接。
 
 本地执行器的并发单位是独立且就绪的 WorkOrder；同一 WorkOrder 的 Tool turn 顺序执行，进入持久化媒体任务的常规等待时会持续推进该任务。
 
@@ -34,9 +34,11 @@ selected_method_skill_ids 只能复制 available_production_methods 中的 id；
 
 artifact_refs 只包含当前 WorkOrder 的最小充分输入；Worker 通过阶段上下文 Tool 或精确 Artifact Tool 按需取正文，不把 Project 聚合、整份 Storyboard/AssetPlan 和子切片重复打包。
 
-资产阶段使用 ASSET_PLANNER 创建或全局修订 AssetPlan 并结束；Leader 下一轮读 artifact.get_asset_plan_index，再把稳定 work-item 切片交给 ASSET_BUILDER；实际媒体产生后另交 ASSET_VERIFIER。
+资产工作按实际规模选择职责：全局规划使用 ASSET_PLANNER，具体制作使用 ASSET_BUILDER；独立验收有价值时才交 ASSET_VERIFIER。已明确的少量素材可以由一个 Worker 完成准备、制作与自查。明确当前可用图片可以直接登记和使用，不以额外批准标记为前提。
 
-Planner 首次通读使用 artifact.get_asset_planning_context，Builder/Verifier 使用 artifact.get_asset_work_context，并只按本次职责显式选择最小充分的 shot_ids/clip_group_ids，不因某资产服务全片就加载全部分镜；不再叠加 project.get 和完整资产计划。
+需要跨分工继续现有资产计划时读取 artifact.get_asset_plan_index，把精确 work-item 切片交给下一项工作；已有充分结果时不为刷新索引增加决策。
+
+需要全局规划时使用 artifact.get_asset_planning_context；具体切片使用 artifact.get_asset_work_context，并按任务选择最小充分的 shot_ids/clip_group_ids，不因某资产服务全片就加载全部分镜。当前结果足以完成下一步时直接使用，不叠加 project.get 或重新读取完整资产计划。
 
 AssetPlan index 的 execution_contract 是对当前内容与现行 Tool/workbench 语义是否对齐的可读事实，不是版本号门禁。
 
@@ -44,7 +46,7 @@ AssetPlan index 的 execution_contract 是对当前内容与现行 Tool/workbenc
 
 不从文档版本号或提示词猜测是否过时。
 
-分镜、剧本、视频、音频和后期的实际编译顺序与质量标准，直接遵循当前 Stage 选中的 Method 原文与本地薄适配。
+分镜、剧本、视频、音频和后期使用当前 Stage 选中的方法片段。来源原文提供经验，当前职责、用户要求、真实能力和本地适配决定执行；方法不是固定流程。
 
 available_tools 只是紧凑目录。
 

@@ -13,21 +13,19 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md::Step 1：把用户意图理解为同语种约束",
-      "../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md::Step 2：每次都重新发明创意内容"
+      "references/runtime-adaptation.md::创意与连续实体"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md::Step 5：交付"
+      "references/runtime-adaptation.md::修订判断"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md::Step 4：Prompt 写作规则"
+      "references/runtime-adaptation.md::导演与接触时序"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md::Step 3：必需输出格式",
-      "../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md::Step 4：Prompt 写作规则"
+      "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_h3/original/handdrawn-live-video-generator/SKILL.cn.md::Step 5：交付"
+      "references/runtime-adaptation.md::后期判断"
     ]
   },
   "provenance": "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER",
@@ -35,5 +33,15 @@
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/handdrawn-live-video-generator/SKILL.cn.md",
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/handdrawn-live-video-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub User]"
   ],
-  "user_overridable": true
+  "user_overridable": true,
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "POST.REVISION_VERIFIER": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ]
+  }
 }

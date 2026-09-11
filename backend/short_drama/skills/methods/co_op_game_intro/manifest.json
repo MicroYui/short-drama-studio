@@ -14,33 +14,22 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 1：询问视觉风格",
-      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 2：收集玩家与游戏信息"
+      "references/runtime-adaptation.md::创意与玩家信息"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 7：常见失败修正"
+      "references/runtime-adaptation.md::修订判断"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 6：回填视频 prompt，并用 Minimax H3 生成"
+      "references/runtime-adaptation.md::导演与事件节拍"
     ],
     "ASSET_REVIEWER": [
-      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 3：生成 GPT 首图提示词",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::核心规则",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::构图",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::角色风格",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::游戏 UI",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-confirmation-image-template.zh_cn.md::负面约束"
+      "references/runtime-adaptation.md::菜单素材与身份映射"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 6：回填视频 prompt，并用 Minimax H3 生成",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::提示词原则",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::优先级顺序",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::参考素材的职责",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::角色身份与风格锁定",
-      "../../sources/minimax_h3/translations/co-op-game-intro-generator/references/h3-video-prompt-template.zh_cn.md::负面约束"
+      "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_h3/original/co-op-game-intro-generator/SKILL.cn.md::STEP 7：常见失败修正"
+      "references/runtime-adaptation.md::后期判断"
     ]
   },
   "provenance": "UPSTREAM_OFFICIAL_WITH_ADAPTER",
@@ -48,5 +37,15 @@
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/co-op-game-intro-generator/SKILL.cn.md + references",
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/co-op-game-intro-generator/meta.yaml [source=official; author-en=MiniMax Hub]"
   ],
-  "user_overridable": true
+  "user_overridable": true,
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "POST.REVISION_VERIFIER": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ]
+  }
 }

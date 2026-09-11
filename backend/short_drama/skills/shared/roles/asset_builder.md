@@ -1,6 +1,6 @@
 # 资产制作
 
-按 Leader 指定范围制作资产。有 AssetPlan 时读取对应 item/work-item 切片；还没有正式分镜或 AssetPlan 时，直接从当前正文、Bible 和原始参考建立所需核心资产，不为缺少计划文档停下。具体人物、场景、道具形态、Prompt 与依赖方法直接采用当前 WorkOrder 已装载的 MiniMax Design 或其他上游 Method 原文章节，本地职责只补充以下 Tool 与交接边界。有 AssetPlan 时使用下列 work-item 切片和候选指针；直接制作核心资产时使用当前正文、Bible、已有 Asset 与精确媒体引用，跳过不存在的计划读写：
+按 Leader 指定范围制作资产。有 AssetPlan 时读取对应 item/work-item 切片；还没有正式分镜或 AssetPlan 时，直接从当前正文、Bible 和原始参考建立所需核心资产，不为缺少计划文档停下。结合当前角色和阶段已装载的方法、项目风格与 Provider 能力决定具体制作，不将上游默认版式当作所有供应商通用配方。有 AssetPlan 时使用下列 work-item 切片和候选指针；直接制作核心资产时使用当前正文、Bible、已有 Asset 与精确媒体引用，跳过不存在的计划读写：
 
 - 先按稳定 ID 调用 `artifact.get_asset_work_context`，取得所选任务、必要依赖闭包、ProductionSpec、用户原始要求与精确 source intake。Leader 委派具体执行项时使用 `{"scope":{"mode":"WORK_ITEM","work_item_ids":["<work-item-id>"]}}`；只有当 WorkOrder 明确要求处理整个资产项时才使用 `{"scope":{"mode":"ITEM","item_ids":["<item-id>"]}}`。两种 scope 互斥，不得在顶层传旧式 `item_ids` / `work_item_ids`，也不得在一个 scope 内混用。只在当前视图确实需要镜头构图或连续性语义时，显式传入最小充分的 `shot_ids` / `clip_group_ids`；不因主角服务全片就读取全部分镜。不要叠加 `project.get`、完整 Storyboard、完整 ProductionSpec 或完整 AssetPlan。后续写入使读取结果过期、且所需事实已不在当前工作集中时，按需重读对应局部。
 - 严格消费计划中的 operation、prompt、引用职责和依赖。按需使用 `artifact.create_asset`、`artifact.update_brief`、catalog/stock/local/url import、`image.capability`、`image.enqueue`、`image.advance`、`image.compose_reference_sheet` 或 `image.compose_text_plate`；不得在执行时重新发明全局用途。`image.enqueue.request.layout_profile` 使用当前 work-item 的 `output_layout_profile`；普通脸部、正面、侧面和背面图是 `LIGHTWEIGHT_SINGLE`，不得继承父 item brief 中最终参考卡的多区布局。只有最终 `COMPOSE` work 使用自身 `compose_intent.layout_profile`。
@@ -13,3 +13,5 @@
 - 整理既有镜头引用时，使用工作切片 `reference_packs` 或当前工作集 `reference_pack` 实体中真正保存的条目与标签；`reference_pack_intent` 是计划意图，不证明对应 role/tags 已存在。独立文字板可以是物理载体包内的 `PROP_STATE` 成员。写入响应中的 `reference_plan` 是该 Shot 最新保存结果，按 Shot ID 保留在工作集，覆盖该 Shot 的旧读取。写入后用 `shot.preview_reference_plan` 核对当前实际选择；各 Shot 最新预览保留为 `reference_plan_preview` 实体，未发生相关写入时不因另一个Shot的预览成为最新交接而重复复核。只修复真正缺失的已计划引用，不因方向或景别偏好未命中而重制可用素材。
 
 局部计划缺口携精确 ID 交回 Leader；全局盘点、顺序或依赖网络失效时交回 ASSET_PLANNER。不要自行读取或替换完整 AssetPlan，不设置固定任务簇、重试次数或返工循环。
+
+生成前确认这份媒体要提供什么：身份、服装、空间、状态或构图。例：已有正脸能稳定辨认人物，而本镜只需补背面服装，就用已有身份图派生该背面，不重做整套卡。身份漂移时检查主体占比、参考间服装/年龄冲突及实际输入顺序；不要把多种人物状态混进同张参考，也不靠重复“保持一致”代替修正输入。已选媒体可用时直接登记，观察只针对其真实用途。

@@ -16,33 +16,28 @@
   "shared_role_footer": "../../shared/official_task_method_footer.md",
   "role_source_sections": {
     "CONCEPT": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::适用场景",
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::默认创作目标",
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::视觉隐喻"
+      "references/runtime-adaptation.md::创意与视觉隐喻"
     ],
     "WRITER": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::脚本 / 视觉节奏轨"
+      "references/runtime-adaptation.md::脚本与视觉节奏"
     ],
     "PLANNER": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::分镜",
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 3：建立静帧规格",
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 5：规划停格组装"
+      "references/runtime-adaptation.md::段落与制作依赖"
     ],
     "REVISION_VERIFIER": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 7：质量检查"
+      "references/runtime-adaptation.md::修订判断"
     ],
     "DIRECTOR": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 5：规划停格组装",
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 6：生成带拼贴音效的 B-roll 片段"
+      "references/runtime-adaptation.md::组装导演"
     ],
     "ASSET_REVIEWER": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 3：建立静帧规格"
+      "references/runtime-adaptation.md::静帧与色板"
     ],
     "VIDEO_PROMPT_COMPILER": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 6：生成带拼贴音效的 B-roll 片段"
+      "references/runtime-adaptation.md::视频编译"
     ],
     "EPISODE_REVIEWER": [
-      "../../sources/minimax_h3/original/paper-collage-explainer-generator/SKILL.cn.md::STEP 7：质量检查"
+      "references/runtime-adaptation.md::后期判断"
     ]
   },
   "provenance": "UPSTREAM_OFFICIAL_FEATURED_WITH_ADAPTER",
@@ -50,5 +45,15 @@
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/paper-collage-explainer-generator/SKILL.cn.md",
     "MiniMax-H3 d21241f0a4b3acbb34c97dae47fa417b7065e438 / skills/paper-collage-explainer-generator/meta.yaml [source=official-featured; author-en=MiniMax Hub]"
   ],
-  "user_overridable": true
+  "user_overridable": true,
+  "stage_role_source_sections": {
+    "POST.DIRECTOR": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ],
+    "POST.REVISION_VERIFIER": [
+      "../../shared/methods/post.md::当前作品与最小修复",
+      "references/runtime-adaptation.md::后期判断"
+    ]
+  }
 }

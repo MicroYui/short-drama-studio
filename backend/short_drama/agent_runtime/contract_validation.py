@@ -33,7 +33,7 @@ def validate_agent_result_contract(work_order: WorkOrder, result: AgentResult) -
     if work_order.acceptance_criteria and not _has_completion_evidence(result):
         raise AgentResultContractError(
             "A COMPLETED AgentResult with acceptance_criteria must include at least "
-            "one finding, decision, artifact update, evidence reference, or next action"
+            "one finding, decision, artifact update, evidence reference, or deliverable"
         )
     if work_order.expected_output_schema:
         payload = (
@@ -58,7 +58,6 @@ def _has_completion_evidence(result: AgentResult) -> bool:
         or result.findings
         or result.decisions
         or result.evidence_refs
-        or result.recommended_next_actions
     )
 
 

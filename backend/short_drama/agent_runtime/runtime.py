@@ -840,6 +840,7 @@ class AgentRuntime:
         next_owner: WorkOrderNextOwner | None = None,
         stale_handoff: bool = False,
         stale_reason: str | None = None,
+        completion_receipts: Sequence[dict[str, JsonValue]] = (),
     ) -> AgentResult:
         work_order = self._require_work_order(work_order_id)
         result = AgentResult(
@@ -859,6 +860,7 @@ class AgentRuntime:
             next_owner=next_owner,
             stale_handoff=stale_handoff,
             stale_reason=stale_reason,
+            completion_receipts=list(completion_receipts),
         )
         # A late result from a superseded plan is retained for traceability, but
         # it no longer claims to satisfy the active WorkOrder contract.  Normal

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from functools import lru_cache
+from typing import cast
 
 from short_drama.h3_models import H3MediaInput, H3VideoRequest
 from short_drama.models import AssetKind, ProjectDocument, ShotPlan, VideoGenerationRoute
@@ -24,8 +26,213 @@ from short_drama.providers.h3_prompt_skill import (
 from short_drama.providers.h3_media_bindings import resolve_h3_media_bindings
 
 
+_H3_FIELDS = (
+    "subject_definitions", "summary", "retention_analysis", "detailed_description",
+    "integrated_multimodal_description", "overall_soundscape", "non_diegetic_music",
+)
+_H3_FIELD_PATTERN = re.compile(
+    r"(?m)^[ \t]*(" + "|".join(_H3_FIELDS) + r"):[ \t]*"
+)
+
+
 class LanguagePromptValidationError(ValueError):
     """The generated prompt changed or omitted a locked production fact."""
+
+
+def _prompt_sections(prompt: str) -> tuple[str, dict[str, str]]:
+    """Parse only the provider's top-level field syntax, never creative prose."""
+
+    matches = list(_H3_FIELD_PATTERN.finditer(prompt))
+    if not matches:
+        raise LanguagePromptValidationError("H3 prompt has no recognizable top-level fields")
+    sections: dict[str, str] = {}
+    for index, match in enumerate(matches):
+        field = match.group(1)
+        if field in sections:
+            raise LanguagePromptValidationError(f"H3 prompt repeats top-level field {field}")
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(prompt)
+        sections[field] = prompt[match.end():end].strip()
+    return prompt[:matches[0].start()].strip(), sections
+
+
+def _required_fields(route: VideoGenerationRoute) -> tuple[str, ...]:
+    if route == VideoGenerationRoute.REFERENCE:
+        return (
+            "subject_definitions", "summary", "retention_analysis", "detailed_description",
+            "overall_soundscape", "non_diegetic_music",
+        )
+    return ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
+
+
+def _frame_alignment(
+    route: VideoGenerationRoute, duration_seconds: int, *, generation_unit: bool,
+) -> str:
+    if route == VideoGenerationRoute.FRAME_FIRST:
+        return (
+            "For the target video, at 0.00 seconds into the target video, "
+            "<Picture 1> (from [Shot 1]) is fully referenced."
+        )
+    if route == VideoGenerationRoute.FRAME_LAST:
+        source = "the final editorial shot" if generation_unit else "[Shot 1]"
+        return (
+            "How the reference pictures align with the target video — "
+            f"<Picture 1> (from {source}) aligns with the {duration_seconds:.2f}-second "
+            "mark of the target video."
+        )
+    if route == VideoGenerationRoute.FRAME_FIRST_LAST:
+        first = "[Shot 1]" if generation_unit else "Shot 1"
+        last = "the final editorial shot" if generation_unit else "Shot 1"
+        return (
+            "How the reference pictures align with the target video — "
+            f"Picture 1 (from {first}) aligns with the 0.00-second mark of the target video; "
+            f"Picture 2 (from {last}) aligns with the {duration_seconds:.2f}-second "
+            "mark of the target video."
+        )
+    return ""
+
+
+def normalize_language_prompt(
+    prompt: str,
+    document: ProjectDocument,
+    *,
+    route: VideoGenerationRoute,
+    duration_seconds: int,
+    media_inputs: list[H3MediaInput],
+    generation_unit: bool = False,
+) -> str:
+    """Assemble known grammar and missing bindings without rewriting any facts.
+
+    Creative sections must all exist. We retain every section body verbatim and
+    reject conflicting aliases rather than silently changing which picture wins.
+    Length and all locked-fact checks still run after this assembly.
+    """
+
+    stripped = prompt.strip()
+    if "```" in stripped:
+        raise LanguagePromptValidationError("H3 prompt contains Markdown fencing")
+    prefix, sections = _prompt_sections(stripped)
+    fields = _required_fields(route)
+    if set(sections) != set(fields):
+        missing = sorted(set(fields).difference(sections))
+        unexpected = sorted(set(sections).difference(fields))
+        raise LanguagePromptValidationError(
+            f"H3 prompt fields do not match {route.value}; missing={missing}, unexpected={unexpected}"
+        )
+    expected_alignment = _frame_alignment(route, duration_seconds, generation_unit=generation_unit)
+    if prefix and prefix != expected_alignment:
+        # The preamble might contain a real creative fact or a conflicting frame
+        # instruction. Never discard it under the guise of formatting repair.
+        raise LanguagePromptValidationError("H3 prompt contains an unexpected preamble before its fields")
+    if route == VideoGenerationRoute.REFERENCE:
+        definitions = sections["subject_definitions"]
+        additions: list[str] = []
+        for binding in resolve_h3_media_bindings(document, media_inputs, []):
+            required = f"@{binding.alias} = {binding.prompt_label}"
+            assignments = re.findall(
+                re.escape(f"@{binding.alias}") + r"\s*=\s*(<(?:Subject|Picture|Video|Audio) \d+>)",
+                stripped,
+            )
+            if any(label != binding.prompt_label for label in assignments):
+                raise LanguagePromptValidationError(f"H3 prompt has a conflicting binding for @{binding.alias}")
+            if required not in definitions or binding.provider_label not in definitions:
+                declaration = (
+                    f"{required}; {binding.prompt_label} refers to {binding.subject} "
+                    f"from {binding.provider_label}."
+                )
+                if declaration not in additions:
+                    additions.append(declaration)
+        if additions:
+            sections["subject_definitions"] = " ".join([definitions, *additions]).strip()
+    body = "\n\n".join(f"{field}: {sections[field]}" for field in fields)
+    return f"{expected_alignment}\n\n{body}" if expected_alignment else body
+
+
+def build_language_prompt_section_repair_input(
+    prompt: str,
+    *,
+    source_input_text: str,
+    route: VideoGenerationRoute,
+) -> tuple[str, str]:
+    """Request a bounded edit of overlong prose; callers retain all other fields.
+
+    This is an optional technical repair, not a second full compilation. The
+    source is the exact first compiler input, so facts and dialogue stay anchored.
+    """
+
+    _prefix, sections = _prompt_sections(prompt)
+    if len(prompt) <= 7000:
+        raise LanguagePromptValidationError("H3 section repair requires an overlong prompt")
+    fields = _required_fields(route)
+    if set(sections) != set(fields):
+        raise LanguagePromptValidationError("Repair requires a structurally complete H3 prompt")
+    # Start with the largest prose sections. Their combined size must leave room
+    # to remove the actual excess. References remain deterministic and intact.
+    candidates = sorted(
+        (field for field in fields if field != "subject_definitions"),
+        key=lambda field: len(sections[field]), reverse=True,
+    )
+    selected: list[str] = []
+    editable_characters = 0
+    for field in candidates:
+        selected.append(field)
+        editable_characters += len(sections[field])
+        if editable_characters > len(prompt) - 7000:
+            break
+    source = json.loads(source_input_text)
+    source.pop("source_prompt", None)
+    source.pop("required_prompt_schema", None)
+    payload = {
+        "operation": "replace_only_selected_h3_prose_sections",
+        "required_reduction_characters": len(prompt) - 7000,
+        "replacement_total_max_characters": editable_characters - (len(prompt) - 7000),
+        "sections_to_replace": {field: sections[field] for field in selected},
+        "retained_reference_definitions": sections.get("subject_definitions"),
+        "locked_source": source,
+    }
+    return (
+        "只修订 sections_to_replace 中的文本，输出 JSON 对象，键必须与其完全一致，值为替换正文。"
+        "调用方会原样保留其他字段、标签与帧对齐。按给定字符上限消除重复修辞、重复身份和解释；"
+        "保留每条不同事实、全部镜头/时段标记、原文对白及说话人、必要动作与声音。"
+        "不得截断、改时长、删镜头或重写故事；不能忠实缩短时明确说明无法完成，不伪造成功。",
+        json.dumps(payload, ensure_ascii=False),
+    )
+
+
+def apply_language_prompt_section_repair(
+    prompt: str,
+    replacement_json: str,
+    *,
+    repair_input_text: str,
+) -> str:
+    """Apply exact returned fields while preserving every untouched byte of prose."""
+
+    _prefix, sections = _prompt_sections(prompt)
+    request = json.loads(repair_input_text)
+    decoded: object = json.loads(replacement_json)
+    expected = request["sections_to_replace"]
+    if not isinstance(decoded, dict):
+        raise LanguagePromptValidationError("H3 section repair must return an object")
+    replacements = cast(dict[str, object], decoded)
+    if set(replacements) != set(expected):
+        raise LanguagePromptValidationError("H3 section repair returned unexpected or missing fields")
+    if not all(isinstance(value, str) and value.strip() for value in replacements.values()):
+        raise LanguagePromptValidationError("H3 section repair must return nonempty text values")
+    for field, value in cast(dict[str, str], replacements).items():
+        if _H3_FIELD_PATTERN.search(value):
+            raise LanguagePromptValidationError("H3 section repair embedded another top-level field")
+        sections[field] = value.strip()
+    matches = list(_H3_FIELD_PATTERN.finditer(prompt))
+    result = prompt
+    for index in range(len(matches) - 1, -1, -1):
+        match = matches[index]
+        field = match.group(1)
+        if field not in replacements:
+            continue
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(prompt)
+        old = prompt[match.end():end]
+        trailing = old[len(old.rstrip()):]
+        result = result[:match.end()] + sections[field] + trailing + result[end:]
+    return result
 
 
 @lru_cache(maxsize=1)
@@ -259,7 +466,7 @@ def _route_media_bindings(
     return bindings
 
 
-def _previous_shot_terminal_state(
+def _previous_shot_planned_terminal_state(
     document: ProjectDocument,
     shot: ShotPlan,
 ) -> dict[str, object] | None:
@@ -271,6 +478,8 @@ def _previous_shot_terminal_state(
     if previous is None:
         return None
     return {
+        "evidence_kind": "PLANNED_ONLY",
+        "shot_id": previous.id,
         "sequence": previous.sequence,
         "visual": previous.visual,
         "framing": previous.framing,
@@ -300,9 +509,8 @@ def _compiler_instructions(
         "制作类型策略只用于忠实编译已经锁定的镜头，不得在此阶段改写导演意图："
         f"{skill_prompt.text}\n{_h3_prompt_skill_instructions()}"
         "\n当前 Provider API 的 required_prompt_schema 是最终输出格式。"
-        "已选 Method 的逐镜叙事、参考绑定和声音连续性用于编译既定内容；"
-        "Design Hub 的中文固定首尾句、画布字段和示例摄影风格不属于当前 API 协议，"
-        "不得与官方 H3 Prompt IR 拼接，或覆盖项目已声明的视觉/声音方向。"
+        "已选 Method 提供逐镜叙事、参考用途和声音连续性，项目提供风格，"
+        "只有当前 Provider Skill 提供输出语法。"
         "\nmodel_lock 来自本次明确调用的 H3 适配器，是实际目标模型；"
         "GenerationUnit 中可空的 provider/model/resolution 是上游偏好，不替代该目标。"
         "operation_scope 是当前 Tool 调用范围：只编译文本，没有媒体上传、提交或生成。"
@@ -325,6 +533,10 @@ def _compiler_instructions(
         "超长草稿本身不是最终 H3 请求，最终输出仍必须通过7000字符限制。"
         "compiler_feedback 是调用方针对上次结果的修订意见，应落实到表达方式；"
         "它不能覆盖锁定的事实、对白、镜头边界或有序媒体。"
+        "\nprevious_*_planned_terminal_state 只是上一镜的设计意图。"
+        "actual_previous_media_boundary 才是调用方提供的当前采用媒体边界；"
+        "其中未观察的事实仍为未知，不得由计划、静帧或摘要冒充已发生动作或声音。"
+        "仅承接当前镜头确实依赖的状态，不为补观察阻挡无依赖的编译。"
     )
 
 
@@ -352,10 +564,11 @@ def build_language_prompt_input(
     *,
     route: VideoGenerationRoute,
     duration_seconds: int,
-    source_prompt: str,
+    source_prompt: str | None,
     media_inputs: list[H3MediaInput] | None = None,
     method_skill_ids: Sequence[str] = (),
     revision_instructions: str | None = None,
+    actual_previous_media_boundary: dict[str, object] | None = None,
 ) -> tuple[str, str]:
     instructions = _compiler_instructions(document, method_skill_ids=method_skill_ids)
     script = next(
@@ -375,9 +588,9 @@ def build_language_prompt_input(
     )
     route_guidance = {
         VideoGenerationRoute.DIRECT: "无图像锚点，提示词必须完整建立首帧人物、空间、构图和动作起点。",
-        VideoGenerationRoute.FRAME_FIRST: "首帧图已批准；从首帧精确起步，保持人物、服装、空间、构图和道具外观。",
-        VideoGenerationRoute.FRAME_LAST: "尾帧图已批准；根据锁定镜头推导相容起始状态，让动作、机位和物理状态逐步收敛到尾帧，不得把尾帧当作开场。",
-        VideoGenerationRoute.FRAME_FIRST_LAST: "首尾帧均已批准；连续完成中间动作，不改变两端已确定的身份、构图和道具状态。",
+        VideoGenerationRoute.FRAME_FIRST: "使用本次选中的首帧；从首帧精确起步，保持人物、服装、空间、构图和道具外观。",
+        VideoGenerationRoute.FRAME_LAST: "使用本次选中的尾帧；根据锁定镜头推导相容起始状态，让动作、机位和物理状态逐步收敛到尾帧，不得把尾帧当作开场。",
+        VideoGenerationRoute.FRAME_FIRST_LAST: "使用本次选中的首尾帧；连续完成中间动作，不改变两端已确定的身份、构图和道具状态。",
         VideoGenerationRoute.REFERENCE: "参考素材用于身份、空间或道具锚定；保持其外观，但不要把参考图理解成额外镜头或新增主体。",
     }[route]
     resolved_media_inputs = media_inputs or []
@@ -388,7 +601,7 @@ def build_language_prompt_input(
     )
     route_media = _route_media_bindings(document, resolved_media_inputs)
     payload = {
-        "task": "在不改变任何锁定事实的前提下，把 source_prompt 编译为 required_prompt_schema 指定的 MiniMax-H3 Prompt IR。",
+        "task": "将当前镜头、原文对白和有序媒体忠实编译为 required_prompt_schema 指定的 MiniMax-H3 Prompt IR；仅在提供 source_prompt 时修订该草稿。",
         **_h3_compilation_target(),
         "production_profile": document.project.production_profile.value,
         "route": route.value,
@@ -397,7 +610,6 @@ def build_language_prompt_input(
         "route_media_bindings": route_media,
         "duration_seconds": duration_seconds,
         "aspect_ratio": "9:16",
-        "source_prompt": source_prompt,
         "locked_shot": {
             "sequence": shot.sequence,
             "narrative_purpose": shot.narrative_purpose,
@@ -411,7 +623,8 @@ def build_language_prompt_input(
             "continuity": shot.continuity.model_dump(mode="json"),
             "transition_out": shot.transition_out,
         },
-        "previous_shot_terminal_state": _previous_shot_terminal_state(document, shot),
+        "previous_shot_planned_terminal_state": _previous_shot_planned_terminal_state(document, shot),
+        "actual_previous_media_boundary": actual_previous_media_boundary,
         "structured_scene_context": (
             scene.model_dump(mode="json") if scene is not None else None
         ),
@@ -420,7 +633,7 @@ def build_language_prompt_input(
             "route_selected_upstream": True,
             "action_density_policy": "按实际镜头上下文编译，不使用固定动作拍数阈值，也不擅自拆镜。",
             "timing_policy": "在不违背锁定事实时保留自然起止呼吸空间，不使用固定秒数作为硬规则。",
-            "continuity_handoff": "从上一镜终态自然承接，但不得携入当前镜头未列出的可见资产。",
+            "continuity_handoff": "有实际连续性依赖时使用已观察的采用媒体边界；未提供观察时只保留计划意图，不携入当前镜头未列出的可见资产。",
         },
         "locked_dialogue": [
             {
@@ -436,6 +649,8 @@ def build_language_prompt_input(
     }
     if revision_instructions is not None:
         payload["compiler_feedback"] = revision_instructions
+    if source_prompt is not None:
+        payload["source_prompt"] = source_prompt
     return instructions, json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -451,6 +666,7 @@ def build_generation_unit_language_prompt_input(
     method_skill_ids: Sequence[str] = (),
     source_prompt: str | None = None,
     revision_instructions: str | None = None,
+    actual_previous_media_boundary: dict[str, object] | None = None,
 ) -> tuple[str, str]:
     """Read one complete clip from canonical facts, without replaying other stages.
 
@@ -517,7 +733,8 @@ def build_generation_unit_language_prompt_input(
         ),
         "locked_generation_unit": unit.model_dump(mode="json", exclude={"shot_windows"}),
         "locked_shots": locked_shots,
-        "previous_clip_terminal_state": _previous_shot_terminal_state(document, ordered_shots[0]),
+        "previous_clip_planned_terminal_state": _previous_shot_planned_terminal_state(document, ordered_shots[0]),
+        "actual_previous_media_boundary": actual_previous_media_boundary,
         "route_media_bindings": bindings,
         "visible_assets": visible_names,
         "visible_asset_bible_for_disambiguation_only": visible_bible,

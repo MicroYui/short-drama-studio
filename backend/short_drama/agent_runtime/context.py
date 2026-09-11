@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 import json
-from typing import Protocol
+from typing import Protocol, cast
 
 from pydantic import JsonValue
 
@@ -47,7 +47,7 @@ def _unique_strings(values: Sequence[str]) -> list[str]:
 def _context_read_ref(ref: ArtifactRef) -> ArtifactRef:
     # Execution records are updated in place. Their saved state numbers remain
     # in Trace, while both Leader and Worker read the current task lifecycle.
-    if ref.artifact_type in {"h3_route_plan", "h3_route_asset_preparation"}:
+    if ref.artifact_type in {"h3_route_plan", "h3_route_asset_preparation", "editorial_timeline"}:
         return ref.model_copy(update={"version": None})
     return ref
 
@@ -475,12 +475,13 @@ def _bounded_experiences(
 def _bounded_actions(
     budget: _CharacterBudget,
     values: Sequence[ActionDigest],
+    *, exact_read_action_ids: frozenset[str] = frozenset(),
 ) -> list[ActionDigest]:
     newest_first: list[ActionDigest] = []
     for item in reversed(values):
         summary = budget.take(
             item.summary,
-            limit=1_000,
+            limit=len(item.summary) if item.id in exact_read_action_ids else 1_000,
             reserve=256 if item.agent_result is not None else 0,
         )
         if summary is None:
@@ -558,6 +559,7 @@ def _agent_result_digest(result: AgentResult | None) -> AgentResultDigest | None
         concise_summary=result.concise_summary,
         deliverable=dict(result.deliverable),
         findings=list(result.findings),
+        completion_receipts=list(result.completion_receipts),
         # The complete evidence set remains on the durable AgentResult.  It is
         # intentionally not promoted into every later Leader prompt: landed
         # created/updated artifacts are carried by ActionDigest, while a later
@@ -645,6 +647,13 @@ class ContextCompiler:
         self._store = store
         self._artifact_resolver = artifact_resolver
 
+    def _summarize_artifacts(self, refs: Sequence[ArtifactRef]) -> list[ArtifactSummary | None]:
+        batch = getattr(self._artifact_resolver, "summarize_artifacts", None)
+        if callable(batch):
+            resolve = cast(Callable[[Sequence[ArtifactRef]], list[ArtifactSummary | None]], batch)
+            return resolve(refs)
+        return [self._artifact_resolver.summarize_artifact(ref) for ref in refs]
+
     def unresolved_artifact_refs(
         self,
         run_id: str,
@@ -657,10 +666,11 @@ class ContextCompiler:
             raise KeyError(f"Unknown agent run: {run_id}")
 
         unresolved: list[ArtifactRef] = []
-        for ref in _unique_artifact_refs(refs):
+        refs = _unique_artifact_refs(refs)
+        for ref in refs:
             if ref.project_id != run.project_id:
                 raise ValueError("Requested artifacts must belong to the run's project")
-            summary = self._artifact_resolver.summarize_artifact(ref)
+        for ref, summary in zip(refs, self._summarize_artifacts(refs), strict=True):
             if summary is None or summary.ref.identity() != ref.identity():
                 unresolved.append(ref)
         return unresolved
@@ -740,8 +750,7 @@ class ContextCompiler:
 
         artifacts: list[ArtifactSummary] = []
         unresolved_refs: list[ArtifactRef] = []
-        for ref in selected_refs:
-            summary = self._artifact_resolver.summarize_artifact(ref)
+        for ref, summary in zip(selected_refs, self._summarize_artifacts(selected_refs), strict=True):
             if summary is None:
                 unresolved_refs.append(ref)
             else:
@@ -767,6 +776,17 @@ class ContextCompiler:
             )
             for action in selected_actions
         ]
+        exact_read_action_ids: set[str] = set()
+        for action in selected_actions:
+            if action.tool_name != "timeline.read_editorial" or not action.output_summary:
+                continue
+            try:
+                output: JsonValue = json.loads(action.output_summary)
+            except ValueError:
+                continue
+            content = output.get("content") if isinstance(output, dict) else None
+            if isinstance(content, dict) and content.get("selection_only") is True:
+                exact_read_action_ids.add(action.id)
         tool_attempt_refs: list[ToolAttemptRef] = []
         seen_attempts: set[tuple[str, str, str, str]] = set()
         for action in selected_actions:
@@ -811,7 +831,8 @@ class ContextCompiler:
             # Current outcomes must precede ambient project prose. Otherwise a
             # completed Tool can lose both its result and exact handoff refs.
             bounded_tool_attempt_refs = _bounded_tool_attempt_refs(budget, tool_attempt_refs)
-            bounded_recent_actions = _bounded_actions(budget, recent_actions)
+            bounded_recent_actions = _bounded_actions(budget, recent_actions,
+                exact_read_action_ids=frozenset(exact_read_action_ids))
             run_focus = budget.take(
                 None if run_memory is None else run_memory.current_focus,
                 limit=2_000,
@@ -918,7 +939,7 @@ class ContextCompiler:
                 raise ContextManifestResolutionError(
                     "ContextManifest artifact references must belong to the AgentRun project"
                 )
-            summary = self._artifact_resolver.summarize_artifact(ref)
+        for ref, summary in zip(refs, self._summarize_artifacts(refs), strict=True):
             if summary is None or summary.ref.identity() != ref.identity():
                 raise ContextManifestResolutionError(
                     "ContextManifest contains an unresolved artifact reference: "
