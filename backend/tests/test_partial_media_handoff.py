@@ -237,8 +237,13 @@ def test_actual_batch_uses_keep_per_version_scope_and_later_single_entry_updates
     all_rows, _ = observed_media_handoffs(runtime.store, run_id=run.id, project_id=project_id)
     assert len(all_rows) == 4
     selected = saved.pack.entries[1]
-    rows, _ = observed_media_handoffs(runtime.store, run_id=run.id, project_id=project_id, selected_ids={selected.asset_version_id})
+    rows, visible_refs = observed_media_handoffs(runtime.store, run_id=run.id, project_id=project_id, selected_ids={selected.asset_version_id})
     assert len(rows) == 1
+    assert {ref.artifact_id for ref in visible_refs if ref.artifact_type == "asset_version"} == {
+        selected.asset_version_id, selected.lineage_root_version_id,
+    }
+    assert {ref.artifact_id for ref in visible_refs if ref.artifact_type == "reference_pack_entry"} == {selected.id}
+    assert {ref.artifact_id for ref in visible_refs if ref.artifact_type == "reference_pack"} == {saved.pack.id}
     row = cast(dict[str, JsonValue], rows[0])
     assert row["asset_version_id"] == selected.asset_version_id and row["kind"] == "saved_reference_use"
     assert cast(dict[str, JsonValue], row["result"])["entry"] == selected.model_dump(mode="json")

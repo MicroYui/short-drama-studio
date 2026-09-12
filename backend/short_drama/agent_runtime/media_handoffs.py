@@ -124,8 +124,18 @@ def media_turn_observations(
             "result": {**result, "output": {"pack": pack, "entry": by_id[entry_id]}}})
         observation = _observation(work, projected_turn, project_id)
         if observation is not None:
-            observation[1]["tool_name"] = turn.tool_name
-            observations.append(observation)
+            key, body, related, refs = observation
+            body["tool_name"] = turn.tool_name
+            entry = by_id[entry_id]
+            version_ids = _strings([entry.get("asset_version_id"), entry.get("lineage_root_version_id")])
+            # A scoped reader must not inherit the other uses' media merely
+            # because all entries share one durable source receipt.
+            scoped_refs = [ref for ref in refs if (
+                (ref.artifact_type == "reference_pack" and ref.artifact_id == pack.get("id"))
+                or (ref.artifact_type == "reference_pack_entry" and ref.artifact_id == entry_id)
+                or (ref.artifact_type == "asset_version" and ref.artifact_id in version_ids)
+            )]
+            observations.append((key, body, related, scoped_refs))
     return observations
 
 
