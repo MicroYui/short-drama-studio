@@ -13,11 +13,13 @@ from pydantic import (
     Field,
     JsonValue,
     PrivateAttr,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
 
 from short_drama.reference_aliases import normalize_reference_alias
+from short_drama.reference_text import ShotTextAnchor, locate_text_anchor
 
 
 class DomainModel(BaseModel):
@@ -1653,9 +1655,14 @@ class ShotReferenceCue(DomainModel):
         "do not change ownership or invent a pack merely because the image contains an object."
     ))
     field: Literal["visual", "action", "performance", "camera"] | None = None
+    text_anchor: ShotTextAnchor | None = Field(default=None, exclude_if=lambda value: value is None, description=(
+        "新正文引用优先复制唯一原文 exact；重复时补紧邻的 prefix/suffix，无需手算位置。"
+        "基于所属 Shot 或 Beat 的 field 定位，保存为规范 text_start/text_end。"
+        "同时提供显式偏移时必须与唯一匹配一致；此输入提示不另存为引用状态。"
+    ))
     text_start: int | None = Field(default=None, ge=0, description=(
-        "正文 @ 引用在 field 指定文本中的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数）。"
-        "新分镜中的具体人物、场景或道具引用应定位到相应文字并填写起止位置；"
+        "已有人工选区的起始 Unicode 字符位置（包含起点，不按 UTF-16 计数），与 text_end 成对。"
+        "新引用可改传 text_anchor，由程序定位；保留已有偏移和自定义 alias。"
         "仅不对应任何正文文字的整镜构图参考才省略。"
     ))
     text_end: int | None = Field(default=None, gt=0, description=(
@@ -1696,6 +1703,8 @@ class ShotReferenceCue(DomainModel):
 
     @model_validator(mode="after")
     def validate_reference_cue(self) -> ShotReferenceCue:
+        if self.text_anchor is not None and self.field is None:
+            raise ValueError("A text_anchor requires its owning text field")
         if (self.text_start is None) != (self.text_end is None):
             raise ValueError("A reference text range requires both start and end")
         if self.text_start is not None and self.text_end is not None:
@@ -1707,6 +1716,33 @@ class ShotReferenceCue(DomainModel):
         ):
             raise ValueError("Shot reference cue tags must be trimmed and unique")
         return self
+
+
+def _locate_reference_cues(
+    cues: list[ShotReferenceCue], info: ValidationInfo,
+) -> list[ShotReferenceCue]:
+    """Resolve only explicit write hints, copying caller-owned cue instances."""
+    resolved: list[ShotReferenceCue] = []
+    for cue in cues:
+        if cue.text_anchor is None:
+            resolved.append(cue)
+            continue
+        text: object = info.data.get(cue.field or "")
+        if not isinstance(text, str):
+            raise ValueError(f"Reference {cue.alias}: field {cue.field!r} has no text on this owner")
+        try:
+            start, end = locate_text_anchor(text, cue.text_anchor)
+        except ValueError as exc:
+            raise ValueError(f"Reference {cue.alias} in {cue.field}: {exc}") from exc
+        if cue.text_start is not None and (cue.text_start, cue.text_end) != (start, end):
+            raise ValueError(
+                f"REFERENCE_TEXT_ANCHOR_CONFLICT: {cue.alias} in {cue.field} does not match "
+                "the explicit text_start/text_end; neither location was overwritten."
+            )
+        resolved.append(cue.model_copy(update={
+            "text_start": start, "text_end": end, "text_anchor": None,
+        }))
+    return resolved
 
 
 class ShotTimelineBeat(DomainModel):
@@ -1730,6 +1766,8 @@ class ShotTimelineBeat(DomainModel):
         max_length=12,
     )
 
+    _locate_references = field_validator("references")(_locate_reference_cues)
+
     @model_validator(mode="after")
     def validate_time_range(self) -> ShotTimelineBeat:
         if self.end_seconds <= self.start_seconds:
@@ -1737,9 +1775,12 @@ class ShotTimelineBeat(DomainModel):
         if len(self.dialogue_line_ids) != len(set(self.dialogue_line_ids)):
             raise ValueError("Shot timeline beat dialogue line IDs must be unique")
         aliases: dict[str, tuple[str, str | None]] = {}
+        occurrences: dict[str, set[tuple[str | None, int | None, int | None]]] = {}
         for index, cue in enumerate(self.references):
             target = (cue.subject_asset_id, cue.asset_version_id)
-            if cue.alias in aliases and (cue.id is None or aliases[cue.alias] != target):
+            location = (cue.field, cue.text_start, cue.text_end)
+            distinct_location = cue.text_start is not None and location not in occurrences.get(cue.alias, set())
+            if cue.alias in aliases and (aliases[cue.alias] != target or (cue.id is None and not distinct_location)):
                 raise ValueError(
                     "Shot timeline beat reference aliases must identify one subject and media: "
                     f"references[{index}] cue={cue.id!r} alias={cue.alias!r} "
@@ -1747,6 +1788,7 @@ class ShotTimelineBeat(DomainModel):
                     "Use distinct aliases for different media or states."
                 )
             aliases[cue.alias] = target
+            occurrences.setdefault(cue.alias, set()).add(location)
         return self
 
 
@@ -1781,6 +1823,8 @@ class ShotPlan(DomainModel):
     approval_status: ApprovalStatus
     freshness: Freshness
     revision: int = Field(default=1, ge=1)
+
+    _locate_references = field_validator("references")(_locate_reference_cues)
 
     @model_validator(mode="after")
     def validate_timeline_beats(self) -> ShotPlan:

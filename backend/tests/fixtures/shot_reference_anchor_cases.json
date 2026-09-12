@@ -1,0 +1,376 @@
+{
+  "source_project_id": "project-a150dc017d81",
+  "cases": [
+    {
+      "shot_id": "shot-xkyx-08",
+      "owner": {
+        "beat_index": null,
+        "field": "visual"
+      },
+      "body": "@林乔在南侧站立看画左，灰蓝衬衫、低马尾和清楚双眼可见。右肩仍挂@棕色单肩包，包带不被裁掉。她平静回答后继续与陈放对视。陈放本镜画外。",
+      "before": {
+        "subject_asset_id": "asset-ef29cf906440",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 39,
+        "text_end": 45,
+        "alias": "棕色单肩包",
+        "required_tags": [],
+        "purpose": "同一棕包和右肩包带连续性；须保持站立准备离开的状态，待绑定实际图片。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "after": {
+        "subject_asset_id": "asset-ef29cf906440",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 32,
+        "text_end": 38,
+        "alias": "棕色单肩包",
+        "required_tags": [],
+        "purpose": "同一棕包和右肩包带连续性；须保持站立准备离开的状态，待绑定实际图片。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "before_revision": 1,
+      "after_revision": 2,
+      "actual_before_slice": "包带不被裁掉",
+      "actual_after_slice": "@棕色单肩包",
+      "derived_unique_exact_text": "@棕色单肩包",
+      "derived_match_positions": [
+        32
+      ],
+      "sources": [
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-first-full-direction-source.json",
+          "json_pointer": "/document/shots/7"
+        },
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-director-self-correction-source.json",
+          "json_pointer": "/document/shots/7"
+        }
+      ],
+      "original_request": {
+        "request_source": {
+          "database": "output/quality-e2e-2026-09-12/runtime/short-drama.sqlite3",
+          "table": "agent_work_orders",
+          "row_id": "work-order-bd0451acaea144b381f3993741fed903",
+          "column": "record_json",
+          "json_pointer": "/specialist_turns/5/arguments/request/group/shots/1"
+        },
+        "cue": {
+          "subject_asset_id": "asset-ef29cf906440",
+          "asset_version_id": null,
+          "alias": "棕色单肩包",
+          "field": "visual",
+          "text_start": 39,
+          "text_end": 45,
+          "purpose": "同一棕包和右肩包带连续性；须保持站立准备离开的状态，待绑定实际图片。",
+          "image_reference_role": "PROP_IDENTITY",
+          "usage": "GENERATION"
+        },
+        "requested_at": "2026-09-12T03:54:47.925353Z",
+        "result_status": "SUCCEEDED"
+      }
+    },
+    {
+      "shot_id": "shot-xkyx-08",
+      "owner": {
+        "beat_index": 1,
+        "field": "visual"
+      },
+      "body": "@林乔闭口继续看陈放，@棕色单肩包仍在右肩。",
+      "before": {
+        "subject_asset_id": "asset-ef29cf906440",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 12,
+        "text_end": 18,
+        "alias": "棕色单肩包",
+        "required_tags": [],
+        "purpose": "1.1—2秒右肩包带保持；未放包未离开。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "after": {
+        "subject_asset_id": "asset-ef29cf906440",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 11,
+        "text_end": 17,
+        "alias": "棕色单肩包",
+        "required_tags": [],
+        "purpose": "1.1—2秒右肩包带保持；未放包未离开。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "before_revision": 1,
+      "after_revision": 2,
+      "actual_before_slice": "棕色单肩包仍",
+      "actual_after_slice": "@棕色单肩包",
+      "derived_unique_exact_text": "@棕色单肩包",
+      "derived_match_positions": [
+        11
+      ],
+      "sources": [
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-first-full-direction-source.json",
+          "json_pointer": "/document/shots/7/timeline_beats/1"
+        },
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-director-self-correction-source.json",
+          "json_pointer": "/document/shots/7/timeline_beats/1"
+        }
+      ],
+      "original_request": {
+        "request_source": {
+          "database": "output/quality-e2e-2026-09-12/runtime/short-drama.sqlite3",
+          "table": "agent_work_orders",
+          "row_id": "work-order-bd0451acaea144b381f3993741fed903",
+          "column": "record_json",
+          "json_pointer": "/specialist_turns/5/arguments/request/group/shots/1/timeline_beats/1"
+        },
+        "cue": {
+          "subject_asset_id": "asset-ef29cf906440",
+          "asset_version_id": null,
+          "alias": "棕色单肩包",
+          "field": "visual",
+          "text_start": 12,
+          "text_end": 18,
+          "purpose": "1.1—2秒右肩包带保持；未放包未离开。",
+          "image_reference_role": "PROP_IDENTITY",
+          "usage": "GENERATION"
+        },
+        "requested_at": "2026-09-12T03:54:47.925353Z",
+        "result_status": "SUCCEEDED"
+      }
+    },
+    {
+      "shot_id": "shot-xkyx-09",
+      "owner": {
+        "beat_index": null,
+        "field": "visual"
+      },
+      "body": "@陈放在画左北侧，@林乔在画右南侧。两人隔桌对视，陈放是注意力中心，林乔侧脸和右肩包带提供关系。打开的@蓝色资料夹留在北侧桌面；@棕色单肩包不卸。陈放看资料与包后拉开北椅，从椅西侧绕入桌椅之间，坐下；林乔始终站着等待。",
+      "before": {
+        "subject_asset_id": "asset-19e6da402c5c",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 10,
+        "text_end": 13,
+        "alias": "林乔",
+        "required_tags": [],
+        "purpose": "林乔站立侧脸、低马尾和灰蓝衬衫身份需求，待精确媒体绑定。",
+        "image_reference_role": "SUBJECT_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "after": {
+        "subject_asset_id": "asset-19e6da402c5c",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 9,
+        "text_end": 12,
+        "alias": "林乔",
+        "required_tags": [],
+        "purpose": "林乔站立侧脸、低马尾和灰蓝衬衫身份需求，待精确媒体绑定。",
+        "image_reference_role": "SUBJECT_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "before_revision": 1,
+      "after_revision": 2,
+      "actual_before_slice": "林乔在",
+      "actual_after_slice": "@林乔",
+      "derived_unique_exact_text": "@林乔",
+      "derived_match_positions": [
+        9
+      ],
+      "sources": [
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-first-full-direction-source.json",
+          "json_pointer": "/document/shots/8"
+        },
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-director-self-correction-source.json",
+          "json_pointer": "/document/shots/8"
+        }
+      ],
+      "original_request": {
+        "request_source": {
+          "database": "output/quality-e2e-2026-09-12/runtime/short-drama.sqlite3",
+          "table": "agent_work_orders",
+          "row_id": "work-order-bd0451acaea144b381f3993741fed903",
+          "column": "record_json",
+          "json_pointer": "/specialist_turns/5/arguments/request/group/shots/2"
+        },
+        "cue": {
+          "subject_asset_id": "asset-19e6da402c5c",
+          "asset_version_id": null,
+          "alias": "林乔",
+          "field": "visual",
+          "text_start": 10,
+          "text_end": 13,
+          "purpose": "林乔站立侧脸、低马尾和灰蓝衬衫身份需求，待精确媒体绑定。",
+          "image_reference_role": "SUBJECT_IDENTITY",
+          "usage": "GENERATION"
+        },
+        "requested_at": "2026-09-12T03:54:47.925353Z",
+        "result_status": "SUCCEEDED"
+      }
+    },
+    {
+      "shot_id": "shot-xkyx-09",
+      "owner": {
+        "beat_index": 0,
+        "field": "visual"
+      },
+      "body": "@陈放看着林乔，嘴张了张却没出声；随后视线落到@蓝色资料夹，再看她肩上的@棕色单肩包。",
+      "before": {
+        "subject_asset_id": "asset-e104055d5990",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 27,
+        "text_end": 33,
+        "alias": "蓝色资料夹",
+        "required_tags": [],
+        "purpose": "需要北侧桌面打开第一页的夹状态；这是任务可由陈放完成的现成资料，不要求读清小字。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "after": {
+        "subject_asset_id": "asset-e104055d5990",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 23,
+        "text_end": 29,
+        "alias": "蓝色资料夹",
+        "required_tags": [],
+        "purpose": "需要北侧桌面打开第一页的夹状态；这是任务可由陈放完成的现成资料，不要求读清小字。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "before_revision": 1,
+      "after_revision": 2,
+      "actual_before_slice": "料夹，再看她",
+      "actual_after_slice": "@蓝色资料夹",
+      "derived_unique_exact_text": "@蓝色资料夹",
+      "derived_match_positions": [
+        23
+      ],
+      "sources": [
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-first-full-direction-source.json",
+          "json_pointer": "/document/shots/8/timeline_beats/0"
+        },
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-director-self-correction-source.json",
+          "json_pointer": "/document/shots/8/timeline_beats/0"
+        }
+      ],
+      "original_request": {
+        "request_source": {
+          "database": "output/quality-e2e-2026-09-12/runtime/short-drama.sqlite3",
+          "table": "agent_work_orders",
+          "row_id": "work-order-bd0451acaea144b381f3993741fed903",
+          "column": "record_json",
+          "json_pointer": "/specialist_turns/5/arguments/request/group/shots/2/timeline_beats/0"
+        },
+        "cue": {
+          "subject_asset_id": "asset-e104055d5990",
+          "asset_version_id": null,
+          "alias": "蓝色资料夹",
+          "field": "visual",
+          "text_start": 27,
+          "text_end": 33,
+          "purpose": "需要北侧桌面打开第一页的夹状态；这是任务可由陈放完成的现成资料，不要求读清小字。",
+          "image_reference_role": "PROP_IDENTITY",
+          "usage": "GENERATION"
+        },
+        "requested_at": "2026-09-12T03:54:47.925353Z",
+        "result_status": "SUCCEEDED"
+      }
+    },
+    {
+      "shot_id": "shot-xkyx-09",
+      "owner": {
+        "beat_index": 0,
+        "field": "visual"
+      },
+      "body": "@陈放看着林乔，嘴张了张却没出声；随后视线落到@蓝色资料夹，再看她肩上的@棕色单肩包。",
+      "before": {
+        "subject_asset_id": "asset-ef29cf906440",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 41,
+        "text_end": 47,
+        "alias": "棕色单肩包",
+        "required_tags": [],
+        "purpose": "包仍在林乔右肩，作为陈放看见的下班意图依据。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "after": {
+        "subject_asset_id": "asset-ef29cf906440",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 36,
+        "text_end": 42,
+        "alias": "棕色单肩包",
+        "required_tags": [],
+        "purpose": "包仍在林乔右肩，作为陈放看见的下班意图依据。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      },
+      "before_revision": 1,
+      "after_revision": 2,
+      "actual_before_slice": "包。",
+      "actual_after_slice": "@棕色单肩包",
+      "derived_unique_exact_text": "@棕色单肩包",
+      "derived_match_positions": [
+        36
+      ],
+      "sources": [
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-first-full-direction-source.json",
+          "json_pointer": "/document/shots/8/timeline_beats/0"
+        },
+        {
+          "file": "output/quality-e2e-2026-09-12/observations/fresh2-director-self-correction-source.json",
+          "json_pointer": "/document/shots/8/timeline_beats/0"
+        }
+      ],
+      "original_request": {
+        "request_source": {
+          "database": "output/quality-e2e-2026-09-12/runtime/short-drama.sqlite3",
+          "table": "agent_work_orders",
+          "row_id": "work-order-bd0451acaea144b381f3993741fed903",
+          "column": "record_json",
+          "json_pointer": "/specialist_turns/5/arguments/request/group/shots/2/timeline_beats/0"
+        },
+        "cue": {
+          "subject_asset_id": "asset-ef29cf906440",
+          "asset_version_id": null,
+          "alias": "棕色单肩包",
+          "field": "visual",
+          "text_start": 41,
+          "text_end": 47,
+          "purpose": "包仍在林乔右肩，作为陈放看见的下班意图依据。",
+          "image_reference_role": "PROP_IDENTITY",
+          "usage": "GENERATION"
+        },
+        "requested_at": "2026-09-12T03:54:47.925353Z",
+        "result_status": "SUCCEEDED"
+      }
+    }
+  ],
+  "limits": "Original request offsets and autonomous corrections; no generated media or production state included. Tests supply text_anchor from the actual corrected substring."
+}

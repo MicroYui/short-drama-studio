@@ -35,6 +35,7 @@ from short_drama.script_text import (
     ScriptTextSynchronizationError,
     synchronize_script_line_text,
 )
+from short_drama.reference_text import remap_field_references
 from short_drama.worker import utc_now
 
 
@@ -358,16 +359,20 @@ def prepare_semantic_change(
         if shot is None:
             raise ChangeExecutionError(f"Unknown shot target: {patch.target_id}")
         payload = shot.model_dump(mode="python")
-        for field, value in patch.updates.items():
-            payload[field] = value.strip()
-        if {
-            "visual",
-            "framing",
-            "camera",
-            "audio_intent",
-            "transition_out",
-        }.intersection(patch.updates):
-            payload["timeline_beats"] = []
+        references = shot.references
+        try:
+            for field, value in patch.updates.items():
+                after = value.strip()
+                if field in {"visual", "camera"}:
+                    references = remap_field_references(references, field=field,
+                        before=getattr(shot, field), after=after)
+                payload[field] = after
+        except ValueError as exc:
+            raise ChangeExecutionError(f"Invalid shot patch: {exc}") from exc
+        payload["references"] = [cue.model_dump(mode="python") for cue in references]
+        # SET_FIELDS changes only the supplied fields. Beat prose, timings and
+        # their selected media belong to the current Shot and are not omitted
+        # merely because its summary/camera/audio description changes.
         payload["revision"] = shot.revision + 1
         payload["approval_status"] = ApprovalStatus.APPROVED
         payload["freshness"] = Freshness.CURRENT

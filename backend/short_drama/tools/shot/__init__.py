@@ -527,7 +527,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             id="shot.append_storyboard_group",
             version=1,
             category=ToolCategory.SHOT,
-            description='立即写入一组完整镜头并在产品中显示。包含场次、镜头设计、逐时段描述、对白与实际媒体引用。直接写入即可，不需要时长账本、预先确定全部组或检查通过。组时长应等于实际镜头时长之和；Provider 秒数限制在生成时处理。只返回当前进度及精确引用，后续按需要读取。',
+            description='立即写入一组完整镜头并在产品中显示。包含场次、镜头设计、逐时段描述、对白与实际媒体引用。正文引用用 text_anchor.exact 复制所属 field 的原文，重复时补紧邻 prefix/suffix，无需计数。直接写入即可，不需要时长账本、预先确定全部组或检查通过。组时长应等于实际镜头时长之和；Provider 秒数限制在生成时处理。只返回当前进度及精确引用，后续按需要读取。',
             effect=ToolEffect.WRITE,
             idempotent=False,
             input_model=StoryboardDraftAppendInput,
@@ -740,6 +740,7 @@ def register_tools(registry: ToolRegistry, service: ShotToolService) -> None:
             category=ToolCategory.SHOT,
             description=(
                 "局部改镜头、拆镜/合并/插入/删除、重分组；只传选中内容，不重输全片。"
+                "正文引用可用 text_anchor.exact 加必要 prefix/suffix 唯一定位；原人工范围保留。"
                 "replacements改正文；shot_splices以原shot_ids替换为局部shots，空shots删除，"
                 "空shot_ids用after_shot_id插入。原组自动更新成员/时长；"
                 "需改变组边界时用clip_group_splices只替换相关旧组。镜号/新修订号由代码计算。"

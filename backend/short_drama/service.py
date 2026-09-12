@@ -1014,20 +1014,62 @@ class ShortDramaService:
 
         with self._lock:
             document = self._require_project_mutation_allowed(project_id)
+            from short_drama.studio_storyboard import project_draft_shots
+            project_draft_shots(document)
             try:
                 prepared = prepare_semantic_change(document, request,
                     next_asset_version_number=self.asset_workbench.next_asset_version_number)
+                changed_shot_ids = list(dict.fromkeys(
+                    patch.target_id for patch in request.patches
+                    if patch.target_kind.value == "SHOT"))
+                if changed_shot_ids:
+                    from short_drama.director_content import prepare_repaired_storyboard
+                    from short_drama.studio_references import sync_shot_references
+                    now = utc_now()
+                    for shot_id in changed_shot_ids:
+                        shot = self._require_shot_in_document(prepared.document, shot_id)
+                        sync_shot_references(prepared.document, shot)
+                    for shot_id in changed_shot_ids:
+                        repaired = prepare_repaired_storyboard(prepared.document, shot_id, [shot_id])
+                        if repaired is None:
+                            continue
+                        source, version, payload = repaired
+                        if payload == version.payload:
+                            continue
+                        if prepared.document.storyboard_document_id:
+                            self._validate_storyboard(prepared.document,
+                                StoryboardContent.model_validate(payload), require_current_sources=False)
+                        saved = self._revise_production_document_locked(prepared.document,
+                            production_document_id=source.id, base_version_id=version.id,
+                            payload=payload, source_artifact_refs=version.source_artifact_refs,
+                            origin=ProductionDocumentOrigin.AGENT, created_at=now)
+                        if prepared.document.storyboard_document_id:
+                            self._bind_output_slot_locked(prepared.document, OutputSlotBindRequest(
+                                slot_id=STORYBOARD_OUTPUT_SLOT_ID, artifact_ref=ProductionDocumentArtifactRef(
+                                    project_id=project_id, artifact_type="storyboard", artifact_id=source.id,
+                                    version=saved.version.version)), updated_at=now)
+                    self._after_storyboard_revision(prepared.document, changed_shot_ids,
+                        updated_at=now, mark_takes=False)
             except ChangeExecutionError as exc:
                 raise WorkflowConflictError(str(exc)) from exc
-            affected = prepared.result.invalidated_shot_ids
+            affected = list(dict.fromkeys([*prepared.result.invalidated_shot_ids, *changed_shot_ids]))
+            prepared.result.invalidated_shot_ids = affected
+            prepared.result.verification.invalidated_shot_ids = affected
             stale_take_ids = [
                 take.id
                 for take in self.repository.list_takes(project_id)
                 if take.shot_id in affected and take.freshness == Freshness.CURRENT
             ]
-            self.repository.mark_takes_stale(project_id, affected)
             prepared.result.stale_take_ids = stale_take_ids
-            self.repository.save_project(prepared.document)
+            if changed_shot_ids:
+                # Reuse the existing one-document/Take transaction. No content
+                # or Take invalidation is written if a later validation or
+                # concurrent edit conflicts with the proposed Shot update.
+                self.repository.save_shot_media_registration(prepared.document, affected,
+                    validate_merged=lambda _merged: None)
+            else:
+                self.repository.mark_takes_stale(project_id, affected)
+                self.repository.save_project(prepared.document)
         return SemanticChangeApplyResponse(
             result=prepared.result,
             project=self.get_project(project_id),
