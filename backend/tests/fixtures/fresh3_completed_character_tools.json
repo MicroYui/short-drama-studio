@@ -1,0 +1,2520 @@
+{
+  "source_project_id": "project-d2fa0fa72d76",
+  "source_note": "Actual Fresh3 final Worker responses and successful Tool turns. Tool output project aggregates/asset histories and unrelated work context omitted; selected version/QA/entry bodies are retained. Original file locators normalized under /fixtures/fresh3/. Pixel availability in tests uses local fixtures, not a new visual judgment.",
+  "roles": [
+    {
+      "role": "林夏人物制作",
+      "work_order": {
+        "id": "work-order-05f4de0c2cd548a6bc7c14005631034a",
+        "objective": "基于林夏现有文字设定，在当前资产上原创制作可复用的人物身份与服装图片。先读取实际image.capability，按真实图片能力执行。确保面部、低马尾、雾蓝衬衫与炭灰裤装明确，采用自然成年职场人物而非夸张模特造型。选择适合后续近景和互动构图的清晰母版，必要时从实际高分辨率图片裁出脸部参考，不机械增加视图。观察真实图片并检查身份、面部清晰度、服装、人体和摄影质感，修复影响用途的问题，保留可用结果。保存精确媒体并登记人物身份参考用途；不把人物母版宣称为镜头首帧。",
+        "task_inputs": {
+          "asset_id": "asset-3e6673f533a5",
+          "visual_style": "现实中国职场，真人摄影质感，自然办公室光线",
+          "downstream_format": "9:16竖屏，视频参数2K",
+          "reference_purpose": "人物身份和固定服装，不限定镜头姿态"
+        },
+        "expected_output_schema": {
+          "selected_media": "精确资产版本、实际文件、尺寸及用途",
+          "visual_findings": "实际观察与修复结果",
+          "continuity_anchors": "由选用图片确定的身份和服装锚点",
+          "unresolved_issues": "尚未满足的具体用途或空数组"
+        },
+        "acceptance_criteria": [
+          "至少有满足人物身份和服装锚定用途的真实原创图片文件及精确资产版本。",
+          "已观察实际结果，报告脸部清晰度、年龄呈现、服装和人体完整性的具体结论。",
+          "选用版本与人物参考用途已保存，图片尺寸和可用性据实记录。",
+          "如能力或媒体存在阻碍，返回具体缺项及已有可用结果，不虚报完成。"
+        ],
+        "scope": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-1f46c95d17c4",
+            "version": 1
+          }
+        ]
+      },
+      "specialist_turns": [
+        {
+          "id": "executor-image-lifecycle-work-order-05f4de0c2cd548a6bc7c14005631034a-4",
+          "sequence": 4,
+          "tool_name": "image.advance",
+          "arguments": {
+            "task_id": "image-task-d6ad4ffd1a91"
+          },
+          "reason": "图片任务已保存，继续准备并提交当前素材。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "image.advance",
+            "status": "SUCCEEDED",
+            "output": {
+              "task": {
+                "id": "image-task-d6ad4ffd1a91",
+                "project_id": "project-d2fa0fa72d76",
+                "asset_id": "asset-3e6673f533a5",
+                "output_version_id": "asset-version-c4e4b77543bc",
+                "output_version_number": 2,
+                "descriptor": "林夏原创身份与固定服装母版：28岁中国女性，低马尾，雾蓝扣袖衬衫、炭灰直筒裤、黑色平底鞋及深棕肩包；单张自然站姿全身摄影，仅作人物参考。",
+                "operation": "GENERATE",
+                "status": "SUCCEEDED",
+                "provider": "openai",
+                "model": "gpt-image-2"
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "image_task",
+                "artifact_id": "image-task-d6ad4ffd1a91",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-3e6673f533a5",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-c4e4b77543bc",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "image_task",
+                  "artifact_id": "image-task-d6ad4ffd1a91",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-3e6673f533a5",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-c4e4b77543bc",
+                  "version": 2
+                }
+              ],
+              "current_state": {
+                "task.id": "image-task-d6ad4ffd1a91",
+                "task.project_id": "project-d2fa0fa72d76",
+                "task.status": "SUCCEEDED",
+                "task.output_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v2-asset-version-c4e4b77543bc.png"
+              },
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:47:12.727789Z",
+          "updated_at": "2026-09-12T05:48:40.150073Z"
+        },
+        {
+          "id": "specialist-turn-884526dd81e64e9ca780ee469e4b971f",
+          "sequence": 5,
+          "tool_name": "qa.inspect_asset_version",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-3e6673f533a5",
+            "version_id": "asset-version-c4e4b77543bc",
+            "request": {
+              "review_focus": "本张是林夏的单张原创人物身份与唯一服装母版，不是分镜首帧，不需要多视图。请实际观察：是否呈现自然的约28岁成年中国职场女性；面部五官、眼睛和皮肤是否清楚；黑色低马尾是否可辨；雾蓝色长袖衬衫的扣合袖口、炭灰直筒裤、黑色平底鞋及深棕无标肩包是否明确一致；人体、双手、腿脚是否有影响身份/服装参考的畸形；摄影质感是否自然而非塑料磨皮或夸张模特。报告可见的身份与服装锚点、实际尺寸以及细节证据不足处。如果原始像素中的脸足够清晰且可用本地裁切减少下游缩图损失，请给出包含完整发际线、双颊和下颌、必要颈部的crop_suggestion及实际源像素范围；不要把裁切说成新增细节。无已有真人参考，本图承担首次原创身份建立，不能声称完成对其他人物图的身份比对。"
+            }
+          },
+          "reason": "林夏的原创全身图片已落盘，现检查真实面容、服装和人体，并判断是否能直接裁出可用的脸部身份参考。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "qa.inspect_asset_version",
+            "status": "SUCCEEDED",
+            "output": {
+              "recommended": true,
+              "score": 4.7,
+              "issues": [],
+              "summary": "候选为2160×3840竖幅单人全身图，完整头发与双鞋均在画内。人物呈自然成年东亚女性外观，与约28岁职场女性设定相容；鹅蛋脸、深色眼睛、眉眼及鼻唇关系清楚，双颊无遮挡，黑色直发低束，马尾在画面右侧颈旁可辨。闭唇表情平和，站姿日常，不呈夸张模特姿态。\n雾蓝色翻领长袖衬衫自然扎入炭灰直筒裤，两侧袖口保持闭合、未挽起；黑色素面平底式鞋带低矮后跟。深棕色无可见标识肩包挂在人物左肩，包体落在左侧髋部至大腿上段，未遮挡脸或衬衫前襟。双臂自然下垂，可见掌指连接连续，双腿及鞋部完整，未见影响身份或服装参考的明显人体畸形。\n光照柔和，衣料织纹、褶皱及面部明暗自然，未见明显塑料磨皮、文字或水印。细小虹膜纹理、毛孔及袖口侧面的具体扣件未充分辨明，不据此声称完成微细节核验。可承担首次原创身份与固定服装母版；本次没有其他人物参考，未进行跨图身份比对。建议保留全身母图，另裁脸部辅助参考以减少下游缩图损失。",
+              "review_focus": "本张是林夏的单张原创人物身份与唯一服装母版，不是分镜首帧，不需要多视图。请实际观察：是否呈现自然的约28岁成年中国职场女性；面部五官、眼睛和皮肤是否清楚；黑色低马尾是否可辨；雾蓝色长袖衬衫的扣合袖口、炭灰直筒裤、黑色平底鞋及深棕无标肩包是否明确一致；人体、双手、腿脚是否有影响身份/服装参考的畸形；摄影质感是否自然而非塑料磨皮或夸张模特。报告可见的身份与服装锚点、实际尺寸以及细节证据不足处。如果原始像素中的脸足够清晰且可用本地裁切减少下游缩图损失，请给出包含完整发际线、双颊和下颌、必要颈部的crop_suggestion及实际源像素范围；不要把裁切说成新增细节。无已有真人参考，本图承担首次原创身份建立，不能声称完成对其他人物图的身份比对。",
+              "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+              "region_evidence": [],
+              "crop_suggestion": {
+                "region": {
+                  "x": 0.3666667,
+                  "y": 0.025,
+                  "width": 0.2666667,
+                  "height": 0.2
+                },
+                "reason": "用于另存脸部辅助参考，不替换全身服装母版。对应源图约x=792、y=96、宽576、高768像素，裁后为3:4；包含完整头顶与发际线、双颊、下颌、必要颈部及可见低马尾，并保留头部周围余量。现有五官轮廓可辨，该裁切仅减少下游缩图损失，不增加原图细节，也不代表裁图已经生成或验收。",
+                "source": {
+                  "source_asset_version_id": "asset-version-c4e4b77543bc",
+                  "source_width": 2160,
+                  "source_height": 3840,
+                  "box_pixels": [
+                    792,
+                    96,
+                    1369,
+                    864
+                  ]
+                }
+              },
+              "edit_guide_suggestion": null,
+              "plane_composite_suggestion": null,
+              "evidence_references": []
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-3e6673f533a5",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-c4e4b77543bc",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-3e6673f533a5",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-c4e4b77543bc",
+                  "version": 2
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:48:54.881408Z",
+          "updated_at": "2026-09-12T05:50:16.317188Z"
+        },
+        {
+          "id": "specialist-turn-b7fcf41ed5a0428bb6da5359c0517353",
+          "sequence": 6,
+          "tool_name": "artifact.review_version",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-3e6673f533a5",
+            "version_id": "asset-version-c4e4b77543bc",
+            "request": {
+              "decision": "APPROVED",
+              "purpose": "CANONICAL_MASTER",
+              "notes": "采用为林夏首次原创人物身份及固定服装母版。实际图片2160×3840，成年东亚女性外观与28岁设定相容；鹅蛋脸、深色眼睛、眉眼及鼻唇关系清楚，双颊无遮挡，黑色低束马尾可辨，平和闭唇表情与自然站姿。雾蓝长袖翻领衬衫扎入炭灰直筒裤，袖口闭合，黑色素面平底式鞋及深棕无标肩包明确；头发与双鞋完整在画内，未见影响参考用途的明显手部或肢体畸形。光照、衣料纹理及面部明暗自然。毛孔、虹膜微纹理及袖口扣件细节未充分辨明，不据此宣称微细节核验。无其他真人参考，属于首次身份建立而非跨图比对。用于身份与服装，不限定后续姿态、机位或包的剧情位置，不是镜头首帧。保留全身母图，并从原始像素裁出脸部辅助参考减少下游缩图损失。"
+            }
+          },
+          "reason": "实际检查显示林夏全身母图的面部、低马尾、固定服装和人体完整性符合用途，现采用为人物母版；它不承担镜头首帧或互动姿态。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "artifact.review_version",
+            "status": "SUCCEEDED",
+            "output": {
+              "version": {
+                "id": "asset-version-c4e4b77543bc",
+                "version": 2,
+                "origin_type": "AI_GENERATED",
+                "descriptor": "林夏原创身份与固定服装母版：28岁中国女性，低马尾，雾蓝扣袖衬衫、炭灰直筒裤、黑色平底鞋及深棕肩包；单张自然站姿全身摄影，仅作人物参考。",
+                "media_type": "IMAGE",
+                "local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v2-asset-version-c4e4b77543bc.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 2160,
+                "height": 3840,
+                "duration_seconds": null,
+                "file_size_bytes": 9777399,
+                "parent_version_id": null,
+                "image_task_id": "image-task-d6ad4ffd1a91",
+                "derivation_references": [],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": null,
+                "source": {
+                  "source_type": "AI_GENERATED",
+                  "source_label": "GPT Image 2 生成",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "openai",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "gpt-image-2",
+                  "prompt": "制作一张原创真人摄影人物参考照片，单张、单人、无拼板、无文字。人物是林夏：28岁成年中国女性，现实中国公司的方案策划，自然鹅蛋脸，深棕色眼睛，清楚真实的五官，正常皮肤纹理，淡而日常的妆容。黑色直发在后脑低束马尾，眼睛和双颊不被头发遮挡，低扎的马尾轮廓在颈肩旁自然可见。气质平稳利落，平静放松的闭唇表情，目光自然看向镜头；不是愤怒表演，也不是性感或时装广告模特。\n唯一固定造型：雾蓝色长袖棉质衬衫，普通翻领、常规前襟纽扣，领口自然，双袖袖口扣好不挽袖，合身但不紧绷，棉织物及自然褶皱可见；衬衫自然扎入炭灰色直筒长裤，黑色简洁平底鞋。深棕色无任何标识的中等大小实用肩包，单根肩带挂在她左肩，包体自然落在左侧髋部，不挡住前襟与脸，外观朴素统一，没有花纹或金属品牌。无夸张珠宝，无奢侈品标识。\n竖幅全身人物母版，从完整头发到双脚鞋底都在画面内，人物占画面高度约88%，面部精确对焦，清楚显示眉眼、鼻唇及发际线。身体接近正面、略有自然角度以显出马尾与肩包，脸接近正面。自然站姿、身体比例健康匀称，两腿不交叉，肩膀放松，双臂自然下垂，双手自然放松且结构完整，不插兜、不握物、不摆夸张手势。真实人体比例，不瘦长拉伸。\n背景仅是干净浅暖灰办公室墙面与低对比地面，没有其他人物、文字、家具或抢眼装饰；它不承担剧情会议室空间参考。柔和自然办公室窗光照亮整张脸与服装，中性色彩、真实皮肤和衣料质感，景深足以看清人物全身，真实人像摄影，适度透视，无广角畸变，无强硬棚拍轮廓光，无磨皮塑料感、动漫、插画、过度锐化或人工美容痕迹。本图只用于身份与服装锚定，不表现剧情动作，不是任何镜头的首帧。",
+                  "created_at": "2026-09-12T05:48:40.122+00:00"
+                },
+                "approval_status": "APPROVED",
+                "review_notes": "采用为林夏首次原创人物身份及固定服装母版。实际图片2160×3840，成年东亚女性外观与28岁设定相容；鹅蛋脸、深色眼睛、眉眼及鼻唇关系清楚，双颊无遮挡，黑色低束马尾可辨，平和闭唇表情与自然站姿。雾蓝长袖翻领衬衫扎入炭灰直筒裤，袖口闭合，黑色素面平底式鞋及深棕无标肩包明确；头发与双鞋完整在画内，未见影响参考用途的明显手部或肢体畸形。光照、衣料纹理及面部明暗自然。毛孔、虹膜微纹理及袖口扣件细节未充分辨明，不据此宣称微细节核验。无其他真人参考，属于首次身份建立而非跨图比对。用于身份与服装，不限定后续姿态、机位或包的剧情位置，不是镜头首帧。保留全身母图，并从原始像素裁出脸部辅助参考减少下游缩图损失。",
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:48:40.122+00:00"
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-3e6673f533a5",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-c4e4b77543bc",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-3e6673f533a5",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-c4e4b77543bc",
+                  "version": 2
+                }
+              ],
+              "current_state": {
+                "asset.id": "asset-3e6673f533a5",
+                "asset.project_id": "project-d2fa0fa72d76",
+                "asset.current_version_id": "asset-version-c4e4b77543bc",
+                "version.id": "asset-version-c4e4b77543bc",
+                "version.version": 2,
+                "version.local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v2-asset-version-c4e4b77543bc.png",
+                "version.duration_seconds": null
+              },
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:50:51.291174Z",
+          "updated_at": "2026-09-12T05:50:57.202462Z"
+        },
+        {
+          "id": "specialist-turn-613432d4985e46c6889483d34bb1df81",
+          "sequence": 7,
+          "tool_name": "image.crop",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-3e6673f533a5",
+            "request": {
+              "source_asset_version_id": "asset-version-c4e4b77543bc",
+              "region": {
+                "x": 0.3666667,
+                "y": 0.025,
+                "width": 0.2666667,
+                "height": 0.2
+              },
+              "descriptor": "林夏脸部身份辅助参考：从已采用的原创全身母图裁出完整头顶、发际线、双颊、下颌和必要颈部，保留可见低马尾；仅保留原始像素，不放大或补充细节，不替换全身服装母版，不作镜头首帧。",
+              "reference_role": "SUBJECT_IDENTITY"
+            }
+          },
+          "reason": "沿用已保存的实际审图裁切建议，从林夏全身母图保留原始脸部像素，减少下游参考缩图损失；不重绘、不新增身份，也不替换全身母版。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "image.crop",
+            "status": "SUCCEEDED",
+            "output": {
+              "version": {
+                "id": "asset-version-346713c6ba52",
+                "version": 3,
+                "origin_type": "LOCAL_DERIVED",
+                "descriptor": "林夏脸部身份辅助参考：从已采用的原创全身母图裁出完整头顶、发际线、双颊、下颌和必要颈部，保留可见低马尾；仅保留原始像素，不放大或补充细节，不替换全身服装母版，不作镜头首帧。",
+                "media_type": "IMAGE",
+                "local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v3-asset-version-346713c6ba52-crop.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 577,
+                "height": 768,
+                "duration_seconds": null,
+                "file_size_bytes": 549621,
+                "parent_version_id": "asset-version-c4e4b77543bc",
+                "image_task_id": null,
+                "derivation_references": [
+                  {
+                    "asset_version_id": "asset-version-c4e4b77543bc",
+                    "source_project_id": "project-d2fa0fa72d76",
+                    "reference_role": "SUBJECT_IDENTITY",
+                    "reference_authority": "AUTHORITATIVE",
+                    "purpose": "原图中的精确局部像素；仅承担本次声明的参考职责。",
+                    "subject_alias": "林夏"
+                  }
+                ],
+                "reference_sheet": null,
+                "image_crop": {
+                  "source_asset_version_id": "asset-version-c4e4b77543bc",
+                  "source_width": 2160,
+                  "source_height": 3840,
+                  "box_pixels": [
+                    792,
+                    96,
+                    1369,
+                    864
+                  ]
+                },
+                "text_plate": null,
+                "source": {
+                  "source_type": "LOCAL_DERIVED",
+                  "source_label": "本地图像裁切",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "local",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "pillow-crop-v1",
+                  "prompt": null,
+                  "created_at": "2026-09-12T05:51:20.220+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:51:20.220+00:00"
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-3e6673f533a5",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-346713c6ba52",
+                "version": 3
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-3e6673f533a5",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-346713c6ba52",
+                  "version": 3
+                }
+              ],
+              "current_state": {
+                "asset.id": "asset-3e6673f533a5",
+                "asset.project_id": "project-d2fa0fa72d76",
+                "asset.current_version_id": "asset-version-346713c6ba52",
+                "version.id": "asset-version-346713c6ba52",
+                "version.version": 3,
+                "version.local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v3-asset-version-346713c6ba52-crop.png",
+                "version.duration_seconds": null
+              },
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:51:15.386411Z",
+          "updated_at": "2026-09-12T05:51:20.280965Z"
+        },
+        {
+          "id": "specialist-turn-2a326200fa6b4981a4d63cc93dc3e5fb",
+          "sequence": 8,
+          "tool_name": "qa.inspect_asset_version",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-3e6673f533a5",
+            "version_id": "asset-version-346713c6ba52",
+            "request": {
+              "canonical_reference_version_ids": [
+                "asset-version-c4e4b77543bc"
+              ],
+              "review_focus": "本张为已采用2160×3840全身母图的原始像素裁切，实际577×768，不是新生成的人脸。用途仅为林夏的脸部身份辅助，减少下游缩图损失，不替代全身服装母版、不作首帧。请观察裁后头顶、发际线、双颊、下颌是否完整，眼鼻唇和自然成年年龄感是否清楚；可见低马尾是否保留；是否出现裁切截断或意外像素损伤。与真实全身母图对照同一身份。无需要求全身、鞋包或多视图，不把裁切当成增加细节；细微皮肤或虹膜纹理不足请据实说明。",
+              "regions": []
+            }
+          },
+          "reason": "检查已落盘的脸部裁图是否完整保留身份特征并适合辅助参考；沿用已验收的全身母版，不重复生成或重新审整套服装。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "qa.inspect_asset_version",
+            "status": "SUCCEEDED",
+            "output": {
+              "recommended": true,
+              "score": 4.8,
+              "issues": [],
+              "summary": "头顶、发际线、双颊和下颌完整，必要颈部及画面右侧可见低马尾均被保留。鹅蛋脸轮廓、眉眼间距、鼻形、唇形和发际走向与全身母图一致，五官关系清楚，成年年龄感与设定相容。未见关键身份部位被裁断、拉伸、拼接或意外像素损伤，无多余文字或水印。可直接承担脸部身份辅助参考职责。当前像素可支持五官与发型识别，但不足以可靠检验细微毛孔或虹膜纹理；裁切没有增加原图细节，本结论不扩展至全身服装参考或镜头首帧。",
+              "review_focus": "本张为已采用2160×3840全身母图的原始像素裁切，实际577×768，不是新生成的人脸。用途仅为林夏的脸部身份辅助，减少下游缩图损失，不替代全身服装母版、不作首帧。请观察裁后头顶、发际线、双颊、下颌是否完整，眼鼻唇和自然成年年龄感是否清楚；可见低马尾是否保留；是否出现裁切截断或意外像素损伤。与真实全身母图对照同一身份。无需要求全身、鞋包或多视图，不把裁切当成增加细节；细微皮肤或虹膜纹理不足请据实说明。",
+              "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+              "region_evidence": [],
+              "crop_suggestion": null,
+              "edit_guide_suggestion": null,
+              "plane_composite_suggestion": null,
+              "evidence_references": [
+                {
+                  "source_project_id": "project-d2fa0fa72d76",
+                  "asset_version_id": "asset-version-c4e4b77543bc"
+                }
+              ]
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-3e6673f533a5",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-346713c6ba52",
+                "version": 3
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-c4e4b77543bc",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-3e6673f533a5",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-346713c6ba52",
+                  "version": 3
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-c4e4b77543bc",
+                  "version": 2
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:51:33.263238Z",
+          "updated_at": "2026-09-12T05:51:54.649343Z"
+        },
+        {
+          "id": "specialist-turn-ddcafdec66e24fc8b91aac6ef64fb033",
+          "sequence": 9,
+          "tool_name": "artifact.add_reference_entry",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "request": {
+              "subject_asset_id": "asset-3e6673f533a5",
+              "asset_version_id": "asset-version-c4e4b77543bc",
+              "role": "CANONICAL_MASTER",
+              "framing": "FULL_BODY",
+              "tags": [
+                "林夏",
+                "原创身份",
+                "固定服装",
+                "雾蓝衬衫",
+                "炭灰直筒裤",
+                "黑色低马尾",
+                "非首帧"
+              ],
+              "description": "林夏首次原创身份与固定服装母版，实际2160×3840。主体别名：林夏；作为SUBJECT_IDENTITY/AUTHORITATIVE建立成年女性鹅蛋脸、清楚五官及黑色低马尾；作为WARDROBE/AUTHORITATIVE固定雾蓝翻领长袖衬衫、扣合袖口、炭灰直筒裤、黑色素面平底式鞋与深棕无标肩包。已观察全身完整、自然站姿、平和表情和摄影质感，未见影响用途的明显人体畸形。细小虹膜纹理、毛孔及袖口扣件未充分辨明。仅贡献身份、体态与服装，不限制后续动作、表情、机位及肩包的剧情位置；不代表会议室空间，不作镜头首帧。同一实际图片承担多个职责时只发送一次。",
+              "priority": 90
+            }
+          },
+          "reason": "林夏全身母图已完成实际检查并采用；将精确图片登记为人物身份和固定服装母版，不作为镜头首帧或固定姿态。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "artifact.add_reference_entry",
+            "status": "SUCCEEDED",
+            "output": {
+              "pack": {
+                "id": "reference-pack-asset-3e6673f533a5",
+                "project_id": "project-d2fa0fa72d76",
+                "subject_asset_id": "asset-3e6673f533a5",
+                "name": "林夏参考包",
+                "created_at": "2026-09-12T05:52:34.674+00:00",
+                "updated_at": "2026-09-12T05:52:34.674+00:00"
+              },
+              "entry": {
+                "id": "reference-entry-ed793e8c6f3c",
+                "asset_version_id": "asset-version-c4e4b77543bc",
+                "lineage_root_version_id": "asset-version-c4e4b77543bc",
+                "role": "CANONICAL_MASTER",
+                "angle": "NOT_APPLICABLE",
+                "framing": "FULL_BODY",
+                "tags": [
+                  "林夏",
+                  "原创身份",
+                  "固定服装",
+                  "雾蓝衬衫",
+                  "炭灰直筒裤",
+                  "黑色低马尾",
+                  "非首帧"
+                ],
+                "description": "林夏首次原创身份与固定服装母版，实际2160×3840。主体别名：林夏；作为SUBJECT_IDENTITY/AUTHORITATIVE建立成年女性鹅蛋脸、清楚五官及黑色低马尾；作为WARDROBE/AUTHORITATIVE固定雾蓝翻领长袖衬衫、扣合袖口、炭灰直筒裤、黑色素面平底式鞋与深棕无标肩包。已观察全身完整、自然站姿、平和表情和摄影质感，未见影响用途的明显人体畸形。细小虹膜纹理、毛孔及袖口扣件未充分辨明。仅贡献身份、体态与服装，不限制后续动作、表情、机位及肩包的剧情位置；不代表会议室空间，不作镜头首帧。同一实际图片承担多个职责时只发送一次。",
+                "priority": 90
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-3e6673f533a5",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack_entry",
+                "artifact_id": "reference-entry-ed793e8c6f3c",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-c4e4b77543bc",
+                "version": null
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack",
+                  "artifact_id": "reference-pack-asset-3e6673f533a5",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack_entry",
+                  "artifact_id": "reference-entry-ed793e8c6f3c",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-c4e4b77543bc",
+                  "version": null
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:52:11.875382Z",
+          "updated_at": "2026-09-12T05:52:34.696913Z"
+        },
+        {
+          "id": "specialist-turn-09d4bed29f08498b8fc737466eb255a2",
+          "sequence": 10,
+          "tool_name": "artifact.add_reference_entry",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "request": {
+              "subject_asset_id": "asset-3e6673f533a5",
+              "asset_version_id": "asset-version-346713c6ba52",
+              "role": "CHARACTER_FACE",
+              "lineage_root_version_id": "asset-version-c4e4b77543bc",
+              "angle": "NOT_APPLICABLE",
+              "framing": "FACE_CLOSE_UP",
+              "tags": [
+                "林夏",
+                "脸部身份",
+                "原像素裁切",
+                "黑色低马尾",
+                "非首帧"
+              ],
+              "description": "主体别名：林夏。选用为SUBJECT_IDENTITY/AUTHORITATIVE脸部身份辅助参考，源于已采用的原创全身母版asset-version-c4e4b77543bc，实际577×768。已观察头顶、发际线、双颊、下颌、必要颈部及可见低马尾完整；鹅蛋脸轮廓、眉眼间距、鼻形、唇形和发际走向与母图一致，成年年龄感自然，未见裁切截断、拉伸或像素损伤。用于近景和互动构图生成时减少全身图缩小导致的五官识别损失，不放大、不重绘，也不新增毛孔或虹膜细节；不替代全身服装母版，不限定表情、姿态、机位，不作镜头首帧或会议室空间参考。",
+              "priority": 100
+            }
+          },
+          "reason": "脸部原像素裁图已实际检查，五官与全身母图一致且没有裁切损伤；登记为林夏的脸部身份辅助参考，保留全身母版，不增加生成任务。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "artifact.add_reference_entry",
+            "status": "SUCCEEDED",
+            "output": {
+              "pack": {
+                "id": "reference-pack-asset-3e6673f533a5",
+                "project_id": "project-d2fa0fa72d76",
+                "subject_asset_id": "asset-3e6673f533a5",
+                "name": "林夏参考包",
+                "created_at": "2026-09-12T05:52:34.674+00:00",
+                "updated_at": "2026-09-12T05:52:48.552+00:00"
+              },
+              "entry": {
+                "id": "reference-entry-7e128b154475",
+                "asset_version_id": "asset-version-346713c6ba52",
+                "lineage_root_version_id": "asset-version-c4e4b77543bc",
+                "role": "CHARACTER_FACE",
+                "angle": "NOT_APPLICABLE",
+                "framing": "FACE_CLOSE_UP",
+                "tags": [
+                  "林夏",
+                  "脸部身份",
+                  "原像素裁切",
+                  "黑色低马尾",
+                  "非首帧"
+                ],
+                "description": "主体别名：林夏。选用为SUBJECT_IDENTITY/AUTHORITATIVE脸部身份辅助参考，源于已采用的原创全身母版asset-version-c4e4b77543bc，实际577×768。已观察头顶、发际线、双颊、下颌、必要颈部及可见低马尾完整；鹅蛋脸轮廓、眉眼间距、鼻形、唇形和发际走向与母图一致，成年年龄感自然，未见裁切截断、拉伸或像素损伤。用于近景和互动构图生成时减少全身图缩小导致的五官识别损失，不放大、不重绘，也不新增毛孔或虹膜细节；不替代全身服装母版，不限定表情、姿态、机位，不作镜头首帧或会议室空间参考。",
+                "priority": 100
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-3e6673f533a5",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack_entry",
+                "artifact_id": "reference-entry-7e128b154475",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-346713c6ba52",
+                "version": null
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack",
+                  "artifact_id": "reference-pack-asset-3e6673f533a5",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack_entry",
+                  "artifact_id": "reference-entry-7e128b154475",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-346713c6ba52",
+                  "version": null
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:52:48.308074Z",
+          "updated_at": "2026-09-12T05:52:48.585623Z"
+        }
+      ],
+      "asset": {
+        "id": "asset-3e6673f533a5",
+        "project_id": "project-d2fa0fa72d76",
+        "kind": "CHARACTER",
+        "name": "林夏",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "林夏，28岁成年中国女性，方案策划；本片唯一女性。",
+          "tone_or_temperament": "做事利落，面对压力先确认措辞再行动。说话完整、平稳，不阴阳怪气；主管退让后不追着羞辱。",
+          "visual_attributes": [
+            "自然鹅蛋脸，深棕色眼睛，正常皮肤纹理",
+            "黑色直发，在后脑低束马尾，露出眼睛和双颊",
+            "身形匀称，日常办公室姿态，不采用夸张模特造型"
+          ],
+          "wardrobe_or_materials": [
+            "雾蓝色长袖棉质衬衫，袖口自然扣合",
+            "炭灰色直筒长裤，黑色平底鞋",
+            "深棕色无标识肩包，整片保持同一只"
+          ],
+          "background_constraints": [
+            "现实职场；无奢侈品标识、夸张珠宝或特殊身份暗示",
+            "后续图片必须在当前项目原创制作，不借用其他项目人物"
+          ],
+          "texture_constraints": [
+            "真人摄影质感，保留皮肤与衣料细节，禁止动漫化和塑料磨皮"
+          ],
+          "continuity_anchors": [
+            "开场坐在会议桌东侧，面朝西；电脑已合上，肩包挂在椅背",
+            "惯用右手握黑色按动笔，左手调整纸张",
+            "结尾拎走肩包，把合上的电脑带走；不签字、不留下加班"
+          ],
+          "named_views_or_zones": [
+            "清晰面部与发型",
+            "衬衫、裤装和肩包的统一外观"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [
+            "CANONICAL_MASTER"
+          ],
+          "strategy_rationale": "先保存人物身份和唯一服装，不在编剧阶段指定多视图制作任务。"
+        },
+        "current_version_id": "asset-version-346713c6ba52",
+        "approved_version_id": "asset-version-c4e4b77543bc",
+        "versions": [
+          {
+            "id": "asset-version-1f46c95d17c4",
+            "version": 1,
+            "origin_type": "MANUAL",
+            "descriptor": "28岁，中国女性，品牌公司的方案策划。临近下班，被直属主管要求签署“自愿加班”单。她不争吵，也不假装服从，而是要求安排者同样留下签字。",
+            "media_type": "TEXT_REFERENCE",
+            "local_path": null,
+            "external_url": null,
+            "mime_type": null,
+            "width": null,
+            "height": null,
+            "duration_seconds": null,
+            "file_size_bytes": null,
+            "parent_version_id": null,
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "MANUAL",
+              "source_label": "用户创建的资产说明",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": null,
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": null,
+              "prompt": null,
+              "created_at": "2026-09-12T05:40:22.363+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:40:22.363+00:00"
+          },
+          {
+            "id": "asset-version-c4e4b77543bc",
+            "version": 2,
+            "origin_type": "AI_GENERATED",
+            "descriptor": "林夏原创身份与固定服装母版：28岁中国女性，低马尾，雾蓝扣袖衬衫、炭灰直筒裤、黑色平底鞋及深棕肩包；单张自然站姿全身摄影，仅作人物参考。",
+            "media_type": "IMAGE",
+            "local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v2-asset-version-c4e4b77543bc.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 2160,
+            "height": 3840,
+            "duration_seconds": null,
+            "file_size_bytes": 9777399,
+            "parent_version_id": null,
+            "image_task_id": "image-task-d6ad4ffd1a91",
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "AI_GENERATED",
+              "source_label": "GPT Image 2 生成",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "openai",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "gpt-image-2",
+              "prompt": "制作一张原创真人摄影人物参考照片，单张、单人、无拼板、无文字。人物是林夏：28岁成年中国女性，现实中国公司的方案策划，自然鹅蛋脸，深棕色眼睛，清楚真实的五官，正常皮肤纹理，淡而日常的妆容。黑色直发在后脑低束马尾，眼睛和双颊不被头发遮挡，低扎的马尾轮廓在颈肩旁自然可见。气质平稳利落，平静放松的闭唇表情，目光自然看向镜头；不是愤怒表演，也不是性感或时装广告模特。\n唯一固定造型：雾蓝色长袖棉质衬衫，普通翻领、常规前襟纽扣，领口自然，双袖袖口扣好不挽袖，合身但不紧绷，棉织物及自然褶皱可见；衬衫自然扎入炭灰色直筒长裤，黑色简洁平底鞋。深棕色无任何标识的中等大小实用肩包，单根肩带挂在她左肩，包体自然落在左侧髋部，不挡住前襟与脸，外观朴素统一，没有花纹或金属品牌。无夸张珠宝，无奢侈品标识。\n竖幅全身人物母版，从完整头发到双脚鞋底都在画面内，人物占画面高度约88%，面部精确对焦，清楚显示眉眼、鼻唇及发际线。身体接近正面、略有自然角度以显出马尾与肩包，脸接近正面。自然站姿、身体比例健康匀称，两腿不交叉，肩膀放松，双臂自然下垂，双手自然放松且结构完整，不插兜、不握物、不摆夸张手势。真实人体比例，不瘦长拉伸。\n背景仅是干净浅暖灰办公室墙面与低对比地面，没有其他人物、文字、家具或抢眼装饰；它不承担剧情会议室空间参考。柔和自然办公室窗光照亮整张脸与服装，中性色彩、真实皮肤和衣料质感，景深足以看清人物全身，真实人像摄影，适度透视，无广角畸变，无强硬棚拍轮廓光，无磨皮塑料感、动漫、插画、过度锐化或人工美容痕迹。本图只用于身份与服装锚定，不表现剧情动作，不是任何镜头的首帧。",
+              "created_at": "2026-09-12T05:48:40.122+00:00"
+            },
+            "approval_status": "APPROVED",
+            "review_notes": "采用为林夏首次原创人物身份及固定服装母版。实际图片2160×3840，成年东亚女性外观与28岁设定相容；鹅蛋脸、深色眼睛、眉眼及鼻唇关系清楚，双颊无遮挡，黑色低束马尾可辨，平和闭唇表情与自然站姿。雾蓝长袖翻领衬衫扎入炭灰直筒裤，袖口闭合，黑色素面平底式鞋及深棕无标肩包明确；头发与双鞋完整在画内，未见影响参考用途的明显手部或肢体畸形。光照、衣料纹理及面部明暗自然。毛孔、虹膜微纹理及袖口扣件细节未充分辨明，不据此宣称微细节核验。无其他真人参考，属于首次身份建立而非跨图比对。用于身份与服装，不限定后续姿态、机位或包的剧情位置，不是镜头首帧。保留全身母图，并从原始像素裁出脸部辅助参考减少下游缩图损失。",
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:48:40.122+00:00"
+          },
+          {
+            "id": "asset-version-346713c6ba52",
+            "version": 3,
+            "origin_type": "LOCAL_DERIVED",
+            "descriptor": "林夏脸部身份辅助参考：从已采用的原创全身母图裁出完整头顶、发际线、双颊、下颌和必要颈部，保留可见低马尾；仅保留原始像素，不放大或补充细节，不替换全身服装母版，不作镜头首帧。",
+            "media_type": "IMAGE",
+            "local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v3-asset-version-346713c6ba52-crop.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 577,
+            "height": 768,
+            "duration_seconds": null,
+            "file_size_bytes": 549621,
+            "parent_version_id": "asset-version-c4e4b77543bc",
+            "image_task_id": null,
+            "derivation_references": [
+              {
+                "asset_version_id": "asset-version-c4e4b77543bc",
+                "source_project_id": "project-d2fa0fa72d76",
+                "reference_role": "SUBJECT_IDENTITY",
+                "reference_authority": "AUTHORITATIVE",
+                "purpose": "原图中的精确局部像素；仅承担本次声明的参考职责。",
+                "subject_alias": "林夏"
+              }
+            ],
+            "reference_sheet": null,
+            "image_crop": {
+              "source_asset_version_id": "asset-version-c4e4b77543bc",
+              "source_width": 2160,
+              "source_height": 3840,
+              "box_pixels": [
+                792,
+                96,
+                1369,
+                864
+              ]
+            },
+            "text_plate": null,
+            "source": {
+              "source_type": "LOCAL_DERIVED",
+              "source_label": "本地图像裁切",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "local",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "pillow-crop-v1",
+              "prompt": null,
+              "created_at": "2026-09-12T05:51:20.220+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:51:20.220+00:00"
+          }
+        ]
+      },
+      "reference_pack": {
+        "id": "reference-pack-asset-3e6673f533a5",
+        "project_id": "project-d2fa0fa72d76",
+        "subject_asset_id": "asset-3e6673f533a5",
+        "name": "林夏参考包",
+        "entries": [
+          {
+            "id": "reference-entry-ed793e8c6f3c",
+            "asset_version_id": "asset-version-c4e4b77543bc",
+            "lineage_root_version_id": "asset-version-c4e4b77543bc",
+            "role": "CANONICAL_MASTER",
+            "angle": "NOT_APPLICABLE",
+            "framing": "FULL_BODY",
+            "tags": [
+              "林夏",
+              "原创身份",
+              "固定服装",
+              "雾蓝衬衫",
+              "炭灰直筒裤",
+              "黑色低马尾",
+              "非首帧"
+            ],
+            "description": "林夏首次原创身份与固定服装母版，实际2160×3840。主体别名：林夏；作为SUBJECT_IDENTITY/AUTHORITATIVE建立成年女性鹅蛋脸、清楚五官及黑色低马尾；作为WARDROBE/AUTHORITATIVE固定雾蓝翻领长袖衬衫、扣合袖口、炭灰直筒裤、黑色素面平底式鞋与深棕无标肩包。已观察全身完整、自然站姿、平和表情和摄影质感，未见影响用途的明显人体畸形。细小虹膜纹理、毛孔及袖口扣件未充分辨明。仅贡献身份、体态与服装，不限制后续动作、表情、机位及肩包的剧情位置；不代表会议室空间，不作镜头首帧。同一实际图片承担多个职责时只发送一次。",
+            "priority": 90
+          },
+          {
+            "id": "reference-entry-7e128b154475",
+            "asset_version_id": "asset-version-346713c6ba52",
+            "lineage_root_version_id": "asset-version-c4e4b77543bc",
+            "role": "CHARACTER_FACE",
+            "angle": "NOT_APPLICABLE",
+            "framing": "FACE_CLOSE_UP",
+            "tags": [
+              "林夏",
+              "脸部身份",
+              "原像素裁切",
+              "黑色低马尾",
+              "非首帧"
+            ],
+            "description": "主体别名：林夏。选用为SUBJECT_IDENTITY/AUTHORITATIVE脸部身份辅助参考，源于已采用的原创全身母版asset-version-c4e4b77543bc，实际577×768。已观察头顶、发际线、双颊、下颌、必要颈部及可见低马尾完整；鹅蛋脸轮廓、眉眼间距、鼻形、唇形和发际走向与母图一致，成年年龄感自然，未见裁切截断、拉伸或像素损伤。用于近景和互动构图生成时减少全身图缩小导致的五官识别损失，不放大、不重绘，也不新增毛孔或虹膜细节；不替代全身服装母版，不限定表情、姿态、机位，不作镜头首帧或会议室空间参考。",
+            "priority": 100
+          }
+        ],
+        "created_at": "2026-09-12T05:52:34.674+00:00",
+        "updated_at": "2026-09-12T05:52:48.552+00:00"
+      },
+      "original_final": {
+        "status": "COMPLETED",
+        "concise_summary": "已完成林夏原创全身母版及脸部原像素裁图，实际检查后选用，并登记到林夏参考包。面部、黑色低马尾及固定服装明确，未发现影响当前参考用途的缺陷。未修改剧本、分镜或其他人物，未执行任何视频任务。",
+        "deliverable": {
+          "selected_media": [
+            {
+              "asset_id": "asset-3e6673f533a5",
+              "asset_version_id": "asset-version-c4e4b77543bc",
+              "version": 2,
+              "local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v2-asset-version-c4e4b77543bc.png",
+              "mime_type": "image/png",
+              "width": 2160,
+              "height": 3840,
+              "operation": "GENERATE",
+              "provider": "openai",
+              "model": "gpt-image-2",
+              "image_task_id": "image-task-d6ad4ffd1a91",
+              "approval_status": "APPROVED",
+              "selection": "已采用为人物母版",
+              "reference_pack_id": "reference-pack-asset-3e6673f533a5",
+              "reference_entry_id": "reference-entry-ed793e8c6f3c",
+              "registered_role": "CANONICAL_MASTER",
+              "subject_alias": "林夏",
+              "reference_uses": [
+                {
+                  "role": "SUBJECT_IDENTITY",
+                  "authority": "AUTHORITATIVE",
+                  "purpose": "建立原创人物身份、发型、成年年龄感和体态。"
+                },
+                {
+                  "role": "WARDROBE",
+                  "authority": "AUTHORITATIVE",
+                  "purpose": "固定雾蓝衬衫、炭灰直筒裤、黑色平底式鞋及深棕无标肩包的外观。"
+                }
+              ],
+              "usage_boundary": "不限定后续姿态、表情、机位或肩包的剧情位置，不作为会议室空间参考或镜头首帧。"
+            },
+            {
+              "asset_id": "asset-3e6673f533a5",
+              "asset_version_id": "asset-version-346713c6ba52",
+              "version": 3,
+              "local_path": "/fixtures/fresh3/assets/asset-3e6673f533a5/v3-asset-version-346713c6ba52-crop.png",
+              "mime_type": "image/png",
+              "width": 577,
+              "height": 768,
+              "operation": "image.crop",
+              "source_asset_version_id": "asset-version-c4e4b77543bc",
+              "source_box_pixels": [
+                792,
+                96,
+                1369,
+                864
+              ],
+              "image_task_id": null,
+              "approval_status": "DRAFT",
+              "selection": "已明确选用并登记为脸部辅助参考，保留原母版",
+              "reference_pack_id": "reference-pack-asset-3e6673f533a5",
+              "reference_entry_id": "reference-entry-7e128b154475",
+              "registered_role": "CHARACTER_FACE",
+              "subject_alias": "林夏",
+              "reference_uses": [
+                {
+                  "role": "SUBJECT_IDENTITY",
+                  "authority": "AUTHORITATIVE",
+                  "purpose": "用于近景及互动构图的人脸身份识别，减少全身图缩小时的五官信息损失。"
+                }
+              ],
+              "usage_boundary": "仅保留原始像素，没有放大、重绘或新增细节；不替代全身服装母版，不作镜头首帧。"
+            }
+          ],
+          "visual_findings": [
+            "全身母图实际为2160×3840，头发与双鞋完整在画内；自然成年东亚女性外观与约28岁设定相容，闭唇表情平和、站姿日常，没有夸张模特姿态。",
+            "鹅蛋脸轮廓、眉眼及鼻唇关系清楚，双颊无遮挡；黑色直发低束，马尾在画面右侧颈旁可辨。",
+            "雾蓝翻领长袖衬衫自然扎入炭灰直筒裤，两侧袖口闭合、未挽起；黑色素面平底式鞋带低矮后跟，深棕无可见标识肩包位于人物左肩及左髋侧。",
+            "双臂、掌指连接、双腿与鞋部完整，未见影响身份及服装参考的明显人体畸形；光照、衣料纹理、褶皱及面部明暗自然，未见明显塑料磨皮、文字或水印。",
+            "脸部裁图保留完整头顶、发际线、双颊、下颌、必要颈部及可见低马尾；与母图五官、脸型及发际走向一致，未见裁切截断、拉伸、拼接或意外像素损伤。",
+            "无需付费返修或新增视图；仅通过本地裁切补充脸部参考。细小毛孔、虹膜纹理及袖口扣件未充分辨明，不宣称完成微细节核验。"
+          ],
+          "continuity_anchors": [
+            "身份以本次选用图片为准：自然成年女性、鹅蛋脸、深色眼睛，保持相同眉眼间距、鼻形、唇形与发际线。",
+            "黑色直发后脑低束马尾，保持眼睛与双颊清楚可见。",
+            "唯一服装为雾蓝翻领长袖衬衫、闭合袖口、炭灰直筒长裤及黑色素面平底式鞋。",
+            "深棕色无可见标识肩包保持同一外观；母图肩背姿态不覆盖剧本中挂椅背或拎走的状态。",
+            "平和、自然、利落是母图的表现基调，不将静态表情锁定为所有镜头的表演。"
+          ],
+          "unresolved_issues": []
+        },
+        "created_artifacts": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "image_task",
+            "artifact_id": "image-task-d6ad4ffd1a91",
+            "version": null
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-c4e4b77543bc",
+            "version": 2
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-346713c6ba52",
+            "version": 3
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack",
+            "artifact_id": "reference-pack-asset-3e6673f533a5",
+            "version": null
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-ed793e8c6f3c",
+            "version": null
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-7e128b154475",
+            "version": null
+          }
+        ],
+        "updated_artifacts": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset",
+            "artifact_id": "asset-3e6673f533a5",
+            "version": null
+          }
+        ],
+        "findings": [
+          "已先读取实际图片能力，使用支持的原创生成路线制作母图；没有借用其他项目图片。",
+          "两张实际图片均已完成针对各自用途的视觉检查，参考包已保存精确媒体、来源系谱及用途边界。",
+          "全身母图是首次原创身份建立，不是对既有人物照片的身份比对；脸部裁图已与该母图对照。",
+          "本分工的人物身份和服装参考用途已满足；静态图片不证明动态表演、口型或手部互动已经通过验证。"
+        ],
+        "decisions": [
+          "采用清晰单张全身母版及原像素脸部裁图，不机械增加侧面、背面或多视图卡。",
+          "保留全身母版为canonical，脸部裁图作为已选用的辅助参考，DRAFT状态不妨碍其已明确的参考用途。",
+          "本任务没有AssetPlan，不补建计划，不修改剧本、分镜及其他资产。"
+        ],
+        "assumptions": [],
+        "unresolved_questions": [],
+        "evidence_refs": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-c4e4b77543bc",
+            "version": 2
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-346713c6ba52",
+            "version": 3
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "image_task",
+            "artifact_id": "image-task-d6ad4ffd1a91",
+            "version": null
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack",
+            "artifact_id": "reference-pack-asset-3e6673f533a5",
+            "version": null
+          }
+        ],
+        "recommended_next_actions": [
+          "后续构图制作按精确版本取用林夏脸部身份参考和全身服装母版，保持各图已登记的职责；同一文件承担多种用途时只发送一次。",
+          "结合具体镜头制作互动构图，不将人物母版直接认作首帧，也不把母图背景或肩包位置作为场景连续性依据。",
+          "继续完成授权的视频生成前准备；口型、表情变化与动态接触留待未来允许视频执行后验证，本次不创建视频任务。"
+        ],
+        "next_owner": null
+      },
+      "original_visible_tokens": 2504,
+      "original_lm_seconds": 43.582233,
+      "selected_sequences": [
+        9,
+        10
+      ],
+      "image_task": {
+        "id": "image-task-d6ad4ffd1a91",
+        "project_id": "project-d2fa0fa72d76",
+        "asset_id": "asset-3e6673f533a5",
+        "output_version_id": "asset-version-c4e4b77543bc",
+        "output_version_number": 2,
+        "descriptor": "林夏原创身份与固定服装母版：28岁中国女性，低马尾，雾蓝扣袖衬衫、炭灰直筒裤、黑色平底鞋及深棕肩包；单张自然站姿全身摄影，仅作人物参考。",
+        "parent_version_id": null,
+        "operation": "GENERATE",
+        "status": "SUCCEEDED",
+        "provider": "openai",
+        "model": "gpt-image-2",
+        "request": {
+          "operation": "GENERATE",
+          "prompt": "制作一张原创真人摄影人物参考照片，单张、单人、无拼板、无文字。人物是林夏：28岁成年中国女性，现实中国公司的方案策划，自然鹅蛋脸，深棕色眼睛，清楚真实的五官，正常皮肤纹理，淡而日常的妆容。黑色直发在后脑低束马尾，眼睛和双颊不被头发遮挡，低扎的马尾轮廓在颈肩旁自然可见。气质平稳利落，平静放松的闭唇表情，目光自然看向镜头；不是愤怒表演，也不是性感或时装广告模特。\n唯一固定造型：雾蓝色长袖棉质衬衫，普通翻领、常规前襟纽扣，领口自然，双袖袖口扣好不挽袖，合身但不紧绷，棉织物及自然褶皱可见；衬衫自然扎入炭灰色直筒长裤，黑色简洁平底鞋。深棕色无任何标识的中等大小实用肩包，单根肩带挂在她左肩，包体自然落在左侧髋部，不挡住前襟与脸，外观朴素统一，没有花纹或金属品牌。无夸张珠宝，无奢侈品标识。\n竖幅全身人物母版，从完整头发到双脚鞋底都在画面内，人物占画面高度约88%，面部精确对焦，清楚显示眉眼、鼻唇及发际线。身体接近正面、略有自然角度以显出马尾与肩包，脸接近正面。自然站姿、身体比例健康匀称，两腿不交叉，肩膀放松，双臂自然下垂，双手自然放松且结构完整，不插兜、不握物、不摆夸张手势。真实人体比例，不瘦长拉伸。\n背景仅是干净浅暖灰办公室墙面与低对比地面，没有其他人物、文字、家具或抢眼装饰；它不承担剧情会议室空间参考。柔和自然办公室窗光照亮整张脸与服装，中性色彩、真实皮肤和衣料质感，景深足以看清人物全身，真实人像摄影，适度透视，无广角畸变，无强硬棚拍轮廓光，无磨皮塑料感、动漫、插画、过度锐化或人工美容痕迹。本图只用于身份与服装锚定，不表现剧情动作，不是任何镜头的首帧。",
+          "size": "2160x3840",
+          "quality": "high",
+          "background": "opaque",
+          "output_format": "png",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "input_version_ids": [],
+          "reference_inputs": [],
+          "primary_input_version_id": null,
+          "mask_version_id": null,
+          "mask_feather_pixels": 8
+        },
+        "attempt": 1,
+        "retry_of_task_id": null,
+        "provider_request_id": "8a118e38-eb3f-4d46-a0d8-80e484cb7dfb",
+        "provider_output_path": null,
+        "provider_output_version_id": null,
+        "provider_output_version_number": null,
+        "staged_path": "/fixtures/fresh3/project-d2fa0fa72d76/assets/.staging/image-task-d6ad4ffd1a91.png.part",
+        "output_path": "/fixtures/fresh3/project-d2fa0fa72d76/assets/asset-3e6673f533a5/v2-asset-version-c4e4b77543bc.png",
+        "output_mime_type": "image/png",
+        "revised_prompt": null,
+        "usage": {
+          "input_tokens": 620,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 620
+          },
+          "output_tokens": 13342,
+          "output_tokens_details": {
+            "image_tokens": 13342,
+            "text_tokens": 0
+          },
+          "total_tokens": 13962
+        },
+        "cost": {
+          "estimated_amount": 0.40336,
+          "currency": "USD",
+          "pricing": {
+            "currency": "USD",
+            "unit": "PER_1M_TOKENS",
+            "image_input": 8.0,
+            "text_input": 5.0,
+            "image_output": 30.0,
+            "captured_at": "2026-09-12T05:48:40.097+00:00"
+          },
+          "usage": {
+            "input_tokens": 620,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 620
+            },
+            "output_tokens": 13342,
+            "output_tokens_details": {
+              "image_tokens": 13342,
+              "text_tokens": 0
+            },
+            "total_tokens": 13962
+          },
+          "note": "Estimate from provider token usage; provider billing is authoritative."
+        },
+        "error_code": null,
+        "error_message": null,
+        "retry_disposition": null,
+        "submitted_at": "2026-09-12T05:47:13.389+00:00",
+        "finished_at": "2026-09-12T05:48:40.122+00:00",
+        "created_at": "2026-09-12T05:46:56.976+00:00",
+        "updated_at": "2026-09-12T05:48:40.122+00:00"
+      }
+    },
+    {
+      "role": "周启人物制作",
+      "work_order": {
+        "id": "work-order-505b14867dd04aec9942d985e549e437",
+        "objective": "基于周启现有文字设定，在当前资产上原创制作可复用的人物身份与服装图片。先读取实际image.capability，按真实图片能力执行。确保略方脸、黑色侧分短发、无胡须无眼镜、浅灰衬衫和深藏青西裤明确，保留普通成年主管的真实质感。选择适合后续近景和互动构图的清晰母版，必要时从实际高分辨率图片裁出脸部参考，不机械增加视图。观察真实图片并检查面部清晰度、服装、人体和摄影质感，修复影响用途的问题，保留可用结果。保存精确媒体并登记人物身份参考用途，不预制夸张恶霸表情。",
+        "task_inputs": {
+          "asset_id": "asset-cd4ea66d5166",
+          "visual_style": "现实中国职场，真人摄影质感，自然办公室光线",
+          "downstream_format": "9:16竖屏，视频参数2K",
+          "reference_purpose": "人物身份和固定服装，不限定镜头姿态"
+        },
+        "expected_output_schema": {
+          "selected_media": "精确资产版本、实际文件、尺寸及用途",
+          "visual_findings": "实际观察与修复结果",
+          "continuity_anchors": "选用图片确定的人物身份和服装锚点",
+          "unresolved_issues": "实际剩余问题或空数组"
+        },
+        "acceptance_criteria": [
+          "已有满足人物身份和服装锚定用途的真实原创图片文件及精确版本。",
+          "已观察实际结果，记录面部清晰度、年龄呈现、服装与人体的具体判断。",
+          "选用媒体和人物参考用途已保存，未把静态参考当作动态表演验收。",
+          "如存在真实阻碍，精确报告已完成用途和剩余缺项。"
+        ],
+        "scope": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-dff13be9bd68",
+            "version": 1
+          }
+        ]
+      },
+      "specialist_turns": [
+        {
+          "id": "executor-image-lifecycle-work-order-505b14867dd04aec9942d985e549e437-4",
+          "sequence": 4,
+          "tool_name": "image.advance",
+          "arguments": {
+            "task_id": "image-task-cc49e9d60467"
+          },
+          "reason": "图片任务已保存，继续准备并提交当前素材。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "image.advance",
+            "status": "SUCCEEDED",
+            "output": {
+              "task": {
+                "id": "image-task-cc49e9d60467",
+                "project_id": "project-d2fa0fa72d76",
+                "asset_id": "asset-cd4ea66d5166",
+                "output_version_id": "asset-version-136d4a9038b9",
+                "output_version_number": 2,
+                "descriptor": "周启原创全身身份与固定服装母版：38岁中国男性、略方脸、黑色侧分短发、无胡须眼镜，浅灰长袖衬衫与深藏青西裤；平静自然神态。用于人物身份及服装，不代表镜头首帧或动态表演。",
+                "operation": "GENERATE",
+                "status": "SUCCEEDED",
+                "provider": "openai",
+                "model": "gpt-image-2"
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "image_task",
+                "artifact_id": "image-task-cc49e9d60467",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-cd4ea66d5166",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-136d4a9038b9",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "image_task",
+                  "artifact_id": "image-task-cc49e9d60467",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-cd4ea66d5166",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-136d4a9038b9",
+                  "version": 2
+                }
+              ],
+              "current_state": {
+                "task.id": "image-task-cc49e9d60467",
+                "task.project_id": "project-d2fa0fa72d76",
+                "task.status": "SUCCEEDED",
+                "task.output_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v2-asset-version-136d4a9038b9.png"
+              },
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:46:40.726595Z",
+          "updated_at": "2026-09-12T05:48:29.661574Z"
+        },
+        {
+          "id": "specialist-turn-88ef20e091e540b2848e0c375d3d893f",
+          "sequence": 5,
+          "tool_name": "qa.inspect_asset_version",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-cd4ea66d5166",
+            "version_id": "asset-version-136d4a9038b9",
+            "request": {
+              "review_focus": "本图仅用于周启的人物身份及固定服装，不作为会议室空间、镜头首帧或动态表演。请观察真实图片：是否呈现约38岁的普通成年中国男性，略方脸、黑色侧分短发、深棕双眼清楚、无胡须无眼镜；浅灰长袖衬衫最上方一粒扣松开、深藏青西裤和黑皮鞋是否明确；人体、自然垂手是否存在影响参考用途的异常；摄影光线、皮肤和衣料是否真实，神态是否平静自然而非夸张恶霸。请报告全图实际尺寸与面部可见细节。若全身原图脸部有足够清晰像素且能裁成可用身份参考，请提供包含完整头发、双耳、下颌及少量衣领的crop_suggestion（精确源版本与归一化区域）；若源脸本身不清楚，请明确，不以裁切当作增清晰。不要因本次不是多视图或9:16而误判。"
+            }
+          },
+          "reason": "周启的原创全身图片已保存，检查真实面部、服装和人体，并判断是否能从原像素裁出清晰身份参考。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "qa.inspect_asset_version",
+            "status": "SUCCEEDED",
+            "output": {
+              "recommended": true,
+              "score": 4.8,
+              "issues": [],
+              "summary": "全图2304×3456，2:3竖幅，完整保留头发至鞋底。人物外观约三十多至四十出头，略方脸、下颌适度宽，黑色侧分短发与自然发际清楚；双耳、眉眼、鼻翼、唇形及下颌轮廓可辨，双眼瞳孔位置清晰，虹膜呈深色，细微棕色色阶不宜由本次全身图精确锁定。无眼镜、无明显胡须，嘴唇轻合、眉眼放松，神态平静，没有夸张威吓表情。\n浅灰长袖衬衫、领口最上方一粒扣松开、收拢袖口、深藏青西裤、黑皮带与黑皮鞋均明确，无领带、文字或醒目标识。人体比例及肩臂、腕手连接自然；双手完整可见，手指自然微屈并有正常重叠，未见影响参考用途的多指、断裂或融合。双脚落在同一地面，接地可信。光线柔和，眼下轻微纹理、皮肤明暗和衣料褶皱可见，无明显蜡像感或水印。\n可直接作为正面人物身份与固定服装母版。现有面部细节足以另行裁取身份参考，但裁切不会增加皮肤微细节。本次没有其他角色或跨视角参考，不据此宣称已验证与林夏的区分度或跨图身份一致性；也不用于证明会议室方位及动态动作。",
+              "review_focus": "本图仅用于周启的人物身份及固定服装，不作为会议室空间、镜头首帧或动态表演。请观察真实图片：是否呈现约38岁的普通成年中国男性，略方脸、黑色侧分短发、深棕双眼清楚、无胡须无眼镜；浅灰长袖衬衫最上方一粒扣松开、深藏青西裤和黑皮鞋是否明确；人体、自然垂手是否存在影响参考用途的异常；摄影光线、皮肤和衣料是否真实，神态是否平静自然而非夸张恶霸。请报告全图实际尺寸与面部可见细节。若全身原图脸部有足够清晰像素且能裁成可用身份参考，请提供包含完整头发、双耳、下颌及少量衣领的crop_suggestion（精确源版本与归一化区域）；若源脸本身不清楚，请明确，不以裁切当作增清晰。不要因本次不是多视图或9:16而误判。",
+              "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+              "region_evidence": [],
+              "crop_suggestion": {
+                "region": {
+                  "x": 0.409,
+                  "y": 0.035,
+                  "width": 0.211,
+                  "height": 0.211
+                },
+                "reason": "该区域保留完整头发、双耳、下颌及少量衣领，四周留有余量，可从现有像素提取约486×729像素的2:3正面身份参考。原图已能分辨发际及五官关系；此建议仅提取已有细节，不作增清晰承诺。完整服装仍须保留并使用全身原图，裁切尚未执行。",
+                "source": {
+                  "source_asset_version_id": "asset-version-136d4a9038b9",
+                  "source_width": 2304,
+                  "source_height": 3456,
+                  "box_pixels": [
+                    942,
+                    120,
+                    1429,
+                    851
+                  ]
+                }
+              },
+              "edit_guide_suggestion": null,
+              "plane_composite_suggestion": null,
+              "evidence_references": []
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-cd4ea66d5166",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-136d4a9038b9",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-cd4ea66d5166",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-136d4a9038b9",
+                  "version": 2
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:48:52.475666Z",
+          "updated_at": "2026-09-12T05:49:47.055378Z"
+        },
+        {
+          "id": "specialist-turn-e61bc66945154cf4be3c9ced83aeb190",
+          "sequence": 6,
+          "tool_name": "image.crop",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-cd4ea66d5166",
+            "request": {
+              "source_asset_version_id": "asset-version-136d4a9038b9",
+              "region": {
+                "x": 0.409,
+                "y": 0.035,
+                "width": 0.211,
+                "height": 0.211
+              },
+              "descriptor": "周启正面脸部身份参考：从原创全身母版原像素裁切，保留完整黑色侧分短发、双耳、五官、下颌及少量浅灰衬衫衣领。仅提供同一人物身份，不代表完整服装、镜头首帧或动态表演；无放大、无重绘。",
+              "reference_role": "SUBJECT_IDENTITY"
+            }
+          },
+          "reason": "全身母版已实际检查可用；按已保存的精确裁切建议提取原像素脸部参考，便于后续近景身份输入，不重新生成人物。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "image.crop",
+            "status": "SUCCEEDED",
+            "output": {
+              "version": {
+                "id": "asset-version-05d30f686774",
+                "version": 3,
+                "origin_type": "LOCAL_DERIVED",
+                "descriptor": "周启正面脸部身份参考：从原创全身母版原像素裁切，保留完整黑色侧分短发、双耳、五官、下颌及少量浅灰衬衫衣领。仅提供同一人物身份，不代表完整服装、镜头首帧或动态表演；无放大、无重绘。",
+                "media_type": "IMAGE",
+                "local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v3-asset-version-05d30f686774-crop.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 487,
+                "height": 731,
+                "duration_seconds": null,
+                "file_size_bytes": 433875,
+                "parent_version_id": "asset-version-136d4a9038b9",
+                "image_task_id": null,
+                "derivation_references": [
+                  {
+                    "asset_version_id": "asset-version-136d4a9038b9",
+                    "source_project_id": "project-d2fa0fa72d76",
+                    "reference_role": "SUBJECT_IDENTITY",
+                    "reference_authority": "AUTHORITATIVE",
+                    "purpose": "原图中的精确局部像素；仅承担本次声明的参考职责。",
+                    "subject_alias": "周启"
+                  }
+                ],
+                "reference_sheet": null,
+                "image_crop": {
+                  "source_asset_version_id": "asset-version-136d4a9038b9",
+                  "source_width": 2304,
+                  "source_height": 3456,
+                  "box_pixels": [
+                    942,
+                    120,
+                    1429,
+                    851
+                  ]
+                },
+                "text_plate": null,
+                "source": {
+                  "source_type": "LOCAL_DERIVED",
+                  "source_label": "本地图像裁切",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "local",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "pillow-crop-v1",
+                  "prompt": null,
+                  "created_at": "2026-09-12T05:50:14.633+00:00"
+                },
+                "approval_status": "DRAFT",
+                "review_notes": null,
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:50:14.633+00:00"
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-cd4ea66d5166",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-05d30f686774",
+                "version": 3
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-cd4ea66d5166",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-05d30f686774",
+                  "version": 3
+                }
+              ],
+              "current_state": {
+                "asset.id": "asset-cd4ea66d5166",
+                "asset.project_id": "project-d2fa0fa72d76",
+                "asset.current_version_id": "asset-version-05d30f686774",
+                "version.id": "asset-version-05d30f686774",
+                "version.version": 3,
+                "version.local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v3-asset-version-05d30f686774-crop.png",
+                "version.duration_seconds": null
+              },
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:50:13.409566Z",
+          "updated_at": "2026-09-12T05:50:14.669178Z"
+        },
+        {
+          "id": "specialist-turn-fbdf0a565c474398acd59a1679445fd7",
+          "sequence": 7,
+          "tool_name": "qa.inspect_asset_version",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-cd4ea66d5166",
+            "version_id": "asset-version-05d30f686774",
+            "request": {
+              "canonical_reference_version_ids": [
+                "asset-version-136d4a9038b9"
+              ],
+              "review_focus": "此图为2304×3456原创全身母版的原像素脸部裁切，实际487×731，不放大、不重绘；仅用于周启身份和近景生成的脸部参考。请看裁后实际图，确认头发、双耳、下颌是否完整且留有必要余量，略方脸、黑色侧分短发、双眼、鼻唇关系与同源母版一致，是否有影响人物识别的模糊、裁断或损坏，皮肤和轻微眼下纹理是否仍自然。深色虹膜可辨即可，不要求本图证明精细棕色色阶。少量浅灰衣领仅作辅助，不以本裁图验收全身服装、手部、空间、首帧或动态表演。现有全身母版已检查可用，本次只回答裁图的实际身份参考可用性，不要求新增视图。"
+            }
+          },
+          "reason": "脸部裁图已经落盘；检查实际裁后边界和五官可读性，确认它可作为原母版的身份参考，而不把裁切当作增清晰。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "qa.inspect_asset_version",
+            "status": "SUCCEEDED",
+            "output": {
+              "recommended": true,
+              "score": 4.8,
+              "issues": [],
+              "summary": "裁图完整保留黑色侧分短发、双耳和下颌，头顶及两侧留有余量，颈部与浅灰衣领也清楚可见。略方脸型、发际、眉眼间距、鼻翼及唇形与同源母版一致；双眼和深色虹膜可辨，皮肤细微纹理及轻微眼下纹理自然。未见影响人物识别的模糊、裁断、拉伸或像素损坏，无多余文字或水印。可直接承担周启正面身份及近景生成的脸部参考，无需进一步裁切。本结论不覆盖全身服装、手部、空间、镜头首帧或动态表演。",
+              "review_focus": "此图为2304×3456原创全身母版的原像素脸部裁切，实际487×731，不放大、不重绘；仅用于周启身份和近景生成的脸部参考。请看裁后实际图，确认头发、双耳、下颌是否完整且留有必要余量，略方脸、黑色侧分短发、双眼、鼻唇关系与同源母版一致，是否有影响人物识别的模糊、裁断或损坏，皮肤和轻微眼下纹理是否仍自然。深色虹膜可辨即可，不要求本图证明精细棕色色阶。少量浅灰衣领仅作辅助，不以本裁图验收全身服装、手部、空间、首帧或动态表演。现有全身母版已检查可用，本次只回答裁图的实际身份参考可用性，不要求新增视图。",
+              "candidate_output_layout": "LIGHTWEIGHT_SINGLE",
+              "region_evidence": [],
+              "crop_suggestion": null,
+              "edit_guide_suggestion": null,
+              "plane_composite_suggestion": null,
+              "evidence_references": [
+                {
+                  "source_project_id": "project-d2fa0fa72d76",
+                  "asset_version_id": "asset-version-136d4a9038b9"
+                }
+              ]
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-cd4ea66d5166",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-05d30f686774",
+                "version": 3
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-136d4a9038b9",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-cd4ea66d5166",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-05d30f686774",
+                  "version": 3
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-136d4a9038b9",
+                  "version": 2
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:50:29.744892Z",
+          "updated_at": "2026-09-12T05:51:06.149805Z"
+        },
+        {
+          "id": "specialist-turn-0b2dd15540ba4cce91dd4683556db144",
+          "sequence": 8,
+          "tool_name": "artifact.review_version",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "asset_id": "asset-cd4ea66d5166",
+            "version_id": "asset-version-136d4a9038b9",
+            "request": {
+              "decision": "APPROVED",
+              "purpose": "CANONICAL_MASTER",
+              "notes": "采用为周启人物身份、固定服装与体态母版。实际图片2304×3456，完整保留头发至鞋底；外观约三十多至四十出头，略方脸、黑色侧分短发、清晰双眼和深色虹膜，无眼镜、无明显胡须，表情平静自然。浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋明确，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，未见影响参考用途的人体异常；皮肤、眼下纹理与衣料褶皱具有自然摄影质感。精细棕色色阶不由本图锁定。本图仅提供身份、衣着和体态，不固定镜头姿态，不证明会议室方位、互动接触或动态表演。另保留已检查可用的同源487×731原像素脸部裁图用于近景身份输入，无需重绘或增加无关视图。"
+            }
+          },
+          "reason": "全身母版与同源脸部裁图均已实际检查可用；现在明确采用全身图作为周启的身份及固定服装母版，保留裁图作为补充身份参考。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "artifact.review_version",
+            "status": "SUCCEEDED",
+            "output": {
+              "version": {
+                "id": "asset-version-136d4a9038b9",
+                "version": 2,
+                "origin_type": "AI_GENERATED",
+                "descriptor": "周启原创全身身份与固定服装母版：38岁中国男性、略方脸、黑色侧分短发、无胡须眼镜，浅灰长袖衬衫与深藏青西裤；平静自然神态。用于人物身份及服装，不代表镜头首帧或动态表演。",
+                "media_type": "IMAGE",
+                "local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v2-asset-version-136d4a9038b9.png",
+                "external_url": null,
+                "mime_type": "image/png",
+                "width": 2304,
+                "height": 3456,
+                "duration_seconds": null,
+                "file_size_bytes": 9626440,
+                "parent_version_id": null,
+                "image_task_id": "image-task-cc49e9d60467",
+                "derivation_references": [],
+                "reference_sheet": null,
+                "image_crop": null,
+                "text_plate": null,
+                "source": {
+                  "source_type": "AI_GENERATED",
+                  "source_label": "GPT Image 2 生成",
+                  "source_uri": null,
+                  "original_filename": null,
+                  "provider": "openai",
+                  "provider_asset_id": null,
+                  "creator": null,
+                  "creator_uri": null,
+                  "license_name": null,
+                  "license_uri": null,
+                  "attribution": null,
+                  "stock_import_mode": null,
+                  "model": "gpt-image-2",
+                  "prompt": "原创真人摄影人物参考，单幅竖构图，一位38岁成年中国男性普通公司主管周启。请建立唯一且可复用的人物身份，不是明星脸，不是时尚模特，不是漫画恶霸。略方脸，适度宽下颌，深棕色眼睛，双眼与瞳孔清楚，黑色侧分短发，发际线自然；干净剃须，无胡须，不戴眼镜。普通成年男性体型，肩背仅略显日常工作疲惫，真实自然的身材比例。神态平静、随意而笃定，嘴唇轻合，眉眼放松，不笑露齿、不怒目、不喊叫，不预制强烈剧情表情。浅灰色长袖衬衫，素色无品牌、真实细致棉质纹理与自然褶皱，领口仅松开最上面一粒扣，袖口扣好，衬衫扎入深藏青色西裤，普通黑色皮带无醒目标识，黑色简洁皮鞋。没有领带、工牌、首饰或文字。单人从完整头顶到鞋底的全身正面参考照，人物靠近画面并占约90%的高度，正面脸朝相机，双眼同样清晰，双臂自然垂于身体两侧，双手完整可见且手指自然放松分离，双脚自然站立在同一地面。无道具、无桌子、无人遮挡，不摆权力姿势。中性浅灰办公室墙面背景，少量自然地面，背景简洁轻微虚化而人物通体清晰；这不是会议室空间参考。自然办公室窗光加柔和环境补光，面部均匀可读、不过度戏剧化。真实摄影质感，保留轻微眼下纹理、毛孔与衣料褶皱，正确人体和手部，不磨皮蜡像，不过度锐化，不胶片噪点，不低清晰度。使用自然人像焦段及不夸张的透视，脸部细节即使在全身构图中也尽可能清晰。只输出一张完整照片，不拼板、不多视图、不标题、不边框、不水印。",
+                  "created_at": "2026-09-12T05:48:29.633+00:00"
+                },
+                "approval_status": "APPROVED",
+                "review_notes": "采用为周启人物身份、固定服装与体态母版。实际图片2304×3456，完整保留头发至鞋底；外观约三十多至四十出头，略方脸、黑色侧分短发、清晰双眼和深色虹膜，无眼镜、无明显胡须，表情平静自然。浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋明确，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，未见影响参考用途的人体异常；皮肤、眼下纹理与衣料褶皱具有自然摄影质感。精细棕色色阶不由本图锁定。本图仅提供身份、衣着和体态，不固定镜头姿态，不证明会议室方位、互动接触或动态表演。另保留已检查可用的同源487×731原像素脸部裁图用于近景身份输入，无需重绘或增加无关视图。",
+                "freshness": "CURRENT",
+                "created_at": "2026-09-12T05:48:29.633+00:00"
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset",
+                "artifact_id": "asset-cd4ea66d5166",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-136d4a9038b9",
+                "version": 2
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset",
+                  "artifact_id": "asset-cd4ea66d5166",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-136d4a9038b9",
+                  "version": 2
+                }
+              ],
+              "current_state": {
+                "asset.id": "asset-cd4ea66d5166",
+                "asset.project_id": "project-d2fa0fa72d76",
+                "asset.current_version_id": "asset-version-136d4a9038b9",
+                "version.id": "asset-version-136d4a9038b9",
+                "version.version": 2,
+                "version.local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v2-asset-version-136d4a9038b9.png",
+                "version.duration_seconds": null
+              },
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:51:19.484022Z",
+          "updated_at": "2026-09-12T05:51:21.001570Z"
+        },
+        {
+          "id": "specialist-turn-fb51627a93194d589bc53dc85c015911",
+          "sequence": 9,
+          "tool_name": "artifact.add_reference_entry",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "request": {
+              "subject_asset_id": "asset-cd4ea66d5166",
+              "asset_version_id": "asset-version-136d4a9038b9",
+              "role": "CANONICAL_MASTER",
+              "angle": "FRONT",
+              "framing": "FULL_BODY",
+              "tags": [
+                "周启",
+                "人物身份",
+                "固定服装",
+                "全身体态",
+                "平静自然"
+              ],
+              "description": "周启的原创人物身份及固定服装母版，2304×3456。已实际观察：约38岁普通中国男性，略方脸、黑色侧分短发、无眼镜无明显胡须，眉眼放松；浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋清楚，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，保留皮肤、眼下纹理和衣料褶皱。本图对周启身份、衣着和身体比例提供权威依据；近景可配合同源脸部裁图。不固定镜头姿态、办公室布景或方位，不承担构图首帧、互动接触及动态表演验收。",
+              "priority": 90
+            }
+          },
+          "reason": "周启全身母版已实际检查并采用，登记其人物身份、固定服装和体态用途，供后续镜头按需引用，不把背景或站姿当成镜头要求。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "artifact.add_reference_entry",
+            "status": "SUCCEEDED",
+            "output": {
+              "pack": {
+                "id": "reference-pack-asset-cd4ea66d5166",
+                "project_id": "project-d2fa0fa72d76",
+                "subject_asset_id": "asset-cd4ea66d5166",
+                "name": "周启参考包",
+                "created_at": "2026-09-12T05:51:40.207+00:00",
+                "updated_at": "2026-09-12T05:51:40.207+00:00"
+              },
+              "entry": {
+                "id": "reference-entry-1b23b089e44c",
+                "asset_version_id": "asset-version-136d4a9038b9",
+                "lineage_root_version_id": "asset-version-136d4a9038b9",
+                "role": "CANONICAL_MASTER",
+                "angle": "FRONT",
+                "framing": "FULL_BODY",
+                "tags": [
+                  "周启",
+                  "人物身份",
+                  "固定服装",
+                  "全身体态",
+                  "平静自然"
+                ],
+                "description": "周启的原创人物身份及固定服装母版，2304×3456。已实际观察：约38岁普通中国男性，略方脸、黑色侧分短发、无眼镜无明显胡须，眉眼放松；浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋清楚，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，保留皮肤、眼下纹理和衣料褶皱。本图对周启身份、衣着和身体比例提供权威依据；近景可配合同源脸部裁图。不固定镜头姿态、办公室布景或方位，不承担构图首帧、互动接触及动态表演验收。",
+                "priority": 90
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-cd4ea66d5166",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack_entry",
+                "artifact_id": "reference-entry-1b23b089e44c",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-136d4a9038b9",
+                "version": null
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack",
+                  "artifact_id": "reference-pack-asset-cd4ea66d5166",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack_entry",
+                  "artifact_id": "reference-entry-1b23b089e44c",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-136d4a9038b9",
+                  "version": null
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:51:39.236366Z",
+          "updated_at": "2026-09-12T05:51:40.226553Z"
+        },
+        {
+          "id": "specialist-turn-0452b67480d74e68ad858651bb94a07d",
+          "sequence": 10,
+          "tool_name": "artifact.add_reference_entry",
+          "arguments": {
+            "project_id": "project-d2fa0fa72d76",
+            "request": {
+              "subject_asset_id": "asset-cd4ea66d5166",
+              "asset_version_id": "asset-version-05d30f686774",
+              "role": "CHARACTER_FACE",
+              "lineage_root_version_id": "asset-version-136d4a9038b9",
+              "angle": "FRONT",
+              "framing": "FACE_CLOSE_UP",
+              "tags": [
+                "周启",
+                "人物身份",
+                "正面脸部",
+                "同源原像素裁切",
+                "平静自然"
+              ],
+              "description": "周启的正面脸部身份参考，487×731 PNG，从已采用的2304×3456全身母版原像素裁取，未放大或重绘。已实际观察：完整保留黑色侧分短发、双耳及下颌并有必要余量；略方脸、发际、眉眼间距、鼻翼及唇形与母版一致，双眼和深色虹膜可辨，皮肤及轻微眼下纹理自然，无影响识别的模糊、裁断、拉伸或像素损坏。作为主体“周启”的SUBJECT_IDENTITY/AUTHORITATIVE输入，贡献同一人物的脸型、五官、发型和成年年龄感；精细棕色色阶不由此图锁定。全身服装与体态使用同源全身母版。本裁图不固定镜头姿态或表情，不提供场景空间、互动接触、镜头首帧或动态表演验收。",
+              "priority": 100
+            }
+          },
+          "reason": "脸部裁图已实际检查可用，补存周启近景身份参考用途；保留现有全身母版，不重绘、不改变人物造型。",
+          "status": "COMPLETED",
+          "result": {
+            "tool_id": "artifact.add_reference_entry",
+            "status": "SUCCEEDED",
+            "output": {
+              "pack": {
+                "id": "reference-pack-asset-cd4ea66d5166",
+                "project_id": "project-d2fa0fa72d76",
+                "subject_asset_id": "asset-cd4ea66d5166",
+                "name": "周启参考包",
+                "created_at": "2026-09-12T05:51:40.207+00:00",
+                "updated_at": "2026-09-12T05:52:03.176+00:00"
+              },
+              "entry": {
+                "id": "reference-entry-5425ce4aaef1",
+                "asset_version_id": "asset-version-05d30f686774",
+                "lineage_root_version_id": "asset-version-136d4a9038b9",
+                "role": "CHARACTER_FACE",
+                "angle": "FRONT",
+                "framing": "FACE_CLOSE_UP",
+                "tags": [
+                  "周启",
+                  "人物身份",
+                  "正面脸部",
+                  "同源原像素裁切",
+                  "平静自然"
+                ],
+                "description": "周启的正面脸部身份参考，487×731 PNG，从已采用的2304×3456全身母版原像素裁取，未放大或重绘。已实际观察：完整保留黑色侧分短发、双耳及下颌并有必要余量；略方脸、发际、眉眼间距、鼻翼及唇形与母版一致，双眼和深色虹膜可辨，皮肤及轻微眼下纹理自然，无影响识别的模糊、裁断、拉伸或像素损坏。作为主体“周启”的SUBJECT_IDENTITY/AUTHORITATIVE输入，贡献同一人物的脸型、五官、发型和成年年龄感；精细棕色色阶不由此图锁定。全身服装与体态使用同源全身母版。本裁图不固定镜头姿态或表情，不提供场景空间、互动接触、镜头首帧或动态表演验收。",
+                "priority": 100
+              }
+            },
+            "artifact_refs": [
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack",
+                "artifact_id": "reference-pack-asset-cd4ea66d5166",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "reference_pack_entry",
+                "artifact_id": "reference-entry-5425ce4aaef1",
+                "version": null
+              },
+              {
+                "project_id": "project-d2fa0fa72d76",
+                "artifact_type": "asset_version",
+                "artifact_id": "asset-version-05d30f686774",
+                "version": null
+              }
+            ],
+            "warnings": [],
+            "error": null,
+            "receipt": {
+              "operation_completed": true,
+              "artifact_refs": [
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack",
+                  "artifact_id": "reference-pack-asset-cd4ea66d5166",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "reference_pack_entry",
+                  "artifact_id": "reference-entry-5425ce4aaef1",
+                  "version": null
+                },
+                {
+                  "project_id": "project-d2fa0fa72d76",
+                  "artifact_type": "asset_version",
+                  "artifact_id": "asset-version-05d30f686774",
+                  "version": null
+                }
+              ],
+              "current_state": {},
+              "changed_ids": {}
+            }
+          },
+          "requested_at": "2026-09-12T05:52:00.415056Z",
+          "updated_at": "2026-09-12T05:52:03.209415Z"
+        }
+      ],
+      "asset": {
+        "id": "asset-cd4ea66d5166",
+        "project_id": "project-d2fa0fa72d76",
+        "kind": "CHARACTER",
+        "name": "周启",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "周启，38岁成年中国男性，林夏直属主管；本片唯一男性。",
+          "tone_or_temperament": "习惯把要求说得像例行流程；初始语气随意而笃定，被递回签字责任后先停顿再退让。不演成吼叫恶霸。",
+          "visual_attributes": [
+            "略方的脸型，深棕色眼睛，面容与林夏明显有别",
+            "黑色短发，侧分，无胡须，不戴眼镜",
+            "普通成年男性体型，肩背略显疲惫"
+          ],
+          "wardrobe_or_materials": [
+            "浅灰色长袖衬衫，领口松开一粒扣",
+            "深藏青色西裤，黑色皮鞋",
+            "无领带、无工牌文字、无品牌标识"
+          ],
+          "background_constraints": [
+            "没有隐藏身份或外部救场者",
+            "后续图片必须在当前项目原创制作"
+          ],
+          "texture_constraints": [
+            "真人摄影质感，保留轻微眼下纹理及衬衫褶皱"
+          ],
+          "continuity_anchors": [
+            "始终位于会议桌西侧，面朝东，与林夏隔桌相对",
+            "开场由他把唯一一张加班单与黑色按动笔放到林夏面前",
+            "中段不接递回的笔；结尾由他收回未签字的单子，对折一次"
+          ],
+          "named_views_or_zones": [
+            "清晰面部与短发",
+            "浅灰衬衫和深藏青西裤"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [
+            "CANONICAL_MASTER"
+          ],
+          "strategy_rationale": "保持单一造型和可读表情，不扩张为无剧情需要的服装或身份状态。"
+        },
+        "current_version_id": "asset-version-136d4a9038b9",
+        "approved_version_id": "asset-version-136d4a9038b9",
+        "versions": [
+          {
+            "id": "asset-version-dff13be9bd68",
+            "version": 1,
+            "origin_type": "MANUAL",
+            "descriptor": "38岁，中国男性，林夏的直属主管。想让林夏留下赶方案，又把加班写成她的自愿选择。被要求自己签字后，收回纸张，改口允许次日上班再做。",
+            "media_type": "TEXT_REFERENCE",
+            "local_path": null,
+            "external_url": null,
+            "mime_type": null,
+            "width": null,
+            "height": null,
+            "duration_seconds": null,
+            "file_size_bytes": null,
+            "parent_version_id": null,
+            "image_task_id": null,
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "MANUAL",
+              "source_label": "用户创建的资产说明",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": null,
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": null,
+              "prompt": null,
+              "created_at": "2026-09-12T05:40:22.363+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:40:22.363+00:00"
+          },
+          {
+            "id": "asset-version-136d4a9038b9",
+            "version": 2,
+            "origin_type": "AI_GENERATED",
+            "descriptor": "周启原创全身身份与固定服装母版：38岁中国男性、略方脸、黑色侧分短发、无胡须眼镜，浅灰长袖衬衫与深藏青西裤；平静自然神态。用于人物身份及服装，不代表镜头首帧或动态表演。",
+            "media_type": "IMAGE",
+            "local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v2-asset-version-136d4a9038b9.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 2304,
+            "height": 3456,
+            "duration_seconds": null,
+            "file_size_bytes": 9626440,
+            "parent_version_id": null,
+            "image_task_id": "image-task-cc49e9d60467",
+            "derivation_references": [],
+            "reference_sheet": null,
+            "image_crop": null,
+            "text_plate": null,
+            "source": {
+              "source_type": "AI_GENERATED",
+              "source_label": "GPT Image 2 生成",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "openai",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "gpt-image-2",
+              "prompt": "原创真人摄影人物参考，单幅竖构图，一位38岁成年中国男性普通公司主管周启。请建立唯一且可复用的人物身份，不是明星脸，不是时尚模特，不是漫画恶霸。略方脸，适度宽下颌，深棕色眼睛，双眼与瞳孔清楚，黑色侧分短发，发际线自然；干净剃须，无胡须，不戴眼镜。普通成年男性体型，肩背仅略显日常工作疲惫，真实自然的身材比例。神态平静、随意而笃定，嘴唇轻合，眉眼放松，不笑露齿、不怒目、不喊叫，不预制强烈剧情表情。浅灰色长袖衬衫，素色无品牌、真实细致棉质纹理与自然褶皱，领口仅松开最上面一粒扣，袖口扣好，衬衫扎入深藏青色西裤，普通黑色皮带无醒目标识，黑色简洁皮鞋。没有领带、工牌、首饰或文字。单人从完整头顶到鞋底的全身正面参考照，人物靠近画面并占约90%的高度，正面脸朝相机，双眼同样清晰，双臂自然垂于身体两侧，双手完整可见且手指自然放松分离，双脚自然站立在同一地面。无道具、无桌子、无人遮挡，不摆权力姿势。中性浅灰办公室墙面背景，少量自然地面，背景简洁轻微虚化而人物通体清晰；这不是会议室空间参考。自然办公室窗光加柔和环境补光，面部均匀可读、不过度戏剧化。真实摄影质感，保留轻微眼下纹理、毛孔与衣料褶皱，正确人体和手部，不磨皮蜡像，不过度锐化，不胶片噪点，不低清晰度。使用自然人像焦段及不夸张的透视，脸部细节即使在全身构图中也尽可能清晰。只输出一张完整照片，不拼板、不多视图、不标题、不边框、不水印。",
+              "created_at": "2026-09-12T05:48:29.633+00:00"
+            },
+            "approval_status": "APPROVED",
+            "review_notes": "采用为周启人物身份、固定服装与体态母版。实际图片2304×3456，完整保留头发至鞋底；外观约三十多至四十出头，略方脸、黑色侧分短发、清晰双眼和深色虹膜，无眼镜、无明显胡须，表情平静自然。浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋明确，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，未见影响参考用途的人体异常；皮肤、眼下纹理与衣料褶皱具有自然摄影质感。精细棕色色阶不由本图锁定。本图仅提供身份、衣着和体态，不固定镜头姿态，不证明会议室方位、互动接触或动态表演。另保留已检查可用的同源487×731原像素脸部裁图用于近景身份输入，无需重绘或增加无关视图。",
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:48:29.633+00:00"
+          },
+          {
+            "id": "asset-version-05d30f686774",
+            "version": 3,
+            "origin_type": "LOCAL_DERIVED",
+            "descriptor": "周启正面脸部身份参考：从原创全身母版原像素裁切，保留完整黑色侧分短发、双耳、五官、下颌及少量浅灰衬衫衣领。仅提供同一人物身份，不代表完整服装、镜头首帧或动态表演；无放大、无重绘。",
+            "media_type": "IMAGE",
+            "local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v3-asset-version-05d30f686774-crop.png",
+            "external_url": null,
+            "mime_type": "image/png",
+            "width": 487,
+            "height": 731,
+            "duration_seconds": null,
+            "file_size_bytes": 433875,
+            "parent_version_id": "asset-version-136d4a9038b9",
+            "image_task_id": null,
+            "derivation_references": [
+              {
+                "asset_version_id": "asset-version-136d4a9038b9",
+                "source_project_id": "project-d2fa0fa72d76",
+                "reference_role": "SUBJECT_IDENTITY",
+                "reference_authority": "AUTHORITATIVE",
+                "purpose": "原图中的精确局部像素；仅承担本次声明的参考职责。",
+                "subject_alias": "周启"
+              }
+            ],
+            "reference_sheet": null,
+            "image_crop": {
+              "source_asset_version_id": "asset-version-136d4a9038b9",
+              "source_width": 2304,
+              "source_height": 3456,
+              "box_pixels": [
+                942,
+                120,
+                1429,
+                851
+              ]
+            },
+            "text_plate": null,
+            "source": {
+              "source_type": "LOCAL_DERIVED",
+              "source_label": "本地图像裁切",
+              "source_uri": null,
+              "original_filename": null,
+              "provider": "local",
+              "provider_asset_id": null,
+              "creator": null,
+              "creator_uri": null,
+              "license_name": null,
+              "license_uri": null,
+              "attribution": null,
+              "stock_import_mode": null,
+              "model": "pillow-crop-v1",
+              "prompt": null,
+              "created_at": "2026-09-12T05:50:14.633+00:00"
+            },
+            "approval_status": "DRAFT",
+            "review_notes": null,
+            "freshness": "CURRENT",
+            "created_at": "2026-09-12T05:50:14.633+00:00"
+          }
+        ]
+      },
+      "reference_pack": {
+        "id": "reference-pack-asset-cd4ea66d5166",
+        "project_id": "project-d2fa0fa72d76",
+        "subject_asset_id": "asset-cd4ea66d5166",
+        "name": "周启参考包",
+        "entries": [
+          {
+            "id": "reference-entry-1b23b089e44c",
+            "asset_version_id": "asset-version-136d4a9038b9",
+            "lineage_root_version_id": "asset-version-136d4a9038b9",
+            "role": "CANONICAL_MASTER",
+            "angle": "FRONT",
+            "framing": "FULL_BODY",
+            "tags": [
+              "周启",
+              "人物身份",
+              "固定服装",
+              "全身体态",
+              "平静自然"
+            ],
+            "description": "周启的原创人物身份及固定服装母版，2304×3456。已实际观察：约38岁普通中国男性，略方脸、黑色侧分短发、无眼镜无明显胡须，眉眼放松；浅灰长袖衬衫最上方一粒扣松开、袖口收拢，深藏青西裤、黑皮带和黑皮鞋清楚，无领带、文字或醒目标识。肩臂、腕手连接及站姿比例自然，保留皮肤、眼下纹理和衣料褶皱。本图对周启身份、衣着和身体比例提供权威依据；近景可配合同源脸部裁图。不固定镜头姿态、办公室布景或方位，不承担构图首帧、互动接触及动态表演验收。",
+            "priority": 90
+          },
+          {
+            "id": "reference-entry-5425ce4aaef1",
+            "asset_version_id": "asset-version-05d30f686774",
+            "lineage_root_version_id": "asset-version-136d4a9038b9",
+            "role": "CHARACTER_FACE",
+            "angle": "FRONT",
+            "framing": "FACE_CLOSE_UP",
+            "tags": [
+              "周启",
+              "人物身份",
+              "正面脸部",
+              "同源原像素裁切",
+              "平静自然"
+            ],
+            "description": "周启的正面脸部身份参考，487×731 PNG，从已采用的2304×3456全身母版原像素裁取，未放大或重绘。已实际观察：完整保留黑色侧分短发、双耳及下颌并有必要余量；略方脸、发际、眉眼间距、鼻翼及唇形与母版一致，双眼和深色虹膜可辨，皮肤及轻微眼下纹理自然，无影响识别的模糊、裁断、拉伸或像素损坏。作为主体“周启”的SUBJECT_IDENTITY/AUTHORITATIVE输入，贡献同一人物的脸型、五官、发型和成年年龄感；精细棕色色阶不由此图锁定。全身服装与体态使用同源全身母版。本裁图不固定镜头姿态或表情，不提供场景空间、互动接触、镜头首帧或动态表演验收。",
+            "priority": 100
+          }
+        ],
+        "created_at": "2026-09-12T05:51:40.207+00:00",
+        "updated_at": "2026-09-12T05:52:03.176+00:00"
+      },
+      "original_final": {
+        "status": "COMPLETED",
+        "concise_summary": "周启的人物图片已完成，保存在周启资产及人物参考包中：一张清晰全身母版和一张同源脸部裁图，均已检查实际图片并登记用途。身份、固定服装与真人摄影质感可用；未制作视频，也未将静态图片当作互动或动态表演验收。",
+        "deliverable": {
+          "selected_media": [
+            {
+              "asset_id": "asset-cd4ea66d5166",
+              "asset_version_id": "asset-version-136d4a9038b9",
+              "version": 2,
+              "local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v2-asset-version-136d4a9038b9.png",
+              "mime_type": "image/png",
+              "width": 2304,
+              "height": 3456,
+              "origin_type": "AI_GENERATED",
+              "approval_status": "APPROVED",
+              "selection": "已采用为人物current/canonical母版",
+              "reference_entry_id": "reference-entry-1b23b089e44c",
+              "reference_pack_role": "CANONICAL_MASTER",
+              "subject_alias": "周启",
+              "authority": "AUTHORITATIVE",
+              "purpose": "提供周启人物身份、浅灰衬衫与深藏青西裤的固定服装、全身体态和身体比例；不限定镜头姿态或空间。",
+              "provider_task_id": "image-task-cc49e9d60467",
+              "provider": "openai",
+              "model": "gpt-image-2",
+              "operation": "GENERATE",
+              "input_text_version_id": "asset-version-dff13be9bd68",
+              "input_image_version_ids": []
+            },
+            {
+              "asset_id": "asset-cd4ea66d5166",
+              "asset_version_id": "asset-version-05d30f686774",
+              "version": 3,
+              "local_path": "/fixtures/fresh3/assets/asset-cd4ea66d5166/v3-asset-version-05d30f686774-crop.png",
+              "mime_type": "image/png",
+              "width": 487,
+              "height": 731,
+              "origin_type": "LOCAL_DERIVED",
+              "approval_status": "DRAFT",
+              "selection": "已明确选用并登记，不替换全身母版",
+              "reference_entry_id": "reference-entry-5425ce4aaef1",
+              "reference_pack_role": "CHARACTER_FACE",
+              "reference_role": "SUBJECT_IDENTITY",
+              "subject_alias": "周启",
+              "authority": "AUTHORITATIVE",
+              "purpose": "供近景及互动构图生成识别同一张脸、发型和成年年龄感；全身衣着与体态仍取自母版。",
+              "parent_version_id": "asset-version-136d4a9038b9",
+              "operation": "LOCAL_CROP",
+              "source_region": {
+                "x": 0.409,
+                "y": 0.035,
+                "width": 0.211,
+                "height": 0.211
+              },
+              "pixel_processing": "保留原始像素，未放大、未重绘"
+            }
+          ],
+          "visual_findings": [
+            "全身图完整保留头发至鞋底。人物呈现三十多至四十出头的普通成年中国男性，符合约38岁的设定；略方脸、适度宽的下颌和黑色侧分短发清楚，无眼镜、无明显胡须。",
+            "眉眼、鼻翼、唇形及下颌轮廓可辨，双眼瞳孔位置清晰，虹膜呈深色。嘴唇轻合、眉眼放松，神态平静自然，没有预制夸张威吓表情。",
+            "浅灰长袖衬衫、领口最上方一粒扣松开、收拢袖口、深藏青西裤、黑皮带和黑皮鞋明确，无领带、文字或醒目标识。",
+            "肩臂、腕手连接和站姿比例自然；双手完整可见，未见影响参考用途的多指、断裂或融合，双脚接地可信。",
+            "柔和光线下可见皮肤、轻微眼下纹理和衣料褶皱，无明显蜡像感或水印，符合真人摄影质感。",
+            "脸部裁图完整保留头发、双耳、下颌与必要余量，五官关系与同源母版一致，未见影响人物识别的模糊、裁断、拉伸或像素损坏，可直接用于脸部身份参考。",
+            "没有发现需要付费重绘的用途阻碍；仅通过本地裁切提取已有面部像素，没有增加无关视图。"
+          ],
+          "continuity_anchors": {
+            "identity": [
+              "约38岁的成年中国男性",
+              "略方脸、适度宽的下颌",
+              "黑色侧分短发，自然发际",
+              "无眼镜、无明显胡须",
+              "以已选图片的眉眼间距、鼻翼及唇形保持同一身份"
+            ],
+            "wardrobe": [
+              "浅灰长袖衬衫，最上方一粒扣松开，袖口收拢",
+              "深藏青西裤",
+              "黑皮带、黑皮鞋",
+              "无领带、无工牌文字、无品牌标识"
+            ],
+            "performance_boundary": "参考图采用平静自然神态，不锁死后续表情。随意笃定、迟疑退让及拒接笔等表演须由具体镜头与未来视频验证。",
+            "reference_pack_id": "reference-pack-asset-cd4ea66d5166",
+            "lineage_root_version_id": "asset-version-136d4a9038b9"
+          },
+          "unresolved_issues": [],
+          "verification_limits": [
+            "深色虹膜可辨，但本次图片不精确证明细微棕色色阶。",
+            "本次未与林夏图片并置检查，不宣称已完成两人同框区分度或跨角色输入验证。",
+            "2:3人物参考图片不等于9:16、2K视频画面；具体构图需由下游按镜头准备。",
+            "静态身份参考不证明会议室方位、互动接触、口型、动态表演或视频连续性。"
+          ]
+        },
+        "created_artifacts": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-136d4a9038b9",
+            "version": 2
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-05d30f686774",
+            "version": 3
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "image_task",
+            "artifact_id": "image-task-cc49e9d60467"
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack",
+            "artifact_id": "reference-pack-asset-cd4ea66d5166"
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-1b23b089e44c"
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-5425ce4aaef1"
+          }
+        ],
+        "updated_artifacts": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset",
+            "artifact_id": "asset-cd4ea66d5166"
+          }
+        ],
+        "findings": [
+          "制作前已读取实际image.capability，确认当前gpt-image-2支持原创生成；全身母版在当前项目从文字设定原创生成，未借用其他项目图片。",
+          "全身母版与脸部裁图均有实际图片检查结论，未发现阻碍已声明身份和服装用途的缺陷。",
+          "两张图片的精确版本及参考用途均已持久化；脸部裁图保持DRAFT但已明确选用，可以直接作为参考。",
+          "本任务没有AssetPlan工作项，不补建计划；未修改剧本、分镜、其他人物或进行任何视频及后期任务。"
+        ],
+        "decisions": [
+          "采用一张清晰全身母版固定身份、衣着与体态，不机械增加侧面、背面或多视图卡。",
+          "采用同源原像素裁图突出面部身份，避免重新生成导致身份漂移。",
+          "保留普通成年主管的真实纹理与自然神态，不预制恶霸表情。",
+          "人物参考只贡献声明的身份和衣着，不自动作为镜头首帧或构图依据。"
+        ],
+        "assumptions": [],
+        "unresolved_questions": [],
+        "evidence_refs": [
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-dff13be9bd68",
+            "version": 1
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-136d4a9038b9",
+            "version": 2
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-05d30f686774",
+            "version": 3
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "image_task",
+            "artifact_id": "image-task-cc49e9d60467"
+          },
+          {
+            "project_id": "project-d2fa0fa72d76",
+            "artifact_type": "reference_pack",
+            "artifact_id": "reference-pack-asset-cd4ea66d5166"
+          }
+        ],
+        "recommended_next_actions": [
+          "镜头构图制作者按实际需求使用周启脸部裁图作为身份输入、全身母版作为衣着及体态依据，保持精确版本与参考职责一致。",
+          "多人互动构图完成后再检查两人身份、空间位置和接触关系；本人物分工无需新增图片。",
+          "继续其余视频生成前准备，遵守用户停靠要求，不创建、入队或执行视频任务。"
+        ],
+        "next_owner": null
+      },
+      "original_visible_tokens": 2596,
+      "original_lm_seconds": 41.625467,
+      "selected_sequences": [
+        9,
+        10
+      ],
+      "image_task": {
+        "id": "image-task-cc49e9d60467",
+        "project_id": "project-d2fa0fa72d76",
+        "asset_id": "asset-cd4ea66d5166",
+        "output_version_id": "asset-version-136d4a9038b9",
+        "output_version_number": 2,
+        "descriptor": "周启原创全身身份与固定服装母版：38岁中国男性、略方脸、黑色侧分短发、无胡须眼镜，浅灰长袖衬衫与深藏青西裤；平静自然神态。用于人物身份及服装，不代表镜头首帧或动态表演。",
+        "parent_version_id": null,
+        "operation": "GENERATE",
+        "status": "SUCCEEDED",
+        "provider": "openai",
+        "model": "gpt-image-2",
+        "request": {
+          "operation": "GENERATE",
+          "prompt": "原创真人摄影人物参考，单幅竖构图，一位38岁成年中国男性普通公司主管周启。请建立唯一且可复用的人物身份，不是明星脸，不是时尚模特，不是漫画恶霸。略方脸，适度宽下颌，深棕色眼睛，双眼与瞳孔清楚，黑色侧分短发，发际线自然；干净剃须，无胡须，不戴眼镜。普通成年男性体型，肩背仅略显日常工作疲惫，真实自然的身材比例。神态平静、随意而笃定，嘴唇轻合，眉眼放松，不笑露齿、不怒目、不喊叫，不预制强烈剧情表情。浅灰色长袖衬衫，素色无品牌、真实细致棉质纹理与自然褶皱，领口仅松开最上面一粒扣，袖口扣好，衬衫扎入深藏青色西裤，普通黑色皮带无醒目标识，黑色简洁皮鞋。没有领带、工牌、首饰或文字。单人从完整头顶到鞋底的全身正面参考照，人物靠近画面并占约90%的高度，正面脸朝相机，双眼同样清晰，双臂自然垂于身体两侧，双手完整可见且手指自然放松分离，双脚自然站立在同一地面。无道具、无桌子、无人遮挡，不摆权力姿势。中性浅灰办公室墙面背景，少量自然地面，背景简洁轻微虚化而人物通体清晰；这不是会议室空间参考。自然办公室窗光加柔和环境补光，面部均匀可读、不过度戏剧化。真实摄影质感，保留轻微眼下纹理、毛孔与衣料褶皱，正确人体和手部，不磨皮蜡像，不过度锐化，不胶片噪点，不低清晰度。使用自然人像焦段及不夸张的透视，脸部细节即使在全身构图中也尽可能清晰。只输出一张完整照片，不拼板、不多视图、不标题、不边框、不水印。",
+          "size": "2304x3456",
+          "quality": "high",
+          "background": "opaque",
+          "output_format": "png",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "input_version_ids": [],
+          "reference_inputs": [],
+          "primary_input_version_id": null,
+          "mask_version_id": null,
+          "mask_feather_pixels": 8
+        },
+        "attempt": 1,
+        "retry_of_task_id": null,
+        "provider_request_id": "84107f70-5060-4c9c-ac69-f5a29b897bef",
+        "provider_output_path": null,
+        "provider_output_version_id": null,
+        "provider_output_version_number": null,
+        "staged_path": "/fixtures/fresh3/project-d2fa0fa72d76/assets/.staging/image-task-cc49e9d60467.png.part",
+        "output_path": "/fixtures/fresh3/project-d2fa0fa72d76/assets/asset-cd4ea66d5166/v2-asset-version-136d4a9038b9.png",
+        "output_mime_type": "image/png",
+        "revised_prompt": null,
+        "usage": {
+          "input_tokens": 529,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 529
+          },
+          "output_tokens": 15303,
+          "output_tokens_details": {
+            "image_tokens": 15303,
+            "text_tokens": 0
+          },
+          "total_tokens": 15832
+        },
+        "cost": {
+          "estimated_amount": 0.461735,
+          "currency": "USD",
+          "pricing": {
+            "currency": "USD",
+            "unit": "PER_1M_TOKENS",
+            "image_input": 8.0,
+            "text_input": 5.0,
+            "image_output": 30.0,
+            "captured_at": "2026-09-12T05:48:29.611+00:00"
+          },
+          "usage": {
+            "input_tokens": 529,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 529
+            },
+            "output_tokens": 15303,
+            "output_tokens_details": {
+              "image_tokens": 15303,
+              "text_tokens": 0
+            },
+            "total_tokens": 15832
+          },
+          "note": "Estimate from provider token usage; provider billing is authoritative."
+        },
+        "error_code": null,
+        "error_message": null,
+        "retry_disposition": null,
+        "submitted_at": "2026-09-12T05:46:53.429+00:00",
+        "finished_at": "2026-09-12T05:48:29.633+00:00",
+        "created_at": "2026-09-12T05:46:39.697+00:00",
+        "updated_at": "2026-09-12T05:48:29.633+00:00"
+      }
+    }
+  ]
+}

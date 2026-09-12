@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import JsonValue
 
 from short_drama.agent_runtime.token_budget import ContextBudget
+from short_drama.agent_runtime.completion_saved_results import saved_completion_artifact_refs
 from short_drama.studio_models import StudioActivity, StudioWorker
 from short_drama.studio_review_scope import ReviewScope, pending_review_scope
 
@@ -34,7 +35,8 @@ def current_activity(service: ShortDramaService, project_id: str, after: int = 0
             latest = work.specialist_turns[-1] if work.specialist_turns else None
             payload = next((turn.result for turn in reversed(work.specialist_turns) if turn.result is not None), dict[str, JsonValue]())
             error, receipt = payload.get("error"), payload.get("receipt")
-            created = [*result.created_artifacts, *result.updated_artifacts] if result is not None else []
+            created = [*result.created_artifacts, *result.updated_artifacts,
+                *saved_completion_artifact_refs(result.completion_receipts)] if result is not None else []
             workers.append(StudioWorker(id=work.id, run_id=run_id, role=work.recipient_role,
                 skill_role=work.production_skill_role, stage=work.production_prompt_stage,
                 objective=work.objective, status=work.status.value,

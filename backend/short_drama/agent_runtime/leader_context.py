@@ -9,6 +9,7 @@ from uuid import uuid4
 from pydantic import JsonValue
 
 from short_drama.agent_runtime.model_input import json_text
+from short_drama.agent_runtime.completion_saved_results import saved_completion_artifact_refs
 from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, observed_media_handoffs
 from short_drama.agent_runtime.models import (
     ActionRecord, ActionStatus, AgentResultStatus, ArtifactRef, DelegationStatus,
@@ -66,7 +67,8 @@ def completed_work_handoffs(
         result = store.get_agent_result(work.id)
         if result is None or result.status != AgentResultStatus.COMPLETED or result.stale_handoff:
             continue
-        refs = [ref for ref in [*result.created_artifacts, *result.updated_artifacts]
+        refs = [ref for ref in [*result.created_artifacts, *result.updated_artifacts,
+                              *saved_completion_artifact_refs(result.completion_receipts)]
                 if ref.project_id == project_id]
         relevant_ids = {ref.artifact_id for ref in refs if ref.artifact_type not in broad_types}
         # A selected parent Asset can be named inside the typed delivery even
@@ -84,6 +86,7 @@ def completed_work_handoffs(
                 return ids | {item for child in value.values() for item in subject_ids(child)}
             return set()
         relevant_ids.update(subject_ids(result.deliverable))
+        relevant_ids.update(subject_ids(cast(JsonValue, result.completion_receipts)))
         matched_ids = None if selected_ids is None else selected_ids & (relevant_ids | {work.id, result.id})
         if matched_ids is not None and not matched_ids:
             continue
@@ -114,8 +117,21 @@ def completed_work_handoffs(
             receipt_ids = matched_ids | exact_context_values(body.get("deliverable"))
             receipts = body.get("completion_receipts")
             if isinstance(receipts, list):
+                def receipt_subjects(receipt: JsonValue) -> set[str]:
+                    if isinstance(receipt, dict) and receipt.get("kind") in {"saved_media_metadata", "saved_media_observation"}:
+                        # A chosen parent is not a choice of every crop/derived
+                        # child. Keep the child's sources only after choosing it.
+                        return {value for key in ("asset_id", "asset_version_id")
+                                if isinstance(value := receipt.get(key), str)}
+                    return subject_ids(receipt)
                 body["completion_receipts"] = [receipt for receipt in receipts
-                    if not subject_ids(receipt) or subject_ids(receipt) & receipt_ids]
+                    if not receipt_subjects(receipt) or receipt_subjects(receipt) & receipt_ids]
+                for receipt in body["completion_receipts"]:
+                    if isinstance(receipt, dict) and receipt.get("kind") == "saved_tool_result":
+                        raw_refs = receipt.get("artifact_refs")
+                        if isinstance(raw_refs, list):
+                            receipt["artifact_refs"] = [ref for ref in raw_refs
+                                if exact_context_values(ref) & receipt_ids]
         size = count_text_tokens(json_text(body))
         view: JsonValue = body if size <= remaining else {**ref, "estimated_tokens": size}
         if size <= remaining:

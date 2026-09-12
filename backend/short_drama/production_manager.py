@@ -17,7 +17,7 @@ from copy import deepcopy
 from datetime import datetime
 import json
 import threading
-from typing import Protocol, cast
+from typing import Annotated, Protocol, cast
 from uuid import uuid4
 
 from pydantic import Field, JsonValue, ValidationError, model_validator
@@ -58,6 +58,9 @@ from short_drama.agent_runtime.artifact_resolver import (
 )
 from short_drama.agent_runtime.models import utc_now
 from short_drama.agent_runtime.completion import verify_completion_claims
+from short_drama.agent_runtime.completion_saved_results import (
+    SAVED_RESULT_GUIDANCE, prepare_saved_completion_results, saved_tool_result_index,
+)
 from short_drama.agent_runtime.media_context import provider_media_model_view
 from short_drama.agent_runtime.execution_control import ExecutionYielded, execution_boundary, execution_control
 from short_drama.agent_runtime.model_input import ModelInputCompiler, generate_context_managed_text, json_text, pointer_value
@@ -600,9 +603,14 @@ class AgentUserInputRequest(DomainModel):
 
 class AgentWorkOrderResultRequest(DomainModel):
     status: AgentResultStatus
-    concise_summary: str = Field(min_length=1, max_length=4000)
+    concise_summary: str = Field(min_length=1, max_length=4000, description="本次分工的完成判断与结果摘要；无需重复逐项抄写已保存的媒体元数据。")
+    saved_tool_result_sequences: list[Annotated[int, Field(strict=True, ge=1)]] = Field(
+        default_factory=list[int],
+        description="可选：本 WorkOrder 已成功 Tool 的 source_sequence。runtime 附其精确产物、现成审核/用途及可回读原回执；不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
+    )
     deliverable: dict[str, JsonValue] = Field(
-        default_factory=dict[str, JsonValue]
+        default_factory=dict[str, JsonValue],
+        description="本任务要求的额外交付、判断或限制。已通过 saved_tool_result_sequences 引用的保存事实无需再次展开；仍满足明确的自定义输出 schema。",
     )
     created_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
     updated_artifacts: list[ArtifactRef] = Field(default_factory=list[ArtifactRef])
@@ -5101,6 +5109,10 @@ class LanguageSpecialistAgent:
             working_set.model_dump(mode="json"), store=store,
             project_id=work_order.context.project_id, work_order=work_order.work_order,
         )
+        saved_result_index = saved_tool_result_index(work_order.work_order, work_order.context.project_id)
+        if saved_result_index:
+            working_set_payload["saved_tool_result_index"] = saved_result_index
+            working_set_payload["saved_tool_result_guidance"] = SAVED_RESULT_GUIDANCE
         if store is not None:
             selected_ids = exact_context_values(work_order.work_order.task_inputs)
             selected_ids.update(ref.artifact_id for ref in [
@@ -7079,13 +7091,21 @@ class ProductionManager:
                 f"Work order is already {work_order.status.value}"
             )
         try:
+            saved_results = prepare_saved_completion_results(
+                self._require_project(run.project_id), work_order, request.saved_tool_result_sequences,
+            )
+            evidence_refs = list({ref.identity(): ref for ref in [
+                *request.evidence_refs, *saved_results.artifact_refs,
+            ]}.values())
             completion_receipts = (
                 verify_completion_claims(self.projects, project_id=run.project_id,
-                    artifact_refs=[*request.created_artifacts, *request.updated_artifacts],
+                    artifact_refs=[*request.created_artifacts, *request.updated_artifacts, *saved_results.artifact_refs],
                     expected_output_slot_ids=work_order.expected_output_slot_ids,
                     deliverable=request.deliverable)
                 if request.status == AgentResultStatus.COMPLETED else []
             )
+            completion_receipts.extend(saved_results.receipts)
+            saved_results.persist_sources(self.runtime.store, run.id)
             result = self.runtime.record_agent_result(
                 work_order_id,
                 status=request.status,
@@ -7097,7 +7117,7 @@ class ProductionManager:
                 decisions=request.decisions,
                 assumptions=request.assumptions,
                 unresolved_questions=request.unresolved_questions,
-                evidence_refs=request.evidence_refs,
+                evidence_refs=evidence_refs,
                 recommended_next_actions=request.recommended_next_actions,
                 next_owner=request.next_owner,
                 completion_receipts=completion_receipts,
@@ -7115,7 +7135,7 @@ class ProductionManager:
             None,
         )
         handoff_refs = _artifact_write_handoff_refs(
-            [*request.created_artifacts, *request.updated_artifacts]
+            [*request.created_artifacts, *request.updated_artifacts, *saved_results.artifact_refs]
         )
         if action is not None:
             if request.status == AgentResultStatus.COMPLETED:
