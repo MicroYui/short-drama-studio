@@ -1,0 +1,2354 @@
+{
+  "provenance": {
+    "project_id": "project-a150dc017d81",
+    "work_order_id": "work-order-3b8fa566b63c48058ab82bf41539988e",
+    "observed_at": "2026-09-12T12:43:21+08:00",
+    "scope": "Actual S04 t31–35 arguments/results and preceding Shot/asset ownership. Unrelated objects and generation prompts omitted; media paths normalized. No generated pixels in fixture."
+  },
+  "before_shot": {
+    "id": "shot-xkyx-04",
+    "project_id": "project-a150dc017d81",
+    "sequence": 4,
+    "scene_id": "scene-e9691087e6b8",
+    "duration_seconds": 2.5,
+    "narrative_purpose": "林乔没有认领任务，而是准备展示已交付的基础资料；移笔先于开夹，避免笔穿模或瞬移。",
+    "visual": "@林乔 @小会议室 @棕色单肩包。林乔在南侧站立，灰蓝衬衫、炭灰长裤、低马尾不变，包仍挂右肩。她看画左的陈放一眼，随后把目光和动作落到桌上。构图同时保留可读的脸、右肩包带及桌面操作区，不展示陈放正脸。",
+    "framing": "9:16腰上中景，脸在上半部，桌沿和资料夹在下半部；手与封面不能被画外身体挡住。",
+    "camera": "西侧稍偏北望向南侧林乔，固定机位，轻俯角只为兼顾桌面，不切成俯拍手部特写。",
+    "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+    "dialogue_line_ids": [],
+    "references": [
+      {
+        "subject_asset_id": "asset-19e6da402c5c",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 0,
+        "text_end": 3,
+        "alias": "林乔",
+        "required_tags": [],
+        "purpose": "待绑定林乔身份、低马尾及灰蓝衬衫；需要站立面部和上肢，脸向画左再看桌面。",
+        "image_reference_role": "SUBJECT_IDENTITY",
+        "usage": "GENERATION"
+      },
+      {
+        "subject_asset_id": "asset-758b439a6065",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 4,
+        "text_end": 9,
+        "alias": "小会议室",
+        "required_tags": [],
+        "purpose": "待绑定南侧桌沿、已拉开南椅、同一浅木桌及西窗光向；为中景空间依据。",
+        "image_reference_role": "SCENE_IDENTITY",
+        "usage": "GENERATION"
+      },
+      {
+        "subject_asset_id": "asset-ef29cf906440",
+        "id": null,
+        "asset_version_id": null,
+        "field": "visual",
+        "text_start": 10,
+        "text_end": 16,
+        "alias": "棕色单肩包",
+        "required_tags": [],
+        "purpose": "待绑定棕包外形和右肩佩戴关系；操作资料时不卸包，不新增另一只包。",
+        "image_reference_role": "PROP_IDENTITY",
+        "usage": "GENERATION"
+      }
+    ],
+    "timeline_beats": [
+      {
+        "start_seconds": 0.0,
+        "end_seconds": 2.5,
+        "visual": "@蓝色资料夹与@黑色按动笔在桌面下半区清楚，初态为合夹、黑笔横在封面上。",
+        "framing": "包含林乔面部、肩包和桌面操作的中景",
+        "camera": "固定",
+        "action": "先看陈放约半秒；右手捏起封面上的黑笔并放在资料夹南侧偏东的桌面，松开笔后翻开封面露出第一页。动作自然连续，不要求每步停成照片。",
+        "performance": "林乔的停顿是判断，不是受辱后的夸张瞪眼；开夹熟练、平静。",
+        "emotion": null,
+        "dialogue_line_ids": [],
+        "sound": "轻微笔触木桌声和纸张开合声。",
+        "references": [
+          {
+            "subject_asset_id": "asset-e104055d5990",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 6,
+            "alias": "蓝色资料夹",
+            "required_tags": [],
+            "purpose": "本时段需要深蓝双折夹由合上变为打开第一页；浅黄索引贴始终存在。基础母版之外是否补合夹桌面构图，由实际图片决定。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-2df81ea5ad58",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 7,
+            "text_end": 13,
+            "alias": "黑色按动笔",
+            "required_tags": [],
+            "purpose": "同一支缩尖黑笔从封面移到南侧偏东桌面；待绑定母版，必要时用包含实际接触的整体构图辅助，不另造每一瞬间。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      }
+    ],
+    "continuity": {
+      "character_positions": "林乔始终南侧站立；陈放北侧站立在画外。林乔的南椅已经拉开，不坐回去。",
+      "eyeline": "起始林乔朝画左看陈放，后转向桌面第一页。",
+      "prop_state_in": "合夹在林乔面前，黑笔横在封面，笔尖未按出；包在右肩。",
+      "prop_state_out": "资料夹打开在第一页，索引贴仍露出；黑笔已松手平放在资料夹南侧偏东的桌面，仍缩尖；包仍右肩。",
+      "action_in": "陈放的“辛苦一下”已结束。",
+      "action_out": "林乔已打开资料夹，手可自然落向第一页，尚未翻到数据页。"
+    },
+    "transition_out": "切桌面证据镜，承接打开的第一页和已移到旁边的同一支笔。",
+    "merge_candidate": false,
+    "local_rework_risk": "后续实际动态须验证先移笔再开夹及笔放稳；若动作拥挤可微调覆盖和全片余量，不能让笔消失或直接跳到数据页。",
+    "approval_status": "DRAFT",
+    "freshness": "CURRENT",
+    "revision": 1
+  },
+  "assets": [
+    {
+      "id": "asset-19e6da402c5c",
+      "project_id": "project-a150dc017d81",
+      "kind": "CHARACTER",
+      "name": "林乔",
+      "current_version_id": "asset-version-598684099f38",
+      "approved_version_id": "asset-version-e336e7d19290",
+      "versions": [
+        {
+          "id": "asset-version-e336e7d19290",
+          "version": 2,
+          "origin_type": "AI_GENERATED",
+          "descriptor": "林乔原创全身身份与服装母图候选；简洁浅灰背景，低马尾、灰蓝扣袖衬衫、炭灰直筒裤、黑平底鞋，栗棕单肩包在自身右肩与右胯；待观察面部及包带结构。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-e336e7d19290.png",
+          "mime_type": "image/png",
+          "parent_version_id": null,
+          "approval_status": "APPROVED",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T03:48:20.627+00:00"
+        },
+        {
+          "id": "asset-version-598684099f38",
+          "version": 3,
+          "origin_type": "LOCAL_DERIVED",
+          "descriptor": "林乔头脸辅助参考：从已采用的原创全身母图本地原像素裁切，保留头顶、五官、碎发、颈侧低马尾及少量衣领；不放大、不增加细节，不替代全身服装母图。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-598684099f38.png",
+          "mime_type": "image/png",
+          "parent_version_id": "asset-version-e336e7d19290",
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T03:50:41.168+00:00"
+        }
+      ]
+    },
+    {
+      "id": "asset-758b439a6065",
+      "project_id": "project-a150dc017d81",
+      "kind": "LOCATION",
+      "name": "小会议室",
+      "current_version_id": "asset-version-4ef62d521b85",
+      "approved_version_id": "asset-version-4ef62d521b85",
+      "versions": [
+        {
+          "id": "asset-version-4ef62d521b85",
+          "version": 2,
+          "origin_type": "AI_GENERATED",
+          "descriptor": "第1场小会议室无人空间母版候选；南侧向北斜广角，西窗画左、北吸音板在后、东墙南端门在右近侧；空桌及南北两椅，不含移动道具。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-4ef62d521b85.png",
+          "mime_type": "image/png",
+          "parent_version_id": null,
+          "approval_status": "APPROVED",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T03:48:33.149+00:00"
+        }
+      ]
+    },
+    {
+      "id": "asset-e104055d5990",
+      "project_id": "project-a150dc017d81",
+      "kind": "PROP",
+      "name": "蓝色资料夹",
+      "current_version_id": "asset-version-6fce79e181e2",
+      "approved_version_id": null,
+      "versions": [
+        {
+          "id": "asset-version-abe658eaa803",
+          "version": 2,
+          "origin_type": "AI_GENERATED",
+          "descriptor": "深蓝A4双折资料夹合上状态及同一黑色按动笔外观源图候选；右侧一枚浅黄索引贴，黑笔横放封面、笔尖未按出；只采用本项目会议桌木色和西窗柔光。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-abe658eaa803.png",
+          "mime_type": "image/png",
+          "parent_version_id": null,
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T03:53:57.956+00:00"
+        },
+        {
+          "id": "asset-version-a1233710c783",
+          "version": 4,
+          "origin_type": "AI_EDITED",
+          "descriptor": "同一打开提纲页资料夹的局部修正候选：保留已可用的夹、纸及唯一索引贴；右侧黑色按动笔恢复闭夹母图比例，改为纵向完整置于木桌上。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-a1233710c783.png",
+          "mime_type": "image/png",
+          "parent_version_id": "asset-version-f9235516d243",
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T04:03:31.714+00:00"
+        },
+        {
+          "id": "asset-version-6fce79e181e2",
+          "version": 5,
+          "origin_type": "AI_EDITED",
+          "descriptor": "同源数据页状态候选：从已采用打开提纲页图派生，带唯一浅黄索引贴的提纲纸向左翻平，背面在左封皮上，右侧露出规整数据表；黑笔仍完整纵放夹右旁，保持既定尺度。只作必要纸页状态参考，不承担可读小字或翻页动态证明。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-6fce79e181e2.png",
+          "mime_type": "image/png",
+          "parent_version_id": "asset-version-a1233710c783",
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T04:07:51.537+00:00"
+        }
+      ]
+    },
+    {
+      "id": "asset-2df81ea5ad58",
+      "project_id": "project-a150dc017d81",
+      "kind": "PROP",
+      "name": "黑色按动笔",
+      "current_version_id": "asset-version-517b1b4894ce",
+      "approved_version_id": null,
+      "versions": [
+        {
+          "id": "asset-version-517b1b4894ce",
+          "version": 2,
+          "origin_type": "LOCAL_DERIVED",
+          "descriptor": "从闭合深蓝资料夹母图原始像素裁出的同一支黑色按动笔；完整保留左侧收尖金属鼻口、哑黑直杆、短笔夹与右端按动钮，深蓝封面为来源背景。用于黑笔外观身份，不代表桌面交接或持握状态。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-517b1b4894ce.png",
+          "mime_type": "image/png",
+          "parent_version_id": null,
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T03:55:23.344+00:00"
+        }
+      ]
+    },
+    {
+      "id": "asset-ef29cf906440",
+      "project_id": "project-a150dc017d81",
+      "kind": "PROP",
+      "name": "棕色单肩包",
+      "current_version_id": "asset-version-5ab10656f4a9",
+      "approved_version_id": "asset-version-5ab10656f4a9",
+      "versions": [
+        {
+          "id": "asset-version-5ab10656f4a9",
+          "version": 3,
+          "origin_type": "AI_EDITED",
+          "descriptor": "棕色单肩包完整外观修订候选：保留原候选包身、材质、缝线及深色闭合拉链，依据林乔母图的右肩至右胯比例延长同一根肩带并扩大取景。仅作完整道具外观，不替代人物佩戴锚点；隐藏结构为补全，待观察。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-5ab10656f4a9.png",
+          "mime_type": "image/png",
+          "parent_version_id": "asset-version-c93f2b49022e",
+          "approval_status": "APPROVED",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T03:58:42.860+00:00"
+        }
+      ]
+    },
+    {
+      "id": "asset-2cb6093b0cad",
+      "project_id": "project-a150dc017d81",
+      "kind": "REFERENCE",
+      "name": "镜4林乔移笔开夹初态构图",
+      "current_version_id": "asset-version-2e42598d5807",
+      "approved_version_id": null,
+      "versions": [
+        {
+          "id": "asset-version-c5b066d9f2a5",
+          "version": 2,
+          "origin_type": "AI_GENERATED",
+          "descriptor": "镜4林乔移笔开夹前的9:16腰上构图候选：清楚面部、右肩包带、双臂与桌面闭合A4资料夹和封面黑笔同框；只提供可达初态，动态顺序尚未验证。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-c5b066d9f2a5.png",
+          "mime_type": "image/png",
+          "parent_version_id": null,
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T04:34:58.630+00:00"
+        },
+        {
+          "id": "asset-version-2e42598d5807",
+          "version": 6,
+          "origin_type": "AI_EDITED",
+          "descriptor": "镜4闭夹初态的局部修正候选：唯一浅黄索引贴由画右夹脊侧移至画左相对页口；其余人物、双手、封面黑笔和会议室保留原像素。修后待核对贴纸连接、数量和边界恢复。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/asset-version-2e42598d5807.png",
+          "mime_type": "image/png",
+          "parent_version_id": "asset-version-c5b066d9f2a5",
+          "approval_status": "DRAFT",
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T04:40:03.158+00:00"
+        }
+      ]
+    }
+  ],
+  "reference_packs": [
+    {
+      "id": "reference-pack-asset-758b439a6065",
+      "project_id": "project-a150dc017d81",
+      "subject_asset_id": "asset-758b439a6065",
+      "name": "小会议室参考包",
+      "entries": [
+        {
+          "id": "reference-entry-9b20df28deb4",
+          "asset_version_id": "asset-version-4ef62d521b85",
+          "lineage_root_version_id": "asset-version-4ef62d521b85",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "WIDE",
+          "tags": [
+            "无人空间",
+            "西窗",
+            "南北两椅",
+            "东墙南端出口",
+            "空间拓扑"
+          ],
+          "description": "无人小会议室空间母版：浅木长桌长轴东西向，画面左为西窗、后方北墙为浅灰吸音板、右近侧为东墙南端木门；南北两把黑椅，南椅已略拉开。仅提供空间、材质与柔和傍晚西窗光，不是任何人物镜头的首帧。门顶部框线及下端出画，门所在墙面与通道可辨，完整门体及动态离开需由后续具体镜头验证。",
+          "priority": 90
+        },
+        {
+          "id": "reference-entry-522020258ef3",
+          "asset_version_id": "asset-version-3e49e380b791",
+          "lineage_root_version_id": "asset-version-4ef62d521b85",
+          "role": "LOCATION_INTERACTION",
+          "angle": "NOT_APPLICABLE",
+          "framing": "CLOSE_UP",
+          "tags": [
+            "shot-xkyx-07",
+            "north-background",
+            "standing-response"
+          ],
+          "description": "已实际检查并采用的镜7软构图裁片，594×1056。陈放胸上近景、眼嘴和下颌完整、画右视线余地充分，北墙光色相容。只贡献本镜构图与局部场景，不替代陈放权威身份，不证明完整站位或动态。",
+          "priority": 0
+        },
+        {
+          "id": "reference-entry-2bd1bc5b22ca",
+          "asset_version_id": "asset-version-70e1c4267df7",
+          "lineage_root_version_id": null,
+          "role": "LOCATION_REVERSE",
+          "angle": "NOT_APPLICABLE",
+          "framing": "CLOSE_UP",
+          "tags": [
+            "镜2",
+            "南侧背景"
+          ],
+          "description": "只承担镜2反打中实见的暖白南侧墙与柔光；不能据此确认整室门窗拓扑。",
+          "priority": 0
+        }
+      ],
+      "created_at": "2026-09-12T03:51:16.339+00:00",
+      "updated_at": "2026-09-12T04:30:27.562+00:00"
+    },
+    {
+      "id": "reference-pack-asset-19e6da402c5c",
+      "project_id": "project-a150dc017d81",
+      "subject_asset_id": "asset-19e6da402c5c",
+      "name": "林乔参考包",
+      "entries": [
+        {
+          "id": "reference-entry-820ec628e045",
+          "asset_version_id": "asset-version-e336e7d19290",
+          "lineage_root_version_id": "asset-version-e336e7d19290",
+          "role": "CANONICAL_MASTER",
+          "angle": "FRONT",
+          "framing": "FULL_BODY",
+          "tags": [
+            "林乔",
+            "原创身份",
+            "低马尾",
+            "灰蓝衬衫",
+            "炭灰长裤",
+            "右肩棕包",
+            "全身服装"
+          ],
+          "description": "已采用的原创近正面全身母图。近30岁成年女性，窄椭圆脸、自然较平直眉、深棕调眼睛，无眼镜；黑发低束、颈侧可见低马尾，表情平静克制。灰蓝长袖衬衫袖口收合、炭灰直筒裤、黑平底鞋完整。人物自身右肩（画面左）一条棕肩带同侧垂至右胯，不跨胸。人体自然。用途为身份、发型、服装和佩戴关系；包口、顶部拉链及另一连接受手臂遮挡，不证明完整包结构。简洁背景不提供会议室空间或剧情动作；不作为固定首帧。",
+          "priority": 90
+        },
+        {
+          "id": "reference-entry-dc5e81a2efa1",
+          "asset_version_id": "asset-version-598684099f38",
+          "lineage_root_version_id": "asset-version-e336e7d19290",
+          "role": "CHARACTER_FACE",
+          "angle": "FRONT",
+          "framing": "FACE_CLOSE_UP",
+          "tags": [
+            "林乔",
+            "同源脸部裁图",
+            "原创身份",
+            "低马尾",
+            "自然肤质",
+            "辅助身份"
+          ],
+          "description": "已选用的308×449原像素头脸裁图，源于林乔全身母图，无重绘或放大。实际可见窄椭圆脸、较平直且略带眉峰的眉形、深色虹膜、清楚鼻口与收窄圆润下颌；额前碎发、头顶、发际线和颈侧可见低马尾段均保留，与母图一致。用于约束基础脸型、五官关系及可见发型，不增加原图细节；不以此锁定微小皮肤纹理、单根睫毛或精确虹膜色调。马尾扎结及背侧受原机位遮挡。仅有少量衣领，服装、体态及右肩背包关系仍使用全身母图；不承担剧情表情、空间或动态表演。",
+          "priority": 95
+        },
+        {
+          "id": "reference-entry-a44d7d258ca4",
+          "asset_version_id": "asset-version-70e1c4267df7",
+          "lineage_root_version_id": "asset-version-e336e7d19290",
+          "role": "CHARACTER_FACE",
+          "angle": "NOT_APPLICABLE",
+          "framing": "CLOSE_UP",
+          "tags": [
+            "镜2",
+            "南侧站立",
+            "画左视线",
+            "胸上构图"
+          ],
+          "description": "采用的842×1496本地裁图，源为同场林乔站立回应图；保留完整头顶下颌、低马尾、清楚眉眼嘴唇与右肩包带。镜2软构图，不证明对白、手或桌面。",
+          "priority": 0
+        }
+      ],
+      "created_at": "2026-09-12T03:51:38.016+00:00",
+      "updated_at": "2026-09-12T04:30:27.550+00:00"
+    },
+    {
+      "id": "reference-pack-asset-e104055d5990",
+      "project_id": "project-a150dc017d81",
+      "subject_asset_id": "asset-e104055d5990",
+      "name": "蓝色资料夹参考包",
+      "entries": [
+        {
+          "id": "reference-entry-f68c63981dc6",
+          "asset_version_id": "asset-version-abe658eaa803",
+          "lineage_root_version_id": "asset-version-abe658eaa803",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "DETAIL",
+          "tags": [
+            "闭合",
+            "深蓝资料夹",
+            "唯一浅黄索引贴",
+            "黑笔横放",
+            "外观母版"
+          ],
+          "description": "采用为同一只深蓝A4双折资料夹的闭合外观母版：薄磨砂聚丙烯、左侧折脊、右缘薄白纸边和唯一浅黄色索引贴，无品牌和金属活页环。封面中部横放同一支哑黑按动笔，左侧金属鼻口收尖、右端按钮及短笔夹完整。仅提供物件外观及开场静态关系；浅木背景不代表完整镜头构图，尚不证明打开内部结构或动态交接。",
+          "priority": 90
+        },
+        {
+          "id": "reference-entry-6fca03239713",
+          "asset_version_id": "asset-version-a1233710c783",
+          "lineage_root_version_id": "asset-version-abe658eaa803",
+          "role": "PROP_STATE",
+          "angle": "NOT_APPLICABLE",
+          "framing": "DETAIL",
+          "tags": [
+            "打开",
+            "提纲第一页",
+            "唯一浅黄索引贴",
+            "黑笔在夹右旁",
+            "同源开合状态"
+          ],
+          "description": "已采用的打开提纲第一页状态：薄磨砂深蓝双折夹向画左展开，左内封面空白，右侧少量整齐白纸，第一页为五组编号分项提纲；唯一浅黄色索引贴位于该页右缘。黑笔完整纵放于夹右侧木桌，尾钮朝上、金属端头朝下，与夹、纸、贴均有间隔；笔长约为单片封皮短边的0.74–0.77，与闭合母图尺度一致。无人无手，浅木桌和柔和侧光自然。仅提供静态道具开合与位置关系，纸面不承担准确小字，不证明翻页、推夹、持握或书写动态。",
+          "priority": 85
+        },
+        {
+          "id": "reference-entry-d0fbc35fc02f",
+          "asset_version_id": "asset-version-6fce79e181e2",
+          "lineage_root_version_id": "asset-version-abe658eaa803",
+          "role": "PROP_STATE",
+          "angle": "NOT_APPLICABLE",
+          "framing": "DETAIL",
+          "tags": [
+            "打开",
+            "数据表",
+            "提纲页已翻左",
+            "唯一浅黄索引贴",
+            "黑笔在夹右旁",
+            "同源翻页状态"
+          ],
+          "description": "已采用的翻过提纲后露出数据表状态。同一薄磨砂深蓝双折夹及中央折缝保持；带唯一浅黄索引贴的提纲纸翻平于画左封皮，朝上为空白背面，贴随纸位于画左外缘，右侧无第二枚贴。右半露出多行多列细网格数据表，底部少量白纸整齐叠放，区别于第一页分项提纲。完整黑笔仍纵放画右木桌，尾钮朝上、短金属鼻口朝下，笔长约单片封皮短边的0.75—0.8，和资料夹间有清楚间隔。无人无手、无额外文具；桌纹、机位及柔光与提纲状态一致。仅提供静态纸页、道具外观与尺度依据，不承担准确小字和数字，不证明翻页、交接、按笔或书写动态，也不是人物镜头首帧。",
+          "priority": 85
+        }
+      ],
+      "created_at": "2026-09-12T03:55:36.501+00:00",
+      "updated_at": "2026-09-12T04:09:02.311+00:00"
+    },
+    {
+      "id": "reference-pack-asset-2df81ea5ad58",
+      "project_id": "project-a150dc017d81",
+      "subject_asset_id": "asset-2df81ea5ad58",
+      "name": "黑色按动笔参考包",
+      "entries": [
+        {
+          "id": "reference-entry-f7f12797a709",
+          "asset_version_id": "asset-version-517b1b4894ce",
+          "lineage_root_version_id": "asset-version-517b1b4894ce",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "DETAIL",
+          "tags": [
+            "黑色按动笔",
+            "完整单笔",
+            "笔尖收起",
+            "闭夹同源裁切",
+            "外观母版"
+          ],
+          "description": "已采用的黑色按动笔外观母版，从闭合资料夹图的原始像素裁出，700×132。整支哑黑直杆、左端短钝金属鼻口、右端按动钮和短笔夹完整清楚，无笔帽及品牌。深蓝封面是来源背景，不表示每个镜头都应置笔于封面。支持同一笔外形和收尖状态；不证明持握、交接、按动或书写动态，也不提供微小内部机构细节。",
+          "priority": 90
+        }
+      ],
+      "created_at": "2026-09-12T03:56:23.577+00:00",
+      "updated_at": "2026-09-12T03:56:23.577+00:00"
+    },
+    {
+      "id": "reference-pack-asset-ef29cf906440",
+      "project_id": "project-a150dc017d81",
+      "subject_asset_id": "asset-ef29cf906440",
+      "name": "棕色单肩包参考包",
+      "entries": [
+        {
+          "id": "reference-entry-1bef982b8ff9",
+          "asset_version_id": "asset-version-5ab10656f4a9",
+          "lineage_root_version_id": "asset-version-5ab10656f4a9",
+          "role": "CANONICAL_MASTER",
+          "angle": "NOT_APPLICABLE",
+          "framing": "CLOSE_UP",
+          "tags": [
+            "棕色单肩包",
+            "完整道具外观",
+            "栗棕软皮",
+            "单根长肩带",
+            "深色闭合拉链",
+            "无标识"
+          ],
+          "description": "已采用的2048×2048完整道具单视图。包身、整条单根肩带及圆角底部完整入画；带子连续、两端连接合理，肩带长度比例与林乔全身母图右肩至右胯的佩戴比例相容。栗棕色细纹哑光软皮、自然褶皱、侧缝、低调连接件及深色闭合拉链清楚，无文字或品牌标志。用途为完整外观、材质与本机位可见结构参考。人物母图中被遮挡的包口与另一连接端在本图中属于合理补全，不能声称已跨图验证。人物自身右肩、不跨胸、包身垂至右胯的定位仍使用林乔全身母图，不以本图提供人物身份、佩戴接触、会议室空间或动态动作证据。原短肩带候选不作为完整比例锚点。",
+          "priority": 90
+        },
+        {
+          "id": "reference-entry-4e3435169be0",
+          "asset_version_id": "asset-version-70e1c4267df7",
+          "lineage_root_version_id": null,
+          "role": "PROP_IN_HAND",
+          "angle": "NOT_APPLICABLE",
+          "framing": "DETAIL",
+          "tags": [
+            "镜2",
+            "右肩包带"
+          ],
+          "description": "只提供林乔自身右肩棕色包带及贴肩佩戴接触，包体画外；不是手持包或完整包型参考。",
+          "priority": 0
+        }
+      ],
+      "created_at": "2026-09-12T04:00:29.284+00:00",
+      "updated_at": "2026-09-12T04:30:27.586+00:00"
+    }
+  ],
+  "turns": [
+    {
+      "id": "specialist-turn-cf2866e4975f452ba523c0fe6bd525e5",
+      "sequence": 31,
+      "tool_name": "shot.save_current",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "shot_id": "shot-xkyx-04",
+        "request": {
+          "expected_revision": 1,
+          "shot": {
+            "id": "shot-xkyx-04",
+            "project_id": "project-a150dc017d81",
+            "sequence": 4,
+            "scene_id": "scene-e9691087e6b8",
+            "duration_seconds": 2.5,
+            "narrative_purpose": "林乔没有认领任务，而是准备展示已交付的基础资料；移笔先于开夹，避免笔穿模或瞬移。",
+            "visual": "@林乔 @小会议室 @棕色单肩包。林乔在南侧站立，灰蓝衬衫、炭灰长裤、低马尾不变，包仍挂右肩。她看画左的陈放一眼，随后把目光和动作落到桌上。构图同时保留可读的脸、右肩包带及桌面操作区，不展示陈放正脸。",
+            "framing": "9:16腰上中景，脸在上半部，桌沿和资料夹在下半部；手与封面不能被画外身体挡住。",
+            "camera": "西侧稍偏北望向南侧林乔，固定机位，轻俯角只为兼顾桌面，不切成俯拍手部特写。",
+            "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+            "dialogue_line_ids": [],
+            "references": [
+              {
+                "subject_asset_id": "asset-19e6da402c5c",
+                "id": "shot-xkyx-04-reference-0",
+                "asset_version_id": "asset-version-598684099f38",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "林乔",
+                "required_tags": [],
+                "purpose": "同源正脸裁片提供林乔身份、五官关系及发型依据；不提供会议室构图或动作初态。",
+                "image_reference_role": "SUBJECT_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-758b439a6065",
+                "id": "shot-xkyx-04-reference-1",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 4,
+                "text_end": 9,
+                "alias": "小会议室",
+                "required_tags": [],
+                "purpose": "实际南侧反打中可见的暖白墙、画右木门及前景浅木桌和柔光；只贡献可见空间，不证明画外南椅或全室拓扑。与构图同一文件去重。",
+                "image_reference_role": "SCENE_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-ef29cf906440",
+                "id": "shot-xkyx-04-reference-2",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 10,
+                "text_end": 16,
+                "alias": "棕色单肩包",
+                "required_tags": [],
+                "purpose": "实见棕包在林乔自身右肩同侧，包带、包身局部和上肢互不冲突；不跨胸、不卸包。与构图同图去重。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-2cb6093b0cad",
+                "id": "shot-xkyx-04-composition",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "alias": "林乔移笔开夹初态",
+                "required_tags": [],
+                "purpose": "0–2.5秒软构图，实际1152×2048：完整面部及双臂、空手在合夹近旁，封面横放黑笔，夹脊与唯一浅黄贴在相对侧。只约束动作前可达初态，不是硬首帧，不证明先移笔再开夹动态。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0,
+                "end_seconds": 2.5,
+                "visual": "@蓝色资料夹与@黑色按动笔在桌面下半区清楚，初态为合夹、黑笔横在封面上。",
+                "framing": "包含林乔面部、肩包和桌面操作的中景",
+                "camera": "固定",
+                "action": "先看陈放约半秒；右手捏起封面上的黑笔并放在资料夹南侧偏东的桌面，松开笔后翻开封面露出第一页。动作自然连续，不要求每步停成照片。",
+                "performance": "林乔的停顿是判断，不是受辱后的夸张瞪眼；开夹熟练、平静。",
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "轻微笔触木桌声和纸张开合声。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-reference-3",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 6,
+                    "alias": "蓝色资料夹",
+                    "required_tags": [],
+                    "purpose": "实见闭合深蓝A4双折夹及唯一浅黄贴，夹脊画右、页口与贴画左；此为当前反角，不能照抄道具正读图的屏幕左右。只提供开夹前初态。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-2df81ea5ad58",
+                    "id": "shot-xkyx-04-reference-4",
+                    "asset_version_id": "asset-version-517b1b4894ce",
+                    "field": "visual",
+                    "text_start": 7,
+                    "text_end": 13,
+                    "alias": "黑色按动笔",
+                    "required_tags": [],
+                    "purpose": "完整同源黑笔外观与收尖鼻口依据；起点在封面由构图提供，实际右手移到南侧偏东桌面后松开才开夹，静态图不证明动态顺序或笔芯细部。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-open-outline-state",
+                    "asset_version_id": "asset-version-a1233710c783",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 6,
+                    "alias": "蓝色资料夹",
+                    "required_tags": [],
+                    "purpose": "动作后打开第一页的静态结构：空内封面、分项提纲、唯一浅黄贴，笔已与夹分离。仅提供状态，不复制该正读图机位和笔的屏幕位置，也不证明林乔接触。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  }
+                ]
+              }
+            ],
+            "continuity": {
+              "character_positions": "林乔始终南侧站立；陈放北侧站立在画外。林乔的南椅已经拉开，不坐回去。",
+              "eyeline": "起始林乔朝画左看陈放，后转向桌面第一页。",
+              "prop_state_in": "合夹在林乔面前，黑笔横在封面，笔尖未按出；包在右肩。",
+              "prop_state_out": "资料夹打开在第一页，索引贴仍露出；黑笔已松手平放在资料夹南侧偏东的桌面，仍缩尖；包仍右肩。",
+              "action_in": "陈放的“辛苦一下”已结束。",
+              "action_out": "林乔已打开资料夹，手可自然落向第一页，尚未翻到数据页。"
+            },
+            "transition_out": "切桌面证据镜，承接打开的第一页和已移到旁边的同一支笔。",
+            "merge_candidate": false,
+            "local_rework_risk": "已有实检初态构图与第一页静态参考；后续实际动态仍须验证先移笔再开夹及笔放稳，不能让笔消失或直接跳到数据页。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 1
+          }
+        },
+        "media_registration": {
+          "asset_version_id": "asset-version-2e42598d5807",
+          "reference_entries": [
+            {
+              "subject_asset_id": "asset-758b439a6065",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "role": "LOCATION_INTERACTION",
+              "lineage_root_version_id": "asset-version-c5b066d9f2a5",
+              "framing": "MEDIUM",
+              "tags": [
+                "shot-04",
+                "south-side",
+                "closed-folder",
+                "pen-on-cover"
+              ],
+              "description": "镜4已实检1152×2048软构图：林乔南侧站立、脸和双臂清楚、自身右肩棕包，浅木桌上合夹及完整黑笔。唯一索引贴已移至相对夹脊的页口，无残片或明显接缝。只作先移笔再开夹前的可达静态初态，不是硬帧，不证明动作顺序。",
+              "priority": 30
+            }
+          ]
+        }
+      },
+      "result": {
+        "tool_id": "shot.save_current",
+        "status": "INVALID_ARGUMENTS",
+        "output": null,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {
+          "kind": "ValidationError",
+          "message": "/request/shot/timeline_beats/0: Value error, Shot timeline beat reference aliases must identify one subject and media",
+          "phase": "VALIDATION",
+          "scope": {
+            "project_id": "project-a150dc017d81",
+            "shot_id": "shot-xkyx-04",
+            "request": {
+              "expected_revision": 1,
+              "shot": {
+                "id": "shot-xkyx-04",
+                "project_id": "project-a150dc017d81",
+                "scene_id": "scene-e9691087e6b8",
+                "references": {
+                  "0": {
+                    "id": "shot-xkyx-04-reference-0",
+                    "asset_version_id": "asset-version-598684099f38"
+                  },
+                  "1": {
+                    "id": "shot-xkyx-04-reference-1",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "2": {
+                    "id": "shot-xkyx-04-reference-2",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "3": {
+                    "id": "shot-xkyx-04-composition",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  }
+                },
+                "timeline_beats": {
+                  "0": {
+                    "start_seconds": 0,
+                    "end_seconds": 2.5,
+                    "references": {
+                      "0": {
+                        "id": "shot-xkyx-04-reference-3",
+                        "asset_version_id": "asset-version-2e42598d5807"
+                      },
+                      "1": {
+                        "id": "shot-xkyx-04-reference-4",
+                        "asset_version_id": "asset-version-517b1b4894ce"
+                      },
+                      "2": {
+                        "id": "shot-xkyx-04-open-outline-state",
+                        "asset_version_id": "asset-version-a1233710c783"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "media_registration": {
+              "asset_version_id": "asset-version-2e42598d5807",
+              "reference_entries": {
+                "0": {
+                  "asset_version_id": "asset-version-2e42598d5807"
+                }
+              }
+            }
+          },
+          "details": [
+            {
+              "path": "/request/shot/timeline_beats/0",
+              "code": "value_error",
+              "message": "Value error, Shot timeline beat reference aliases must identify one subject and media",
+              "identifiers": {
+                "/": {
+                  "project_id": "project-a150dc017d81",
+                  "shot_id": "shot-xkyx-04"
+                },
+                "/request": {
+                  "expected_revision": 1
+                },
+                "/request/shot": {
+                  "id": "shot-xkyx-04",
+                  "project_id": "project-a150dc017d81",
+                  "scene_id": "scene-e9691087e6b8"
+                },
+                "/request/shot/timeline_beats/0": {
+                  "start_seconds": 0,
+                  "end_seconds": 2.5
+                }
+              },
+              "constraints": {}
+            }
+          ],
+          "suggested_actions": [
+            "Correct the indicated fields in the existing arguments, preserving unrelated IDs and values; the operation has not started."
+          ],
+          "retryable": false
+        },
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T04:41:44.127747Z",
+      "updated_at": "2026-09-12T04:41:44.589100Z"
+    },
+    {
+      "id": "specialist-turn-4531faf8ad194cb4afe55abcfb9450ef",
+      "sequence": 32,
+      "tool_name": "shot.save_current",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "shot_id": "shot-xkyx-04",
+        "request": {
+          "expected_revision": 1,
+          "shot": {
+            "id": "shot-xkyx-04",
+            "project_id": "project-a150dc017d81",
+            "sequence": 4,
+            "scene_id": "scene-e9691087e6b8",
+            "duration_seconds": 2.5,
+            "narrative_purpose": "林乔没有认领任务，而是准备展示已交付的基础资料；移笔先于开夹，避免笔穿模或瞬移。",
+            "visual": "@林乔 @小会议室 @棕色单肩包。林乔在南侧站立，灰蓝衬衫、炭灰长裤、低马尾不变，包仍挂右肩。她看画左的陈放一眼，随后把目光和动作落到桌上。构图同时保留可读的脸、右肩包带及桌面操作区，不展示陈放正脸。",
+            "framing": "9:16腰上中景，脸在上半部，桌沿和资料夹在下半部；手与封面不能被画外身体挡住。",
+            "camera": "西侧稍偏北望向南侧林乔，固定机位，轻俯角只为兼顾桌面，不切成俯拍手部特写。",
+            "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+            "dialogue_line_ids": [],
+            "references": [
+              {
+                "subject_asset_id": "asset-19e6da402c5c",
+                "id": "shot-xkyx-04-reference-0",
+                "asset_version_id": "asset-version-598684099f38",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "林乔",
+                "required_tags": [],
+                "purpose": "同源脸部裁图只提供林乔身份、五官及低马尾依据；不是会议室构图或动作首帧。",
+                "image_reference_role": "SUBJECT_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-758b439a6065",
+                "id": "shot-xkyx-04-reference-1",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 4,
+                "text_end": 9,
+                "alias": "小会议室",
+                "required_tags": [],
+                "purpose": "已实见的浅木桌、南侧暖白背景、画右木门局部及柔光；只提供本机位可见空间，不证明全室拓扑。与构图同图去重。",
+                "image_reference_role": "SCENE_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-ef29cf906440",
+                "id": "shot-xkyx-04-reference-2",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 10,
+                "text_end": 16,
+                "alias": "棕色单肩包",
+                "required_tags": [],
+                "purpose": "实见的自身右肩棕包带和同侧包身，双手操作时不卸包；与构图同图去重。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-2cb6093b0cad",
+                "id": "shot-xkyx-04-composition",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "alias": "林乔移笔开夹初态构图",
+                "required_tags": [],
+                "purpose": "0–2.5秒软构图，1152×2048：清楚面部、完整相关上肢、空手和闭夹封面横笔；画左页口唯一黄贴、画右夹脊。只提供先移笔再开夹前的可达初态，不是硬首帧，不证明动态顺序。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-e104055d5990",
+                "id": "shot-xkyx-04-open-outline-state",
+                "asset_version_id": "asset-version-a1233710c783",
+                "alias": "开夹后提纲页静态参考",
+                "required_tags": [],
+                "purpose": "本镜末尾露出第一页所需的道具状态：左空内封面、右侧提纲分项和页口唯一黄贴。仅贡献开夹后外观，不复制其无人构图、旁笔画面方向或人物接触；不是动作终帧。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0,
+                "end_seconds": 2.5,
+                "visual": "@蓝色资料夹与@黑色按动笔在桌面下半区清楚，初态为合夹、黑笔横在封面上。",
+                "framing": "包含林乔面部、肩包和桌面操作的中景",
+                "camera": "固定",
+                "action": "先看陈放约半秒；右手捏起封面上的黑笔并放在资料夹南侧偏东的桌面，松开笔后翻开封面露出第一页。动作自然连续，不要求每步停成照片。",
+                "performance": "林乔的停顿是判断，不是受辱后的夸张瞪眼；开夹熟练、平静。",
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "轻微笔触木桌声和纸张开合声。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-reference-3",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 6,
+                    "alias": "蓝色资料夹",
+                    "required_tags": [],
+                    "purpose": "本时段初态闭夹及封面横笔的真实构图；夹脊与唯一浅黄索引贴分处相对两侧，手在可达范围。先移笔再开夹仍须后续动态验证。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-2df81ea5ad58",
+                    "id": "shot-xkyx-04-reference-4",
+                    "asset_version_id": "asset-version-517b1b4894ce",
+                    "field": "visual",
+                    "text_start": 7,
+                    "text_end": 13,
+                    "alias": "黑色按动笔",
+                    "required_tags": [],
+                    "purpose": "同源完整黑笔外观与缩尖形态依据；只提供外形，不把深蓝来源背景或横向姿态强加给移到桌面的结果。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  }
+                ]
+              }
+            ],
+            "continuity": {
+              "character_positions": "林乔始终南侧站立；陈放北侧站立在画外。林乔的南椅已经拉开，不坐回去。",
+              "eyeline": "起始林乔朝画左看陈放，后转向桌面第一页。",
+              "prop_state_in": "合夹在林乔面前，黑笔横在封面，笔尖未按出；包在右肩。",
+              "prop_state_out": "资料夹打开在第一页，索引贴仍露出；黑笔已松手平放在资料夹南侧偏东的桌面，仍缩尖；包仍右肩。",
+              "action_in": "陈放的“辛苦一下”已结束。",
+              "action_out": "林乔已打开资料夹，手可自然落向第一页，尚未翻到数据页。"
+            },
+            "transition_out": "切桌面证据镜，承接打开的第一页和已移到旁边的同一支笔。",
+            "merge_candidate": false,
+            "local_rework_risk": "后续实际动态须验证先移笔再开夹及笔放稳；若动作拥挤可微调覆盖和全片余量，不能让笔消失或直接跳到数据页。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 1
+          }
+        },
+        "media_registration": {
+          "asset_version_id": "asset-version-2e42598d5807",
+          "reference_entries": [
+            {
+              "subject_asset_id": "asset-2cb6093b0cad",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "role": "LOCATION_INTERACTION",
+              "lineage_root_version_id": "asset-version-c5b066d9f2a5",
+              "framing": "MEDIUM",
+              "tags": [
+                "镜4",
+                "林乔南侧站立",
+                "移笔开夹前",
+                "软构图"
+              ],
+              "description": "已实检采用的镜4软构图：清楚林乔面部、自身右肩棕包及完整上肢；闭夹封面横放黑笔，唯一浅黄贴已修至相对页口侧。1152×2048，仅静态可达初态，不证明动态顺序。"
+            }
+          ]
+        }
+      },
+      "result": {
+        "tool_id": "shot.save_current",
+        "status": "FAILED",
+        "output": null,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {
+          "kind": "WorkflowConflictError",
+          "message": "Reference packs must belong to a character, location, or prop asset",
+          "phase": "EXECUTION",
+          "scope": {
+            "project_id": "project-a150dc017d81",
+            "shot_id": "shot-xkyx-04",
+            "request": {
+              "expected_revision": 1,
+              "shot": {
+                "id": "shot-xkyx-04",
+                "project_id": "project-a150dc017d81",
+                "scene_id": "scene-e9691087e6b8",
+                "references": {
+                  "0": {
+                    "id": "shot-xkyx-04-reference-0",
+                    "asset_version_id": "asset-version-598684099f38"
+                  },
+                  "1": {
+                    "id": "shot-xkyx-04-reference-1",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "2": {
+                    "id": "shot-xkyx-04-reference-2",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "3": {
+                    "id": "shot-xkyx-04-composition",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "4": {
+                    "id": "shot-xkyx-04-open-outline-state",
+                    "asset_version_id": "asset-version-a1233710c783"
+                  }
+                },
+                "timeline_beats": {
+                  "0": {
+                    "start_seconds": 0,
+                    "end_seconds": 2.5,
+                    "references": {
+                      "0": {
+                        "id": "shot-xkyx-04-reference-3",
+                        "asset_version_id": "asset-version-2e42598d5807"
+                      },
+                      "1": {
+                        "id": "shot-xkyx-04-reference-4",
+                        "asset_version_id": "asset-version-517b1b4894ce"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "media_registration": {
+              "asset_version_id": "asset-version-2e42598d5807",
+              "reference_entries": {
+                "0": {
+                  "asset_version_id": "asset-version-2e42598d5807"
+                }
+              }
+            }
+          },
+          "details": [],
+          "suggested_actions": [
+            "Use the specific error and current object scope to repair this operation. Check its persisted task state before retrying external work."
+          ],
+          "retryable": false
+        },
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T04:42:49.349360Z",
+      "updated_at": "2026-09-12T04:42:49.880618Z"
+    },
+    {
+      "id": "specialist-turn-7aa03466cd1f443e91d04fa4af2cf3bc",
+      "sequence": 33,
+      "tool_name": "shot.save_current",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "shot_id": "shot-xkyx-04",
+        "request": {
+          "expected_revision": 1,
+          "shot": {
+            "id": "shot-xkyx-04",
+            "project_id": "project-a150dc017d81",
+            "sequence": 4,
+            "scene_id": "scene-e9691087e6b8",
+            "duration_seconds": 2.5,
+            "narrative_purpose": "林乔没有认领任务，而是准备展示已交付的基础资料；移笔先于开夹，避免笔穿模或瞬移。",
+            "visual": "@林乔 @小会议室 @棕色单肩包。林乔在南侧站立，灰蓝衬衫、炭灰长裤、低马尾不变，包仍挂右肩。她看画左的陈放一眼，随后把目光和动作落到桌上。构图同时保留可读的脸、右肩包带及桌面操作区，不展示陈放正脸。",
+            "framing": "9:16腰上中景，脸在上半部，桌沿和资料夹在下半部；手与封面不能被画外身体挡住。",
+            "camera": "西侧稍偏北望向南侧林乔，固定机位，轻俯角只为兼顾桌面，不切成俯拍手部特写。",
+            "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+            "dialogue_line_ids": [],
+            "references": [
+              {
+                "subject_asset_id": "asset-19e6da402c5c",
+                "id": "shot-xkyx-04-reference-0",
+                "asset_version_id": "asset-version-598684099f38",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "林乔",
+                "required_tags": [],
+                "purpose": "同源正脸裁片提供林乔身份、五官及低马尾，不贡献桌面状态或硬首帧。",
+                "image_reference_role": "SUBJECT_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-758b439a6065",
+                "id": "shot-xkyx-04-reference-1",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 4,
+                "text_end": 9,
+                "alias": "小会议室",
+                "required_tags": [],
+                "purpose": "本镜实际构图中可见的浅木桌、南侧暖白墙、画右木门及柔和傍晚光，不证明画外椅位和整室拓扑；与构图同图去重。",
+                "image_reference_role": "SCENE_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-ef29cf906440",
+                "id": "shot-xkyx-04-reference-2",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 10,
+                "text_end": 16,
+                "alias": "棕色单肩包",
+                "required_tags": [],
+                "purpose": "本镜林乔自身右肩棕包和同侧垂带的实际佩戴关系；不卸包、不跨胸，与构图同图去重。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-2cb6093b0cad",
+                "id": "shot-xkyx-04-composition",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "alias": "林乔移笔开夹初态构图",
+                "required_tags": [],
+                "purpose": "0–2.5秒软构图参考，1152×2048。面部、双臂空手、右肩包与桌面合夹同框；黑笔横放封面，唯一浅黄贴在相对夹脊的页口侧。双手附近有可达操作区；仅为动作初态，不证明先移笔后开夹的动态，不作硬首帧。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-e104055d5990",
+                "id": "shot-xkyx-04-open-outline-state",
+                "asset_version_id": "asset-version-a1233710c783",
+                "alias": "打开提纲第一页状态",
+                "required_tags": [],
+                "purpose": "本镜后段开夹的目标静态状态：一侧空封皮、另一侧编号提纲及唯一索引贴；黑笔已独立在木桌上。只提供道具结构和纸页状态，不照搬此母图画面左右、笔落点或无人构图。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0,
+                "end_seconds": 2.5,
+                "visual": "@蓝色资料夹与@黑色按动笔在桌面下半区清楚，初态为合夹、黑笔横在封面上。",
+                "framing": "包含林乔面部、肩包和桌面操作的中景",
+                "camera": "固定",
+                "action": "先看陈放约半秒；右手捏起封面上的黑笔并放在资料夹南侧偏东的桌面，松开笔后翻开封面露出第一页。动作自然连续，不要求每步停成照片。",
+                "performance": "林乔的停顿是判断，不是受辱后的夸张瞪眼；开夹熟练、平静。",
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "轻微笔触木桌声和纸张开合声。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-reference-3",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 6,
+                    "alias": "蓝色资料夹",
+                    "required_tags": [],
+                    "purpose": "0–2.5秒合夹初态及手物可达关系，薄深蓝A4双折夹、唯一浅黄贴、封面横笔；目标提纲状态由独立状态引用补充，不把合夹图当全过程。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-2df81ea5ad58",
+                    "id": "shot-xkyx-04-reference-4",
+                    "asset_version_id": "asset-version-517b1b4894ce",
+                    "field": "visual",
+                    "text_start": 7,
+                    "text_end": 13,
+                    "alias": "黑色按动笔",
+                    "required_tags": [],
+                    "purpose": "同源完整黑笔外观、短笔夹及收尖鼻口依据。笔由封面移到南侧偏东桌面，位置与接触由镜头动作承担；此裁片不证明动态。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  }
+                ]
+              }
+            ],
+            "continuity": {
+              "character_positions": "林乔始终南侧站立；陈放北侧站立在画外。林乔的南椅已经拉开，不坐回去。",
+              "eyeline": "起始林乔朝画左看陈放，后转向桌面第一页。",
+              "prop_state_in": "合夹在林乔面前，黑笔横在封面，笔尖未按出；包在右肩。",
+              "prop_state_out": "资料夹打开在第一页，索引贴仍露出；黑笔已松手平放在资料夹南侧偏东的桌面，仍缩尖；包仍右肩。",
+              "action_in": "陈放的“辛苦一下”已结束。",
+              "action_out": "林乔已打开资料夹，手可自然落向第一页，尚未翻到数据页。"
+            },
+            "transition_out": "切桌面证据镜，承接打开的第一页和已移到旁边的同一支笔。",
+            "merge_candidate": false,
+            "local_rework_risk": "后续实际动态须验证先移笔再开夹及笔放稳；若动作拥挤可微调覆盖和全片余量，不能让笔消失或直接跳到数据页。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 1
+          }
+        },
+        "media_registration": {
+          "asset_version_id": "asset-version-2e42598d5807",
+          "reference_entries": [
+            {
+              "subject_asset_id": "asset-758b439a6065",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "role": "LOCATION_INTERACTION",
+              "lineage_root_version_id": "asset-version-c5b066d9f2a5",
+              "angle": "NOT_APPLICABLE",
+              "framing": "MEDIUM",
+              "tags": [
+                "shot-04",
+                "south-standing",
+                "closed-folder",
+                "pen-on-cover"
+              ],
+              "description": "镜4已采用1152×2048软构图：南侧林乔面部、灰蓝衣着、右肩棕包与桌面合夹横笔同框，双手空置可达；唯一浅黄索引贴位于相对夹脊页口侧。只供先移笔再开夹前静态初态，不证明动态顺序或画外椅位。",
+              "priority": 10
+            }
+          ]
+        }
+      },
+      "result": {
+        "tool_id": "shot.save_current",
+        "status": "FAILED",
+        "output": null,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {
+          "kind": "WorkflowConflictError",
+          "message": "Reference-pack lineage root must be a current usable image owned by the subject",
+          "phase": "EXECUTION",
+          "scope": {
+            "project_id": "project-a150dc017d81",
+            "shot_id": "shot-xkyx-04",
+            "request": {
+              "expected_revision": 1,
+              "shot": {
+                "id": "shot-xkyx-04",
+                "project_id": "project-a150dc017d81",
+                "scene_id": "scene-e9691087e6b8",
+                "references": {
+                  "0": {
+                    "id": "shot-xkyx-04-reference-0",
+                    "asset_version_id": "asset-version-598684099f38"
+                  },
+                  "1": {
+                    "id": "shot-xkyx-04-reference-1",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "2": {
+                    "id": "shot-xkyx-04-reference-2",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "3": {
+                    "id": "shot-xkyx-04-composition",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "4": {
+                    "id": "shot-xkyx-04-open-outline-state",
+                    "asset_version_id": "asset-version-a1233710c783"
+                  }
+                },
+                "timeline_beats": {
+                  "0": {
+                    "start_seconds": 0,
+                    "end_seconds": 2.5,
+                    "references": {
+                      "0": {
+                        "id": "shot-xkyx-04-reference-3",
+                        "asset_version_id": "asset-version-2e42598d5807"
+                      },
+                      "1": {
+                        "id": "shot-xkyx-04-reference-4",
+                        "asset_version_id": "asset-version-517b1b4894ce"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "media_registration": {
+              "asset_version_id": "asset-version-2e42598d5807",
+              "reference_entries": {
+                "0": {
+                  "asset_version_id": "asset-version-2e42598d5807"
+                }
+              }
+            }
+          },
+          "details": [],
+          "suggested_actions": [
+            "Use the specific error and current object scope to repair this operation. Check its persisted task state before retrying external work."
+          ],
+          "retryable": false
+        },
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T04:43:26.203786Z",
+      "updated_at": "2026-09-12T04:43:26.653859Z"
+    },
+    {
+      "id": "specialist-turn-cd1c0a0309f74574b64d92e49f1f4f89",
+      "sequence": 34,
+      "tool_name": "shot.save_current",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "shot_id": "shot-xkyx-04",
+        "request": {
+          "expected_revision": 1,
+          "shot": {
+            "id": "shot-xkyx-04",
+            "project_id": "project-a150dc017d81",
+            "sequence": 4,
+            "scene_id": "scene-e9691087e6b8",
+            "duration_seconds": 2.5,
+            "narrative_purpose": "林乔没有认领任务，而是准备展示已交付的基础资料；移笔先于开夹，避免笔穿模或瞬移。",
+            "visual": "@林乔 @小会议室 @棕色单肩包。林乔在南侧站立，灰蓝衬衫、炭灰长裤、低马尾不变，包仍挂右肩。她看画左的陈放一眼，随后把目光和动作落到桌上。构图同时保留可读的脸、右肩包带及桌面操作区，不展示陈放正脸。",
+            "framing": "9:16腰上中景，脸在上半部，桌沿和资料夹在下半部；手与封面不能被画外身体挡住。",
+            "camera": "西侧稍偏北望向南侧林乔，固定机位，轻俯角只为兼顾桌面，不切成俯拍手部特写。",
+            "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+            "dialogue_line_ids": [],
+            "references": [
+              {
+                "subject_asset_id": "asset-19e6da402c5c",
+                "id": "shot-xkyx-04-reference-0",
+                "asset_version_id": "asset-version-598684099f38",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "林乔",
+                "required_tags": [],
+                "purpose": "林乔同源正脸身份、五官与低马尾依据；不作为会议室首帧。",
+                "image_reference_role": "SUBJECT_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-758b439a6065",
+                "id": "shot-xkyx-04-reference-1",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 4,
+                "text_end": 9,
+                "alias": "小会议室",
+                "required_tags": [],
+                "purpose": "本镜实际南侧暖白墙、画右木门局部、浅木桌和傍晚柔光；与构图同图去重，不证明全室拓扑或南椅位置。",
+                "image_reference_role": "SCENE_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-ef29cf906440",
+                "id": "shot-xkyx-04-reference-2",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 10,
+                "text_end": 16,
+                "alias": "棕色单肩包",
+                "required_tags": [],
+                "purpose": "本镜实见的自身右肩包带及右胯同侧棕包佩戴关系；与构图同图去重，不卸包。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-2cb6093b0cad",
+                "id": "shot-xkyx-04-composition",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "alias": "林乔移笔开夹前构图",
+                "required_tags": [],
+                "purpose": "0–2.5秒软构图：1152×2048，林乔清楚面部、双臂空手、右肩棕包与合夹封面黑笔同框。唯一索引贴已在夹脊相对页口，手与夹旁桌面可达。仅初态，不是硬首帧，不证明先移笔再开夹动态。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-e104055d5990",
+                "id": "shot-xkyx-04-open-outline-state",
+                "asset_version_id": "asset-version-a1233710c783",
+                "alias": "开夹后提纲第一页状态",
+                "required_tags": [],
+                "purpose": "本镜末端露出提纲第一页的道具状态：分项提纲、右侧唯一索引贴及移开后的完整黑笔外观；只贡献道具结构，图中笔摆向不替代本镜南侧偏东落点，不提供人物接触。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0,
+                "end_seconds": 2.5,
+                "visual": "@蓝色资料夹与@黑色按动笔在桌面下半区清楚，初态为合夹、黑笔横在封面上。",
+                "framing": "包含林乔面部、肩包和桌面操作的中景",
+                "camera": "固定",
+                "action": "先看陈放约半秒；右手捏起封面上的黑笔并放在资料夹南侧偏东的桌面，松开笔后翻开封面露出第一页。动作自然连续，不要求每步停成照片。",
+                "performance": "林乔的停顿是判断，不是受辱后的夸张瞪眼；开夹熟练、平静。",
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "轻微笔触木桌声和纸张开合声。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-reference-3",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 6,
+                    "alias": "蓝色资料夹",
+                    "required_tags": [],
+                    "purpose": "0–2.5秒开夹前真实可达初态：薄深蓝A4闭夹、相对夹脊的唯一浅黄贴及封面横笔；与构图同图去重，不把闭夹图片当作开夹后状态。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-2df81ea5ad58",
+                    "id": "shot-xkyx-04-reference-4",
+                    "asset_version_id": "asset-version-517b1b4894ce",
+                    "field": "visual",
+                    "text_start": 7,
+                    "text_end": 13,
+                    "alias": "黑色按动笔",
+                    "required_tags": [],
+                    "purpose": "同源完整黑笔外观，短笔夹、尾钮与收尖鼻口；仅身份依据，不将裁片深蓝背景当作笔的最终位置。先移到南侧偏东桌面再开夹仍须动态验证。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  }
+                ]
+              }
+            ],
+            "continuity": {
+              "character_positions": "林乔始终南侧站立；陈放北侧站立在画外。林乔的南椅已经拉开，不坐回去。",
+              "eyeline": "起始林乔朝画左看陈放，后转向桌面第一页。",
+              "prop_state_in": "合夹在林乔面前，黑笔横在封面，笔尖未按出；包在右肩。",
+              "prop_state_out": "资料夹打开在第一页，索引贴仍露出；黑笔已松手平放在资料夹南侧偏东的桌面，仍缩尖；包仍右肩。",
+              "action_in": "陈放的“辛苦一下”已结束。",
+              "action_out": "林乔已打开资料夹，手可自然落向第一页，尚未翻到数据页。"
+            },
+            "transition_out": "切桌面证据镜，承接打开的第一页和已移到旁边的同一支笔。",
+            "merge_candidate": false,
+            "local_rework_risk": "后续实际动态须验证先移笔再开夹及笔放稳；若动作拥挤可微调覆盖和全片余量，不能让笔消失或直接跳到数据页。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 1
+          }
+        },
+        "media_registration": {
+          "asset_version_id": "asset-version-2e42598d5807",
+          "reference_entries": [
+            {
+              "subject_asset_id": "asset-758b439a6065",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "role": "LOCATION_INTERACTION",
+              "lineage_root_version_id": "asset-version-4ef62d521b85",
+              "angle": "NOT_APPLICABLE",
+              "framing": "MEDIUM",
+              "tags": [
+                "shot-04",
+                "south-side",
+                "closed-folder",
+                "pen-on-cover"
+              ],
+              "description": "镜4南侧单人操作区软构图。1152×2048真人摄影；林乔脸、右肩棕包、双臂与合夹封面黑笔同框，唯一浅黄贴位于夹脊相对页口。已实检静态可达初态；不证明移笔开夹动态，也不是硬首帧。",
+              "priority": 30
+            }
+          ]
+        }
+      },
+      "result": {
+        "tool_id": "shot.save_current",
+        "status": "FAILED",
+        "output": null,
+        "artifact_refs": [],
+        "warnings": [],
+        "error": {
+          "kind": "ValueError",
+          "message": "选择的图片不属于该对象或其参考图集",
+          "phase": "EXECUTION",
+          "scope": {
+            "project_id": "project-a150dc017d81",
+            "shot_id": "shot-xkyx-04",
+            "request": {
+              "expected_revision": 1,
+              "shot": {
+                "id": "shot-xkyx-04",
+                "project_id": "project-a150dc017d81",
+                "scene_id": "scene-e9691087e6b8",
+                "references": {
+                  "0": {
+                    "id": "shot-xkyx-04-reference-0",
+                    "asset_version_id": "asset-version-598684099f38"
+                  },
+                  "1": {
+                    "id": "shot-xkyx-04-reference-1",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "2": {
+                    "id": "shot-xkyx-04-reference-2",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "3": {
+                    "id": "shot-xkyx-04-composition",
+                    "asset_version_id": "asset-version-2e42598d5807"
+                  },
+                  "4": {
+                    "id": "shot-xkyx-04-open-outline-state",
+                    "asset_version_id": "asset-version-a1233710c783"
+                  }
+                },
+                "timeline_beats": {
+                  "0": {
+                    "start_seconds": 0,
+                    "end_seconds": 2.5,
+                    "references": {
+                      "0": {
+                        "id": "shot-xkyx-04-reference-3",
+                        "asset_version_id": "asset-version-2e42598d5807"
+                      },
+                      "1": {
+                        "id": "shot-xkyx-04-reference-4",
+                        "asset_version_id": "asset-version-517b1b4894ce"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "media_registration": {
+              "asset_version_id": "asset-version-2e42598d5807",
+              "reference_entries": {
+                "0": {
+                  "asset_version_id": "asset-version-2e42598d5807"
+                }
+              }
+            }
+          },
+          "details": [],
+          "suggested_actions": [
+            "Use the specific error and current object scope to repair this operation. Check its persisted task state before retrying external work."
+          ],
+          "retryable": false
+        },
+        "receipt": null
+      },
+      "requested_at": "2026-09-12T04:44:00.631617Z",
+      "updated_at": "2026-09-12T04:44:01.135227Z"
+    },
+    {
+      "id": "specialist-turn-50b6e0a4cd3b4040b2750bec4573a193",
+      "sequence": 35,
+      "tool_name": "shot.save_current",
+      "arguments": {
+        "project_id": "project-a150dc017d81",
+        "shot_id": "shot-xkyx-04",
+        "request": {
+          "expected_revision": 1,
+          "shot": {
+            "id": "shot-xkyx-04",
+            "project_id": "project-a150dc017d81",
+            "sequence": 4,
+            "scene_id": "scene-e9691087e6b8",
+            "duration_seconds": 2.5,
+            "narrative_purpose": "林乔没有认领任务，而是准备展示已交付的基础资料；移笔先于开夹，避免笔穿模或瞬移。",
+            "visual": "@林乔 @小会议室 @棕色单肩包。林乔在南侧站立，灰蓝衬衫、炭灰长裤、低马尾不变，包仍挂右肩。她看画左的陈放一眼，随后把目光和动作落到桌上。构图同时保留可读的脸、右肩包带及桌面操作区，不展示陈放正脸。",
+            "framing": "9:16腰上中景，脸在上半部，桌沿和资料夹在下半部；手与封面不能被画外身体挡住。",
+            "camera": "西侧稍偏北望向南侧林乔，固定机位，轻俯角只为兼顾桌面，不切成俯拍手部特写。",
+            "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+            "dialogue_line_ids": [],
+            "references": [
+              {
+                "subject_asset_id": "asset-19e6da402c5c",
+                "id": "shot-xkyx-04-reference-0",
+                "asset_version_id": "asset-version-598684099f38",
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "林乔",
+                "required_tags": [],
+                "purpose": "同源正脸裁片提供林乔身份、五官与低马尾；不提供会议室或操作初态。",
+                "image_reference_role": "SUBJECT_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-758b439a6065",
+                "id": "shot-xkyx-04-reference-1",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 4,
+                "text_end": 9,
+                "alias": "小会议室",
+                "required_tags": [],
+                "purpose": "本镜实见的南侧暖白背景、画右门局部及前景浅木桌、柔光；不证明画外南椅或整室拓扑。与构图同图去重。",
+                "image_reference_role": "SCENE_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-ef29cf906440",
+                "id": "shot-xkyx-04-reference-2",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "field": "visual",
+                "text_start": 10,
+                "text_end": 16,
+                "alias": "棕色单肩包",
+                "required_tags": [],
+                "purpose": "实见的自身右肩棕包带、同侧垂落与包局部，操作时不卸包；与构图同图去重。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-2cb6093b0cad",
+                "id": "shot-xkyx-04-composition",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "alias": "林乔移笔开夹初态构图",
+                "required_tags": [],
+                "purpose": "0–2.5秒软构图：1152×2048，脸、肩包、完整双臂与空手、桌上合夹及封面完整黑笔同框。仅提供先移笔后开夹前的可达初态，不是硬首帧，不证明动作顺序或笔芯细部。",
+                "image_reference_role": "COMPOSITION",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-e104055d5990",
+                "id": "shot-xkyx-04-open-outline-state",
+                "asset_version_id": "asset-version-a1233710c783",
+                "alias": "开夹后的提纲第一页状态",
+                "required_tags": [],
+                "purpose": "只提供本镜末段打开第一页的纸页排布、双折结构和唯一索引贴。静态道具图不提供人物接触，不把源图画右笔位直接套到反角；实际笔须留夹南侧偏东。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0,
+                "end_seconds": 2.5,
+                "visual": "@蓝色资料夹与@黑色按动笔在桌面下半区清楚，初态为合夹、黑笔横在封面上。",
+                "framing": "包含林乔面部、肩包和桌面操作的中景",
+                "camera": "固定",
+                "action": "先看陈放约半秒；右手捏起封面上的黑笔并放在资料夹南侧偏东的桌面，松开笔后翻开封面露出第一页。动作自然连续，不要求每步停成照片。",
+                "performance": "林乔的停顿是判断，不是受辱后的夸张瞪眼；开夹熟练、平静。",
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "轻微笔触木桌声和纸张开合声。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-reference-3",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 6,
+                    "alias": "蓝色资料夹",
+                    "required_tags": [],
+                    "purpose": "本镜初态合夹、黑笔横封面、单枚浅黄贴在页口侧且与夹脊相对；手空置且可达。此图不表示已打开，末态另用提纲状态参考。与构图同图去重。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  {
+                    "subject_asset_id": "asset-2df81ea5ad58",
+                    "id": "shot-xkyx-04-reference-4",
+                    "asset_version_id": "asset-version-517b1b4894ce",
+                    "field": "visual",
+                    "text_start": 7,
+                    "text_end": 13,
+                    "alias": "黑色按动笔",
+                    "required_tags": [],
+                    "purpose": "同源完整黑笔外观：黑直杆、短笔夹、按钮及短金属鼻口。只供同款身份，不指定深蓝来源背景或替代从封面移至南侧偏东桌面的动态。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  }
+                ]
+              }
+            ],
+            "continuity": {
+              "character_positions": "林乔始终南侧站立；陈放北侧站立在画外。林乔的南椅已经拉开，不坐回去。",
+              "eyeline": "起始林乔朝画左看陈放，后转向桌面第一页。",
+              "prop_state_in": "合夹在林乔面前，黑笔横在封面，笔尖未按出；包在右肩。",
+              "prop_state_out": "资料夹打开在第一页，索引贴仍露出；黑笔已松手平放在资料夹南侧偏东的桌面，仍缩尖；包仍右肩。",
+              "action_in": "陈放的“辛苦一下”已结束。",
+              "action_out": "林乔已打开资料夹，手可自然落向第一页，尚未翻到数据页。"
+            },
+            "transition_out": "切桌面证据镜，承接打开的第一页和已移到旁边的同一支笔。",
+            "merge_candidate": false,
+            "local_rework_risk": "后续实际动态须验证先移笔再开夹及笔放稳；若动作拥挤可微调覆盖和全片余量，不能让笔消失或直接跳到数据页。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 1
+          }
+        },
+        "media_registration": {
+          "asset_version_id": "asset-version-2e42598d5807",
+          "reference_entries": [
+            {
+              "subject_asset_id": "asset-758b439a6065",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "lineage_root_version_id": "asset-version-4ef62d521b85",
+              "role": "LOCATION_INTERACTION",
+              "framing": "MEDIUM",
+              "tags": [
+                "shot-04",
+                "south-side",
+                "closed-folder"
+              ],
+              "description": "镜4已采用软构图；只提供南侧暖白背景、局部门框、浅木桌及人物与操作区空间，不证明全室拓扑或动态。"
+            },
+            {
+              "subject_asset_id": "asset-ef29cf906440",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "lineage_root_version_id": "asset-version-5ab10656f4a9",
+              "role": "PROP_IN_HAND",
+              "framing": "MEDIUM",
+              "tags": [
+                "shot-04",
+                "right-shoulder",
+                "worn"
+              ],
+              "description": "林乔自身右肩佩戴同一棕包的静态依据；完整包型仍由已有包母图提供，PROP_IN_HAND在此仅表示人物随身接触关系。"
+            },
+            {
+              "subject_asset_id": "asset-e104055d5990",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "lineage_root_version_id": "asset-version-abe658eaa803",
+              "role": "PROP_STATE",
+              "framing": "MEDIUM",
+              "tags": [
+                "shot-04",
+                "closed",
+                "pen-on-cover"
+              ],
+              "description": "合夹在林乔可达桌面，完整黑笔横在封面；唯一索引贴位于与夹脊相对的页口侧。只承担移笔开夹前初态，不证明动态。"
+            }
+          ]
+        }
+      },
+      "result": {
+        "tool_id": "shot.save_current",
+        "status": "SUCCEEDED",
+        "output": {
+          "project_id": "project-a150dc017d81",
+          "scene_ids": [],
+          "shot_ids": [
+            "shot-xkyx-04"
+          ],
+          "notices": [
+            "镜头与所选素材登记已一起保存。"
+          ],
+          "shot_revisions": {
+            "shot-xkyx-04": 2
+          },
+          "editorial_revision": null,
+          "timeline_id": null,
+          "changed_shot_ids": [
+            "shot-xkyx-04"
+          ],
+          "changed_scene_ids": [],
+          "asset_plan_identity": null,
+          "saved_shot": {
+            "shot_id": "shot-xkyx-04",
+            "revision": 2,
+            "duration_seconds": 2.5,
+            "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+            "dialogue_line_ids": [],
+            "beats": [
+              {
+                "index": 0,
+                "start_seconds": 0.0,
+                "end_seconds": 2.5,
+                "dialogue_line_ids": [],
+                "sound": "轻微笔触木桌声和纸张开合声。"
+              }
+            ],
+            "shot_cues": [
+              {
+                "scope": "SHOT",
+                "beat_index": null,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-19e6da402c5c",
+                  "id": "shot-xkyx-04-reference-0",
+                  "asset_version_id": "asset-version-598684099f38",
+                  "field": "visual",
+                  "text_start": 0,
+                  "text_end": 3,
+                  "alias": "林乔",
+                  "required_tags": [],
+                  "purpose": "同源正脸裁片提供林乔身份、五官与低马尾；不提供会议室或操作初态。",
+                  "image_reference_role": "SUBJECT_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": "@林乔"
+              },
+              {
+                "scope": "SHOT",
+                "beat_index": null,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-758b439a6065",
+                  "id": "shot-xkyx-04-reference-1",
+                  "asset_version_id": "asset-version-2e42598d5807",
+                  "field": "visual",
+                  "text_start": 4,
+                  "text_end": 9,
+                  "alias": "小会议室",
+                  "required_tags": [],
+                  "purpose": "本镜实见的南侧暖白背景、画右门局部及前景浅木桌、柔光；不证明画外南椅或整室拓扑。与构图同图去重。",
+                  "image_reference_role": "SCENE_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": "@小会议室"
+              },
+              {
+                "scope": "SHOT",
+                "beat_index": null,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-ef29cf906440",
+                  "id": "shot-xkyx-04-reference-2",
+                  "asset_version_id": "asset-version-2e42598d5807",
+                  "field": "visual",
+                  "text_start": 10,
+                  "text_end": 16,
+                  "alias": "棕色单肩包",
+                  "required_tags": [],
+                  "purpose": "实见的自身右肩棕包带、同侧垂落与包局部，操作时不卸包；与构图同图去重。",
+                  "image_reference_role": "PROP_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": "@棕色单肩包"
+              },
+              {
+                "scope": "SHOT",
+                "beat_index": null,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-2cb6093b0cad",
+                  "id": "shot-xkyx-04-composition",
+                  "asset_version_id": "asset-version-2e42598d5807",
+                  "field": null,
+                  "text_start": null,
+                  "text_end": null,
+                  "alias": "林乔移笔开夹初态构图",
+                  "required_tags": [],
+                  "purpose": "0–2.5秒软构图：1152×2048，脸、肩包、完整双臂与空手、桌上合夹及封面完整黑笔同框。仅提供先移笔后开夹前的可达初态，不是硬首帧，不证明动作顺序或笔芯细部。",
+                  "image_reference_role": "COMPOSITION",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": null
+              },
+              {
+                "scope": "SHOT",
+                "beat_index": null,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-e104055d5990",
+                  "id": "shot-xkyx-04-open-outline-state",
+                  "asset_version_id": "asset-version-a1233710c783",
+                  "field": null,
+                  "text_start": null,
+                  "text_end": null,
+                  "alias": "开夹后的提纲第一页状态",
+                  "required_tags": [],
+                  "purpose": "只提供本镜末段打开第一页的纸页排布、双折结构和唯一索引贴。静态道具图不提供人物接触，不把源图画右笔位直接套到反角；实际笔须留夹南侧偏东。",
+                  "image_reference_role": "PROP_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": null
+              },
+              {
+                "scope": "BEAT",
+                "beat_index": 0,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-e104055d5990",
+                  "id": "shot-xkyx-04-reference-3",
+                  "asset_version_id": "asset-version-2e42598d5807",
+                  "field": "visual",
+                  "text_start": 0,
+                  "text_end": 6,
+                  "alias": "蓝色资料夹",
+                  "required_tags": [],
+                  "purpose": "本镜初态合夹、黑笔横封面、单枚浅黄贴在页口侧且与夹脊相对；手空置且可达。此图不表示已打开，末态另用提纲状态参考。与构图同图去重。",
+                  "image_reference_role": "PROP_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": "@蓝色资料夹"
+              },
+              {
+                "scope": "BEAT",
+                "beat_index": 0,
+                "time_range": {
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5
+                },
+                "cue": {
+                  "subject_asset_id": "asset-2df81ea5ad58",
+                  "id": "shot-xkyx-04-reference-4",
+                  "asset_version_id": "asset-version-517b1b4894ce",
+                  "field": "visual",
+                  "text_start": 7,
+                  "text_end": 13,
+                  "alias": "黑色按动笔",
+                  "required_tags": [],
+                  "purpose": "同源完整黑笔外观：黑直杆、短笔夹、按钮及短金属鼻口。只供同款身份，不指定深蓝来源背景或替代从封面移至南侧偏东桌面的动态。",
+                  "image_reference_role": "PROP_IDENTITY",
+                  "usage": "GENERATION"
+                },
+                "referenced_text": "@黑色按动笔"
+              }
+            ]
+          },
+          "media_registration": {
+            "asset_id": "asset-2cb6093b0cad",
+            "asset_version_id": "asset-version-2e42598d5807",
+            "asset_plan_document_id": null,
+            "asset_plan_version_id": null,
+            "asset_plan_version": null,
+            "completed_item_ids": [],
+            "completed_work_item_ids": [],
+            "reference_entry_ids": [
+              "reference-entry-be49388b2be5",
+              "reference-entry-a05791f6bb01",
+              "reference-entry-1ee8c670daa2"
+            ],
+            "created_reference_entry_ids": [
+              "reference-entry-be49388b2be5",
+              "reference-entry-a05791f6bb01",
+              "reference-entry-1ee8c670daa2"
+            ],
+            "plan_changed": false,
+            "reused": false
+          },
+          "reference_plan_preview_scope": "GENERATION_ONLY",
+          "reference_plan_preview": {
+            "shot_id": "shot-xkyx-04",
+            "selected": [
+              {
+                "pack_id": "reference-pack-asset-19e6da402c5c",
+                "entry_id": "reference-entry-dc5e81a2efa1",
+                "subject_asset_id": "asset-19e6da402c5c",
+                "asset_version_id": "asset-version-598684099f38",
+                "lineage_root_version_id": "asset-version-e336e7d19290",
+                "role": "CHARACTER_FACE",
+                "angle": "FRONT",
+                "framing": "FACE_CLOSE_UP",
+                "tags": [
+                  "林乔",
+                  "同源脸部裁图",
+                  "原创身份",
+                  "低马尾",
+                  "自然肤质",
+                  "辅助身份"
+                ],
+                "description": "同源正脸裁片提供林乔身份、五官与低马尾；不提供会议室或操作初态。",
+                "requirement_ids": [],
+                "score": 1999,
+                "reasons": [
+                  "current ShotReferenceCue GENERATION media and purpose take priority"
+                ]
+              },
+              {
+                "pack_id": "reference-pack-asset-758b439a6065",
+                "entry_id": "reference-entry-be49388b2be5",
+                "subject_asset_id": "asset-758b439a6065",
+                "asset_version_id": "asset-version-2e42598d5807",
+                "lineage_root_version_id": "asset-version-4ef62d521b85",
+                "role": "LOCATION_INTERACTION",
+                "angle": "NOT_APPLICABLE",
+                "framing": "MEDIUM",
+                "tags": [
+                  "shot-04",
+                  "south-side",
+                  "closed-folder"
+                ],
+                "description": "本镜实见的南侧暖白背景、画右门局部及前景浅木桌、柔光；不证明画外南椅或整室拓扑。与构图同图去重。; 实见的自身右肩棕包带、同侧垂落与包局部，操作时不卸包；与构图同图去重。; 0–2.5秒软构图：1152×2048，脸、肩包、完整双臂与空手、桌上合夹及封面完整黑笔同框。仅提供先移笔后开夹前的可达初态，不是硬首帧，不证明动作顺序或笔芯细部。; 本镜初态合夹、黑笔横封面、单枚浅黄贴在页口侧且与夹脊相对；手空置且可达。此图不表示已打开，末态另用提纲状态参考。与构图同图去重。",
+                "requirement_ids": [],
+                "score": 1998,
+                "reasons": [
+                  "current ShotReferenceCue GENERATION media and purpose take priority"
+                ]
+              },
+              {
+                "pack_id": "reference-pack-asset-e104055d5990",
+                "entry_id": "reference-entry-6fca03239713",
+                "subject_asset_id": "asset-e104055d5990",
+                "asset_version_id": "asset-version-a1233710c783",
+                "lineage_root_version_id": "asset-version-abe658eaa803",
+                "role": "PROP_STATE",
+                "angle": "NOT_APPLICABLE",
+                "framing": "DETAIL",
+                "tags": [
+                  "打开",
+                  "提纲第一页",
+                  "唯一浅黄索引贴",
+                  "黑笔在夹右旁",
+                  "同源开合状态"
+                ],
+                "description": "只提供本镜末段打开第一页的纸页排布、双折结构和唯一索引贴。静态道具图不提供人物接触，不把源图画右笔位直接套到反角；实际笔须留夹南侧偏东。",
+                "requirement_ids": [],
+                "score": 1995,
+                "reasons": [
+                  "current ShotReferenceCue GENERATION media and purpose take priority"
+                ]
+              },
+              {
+                "pack_id": "reference-pack-asset-2df81ea5ad58",
+                "entry_id": "reference-entry-f7f12797a709",
+                "subject_asset_id": "asset-2df81ea5ad58",
+                "asset_version_id": "asset-version-517b1b4894ce",
+                "lineage_root_version_id": "asset-version-517b1b4894ce",
+                "role": "CANONICAL_MASTER",
+                "angle": "NOT_APPLICABLE",
+                "framing": "DETAIL",
+                "tags": [
+                  "黑色按动笔",
+                  "完整单笔",
+                  "笔尖收起",
+                  "闭夹同源裁切",
+                  "外观母版"
+                ],
+                "description": "同源完整黑笔外观：黑直杆、短笔夹、按钮及短金属鼻口。只供同款身份，不指定深蓝来源背景或替代从封面移至南侧偏东桌面的动态。",
+                "requirement_ids": [],
+                "score": 1993,
+                "reasons": [
+                  "current ShotReferenceCue GENERATION media and purpose take priority"
+                ]
+              }
+            ],
+            "missing_requirement_ids": [],
+            "warnings": [],
+            "complexity": {
+              "duration_seconds": 2.5,
+              "action_beat_count": 0,
+              "interaction_count": 0,
+              "missing_topology_anchors": [],
+              "observations": [
+                "镜头时长为 2.5 秒，共声明 0 个动作节拍。",
+                "当前镜头未显式声明空间交互。"
+              ],
+              "advisory_only": true
+            },
+            "proceed_allowed": true
+          },
+          "reference_plan_preview_error": null
+        },
+        "artifact_refs": [
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "shot",
+            "artifact_id": "shot-xkyx-04",
+            "version": 2
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "asset_version",
+            "artifact_id": "asset-version-2e42598d5807",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-be49388b2be5",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-a05791f6bb01",
+            "version": null
+          },
+          {
+            "project_id": "project-a150dc017d81",
+            "artifact_type": "reference_pack_entry",
+            "artifact_id": "reference-entry-1ee8c670daa2",
+            "version": null
+          }
+        ],
+        "warnings": [],
+        "error": null,
+        "receipt": {
+          "operation_completed": true,
+          "artifact_refs": [
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "shot",
+              "artifact_id": "shot-xkyx-04",
+              "version": 2
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "asset_version",
+              "artifact_id": "asset-version-2e42598d5807",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack_entry",
+              "artifact_id": "reference-entry-be49388b2be5",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack_entry",
+              "artifact_id": "reference-entry-a05791f6bb01",
+              "version": null
+            },
+            {
+              "project_id": "project-a150dc017d81",
+              "artifact_type": "reference_pack_entry",
+              "artifact_id": "reference-entry-1ee8c670daa2",
+              "version": null
+            }
+          ],
+          "current_state": {
+            "project_id": "project-a150dc017d81",
+            "shot_revisions": {
+              "shot-xkyx-04": 2
+            },
+            "editorial_revision": null,
+            "timeline_id": null,
+            "saved_shot": {
+              "shot_id": "shot-xkyx-04",
+              "revision": 2,
+              "duration_seconds": 2.5,
+              "audio_intent": "无对白；陈放上一句已经说完。轻微笔触桌面声及开夹纸声，不加解释性旁白。",
+              "dialogue_line_ids": [],
+              "beats": [
+                {
+                  "index": 0,
+                  "start_seconds": 0.0,
+                  "end_seconds": 2.5,
+                  "dialogue_line_ids": [],
+                  "sound": "轻微笔触木桌声和纸张开合声。"
+                }
+              ],
+              "shot_cues": [
+                {
+                  "scope": "SHOT",
+                  "beat_index": null,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-19e6da402c5c",
+                    "id": "shot-xkyx-04-reference-0",
+                    "asset_version_id": "asset-version-598684099f38",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 3,
+                    "alias": "林乔",
+                    "required_tags": [],
+                    "purpose": "同源正脸裁片提供林乔身份、五官与低马尾；不提供会议室或操作初态。",
+                    "image_reference_role": "SUBJECT_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": "@林乔"
+                },
+                {
+                  "scope": "SHOT",
+                  "beat_index": null,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-758b439a6065",
+                    "id": "shot-xkyx-04-reference-1",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 4,
+                    "text_end": 9,
+                    "alias": "小会议室",
+                    "required_tags": [],
+                    "purpose": "本镜实见的南侧暖白背景、画右门局部及前景浅木桌、柔光；不证明画外南椅或整室拓扑。与构图同图去重。",
+                    "image_reference_role": "SCENE_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": "@小会议室"
+                },
+                {
+                  "scope": "SHOT",
+                  "beat_index": null,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-ef29cf906440",
+                    "id": "shot-xkyx-04-reference-2",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 10,
+                    "text_end": 16,
+                    "alias": "棕色单肩包",
+                    "required_tags": [],
+                    "purpose": "实见的自身右肩棕包带、同侧垂落与包局部，操作时不卸包；与构图同图去重。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": "@棕色单肩包"
+                },
+                {
+                  "scope": "SHOT",
+                  "beat_index": null,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-2cb6093b0cad",
+                    "id": "shot-xkyx-04-composition",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": null,
+                    "text_start": null,
+                    "text_end": null,
+                    "alias": "林乔移笔开夹初态构图",
+                    "required_tags": [],
+                    "purpose": "0–2.5秒软构图：1152×2048，脸、肩包、完整双臂与空手、桌上合夹及封面完整黑笔同框。仅提供先移笔后开夹前的可达初态，不是硬首帧，不证明动作顺序或笔芯细部。",
+                    "image_reference_role": "COMPOSITION",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": null
+                },
+                {
+                  "scope": "SHOT",
+                  "beat_index": null,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-open-outline-state",
+                    "asset_version_id": "asset-version-a1233710c783",
+                    "field": null,
+                    "text_start": null,
+                    "text_end": null,
+                    "alias": "开夹后的提纲第一页状态",
+                    "required_tags": [],
+                    "purpose": "只提供本镜末段打开第一页的纸页排布、双折结构和唯一索引贴。静态道具图不提供人物接触，不把源图画右笔位直接套到反角；实际笔须留夹南侧偏东。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": null
+                },
+                {
+                  "scope": "BEAT",
+                  "beat_index": 0,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-e104055d5990",
+                    "id": "shot-xkyx-04-reference-3",
+                    "asset_version_id": "asset-version-2e42598d5807",
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 6,
+                    "alias": "蓝色资料夹",
+                    "required_tags": [],
+                    "purpose": "本镜初态合夹、黑笔横封面、单枚浅黄贴在页口侧且与夹脊相对；手空置且可达。此图不表示已打开，末态另用提纲状态参考。与构图同图去重。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": "@蓝色资料夹"
+                },
+                {
+                  "scope": "BEAT",
+                  "beat_index": 0,
+                  "time_range": {
+                    "start_seconds": 0.0,
+                    "end_seconds": 2.5
+                  },
+                  "cue": {
+                    "subject_asset_id": "asset-2df81ea5ad58",
+                    "id": "shot-xkyx-04-reference-4",
+                    "asset_version_id": "asset-version-517b1b4894ce",
+                    "field": "visual",
+                    "text_start": 7,
+                    "text_end": 13,
+                    "alias": "黑色按动笔",
+                    "required_tags": [],
+                    "purpose": "同源完整黑笔外观：黑直杆、短笔夹、按钮及短金属鼻口。只供同款身份，不指定深蓝来源背景或替代从封面移至南侧偏东桌面的动态。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  },
+                  "referenced_text": "@黑色按动笔"
+                }
+              ]
+            },
+            "reference_plan_preview_scope": "GENERATION_ONLY",
+            "reference_plan_preview_error": null,
+            "media_registration": {
+              "asset_id": "asset-2cb6093b0cad",
+              "asset_version_id": "asset-version-2e42598d5807",
+              "asset_plan_document_id": null,
+              "asset_plan_version_id": null,
+              "asset_plan_version": null,
+              "completed_item_ids": [],
+              "completed_work_item_ids": [],
+              "reference_entry_ids": [
+                "reference-entry-be49388b2be5",
+                "reference-entry-a05791f6bb01",
+                "reference-entry-1ee8c670daa2"
+              ],
+              "created_reference_entry_ids": [
+                "reference-entry-be49388b2be5",
+                "reference-entry-a05791f6bb01",
+                "reference-entry-1ee8c670daa2"
+              ],
+              "plan_changed": false,
+              "reused": false
+            }
+          },
+          "changed_ids": {
+            "changed_shot_ids": [
+              "shot-xkyx-04"
+            ],
+            "changed_scene_ids": [],
+            "created_reference_entry_ids": [
+              "reference-entry-be49388b2be5",
+              "reference-entry-a05791f6bb01",
+              "reference-entry-1ee8c670daa2"
+            ],
+            "completed_work_item_ids": []
+          }
+        }
+      },
+      "requested_at": "2026-09-12T04:44:40.337228Z",
+      "updated_at": "2026-09-12T04:44:41.095644Z"
+    }
+  ]
+}
