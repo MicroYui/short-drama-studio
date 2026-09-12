@@ -1,6 +1,6 @@
 # 保留图片编辑原始结果与本地重新合成
 
-状态：2026-09-12 已暂停《一起签》调试任务并实现 batch 12，联合回归与独立代码审查已完成，待加载运行。此时 30 个真实图片任务已成功落盘，视频任务为零。代码及 Fake Provider 验证不代表下一张真实图片已经修好，也不代表新的空项目视频前端到端已通过。
+状态：2026-09-12 batch 12 已以 `3b88316` 本地提交，联合回归与独立代码审查完成；08:24:13 在新后台 PID 63938 恢复《一起签》原调试任务。恢复前 30 个真实图片任务已成功落盘，视频任务为零。代码及 Fake Provider 验证不代表下一张真实图片已经修好，也不代表新的空项目视频前端到端已通过。
 
 ## 真实问题
 
@@ -29,3 +29,9 @@ batch 11 的 `AssetWorkbench._land_provider_output` 将 Provider bytes 写入 st
 核心验证使用现有 Fake Provider 返回真实 PNG，检查原 bytes 保留、本地不同 mask 结果、原保护区像素、Provider 调用数、重启恢复、旧数据缺原图的具体反馈，以及派生不自动改当前/批准/镜头。恢复中断的本地落盘必须从确知的原结果单次合成，不能把未合成 staging 当作完成结果，或把已羽化的结果再次混合。实际产品图片验证仍随原调试任务继续；新空项目 E2E 尚未开始。
 
 最终检查：图像编辑与派生、QA/空间观察/平面建议、Skills、Worker 上下文、ProductionManager、Studio Harness 和 no-mock 联合 **382 passed / 213.69 秒**。联合启动后最后补入的恢复选择与 EXIF 两处修复，另由最终 Workbench 36 项及实际 Tool/Service 7 项覆盖，**43 passed / 9.23 秒**；不将重叠测试相加。10 个本批 Python 文件类型检查通过，最后五个核心文件再次检查为 0 errors。OpenAPI/前端类型已生成，TypeScript 与 Vite 前端/Electron 构建通过，五份改动研究文档的本地链接及 diff-check 通过。独立审查提出的两处具体问题已修复并复核，没有以测试数代替实图质量。
+
+恢复后两份首批 Worker 实际请求 `model-ea033b142183`（08:24:20）和 `model-457fe2f4770d`（08:24:21）均使用 Astra/xhigh，实际输入分别 73,927 / 73,200 tokens，耗时 11.284 / 11.980 秒。两份均保留视频前停止点，并实际加载原结果保留、本地派生和旧任务无原图不可恢复的方法；目录中可发现 `image.derive_edit_result`，完整 Schema 尚未按需载入。原签复核 t31 候选登记和证据 t19 裁图请求均与暂停前模型输出逐值一致、成功执行一次。首张新任务 `image-task-8f0936068f31` 为不带 mask 的 REFERENCE_GENERATE，raw=null 是预期行为，不能用它证明新 masked 原图保留已实际运行。
+
+08:34:11.037，首张新 masked EDIT `image-task-33a413244a5f` 完成。原 primary 为 `asset-version-5890dc977e57`，mask 为 `asset-version-a35c45cddfad`，feather=8；新候选为 `asset-version-a826f7a3cbf2`，用于 s12 的空白纸面与手腕中间图。任务实际记录 `.provider-output/image-task-33a413244a5f.png`，文件为 1440×2560 PNG、4,548,283 bytes。只读像素核对确认原结果与最终局部合成结果不同，原遮罩中 1,851,854 个完全受保护像素在最终图中零变化。核对记录保存于忽略输出目录 `observations/first-real-preserved-edit.json`。这证明新真实 Provider 结果确实在合成前独立留存，未为核对重发 Provider；它不证明 Provider 原图比最终图更好。
+
+此时新图尚未由产品 QA 检查，也尚未调用 `image.derive_edit_result` 派生。预览能看到两张空白纸、右手裸笔、左手及唯一笔帽；准确文字与后续镜头用途仍待产品处理。不能把中间图或文件留存当作该镜头最终通过。08:36:37.168 原调试任务进入 paused，34 个图片任务、零视频任务和零 Take，准备统一加载下一轮本地采样修复。

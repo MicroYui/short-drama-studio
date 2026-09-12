@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
+import math
 from pathlib import Path
 from typing import Literal
 
@@ -26,6 +27,8 @@ class ImagePlaneLayer(DomainModel):
         description="Four visible base-region corners matching source_quad one-for-one; physical object corners are not required. Preserve corner identities, usable direction and proportions, not independent screen sorting. Only this region is changed, without whole-page extrapolation. Convex, noncrossing, same winding; no mirror.")
     blend_mode: Literal["replace", "multiply"] = Field(default="replace",
         description="replace covers existing pixels with source pixels/alpha, including their lighting. multiply adds dark ink onto an already blank lit surface; it cannot erase old text. Neither mode infers shadows, removes old paper outside the plane, or repairs foreground hands.")
+    source_white_point: int | None = Field(default=None, ge=1, le=255, strict=True,
+        description="Optional photographic-paper white point from an observed blank source area (1–255). None preserves source RGB; otherwise RGB=min(255, round(channel*255/value)), alpha unchanged. Use only when source paper gray interferes, usually with multiply on a blank base. Keeps original ink geometry, but light ink/color can weaken or clip; inspect handwriting, red edits and fine lines. No automatic value.")
 
     @model_validator(mode="after")
     def coherent_corners(self) -> ImagePlaneLayer:
@@ -159,6 +162,56 @@ def _read_upright(path: Path) -> Image.Image:
             return upright.convert("RGBA")
 
 
+_MAX_SUPERSAMPLED_PIXELS = 8_000_000
+
+
+def _plane_sampling_scale(
+    coefficients: tuple[float, ...], layer: ImagePlaneLayer,
+    base_size: tuple[int, int], roi_size: tuple[int, int],
+) -> int:
+    """Choose bounded area sampling only when the inverse map reduces detail."""
+    a, b, c, d, e, f, g, h = coefficients
+    corners = [(p.x * (base_size[0] - 1), p.y * (base_size[1] - 1)) for p in layer.target_quad]
+    samples = [*corners,
+        *[((x + xx) / 2, (y + yy) / 2) for (x, y), (xx, yy) in zip(corners, [*corners[1:], corners[0]])],
+        (sum(x for x, _y in corners) / 4, sum(y for _x, y in corners) / 4)]
+    maximum_stretch = 1.0
+    for x, y in samples:
+        denominator = g * x + h * y + 1
+        if abs(denominator) < 1e-12:
+            maximum_stretch = 4.0
+            break
+        u, v = a * x + b * y + c, d * x + e * y + f
+        square = denominator * denominator
+        j00, j01 = (a * denominator - g * u) / square, (b * denominator - h * u) / square
+        j10, j11 = (d * denominator - g * v) / square, (e * denominator - h * v) / square
+        aa, ab, bb = j00 * j00 + j10 * j10, j00 * j01 + j10 * j11, j01 * j01 + j11 * j11
+        stretch = math.sqrt(max(0.0, (aa + bb + math.hypot(aa - bb, 2 * ab)) / 2))
+        maximum_stretch = max(maximum_stretch, stretch)
+    if maximum_stretch <= 1 + 1e-7:
+        return 1  # Preserve the existing sharp 1:1/enlargement interpolation.
+    desired = max(2, math.ceil(min(4.0, maximum_stretch)))
+    allocation_limit = math.isqrt(_MAX_SUPERSAMPLED_PIXELS // (roi_size[0] * roi_size[1]))
+    # Large previously valid planes keep their old sampling if even 2x cannot fit.
+    return max(1, min(desired, allocation_limit))
+
+
+def _plane_sampling_box(layer: ImagePlaneLayer, base_size: tuple[int, int]) -> tuple[int, int, int, int]:
+    points = _pixel_points(layer.target_quad, base_size)
+    return (max(0, min(x for x, _y in points) - 3),
+            max(0, min(y for _x, y in points) - 3),
+            min(base_size[0], max(x for x, _y in points) + 4),
+            min(base_size[1], max(y for _x, y in points) + 4))
+
+
+def _roi_coefficients(coefficients: tuple[float, ...], left: int, top: int, scale: int) -> tuple[float, ...]:
+    a, b, c, d, e, f, g, h = coefficients
+    divisor = g * left + h * top + 1
+    return (a / scale / divisor, b / scale / divisor, (a * left + b * top + c) / divisor,
+            d / scale / divisor, e / scale / divisor, (d * left + e * top + f) / divisor,
+            g / scale / divisor, h / scale / divisor)
+
+
 def render_plane_composite(
     base_path: Path, source_paths: dict[str, Path], request: AssetImagePlaneCompositeRequest, *, output_path: Path,
 ) -> tuple[int, int]:
@@ -189,26 +242,53 @@ def render_plane_composite(
                 source_alpha = temporary.enter_context(source.getchannel("A"))
                 clipped_alpha = temporary.enter_context(ImageChops.multiply(source_alpha, source_mask))
                 clipped.putalpha(clipped_alpha)
-                warped = temporary.enter_context(clipped.transform(base.size, Image.Transform.PERSPECTIVE,
-                    _coefficients(layer, base.size, source.size), Image.Resampling.BICUBIC))
+                if layer.source_white_point not in (None, 255):
+                    lut = [min(255, round(channel * 255 / layer.source_white_point)) for channel in range(256)]
+                    # Transform existing RGB only; retain clipped alpha and exact ink positions.
+                    clipped = temporary.enter_context(clipped.point([*lut, *lut, *lut, *range(256)]))
+                coefficients = _coefficients(layer, base.size, source.size)
+                box = _plane_sampling_box(layer, base.size)
+                if abs(coefficients[6] * box[0] + coefficients[7] * box[1] + 1) < 1e-12:
+                    # A valid plane may have its homography horizon just outside its quad.
+                    # Preserve the original origin instead of rejecting that input.
+                    box = (0, 0, *base.size)
+                roi_size = (box[2] - box[0], box[3] - box[1])
+                scale = _plane_sampling_scale(coefficients, layer, base.size, roi_size)
+                if scale == 1:
+                    # Keep the original 1x map, including its floating-point
+                    # origin: ROI normalization can round a few colors by 1.
+                    box = (0, 0, *base.size)
+                    roi_size = base.size
+                    sampling_coefficients = coefficients
+                else:
+                    sampling_coefficients = _roi_coefficients(coefficients, box[0], box[1], scale)
+                warped = temporary.enter_context(clipped.transform(
+                    (roi_size[0] * scale, roi_size[1] * scale), Image.Transform.PERSPECTIVE,
+                    sampling_coefficients,
+                    Image.Resampling.BILINEAR if scale > 1 else Image.Resampling.BICUBIC))
+                if scale > 1:
+                    # Positive-weight area averaging avoids cubic alpha-edge overshoot;
+                    # the supersampled destination area has a bounded pixel allocation.
+                    warped = temporary.enter_context(warped.resize(roi_size, Image.Resampling.BOX))
                 plane_mask = temporary.enter_context(Image.new("L", base.size))
                 ImageDraw.Draw(plane_mask).polygon(_pixel_points(layer.target_quad, base.size), fill=255)
                 permitted = temporary.enter_context(ImageChops.subtract(plane_mask, protected))
+                local_permitted = temporary.enter_context(permitted.crop(box))
                 warped_alpha = temporary.enter_context(warped.getchannel("A"))
-                alpha = temporary.enter_context(ImageChops.multiply(warped_alpha, permitted))
+                alpha = temporary.enter_context(ImageChops.multiply(warped_alpha, local_permitted))
+                current = temporary.enter_context(result.crop(box))
                 if layer.blend_mode == "multiply":
                     # White source pixels are neutral; target lighting is preserved, existing ink is not removed.
-                    result_rgb = temporary.enter_context(result.convert("RGB"))
+                    result_rgb = temporary.enter_context(current.convert("RGB"))
                     warped_rgb = temporary.enter_context(warped.convert("RGB"))
                     product = temporary.enter_context(ImageChops.multiply(result_rgb, warped_rgb))
                     multiplied = temporary.enter_context(product.convert("RGBA"))
-                    result_alpha = temporary.enter_context(result.getchannel("A"))
+                    result_alpha = temporary.enter_context(current.getchannel("A"))
                     multiplied.putalpha(result_alpha)
-                    updated = images.enter_context(Image.composite(multiplied, result, alpha))
+                    updated = temporary.enter_context(Image.composite(multiplied, current, alpha))
                 else:
                     warped.putalpha(alpha)
-                    updated = images.enter_context(Image.alpha_composite(result, warped))
-                result.close()
-                result = updated
+                    updated = temporary.enter_context(Image.alpha_composite(current, warped))
+                result.paste(updated, box)
         result.save(output_path, format="PNG")
         return base.size

@@ -11,3 +11,5 @@
 各方法 manifest 的 `role_source_sections` / `stage_role_source_sections` 声明进入请求的章节；`upstream_sources` 记录出处和作者。参考资料不会作为第二份方法目录展示，也不会整包注入模型。
 
 未使用的英文 SKILL 副本、模型选择/固定回退/旧镜头表资料已删除。保留的原文没有改写成项目原创内容；具体来源和再分发边界见项目根目录 [NOTICES.md](../../../../NOTICES.md)。
+
+本地图片制作方法还参考公开技术说明：[Adobe Levels/Curves 白点](https://helpx.adobe.com/photoshop/using/adjust-color-tone-levels-curves.html)、[Pillow 滤镜与缩放](https://pillow.readthedocs.io/en/stable/handbook/concepts.html#filters)。现有 Builder/Verifier 中可选摄影纸色处理为本地整理，局部透视采样为本地实现；没有复制产品私有代码或整篇文档。实际缺陷、采用范围与验证见[细线采样和摄影纸色研究](../../../../docs/research/2026-09-12-generation-quality/47-plane-resampling-and-paper-tone.md)，来源说明不另行注入每次模型请求。
