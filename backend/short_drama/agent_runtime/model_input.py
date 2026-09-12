@@ -10,7 +10,8 @@ from pydantic import JsonValue
 
 from short_drama.agent_runtime.context_markers import context_marker, context_read_contract
 from short_drama.agent_runtime.store import AgentRuntimeStore
-from short_drama.agent_runtime.token_budget import ContextBudget, count_text_tokens
+from short_drama.agent_runtime.token_budget import ContextBudget, count_text_tokens, reserved_visual_tokens
+from short_drama.agent_runtime.visual_input import PreparedVisualInput
 from short_drama.studio_trace import record_trace
 from short_drama.agent_runtime.execution_control import execution_boundary
 from short_drama.agent_runtime.input_references import project_visible_artifact_refs
@@ -28,16 +29,23 @@ def json_text(value: JsonValue) -> str:
 def pointer_value(value: JsonValue, pointer: str) -> JsonValue:
     if pointer and not pointer.startswith("/"):
         raise ValueError("A JSON pointer must be empty or start with /")
+    traversed = ""
     for token in pointer.split("/")[1:] if pointer else []:
         key = token.replace("~1", "/").replace("~0", "~")
         if isinstance(value, dict):
             if key not in value:
-                raise ValueError(f"Context pointer does not exist: {pointer}")
+                raise ValueError(
+                    f"Context pointer does not exist: {pointer}. Readable parent pointer={json.dumps(traversed)}; "
+                    f"available keys={json.dumps(list(value), ensure_ascii=False)}. "
+                    "Use the saved locator's actual root; Tool envelopes may be under /result."
+                )
             value = value[key]
         elif isinstance(value, list) and key.isdigit() and int(key) < len(value):
             value = value[int(key)]
         else:
-            raise ValueError(f"Context pointer does not exist: {pointer}")
+            hint = f"list length={len(value)}" if isinstance(value, list) else "value is not a container"
+            raise ValueError(f"Context pointer does not exist: {pointer}. Readable parent pointer={json.dumps(traversed)}; {hint}.")
+        traversed += "/" + token
     return value
 
 
@@ -97,6 +105,8 @@ class PreparedModelInput:
     input_tokens: int
     original_input_tokens: int
     offloaded_blocks: int
+    image_urls: tuple[str, ...] = ()
+    reserved_visual_tokens: int = 0
 
 
 class ModelInputCompiler:
@@ -106,8 +116,14 @@ class ModelInputCompiler:
 
     def prepare(self, *, run_id: str, project_id: str, instructions: str,
                 payload: dict[str, JsonValue], max_output_tokens: int,
-                force_compact: bool = False) -> PreparedModelInput:
+                force_compact: bool = False,
+                visual_input: PreparedVisualInput | None = None) -> PreparedModelInput:
         prepared = deepcopy(payload)
+        image_urls = visual_input.image_urls if visual_input is not None else ()
+        visual_tokens = reserved_visual_tokens(len(image_urls))
+        if visual_input is not None:
+            # This small map stays beside the ordered pixels, outside offload candidates.
+            prepared["image_observations"] = deepcopy(visual_input.observations)
         read_contract = context_read_contract(project_id=project_id, run_id=run_id)
         working = prepared.get("working_set")
         if isinstance(working, dict) and working.get("context_read") == read_contract:
@@ -118,9 +134,9 @@ class ModelInputCompiler:
         instruction_tokens = count_text_tokens(instructions)
         original_text = json_text(prepared)
         original_tokens = instruction_tokens + count_text_tokens(original_text)
-        hard_limit = self.budget.input_limit(max_output_tokens)
-        threshold = min(self.budget.compact_at_tokens, hard_limit)
-        target = min(self.budget.target_tokens, hard_limit)
+        hard_limit = self.budget.input_limit(max_output_tokens, visual_tokens=visual_tokens)
+        threshold = min(max(0, self.budget.compact_at_tokens - visual_tokens), hard_limit)
+        target = min(max(0, self.budget.target_tokens - visual_tokens), hard_limit)
         # A provider can report a smaller real limit than its compatible model
         # alias implies. Rebuild from the original, never resend the same overflow.
         if force_compact:
@@ -171,6 +187,9 @@ class ModelInputCompiler:
             "input_limit_tokens": hard_limit, "reserved_output_tokens": max_output_tokens,
             "envelope_tokens": self.budget.envelope_tokens,
             "estimated_input_tokens": current_tokens, "original_input_tokens": original_tokens,
+            "estimated_text_tokens": current_tokens, "reserved_visual_tokens": visual_tokens,
+            "estimated_input_with_visual_allowance": current_tokens + visual_tokens,
+            "image_count": len(image_urls), "visual_token_measurement": "ALLOWANCE_NOT_PROVIDER_USAGE",
             "estimator": "o200k_base", "instruction_characters": len(instructions),
             "input_characters": len(text), "original_input_characters": len(original_text),
             "offloaded_blocks": count, "snapshot_id": snapshot_id,
@@ -182,25 +201,33 @@ class ModelInputCompiler:
                 f"上下文预算中预留输出后的 {hard_limit:,} tokens。可恢复内容已保存；"
                 "需要缩小当前 WorkOrder 或按字段读取，未发送超限请求。"
             )
-        return PreparedModelInput(text, current_tokens, original_tokens, count)
+        return PreparedModelInput(text, current_tokens, original_tokens, count, image_urls, visual_tokens)
 
 
 def generate_context_managed_text(client: LanguageProviderClient, compiler: ModelInputCompiler, *,
                                   run_id: str, project_id: str, instructions: str,
-                                  payload: dict[str, JsonValue], max_output_tokens: int) -> str:
+                                  payload: dict[str, JsonValue], max_output_tokens: int,
+                                  visual_input: PreparedVisualInput | None = None) -> str:
     prepared = compiler.prepare(run_id=run_id, project_id=project_id, instructions=instructions,
-                                payload=payload, max_output_tokens=max_output_tokens)
+                                payload=payload, max_output_tokens=max_output_tokens, visual_input=visual_input)
+
+    def generate(value: PreparedModelInput) -> str:
+        if value.image_urls:
+            return client.generate_text(instructions=instructions, input_text=value.input_text,
+                image_urls=list(value.image_urls), max_output_tokens=max_output_tokens)
+        return client.generate_text(instructions=instructions, input_text=value.input_text,
+            max_output_tokens=max_output_tokens)
+
     execution_boundary()
     try:
-        return client.generate_text(instructions=instructions, input_text=prepared.input_text,
-                                    max_output_tokens=max_output_tokens)
+        return generate(prepared)
     except LanguageProviderContextWindowError:
         reduced = compiler.prepare(run_id=run_id, project_id=project_id, instructions=instructions,
-                                   payload=payload, max_output_tokens=max_output_tokens, force_compact=True)
+                                   payload=payload, max_output_tokens=max_output_tokens, force_compact=True,
+                                   visual_input=visual_input)
         if reduced.input_tokens >= prepared.input_tokens:
             raise ContextBudgetExceeded("供应商拒绝了上下文，必要输入无法进一步整理；未原样重发。") from None
         record_trace("context.provider_overflow", {"before_tokens": prepared.input_tokens,
                      "after_tokens": reduced.input_tokens, "run_id": run_id})
         execution_boundary()
-        return client.generate_text(instructions=instructions, input_text=reduced.input_text,
-                                    max_output_tokens=max_output_tokens)
+        return generate(reduced)

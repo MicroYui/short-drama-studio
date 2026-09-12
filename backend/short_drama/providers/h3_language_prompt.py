@@ -9,6 +9,8 @@ from functools import lru_cache
 from typing import cast
 
 from short_drama.h3_models import H3MediaInput, H3VideoRequest
+from short_drama.h3_source_projection import cue_subjects_by_version, terminal_source
+from short_drama.providers.h3_multishot_example import MULTISHOT_EXAMPLE
 from short_drama.models import AssetKind, ProjectDocument, ShotPlan, VideoGenerationRoute
 from short_drama.production_contracts import GenerationUnit, ProductionSpecContent
 from short_drama.production_profiles import (
@@ -334,6 +336,7 @@ def _explicit_shot_asset_ids(
         (item for item in document.reference_plan if item.shot_id == shot.id),
         None,
     )
+    cue_subjects = cue_subjects_by_version(shot)
     if plan is not None:
         for requirement in plan.requirements:
             add(requirement.subject_asset_id)
@@ -343,13 +346,18 @@ def _explicit_shot_asset_ids(
             add(interaction.actor_asset_id)
             add(interaction.target_asset_id)
         for binding in plan.bindings:
-            add(version_to_asset_id.get(binding.target_id))
+            subjects = cue_subjects.get(binding.target_id or "")
+            if subjects:
+                for subject in subjects:
+                    add(subject)
+            else:
+                add(version_to_asset_id.get(binding.target_id))
     for beat in [shot, *shot.timeline_beats]:
         for cue in beat.references:
             add(cue.subject_asset_id)
     for media in media_inputs:
         if media.asset_version_id is not None:
-            add(version_to_asset_id.get(media.asset_version_id))
+            add(media.subject_asset_id or version_to_asset_id.get(media.asset_version_id))
     return selected
 
 
@@ -495,7 +503,7 @@ def _previous_shot_planned_terminal_state(
     )
     if previous is None:
         return None
-    return {
+    return dict(terminal_source({
         "evidence_kind": "PLANNED_ONLY",
         "shot_id": previous.id,
         "sequence": previous.sequence,
@@ -506,13 +514,14 @@ def _previous_shot_planned_terminal_state(
         "character_positions": previous.continuity.character_positions,
         "eyeline": previous.continuity.eyeline,
         "transition_out": previous.transition_out,
-    }
+    }))
 
 
 def _compiler_instructions(
     document: ProjectDocument,
     *,
     method_skill_ids: Sequence[str],
+    generation_unit: bool = False,
 ) -> str:
     skill = production_skill(document.project.production_profile)
     skill_prompt = compile_production_prompt(
@@ -540,21 +549,11 @@ def _compiler_instructions(
         "\n最终请求的全部字段、标题、空白、引用声明和对白合计不超过7000字符。"
         "完整首稿以约6000字符为表达目标，为计数误差和格式补全保留余量；"
         "这是软目标，不是删事实门槛，较短内容不补写凑数，7000才是最终硬上限。"
-        "先为主体映射、选图例外和公共约束留出空间，再用剩余字符写逐镜正文；"
-        "各字段可调剂，不设固定逐字段配额，不靠截断或删独有事实达标。"
-        "共用空间、摄影、物件不变状态和声音只集中说明一次，不在每镜重新叙述。"
-        "detailed_description 的每个 beat 用紧凑的‘绝对时段：主体动作→结果；对白/声音’表达，"
-        "保留独有动作、停顿、首末状态、同时发生关系和逐字对白，不另写解释性连接段。"
-        "本镜continuity已声明的画外视线、持物或接触状态也用短句保留，"
-        "不要因人物未入画而省略其连续性，也不要因此把画外主体移进画面。"
-        "官方字段是必要格式，不是要删除的解释包装：保留全部字段标题，压缩的是正文。"
-        "英文叙述用直接、紧凑的句法，不用电影化修辞扩写已给事实。"
-        "Ref2VA官方指南的detailed_description通常约350–500英文词；这只是篇幅参照，"
-        "短内容无需达到下限，台词密集时优先完整发声时间线。不要把每个短beat扩成解释性段落。"
-        "紧凑摄影说明示例（A/B仅为占位，不添加到本片）："
-        "‘Fixed medium two-shot, eye-level/slightly down from the table end; A left, B right, facing across. "
-        "Faces upper frame, passing area below; no wide-room pullback or fine-text reading. Pen rests at A's right.’"
-        "这一类短分句仍逐项交代机位、构图、主体关系和不变物件；按本片事实编写，不照抄示例。"
+        "六段各有职责：身份/别名映射一次；summary一句交代变化；retention只写选图用途例外；"
+        "detailed_description集中公共场景后按镜头绝对时窗写独有动作、首末状态、停顿、同时关系和逐字对白；"
+        "soundscape只写共享声音；music按实际有无填写。不要跨段重写同一动作或QA/制作流程说明。"
+        "画外视线、持物和接触状态仍是连续性事实，简明保留，不因此把画外主体加入画面。"
+        "不设逐字段配额，不截断或省略独有事件，不把每个短beat扩成解释段落。"
         "subject_definitions 保留短身份名、来源支持的主要可见区别、全部语义别名及对应图片；summary 一句；"
         "COMPOSITION/LAYOUT_GUIDE 的 prompt_label 为 Picture：它提供本镜构图、站位和当前物件状态，"
         "不是另一个 Subject，也不承诺硬首尾帧。明确它适用的镜头、时间和哪些人可见；"
@@ -577,6 +576,9 @@ def _compiler_instructions(
         "actual_previous_media_boundary 才是调用方提供的当前采用媒体边界；"
         "其中未观察的事实仍为未知，不得由计划、静帧或摘要冒充已发生动作或声音。"
         "仅承接当前镜头确实依赖的状态，不为补观察阻挡无依赖的编译。"
+        + ("\n以下是完整四镜六段组织示例，展示同一事实只放在承担其职责的字段。"
+           "示例人物、对白、图片与时间只属于示例；必须用当前locked facts替换，不追加到本片。\n"
+           + MULTISHOT_EXAMPLE if generation_unit else "")
     )
 
 
@@ -825,7 +827,7 @@ def build_generation_unit_language_prompt_input(
     if revision_instructions is not None:
         payload["compiler_feedback"] = revision_instructions
     return (
-        _compiler_instructions(document, method_skill_ids=method_skill_ids),
+        _compiler_instructions(document, method_skill_ids=method_skill_ids, generation_unit=True),
         json.dumps(payload, ensure_ascii=False, indent=2),
     )
 

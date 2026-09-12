@@ -14,6 +14,16 @@ from typing import Protocol, cast
 from tokenizers import Tokenizer
 
 
+# Conservative request headroom, not a model-specific image-token formula.
+# Actual multimodal usage is supplied by the provider. Images are not tokenized
+# as base64 text. This leaves ordinary 100k text requests unchanged.
+VISUAL_TOKEN_ALLOWANCE_PER_IMAGE = 8192
+
+
+def reserved_visual_tokens(image_count: int) -> int:
+    return max(0, image_count) * VISUAL_TOKEN_ALLOWANCE_PER_IMAGE
+
+
 class _EncodingLike(Protocol):
     @property
     def ids(self) -> list[int]: ...
@@ -40,8 +50,8 @@ class ContextBudget:
         if self.envelope_tokens < 0:
             raise ValueError("envelope_tokens cannot be negative")
 
-    def input_limit(self, max_output_tokens: int) -> int:
-        return max(0, self.window_tokens - max_output_tokens - self.envelope_tokens)
+    def input_limit(self, max_output_tokens: int, *, visual_tokens: int = 0) -> int:
+        return max(0, self.window_tokens - max_output_tokens - self.envelope_tokens - max(0, visual_tokens))
 
 
 @lru_cache(maxsize=1)

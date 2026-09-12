@@ -1812,6 +1812,17 @@ class ShortDramaRepository:
         with self._lock, self._connection() as connection:
             self._write_h3_route_plan(connection, plan)
 
+    def save_h3_route_source_bundle(self, plan: H3ProductionRoutePlan, operation: H3GroupOperation) -> None:
+        """Persist an explicitly reused prompt with its new actual source atomically."""
+        if plan.project_id != operation.project_id or plan.source_operation_id != operation.id or operation.state.route_plan_id != plan.id:
+            raise ValueError("H3 saved-route source ownership is inconsistent")
+        with self._lock, self._connection() as connection:
+            self._write_h3_route_plan(connection, plan)
+            connection.execute(
+                "INSERT INTO h3_group_operations(id, project_id, updated_at, record_json) VALUES(?, ?, ?, ?)",
+                (operation.id, operation.project_id, operation.updated_at, operation.model_dump_json()),
+            )
+
     @staticmethod
     def _write_h3_route_plan(
         connection: sqlite3.Connection,

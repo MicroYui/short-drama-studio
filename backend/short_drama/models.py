@@ -1632,12 +1632,12 @@ class VoiceReferenceBinding(DomainModel):
 
 
 class ContinuityState(DomainModel):
-    character_positions: str
-    eyeline: str
-    prop_state_in: str
-    prop_state_out: str
-    action_in: str
-    action_out: str
+    character_positions: str = Field(description="Current authored spatial continuity; keep consistent when editing blocking or the outgoing boundary.")
+    eyeline: str = Field(description="Current authored eyeline continuity, including the outgoing gaze used by the next shot.")
+    prop_state_in: str = Field(description="Actual planned prop state at this shot's start.")
+    prop_state_out: str = Field(description="Authoritative planned prop state at this shot's end, used for the next shot/group. Update it when that end state changes; empty retains visual-prose fallback.")
+    action_in: str = Field(description="Actual planned action state at this shot's start.")
+    action_out: str = Field(description="Authoritative planned action state at this shot's end, used for the next shot/group. Mid-shot prose does not replace a populated outgoing state; update it when the ending changes.")
 
 
 class ShotReferenceCue(DomainModel):

@@ -6,11 +6,10 @@ import base64
 import json
 from dataclasses import dataclass
 from enum import StrEnum
-from io import BytesIO
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from short_drama.h3_models import H3RouteAssetPreparation
@@ -23,6 +22,10 @@ from short_drama.image_plane_composite import (
     AssetImagePlaneCompositeRequest, validate_plane_composite_geometry,
 )
 from short_drama.image_regions import read_image_region, region_box
+from short_drama.image_observation import (
+    ANALYSIS_IMAGE_MAX_SOURCE_PIXELS as _ANALYSIS_IMAGE_MAX_SOURCE_PIXELS,
+    asset_image_url as _asset_image_url, encode_review_image as _encode_review_image,
+)
 from short_drama.models import (
     ApprovalStatus,
     Asset,
@@ -138,6 +141,18 @@ class AssetInspectionContextError(ValueError):
 ImplementationPreference = Annotated[str, Field(min_length=1, max_length=500)]
 
 
+class AssetInspectionShotSource(DomainModel):
+    """Saved shot content actually observed, including a partial draft version."""
+
+    project_id: str
+    artifact_type: Literal["shot", "storyboard_draft"]
+    artifact_id: str
+    version: int = Field(ge=1)
+    version_id: str | None = None
+    shot_id: str
+    shot_revision: int = Field(ge=1)
+
+
 class SemanticImageReview(DomainModel):
     recommended: bool
     score: float = Field(ge=0.0, le=5.0)
@@ -147,6 +162,7 @@ class SemanticImageReview(DomainModel):
     narrative_context: AssetInspectionNarrativeEvidence | None = None
     implementation_preferences: list[ImplementationPreference] = Field(default_factory=list[ImplementationPreference], max_length=8)
     shot_revision: int | None = Field(default=None, ge=1)
+    shot_source: AssetInspectionShotSource | None = None
     candidate_output_layout: AssetLayoutProfile | None = None
     region_evidence: list[AssetInspectionRegionEvidence] = Field(
         default_factory=list[AssetInspectionRegionEvidence], max_length=6,
@@ -227,7 +243,7 @@ def _asset_review_output_schema(
     """
     schema = SemanticAssetReview.model_json_schema()
     properties = schema["properties"]
-    runtime_fields = ("review_focus", "narrative_context", "implementation_preferences", "shot_revision",
+    runtime_fields = ("review_focus", "narrative_context", "implementation_preferences", "shot_revision", "shot_source",
                       "candidate_output_layout", "region_evidence", "evidence_references")
     for field in runtime_fields:
         properties.pop(field)
@@ -970,6 +986,7 @@ def inspect_asset_image(
     version: AssetVersion,
     client: LanguageProviderClient,
     shot: ShotPlan | None = None,
+    shot_source: AssetInspectionShotSource | None = None,
     preparation: H3RouteAssetPreparation | None = None,
     canonical_references: list[tuple[Asset, AssetVersion]] | None = None,
     inspection_references: list[AssetInspectionReference] | None = None,
@@ -977,6 +994,10 @@ def inspect_asset_image(
     request: AssetVersionInspectionRequest | None = None,
 ) -> SemanticAssetReview:
     request = request or AssetVersionInspectionRequest()
+    if shot is not None and shot_source is None:
+        shot_source = AssetInspectionShotSource(project_id=document.project.id,
+            artifact_type="shot", artifact_id=shot.id, version=shot.revision,
+            shot_id=shot.id, shot_revision=shot.revision)
     compared_version = resolve_inspection_provider_output(asset, version, generation_task) if request.compare_provider_output else None
     narrative_context = resolve_asset_inspection_narrative_context(document, request.narrative_context)
     skill_prompt = compile_production_prompt(
@@ -1305,6 +1326,7 @@ def inspect_asset_image(
             if item.id == document.project.current_bible_version_id
         ),
         "shot": shot.model_dump(mode="json") if shot is not None else None,
+        "shot_source": shot_source.model_dump(mode="json") if shot_source is not None else None,
         "keyframe_preparation": (
             preparation.model_dump(mode="json") if preparation is not None else None
         ),
@@ -1417,7 +1439,9 @@ def inspect_asset_image(
             asset_version_id=generation_task.request.mask_version_id))
     runtime_fields: dict[str, Any] = {
         "review_focus": request.review_focus, "candidate_output_layout": output_layout,
-        "narrative_context": narrative_context, "shot_revision": shot.revision if shot is not None else None,
+        "narrative_context": narrative_context,
+        "shot_revision": shot.revision if shot is not None and shot_source is not None and shot_source.artifact_type == "shot" else None,
+        "shot_source": shot_source,
         "implementation_preferences": list(request.implementation_preferences),
         "region_evidence": detail_evidence,
         "evidence_references": shared_evidence,
@@ -1539,81 +1563,6 @@ def _inspection_reference_images(
         seen.add(reference.version.id)
     return result
 
-
-def _asset_image_url(version: AssetVersion) -> str:
-    if version.external_url is not None:
-        return version.external_url
-    if version.local_path is None:
-        raise ValueError(f"AssetVersion {version.id} has no usable image")
-    path = Path(version.local_path).expanduser().resolve()
-    if not path.is_file():
-        raise ValueError(f"AssetVersion image is missing: {path}")
-    encoded = base64.b64encode(_analysis_thumbnail_bytes(path)).decode("ascii")
-    return f"data:image/jpeg;base64,{encoded}"
-
-
-_ANALYSIS_IMAGE_MAX_EDGE = 2048
-_ANALYSIS_IMAGE_MAX_BYTES = 3 * 1024 * 1024
-_ANALYSIS_IMAGE_MAX_SOURCE_PIXELS = 50_000_000
-
-
-def _analysis_thumbnail_bytes(path: Path) -> bytes:
-    """Build an EXIF-correct, bounded in-memory review image without changing source."""
-
-    try:
-        with Image.open(path) as opened:
-            if opened.width * opened.height > _ANALYSIS_IMAGE_MAX_SOURCE_PIXELS:
-                raise ValueError(
-                    "AssetVersion image is too large for in-process semantic review; "
-                    "create a bounded derivative while preserving the original source"
-                )
-            # JPEG decoders can downsample during decode. Other formats still remain
-            # untouched on disk and are reduced immediately after decoding.
-            opened.draft("RGB", (_ANALYSIS_IMAGE_MAX_EDGE, _ANALYSIS_IMAGE_MAX_EDGE))
-            image = ImageOps.exif_transpose(opened)
-            return _encode_review_image(image)
-    except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
-        raise ValueError(f"AssetVersion image cannot be decoded: {path}") from exc
-
-
-def _encode_review_image(source: Image.Image) -> bytes:
-    image = source.copy()
-    image.thumbnail(
-        (_ANALYSIS_IMAGE_MAX_EDGE, _ANALYSIS_IMAGE_MAX_EDGE),
-        Image.Resampling.LANCZOS, reducing_gap=3.0,
-    )
-    if image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info):
-        rgba = image.convert("RGBA")
-        # Mid-grey keeps both white and black text visible during asset inspection.
-        flattened = Image.new("RGB", rgba.size, "#808080")
-        flattened.paste(rgba, mask=rgba.getchannel("A"))
-        image = flattened
-    elif image.mode != "RGB":
-        image = image.convert("RGB")
-
-    quality = 90
-    while True:
-        buffer = BytesIO()
-        image.save(
-            buffer,
-            format="JPEG",
-            quality=quality,
-            optimize=True,
-            progressive=True,
-        )
-        output = buffer.getvalue()
-        if len(output) <= _ANALYSIS_IMAGE_MAX_BYTES:
-            return output
-        if quality > 72:
-            quality -= 6
-            continue
-        next_size = (
-            max(1, int(image.width * 0.85)),
-            max(1, int(image.height * 0.85)),
-        )
-        if next_size == image.size:
-            raise ValueError("AssetVersion review thumbnail cannot be bounded")
-        image = image.resize(next_size, Image.Resampling.LANCZOS)
 
 
 def _strip_json_fence(value: str) -> str:

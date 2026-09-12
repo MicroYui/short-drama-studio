@@ -295,7 +295,8 @@ def test_prepare_tracks_canonical_local_files_before_cache_and_compilation(
     read = service.tool_registry.invoke("route.get_h3_plan", {"project_id": document.project.id, "plan_id": prepared.route_plan_id})
     assert read.status == ToolCallStatus.SUCCEEDED and read.output is not None
     plan = service.get_h3_production_route_plan(document.project.id, prepared.route_plan_id).plan
-    assert read.output == {"plan": plan.model_dump(mode="json")}
+    assert read.output["plan"] == plan.model_dump(mode="json")
+    assert read.output["source_checks"][0]["status"] == "CURRENT"
     assert plan.decisions[0].media_inputs == media and plan.decisions[0].prompt == language.output_text
     assert plan.decisions[0].resolution == "2K" and plan.decisions[0].aspect_ratio == "9:16"
     payload = json.loads(language.calls[0][1])

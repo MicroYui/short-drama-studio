@@ -15,7 +15,7 @@ import shutil
 import threading
 from copy import deepcopy
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 from uuid import uuid4
 
 from PIL import Image, UnidentifiedImageError
@@ -33,6 +33,7 @@ from short_drama.asset_inspection import (
     AssetInspectionContextError,
     AssetInspectionReference,
     AssetInspectionReferenceSource,
+    AssetInspectionShotSource,
     AssetVersionInspectionRequest,
     SemanticAssetReview,
     SemanticSourceImageAnalysis,
@@ -95,6 +96,7 @@ from short_drama.h3_models import (
     H3ProductionRoutePlanListResponse,
     H3ProductionRoutePlanRequest,
     H3ProductionRoutePlanResponse,
+    H3RouteSourceCheck,
     H3MediaInput,
     H3MediaKind,
     H3MediaRole,
@@ -171,6 +173,7 @@ from short_drama.image_models import (
 from short_drama.language_models import (
     H3GenerationUnitContextRequest,
     H3GenerationUnitContextResponse,
+    H3CurrentSourceDocument,
     LanguagePromptCompileRequest,
     LanguagePromptCompileResponse,
     LanguageProviderConfigResponse,
@@ -11068,8 +11071,55 @@ class ShortDramaService:
         self,
         project_id: str,
         request: H3GenerationUnitContextRequest,
+        *, require_current_plan: bool = False,
     ) -> H3GenerationUnitContextResponse:
-        document, _plan, unit, shots, spec = self._h3_generation_unit_sources(project_id, request)
+        from short_drama.generation_plan_state import derive_current_generation_plan
+
+        # Public READ observes current facts. Preparation and source verification
+        # explicitly retain the strict saved-plan contract.
+        with self._lock:
+            document = self._require_project_document(project_id)
+            requested_document = self._managed_project_document(
+                document, request.generation_plan_document_id, GENERATION_PLAN_DOCUMENT_KIND)
+            if requested_document.id != document.generation_plan_document_id:
+                raise WorkflowConflictError("Requested GenerationPlan is not this project's plan")
+            requested_version = self._production_document_version(requested_document, request.generation_plan_version_id)
+            requested_plan = self._parse_generation_plan(requested_version)
+            if requested_plan.project_id != project_id:
+                raise WorkflowConflictError("Requested GenerationPlan belongs to another project")
+            requested_unit = next((u for u in requested_plan.units if u.id == request.generation_unit_id), None)
+            if requested_unit is None:
+                raise ArtifactNotFoundError(request.generation_unit_id)
+            try:
+                current_plan, board, spec = derive_current_generation_plan(document)
+            except ValueError as exc:
+                raise WorkflowConflictError(str(exc)) from exc
+            unit = next((u for u in current_plan.units if u.id == request.generation_unit_id), None)
+            if unit is None:
+                raise WorkflowConflictError(f"Generation unit {request.generation_unit_id} no longer exists in the current Storyboard")
+            changes: list[str] = []
+            try:
+                validate_generation_units_current(document, requested_plan, [unit.id])
+            except ValueError as exc:
+                if require_current_plan:
+                    raise WorkflowConflictError(str(exc)) from exc
+                changes.append(str(exc))
+            for field in ("script_version_id", "bible_version_id", "storyboard_document_id", "storyboard_version_id",
+                          "production_spec_document_id", "production_spec_version_id"):
+                if getattr(requested_plan, field) != getattr(current_plan, field):
+                    changes.append(f"/{field}: {getattr(requested_plan, field)} -> {getattr(current_plan, field)}")
+            for field in type(unit).model_fields:
+                if getattr(requested_unit, field) != getattr(unit, field):
+                    changes.append(f"/generation_unit/{field}")
+            # Strict callers keep the exact requested (still-current) unit.
+            if require_current_plan:
+                unit = requested_unit
+            shots = [self._require_shot_in_document(document, sid) for sid in unit.shot_ids]
+            current_group = next(g for g in board.clip_groups if g.id == unit.clip_group_id)
+            def identity(document_id: str, version_id: str) -> H3CurrentSourceDocument:
+                item = next(d for d in document.production_documents if d.id == document_id)
+                version = next(v for v in item.versions if v.id == version_id)
+                return H3CurrentSourceDocument(document_id=item.id, version_id=version.id, version=version.version)
         plan_document = self._managed_project_document(
             document, request.generation_plan_document_id, GENERATION_PLAN_DOCUMENT_KIND,
         )
@@ -11092,6 +11142,10 @@ class ShortDramaService:
             generation_plan_version_id=version.id,
             generation_plan_version=version.version,
             generation_unit_id=unit.id,
+            source_status="CURRENT_PROJECTION" if changes else "CURRENT_PLAN",
+            source_changes=changes, current_clip_group=current_group,
+            current_storyboard=identity(current_plan.storyboard_document_id, current_plan.storyboard_version_id),
+            current_production_spec=identity(current_plan.production_spec_document_id, current_plan.production_spec_version_id),
             source_context=source, media_candidates=candidates, warnings=warnings,
         )
 
@@ -11474,11 +11528,20 @@ class ShortDramaService:
                     f"AssetVersion image is missing: {candidate_path}"
                 )
 
-        shot = (
-            self._require_shot_in_document(document, request.shot_id)
-            if request.shot_id is not None
-            else None
-        )
+        shot = None
+        shot_source = None
+        if request.shot_id is not None:
+            from short_drama.studio_storyboard import resolve_current_shot
+            resolved = resolve_current_shot(document, request.shot_id)
+            if resolved is None:
+                raise ArtifactNotFoundError(request.shot_id)
+            shot = resolved.shot
+            if resolved.draft_source is not None:
+                draft_document, draft_version = resolved.draft_source
+                shot_source = AssetInspectionShotSource(project_id=project_id,
+                    artifact_type="storyboard_draft", artifact_id=draft_document.id,
+                    version=draft_version.version, version_id=draft_version.id,
+                    shot_id=shot.id, shot_revision=shot.revision)
         inspection_references = self._resolve_asset_inspection_references(
             document,
             version,
@@ -11520,6 +11583,7 @@ class ShortDramaService:
                 version=version,
                 client=client,
                 shot=shot,
+                shot_source=shot_source,
                 inspection_references=inspection_references,
                 generation_task=generation_task,
                 request=request,
@@ -12167,6 +12231,9 @@ class ShortDramaService:
         project_id: str,
         request: H3ProductionRoutePlanRequest,
     ) -> H3ProductionRoutePlanResponse:
+        from short_drama.h3_saved_route import prepare_saved_route_reuse
+        from short_drama.h3_group_operation import operation_source_staleness_reason
+
         generation_plan: GenerationPlanContent | None = None
         selected_generation_units = None
         with self._lock:
@@ -12200,6 +12267,10 @@ class ShortDramaService:
             )
             for shot_id in target_shot_ids:
                 self._require_shot_in_document(document, shot_id)
+            reuse = prepare_saved_route_reuse(self, document, request)
+            original_source = next((d.saved_route_source for d in request.shot_directives if d.saved_route_source is not None), None)
+            if reuse is not None:
+                request = reuse.request
             shot_directives = [
                 directive.model_copy(
                     update={
@@ -12293,6 +12364,14 @@ class ShortDramaService:
                 validate_route_plan_freshness(plan, current)
             except RoutePlanningError as exc:
                 raise WorkflowConflictError(str(exc)) from exc
+            if reuse is not None:
+                original_now = self.repository.get_h3_route_plan(reuse.original.id)
+                if original_now is None or original_now.state_revision != reuse.original.state_revision:
+                    raise WorkflowConflictError("Saved route source changed before persistence; read its current state")
+                source_reason = operation_source_staleness_reason(self, reuse.operation,
+                    media_inputs=[m for decision in plan.decisions for m in decision.media_inputs])
+                if source_reason is not None:
+                    raise WorkflowConflictError(source_reason)
             if references_changed and refresh_lightweight_reference_plans(current, shot_ids=target_shot_ids):
                 current.project.updated_at = utc_now()
                 self.repository.save_project(current)
@@ -12300,7 +12379,13 @@ class ShortDramaService:
             # ordinal at persistence, after all slow work has completed.
             plan.version = max((item.version for item in self.repository.list_h3_route_plans(project_id)), default=0) + 1
             plan.source_operation_id = request.source_operation_id
-            self.repository.save_h3_route_plan(plan)
+            if reuse is not None:
+                plan.reused_route_source = original_source
+                reuse.operation.state.route_plan_id = plan.id
+                reuse.operation.state.route_plan_state_revision = plan.state_revision
+                self.repository.save_h3_route_source_bundle(plan, reuse.operation)
+            else:
+                self.repository.save_h3_route_plan(plan)
         return H3ProductionRoutePlanResponse(plan=plan)
 
     def update_h3_route_asset_preparation(
@@ -12460,21 +12545,56 @@ class ShortDramaService:
                 approved_version_number=approved_version_number,
             )
 
+    def _h3_route_source_checks(self, plan: H3ProductionRoutePlan) -> list[H3RouteSourceCheck]:
+        """Observe the current source without changing the saved READY snapshot."""
+        from short_drama.studio_references import assert_generation_references
+
+        checks: list[H3RouteSourceCheck] = []
+        with self._lock:
+            document = self._require_project_document(plan.project_id)
+            for decision in plan.decisions:
+                status: Literal["CURRENT", "STALE", "UNKNOWN"] = "CURRENT"
+                reason: str | None = None
+                try:
+                    scoped = plan.model_copy(update={"decisions": [decision]})
+                    validate_route_plan_freshness(scoped, document)
+                    media = self._resolve_approved_asset_inputs(document, decision.media_inputs)
+                    for shot_id in decision.shot_ids or [decision.shot_id]:
+                        assert_generation_references(document, self._require_shot_in_document(document, shot_id), media, require_all=False)
+                    if decision.action == H3ShotRouteAction.GENERATE:
+                        validate_h3_probe(route=decision.route, prompt=decision.prompt,
+                            duration_seconds=decision.duration_seconds, media_inputs=media)
+                    reason = self._h3_route_operation_staleness_reason(scoped, media_inputs=media)
+                    if reason is not None:
+                        status = "STALE"
+                except (ValueError, OSError, KeyError) as exc:
+                    status, reason = "STALE", str(exc)
+                checks.append(H3RouteSourceCheck(
+                    route_plan_id=plan.id, state_revision=plan.state_revision,
+                    generation_unit_id=decision.generation_unit_id, shot_id=decision.shot_id,
+                    checked_at=utc_now(), status=status,
+                    scope="SAVED_OPERATION_SOURCE" if plan.source_operation_id else "CURRENT_INPUTS_ONLY",
+                    reason=reason if reason is not None else (None if plan.source_operation_id else
+                        "Current structured inputs checked; this legacy route has no saved operation source snapshot."),
+                ))
+        return checks
+
     def get_h3_production_route_plan(
         self, project_id: str, plan_id: str,
     ) -> H3ProductionRoutePlanResponse:
         plan = self.repository.get_h3_route_plan(plan_id)
         if plan is None or plan.project_id != project_id:
             raise ArtifactNotFoundError(plan_id)
-        return H3ProductionRoutePlanResponse(plan=plan)
+        return H3ProductionRoutePlanResponse(plan=plan, source_checks=self._h3_route_source_checks(plan))
 
     def list_h3_production_route_plans(
         self,
         project_id: str,
     ) -> H3ProductionRoutePlanListResponse:
         self._require_project_document(project_id)
+        plans = self.repository.list_h3_route_plans(project_id)
         return H3ProductionRoutePlanListResponse(
-            plans=self.repository.list_h3_route_plans(project_id)
+            plans=plans, source_checks=[check for plan in plans for check in self._h3_route_source_checks(plan)],
         )
 
     def _h3_route_plan_tasks(

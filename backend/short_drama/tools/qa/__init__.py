@@ -215,7 +215,11 @@ def register_tools(registry: ToolRegistry, service: QaToolService) -> None:
                 artifact_id=request.asset_id,
             ),
         ]
-        if request.request.shot_id is not None:
+        if result.shot_source is not None:
+            source = result.shot_source
+            refs.append(ArtifactRef(project_id=source.project_id, artifact_type=source.artifact_type,
+                artifact_id=source.artifact_id, version=source.version))
+        elif request.request.shot_id is not None:
             refs.append(
                 ArtifactRef(
                     project_id=request.project_id,

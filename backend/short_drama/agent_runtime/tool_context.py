@@ -10,7 +10,7 @@ from typing import cast
 
 from pydantic import JsonValue
 
-from short_drama.agent_runtime.models import WorkOrder
+from short_drama.agent_runtime.models import ArtifactRef, WorkOrder
 from short_drama.agent_runtime.context_markers import context_marker, context_read_contract
 from short_drama.agent_runtime.model_input import json_text, pointer_value
 from short_drama.agent_runtime.store import AgentRuntimeStore
@@ -30,12 +30,29 @@ _ROLE_TOOLS: dict[str, tuple[str, ...]] = {
     "WRITER": ("script.save_scene", "artifact.create_assets"),
     "DIRECTOR": ("shot.save_current",),
     "ASSET_PLANNER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan"),
-    "ASSET_BUILDER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan_fields", "image.capability", "image.enqueue"),
-    "ASSET_VERIFIER": ("artifact.get_asset_work_context", "artifact.inspect_asset"),
+    "ASSET_BUILDER": ("artifact.get_asset_work_context", "artifact.patch_asset_plan_fields", "image.capability", "image.enqueue", "image.view"),
+    "ASSET_VERIFIER": ("artifact.get_asset_work_context", "artifact.inspect_asset", "image.view"),
     "VIDEO_PROMPT_COMPILER": ("route.get_generation_unit_context", "route.h3_capability_profile", "route.compile_h3_prompt", "route.plan_h3"),
     "ROUTE_PLANNER": ("route.get_generation_unit_context", "route.h3_capability_profile", "route.plan_h3"),
     "EPISODE_REVIEWER": ("timeline.read_editorial", "video.inspect_take"),
 }
+
+
+def leader_artifact_tool_schema_ids(refs: list[ArtifactRef], project_id: str) -> list[str]:
+    """Starting contracts for saved domains already visible in this planning call.
+
+    This only discovers schemas: no goal-word matching, execution, or assertion
+    that a referenced historical result is currently usable. Drafts are distinct.
+    """
+    kinds = {ref.artifact_type for ref in refs if ref.project_id == project_id}
+    ids: list[str] = []
+    if kinds & {"storyboard", "shot", "clip_group"}:
+        ids.extend(("shot.get_storyboard", "shot.patch_storyboard", "change.apply"))
+    if kinds & {"generation_plan", "generation_unit"}:
+        ids.extend(("route.get_generation_unit_context", "route.compile_generation_plan"))
+    if kinds & {"h3_route_plan", "h3_group_operation"}:
+        ids.extend(("route.list_h3_plans", "route.get_h3_plan", "route.prepare_h3_group", "route.plan_h3"))
+    return ids
 
 
 def initial_tool_schema_ids(work_order: WorkOrder | None = None) -> list[str]:

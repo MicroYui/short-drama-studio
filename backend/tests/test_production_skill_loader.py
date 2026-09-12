@@ -51,6 +51,19 @@ def test_every_profile_is_compiled_from_reviewable_markdown() -> None:
                 assert not (directory / "roles" / f"{legacy_role.value.casefold()}.md").exists()
 
 
+@pytest.mark.parametrize(("role", "required"), [
+    (ProductionSkillRole.ASSET_BUILDER, ("已有 `image_observations`", "不为取得像素固定再调用 QA", "不固定多视图数量", "brief.required_visible_text 为空时")),
+    (ProductionSkillRole.DIRECTOR, ("受影响邻镜的 transition/continuity", "timeline_beats", "组 summary/reference_notes", "无关门窗合理画外")),
+    (ProductionSkillRole.ASSET_VERIFIER, ("独立 Worker 已有实际 `image_observations`", "以当前已保存机位为准", "不单独构成缺陷，也不证明画外空间")),
+])
+def test_actual_roles_load_observed_images_and_local_continuity_methods(role: ProductionSkillRole, required: tuple[str, ...]) -> None:
+    compiled = compile_production_prompt(ProductionProfile.AI_SHORT_DRAMA, roles=(role,))
+    for phrase in required:
+        assert phrase in compiled.text
+    # These are role methods; they do not require every role or an extra QA workflow.
+    assert compiled.text.count(required[0]) == 1
+
+
 def test_packaged_backend_includes_runtime_markdown_skills() -> None:
     repository_root = Path(__file__).resolve().parents[2]
     builder_config = (repository_root / "electron-builder.yml").read_text(

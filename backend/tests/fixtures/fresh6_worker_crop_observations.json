@@ -1,0 +1,72 @@
+{
+  "provenance": {
+    "project_id": "project-bd8595b4b332",
+    "work_order_id": "work-order-41d36c09a8c742a6836099cfa85e6685",
+    "source_version_id": "asset-version-48b4a1aa4f51",
+    "source_size": [
+      1152,
+      2048
+    ],
+    "note": "Exact saved S04 crop requests and integer pixel boxes from Fresh6. Unit tests create diagnostic pixels; they do not reproduce or judge photographic quality."
+  },
+  "crops": [
+    {
+      "source_sequence": 9,
+      "arguments": {
+        "project_id": "project-bd8595b4b332",
+        "asset_id": "asset-7687da76f6c6",
+        "request": {
+          "source_asset_version_id": "asset-version-48b4a1aa4f51",
+          "region": {
+            "x": 0.21875,
+            "y": 0.1015625,
+            "width": 0.6796875,
+            "height": 0.6796875
+          },
+          "descriptor": "第4镜许宁近门席胸部近景候选：从已生成的场内照片按实际检查建议本地裁切，裁框微调为整数像素9:16。保留原有清楚五官、黑色侧分齐肩发、浅蓝衬衫肩胸、朝画右视线及闭门背景局部，去除腹部裤腰与过多头顶留白。仅供第4镜软COMPOSITION，不是整组首帧；纸笔及双手在下方画外，静态图不验证持笔手下降、签字状态、对白口型、换气或语气。",
+          "reference_role": "COMPOSITION"
+        }
+      },
+      "actual_image_crop": {
+        "source_asset_version_id": "asset-version-48b4a1aa4f51",
+        "source_width": 1152,
+        "source_height": 2048,
+        "box_pixels": [
+          252,
+          208,
+          1035,
+          1600
+        ]
+      }
+    },
+    {
+      "source_sequence": 12,
+      "arguments": {
+        "project_id": "project-bd8595b4b332",
+        "asset_id": "asset-7687da76f6c6",
+        "request": {
+          "source_asset_version_id": "asset-version-48b4a1aa4f51",
+          "region": {
+            "x": 0.09722222222222222,
+            "y": 0.0703125,
+            "width": 0.7265625,
+            "height": 0.7265625
+          },
+          "descriptor": "第4镜许宁场内胸部近景候选：从已生成场内照片按实际观察建议的像素框[112,144,949,1632]本地裁取9:16画面，保留原像素，不放大、不重绘。裁框用于兼顾清楚面部、浅蓝衬衫肩胸、朝画右视线与画左最小闭门及门框线索，裁后实际效果另行观察。仅供第4镜软COMPOSITION，不是整组首帧；不依赖画外纸笔，静态图不验证持笔手下降、仍持笔、未签字、对白口型、换气或语气。",
+          "reference_role": "COMPOSITION"
+        }
+      },
+      "actual_image_crop": {
+        "source_asset_version_id": "asset-version-48b4a1aa4f51",
+        "source_width": 1152,
+        "source_height": 2048,
+        "box_pixels": [
+          112,
+          144,
+          949,
+          1632
+        ]
+      }
+    }
+  ]
+}

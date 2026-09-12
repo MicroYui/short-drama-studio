@@ -1357,7 +1357,7 @@
             "type": "array"
           },
           "saved_tool_result_sequences": {
-            "description": "可选：本 WorkOrder 已成功 Tool 的 source_sequence。runtime 附其精确产物、现成审核/用途及可回读原回执；不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
+            "description": "可选：本 WorkOrder 已成功 Tool 的 source_sequence。READ 可作为已保存观察，包括无产物 refs 的读取；不代表新产物。runtime 附精确产物、现成审核/用途及原回执定位，不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
             "items": {
               "minimum": 1.0,
               "type": "integer"
@@ -5352,26 +5352,32 @@
         "additionalProperties": false,
         "properties": {
           "action_in": {
+            "description": "Actual planned action state at this shot's start.",
             "title": "Action In",
             "type": "string"
           },
           "action_out": {
+            "description": "Authoritative planned action state at this shot's end, used for the next shot/group. Mid-shot prose does not replace a populated outgoing state; update it when the ending changes.",
             "title": "Action Out",
             "type": "string"
           },
           "character_positions": {
+            "description": "Current authored spatial continuity; keep consistent when editing blocking or the outgoing boundary.",
             "title": "Character Positions",
             "type": "string"
           },
           "eyeline": {
+            "description": "Current authored eyeline continuity, including the outgoing gaze used by the next shot.",
             "title": "Eyeline",
             "type": "string"
           },
           "prop_state_in": {
+            "description": "Actual planned prop state at this shot's start.",
             "title": "Prop State In",
             "type": "string"
           },
           "prop_state_out": {
+            "description": "Authoritative planned prop state at this shot's end, used for the next shot/group. Update it when that end state changes; empty retains visual-prose fallback.",
             "title": "Prop State Out",
             "type": "string"
           }
@@ -9650,6 +9656,16 @@
             "title": "Resolution",
             "type": "string"
           },
+          "reused_route_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3SavedRouteSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_operation_id": {
             "anyOf": [
               {
@@ -9713,6 +9729,13 @@
               "$ref": "#/components/schemas/H3ProductionRoutePlan"
             },
             "title": "Plans",
+            "type": "array"
+          },
+          "source_checks": {
+            "items": {
+              "$ref": "#/components/schemas/H3RouteSourceCheck"
+            },
+            "title": "Source Checks",
             "type": "array"
           }
         },
@@ -9835,6 +9858,13 @@
         "properties": {
           "plan": {
             "$ref": "#/components/schemas/H3ProductionRoutePlan"
+          },
+          "source_checks": {
+            "items": {
+              "$ref": "#/components/schemas/H3RouteSourceCheck"
+            },
+            "title": "Source Checks",
+            "type": "array"
           }
         },
         "required": [
@@ -10667,6 +10697,104 @@
         "title": "H3RoutePlanStatus",
         "type": "string"
       },
+      "H3RouteSourceCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "generation_unit_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Unit Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "route_plan_id": {
+            "title": "Route Plan Id",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "SAVED_OPERATION_SOURCE",
+              "CURRENT_INPUTS_ONLY"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "shot_id": {
+            "title": "Shot Id",
+            "type": "string"
+          },
+          "state_revision": {
+            "title": "State Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "CURRENT",
+              "STALE",
+              "UNKNOWN"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route_plan_id",
+          "state_revision",
+          "shot_id",
+          "checked_at",
+          "status",
+          "scope"
+        ],
+        "title": "H3RouteSourceCheck",
+        "type": "object"
+      },
+      "H3SavedRouteSource": {
+        "additionalProperties": false,
+        "properties": {
+          "generation_unit_id": {
+            "description": "Exact source decision identity; must equal the current target group.",
+            "minLength": 1,
+            "title": "Generation Unit Id",
+            "type": "string"
+          },
+          "route_plan_id": {
+            "minLength": 1,
+            "title": "Route Plan Id",
+            "type": "string"
+          },
+          "state_revision": {
+            "minimum": 1.0,
+            "title": "State Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "route_plan_id",
+          "state_revision",
+          "generation_unit_id"
+        ],
+        "title": "H3SavedRouteSource",
+        "type": "object"
+      },
       "H3ShotRouteAction": {
         "enum": [
           "REUSE_TAKE",
@@ -10771,6 +10899,17 @@
               }
             ],
             "title": "Reuse Take Id"
+          },
+          "saved_route_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/H3SavedRouteSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actively reuse one exact saved route decision after checking its prompt against this current group. Reads its unchanged prompt, format and ordered media; no language call. Mutually exclusive with candidate/prompt/media/take choices. Current facts and files are revalidated and saved as a new source."
           },
           "shot_id": {
             "default": "",
@@ -21040,6 +21179,7 @@
             "additionalProperties": {
               "type": "string"
             },
+            "description": "Exact supported fields. SHOT also accepts continuity.character_positions, continuity.eyeline, continuity.prop_state_in, continuity.prop_state_out, continuity.action_in and continuity.action_out. Keep outgoing continuity and affected transition prose consistent when changing an action; no automatic rewriting of neighbours.",
             "maxProperties": 16,
             "minProperties": 1,
             "title": "Updates",

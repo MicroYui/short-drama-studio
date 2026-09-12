@@ -1,0 +1,1672 @@
+{
+  "source": {
+    "project_id": "project-bd8595b4b332",
+    "original_fixture": "../fresh6-draft-qa-contract-failure-fixture.json",
+    "captured_at": "2026-09-12T10:23:32.934152+00:00",
+    "extraction": "Actual saved JSON subsets; identities, requests and selected bodies are unchanged. Not a complete ProjectDocument or a successful product replay.",
+    "provider_calls_by_extractor": 0
+  },
+  "successful_read_turn": {
+    "id": "specialist-turn-509b355639b440faa986a29137955a0e",
+    "sequence": 1,
+    "tool_name": "artifact.read_current",
+    "arguments": {
+      "project_id": "project-bd8595b4b332",
+      "shot_id": "shot-qwxb-004"
+    },
+    "reason": "读取第4镜当前已保存正文，核对胸部近景、视线和动作边界；不修改导演分镜。",
+    "status": "COMPLETED",
+    "result": {
+      "tool_id": "artifact.read_current",
+      "status": "SUCCEEDED",
+      "output": {
+        "content": {
+          "project_id": "project-bd8595b4b332",
+          "script_id": "project-bd8595b4b332-script-v2",
+          "episode_title": "第 1 集",
+          "input_text": "请从这个空项目出发，创作并完成一部45–60秒、9:16竖屏、真人摄影质感短剧的视频生成前全部制作准备。现实职场题材，两名成年主要人物，一个主要室内场景；人物、故事、台词、片名和镜头由你创作决定。\n\n开头尽快让观众看懂矛盾，人物通过行动和回应改变局势，转折有前因，结尾回收前面的信息。对白像真人会说的话，不靠突然出现的第三人、神秘身份或不合常理的巧合解决问题。画面需要清楚的面部与表演，人物和空间统一，动作与对白留出自然可表演的时间。\n\n完成完整剧本、分镜、全部必要人物/场景/道具和剧情状态的原创图片、镜头所需的构图参考、正文与具体媒体的绑定，以及所有生成组可执行的视频输入和提示词路线准备。图片从零制作，不借用其他项目素材。按真实结果判断清晰度、身份、状态和输入是否满足用途；有实际问题就自主修订，保留可用结果。制作细节由你决定，无需逐步询问确认。\n\n如选定路线确实需要声音参考，也在本次资产内准备并核验，不把尚未听到的生成对白当作已验收。\n\n本次停止点是所有视频生成前准备完成。视频参数按2K、9:16准备，允许语言编译和保存生成路线，但不要创建、入队、提交或执行任何视频生成，也不要继续后期声音、剪辑或导出。准备完成后直接结束本次任务，说明已完成内容、实际图片及仍需之后视频验证的动态表现。",
+          "scene_index": [
+            {
+              "id": "scene-7c6c7817bf70",
+              "heading": "第一场｜内景·物流公司小会议室·夜",
+              "summary": "主管周明要求许宁独自签下发货差错说明。许宁承认漏核对，但追问是否只有自己署名，并指出事先已提醒尚未复核；周明以怕错过发车为由回应，印证了他决定先发货的前因。许宁把纸笔退到桌中央，坚持经过写全才签。周明补写并先署名，承诺次日说明；许宁随后签名并主动同行，最后以“签完了。下班。”回收开头。",
+              "narrative_purpose": "让普通职员通过承认自己的疏漏、停止独签并提出明确条件，迫使主管从单方追责转为共同记录事实；用同一张纸、同一支笔的归属变化和先后署名兑现职场边界的情绪回报。"
+            }
+          ],
+          "shot_index": [
+            {
+              "id": "shot-qwxb-001",
+              "sequence": 1,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 4.8
+            },
+            {
+              "id": "shot-qwxb-002",
+              "sequence": 2,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 3.7
+            },
+            {
+              "id": "shot-qwxb-003",
+              "sequence": 3,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.0
+            },
+            {
+              "id": "shot-qwxb-004",
+              "sequence": 4,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 5.6
+            },
+            {
+              "id": "shot-qwxb-005",
+              "sequence": 5,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.9
+            },
+            {
+              "id": "shot-qwxb-006",
+              "sequence": 6,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 4.0
+            },
+            {
+              "id": "shot-qwxb-007",
+              "sequence": 7,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.0
+            },
+            {
+              "id": "shot-qwxb-008",
+              "sequence": 8,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.5
+            },
+            {
+              "id": "shot-qwxb-009",
+              "sequence": 9,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 4.0
+            }
+          ],
+          "asset_index": [
+            {
+              "id": "asset-a999f3e98732",
+              "name": "许宁",
+              "kind": "CHARACTER",
+              "media": [
+                {
+                  "id": "asset-version-cd9ab32b2b1f",
+                  "descriptor": "许宁原创身份母图候选：近正面头顶至大腿中部，29岁中国成年女性，浅蓝扣袖口长袖棉衬衫与深灰直筒裤；中性背景，仅供身份及服装参考。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-25a7c2a06f69",
+                  "descriptor": "许宁近正面脸部身份参考；从原创母图保留原始像素裁取完整头发、可见双耳、下颌、颈部与领口。用于近景和对话人物身份，不代表会议室构图或镜头首帧；服装、袖口及裤腰仍引用母图。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-9c102fb6c1ce",
+              "name": "周明",
+              "kind": "CHARACTER",
+              "media": [
+                {
+                  "id": "asset-version-09a28cdbb4e3",
+                  "descriptor": "周明原创正面身份与服装母图；38岁中国成年男性，短黑发、略方脸、炭灰长袖衬衫和黑裤；中性浅灰背景，头顶至大腿中段。用于人物身份及衣着连续性，不作为具体镜头首帧。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-407987cb1b59",
+                  "descriptor": "周明正面脸部身份参考，裁自本项目原创母图；保留完整短黑发、双耳、下颌、颈部和少量炭灰衣领。仅集中原有像素，供后续近景生成保持身份，不作为高清近景成片。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-24c91a5b7fba",
+              "name": "物流公司小会议室",
+              "kind": "LOCATION",
+              "media": [
+                {
+                  "id": "asset-version-c48ea915da16",
+                  "descriptor": "原创无人物会议室空间母版候选：浅木矩形桌与相对两椅，画面左椅近关闭入口、右椅靠素灰内墙，桌远端一侧为磨砂玻璃；暖中性顶灯、空桌。用于空间与照明继承，不是最终竖屏镜头或纸笔状态图。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-d9b912d71f3d",
+              "name": "发货差错说明",
+              "kind": "PROP",
+              "media": [
+                {
+                  "id": "asset-version-ce73e20ad056",
+                  "descriptor": "原创A4纸张空白实体母底，仅供后续同纸打印与签写状态派生，不作为开场已打印状态。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-2015128024a3",
+                  "descriptor": "未签状态准确打印字版，供同一张原创A4母底合成使用。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-6121f0476318",
+                  "descriptor": "开场未签实体母版：同一张原创哑光A4纸，上半部只有“发货差错说明 / 事项：发货核对 / 请记录有关经过。”稀疏打印，下半部留白，无补写及姓名。保留母底纸边、光照和接触影；仅为道具身份与纸面状态参考，不锁定后续机位或动作。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-7bc44f2faed1",
+              "name": "黑色签字笔",
+              "kind": "PROP",
+              "media": [
+                {
+                  "id": "asset-version-377292c951cd",
+                  "descriptor": "原创黑色按动签字笔整笔摄影母版候选：哑黑细圆笔杆、简洁银色金属笔夹、单一黑色按动端、已伸出银色书写笔尖；无帽、无商标、无人物。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            }
+          ],
+          "structure_stale_scene_ids": [],
+          "editorial_revision": 0,
+          "text_change_reviews": [],
+          "story_intent": null,
+          "bible": {
+            "id": "project-bd8595b4b332-bible-v1",
+            "project_id": "project-bd8595b4b332",
+            "version": 1,
+            "characters": [],
+            "locations": [],
+            "props": [],
+            "style": {
+              "medium": "未指定",
+              "genre": "未指定",
+              "cinematography": "未指定",
+              "color": "未指定",
+              "texture": "未指定",
+              "forbidden": []
+            },
+            "approval_status": "APPROVED",
+            "freshness": "CURRENT",
+            "parent_version_id": null,
+            "created_at": "2026-09-12T10:01:05.551+00:00"
+          },
+          "production_documents": [
+            {
+              "id": "production-document-c1975b6db157",
+              "kind": "production.spec",
+              "version_id": "production-document-version-4645bac79257"
+            },
+            {
+              "id": "production-document-29073ee1a194",
+              "kind": "story.contracts",
+              "version_id": "production-document-version-80af747d0462"
+            },
+            {
+              "id": "production-document-25cceff9567d",
+              "kind": "storyboard.draft",
+              "version_id": "production-document-version-fdb094b8fd62"
+            }
+          ],
+          "shot": {
+            "id": "shot-qwxb-004",
+            "project_id": "project-bd8595b4b332",
+            "sequence": 4,
+            "scene_id": "scene-7c6c7817bf70",
+            "duration_seconds": 5.6,
+            "narrative_purpose": "完整听清许宁承认自身漏核对，同时给出已提醒未复核的关键前因。",
+            "visual": "@许宁 仍朝画右看周明，先将握笔的手自然放低到画面下方，脸不移开。@物流公司小会议室 的近门侧背景延续。近景以她把话说完整的面部变化为中心；纸笔留在下方画外，不要求显示整纸。",
+            "framing": "胸部近景，眼睛和嘴清楚，下沿可见少量前臂但不承诺看见笔尖。",
+            "camera": "眼平固定，延续许宁朝画右的视线，镜头不随手下降。",
+            "audio_intent": "许宁原句：“漏核对，我认。可发货前，我说了还没复核。”前一句坦然承认，句号有正常换气，后一句陈述事实，不加速争辩。周明画外只听。",
+            "dialogue_line_ids": [
+              "line-qwxb-004"
+            ],
+            "references": [
+              {
+                "subject_asset_id": "asset-a999f3e98732",
+                "id": "shot-qwxb-004-reference-0",
+                "asset_version_id": null,
+                "field": "visual",
+                "text_start": 0,
+                "text_end": 3,
+                "alias": "许宁",
+                "required_tags": [
+                  "浅蓝衬衫",
+                  "面部近景",
+                  "朝画右"
+                ],
+                "purpose": "待绑定许宁实际脸部与服装；优先保证承认和提出事实时的眼神、口部清晰。",
+                "image_reference_role": "SUBJECT_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-24c91a5b7fba",
+                "id": "shot-qwxb-004-reference-1",
+                "asset_version_id": null,
+                "field": "visual",
+                "text_start": 33,
+                "text_end": 42,
+                "alias": "物流公司小会议室",
+                "required_tags": [
+                  "近门侧反打",
+                  "暖中性夜间"
+                ],
+                "purpose": "延续已选空间的近门背景及面部光向，不要求完整房间入画。",
+                "image_reference_role": "SCENE_IDENTITY",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0.0,
+                "end_seconds": 0.3,
+                "visual": "许宁把持笔手放低，视线不离开周明。",
+                "framing": "胸部近景",
+                "camera": "固定",
+                "action": "持笔手降低但不放笔、不签字；动作落到下沿画外。",
+                "performance": null,
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "衣料轻响。",
+                "references": []
+              },
+              {
+                "start_seconds": 0.3,
+                "end_seconds": 5.2,
+                "visual": "许宁脸部持续清楚，既不回避也不逼近。",
+                "framing": "胸部近景",
+                "camera": "固定",
+                "action": "说完整句，句号处自然换气，身体稳定。",
+                "performance": "先坦然承担疏漏，再要求对方承认已被提醒这一事实。",
+                "emotion": null,
+                "dialogue_line_ids": [
+                  "line-qwxb-004"
+                ],
+                "sound": "许宁发声，保持真实办公室音量。",
+                "references": []
+              },
+              {
+                "start_seconds": 5.2,
+                "end_seconds": 5.6,
+                "visual": "她说完等周明回应。",
+                "framing": "胸部近景",
+                "camera": "固定",
+                "action": "不再追加解释，持笔手继续在下方。",
+                "performance": null,
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "底噪。",
+                "references": []
+              }
+            ],
+            "continuity": {
+              "character_positions": "许宁近门侧坐姿不变，周明对面画外。",
+              "eyeline": "许宁朝画右看周明。",
+              "prop_state_in": "许宁持笔悬停，原纸未签。",
+              "prop_state_out": "许宁仍持笔但手已放低，原纸未签且仍在她面前。",
+              "action_in": "周明刚把责任归于填单者。",
+              "action_out": "许宁承认疏漏并讲清曾提醒，等待回应。"
+            },
+            "transition_out": "切周明回应赶车理由。",
+            "merge_candidate": false,
+            "local_rework_risk": "本镜的持笔手位只作连续性意图，未来采用镜头若实际放笔或落笔须局部修复；不靠不可能的胸部近景兼拍全桌。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 1
+          }
+        }
+      },
+      "artifact_refs": [],
+      "warnings": [],
+      "error": null,
+      "receipt": null
+    },
+    "requested_at": "2026-09-12T10:19:53.099505Z",
+    "updated_at": "2026-09-12T10:19:53.294384Z"
+  },
+  "failed_qa_turn": {
+    "id": "specialist-turn-93bb0f864ff64324a91d4512575112e8",
+    "sequence": 7,
+    "tool_name": "qa.inspect_asset_version",
+    "arguments": {
+      "project_id": "project-bd8595b4b332",
+      "asset_id": "asset-7687da76f6c6",
+      "version_id": "asset-version-48b4a1aa4f51",
+      "request": {
+        "shot_id": "shot-qwxb-004",
+        "intended_reference_role": "COMPOSITION",
+        "canonical_reference_version_ids": [
+          "asset-version-25a7c2a06f69",
+          "asset-version-cd9ab32b2b1f",
+          "asset-version-c48ea915da16"
+        ],
+        "review_focus": "本图仅作第4镜9:16场内胸部近景的软COMPOSITION，不是整组首帧。请实际对照脸部裁图的五官、年龄感与肤色，以及母图的黑色侧分齐肩发、浅蓝棉衬衫和体态，判断身份与可见服装是否相容。观察坐姿、朝画右看画外周明的眼神、双眼及嘴部清晰度、自然肤纹、克制平静的静态神态和暖中性面部照明。对照会议室图中近门席与关闭入口，判断候选背景有无可见镜像、门墙关系或换座矛盾；只评价实际可见局部，不把虚化区域当作完整空间已验证。核查纸笔、双手是否留在下方画外，是否新增提前签字或放笔等可见矛盾，低处袖臂和下沿是否适合本镜而不必露出全桌整纸。静态图不能证明持笔手下降、口型、自然换气或前后两句的语气，请明确这些限制。只指出影响上述用途的实际问题。",
+        "narrative_context": {
+          "scene_id": "scene-7c6c7817bf70",
+          "dialogue_line_ids": [
+            "line-qwxb-004"
+          ]
+        },
+        "implementation_preferences": [
+          "轻微三分之四朝向、完整头部和少量椅背是本次构图实现方式；不要求机械角度、全肩或未出画袖口，也不因看不见磨砂玻璃而否决近门局部背景。"
+        ]
+      }
+    },
+    "reason": "第4镜近景图片已生成；现在对照精确人物与会议室来源，检查它是否真正满足本镜的面部、视线和近门背景用途。",
+    "status": "COMPLETED",
+    "result": {
+      "tool_id": "qa.inspect_asset_version",
+      "status": "FAILED",
+      "output": null,
+      "artifact_refs": [],
+      "warnings": [],
+      "error": {
+        "kind": "ArtifactNotFoundError",
+        "message": "'shot-qwxb-004'",
+        "phase": "EXECUTION",
+        "scope": {
+          "project_id": "project-bd8595b4b332",
+          "asset_id": "asset-7687da76f6c6",
+          "version_id": "asset-version-48b4a1aa4f51",
+          "request": {
+            "shot_id": "shot-qwxb-004",
+            "narrative_context": {
+              "scene_id": "scene-7c6c7817bf70"
+            }
+          }
+        },
+        "details": [],
+        "suggested_actions": [
+          "Use the specific error and current object scope to repair this operation. Check its persisted task state before retrying external work."
+        ],
+        "retryable": false
+      },
+      "receipt": null
+    },
+    "requested_at": "2026-09-12T10:22:51.164850Z",
+    "updated_at": "2026-09-12T10:22:51.496202Z"
+  },
+  "draft_document": {
+    "id": "production-document-25cceff9567d",
+    "project_id": "project-bd8595b4b332",
+    "kind": "storyboard.draft",
+    "title": "Storyboard Draft",
+    "current_version_id": "production-document-version-1e174412579f"
+  },
+  "version_sources": [
+    {
+      "use": "work_order_pinned",
+      "version": {
+        "id": "production-document-version-4d5832047780",
+        "version": 3,
+        "parent_version_id": "production-document-version-aefcf040cbaa",
+        "origin": "AGENT",
+        "created_at": "2026-09-12T10:16:41.749+00:00",
+        "source_artifact_refs": [
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "script_version",
+            "artifact_id": "project-bd8595b4b332-script-v2",
+            "version": 2
+          },
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "bible_version",
+            "artifact_id": "project-bd8595b4b332-bible-v1",
+            "version": 1
+          },
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "production_spec",
+            "artifact_id": "production-document-c1975b6db157",
+            "version": 1
+          }
+        ]
+      },
+      "payload_header": {
+        "phase": "GROUP_AUTHORING",
+        "project_id": "project-bd8595b4b332",
+        "title": "《签完下班》完整分镜",
+        "script_version_id": "project-bd8595b4b332-script-v2",
+        "bible_version_id": "project-bd8595b4b332-bible-v1",
+        "production_spec_document_id": "production-document-c1975b6db157",
+        "production_spec_version_id": "production-document-version-4645bac79257",
+        "base_storyboard_version_id": null,
+        "script_line_ids": [
+          "line-qwxb-001",
+          "line-qwxb-002",
+          "line-qwxb-003",
+          "line-qwxb-004",
+          "line-qwxb-005",
+          "line-qwxb-006",
+          "line-qwxb-007",
+          "line-qwxb-008",
+          "line-qwxb-009",
+          "line-qwxb-010",
+          "line-qwxb-011",
+          "line-qwxb-012"
+        ],
+        "scene_nodes": [
+          {
+            "id": "sb-scene-qwxb-01",
+            "scene_id": "scene-7c6c7817bf70",
+            "sequence": 1,
+            "heading": "第一场｜内景·物流公司小会议室·夜",
+            "summary": "主管周明要求许宁独自签下发货差错说明。许宁承认漏核对，但追问是否只有自己署名，并指出事先已提醒尚未复核；周明以怕错过发车为由回应，印证了他决定先发货的前因。许宁把纸笔退到桌中央，坚持经过写全才签。周明补写并先署名，承诺次日说明；许宁随后签名并主动同行，最后以“签完了。下班。”回收开头。",
+            "source_target_duration_seconds": 56.0,
+            "source_line_ids": [
+              "line-qwxb-001",
+              "line-qwxb-002",
+              "line-qwxb-003",
+              "line-qwxb-004",
+              "line-qwxb-005",
+              "line-qwxb-006",
+              "line-qwxb-007",
+              "line-qwxb-008",
+              "line-qwxb-009",
+              "line-qwxb-010",
+              "line-qwxb-011",
+              "line-qwxb-012"
+            ],
+            "clip_group_ids": [],
+            "shot_ids": [],
+            "continuity_in": [
+              "许宁坐近关闭的门，周明坐素灰内墙侧，两人隔浅木色会议桌相对。",
+              "同一张白色A4说明尚无署名；同一支黑色按动签字笔已出尖，由周明交出。"
+            ],
+            "continuity_out": [
+              "周明补写经过并先署名，许宁随后署名；原纸由周明收下，两处签写痕迹保留。",
+              "笔留在桌面纸旁区域；许宁从近门侧起身，周明仍坐内墙侧，门不打开，无第三人。"
+            ],
+            "notes": [
+              "9:16暖中性、面部清楚的真人摄影质感。现有基础资产文字足够开始分镜；全部具体图片仍需后续实际选用绑定。",
+              "导演关系机位从磨砂玻璃一侧看向两人：许宁画左、周明画右；单人覆盖保持许宁看画右、周明看画左。以实际空间图校准，不改变近门与内墙座位关系。"
+            ]
+          }
+        ],
+        "timing_ledger": [],
+        "planned_clip_groups": [],
+        "timing_audit": null,
+        "verification": null,
+        "timing_notes": [
+          "当前以56秒设计，允许最终表演45–60秒；时段是自然演读和动作先后推演，并非实测声音。",
+          "对白与可并行动作同走；退纸后的沉默、看纸回应、签写及结尾点头保留独立可读时间。",
+          "补写使用落笔证据、许宁等待反应及签写结果的切接，不要求连续逐笔生成准确汉字，也不要求观众辨认纸面小字。"
+        ],
+        "notes": [
+          "只保存分镜和声音意图，不改剧本、不生成图片、不创建任何视频任务。",
+          "参考中的空媒体版本表示身份、空间或剧情状态需求，不代表已绑定图；角色身份图不自动作首帧。",
+          "同一支笔以自然持笔手持续使用；默认两人各自右手执笔仅为可调整导演方案，实际采用图若需改变须连同相邻接触关系修改。"
+        ]
+      },
+      "actual_committed_group_ids": [
+        "clip-qwxb-01",
+        "clip-qwxb-02"
+      ]
+    },
+    {
+      "use": "successful_read",
+      "version": {
+        "id": "production-document-version-fdb094b8fd62",
+        "version": 4,
+        "parent_version_id": "production-document-version-4d5832047780",
+        "origin": "AGENT",
+        "created_at": "2026-09-12T10:18:45.493+00:00",
+        "source_artifact_refs": [
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "script_version",
+            "artifact_id": "project-bd8595b4b332-script-v2",
+            "version": 2
+          },
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "bible_version",
+            "artifact_id": "project-bd8595b4b332-bible-v1",
+            "version": 1
+          },
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "production_spec",
+            "artifact_id": "production-document-c1975b6db157",
+            "version": 1
+          }
+        ]
+      },
+      "payload_header": {
+        "phase": "GROUP_AUTHORING",
+        "project_id": "project-bd8595b4b332",
+        "title": "《签完下班》完整分镜",
+        "script_version_id": "project-bd8595b4b332-script-v2",
+        "bible_version_id": "project-bd8595b4b332-bible-v1",
+        "production_spec_document_id": "production-document-c1975b6db157",
+        "production_spec_version_id": "production-document-version-4645bac79257",
+        "base_storyboard_version_id": null,
+        "script_line_ids": [
+          "line-qwxb-001",
+          "line-qwxb-002",
+          "line-qwxb-003",
+          "line-qwxb-004",
+          "line-qwxb-005",
+          "line-qwxb-006",
+          "line-qwxb-007",
+          "line-qwxb-008",
+          "line-qwxb-009",
+          "line-qwxb-010",
+          "line-qwxb-011",
+          "line-qwxb-012"
+        ],
+        "scene_nodes": [
+          {
+            "id": "sb-scene-qwxb-01",
+            "scene_id": "scene-7c6c7817bf70",
+            "sequence": 1,
+            "heading": "第一场｜内景·物流公司小会议室·夜",
+            "summary": "主管周明要求许宁独自签下发货差错说明。许宁承认漏核对，但追问是否只有自己署名，并指出事先已提醒尚未复核；周明以怕错过发车为由回应，印证了他决定先发货的前因。许宁把纸笔退到桌中央，坚持经过写全才签。周明补写并先署名，承诺次日说明；许宁随后签名并主动同行，最后以“签完了。下班。”回收开头。",
+            "source_target_duration_seconds": 56.0,
+            "source_line_ids": [
+              "line-qwxb-001",
+              "line-qwxb-002",
+              "line-qwxb-003",
+              "line-qwxb-004",
+              "line-qwxb-005",
+              "line-qwxb-006",
+              "line-qwxb-007",
+              "line-qwxb-008",
+              "line-qwxb-009",
+              "line-qwxb-010",
+              "line-qwxb-011",
+              "line-qwxb-012"
+            ],
+            "clip_group_ids": [],
+            "shot_ids": [],
+            "continuity_in": [
+              "许宁坐近关闭的门，周明坐素灰内墙侧，两人隔浅木色会议桌相对。",
+              "同一张白色A4说明尚无署名；同一支黑色按动签字笔已出尖，由周明交出。"
+            ],
+            "continuity_out": [
+              "周明补写经过并先署名，许宁随后署名；原纸由周明收下，两处签写痕迹保留。",
+              "笔留在桌面纸旁区域；许宁从近门侧起身，周明仍坐内墙侧，门不打开，无第三人。"
+            ],
+            "notes": [
+              "9:16暖中性、面部清楚的真人摄影质感。现有基础资产文字足够开始分镜；全部具体图片仍需后续实际选用绑定。",
+              "导演关系机位从磨砂玻璃一侧看向两人：许宁画左、周明画右；单人覆盖保持许宁看画右、周明看画左。以实际空间图校准，不改变近门与内墙座位关系。"
+            ]
+          }
+        ],
+        "timing_ledger": [],
+        "planned_clip_groups": [],
+        "timing_audit": null,
+        "verification": null,
+        "timing_notes": [
+          "当前以56秒设计，允许最终表演45–60秒；时段是自然演读和动作先后推演，并非实测声音。",
+          "对白与可并行动作同走；退纸后的沉默、看纸回应、签写及结尾点头保留独立可读时间。",
+          "补写使用落笔证据、许宁等待反应及签写结果的切接，不要求连续逐笔生成准确汉字，也不要求观众辨认纸面小字。"
+        ],
+        "notes": [
+          "只保存分镜和声音意图，不改剧本、不生成图片、不创建任何视频任务。",
+          "参考中的空媒体版本表示身份、空间或剧情状态需求，不代表已绑定图；角色身份图不自动作首帧。",
+          "同一支笔以自然持笔手持续使用；默认两人各自右手执笔仅为可调整导演方案，实际采用图若需改变须连同相邻接触关系修改。"
+        ]
+      },
+      "actual_committed_group_ids": [
+        "clip-qwxb-01",
+        "clip-qwxb-02",
+        "clip-qwxb-03"
+      ]
+    },
+    {
+      "use": "captured_current_before_qa_failure",
+      "version": {
+        "id": "production-document-version-1e174412579f",
+        "version": 5,
+        "parent_version_id": "production-document-version-fdb094b8fd62",
+        "origin": "AGENT",
+        "created_at": "2026-09-12T10:20:45.360+00:00",
+        "source_artifact_refs": [
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "script_version",
+            "artifact_id": "project-bd8595b4b332-script-v2",
+            "version": 2
+          },
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "bible_version",
+            "artifact_id": "project-bd8595b4b332-bible-v1",
+            "version": 1
+          },
+          {
+            "project_id": "project-bd8595b4b332",
+            "artifact_type": "production_spec",
+            "artifact_id": "production-document-c1975b6db157",
+            "version": 1
+          }
+        ]
+      },
+      "payload_header": {
+        "phase": "GROUP_AUTHORING",
+        "project_id": "project-bd8595b4b332",
+        "title": "《签完下班》完整分镜",
+        "script_version_id": "project-bd8595b4b332-script-v2",
+        "bible_version_id": "project-bd8595b4b332-bible-v1",
+        "production_spec_document_id": "production-document-c1975b6db157",
+        "production_spec_version_id": "production-document-version-4645bac79257",
+        "base_storyboard_version_id": null,
+        "script_line_ids": [
+          "line-qwxb-001",
+          "line-qwxb-002",
+          "line-qwxb-003",
+          "line-qwxb-004",
+          "line-qwxb-005",
+          "line-qwxb-006",
+          "line-qwxb-007",
+          "line-qwxb-008",
+          "line-qwxb-009",
+          "line-qwxb-010",
+          "line-qwxb-011",
+          "line-qwxb-012"
+        ],
+        "scene_nodes": [
+          {
+            "id": "sb-scene-qwxb-01",
+            "scene_id": "scene-7c6c7817bf70",
+            "sequence": 1,
+            "heading": "第一场｜内景·物流公司小会议室·夜",
+            "summary": "主管周明要求许宁独自签下发货差错说明。许宁承认漏核对，但追问是否只有自己署名，并指出事先已提醒尚未复核；周明以怕错过发车为由回应，印证了他决定先发货的前因。许宁把纸笔退到桌中央，坚持经过写全才签。周明补写并先署名，承诺次日说明；许宁随后签名并主动同行，最后以“签完了。下班。”回收开头。",
+            "source_target_duration_seconds": 56.0,
+            "source_line_ids": [
+              "line-qwxb-001",
+              "line-qwxb-002",
+              "line-qwxb-003",
+              "line-qwxb-004",
+              "line-qwxb-005",
+              "line-qwxb-006",
+              "line-qwxb-007",
+              "line-qwxb-008",
+              "line-qwxb-009",
+              "line-qwxb-010",
+              "line-qwxb-011",
+              "line-qwxb-012"
+            ],
+            "clip_group_ids": [],
+            "shot_ids": [],
+            "continuity_in": [
+              "许宁坐近关闭的门，周明坐素灰内墙侧，两人隔浅木色会议桌相对。",
+              "同一张白色A4说明尚无署名；同一支黑色按动签字笔已出尖，由周明交出。"
+            ],
+            "continuity_out": [
+              "周明补写经过并先署名，许宁随后署名；原纸由周明收下，两处签写痕迹保留。",
+              "笔留在桌面纸旁区域；许宁从近门侧起身，周明仍坐内墙侧，门不打开，无第三人。"
+            ],
+            "notes": [
+              "9:16暖中性、面部清楚的真人摄影质感。现有基础资产文字足够开始分镜；全部具体图片仍需后续实际选用绑定。",
+              "导演关系机位从磨砂玻璃一侧看向两人：许宁画左、周明画右；单人覆盖保持许宁看画右、周明看画左。以实际空间图校准，不改变近门与内墙座位关系。"
+            ]
+          }
+        ],
+        "timing_ledger": [],
+        "planned_clip_groups": [],
+        "timing_audit": null,
+        "verification": null,
+        "timing_notes": [
+          "当前以56秒设计，允许最终表演45–60秒；时段是自然演读和动作先后推演，并非实测声音。",
+          "对白与可并行动作同走；退纸后的沉默、看纸回应、签写及结尾点头保留独立可读时间。",
+          "补写使用落笔证据、许宁等待反应及签写结果的切接，不要求连续逐笔生成准确汉字，也不要求观众辨认纸面小字。"
+        ],
+        "notes": [
+          "只保存分镜和声音意图，不改剧本、不生成图片、不创建任何视频任务。",
+          "参考中的空媒体版本表示身份、空间或剧情状态需求，不代表已绑定图；角色身份图不自动作首帧。",
+          "同一支笔以自然持笔手持续使用；默认两人各自右手执笔仅为可调整导演方案，实际采用图若需改变须连同相邻接触关系修改。"
+        ]
+      },
+      "actual_committed_group_ids": [
+        "clip-qwxb-01",
+        "clip-qwxb-02",
+        "clip-qwxb-03",
+        "clip-qwxb-04"
+      ]
+    }
+  ],
+  "selected_committed_group": {
+    "work_unit_id": "wu-qwxb-storyboard",
+    "scene_node_id": "sb-scene-qwxb-01",
+    "scene_group_sequence": 2,
+    "source_range": {
+      "id": "range-qwxb-g02",
+      "scene_ids": [
+        "scene-7c6c7817bf70"
+      ],
+      "script_line_ids": [
+        "line-qwxb-003",
+        "line-qwxb-004",
+        "line-qwxb-005"
+      ],
+      "description": "周明把责任指向填单者；许宁认漏核对却说明曾提醒未复核；周明以怕车走回应。",
+      "starts_after": null,
+      "ends_before": null
+    },
+    "shots": [
+      {
+        "id": "shot-qwxb-003",
+        "project_id": "project-bd8595b4b332",
+        "sequence": 3,
+        "scene_id": "scene-7c6c7817bf70",
+        "duration_seconds": 2.0,
+        "narrative_purpose": "明确周明试图用填单归属结束讨论。",
+        "visual": "@周明 背靠椅背，朝画左回答许宁。@物流公司小会议室 的素灰内墙在身后，脸部曝光清楚；不要求桌面或画外许宁同时入镜。",
+        "framing": "胸部以上近景，保留头顶和双肩，不用极近特写。",
+        "camera": "眼平固定，与许宁反打保持同侧轴线，周明视线朝画左。",
+        "audio_intent": "周明原句：“单子是你填的。”平常而封口式的回答，许宁画外不发声。",
+        "dialogue_line_ids": [
+          "line-qwxb-003"
+        ],
+        "references": [
+          {
+            "subject_asset_id": "asset-9c102fb6c1ce",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 3,
+            "alias": "周明",
+            "required_tags": [
+              "炭灰衬衫",
+              "面部近景",
+              "朝画左"
+            ],
+            "purpose": "待绑定周明实际面部身份与服装图；轻微反应应看得清。",
+            "image_reference_role": "SUBJECT_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-24c91a5b7fba",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 17,
+            "text_end": 26,
+            "alias": "物流公司小会议室",
+            "required_tags": [
+              "内墙侧反打",
+              "暖中性夜间"
+            ],
+            "purpose": "待实际灰墙反打空间与光向，不把门移到周明身后。",
+            "image_reference_role": "SCENE_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ],
+        "timeline_beats": [
+          {
+            "start_seconds": 0.0,
+            "end_seconds": 0.2,
+            "visual": "周明看向许宁，未改变靠背坐姿。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "接上许宁的问话。",
+            "performance": null,
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "底噪。",
+            "references": []
+          },
+          {
+            "start_seconds": 0.2,
+            "end_seconds": 1.7,
+            "visual": "周明脸部与嘴部清楚。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "说出原回答，不指点画外纸面。",
+            "performance": "认为填单就是足够的理由。",
+            "emotion": null,
+            "dialogue_line_ids": [
+              "line-qwxb-003"
+            ],
+            "sound": "周明发声。",
+            "references": []
+          },
+          {
+            "start_seconds": 1.7,
+            "end_seconds": 2.0,
+            "visual": "他看着许宁等待服从。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "嘴停住，身体仍靠后。",
+            "performance": null,
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "底噪。",
+            "references": []
+          }
+        ],
+        "continuity": {
+          "character_positions": "周明内墙侧坐着，许宁对面画外。",
+          "eyeline": "周明朝画左看许宁。",
+          "prop_state_in": "画外许宁持笔，原纸在她面前未签。",
+          "prop_state_out": "纸笔状态无变化。",
+          "action_in": "接听许宁追问。",
+          "action_out": "回答完仍靠椅背。"
+        },
+        "transition_out": "切许宁较紧的面部反打。",
+        "merge_candidate": false,
+        "local_rework_risk": "本镜只检查周明脸与视线；不能凭近景证明画外纸笔状态已经完成。",
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 1
+      },
+      {
+        "id": "shot-qwxb-004",
+        "project_id": "project-bd8595b4b332",
+        "sequence": 4,
+        "scene_id": "scene-7c6c7817bf70",
+        "duration_seconds": 5.6,
+        "narrative_purpose": "完整听清许宁承认自身漏核对，同时给出已提醒未复核的关键前因。",
+        "visual": "@许宁 仍朝画右看周明，先将握笔的手自然放低到画面下方，脸不移开。@物流公司小会议室 的近门侧背景延续。近景以她把话说完整的面部变化为中心；纸笔留在下方画外，不要求显示整纸。",
+        "framing": "胸部近景，眼睛和嘴清楚，下沿可见少量前臂但不承诺看见笔尖。",
+        "camera": "眼平固定，延续许宁朝画右的视线，镜头不随手下降。",
+        "audio_intent": "许宁原句：“漏核对，我认。可发货前，我说了还没复核。”前一句坦然承认，句号有正常换气，后一句陈述事实，不加速争辩。周明画外只听。",
+        "dialogue_line_ids": [
+          "line-qwxb-004"
+        ],
+        "references": [
+          {
+            "subject_asset_id": "asset-a999f3e98732",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 3,
+            "alias": "许宁",
+            "required_tags": [
+              "浅蓝衬衫",
+              "面部近景",
+              "朝画右"
+            ],
+            "purpose": "待绑定许宁实际脸部与服装；优先保证承认和提出事实时的眼神、口部清晰。",
+            "image_reference_role": "SUBJECT_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-24c91a5b7fba",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 33,
+            "text_end": 42,
+            "alias": "物流公司小会议室",
+            "required_tags": [
+              "近门侧反打",
+              "暖中性夜间"
+            ],
+            "purpose": "延续已选空间的近门背景及面部光向，不要求完整房间入画。",
+            "image_reference_role": "SCENE_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ],
+        "timeline_beats": [
+          {
+            "start_seconds": 0.0,
+            "end_seconds": 0.3,
+            "visual": "许宁把持笔手放低，视线不离开周明。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "持笔手降低但不放笔、不签字；动作落到下沿画外。",
+            "performance": null,
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "衣料轻响。",
+            "references": []
+          },
+          {
+            "start_seconds": 0.3,
+            "end_seconds": 5.2,
+            "visual": "许宁脸部持续清楚，既不回避也不逼近。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "说完整句，句号处自然换气，身体稳定。",
+            "performance": "先坦然承担疏漏，再要求对方承认已被提醒这一事实。",
+            "emotion": null,
+            "dialogue_line_ids": [
+              "line-qwxb-004"
+            ],
+            "sound": "许宁发声，保持真实办公室音量。",
+            "references": []
+          },
+          {
+            "start_seconds": 5.2,
+            "end_seconds": 5.6,
+            "visual": "她说完等周明回应。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "不再追加解释，持笔手继续在下方。",
+            "performance": null,
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "底噪。",
+            "references": []
+          }
+        ],
+        "continuity": {
+          "character_positions": "许宁近门侧坐姿不变，周明对面画外。",
+          "eyeline": "许宁朝画右看周明。",
+          "prop_state_in": "许宁持笔悬停，原纸未签。",
+          "prop_state_out": "许宁仍持笔但手已放低，原纸未签且仍在她面前。",
+          "action_in": "周明刚把责任归于填单者。",
+          "action_out": "许宁承认疏漏并讲清曾提醒，等待回应。"
+        },
+        "transition_out": "切周明回应赶车理由。",
+        "merge_candidate": false,
+        "local_rework_risk": "本镜的持笔手位只作连续性意图，未来采用镜头若实际放笔或落笔须局部修复；不靠不可能的胸部近景兼拍全桌。",
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 1
+      },
+      {
+        "id": "shot-qwxb-005",
+        "project_id": "project-bd8595b4b332",
+        "sequence": 5,
+        "scene_id": "scene-7c6c7817bf70",
+        "duration_seconds": 2.9,
+        "narrative_purpose": "周明自己的回答印证先发货的决策原因，为后面的承认埋下直接前因。",
+        "visual": "@周明 仍坐在 @物流公司小会议室 内墙侧，听完后稍作停顿才回答。他没有否认许宁的提醒，目光仍朝画左。保持原靠背状态，尚未坐直。",
+        "framing": "周明胸部近景，灰墙背景，与第3镜一致。",
+        "camera": "固定眼平反打，不为每句改变高低角度。",
+        "audio_intent": "周明原句：“再等，车就走了。”自然解释中带一点辩护，不读成突然认错。许宁画外静听。",
+        "dialogue_line_ids": [
+          "line-qwxb-005"
+        ],
+        "references": [
+          {
+            "subject_asset_id": "asset-9c102fb6c1ce",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 3,
+            "alias": "周明",
+            "required_tags": [
+              "炭灰衬衫",
+              "面部近景",
+              "朝画左"
+            ],
+            "purpose": "待实际周明身份图，沿用第3镜脸部、衣领与视线方向。",
+            "image_reference_role": "SUBJECT_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-24c91a5b7fba",
+            "id": null,
+            "asset_version_id": null,
+            "field": "visual",
+            "text_start": 8,
+            "text_end": 17,
+            "alias": "物流公司小会议室",
+            "required_tags": [
+              "内墙侧反打",
+              "暖中性夜间"
+            ],
+            "purpose": "待实际内墙侧空间图；灰墙和光向与前镜相容。",
+            "image_reference_role": "SCENE_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ],
+        "timeline_beats": [
+          {
+            "start_seconds": 0.0,
+            "end_seconds": 0.3,
+            "visual": "周明听完，短暂看着许宁。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "接收她提出的事实，不抢白。",
+            "performance": null,
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "底噪。",
+            "references": []
+          },
+          {
+            "start_seconds": 0.3,
+            "end_seconds": 2.3,
+            "visual": "周明说赶车的理由，嘴部清楚。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "靠着椅背说完整句，没有另取道具。",
+            "performance": "给自己的先发决定找现实理由，尚想维持原安排。",
+            "emotion": null,
+            "dialogue_line_ids": [
+              "line-qwxb-005"
+            ],
+            "sound": "周明发声。",
+            "references": []
+          },
+          {
+            "start_seconds": 2.3,
+            "end_seconds": 2.9,
+            "visual": "他停话，理由留在两人之间。",
+            "framing": "胸部近景",
+            "camera": "固定",
+            "action": "不立刻追加台词，等许宁回应。",
+            "performance": null,
+            "emotion": null,
+            "dialogue_line_ids": [],
+            "sound": "室内底噪，不加反转音效。",
+            "references": []
+          }
+        ],
+        "continuity": {
+          "character_positions": "周明内墙侧靠背坐着，许宁近门侧画外。",
+          "eyeline": "周明朝画左看许宁。",
+          "prop_state_in": "许宁仍持笔但放低，原纸在她面前未签。",
+          "prop_state_out": "无道具变化。",
+          "action_in": "听见许宁说明曾提醒未复核。",
+          "action_out": "说出赶车理由，仍未坐直。"
+        },
+        "transition_out": "完整句结束后切许宁提出写全经过的条件。",
+        "merge_candidate": false,
+        "local_rework_risk": "需未来声音验证辩护而非提前让步的语气，以及回应间距；静态图不能证明。",
+        "approval_status": "DRAFT",
+        "freshness": "CURRENT",
+        "revision": 1
+      }
+    ],
+    "clip_group": {
+      "id": "clip-qwxb-02",
+      "title": "承认疏漏与未复核的前因",
+      "shot_ids": [
+        "shot-qwxb-003",
+        "shot-qwxb-004",
+        "shot-qwxb-005"
+      ],
+      "duration_seconds": 10.5,
+      "generation_intent": "三次互补视线的人物近景，按来源顺序完整呈现第3–5句。许宁承认自己的疏漏不是认下全部经过；周明的赶车回应为他的先发决定提供因果。让每人说完再回应，面部无遮挡。",
+      "transition_intent": "不跨组拆对白；以周明说完后短暂停顿转入许宁条件。",
+      "continuity_in": [
+        "许宁持笔未签，周明靠椅背。",
+        "许宁近门朝画右，周明内墙朝画左。"
+      ],
+      "visible_changes": [
+        "许宁把持笔手放低，讲清先前提醒。",
+        "周明用赶车理由回应，尚未让步。"
+      ],
+      "continuity_out": [
+        "原纸仍未签，许宁仍持笔。",
+        "周明仍靠背，坐直变化留给下一组。"
+      ],
+      "reference_notes": [
+        "只需两名实际人物身份与对应单人背景，画外人物不要求进入每镜参考画面。",
+        "本组纸笔未入特写，不为画外道具补状态照片；后续与桌面镜头相接时按实际可用边界核验。"
+      ]
+    },
+    "handoff_notes": [
+      "本组10.5秒，累计19秒，覆盖第3–5句；第4句有4.9秒发声时窗和前后回应余量。"
+    ]
+  },
+  "narrative_source": {
+    "id": "project-bd8595b4b332-script-v2",
+    "project_id": "project-bd8595b4b332",
+    "version": 2,
+    "source_mode": "IDEA_EXPANSION",
+    "original_text": "第一场｜内景·物流公司小会议室·夜\n《签完下班》\n\n第一场｜内景·物流公司小会议室·夜\n\n暖中性的顶灯亮着。浅木色会议桌两侧，许宁坐近门一边，周明背对素灰内墙。门关着，室内只有他们两人。\n\n周明把一张发货差错说明推到许宁面前，放下一支黑色签字笔。\n\n周明：这批货发错了，你漏了核对。签完下班。\n\n许宁拿起笔，笔尖停在纸上方。她抬眼，没有落笔。\n\n许宁：这张说明，就我签？\n\n周明：单子是你填的。\n\n许宁把笔放低，仍看着他。\n\n许宁：漏核对，我认。可发货前，我说了还没复核。\n\n周明：再等，车就走了。\n\n许宁：所以你让先发。这句也写上，我签。\n\n周明原本靠着椅背，此刻坐直了。\n\n周明：你非得分这么清？\n\n许宁把笔放到桌中央，再把原纸推到笔旁，收回手。\n\n许宁：你要我负责，就把经过写全。\n\n周明看着她。许宁没有伸手拿笔。\n\n短暂停顿。周明垂眼，把原纸拉到自己面前，拿起笔。\n\n周明：行。先发是我定的。\n\n他在纸的留白处简短补写经过，随后署名。纸笔摩擦声清楚。写完，他把原纸和笔推回许宁面前。\n\n周明：明早我去说明。\n\n许宁看看纸，又看向周明。\n\n许宁：我也去。该我认的，我认。\n\n她在同一张纸的另一处空白签名，把笔放回纸旁，将纸推回。周明接住，两处签写痕迹留在纸上。\n\n许宁站起身，肩膀松下来。\n\n许宁：签完了。下班。\n\n周明抬头看她，点了一下头，没有再把纸推回去。\n\n结束。",
+    "screenplay_text": "第一场｜内景·物流公司小会议室·夜\n《签完下班》\n\n第一场｜内景·物流公司小会议室·夜\n\n暖中性的顶灯亮着。浅木色会议桌两侧，许宁坐近门一边，周明背对素灰内墙。门关着，室内只有他们两人。\n\n周明把一张发货差错说明推到许宁面前，放下一支黑色签字笔。\n\n周明：这批货发错了，你漏了核对。签完下班。\n\n许宁拿起笔，笔尖停在纸上方。她抬眼，没有落笔。\n\n许宁：这张说明，就我签？\n\n周明：单子是你填的。\n\n许宁把笔放低，仍看着他。\n\n许宁：漏核对，我认。可发货前，我说了还没复核。\n\n周明：再等，车就走了。\n\n许宁：所以你让先发。这句也写上，我签。\n\n周明原本靠着椅背，此刻坐直了。\n\n周明：你非得分这么清？\n\n许宁把笔放到桌中央，再把原纸推到笔旁，收回手。\n\n许宁：你要我负责，就把经过写全。\n\n周明看着她。许宁没有伸手拿笔。\n\n短暂停顿。周明垂眼，把原纸拉到自己面前，拿起笔。\n\n周明：行。先发是我定的。\n\n他在纸的留白处简短补写经过，随后署名。纸笔摩擦声清楚。写完，他把原纸和笔推回许宁面前。\n\n周明：明早我去说明。\n\n许宁看看纸，又看向周明。\n\n许宁：我也去。该我认的，我认。\n\n她在同一张纸的另一处空白签名，把笔放回纸旁，将纸推回。周明接住，两处签写痕迹留在纸上。\n\n许宁站起身，肩膀松下来。\n\n许宁：签完了。下班。\n\n周明抬头看她，点了一下头，没有再把纸推回去。\n\n结束。",
+    "spoken_text": "这批货发错了，你漏了核对。签完下班。\n这张说明，就我签？\n单子是你填的。\n漏核对，我认。可发货前，我说了还没复核。\n再等，车就走了。\n所以你让先发。这句也写上，我签。\n你非得分这么清？\n你要我负责，就把经过写全。\n行。先发是我定的。\n明早我去说明。\n我也去。该我认的，我认。\n签完了。下班。",
+    "subtitle_text": "这批货发错了，你漏了核对。签完下班。\n这张说明，就我签？\n单子是你填的。\n漏核对，我认。可发货前，我说了还没复核。\n再等，车就走了。\n所以你让先发。这句也写上，我签。\n你非得分这么清？\n你要我负责，就把经过写全。\n行。先发是我定的。\n明早我去说明。\n我也去。该我认的，我认。\n签完了。下班。",
+    "lines": [
+      {
+        "id": "line-qwxb-001",
+        "speaker": "周明",
+        "speaker_character_id": "asset-9c102fb6c1ce",
+        "original_text": "这批货发错了，你漏了核对。签完下班。",
+        "spoken_text": "这批货发错了，你漏了核对。签完下班。",
+        "subtitle_text": "这批货发错了，你漏了核对。签完下班。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-002",
+        "speaker": "许宁",
+        "speaker_character_id": "asset-a999f3e98732",
+        "original_text": "这张说明，就我签？",
+        "spoken_text": "这张说明，就我签？",
+        "subtitle_text": "这张说明，就我签？",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-003",
+        "speaker": "周明",
+        "speaker_character_id": "asset-9c102fb6c1ce",
+        "original_text": "单子是你填的。",
+        "spoken_text": "单子是你填的。",
+        "subtitle_text": "单子是你填的。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-004",
+        "speaker": "许宁",
+        "speaker_character_id": "asset-a999f3e98732",
+        "original_text": "漏核对，我认。可发货前，我说了还没复核。",
+        "spoken_text": "漏核对，我认。可发货前，我说了还没复核。",
+        "subtitle_text": "漏核对，我认。可发货前，我说了还没复核。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-005",
+        "speaker": "周明",
+        "speaker_character_id": "asset-9c102fb6c1ce",
+        "original_text": "再等，车就走了。",
+        "spoken_text": "再等，车就走了。",
+        "subtitle_text": "再等，车就走了。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-006",
+        "speaker": "许宁",
+        "speaker_character_id": "asset-a999f3e98732",
+        "original_text": "所以你让先发。这句也写上，我签。",
+        "spoken_text": "所以你让先发。这句也写上，我签。",
+        "subtitle_text": "所以你让先发。这句也写上，我签。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-007",
+        "speaker": "周明",
+        "speaker_character_id": "asset-9c102fb6c1ce",
+        "original_text": "你非得分这么清？",
+        "spoken_text": "你非得分这么清？",
+        "subtitle_text": "你非得分这么清？",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-008",
+        "speaker": "许宁",
+        "speaker_character_id": "asset-a999f3e98732",
+        "original_text": "你要我负责，就把经过写全。",
+        "spoken_text": "你要我负责，就把经过写全。",
+        "subtitle_text": "你要我负责，就把经过写全。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-009",
+        "speaker": "周明",
+        "speaker_character_id": "asset-9c102fb6c1ce",
+        "original_text": "行。先发是我定的。",
+        "spoken_text": "行。先发是我定的。",
+        "subtitle_text": "行。先发是我定的。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-010",
+        "speaker": "周明",
+        "speaker_character_id": "asset-9c102fb6c1ce",
+        "original_text": "明早我去说明。",
+        "spoken_text": "明早我去说明。",
+        "subtitle_text": "明早我去说明。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-011",
+        "speaker": "许宁",
+        "speaker_character_id": "asset-a999f3e98732",
+        "original_text": "我也去。该我认的，我认。",
+        "spoken_text": "我也去。该我认的，我认。",
+        "subtitle_text": "我也去。该我认的，我认。",
+        "audio_kind": "DIALOGUE"
+      },
+      {
+        "id": "line-qwxb-012",
+        "speaker": "许宁",
+        "speaker_character_id": "asset-a999f3e98732",
+        "original_text": "签完了。下班。",
+        "spoken_text": "签完了。下班。",
+        "subtitle_text": "签完了。下班。",
+        "audio_kind": "DIALOGUE"
+      }
+    ],
+    "structured_scenes": [
+      {
+        "id": "scene-7c6c7817bf70",
+        "heading": "第一场｜内景·物流公司小会议室·夜",
+        "summary": "主管周明要求许宁独自签下发货差错说明。许宁承认漏核对，但追问是否只有自己署名，并指出事先已提醒尚未复核；周明以怕错过发车为由回应，印证了他决定先发货的前因。许宁把纸笔退到桌中央，坚持经过写全才签。周明补写并先署名，承诺次日说明；许宁随后签名并主动同行，最后以“签完了。下班。”回收开头。",
+        "line_ids": [
+          "line-qwxb-001",
+          "line-qwxb-002",
+          "line-qwxb-003",
+          "line-qwxb-004",
+          "line-qwxb-005",
+          "line-qwxb-006",
+          "line-qwxb-007",
+          "line-qwxb-008",
+          "line-qwxb-009",
+          "line-qwxb-010",
+          "line-qwxb-011",
+          "line-qwxb-012"
+        ],
+        "screenplay_text": "《签完下班》\n\n第一场｜内景·物流公司小会议室·夜\n\n暖中性的顶灯亮着。浅木色会议桌两侧，许宁坐近门一边，周明背对素灰内墙。门关着，室内只有他们两人。\n\n周明把一张发货差错说明推到许宁面前，放下一支黑色签字笔。\n\n周明：这批货发错了，你漏了核对。签完下班。\n\n许宁拿起笔，笔尖停在纸上方。她抬眼，没有落笔。\n\n许宁：这张说明，就我签？\n\n周明：单子是你填的。\n\n许宁把笔放低，仍看着他。\n\n许宁：漏核对，我认。可发货前，我说了还没复核。\n\n周明：再等，车就走了。\n\n许宁：所以你让先发。这句也写上，我签。\n\n周明原本靠着椅背，此刻坐直了。\n\n周明：你非得分这么清？\n\n许宁把笔放到桌中央，再把原纸推到笔旁，收回手。\n\n许宁：你要我负责，就把经过写全。\n\n周明看着她。许宁没有伸手拿笔。\n\n短暂停顿。周明垂眼，把原纸拉到自己面前，拿起笔。\n\n周明：行。先发是我定的。\n\n他在纸的留白处简短补写经过，随后署名。纸笔摩擦声清楚。写完，他把原纸和笔推回许宁面前。\n\n周明：明早我去说明。\n\n许宁看看纸，又看向周明。\n\n许宁：我也去。该我认的，我认。\n\n她在同一张纸的另一处空白签名，把笔放回纸旁，将纸推回。周明接住，两处签写痕迹留在纸上。\n\n许宁站起身，肩膀松下来。\n\n许宁：签完了。下班。\n\n周明抬头看她，点了一下头，没有再把纸推回去。\n\n结束。",
+        "narrative_purpose": "让普通职员通过承认自己的疏漏、停止独签并提出明确条件，迫使主管从单方追责转为共同记录事实；用同一张纸、同一支笔的归属变化和先后署名兑现职场边界的情绪回报。",
+        "target_duration_seconds": 56.0,
+        "entry_state": {
+          "setting": "工作日晚间，物流公司小会议室；许宁近门、周明靠内墙，隔桌相对，门关闭。",
+          "character_states": [
+            "许宁疲惫，拿到说明后尚未签字。",
+            "周明掌握说明和笔，以签字作为下班前的要求。"
+          ],
+          "prop_states": [
+            "一张尚无人署名的白色A4发货差错说明。",
+            "同一支黑色按动签字笔，笔尖已伸出，由周明放到许宁面前。"
+          ],
+          "known_facts": [
+            "一批货已发错，许宁漏了核对。",
+            "眼前任务是签署差错说明，而不是当场处理发货。"
+          ],
+          "open_threads": [
+            "说明是否只由许宁署名、只记录她的疏漏。"
+          ]
+        },
+        "exit_state": {
+          "setting": "仍在同一间会议室，门未开启；许宁从近门侧座位站起，周明仍在内墙侧。",
+          "character_states": [
+            "许宁承认自己漏核对，拒绝独自承担全部经过；待主管署名后签字，主动提出次日同行说明。",
+            "周明承认先发是自己的决定，补写经过并先署名，收下两人签过的原纸，不再阻拦许宁下班。"
+          ],
+          "prop_states": [
+            "原A4说明已有补写经过及两人的签写痕迹，结尾由周明接住。",
+            "原黑色签字笔经过两人使用，最终放回纸旁的桌面。"
+          ],
+          "known_facts": [
+            "许宁事先提醒尚未复核，周明为赶发车决定先发。",
+            "双方各自的行为都已纳入本次说明，两人将于次日共同解释。",
+            "“签完下班”由催促独签变为双方署名后的结束。"
+          ],
+          "open_threads": []
+        }
+      }
+    ],
+    "structure_stale_scene_ids": [],
+    "review_report": null,
+    "review_disposition": null,
+    "final_cold_read_report": null,
+    "ending_contract": null,
+    "story_intent": null,
+    "source_contract": null,
+    "planning_run_id": null,
+    "approval_status": "APPROVED",
+    "freshness": "CURRENT",
+    "parent_version_id": "project-bd8595b4b332-script-v1",
+    "change_reason": "当前场次编辑",
+    "created_at": "2026-09-12T10:06:45.938191+00:00"
+  },
+  "media_sources": [
+    {
+      "asset_metadata": {
+        "id": "asset-a999f3e98732",
+        "project_id": "project-bd8595b4b332",
+        "kind": "CHARACTER",
+        "name": "许宁",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "许宁，29岁中国成年女性，运营专员；椭圆脸，平直眉，深棕色眼睛，黑色齐肩直发别在耳后，身形中等。",
+          "tone_or_temperament": "疲惫但清醒；起初压着情绪，明确边界时看着对方说话，不咆哮、不讨好。",
+          "visual_attributes": [
+            "自然成年面部比例，清晰眼睛与唇形",
+            "黑色齐肩直发，侧分，无刘海遮眼",
+            "不戴眼镜，淡妆，真实皮肤纹理"
+          ],
+          "wardrobe_or_materials": [
+            "浅蓝色长袖棉质衬衫，袖口扣好",
+            "深灰色直筒长裤",
+            "无醒目首饰、胸牌或品牌标识"
+          ],
+          "background_constraints": [
+            "只属于本项目原创人物，不使用其他项目照片或身份"
+          ],
+          "texture_constraints": [
+            "真人摄影质感，保留自然肤质，禁止动漫化和塑料磨皮"
+          ],
+          "continuity_anchors": [
+            "全场发型、服装和年龄外貌一致",
+            "在会议桌靠门一侧就座，与周明隔桌相对",
+            "开场未签字；主管署名后才签自己的名字"
+          ],
+          "named_views_or_zones": [
+            "脸部辨识区",
+            "上半身服装区"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": null
+        },
+        "current_version_id": "asset-version-25a7c2a06f69",
+        "approved_version_id": null
+      },
+      "selected_versions": [
+        {
+          "id": "asset-version-cd9ab32b2b1f",
+          "version": 2,
+          "origin_type": "AI_GENERATED",
+          "descriptor": "许宁原创身份母图候选：近正面头顶至大腿中部，29岁中国成年女性，浅蓝扣袖口长袖棉衬衫与深灰直筒裤；中性背景，仅供身份及服装参考。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/v2-asset-version-cd9ab32b2b1f.png",
+          "external_url": null,
+          "mime_type": "image/png",
+          "width": 1536,
+          "height": 2048,
+          "duration_seconds": null,
+          "file_size_bytes": 3110687,
+          "parent_version_id": null,
+          "image_task_id": "image-task-01735fde8d4f",
+          "derivation_references": [],
+          "reference_sheet": null,
+          "image_crop": null,
+          "text_plate": null,
+          "source": {
+            "source_type": "AI_GENERATED",
+            "source_label": "GPT Image 2 生成",
+            "source_uri": null,
+            "original_filename": null,
+            "provider": "openai",
+            "provider_asset_id": null,
+            "creator": null,
+            "creator_uri": null,
+            "license_name": null,
+            "license_uri": null,
+            "attribution": null,
+            "stock_import_mode": null,
+            "model": "gpt-image-2",
+            "prompt": "为现实职场短剧制作一张原创人物摄影参考，不模仿任何真实名人。画面只有同一个人物的一张照片，不拼板、不含文字。许宁：29岁中国成年女性，普通物流公司运营专员，中等身形，自然成年面部比例，椭圆脸、平直眉、深棕色眼睛，黑色侧分齐肩直发，头发整洁别在耳后，没有遮眼刘海；不戴眼镜，极淡的日常妆，真实肤质与细小纹理，眼睛和嘴唇清晰自然。气质平实、稍疲惫但清醒，嘴唇自然闭合，沉静直接，没有广告微笑、时装姿势或浓妆修容。穿朴素浅蓝色长袖棉质衬衫，领口自然，袖口扣好，面料不透，适度日常褶皱；衬衫自然收入深灰色直筒长裤。无醒目首饰、胸牌和品牌标识。相机平视，近正面站姿，从完整头顶到大腿中部的单人参考照，双臂自然垂放，不持物、不摆手势，清楚展示衬衫领口、肩部、衣襟、两侧长袖和扣合袖口，以及长裤腰部和上段。不要把人物腿拉长或拍成模特。背景为简单暖浅灰中性背景，无家具、场景道具或其他人影。自然暖中性柔光，面部曝光明亮均匀，清楚呈现眼睛、唇形和织物，真人实景摄影质感，非动漫非插画，拒绝塑料磨皮、过度锐化和商业大片装饰。人物脸部与躯干均对焦清楚，适合作为该人物持续一致的身份和服装母图。",
+            "created_at": "2026-09-12T10:14:08.881+00:00"
+          },
+          "approval_status": "DRAFT",
+          "review_notes": null,
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T10:14:08.881+00:00"
+        },
+        {
+          "id": "asset-version-25a7c2a06f69",
+          "version": 3,
+          "origin_type": "LOCAL_DERIVED",
+          "descriptor": "许宁近正面脸部身份参考；从原创母图保留原始像素裁取完整头发、可见双耳、下颌、颈部与领口。用于近景和对话人物身份，不代表会议室构图或镜头首帧；服装、袖口及裤腰仍引用母图。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/v3-asset-version-25a7c2a06f69-crop.png",
+          "external_url": null,
+          "mime_type": "image/png",
+          "width": 569,
+          "height": 759,
+          "duration_seconds": null,
+          "file_size_bytes": 521164,
+          "parent_version_id": "asset-version-cd9ab32b2b1f",
+          "image_task_id": null,
+          "derivation_references": [
+            {
+              "asset_version_id": "asset-version-cd9ab32b2b1f",
+              "source_project_id": "project-bd8595b4b332",
+              "reference_role": "SUBJECT_IDENTITY",
+              "reference_authority": "AUTHORITATIVE",
+              "purpose": "原图中的精确局部像素；仅承担本次声明的参考职责。",
+              "subject_alias": "许宁"
+            }
+          ],
+          "reference_sheet": null,
+          "image_crop": {
+            "source_asset_version_id": "asset-version-cd9ab32b2b1f",
+            "source_width": 1536,
+            "source_height": 2048,
+            "box_pixels": [
+              491,
+              71,
+              1060,
+              830
+            ]
+          },
+          "text_plate": null,
+          "source": {
+            "source_type": "LOCAL_DERIVED",
+            "source_label": "本地图像裁切",
+            "source_uri": null,
+            "original_filename": null,
+            "provider": "local",
+            "provider_asset_id": null,
+            "creator": null,
+            "creator_uri": null,
+            "license_name": null,
+            "license_uri": null,
+            "attribution": null,
+            "stock_import_mode": null,
+            "model": "pillow-crop-v1",
+            "prompt": null,
+            "created_at": "2026-09-12T10:16:05.542+00:00"
+          },
+          "approval_status": "DRAFT",
+          "review_notes": null,
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T10:16:05.542+00:00"
+        }
+      ],
+      "omitted_version_ids": [
+        "asset-version-b3d904a890d7"
+      ]
+    },
+    {
+      "asset_metadata": {
+        "id": "asset-24c91a5b7fba",
+        "project_id": "project-bd8595b4b332",
+        "kind": "LOCATION",
+        "name": "物流公司小会议室",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "单一主要室内空间：普通物流公司小会议室，工作日晚间；浅木色矩形桌、相对两椅、素灰内墙与一侧磨砂玻璃。",
+          "tone_or_temperament": null,
+          "visual_attributes": [
+            "空间简洁，无拥挤杂物",
+            "桌面足够容纳一张A4说明与一支笔",
+            "许宁坐近门侧，周明坐内墙侧，始终隔桌相对",
+            "入口在许宁侧后方，磨砂玻璃在桌的一侧"
+          ],
+          "wardrobe_or_materials": [
+            "浅木纹哑光桌面",
+            "深灰织物办公椅",
+            "灰白乳胶漆墙、磨砂玻璃"
+          ],
+          "background_constraints": [
+            "无第三人、人物倒影或背景人影",
+            "无需要读取的屏幕、海报、时钟或企业标识",
+            "门在全场保持关闭，不扩展走廊场景"
+          ],
+          "texture_constraints": [
+            "真人实景摄影质感，玻璃反射克制，不出现摄影设备"
+          ],
+          "continuity_anchors": [
+            "稳定保留门、内墙、磨砂玻璃与双方座位关系",
+            "暖中性顶灯照明，脸部清楚，不以昏暗掩盖表演",
+            "纸笔是唯一需要连续追踪的桌面活动道具"
+          ],
+          "named_views_or_zones": [
+            "隔桌对话区",
+            "桌中央说明与笔的交接区",
+            "许宁侧背景入口",
+            "周明侧素灰内墙"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": null
+        },
+        "current_version_id": "asset-version-c48ea915da16",
+        "approved_version_id": null
+      },
+      "selected_versions": [
+        {
+          "id": "asset-version-c48ea915da16",
+          "version": 2,
+          "origin_type": "AI_GENERATED",
+          "descriptor": "原创无人物会议室空间母版候选：浅木矩形桌与相对两椅，画面左椅近关闭入口、右椅靠素灰内墙，桌远端一侧为磨砂玻璃；暖中性顶灯、空桌。用于空间与照明继承，不是最终竖屏镜头或纸笔状态图。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/v2-asset-version-c48ea915da16.png",
+          "external_url": null,
+          "mime_type": "image/png",
+          "width": 1536,
+          "height": 1024,
+          "duration_seconds": null,
+          "file_size_bytes": 1899275,
+          "parent_version_id": null,
+          "image_task_id": "image-task-f4f6d248f4bb",
+          "derivation_references": [],
+          "reference_sheet": null,
+          "image_crop": null,
+          "text_plate": null,
+          "source": {
+            "source_type": "AI_GENERATED",
+            "source_label": "GPT Image 2 生成",
+            "source_uri": null,
+            "original_filename": null,
+            "provider": "openai",
+            "provider_asset_id": null,
+            "creator": null,
+            "creator_uri": null,
+            "license_name": null,
+            "license_uri": null,
+            "attribution": null,
+            "stock_import_mode": null,
+            "model": "gpt-image-2",
+            "prompt": "Original live-action photographic location reference for a modest small meeting room in an ordinary contemporary Chinese logistics office at night. An empty real room, absolutely NO people, human silhouettes, reflections of people, mannequins or camera equipment. A single matte light natural wood rectangular meeting table, approximately 160 by 80 cm, with exactly TWO matching dark gray fabric office chairs facing each other across its two long sides. No chairs at the short ends and no other seats anywhere. Clear, physically plausible floor space around the table for sitting down and standing up. The tabletop is completely bare: no paper, pen, computer, phone, cups or decorative objects.\nShow the layout in one unlabelled natural architectural photograph from the open short end of the table, camera at about seated-to-standing eye level with a modest diagonal view, allowing both chairs, the whole tabletop, the left wall entrance, the right inner wall and the far frosted-glass partition to be understood together. Use natural moderate wide-angle perspective, roughly a 32 mm full-frame lens; straight verticals, no fisheye, no exaggerated table length, no dollhouse, no floorplan or collage.\nConsistent spatial anchors in this photograph: the chair on image LEFT is the future near-door seat for Xu Ning, facing across the table toward image RIGHT. On the left side wall, a single CLOSED plain light-gray office door lies behind and slightly to the side of this left chair, visibly accessible without crossing the tabletop. The chair on image RIGHT is the future inner-wall seat for Zhou Ming, facing image LEFT, and has a plain solid gray painted inner wall directly behind it. The far short wall of the room, beyond the far short end of the table and to one side of the line between the two seats, contains a matte frosted-glass office partition with slim unobtrusive gray framing. Glass is opaque/translucent with restrained highlights, not transparent; no corridor view, people or readable objects through it. Keep the door and the solid gray chair-background wall distinct from the glass partition. Show plausible chair bases and table support with consistent vanishing points, sufficient knee room and no interpenetration.\nLighting: evenly lit working-evening office interior, warm-neutral ceiling illumination around 4000 K, broad soft light and gentle natural contact shadows. The two future seated face positions and the central tabletop should receive usable, clear light, not a moody dark cinematic look, not orange tungsten, not blue daylight. Gray-white painted walls, restrained gray floor, realistic matte woodgrain, fabric and frosted glass. Modest practical finishes, not a luxury boardroom. High photographic realism, naturally detailed materials, neutral exposure, no heavy vignette or artificial blur. No readable text, logos, posters, clocks, screens, arrows or annotations. This is a clean reusable spatial and lighting reference, not a final dramatic shot or a character composition.",
+            "created_at": "2026-09-12T10:14:15.921+00:00"
+          },
+          "approval_status": "DRAFT",
+          "review_notes": null,
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T10:14:15.921+00:00"
+        }
+      ],
+      "omitted_version_ids": [
+        "asset-version-3e1127fdc9b4"
+      ]
+    },
+    {
+      "asset_metadata": {
+        "id": "asset-7687da76f6c6",
+        "project_id": "project-bd8595b4b332",
+        "kind": "REFERENCE",
+        "name": "第4镜｜许宁近门席胸部近景",
+        "bible_entity_id": null,
+        "brief": {
+          "identity_anchor": "第4镜场内构图；许宁身份沿用asset-version-25a7c2a06f69，发型、浅蓝衬衫和体态沿用asset-version-cd9ab32b2b1f，近门席空间与光色沿用asset-version-c48ea915da16。",
+          "tone_or_temperament": "平静清醒、克制直接，适合坦然承认疏漏后陈述先前已提醒的事实；不愤怒咆哮、不讨好微笑。",
+          "visual_attributes": [
+            "9:16单张真人摄影胸部近景，眼平固定机位",
+            "许宁坐姿，脸与视线朝画右的画外周明，眼睛、嘴部与自然肤纹清楚",
+            "头部、领口、肩胸和少量低处手臂形成自然近景，不扩大到全桌或整纸"
+          ],
+          "wardrobe_or_materials": [
+            "沿用浅蓝色长袖棉质衬衫与黑色侧分齐肩直发",
+            "近门席深灰织物办公椅、浅灰闭门与灰墙局部"
+          ],
+          "background_constraints": [
+            "继承真实会议室近门席及关闭入口，不镜像空间、不交换两人座位",
+            "周明在画外；无第三人、人物倒影、可读标识或摄影设备",
+            "纸笔在画面下方画外，不新增握笔特写、签字或放笔状态"
+          ],
+          "texture_constraints": [
+            "真人实景摄影质感，脸部清晰对焦、自然肤纹",
+            "暖中性办公室照明；背景可自然虚化，五官不可模糊"
+          ],
+          "continuity_anchors": [
+            "仅供shot-qwxb-004、clip-qwxb-02内第4镜的COMPOSITION用途",
+            "构图允许持笔手向下离开下沿，静态图片不验证下降动作，也不改变未签且仍持笔的剧情连续性",
+            "不覆盖人物或场景身份母版；不作为整组首帧"
+          ],
+          "named_views_or_zones": [
+            "第4镜许宁胸部近景",
+            "近门侧闭门背景"
+          ],
+          "presentation_mode": null,
+          "required_visible_text": [],
+          "reference_strategy": "LIGHTWEIGHT",
+          "layout_profile": "LIGHTWEIGHT_SINGLE",
+          "requested_views": [],
+          "strategy_rationale": "已有清楚身份与空间媒体，仅补必要场内单视图；本镜纸笔画外，不等待纸张状态。"
+        },
+        "current_version_id": "asset-version-48b4a1aa4f51",
+        "approved_version_id": null
+      },
+      "selected_versions": [
+        {
+          "id": "asset-version-48b4a1aa4f51",
+          "version": 2,
+          "origin_type": "AI_GENERATED",
+          "descriptor": "第4镜许宁近门席9:16胸部近景候选：沿用指定身份、浅蓝衬衫与会议室光色，坐着朝画右看画外周明，脸部清楚，纸笔在下方画外。仅供shot-qwxb-004的软COMPOSITION参考，不是整组首帧，不证明持笔手下降、未签状态或对白动态。",
+          "media_type": "IMAGE",
+          "local_path": "/fixtures/v2-asset-version-48b4a1aa4f51.png",
+          "external_url": null,
+          "mime_type": "image/png",
+          "width": 1152,
+          "height": 2048,
+          "duration_seconds": null,
+          "file_size_bytes": 2736791,
+          "parent_version_id": null,
+          "image_task_id": "image-task-1348af6cf02f",
+          "derivation_references": [
+            {
+              "asset_version_id": "asset-version-25a7c2a06f69",
+              "source_project_id": "project-bd8595b4b332",
+              "reference_role": "SUBJECT_IDENTITY",
+              "reference_authority": "AUTHORITATIVE",
+              "purpose": "许宁的同一脸部身份、年龄感、肤色和五官比例；原像素裁图，不提供场内构图。",
+              "subject_alias": "许宁"
+            },
+            {
+              "asset_version_id": "asset-version-cd9ab32b2b1f",
+              "source_project_id": "project-bd8595b4b332",
+              "reference_role": "WARDROBE",
+              "reference_authority": "AUTHORITATIVE",
+              "purpose": "同一许宁的浅蓝长袖棉衬衫、黑色侧分齐肩发及体态；不继承站姿或中性背景。",
+              "subject_alias": "许宁"
+            },
+            {
+              "asset_version_id": "asset-version-c48ea915da16",
+              "source_project_id": "project-bd8595b4b332",
+              "reference_role": "SCENE_IDENTITY",
+              "reference_authority": "AUTHORITATIVE",
+              "purpose": "真实会议室近门席、关闭入口、深灰椅与灰墙局部及暖中性办公光；不镜像母版，不交换双方席位。",
+              "subject_alias": "物流公司小会议室"
+            }
+          ],
+          "reference_sheet": null,
+          "image_crop": null,
+          "text_plate": null,
+          "source": {
+            "source_type": "AI_GENERATED",
+            "source_label": "GPT Image 2 参考生成",
+            "source_uri": null,
+            "original_filename": null,
+            "provider": "openai",
+            "provider_asset_id": null,
+            "creator": null,
+            "creator_uri": null,
+            "license_name": null,
+            "license_uri": null,
+            "attribution": null,
+            "stock_import_mode": null,
+            "model": "gpt-image-2",
+            "prompt": "制作一张9:16竖屏真人实景摄影剧照，单幅画面，不拼板、不含文字。严格使用这次实际输入的三张图：图1是许宁的权威脸部身份，保留同一张脸的椭圆轮廓、眉眼间距、眼形、鼻唇、年龄感和自然肤色；图2是同一许宁的服装、发型与体态依据，保留黑色侧分齐肩直发别在耳后的造型、朴素浅蓝色长袖棉衬衫、正常成年女性体态，不使用其中的中性背景或站姿；图3只提供真实小会议室的空间、家具材质和暖中性办公室照明，不提供人物身份。\n拍摄第4镜：许宁仍坐在图3中靠关闭入口的那把深灰织物椅上，也就是空场母图的左侧席位，不换到右侧素灰内墙席。对面的周明完全在画外。相机在双方对话轴靠近原图近短端的一侧，从桌边近距离平视拍许宁，保持她向画面右侧看画外对话者的方向，不越轴、不把房间镜像当作反打。将真实近门席后方的浅灰关闭门、门框及灰墙局部自然呈现在她身后；门保持关闭，背景可以柔和虚化，不必把磨砂玻璃或全房间强行塞入近景。\n这是眼平固定机位的胸部近景，完整头部、颈部、浅蓝衬衫领口和肩胸为主体，脸在画面上半部，画面右侧有适量视线空间。许宁身体稳定地坐着，头和双眼自然转向画右，轻微三分之四朝向而非完全侧脸，双眼与嘴部都可清楚观察，不看镜头。表情平静清醒，略有工作后的疲惫，克制而直接，嘴唇自然放松闭合，适合随后坦然承认疏漏并陈述事实；不要微笑讨好、咆哮、瞪眼、哭泣或夸张摆拍。\n下沿保留自然的低处袖臂走向，让后续持笔手向下离开画面有空间，但不要将手势作为画面中心。双手、纸张和笔均在画面下方之外；不要画握笔特写、整张纸、签名或放在桌上的笔，也不要为露出道具拉远成中景或全桌景。只需要胸部近景以及少量可见椅背；不要求画外物件出现。本图不是动作完成证明，也不是整组首帧。\n真人实景摄影质感，自然透视，暖中性柔和办公室顶灯及真实漫反射补光，面部曝光充足不过曝，眼睛、睫毛、鼻唇和基本皮肤纹理清楚对焦，淡妆、无塑料磨皮；背景虚化不影响面部锐度。衬衫不透，领口、衣襟和自然褶皱与图2相容，头发不遮住眼睛。无第二个人、人物倒影、额外肢体、首饰胸牌、标识、字幕或摄影器材。不要把人物参考照直接贴到房间背景，人物受光与空间应自然融为一张真实场内照片。",
+            "created_at": "2026-09-12T10:22:35.678+00:00"
+          },
+          "approval_status": "DRAFT",
+          "review_notes": null,
+          "freshness": "CURRENT",
+          "created_at": "2026-09-12T10:22:35.678+00:00"
+        }
+      ],
+      "omitted_version_ids": [
+        "asset-version-c09de40967a7"
+      ]
+    }
+  ],
+  "fixture_note": "Cropped actual Fresh6 saved inputs/results. Draft fixture keeps only the selected committed group; omitted groups are not reconstructed. Image paths normalized to /fixtures; temporary test pixels prove protocol wiring only, never visual quality."
+}

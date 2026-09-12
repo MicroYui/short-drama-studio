@@ -152,7 +152,7 @@ class OpenAICompatibleLanguageClient:
     ) -> str:
         from short_drama.studio_trace import clean_trace_text, record_trace
         from short_drama.studio_generation_draft import StreamedCreativeDraft
-        from short_drama.agent_runtime.token_budget import ContextBudget, count_text_tokens
+        from short_drama.agent_runtime.token_budget import ContextBudget, count_text_tokens, reserved_visual_tokens
         from uuid import uuid4
 
         call_id = f"model-{uuid4().hex[:12]}"
@@ -206,10 +206,12 @@ class OpenAICompatibleLanguageClient:
             # the configured window. Vision usage is still provider-reported.
             budget = ContextBudget()
             estimated_text_tokens = count_text_tokens(instructions) + count_text_tokens(input_text)
-            input_limit = budget.input_limit(max_output_tokens)
+            visual_tokens = reserved_visual_tokens(len(image_urls or []))
+            input_limit = budget.input_limit(max_output_tokens, visual_tokens=visual_tokens)
             record_trace("model.preflight", {"call_id": call_id, "window_tokens": budget.window_tokens,
                 "estimated_text_tokens": estimated_text_tokens, "reserved_output_tokens": max_output_tokens,
                 "input_limit_tokens": input_limit, "image_count": len(image_urls or []),
+                "reserved_visual_tokens": visual_tokens, "visual_token_measurement": "ALLOWANCE_NOT_PROVIDER_USAGE",
                 "image_tokens_included": False, "within_text_budget": estimated_text_tokens <= input_limit})
             if estimated_text_tokens > input_limit:
                 completion_type = "local_context_limit"

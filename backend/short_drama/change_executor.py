@@ -69,6 +69,13 @@ _ALLOWED_FIELDS: dict[ChangeTargetKind, frozenset[str]] = {
             "audio_intent",
             "transition_out",
             "local_rework_risk",
+            "continuity.character_positions",
+            "continuity.eyeline",
+            "continuity.prop_state_in",
+            "continuity.prop_state_out",
+            "continuity.action_in",
+            "continuity.action_out",
+
         }
     ),
 }
@@ -80,7 +87,7 @@ class SemanticArtifactPatch(DomainModel):
     target_kind: ChangeTargetKind
     target_id: str = Field(min_length=1, max_length=240)
     operation: SemanticPatchOperation = SemanticPatchOperation.SET_FIELDS
-    updates: dict[str, str] = Field(min_length=1, max_length=16)
+    updates: dict[str, str] = Field(min_length=1, max_length=16, description="Exact supported fields. SHOT also accepts continuity.character_positions, continuity.eyeline, continuity.prop_state_in, continuity.prop_state_out, continuity.action_in and continuity.action_out. Keep outgoing continuity and affected transition prose consistent when changing an action; no automatic rewriting of neighbours.")
 
     @model_validator(mode="after")
     def validate_fields(self) -> SemanticArtifactPatch:
@@ -366,7 +373,10 @@ def prepare_semantic_change(
                 if field in {"visual", "camera"}:
                     references = remap_field_references(references, field=field,
                         before=getattr(shot, field), after=after)
-                payload[field] = after
+                if field.startswith("continuity."):
+                    payload["continuity"][field.removeprefix("continuity.")] = after
+                else:
+                    payload[field] = after
         except ValueError as exc:
             raise ChangeExecutionError(f"Invalid shot patch: {exc}") from exc
         payload["references"] = [cue.model_dump(mode="python") for cue in references]

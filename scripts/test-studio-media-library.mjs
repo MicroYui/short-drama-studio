@@ -5,7 +5,7 @@ import ts from 'typescript'
 
 const source = readFileSync(new URL('../frontend/features/short-drama/studio-media-library.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
-const { assetGroups, mediaLabel, projectMediaFiles, libraryFileCards, fileReadLabel, fileModificationPrompt, selectedFileScope } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+const { assetGroups, assetGroupPreview, mediaLabel, projectMediaFiles, libraryFileCards, fileReadKey, fileReadLabel, fileModificationPrompt, selectedFileScope } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 function version(id, extra = {}) {
   return { id, version: 1, descriptor: `情况说明｜${id}`, media_type: 'IMAGE', local_path: `/media/${id}.png`,
@@ -124,4 +124,109 @@ test('two Takes of one imported file keep the first visible target and all cover
   assert.deepEqual(files[0].shotIds, ['shot-1', 'shot-2'])
   assert.deepEqual(files[0].relatedTakes.map(item => item.id), ['take-first', 'take-second'])
   assert.deepEqual(p, before)
+})
+
+test('Fresh6 rejected current is not a default cover; exact canonical and every saved file remain available', () => {
+  const { preview_snapshot: saved } = JSON.parse(readFileSync(new URL('../backend/tests/fixtures/fresh6_paper_candidate_contracts.json', import.meta.url), 'utf8'))
+  const p = project([saved.asset], [], { reference_packs: saved.reference_packs,
+    shots: saved.shot_cues.map(shot => ({ id: shot.shot_id, sequence: shot.sequence, references: shot.cues })) })
+  const before = structuredClone(p)
+  const groups = assetGroups(p, { allMedia: true })
+  const files = projectMediaFiles(p, groups)
+  assert.equal(assetGroupPreview(p, groups[0], files).id, 'asset-version-6121f0476318')
+  assert.deepEqual(files.map(file => file.id), saved.asset.versions.map(version => version.id))
+  const rejected = assetGroupPreview(p, groups[0], files, {}, saved.asset.current_version_id)
+  assert.equal(rejected.id, 'asset-version-dd6a58f9e33e')
+  assert.equal(rejected.warning, '已拒绝')
+  assert.equal(selectedFileScope(rejected).asset_version_id, saved.asset.current_version_id)
+  assert.deepEqual(p, before)
+})
+
+test('valid current stays default, while explicit inspection is retained across a changed current', () => {
+  const p = project([asset('paper', [version('canonical'), version('current'), version('rejected', { approval_status: 'REJECTED' })], { current_version_id: 'current' })], [], {
+    reference_packs: [{ subject_asset_id: 'paper', entries: [{ role: 'CANONICAL_MASTER', asset_version_id: 'canonical' }] }],
+  })
+  const groups = assetGroups(p, { allMedia: true })
+  const files = projectMediaFiles(p, groups)
+  assert.equal(assetGroupPreview(p, groups[0], files).id, 'current')
+  assert.equal(assetGroupPreview(p, groups[0], files, {}, 'rejected').id, 'rejected')
+  p.document.assets[0].current_version_id = 'canonical'
+  assert.equal(assetGroupPreview(p, groups[0], files, {}, 'rejected').id, 'rejected')
+  assert.equal(assetGroupPreview(p, groups[0], files).id, 'canonical')
+})
+
+test('unusable canonical falls back to actual bound or registered media, never another asset group', () => {
+  for (const problem of [{ approval_status: 'REJECTED' }, { approval_status: 'SUPERSEDED' }, { freshness: 'STALE' }, { local_path: null }, { file_size_bytes: 0 }, { readError: true }]) {
+    const p = project([asset('paper', [version('bad-current', { approval_status: 'REJECTED' }), version('canonical', problem), version('registered'), version('bound')], { current_version_id: 'bad-current' }), asset('room', [version('other')])], [], {
+      reference_packs: [{ subject_asset_id: 'paper', entries: [{ role: 'CANONICAL_MASTER', asset_version_id: 'canonical' }, { role: 'PROP_STATE', asset_version_id: 'registered' }] }],
+      shots: [{ id: 'shot', references: [{ asset_version_id: 'bound' }] }],
+    })
+    const groups = assetGroups(p, { allMedia: true })
+    const files = projectMediaFiles(p, groups)
+    // A reference not present in this group's projected files cannot select another object.
+    p.document.reference_packs[0].entries.unshift({ role: 'CANONICAL_MASTER', asset_version_id: 'other' })
+    const reads = problem.readError ? { [fileReadKey(files.find(file => file.id === 'canonical'))]: 'error' } : {}
+    assert.equal(assetGroupPreview(p, groups[0], files, reads).id, 'bound')
+    const withoutBinding = files.map(file => ({ ...file, shotIds: [] }))
+    assert.equal(assetGroupPreview(p, groups[0], withoutBinding, reads).id, 'registered')
+  }
+})
+
+test('a shared registered canonical can preview its subject; no usable file does not hide explicit records', () => {
+  const p = project([asset('paper', [version('bad', { approval_status: 'REJECTED' })]),
+    asset('paper-surface', [version('surface')])], [], {
+      reference_packs: [{ subject_asset_id: 'paper', entries: [{ role: 'CANONICAL_MASTER', asset_version_id: 'surface' }] }],
+    })
+  const groups = assetGroups(p, { allMedia: true })
+  const files = projectMediaFiles(p, groups)
+  assert.equal(assetGroupPreview(p, groups[0], files).id, 'surface')
+  const reads = { [fileReadKey(files.find(file => file.id === 'surface'))]: 'error' }
+  assert.equal(assetGroupPreview(p, groups[0], files, reads), undefined)
+  assert.equal(assetGroupPreview(p, groups[0], files, reads, 'bad').id, 'bad')
+  assert.equal(files.length, 2)
+})
+
+test('open detail publishes its displayed fallback scope once, preserving explicit inspection and close', () => {
+  // Run the actual scope effect body without starting a browser or introducing a DOM runtime.
+  const viewSource = ts.createSourceFile('StudioAssets.tsx', readFileSync(new URL('../frontend/features/short-drama/StudioAssets.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX)
+  let scopeEffect
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(viewSource) === 'useEffect' && node.arguments[0].getText(viewSource).includes('lastDetailScope.current')) scopeEffect = node.arguments[0]
+    ts.forEachChild(node, visit)
+  }
+  visit(viewSource)
+  assert.ok(scopeEffect, 'the displayed-file scope effect must be wired in StudioAssets')
+  const effectSource = ts.transpileModule(`(${scopeEffect.getText(viewSource)})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  const runEffect = new Function('file', 'selected', 'onScope', 'lastDetailScope', 'selectedFileScope', effectSource)
+  const p = project([asset('paper', [version('current'), version('canonical'), version('new-current'), version('rejected', { approval_status: 'REJECTED' })], { current_version_id: 'current' })], [], {
+    reference_packs: [{ subject_asset_id: 'paper', entries: [{ role: 'CANONICAL_MASTER', asset_version_id: 'canonical' }] }],
+  })
+  const groups = assetGroups(p, { allMedia: true })
+  const files = projectMediaFiles(p, groups)
+  const scopes = []
+  const lastScope = { current: null }
+  const publish = (file, group = groups[0]) => runEffect(file, group, scope => scopes.push(scope), lastScope, selectedFileScope)
+  publish(assetGroupPreview(p, groups[0], files))
+  assert.equal(scopes.at(-1).asset_version_id, 'current')
+  const reads = { [fileReadKey(files.find(file => file.id === 'current'))]: 'error' }
+  publish(assetGroupPreview(p, groups[0], files, reads))
+  assert.equal(scopes.at(-1).asset_version_id, 'canonical')
+  publish({ ...assetGroupPreview(p, groups[0], files, reads) })
+  assert.equal(scopes.length, 2, 'a new file object or callback with equal scope must not trigger render loops')
+  // A refreshed valid current also replaces the displayed default and hidden target.
+  p.document.assets[0].current_version_id = 'new-current'
+  publish(assetGroupPreview(p, groups[0], files, reads))
+  assert.equal(scopes.at(-1).asset_version_id, 'new-current')
+  assert.equal(scopes.length, 3)
+  publish(assetGroupPreview(p, groups[0], files, {}, 'rejected'))
+  assert.equal(scopes.at(-1).asset_version_id, 'rejected')
+  p.document.assets[0].current_version_id = 'canonical'
+  publish(assetGroupPreview(p, groups[0], files, {}, 'rejected'))
+  assert.equal(scopes.length, 4, 'project refresh must not move an explicit selection')
+  publish(undefined)
+  assert.deepEqual(scopes.at(-1), { kind: 'asset', id: 'paper', label: 'paper' })
+  runEffect(undefined, undefined, scope => scopes.push(scope), lastScope, selectedFileScope)
+  assert.equal(scopes.length, 5, 'closing does not overwrite a subsequent Agent or shot scope')
+  publish(files.find(file => file.id === 'rejected'))
+  assert.equal(scopes.length, 6, 'reopening the same file publishes its precise scope again')
 })

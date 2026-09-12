@@ -23,7 +23,8 @@ from short_drama.h3_models import (
 )
 from short_drama.h3_route_planner import generation_unit_voice_reference_inputs, validate_route_plan_freshness
 from short_drama.language_models import H3GenerationUnitContextRequest, LanguagePromptCompileRequest
-from short_drama.models import DomainModel, ProductionDocumentOrigin, TaskStatus, VideoGenerationRoute
+from short_drama.h3_source_projection import normalize_legacy_composition_owners, terminal_source
+from short_drama.models import ProjectDocument, DomainModel, ProductionDocumentOrigin, TaskStatus, VideoGenerationRoute
 from short_drama.production_contracts import GenerationPlanCompileRequest, GenerationPlanReadResponse, GenerationUnit
 from short_drama.skill_ids import SkillIds, canonical_skill_ids
 from short_drama.studio_trace import current_trace_context, record_trace
@@ -82,7 +83,7 @@ class H3GroupOperationResponse(DomainModel):
     shot_ids: list[str] = Field(default_factory=list[str])
     status: str
     phase: str
-    compile_mode: Literal["LANGUAGE", "H3_CONTEXT_IR"] = "LANGUAGE"
+    compile_mode: Literal["LANGUAGE", "H3_CONTEXT_IR", "SAVED_ROUTE"] = "LANGUAGE"
     enqueue_requested: bool = False
     provider_prompt_cache_id: str | None = None
     provider_prompt_task_id: str | None = None
@@ -149,11 +150,13 @@ def _identity(request: H3GroupOperationRequest) -> dict[str, JsonValue]:
     return request.model_dump(mode="json", exclude={"operation_id", "shot_id", "clip_group_id", "enqueue", "retry_failed_step"})
 
 
-def _source_identity(source: dict[str, JsonValue]) -> dict[str, JsonValue]:
+def _source_identity(source: dict[str, JsonValue], *, document: ProjectDocument | None = None) -> dict[str, JsonValue]:
     """Ignore display numbering and order of the known per-shot visibility set only."""
     result = deepcopy(source)
     context = result.get("source_context")
     if isinstance(context, dict):
+        if document is not None:
+            normalize_legacy_composition_owners(context, document)
         shots = context.get("locked_shots")
         if isinstance(shots, list):
             for row in shots:
@@ -165,6 +168,7 @@ def _source_identity(source: dict[str, JsonValue]) -> dict[str, JsonValue]:
         previous = context.get("previous_clip_planned_terminal_state")
         if isinstance(previous, dict):
             previous.pop("sequence", None)
+            context["previous_clip_planned_terminal_state"] = terminal_source(previous)
     return result
 
 
@@ -180,13 +184,14 @@ def operation_source_staleness_reason(
             generation_plan_document_id=state.generation_plan_document_id,
             generation_plan_version_id=state.generation_plan_version_id,
             generation_unit_id=state.generation_unit_id,
-        ))
+        ), require_current_plan=True)
+        document = service.get_project(record.project_id).document
         media = service._resolve_approved_asset_inputs(  # pyright: ignore[reportPrivateUsage]
-            service.get_project(record.project_id).document, media_inputs)
+            document, media_inputs)
         current: dict[str, JsonValue] = {**record.input_context, "source_context": context.source_context,
             "media_inputs": [item.model_dump(mode="json") for item in media],
             "media_file_states": cast(JsonValue, _media_file_states(media))}
-        if _source_identity(record.input_context) != _source_identity(current):
+        if _source_identity(record.input_context, document=document) != _source_identity(current, document=document):
             return "Current group/media differs from the saved H3 operation source; prepare the current group before submitting"
     except (ValueError, OSError, KeyError) as exc:
         return str(exc)
@@ -399,7 +404,7 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
             context = service.get_h3_generation_unit_context(project_id, H3GenerationUnitContextRequest(
                 generation_plan_document_id=plan.document.id, generation_plan_version_id=plan.version.id,
                 generation_unit_id=unit.id,
-            ))
+            ), require_current_plan=True)
             document = service.get_project(project_id).document
             repair = next((item for item in document.repair_history if item.id == intent.source_repair_id), None)
             repair_covers_group = repair is not None and bool(set(repair.affected_shot_ids) & set(unit.shot_ids))
@@ -440,7 +445,7 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 "media_inputs": [item.model_dump(mode="json") for item in media],
                 "media_file_states": cast(JsonValue, _media_file_states(media)), "method_skill_ids": list(methods),
                 "revision_instructions": intent.revision_instructions,
-                "compile_mode": intent.compile_mode,
+                "compile_mode": record.state.compile_mode,
                 "resolution": resolution, "aspect_ratio": aspect_ratio,
             }
             previous_source = dict(record.input_context)
@@ -448,7 +453,7 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
                 previous_source.setdefault("resolution", "768P")
                 previous_source.setdefault("aspect_ratio", None if route in {
                     VideoGenerationRoute.FRAME_FIRST, VideoGenerationRoute.FRAME_LAST, VideoGenerationRoute.FRAME_FIRST_LAST} else "9:16")
-            if previous_source and _source_identity(previous_source) != _source_identity(source):
+            if previous_source and _source_identity(previous_source, document=document) != _source_identity(source, document=document):
                 if request.operation_id:
                     record.state.status, record.state.next_action = "INPUTS_CHANGED", "PREPARE_CURRENT_SHOT_OR_GROUP"
                     record.state.error = "Current group/media differs from this saved operation; its previous prompt/tasks remain retained."
@@ -485,7 +490,7 @@ def prepare_h3_group(service: ShortDramaService, project_id: str, request: H3Gro
             _step(service, record, "CURRENT_GROUP_INPUTS_RESOLVED")
             if record.compiled_prompt is None:
                 cached = next((item for item in reversed(service.repository.list_h3_group_operations(project_id))
-                               if item.id != record.id and _source_identity(item.input_context) == _source_identity(source) and item.compiled_prompt is not None), None)
+                               if item.id != record.id and _source_identity(item.input_context, document=document) == _source_identity(source, document=document) and item.compiled_prompt is not None), None)
                 if cached is not None:
                     record.compiled_prompt = cached.compiled_prompt
                     record.resolved_media_inputs = list(cached.resolved_media_inputs)

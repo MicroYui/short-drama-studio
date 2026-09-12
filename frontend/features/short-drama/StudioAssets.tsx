@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpRight, FileWarning, Image, Music2, Plus, Search, Sparkles, Upload, X } from 'lucide-react'
 import type { ProjectAggregate } from './api'
 import { allCues, assetGroups, currentEditorial, mediaUrl } from './studio-content'
-import { fileDetails, fileModificationPrompt, fileReadKey, fileReadLabel, libraryFileCards, projectMediaFiles, selectedFileScope, type LibraryFile, type MediaReadState } from './studio-media-library'
+import { assetGroupPreview, fileDetails, fileModificationPrompt, fileReadKey, fileReadLabel, libraryFileCards, projectMediaFiles, selectedFileScope, type LibraryFile, type MediaReadState } from './studio-media-library'
 import { StudioApi, type StudioScope } from './studio-api'
 
 const kinds = { all: '全部', CHARACTER: '角色', LOCATION: '场景', PROP: '道具', REFERENCE: '其他' }
@@ -39,12 +39,21 @@ export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onErr
   const visibleFiles = fileCards.filter(file => (mediaFilter === 'all' || file.mediaType === mediaFilter) && `${file.owner} ${file.description} ${file.title} ${file.contentState ?? ''} ${file.relatedFiles?.map(item => `${item.owner} ${item.title}`).join(' ') ?? ''}`.toLowerCase().includes(query))
   const selected = groups.find(group => group.id === selectedId)
   const groupFiles = selected ? files.filter(file => file.groupId === selected.id) : []
-  const file = files.find(item => item.id === selectedFileId) ?? groupFiles.find(item => item.asset?.current_version_id === item.id) ?? groupFiles[0]
+  const file = selected ? assetGroupPreview(project, selected, groupFiles, reads, selectedFileId) : files.find(item => item.id === selectedFileId)
   const sharedFiles = fileCards.find(card => card.relatedFiles?.some(item => item.id === file?.id))?.relatedFiles?.filter(item => item.id !== file?.id) ?? []
   const detailOpen = Boolean(selected || file)
   const usage = (id: string) => project.document.shots.filter(shot => allCues(shot).some(cue => cue.subject_asset_id === id || groups.find(group => group.id === id)?.files.some(file => file.version.id === cue.asset_version_id)))
   const fileShots = file ? project.document.shots.filter(shot => file.shotIds.includes(shot.id)) : selected ? usage(selected.id) : []
+  const lastDetailScope = useRef<string | null>(null)
   useEffect(() => { setSelectedId(null); setSelectedFileId(null); setReads({}); setSearch('') }, [project.document.project.id])
+  useEffect(() => {
+    // A default preview may change after a read error or project refresh.
+    const next: StudioScope | null = file ? selectedFileScope(file) : selected ? { kind: 'asset', id: selected.id, label: selected.name } : null
+    const key = next ? JSON.stringify(next) : null
+    if (key === lastDetailScope.current) return
+    lastDetailScope.current = key
+    if (next) onScope(next)
+  }, [file, selected, onScope])
   const close = () => { setSelectedId(null); setSelectedFileId(null) }
   const chooseFile = (item: LibraryFile) => { setSelectedFileId(item.id); setSelectedId(item.groupId ?? null); onScope(selectedFileScope(item)) }
   const read = (item: LibraryFile) => reads[fileReadKey(item)]
@@ -68,19 +77,19 @@ export function StudioAssets({ project, onProject, onAsk, onScope, onShot, onErr
     <div className="sd-asset-grid">{view === 'objects' ? <>
       {visible.map(group => {
         const items = files.filter(item => item.groupId === group.id)
-        const picture = items.find(item => item.id === group.subject.current_version_id) ?? items.find(item => item.asset?.current_version_id === item.id) ?? items[0]
+        const picture = assetGroupPreview(project, group, items, reads)
         const uses = usage(group.id)
         const uniqueCards = libraryFileCards(items)
         const saved = uniqueCards.filter(item => !item.missing && read(item) !== 'error').length
         const pending = uniqueCards.filter(item => item.missing || read(item) === 'error').length
-        return <button className="sd-asset-card" key={group.id} onClick={() => { setSelectedId(group.id); setSelectedFileId(picture?.id ?? null); onScope(picture ? selectedFileScope(picture) : { kind: 'asset', id: group.id, label: group.name }) }}><div className="sd-asset-cover" data-kind={group.kind}>{picture ? preview(picture, true) : <div className="sd-media-cover"><Image size={28} /><span>等待素材</span></div>}<span className="sd-asset-kind">{kinds[group.kind]}</span><span className="sd-asset-open"><ArrowUpRight size={15} /></span></div><div className="sd-asset-card-label"><strong>{group.name}</strong><span>{saved ? `${saved} 份文件` : '等待素材'}{pending ? ` · ${pending} 份待补` : ''}</span><p>{uses.length ? `用于本集 ${uses.length} 个镜头` : '项目共享资产'}</p></div></button>
+        return <button className="sd-asset-card" key={group.id} onClick={() => { setSelectedId(group.id); setSelectedFileId(null); onScope(picture ? selectedFileScope(picture) : { kind: 'asset', id: group.id, label: group.name }) }}><div className="sd-asset-cover" data-kind={group.kind}>{picture ? preview(picture, true) : <div className="sd-media-cover"><Image size={28} /><span>{items.length ? '暂无可用默认预览' : '等待素材'}</span></div>}<span className="sd-asset-kind">{kinds[group.kind]}</span><span className="sd-asset-open"><ArrowUpRight size={15} /></span></div><div className="sd-asset-card-label"><strong>{group.name}</strong><span>{saved ? `${saved} 份文件` : '等待素材'}{pending ? ` · ${pending} 份待补` : ''}</span>{picture && <span>{picture.warning || picture.state} · {fileReadLabel(picture, read(picture))}</span>}<p>{uses.length ? `用于本集 ${uses.length} 个镜头` : '项目共享资产'}</p></div></button>
       })}
       <button className="sd-asset-add-card" onClick={() => onAsk('根据当前剧本和镜头，补齐缺少的角色、场景和道具素材，优先复用已有资产。', { kind: 'episode', label: '当前集所需资产' })}><span><Plus size={24} /></span><strong>让 Agent 补齐资产</strong><small>根据剧本与镜头自动准备</small></button>
     </> : visibleFiles.map(item => <button className="sd-asset-card sd-file-card" key={item.id} onClick={() => chooseFile(item)}><div className="sd-asset-cover">{preview(item, true)}<span className="sd-asset-kind">{mediaKinds[item.mediaType]}</span><span className="sd-asset-open"><ArrowUpRight size={15} /></span></div><div className="sd-asset-card-label"><strong title={item.title}>{item.title}</strong><p>{[...new Set(item.relatedFiles?.map(reference => reference.owner) ?? [item.owner])].join('、')}</p><span className={item.warning || item.missing || read(item) === 'error' ? 'sd-file-warning' : ''}>{item.warning || item.state} · {fileReadLabel(item, read(item))}</span><p>{fileDetails(item) || item.source}</p><p>{item.editorialUsed ? '剪辑中使用' : item.shotIds.length ? `关联 ${item.shotIds.length} 个镜头` : item.voiceUsed ? '角色声音参考' : '当前内容未引用'}</p></div></button>)}</div>
     {view === 'files' && !visibleFiles.length && <p className="sd-hint sd-library-empty">还没有匹配的媒体文件。文字设定保留在核心资产中。</p>}
 
     {detailOpen && <div className="sd-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close() }}><div className="sd-asset-detail" role="dialog" aria-label={`${detailName} 素材详情`}><header className="sd-modal-heading"><div><span className="sd-eyebrow">{selected ? `${kinds[selected.kind]} · 全项目共享` : '项目媒体'}</span><h2>{detailName}</h2></div><button className="sd-icon" aria-label="关闭资产详情" onClick={close}><X size={20} /></button></header>
-      <div className="sd-asset-detail-body"><div><div className="sd-asset-large">{file ? preview(file) : <p>等待素材</p>}</div>
+      <div className="sd-asset-detail-body"><div><div className="sd-asset-large">{file ? preview(file) : <p>{groupFiles.length ? '暂无可用默认预览，可从下方查看具体文件及状态。' : '等待素材'}</p>}</div>
         {file && <div className="sd-file-caption"><strong>{file.title}</strong><span>{file.warning || file.state} · {fileReadLabel(file, read(file))}</span></div>}
         <div className="sd-asset-filmstrip">{groupFiles.map(item => <button key={item.id} className={file?.id === item.id ? 'is-active' : ''} onClick={() => chooseFile(item)} title={item.title} aria-label={`查看素材：${item.title}`} aria-pressed={file?.id === item.id}>{preview(item, true)}<span>{item.contentState || item.title}</span></button>)}</div>
       </div><div className="sd-asset-info"><h3>素材说明</h3><p className="sd-file-description">{file?.description || selected?.subject.brief?.identity_anchor || '还没有素材说明。'}</p>

@@ -24,6 +24,7 @@ from short_drama.studio_trace import record_trace
 
 SAVED_RESULT_GUIDANCE = (
     "Optional saved_tool_result_sequences selects successful Tool source_sequence values from this WorkOrder. "
+    "Successful READs may be selected as saved observations, including reads with no artifact refs; they are not new outputs. "
     "Runtime attaches their exact saved artifacts, current file/state receipts and applicable saved inspection/use "
     "observations, with original results available to read. Do not recopy those IDs, paths, dimensions or reports "
     "into prose. State your completion decision, additional judgments, limitations and remaining work once; "
@@ -95,6 +96,7 @@ def saved_completion_artifact_refs(receipts: Sequence[dict[str, JsonValue]]) -> 
 
 def prepare_saved_completion_results(
     document: ProjectDocument, work: WorkOrder, sequences: Sequence[int],
+    *, read_tool_ids: frozenset[str] = frozenset(),
 ) -> SavedCompletionResults:
     """Resolve exact successful turns in memory before writing any handoff."""
     result = SavedCompletionResults()
@@ -117,11 +119,14 @@ def prepare_saved_completion_results(
     def source(turn: SpecialistTurnRecord) -> dict[str, JsonValue]:
         snapshot_id = f"context-completion-tool-{work.id}-{turn.id}"
         result.snapshots[snapshot_id] = {"arguments": dict(turn.arguments), "result": turn.result}
-        return context_marker(snapshot_id, "")
+        return context_marker(snapshot_id, "/result")
+
+    def arguments_source(turn: SpecialistTurnRecord) -> dict[str, JsonValue]:
+        return context_marker(f"context-completion-tool-{work.id}-{turn.id}", "/arguments")
 
     for turn in selected:
         refs = _refs(turn, project_id)
-        if not refs:
+        if not refs and turn.tool_name not in read_tool_ids:
             raise AgentResultContractError(f"saved_tool_result_sequences/{turn.sequence}: result has no saved artifact references; report its analysis directly")
         canonical: list[ArtifactRef] = []
         for ref in refs:
@@ -132,7 +137,9 @@ def prepare_saved_completion_results(
             unique[ref.identity()] = ref
         result.receipts.append({"kind": "saved_tool_result", "sequence": turn.sequence,
             "tool_name": turn.tool_name, "status": "SUCCEEDED", "observed_at": turn.updated_at.isoformat(),
-            "artifact_refs": [ref.model_dump(mode="json") for ref in canonical], "saved_result": source(turn)})
+            "artifact_refs": [ref.model_dump(mode="json") for ref in canonical], "saved_result": source(turn),
+            "saved_arguments": arguments_source(turn),
+            **({"tool_effect": "READ", "observation_only": True} if turn.tool_name in read_tool_ids else {})})
 
     result.artifact_refs = list(unique.values())
     selected_version_ids = {ref.artifact_id for ref in result.artifact_refs if ref.artifact_type == "asset_version"}
@@ -171,5 +178,5 @@ def prepare_saved_completion_results(
         result.receipts.append({"kind": "saved_media_observation", "asset_id": body.get("asset_id"),
             "asset_version_id": body.get("asset_version_id"), "observation_kind": body.get("kind"),
             "scope": body.get("scope"), "result": output, "observed_at": turn.updated_at.isoformat(),
-            "saved_result": source(turn)})
+            "saved_result": source(turn), "saved_arguments": arguments_source(turn)})
     return result

@@ -386,7 +386,7 @@ class AssetTextPlateComposeRequest(DomainModel):
     append_text_blocks: list[TextPlateTextBlock] = Field(default_factory=list[TextPlateTextBlock], max_length=64,
         description="Only new text to draw on base_version_id. Requires an explicit complete content_state; omit all full-layout fields. Never redraw, move or erase existing content.")
     content_state: AssetTextPlateContentState | None = Field(default=None,
-        description="Optional explicit narrative state and full exact visible copy for this candidate. Allows declared additions such as a signature while preserving all fixed brief text. Omit to use brief.required_visible_text unchanged; never rewrite the global brief merely to create a later state.")
+        description="Optional explicit narrative state and full exact visible copy for this candidate, including when brief.required_visible_text is empty. Preserve any fixed brief text. Omit only to use non-empty brief.required_visible_text unchanged; never rewrite the global brief merely to create a candidate state.")
     background_color: str = Field(default="#F5F1E8", min_length=1, max_length=64)
     foreground_color: str = Field(default="#171717", min_length=1, max_length=64)
     content_box: tuple[float, float, float, float] = Field(default=(0, 0, 1, 1), description="Normalized x/y/width/height of the text area. Set a full-frame transparent background with #00000000 for an overlay.")

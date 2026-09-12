@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from dataclasses import replace
+from pathlib import Path
+from typing import Literal, Protocol, TypeVar
+
+from pydantic import BaseModel, Field
 
 from short_drama.image_capabilities import ImageProviderCapabilityResponse
 from short_drama.image_edit_guides import AssetImageEditGuideRequest, AssetImageEditGuideResponse
@@ -19,7 +23,10 @@ from short_drama.image_models import (
     ImageTaskListResponse,
     ImageTaskResponse,
     ImageTaskStatus,
+    ImageRegion,
 )
+from short_drama.image_observation import VisualAttachment, VisualRole, visual_attachment
+from short_drama.models import ProjectAggregate, ProjectDocument
 from short_drama.tools.contracts import (
     ArtifactRef,
     ToolCategory,
@@ -33,6 +40,8 @@ from short_drama.tools.registry import ToolRegistry
 
 
 class ImageToolService(Protocol):
+    def get_project(self, project_id: str) -> ProjectAggregate: ...
+
     def get_image_provider_capability(self) -> ImageProviderCapabilityResponse: ...
 
     def crop_asset_image(
@@ -141,6 +150,23 @@ class ImageListInput(ToolModel):
     asset_id: str | None = None
 
 
+class ImageViewSelection(ToolModel):
+    asset_version_id: str = Field(min_length=1)
+    region: ImageRegion | None = None
+
+
+class ImageViewInput(ToolModel):
+    project_id: str
+    images: list[ImageViewSelection] = Field(min_length=1, max_length=16)
+    purpose: str = Field(min_length=1, max_length=1000)
+
+
+class ImageViewOutput(ToolModel):
+    images: list[ArtifactRef]
+    purpose: str
+    delivery: Literal["NEXT_AGENT_DECISION"] = "NEXT_AGENT_DECISION"
+
+
 class ImageTaskActionInput(ToolModel):
     task_id: str
 
@@ -148,6 +174,34 @@ class ImageTaskActionInput(ToolModel):
 class ImageNotSubmittedInput(ToolModel):
     task_id: str
     request: ImageNotSubmittedResolutionRequest
+
+
+OutputT = TypeVar("OutputT", bound=BaseModel)
+
+
+def _with_visuals(
+    execution: ToolExecution[OutputT], document: ProjectDocument,
+    selections: list[tuple[str, VisualRole, str]],
+) -> ToolExecution[OutputT]:
+    versions = {v.id: (a.id, v) for a in document.assets for v in a.versions}
+    attachments: list[VisualAttachment] = []
+    warnings = list(execution.warnings)
+    seen: set[str] = set()
+    for version_id, role, purpose in selections:
+        if version_id in seen:
+            continue
+        seen.add(version_id)
+        entry = versions.get(version_id)
+        if entry is None:
+            warnings.append(f"Image preview unavailable: exact version {version_id} is absent from this Tool's saved project snapshot.")
+            continue
+        asset_id, version = entry
+        try:
+            attachments.append(visual_attachment(document.project.id, asset_id, version, role=role, purpose=purpose))
+        except ValueError as exc:
+            # A preview problem must not turn an already completed write into a retry.
+            warnings.append(str(exc))
+    return replace(execution, visual_attachments=tuple(attachments), warnings=tuple(warnings))
 
 
 def _task_execution(result: ImageTaskResponse) -> ToolExecution[ImageTaskResponse]:
@@ -178,13 +232,53 @@ def _task_execution(result: ImageTaskResponse) -> ToolExecution[ImageTaskRespons
                 version=result.task.output_version_number,
             )
         )
-    return ToolExecution(
+    execution = ToolExecution(
         output=result,
         artifact_refs=tuple(refs),
     )
+    selections: list[tuple[str, VisualRole, str]] = []
+    if result.task.status == ImageTaskStatus.SUCCEEDED:
+        selections.append((result.task.output_version_id, "CANDIDATE", "This image task's saved final output; inspect for its requested use."))
+        if result.task.provider_output_version_id is not None:
+            selections.append((result.task.provider_output_version_id, "PROVIDER_OUTPUT", "Same task's raw Provider output before local masking; compare separately with the final output."))
+        if result.task.request.primary_input_version_id is not None:
+            selections.append((result.task.request.primary_input_version_id, "SOURCE", "Exact primary input used by this task; compare preservation and intended changes."))
+    return _with_visuals(execution, result.project.document, selections)
 
 
 def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
+    def view_images(request: ImageViewInput) -> ToolExecution[ImageViewOutput]:
+        document = service.get_project(request.project_id).document
+        versions = {v.id: (a.id, v) for a in document.assets for v in a.versions}
+        attachments: list[VisualAttachment] = []
+        for selection in request.images:
+            entry = versions.get(selection.asset_version_id)
+            if entry is None:
+                raise ValueError(f"Exact image version not found in this project: {selection.asset_version_id}")
+            asset_id, version = entry
+            if selection.region is not None and version.local_path is None:
+                raise ValueError(f"Region observation requires a local image: {version.id}")
+            if not version.external_url or selection.region is not None:
+                if version.local_path is None or not Path(version.local_path).expanduser().is_file():
+                    raise ValueError(f"Exact image file is missing for {version.id}; no current-version fallback was used")
+            attachments.append(visual_attachment(request.project_id, asset_id, version,
+                role="REFERENCE", purpose=request.purpose, region=selection.region))
+        refs = [item.artifact_ref for item in attachments]
+        return ToolExecution(output=ImageViewOutput(images=refs, purpose=request.purpose),
+            artifact_refs=tuple(refs), visual_attachments=tuple(attachments))
+
+    registry.register(ToolSpec(
+        id="image.view", version=1, category=ToolCategory.IMAGE,
+        description=(
+            "读取本项目精确图片版本，按请求顺序把实际像素附到紧接的Worker决策，不调用语言/图像Provider、不创建版本。"
+            "用于回看旧图、比较原始/合成/母图或查看细节；image.advance、crop等刚完成的结果已自动附图，不必为取像素再调用QA。"
+            "region可选，按EXIF转正后的归一化x/y/width/height取原像素区域；观察图最长边2048，原文件不变。"
+            "已拒绝或过期图片可以供诊断，状态如实保留，查看不等于采用、批准或检查通过。"
+            "使用本次image_observations中的实际Image顺序、尺寸和不可读取原因；缺图不回退到current。"
+        ), effect=ToolEffect.READ, idempotent=True, input_model=ImageViewInput,
+        output_model=ImageViewOutput, handler=view_images,
+        tags=frozenset({"image", "read", "observe", "region", "compare"}),
+    ))
     registry.register(
         ToolSpec(
             id="image.capability",
@@ -209,11 +303,14 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
 
     def crop_image(request: ImageCropInput) -> ToolExecution[AssetMutationResponse]:
         result = service.crop_asset_image(request.project_id, request.asset_id, request.request)
-        return ToolExecution(output=result, artifact_refs=(
+        return _with_visuals(ToolExecution(output=result, artifact_refs=(
             ArtifactRef(project_id=request.project_id, artifact_type="asset", artifact_id=result.asset.id),
             ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=result.version.id,
                         version=result.version.version),
-        ))
+        )), result.project.document, [
+            (result.version.id, "CANDIDATE", "Actual local crop; inspect its framing and retained details."),
+            (request.request.source_asset_version_id, "SOURCE", "Exact original image for this crop; the candidate image_crop records its actual source pixel box."),
+        ])
 
     registry.register(ToolSpec(
         id="image.crop", version=1, category=ToolCategory.IMAGE,
@@ -273,7 +370,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=result.version.id,
                 version=result.version.version),
         )
-        return ToolExecution(output=result, artifact_refs=refs, receipt=ToolWriteReceipt(
+        return _with_visuals(ToolExecution(output=result, artifact_refs=refs, receipt=ToolWriteReceipt(
             artifact_refs=list(refs), current_state={
                 "project_id": request.project_id, "asset_id": result.asset.id,
                 "image_task_id": request.request.image_task_id,
@@ -287,7 +384,12 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             }, changed_ids=(
                 {"created_asset_version_ids": [result.version.id]}
                 if request.request.mode.value == "MASKED_COMPOSITE" else {}
-            )))
+            ))), result.project.document, [
+                (result.version.id, "PROVIDER_OUTPUT" if request.request.mode.value == "PROVIDER_OUTPUT" else "CANDIDATE",
+                 "Actual locally derived image; compare the relevant edited structure and boundaries."),
+                *(([(result.version.parent_version_id, "SOURCE", "Recorded parent of this derived candidate.")])
+                    if result.version.parent_version_id else []),
+            ])
 
     registry.register(ToolSpec(
         id="image.derive_edit_result", version=2, category=ToolCategory.IMAGE,
@@ -312,7 +414,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=result.version.id,
                 version=result.version.version),
         )
-        return ToolExecution(output=result, artifact_refs=refs, receipt=ToolWriteReceipt(
+        return _with_visuals(ToolExecution(output=result, artifact_refs=refs, receipt=ToolWriteReceipt(
             artifact_refs=list(refs), current_state={
                 "project_id": request.project_id, "asset_id": result.asset.id,
                 "base_asset_version_id": request.request.base_asset_version_id,
@@ -322,7 +424,10 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
                 "version.height": result.version.height,
                 "asset.current_version_id": result.asset.current_version_id,
                 "composition_completed": True, "visual_acceptance": "NOT_ASSESSED",
-            }, changed_ids={"created_asset_version_ids": [result.version.id]}))
+            }, changed_ids={"created_asset_version_ids": [result.version.id]})), result.project.document, [
+                (result.version.id, "CANDIDATE", "Actual local plane composite; inspect perspective, edges, text and occlusion."),
+                (request.request.base_asset_version_id, "SOURCE", "Exact photographic base before the plane composite."),
+            ])
 
     registry.register(ToolSpec(
         id="image.composite_plane", version=1, category=ToolCategory.IMAGE,
@@ -358,7 +463,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             request.asset_id,
             request.request,
         )
-        return ToolExecution(
+        return _with_visuals(ToolExecution(
             output=result,
             artifact_refs=(
                 ArtifactRef(
@@ -373,7 +478,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
                     version=result.version.version,
                 ),
             ),
-        )
+        ), result.project.document, [(result.version.id, "CANDIDATE", "Actual composed reference sheet; inspect selected views, labels and layout.")])
 
     registry.register(
         ToolSpec(
@@ -408,7 +513,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             request.asset_id,
             request.request,
         )
-        return ToolExecution(
+        return _with_visuals(ToolExecution(
             output=result,
             artifact_refs=(
                 ArtifactRef(
@@ -425,7 +530,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
                 *(ArtifactRef(project_id=request.project_id, artifact_type="asset_version", artifact_id=reference.asset_version_id)
                     for reference in result.version.derivation_references),
             ),
-        )
+        ), result.project.document, [(result.version.id, "CANDIDATE", "Actual locally rendered text plate; inspect text completeness and placement, not photographic realism.")])
 
     registry.register(
         ToolSpec(
@@ -436,6 +541,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
                 "为 SCREEN_CONTENT_PLATE 或已有 PHYSICAL_MASTER PROP 的准确表面内容在本地"
                 "确定性排版菜价、金额、姓名、标题或文件条款。文案须保持 "
                 "brief.required_visible_text 的词句、数字与顺序；空行、行末标签冒号和尾随装饰横线不要求改 brief，"
+                "brief.required_visible_text为空时，可由显式content_state独立声明本候选完整文案；未提供content_state时仍须有固定brief文案，不从descriptor或版面说明推断。"
                 "若同一资产的后续剧情状态需新增姓名等文字，显式提供 content_state.name 和该状态完整的 "
                 "required_visible_text：保留 brief 每项固定文字为独立条目并按原顺序排列，新增文字另列条目。"
                 "实际渲染逐字匹配该状态；状态只保存在本候选 AssetTextPlate，不修改全局 brief 或旧候选。"
@@ -539,6 +645,7 @@ def register_tools(registry: ToolRegistry, service: ImageToolService) -> None:
             "image.advance",
             "对已入队图像任务只推进一次 Provider 状态转换；返回后由 Agent 根据新状态决定下一步。"
             "masked EDIT 完成同时返回默认 output_version_id 和可选 provider_output_version_id 原图候选的精确引用；"
+            "实际输出像素及必要的raw/primary对照会附到下一Worker决策，可直接观察后决定下一动作；不自动产生QA结论。"
             "原图未应用本地遮罩保护，可按需直接检查或比较，不需要先 derive，也不表示原图更好或已采用。",
             service.advance_image_task,
             ToolEffect.EXTERNAL,

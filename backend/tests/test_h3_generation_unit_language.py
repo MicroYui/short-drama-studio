@@ -248,10 +248,10 @@ def test_unit_context_tool_exposes_scoped_facts_and_real_approved_media_without_
         assert set(candidate["serves_shot_ids"]) <= set(unit.shot_ids)
     assert fake.calls == []
     assert service.repository.list_tasks(document.project.id) == []
-    assert {ref.artifact_type for ref in result.artifact_refs} == {"generation_plan", "generation_unit"}
+    assert {ref.artifact_type for ref in result.artifact_refs} == {"generation_plan", "generation_unit", "storyboard"}
 
 
-def test_unit_context_rejects_stale_plan_before_returning_media(tmp_path: Path) -> None:
+def test_internal_unit_context_rejects_stale_plan_before_returning_media(tmp_path: Path) -> None:
     service, fake, document, generation, unit, _request = _fixture(tmp_path)
     document.shots[0].revision += 1
     service.repository.save_project(document)
@@ -260,7 +260,7 @@ def test_unit_context_rejects_stale_plan_before_returning_media(tmp_path: Path) 
             generation_plan_document_id=generation.document.id,
             generation_plan_version_id=generation.version.id,
             generation_unit_id=unit.id,
-        ))
+        ), require_current_plan=True)
     assert fake.calls == []
 
 
@@ -315,7 +315,7 @@ def test_unrelated_clip_edits_keep_prepared_unit_and_route_usable(
             generation_plan_document_id=generation.document.id,
             generation_plan_version_id=generation.version.id,
             generation_unit_id=generation.generation_plan.units[1].id,
-        ))
+        ), require_current_plan=True)
 
 
 def test_selected_clip_group_change_requires_new_input_before_execution(tmp_path: Path) -> None:
@@ -541,7 +541,9 @@ def test_authored_clip_and_reference_order_survive_route_save_and_enqueue(tmp_pa
         "project_id": document.project.id, "plan_id": planned.id,
     })
     assert read_plan.status == ToolCallStatus.SUCCEEDED
-    assert read_plan.output == {"plan": planned.model_dump(mode="json")}
+    assert read_plan.output is not None
+    assert read_plan.output["plan"] == planned.model_dump(mode="json")
+    assert read_plan.output["source_checks"][0]["status"] == "CURRENT"
     assert read_plan.artifact_refs[0].artifact_id == planned.id
     listed = service.tool_registry.invoke("route.list_h3_plans", {"project_id": document.project.id})
     index_ref = next(ref for ref in listed.artifact_refs if ref.artifact_type == "h3_route_plan_index")

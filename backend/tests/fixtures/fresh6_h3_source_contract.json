@@ -1,0 +1,343 @@
+{
+  "source": "fresh6-final-route-h3-source-h3-group-operation-a3677b2fbc9042dfa2a0533cad73a466.json",
+  "operation_id": "h3-group-operation-a3677b2fbc9042dfa2a0533cad73a466",
+  "saved_s12": {
+    "required_timing_marker": "[Shot 3] [5.30-6.50 seconds]",
+    "source_window": {
+      "shot_id": "shot-qwxb-012",
+      "shot_revision": 3,
+      "source_in_seconds": 5.3,
+      "source_out_seconds": 6.5,
+      "duration_seconds": 1.2
+    },
+    "locked_shot": {
+      "id": "shot-qwxb-012",
+      "project_id": "project-bd8595b4b332",
+      "sequence": 12,
+      "scene_id": "scene-7c6c7817bf70",
+      "duration_seconds": 1.2,
+      "narrative_purpose": "给许宁确认对方已真正动笔的反应，并提供补写过程的合理省略切口。",
+      "visual": "@许宁在@物流公司小会议室近门席坐着，视线朝画右下方的书写区域。她没有伸手替周明完成，也不急着笑；眼神从顶住对方转为等待，嘴唇闭合。浅蓝领口可见，桌面和纸笔在画外。",
+      "framing": "9:16胸部以上近景，双眼、嘴部与完整下颌清楚。",
+      "camera": "固定在对视轴近短端同侧，许宁朝画右；背景为近门侧灰墙与模糊门边，不镜像空间。",
+      "audio_intent": "无对白。周明画外书写声继续；不把许宁听写的反应变成她说话。",
+      "dialogue_line_ids": [],
+      "references": [
+        {
+          "subject_asset_id": "asset-a999f3e98732",
+          "id": "shot-qwxb-012-reference-0",
+          "asset_version_id": "asset-version-25a7c2a06f69",
+          "field": "visual",
+          "text_start": 0,
+          "text_end": 3,
+          "alias": "许宁",
+          "required_tags": [],
+          "purpose": "脸部身份依据，保持自然肤质、眼睛与嘴部可读。",
+          "image_reference_role": "SUBJECT_IDENTITY",
+          "usage": "GENERATION"
+        },
+        {
+          "subject_asset_id": "asset-24c91a5b7fba",
+          "id": "shot-qwxb-012-reference-1",
+          "asset_version_id": "asset-version-c48ea915da16",
+          "field": "visual",
+          "text_start": 4,
+          "text_end": 13,
+          "alias": "物流公司小会议室",
+          "required_tags": [],
+          "purpose": "近门席空间及暖中性光，不要求复现空场构图。",
+          "image_reference_role": "SCENE_IDENTITY",
+          "usage": "GENERATION"
+        },
+        {
+          "subject_asset_id": "asset-a999f3e98732",
+          "id": "shot-qwxb-012-shot-ref-2",
+          "asset_version_id": "asset-version-40ee912ebdda",
+          "field": "visual",
+          "text_start": 19,
+          "text_end": 31,
+          "alias": "许宁等待构图",
+          "required_tags": [
+            "shot-qwxb-012",
+            "COMPOSITION",
+            "向右下等待"
+          ],
+          "purpose": "第12镜0–1.2秒软COMPOSITION：采样许宁已垂眼看向画右下、双唇自然闭合、继续等待的静态时刻，提供清楚眼嘴、浅蓝领口肩胸、坐姿线索及近门局部背景。不是整组首尾帧，不锁定持续静止；不证明画外纸笔持有、书写完成、呼吸、视线转变或省略剪辑节奏。",
+          "image_reference_role": "COMPOSITION",
+          "usage": "GENERATION"
+        }
+      ],
+      "timeline_beats": [
+        {
+          "start_seconds": 0.0,
+          "end_seconds": 1.2,
+          "visual": "@许宁安静看着画右下方，眼睛与嘴部无遮挡。",
+          "framing": "胸部以上近景。",
+          "camera": "固定。",
+          "action": "维持等待，不伸手取物。",
+          "performance": "确认对方在补写，目光稍松，尚不提前庆祝。",
+          "emotion": null,
+          "dialogue_line_ids": [],
+          "sound": "周明画外书写声继续；下一切点省略补写余段及随后署名的耗时，切回已签且笔尖离纸的结果时摩擦声收止，不提高笔速。",
+          "references": [
+            {
+              "subject_asset_id": "asset-a999f3e98732",
+              "id": "shot-qwxb-012-reference-2",
+              "asset_version_id": "asset-version-25a7c2a06f69",
+              "field": "visual",
+              "text_start": 0,
+              "text_end": 3,
+              "alias": "许宁",
+              "required_tags": [],
+              "purpose": "等待反应的脸部身份。",
+              "image_reference_role": "SUBJECT_IDENTITY",
+              "usage": "GENERATION"
+            },
+            {
+              "subject_asset_id": "asset-a999f3e98732",
+              "id": "shot-qwxb-012-beat-0-ref-1",
+              "asset_version_id": "asset-version-40ee912ebdda",
+              "field": "visual",
+              "text_start": 3,
+              "text_end": 11,
+              "alias": "许宁等待构图",
+              "required_tags": [
+                "shot-qwxb-012",
+                "COMPOSITION",
+                "向右下等待"
+              ],
+              "purpose": "0–1.2秒等待段的静态软构图依据：向画右下的协调目光、自然闭唇、克制神态及稳定肩胸，不提前笑或说话。图片不验证呼吸、目光稍松的过程、持续静默、周明画外书写，或切回已补写、周明已先签且笔尖已离纸结果的时间省略。",
+              "image_reference_role": "COMPOSITION",
+              "usage": "GENERATION"
+            }
+          ]
+        }
+      ],
+      "continuity": {
+        "character_positions": "许宁近门侧仍坐着，周明画外内墙侧。",
+        "eyeline": "许宁看画右下方原纸与周明的书写手。",
+        "prop_state_in": "原纸与笔在周明处，补写已开始。",
+        "prop_state_out": "镜内纸笔仍在周明处且位于画外；下一切点通过时间省略承接同纸补写及周明先署名均已完成、笔尖已离纸的结果，许宁署名处仍空白。",
+        "action_in": "周明开始补写，许宁看见动作。",
+        "action_out": "许宁继续等候；周明在画外先补写、随后署名，余下耗时由切镜省略；不是许宁在画外写字。"
+      },
+      "transition_out": "以明确的时间省略切回周明已补写并先署名、笔尖已离纸的结果，再承接放笔送回；不展示姓名末笔，不宣称1.2秒涵盖全部书写。书写声随下一镜切回收止。",
+      "revision": 3
+    },
+    "locked_dialogue": [],
+    "dialogue_spans": [],
+    "continuing_dialogue": [],
+    "visible_asset_ids": [
+      "asset-a999f3e98732",
+      "asset-24c91a5b7fba"
+    ],
+    "structured_action_plan": null
+  },
+  "current_s12": {
+    "required_timing_marker": "[Shot 3] [5.30-6.50 seconds]",
+    "source_window": {
+      "shot_id": "shot-qwxb-012",
+      "shot_revision": 3,
+      "source_in_seconds": 5.3,
+      "source_out_seconds": 6.5,
+      "duration_seconds": 1.2
+    },
+    "locked_shot": {
+      "id": "shot-qwxb-012",
+      "project_id": "project-bd8595b4b332",
+      "sequence": 12,
+      "scene_id": "scene-7c6c7817bf70",
+      "duration_seconds": 1.2,
+      "narrative_purpose": "给许宁确认对方已真正动笔的反应，并提供补写过程的合理省略切口。",
+      "visual": "@许宁在@物流公司小会议室近门席坐着，视线朝画右下方的书写区域。她没有伸手替周明完成，也不急着笑；眼神从顶住对方转为等待，嘴唇闭合。浅蓝领口可见，桌面和纸笔在画外。",
+      "framing": "9:16胸部以上近景，双眼、嘴部与完整下颌清楚。",
+      "camera": "固定在对视轴近短端同侧，许宁朝画右；背景为近门侧灰墙与模糊门边，不镜像空间。",
+      "audio_intent": "无对白。周明画外书写声继续；不把许宁听写的反应变成她说话。",
+      "dialogue_line_ids": [],
+      "references": [
+        {
+          "subject_asset_id": "asset-a999f3e98732",
+          "id": "shot-qwxb-012-reference-0",
+          "asset_version_id": "asset-version-25a7c2a06f69",
+          "field": "visual",
+          "text_start": 0,
+          "text_end": 3,
+          "alias": "许宁",
+          "required_tags": [],
+          "purpose": "脸部身份依据，保持自然肤质、眼睛与嘴部可读。",
+          "image_reference_role": "SUBJECT_IDENTITY",
+          "usage": "GENERATION"
+        },
+        {
+          "subject_asset_id": "asset-24c91a5b7fba",
+          "id": "shot-qwxb-012-reference-1",
+          "asset_version_id": "asset-version-c48ea915da16",
+          "field": "visual",
+          "text_start": 4,
+          "text_end": 13,
+          "alias": "物流公司小会议室",
+          "required_tags": [],
+          "purpose": "近门席空间及暖中性光，不要求复现空场构图。",
+          "image_reference_role": "SCENE_IDENTITY",
+          "usage": "GENERATION"
+        },
+        {
+          "subject_asset_id": "asset-a999f3e98732",
+          "id": "shot-qwxb-012-shot-ref-2",
+          "asset_version_id": "asset-version-40ee912ebdda",
+          "field": "visual",
+          "text_start": 19,
+          "text_end": 31,
+          "alias": "许宁等待构图",
+          "required_tags": [
+            "shot-qwxb-012",
+            "COMPOSITION",
+            "向右下等待"
+          ],
+          "purpose": "第12镜0–1.2秒软COMPOSITION：采样许宁已垂眼看向画右下、双唇自然闭合、继续等待的静态时刻，提供清楚眼嘴、浅蓝领口肩胸、坐姿线索及近门局部背景。不是整组首尾帧，不锁定持续静止；不证明画外纸笔持有、书写完成、呼吸、视线转变或省略剪辑节奏。",
+          "image_reference_role": "COMPOSITION",
+          "usage": "GENERATION"
+        }
+      ],
+      "timeline_beats": [
+        {
+          "start_seconds": 0.0,
+          "end_seconds": 1.2,
+          "visual": "@许宁安静看着画右下方，眼睛与嘴部无遮挡。",
+          "framing": "胸部以上近景。",
+          "camera": "固定。",
+          "action": "维持等待，不伸手取物。",
+          "performance": "确认对方在补写，目光稍松，尚不提前庆祝。",
+          "emotion": null,
+          "dialogue_line_ids": [],
+          "sound": "周明画外书写声继续；下一切点省略补写余段及随后署名的耗时，切回已签且笔尖离纸的结果时摩擦声收止，不提高笔速。",
+          "references": [
+            {
+              "subject_asset_id": "asset-a999f3e98732",
+              "id": "shot-qwxb-012-reference-2",
+              "asset_version_id": "asset-version-25a7c2a06f69",
+              "field": "visual",
+              "text_start": 0,
+              "text_end": 3,
+              "alias": "许宁",
+              "required_tags": [],
+              "purpose": "等待反应的脸部身份。",
+              "image_reference_role": "SUBJECT_IDENTITY",
+              "usage": "GENERATION"
+            },
+            {
+              "subject_asset_id": "asset-a999f3e98732",
+              "id": "shot-qwxb-012-beat-0-ref-1",
+              "asset_version_id": "asset-version-40ee912ebdda",
+              "field": "visual",
+              "text_start": 3,
+              "text_end": 11,
+              "alias": "许宁等待构图",
+              "required_tags": [
+                "shot-qwxb-012",
+                "COMPOSITION",
+                "向右下等待"
+              ],
+              "purpose": "0–1.2秒等待段的静态软构图依据：向画右下的协调目光、自然闭唇、克制神态及稳定肩胸，不提前笑或说话。图片不验证呼吸、目光稍松的过程、持续静默、周明画外书写，或切回已补写、周明已先签且笔尖已离纸结果的时间省略。",
+              "image_reference_role": "COMPOSITION",
+              "usage": "GENERATION"
+            }
+          ]
+        }
+      ],
+      "continuity": {
+        "character_positions": "许宁近门侧仍坐着，周明画外内墙侧。",
+        "eyeline": "许宁看画右下方原纸与周明的书写手。",
+        "prop_state_in": "原纸与笔在周明处，补写已开始。",
+        "prop_state_out": "镜内纸笔仍在周明处且位于画外；下一切点通过时间省略承接同纸补写及周明先署名均已完成、笔尖已离纸的结果，许宁署名处仍空白。",
+        "action_in": "周明开始补写，许宁看见动作。",
+        "action_out": "许宁继续等候；周明在画外先补写、随后署名，余下耗时由切镜省略；不是许宁在画外写字。"
+      },
+      "transition_out": "以明确的时间省略切回周明已补写并先署名、笔尖已离纸的结果，再承接放笔送回；不展示姓名末笔，不宣称1.2秒涵盖全部书写。书写声随下一镜切回收止。",
+      "revision": 3
+    },
+    "locked_dialogue": [],
+    "dialogue_spans": [],
+    "continuing_dialogue": [],
+    "visible_asset_ids": [
+      "asset-a999f3e98732",
+      "asset-24c91a5b7fba",
+      "asset-bc20f06f2c2e"
+    ],
+    "structured_action_plan": null
+  },
+  "s12_reference_plan": {
+    "shot_id": "shot-qwxb-012",
+    "bindings": [
+      {
+        "kind": "CHARACTER",
+        "target_id": "asset-version-25a7c2a06f69",
+        "purpose": "等待反应的脸部身份。；脸部身份依据，保持自然肤质、眼睛与嘴部可读。",
+        "required": true
+      },
+      {
+        "kind": "LOCATION",
+        "target_id": "asset-version-c48ea915da16",
+        "purpose": "近门席空间及暖中性光，不要求复现空场构图。",
+        "required": true
+      },
+      {
+        "kind": "REFERENCE",
+        "target_id": "asset-version-40ee912ebdda",
+        "purpose": "0–1.2秒等待段的静态软构图依据：向画右下的协调目光、自然闭唇、克制神态及稳定肩胸，不提前笑或说话。图片不验证呼吸、目光稍松的过程、持续静默、周明画外书写，或切回已补写、周明已先签且笔尖已离纸结果的时间省略。；第12镜0–1.2秒软COMPOSITION：采样许宁已垂眼看向画右下、双唇自然闭合、继续等待的静态时刻，提供清楚眼嘴、浅蓝领口肩胸、坐姿线索及近门局部背景。不是整组首尾帧，不锁定持续静止；不证明画外纸笔持有、书写完成、呼吸、视线转变或省略剪辑节奏。",
+        "required": true
+      }
+    ],
+    "capability_valid": true,
+    "validation_notes": [
+      "当前尚无显式引用绑定；Agent 可按资产与镜头语义补充。"
+    ],
+    "requirements": [],
+    "action_beats": [],
+    "interactions": [],
+    "max_reference_images": 9,
+    "planning_notes": "storyboard-projection"
+  },
+  "version_owners": [
+    {
+      "asset_id": "asset-a999f3e98732",
+      "name": "许宁",
+      "kind": "CHARACTER",
+      "version_ids": [
+        "asset-version-b3d904a890d7",
+        "asset-version-cd9ab32b2b1f",
+        "asset-version-25a7c2a06f69"
+      ]
+    },
+    {
+      "asset_id": "asset-24c91a5b7fba",
+      "name": "物流公司小会议室",
+      "kind": "LOCATION",
+      "version_ids": [
+        "asset-version-3e1127fdc9b4",
+        "asset-version-c48ea915da16"
+      ]
+    },
+    {
+      "asset_id": "asset-bc20f06f2c2e",
+      "name": "第12镜｜许宁垂眼等待反应",
+      "kind": "REFERENCE",
+      "version_ids": [
+        "asset-version-9e963d343ffa",
+        "asset-version-40ee912ebdda"
+      ]
+    }
+  ],
+  "previous_terminal": {
+    "evidence_kind": "PLANNED_ONLY",
+    "shot_id": "shot-qwxb-013",
+    "sequence": 13,
+    "visual": "回到桌面斜俯覆盖，@周明衣装的炭灰袖口及写字手在画右。@主管签写说明的留白已有简短补写，周明用@黑色签字笔完成自己的署名末笔；许宁署名区域仍空着。随后笔离纸、放到纸侧。周明再以一手接触纸边、另一手接触笔杆，分别将原纸和笔沿桌面送向画左近门席，到位后松手收回；笔不因纸移动而自行滑走。落笔与完成状态可分切承接，不靠识读小字证明责任。",
+    "framing": "9:16桌面近景略宽，完整纸主体、笔和周明两手可见，留出从右向左的送物距离；不含双方脸。",
+    "action_out": "周明分别接触并送回纸笔，到位后收手；已承诺说明，许宁可以先看后决定。",
+    "prop_state_out": "纸上有补写及周明署名，无许宁署名；纸和笔均在许宁面前桌上，周明已收手。",
+    "character_positions": "两席不变；画内只需周明两手与炭灰袖口。",
+    "eyeline": "无面部入画；许宁画外等待。",
+    "transition_out": "切许宁抬眼回应，保留纸笔已送到她面前的结果；不重新播放送纸。"
+  }
+}

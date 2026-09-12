@@ -4037,7 +4037,22 @@ def test_language_planner_preloads_small_hot_set_and_discovers_long_tail(
     assert run.snapshot.current_plan.steps[0].tool_name == "project.get"
     assert len(client.inputs) == 2
     first_payload, second_payload = [json.loads(value) for value in client.inputs]
-    assert set(first_payload["tool_schemas"]) == {"artifact.read_current", "agent.read_context", "artifact.get_production_document"}
+    # This fixture already contains saved shots. Their current contracts are
+    # available on the first request; the unrelated project read is discovered.
+    assert any(
+        ref["artifact_type"] == "shot" and ref["project_id"] == project_id
+        for ref in first_payload["context"]["artifact_index"].values()
+    )
+    assert set(first_payload["tool_schemas"]) == {
+        "artifact.read_current", "agent.read_context", "artifact.get_production_document",
+        "shot.get_storyboard", "shot.patch_storyboard", "change.apply",
+    }
+    catalog = {tool.id: tool for tool in service.tool_registry.list()}
+    for tool_id in ("shot.get_storyboard", "shot.patch_storyboard", "change.apply"):
+        assert first_payload["tool_schemas"][tool_id] == {
+            "description": catalog[tool_id].description,
+            "input_schema": catalog[tool_id].input_schema,
+        }
     assert all(
         "input_schema" not in descriptor
         and "output_schema" not in descriptor
@@ -6881,7 +6896,7 @@ def test_completed_work_order_contract_errors_are_wrapped(
         )
 
 
-def test_specialist_contract_failure_returns_the_work_order_to_the_leader(
+def test_specialist_contract_failure_returns_lossless_feedback_to_same_worker(
     tmp_path: Path,
 ) -> None:
     client = SequencedLanguageClient(
@@ -6911,22 +6926,35 @@ def test_specialist_contract_failure_returns_the_work_order_to_the_leader(
     service.update_language_provider_config(
         LanguageProviderConfigUpdate(base_url="http://127.0.0.1:4141/v1")
     )
-    _run_id, work_order_id, _action_id = _start_pending_delegation(
+    run_id, work_order_id, action_id = _start_pending_delegation(
         service,
         project_id,
         strict_completion_contract=True,
     )
 
-    with pytest.raises(
-        ProductionManagerError,
-        match="does not satisfy the WorkOrder contract",
-    ):
-        service.execute_agent_work_order(work_order_id)
+    plan_id = service.get_agent_run(run_id).snapshot.run.current_plan_revision_id
+    response = service.execute_agent_work_order(work_order_id)
 
     failed = service.agent_runtime_store.get_work_order(work_order_id)
     assert failed is not None
     assert failed.status == DelegationStatus.NEEDS_ATTENTION
-    assert failed.next_owner == WorkOrderNextOwner.LEADER_REPLAN
+    assert failed.next_owner == WorkOrderNextOwner.WORKER_DECISION
+    assert failed.pending_protocol_feedback is not None
+    original = json.loads(failed.pending_protocol_feedback.rejected_response)
+    assert original["status"] == "COMPLETED"
+    assert original["concise_summary"] == "The specialist omitted the required delivery."
+    assert original["findings"] == ["The review itself completed."]
+    assert "delivery" in json.dumps(failed.pending_protocol_feedback.validation_issues)
+    assert response.result.status == AgentResultStatus.PARTIAL
+    rejected = response.result.deliverable["rejected_handoff"]
+    assert rejected["accepted"] is False
+    assert rejected["response"] == original
+    assert rejected["validation_issues"] == failed.pending_protocol_feedback.validation_issues
+    assert response.result.created_artifacts == response.result.updated_artifacts == []
+    action = service.agent_runtime_store.get_action(action_id)
+    assert action is not None and action.status == ActionStatus.RUNNING
+    assert service.get_agent_run(run_id).snapshot.run.current_plan_revision_id == plan_id
+    assert len(client.inputs) == 1
 
 
 def test_agent_project_bootstrap_creates_the_project_before_returning(

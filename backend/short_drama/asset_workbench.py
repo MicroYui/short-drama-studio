@@ -2589,12 +2589,14 @@ class AssetWorkbench:
             or asset_kind == AssetKind.PROP and brief.presentation_mode == AssetPresentationMode.PHYSICAL_MASTER
         ):
             raise AssetWorkbenchConflict(
-                "Text plates require SCREEN_CONTENT_PLATE or a PHYSICAL_MASTER PROP with required_visible_text; "
+                "Text plates require SCREEN_CONTENT_PLATE or a PHYSICAL_MASTER PROP; "
                 "a physical prop's plate is a surface-content candidate, not a replacement photograph"
             )
-        if not brief.required_visible_text:
+        if not brief.required_visible_text and request.content_state is None:
             raise AssetWorkbenchConflict(
-                "Text plate asset brief must declare required_visible_text; preserve the physical carrier's presentation_mode"
+                f"asset_id={asset_id}: with no fixed brief.required_visible_text, explicitly provide "
+                "content_state.name and complete content_state.required_visible_text for this candidate. "
+                "Preserve the physical carrier's presentation_mode and shared brief."
             )
         # Fixed asset copy remains authoritative. A state can declare additions
         # without changing earlier candidates or the physical carrier's brief.

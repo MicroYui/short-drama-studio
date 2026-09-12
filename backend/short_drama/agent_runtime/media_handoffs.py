@@ -102,6 +102,7 @@ def _observation(
         identity: JsonValue = [turn.tool_name, asset_id, version_id, scope,
                                output.get("narrative_context") if success else None,
                                output.get("shot_revision") if success else None,
+                               output.get("shot_source") if success else None,
                                "pending" if pending else "saved"]
         body: dict[str, JsonValue] = {"kind": "image_inspection", "asset_id": asset_id,
             "asset_version_id": version_id, "scope": scope, "result": output if success else None}

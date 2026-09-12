@@ -12,6 +12,33 @@ from short_drama.production_contracts import (
 )
 
 
+def derive_current_generation_plan(
+    document: ProjectDocument,
+) -> tuple[GenerationPlanContent, StoryboardContent, ProductionSpecContent]:
+    """Project the saved current source documents in memory; never save a plan."""
+    documents = {item.id: item for item in document.production_documents}
+    board_document = documents.get(document.storyboard_document_id or "")
+    spec_document = documents.get(document.production_spec_document_id or "")
+    if board_document is None or spec_document is None:
+        raise ValueError("Current Storyboard and ProductionSpec are required")
+    board_version = next((v for v in board_document.versions if v.id == board_document.current_version_id), None)
+    spec_version = next((v for v in spec_document.versions if v.id == spec_document.current_version_id), None)
+    if board_version is None or spec_version is None:
+        raise ValueError("Current Storyboard or ProductionSpec version is missing")
+    board = StoryboardContent.model_validate(board_version.payload)
+    spec = ProductionSpecContent.model_validate(spec_version.payload)
+    shots = {shot.id: shot for shot in document.shots}
+    if any(shot.id not in shots for shot in board.shots):
+        raise ValueError("Current Storyboard has missing shot content")
+    current = compile_generation_plan(
+        storyboard=board, storyboard_document_id=board_document.id,
+        storyboard_version_id=board_version.id, production_spec=spec,
+        production_spec_document_id=spec_document.id, production_spec_version_id=spec_version.id,
+        shot_revisions={shot.id: shots[shot.id].revision for shot in board.shots},
+    )
+    return current, board, spec
+
+
 def validate_generation_units_current(
     document: ProjectDocument,
     plan: GenerationPlanContent,

@@ -72,6 +72,22 @@ const originLabels: Record<AssetVersion['origin_type'], string> = {
 const reviewLabels: Record<AssetVersion['approval_status'], string> = { DRAFT: '候选素材', APPROVED: '已确认素材', REJECTED: '已拒绝', SUPERSEDED: '已失效' }
 const fileName = (path: string) => path.split(/[\\/]/).at(-1) || path
 
+/** Pick a preview only; explicit inspection never changes the selected asset version. */
+export function assetGroupPreview(project: ProjectAggregate, group: AssetGroup, files: LibraryFile[], reads: Readonly<Record<string, MediaReadState>> = {}, selectedFileId?: string | null): LibraryFile | undefined {
+  const items = files.filter(file => file.groupId === group.id)
+  const selected = items.find(file => file.id === selectedFileId)
+  if (selected) return selected
+  const usable = items.filter(file => !file.missing && reads[fileReadKey(file)] !== 'error'
+    && file.version?.freshness === 'CURRENT' && ['DRAFT', 'APPROVED'].includes(file.version.approval_status))
+  const current = usable.find(file => file.id === group.subject.current_version_id)
+  if (current) return current
+  const entries = (project.document.reference_packs ?? []).filter(pack => pack.subject_asset_id === group.id).flatMap(pack => pack.entries ?? [])
+  const canonical = entries.filter(entry => entry.role === 'CANONICAL_MASTER').map(entry => usable.find(file => file.id === entry.asset_version_id)).find(Boolean)
+  return canonical ?? usable.find(file => file.shotIds.length > 0 || file.editorialUsed || file.voiceUsed)
+    ?? entries.map(entry => usable.find(file => file.id === entry.asset_version_id)).find(Boolean)
+    ?? usable.find(file => file.id === file.asset?.current_version_id) ?? usable[0]
+}
+
 /** A read-only projection of canonical files, not a version browser or selection mutation. */
 export function projectMediaFiles(project: ProjectAggregate, groups: AssetGroup[], editorial: Project | null = null): LibraryFile[] {
   const files: LibraryFile[] = []

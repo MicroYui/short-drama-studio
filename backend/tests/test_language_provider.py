@@ -813,7 +813,6 @@ def test_language_prompt_uses_profile_visible_assets_and_previous_terminal_state
         "evidence_kind": "PLANNED_ONLY",
         "shot_id": document.shots[0].id,
         "sequence": 1,
-        "visual": "雨夜便利店外，镜头靠近带雨痕的玻璃门",
         "framing": "大全景",
         "action_out": "门内两人形成对峙",
         "prop_state_out": "门内两人形成对峙",

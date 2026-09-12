@@ -7,6 +7,7 @@ from short_drama.skill_ids import SkillIds
 from pydantic import Field, JsonValue, model_validator
 
 from short_drama.h3_models import H3MediaInput
+from short_drama.production_contracts import ClipGroup
 from short_drama.language_defaults import LANGUAGE_MODEL, LANGUAGE_REASONING_EFFORT
 from short_drama.models import DomainModel, VideoGenerationRoute
 
@@ -39,12 +40,23 @@ class H3GenerationUnitMediaCandidate(DomainModel):
     serves_shot_ids: list[str]
 
 
+class H3CurrentSourceDocument(DomainModel):
+    document_id: str
+    version_id: str
+    version: int
+
+
 class H3GenerationUnitContextResponse(DomainModel):
     project_id: str
     generation_plan_document_id: str
     generation_plan_version_id: str
     generation_plan_version: int
     generation_unit_id: str
+    source_status: str = Field(default="CURRENT_PLAN", description="CURRENT_PLAN or CURRENT_PROJECTION. GenerationPlan identity above is the requested saved source, never an invented version for projected current facts.")
+    source_changes: list[str] = Field(default_factory=list[str])
+    current_clip_group: ClipGroup | None = None
+    current_storyboard: H3CurrentSourceDocument | None = None
+    current_production_spec: H3CurrentSourceDocument | None = None
     source_context: dict[str, JsonValue]
     media_candidates: list[H3GenerationUnitMediaCandidate]
     warnings: list[str] = Field(default_factory=list[str])

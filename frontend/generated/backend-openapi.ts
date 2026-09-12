@@ -3507,7 +3507,7 @@ export interface components {
             recommended_next_actions?: string[];
             /**
              * Saved Tool Result Sequences
-             * @description 可选：本 WorkOrder 已成功 Tool 的 source_sequence。runtime 附其精确产物、现成审核/用途及可回读原回执；不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。
+             * @description 可选：本 WorkOrder 已成功 Tool 的 source_sequence。READ 可作为已保存观察，包括无产物 refs 的读取；不代表新产物。runtime 附精确产物、现成审核/用途及原回执定位，不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。
              */
             saved_tool_result_sequences?: number[];
             status: components["schemas"]["AgentResultStatus"];
@@ -4797,17 +4797,35 @@ export interface components {
         ContinuationPreference: "SERIES" | "STANDALONE" | "AGENT_DECIDES";
         /** ContinuityState */
         ContinuityState: {
-            /** Action In */
+            /**
+             * Action In
+             * @description Actual planned action state at this shot's start.
+             */
             action_in: string;
-            /** Action Out */
+            /**
+             * Action Out
+             * @description Authoritative planned action state at this shot's end, used for the next shot/group. Mid-shot prose does not replace a populated outgoing state; update it when the ending changes.
+             */
             action_out: string;
-            /** Character Positions */
+            /**
+             * Character Positions
+             * @description Current authored spatial continuity; keep consistent when editing blocking or the outgoing boundary.
+             */
             character_positions: string;
-            /** Eyeline */
+            /**
+             * Eyeline
+             * @description Current authored eyeline continuity, including the outgoing gaze used by the next shot.
+             */
             eyeline: string;
-            /** Prop State In */
+            /**
+             * Prop State In
+             * @description Actual planned prop state at this shot's start.
+             */
             prop_state_in: string;
-            /** Prop State Out */
+            /**
+             * Prop State Out
+             * @description Authoritative planned prop state at this shot's end, used for the next shot/group. Update it when that end state changes; empty retains visual-prose fallback.
+             */
             prop_state_out: string;
         };
         /**
@@ -6290,6 +6308,7 @@ export interface components {
              * @default 768P
              */
             resolution: string;
+            reused_route_source?: components["schemas"]["H3SavedRouteSource"] | null;
             /** Source Operation Id */
             source_operation_id?: string | null;
             /**
@@ -6310,6 +6329,8 @@ export interface components {
         H3ProductionRoutePlanListResponse: {
             /** Plans */
             plans: components["schemas"]["H3ProductionRoutePlan"][];
+            /** Source Checks */
+            source_checks?: components["schemas"]["H3RouteSourceCheck"][];
         };
         /** H3ProductionRoutePlanRequest */
         H3ProductionRoutePlanRequest: {
@@ -6349,6 +6370,8 @@ export interface components {
         /** H3ProductionRoutePlanResponse */
         H3ProductionRoutePlanResponse: {
             plan: components["schemas"]["H3ProductionRoutePlan"];
+            /** Source Checks */
+            source_checks?: components["schemas"]["H3RouteSourceCheck"][];
         };
         /** H3ProviderConfigResponse */
         H3ProviderConfigResponse: {
@@ -6583,6 +6606,43 @@ export interface components {
          * @enum {string}
          */
         H3RoutePlanStatus: "READY" | "PARTIAL" | "EXECUTING" | "COMPLETE" | "STALE";
+        /** H3RouteSourceCheck */
+        H3RouteSourceCheck: {
+            /** Checked At */
+            checked_at: string;
+            /** Generation Unit Id */
+            generation_unit_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Route Plan Id */
+            route_plan_id: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "SAVED_OPERATION_SOURCE" | "CURRENT_INPUTS_ONLY";
+            /** Shot Id */
+            shot_id: string;
+            /** State Revision */
+            state_revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "CURRENT" | "STALE" | "UNKNOWN";
+        };
+        /** H3SavedRouteSource */
+        H3SavedRouteSource: {
+            /**
+             * Generation Unit Id
+             * @description Exact source decision identity; must equal the current target group.
+             */
+            generation_unit_id: string;
+            /** Route Plan Id */
+            route_plan_id: string;
+            /** State Revision */
+            state_revision: number;
+        };
         /**
          * H3ShotRouteAction
          * @enum {string}
@@ -6612,6 +6672,8 @@ export interface components {
             reference_selection_candidate_ids?: string[] | null;
             /** Reuse Take Id */
             reuse_take_id?: string | null;
+            /** @description Actively reuse one exact saved route decision after checking its prompt against this current group. Reads its unchanged prompt, format and ordered media; no language call. Mutually exclusive with candidate/prompt/media/take choices. Current facts and files are revalidated and saved as a new source. */
+            saved_route_source?: components["schemas"]["H3SavedRouteSource"] | null;
             /**
              * Shot Id
              * @default
@@ -10185,7 +10247,10 @@ export interface components {
             /** Target Id */
             target_id: string;
             target_kind: components["schemas"]["ChangeTargetKind"];
-            /** Updates */
+            /**
+             * Updates
+             * @description Exact supported fields. SHOT also accepts continuity.character_positions, continuity.eyeline, continuity.prop_state_in, continuity.prop_state_out, continuity.action_in and continuity.action_out. Keep outgoing continuity and affected transition prose consistent when changing an action; no automatic rewriting of neighbours.
+             */
             updates: {
                 [key: string]: string;
             };

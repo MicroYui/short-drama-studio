@@ -323,6 +323,7 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
     ) -> ToolExecution[H3GenerationUnitContextResponse]:
         result = service.get_h3_generation_unit_context(request.project_id, request.request)
         return ToolExecution(output=result, artifact_refs=(
+            *((ArtifactRef(project_id=result.project_id, artifact_type="storyboard", artifact_id=result.current_storyboard.document_id, version=result.current_storyboard.version),) if result.current_storyboard else ()),
             ArtifactRef(project_id=result.project_id, artifact_type="generation_plan",
                         artifact_id=result.generation_plan_document_id, version=result.generation_plan_version),
             ArtifactRef(project_id=result.project_id, artifact_type="generation_unit",
@@ -332,13 +333,13 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
     registry.register(ToolSpec(
         id="route.get_generation_unit_context", version=1, category=ToolCategory.ROUTE,
         description=(
-            "Read one exact GenerationUnit's complete canonical shots, dialogue, timing, "
+            "Read current facts for the exact requested group, even when its saved GenerationPlan is stale: complete ClipGroup, source document/version identities and changes, canonical shots, dialogue, timing, "
             "production direction and visible Bible, plus current usable media candidates "
             "with real local_path/external_url, AssetVersion, subject, role, purpose and tags. "
             "Current available DRAFT images can be selected directly; approval status is not a prerequisite. "
             "Use this before compile_h3_prompt; it replaces full Storyboard/AssetPlan reads "
             "for video preparation. Select the route and ordered media subset yourself. "
-            "Read-only; no model, upload or H3 call."
+            "The requested plan identity remains provenance; current projections are not saved plans. Preparation still validates current sources strictly. Read-only; no model, upload or H3 call."
         ),
         effect=ToolEffect.READ, idempotent=True,
         input_model=GenerationUnitContextInput, output_model=H3GenerationUnitContextResponse,
@@ -670,7 +671,10 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
                 "Save a MiniMax-H3 route plan for shots or generation units. For units use "
                 "generation_plan_document_id/version_id and unit_ids without shot_ids; "
                 "each directive targets generation_unit_id without shot_id. Preserve the "
-                "compiled prompt and media order. Does not submit video."
+                "compiled prompt and media order. After explicitly checking an existing saved prompt against current facts, "
+                "one unit directive may select saved_route_source={route_plan_id,state_revision,generation_unit_id}; "
+                "this reuses its exact prompt/format/ordered media without a language call and captures current sources. "
+                "Do not combine that branch with candidate_id/prompt_override/media_inputs. It does not automatically reuse stale content or submit video."
             ),
             effect=ToolEffect.EXTERNAL,
             idempotent=False,
@@ -699,7 +703,7 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
             version=1,
             category=ToolCategory.ROUTE,
             description=(
-                "List persisted H3 route plans for coverage and readiness. Model context "
+                "List persisted H3 route plans with current read-only source_checks and reasons. Saved READY is a snapshot, not proof of current inputs. Historical stale routes need not block a newer current route. Model context "
                 "contains compact plan summaries; use route.get_h3_plan for one complete "
                 "saved prompt, media order, and execution parameters."
             ),
@@ -724,7 +728,7 @@ def register_tools(registry: ToolRegistry, service: RouteToolService) -> None:
 
     registry.register(ToolSpec(
         id="route.get_h3_plan", version=1, category=ToolCategory.ROUTE,
-        description="Read one complete persisted H3 route plan, including its exact prompt and ordered media. No provider calls.",
+        description="Read one complete persisted H3 route plan, exact prompt and ordered media, plus current source_checks/reasons. Saved readiness is unchanged; no writes or provider calls.",
         effect=ToolEffect.READ, idempotent=True, input_model=RoutePlanGetInput,
         output_model=H3ProductionRoutePlanResponse, handler=get_plan,
         tags=frozenset({"h3", "planning", "route", "on-demand-payload"}),

@@ -1,0 +1,692 @@
+{
+  "source": {
+    "project_id": "project-bd8595b4b332",
+    "original_fixture": "../fresh6-shot13-replan-fixture.json",
+    "captured_at": "2026-09-12T10:39:46.942095+00:00",
+    "extraction": "Actual saved JSON subsets; identities, requests and selected bodies are unchanged. Not a complete ProjectDocument or a successful product replay.",
+    "provider_calls_by_extractor": 0
+  },
+  "work_order_contract": {
+    "id": "work-order-878318269869472480e7c36817514588",
+    "parent_run_id": "agent-run-2e912068740048388fdfce51dac66b04",
+    "recipient_role": "first-signed-paper-return-builder",
+    "production_skill_role": "ASSET_BUILDER",
+    "objective": "依据第13镜当前正文及所给已采用媒体，制作周明补写并先署名后将纸笔送回许宁的原创9:16构图参考。遵守当前镜头的景别与面部表达要求，不自行把人物对白镜头改成只有桌面的插入镜。选择与本镜相容的代表静态时刻，保持周明内墙侧、许宁近门侧；纸面已有经过及周明署名，许宁署名处仍空白。当前分镜已明确周明分别接触纸边和笔杆推动，到位后松手；构图要支持真实接触，不让笔无接触跟随纸移动，也不要求单图同时证明推动和松手。纸上小字不承担剧情阅读，但实际可辨文字不得错误，既有签写不能消失。实际检查可见身份、面部清晰度、光色、座位、手物关系与签痕遮挡，保存专用构图资产并登记、绑定第13镜用途。不要等待或重做前段书写构图，不使用未完成双签图片，不覆盖基础资产。本工单仅负责第13镜图片输入，不保存整组路线，不创建任何视频任务。",
+    "why_now": "第13镜修订正文和周明先签纸张均已保存可用；返纸构图只依赖这些实际输入，不依赖前段书写构图或其修图完成。",
+    "task_inputs": {
+      "shot_ids": [
+        "shot-qwxb-013"
+      ],
+      "clip_group_id": "clip-qwxb-04",
+      "selected_media": {
+        "zhouming_identity": "asset-version-407987cb1b59",
+        "zhouming_wardrobe": "asset-version-09a28cdbb4e3",
+        "xuning_identity": "asset-version-25a7c2a06f69",
+        "xuning_wardrobe": "asset-version-cd9ab32b2b1f",
+        "room": "asset-version-c48ea915da16",
+        "zhouming_signed_paper": "asset-version-2f322f51b557",
+        "pen": "asset-version-377292c951cd"
+      },
+      "delivery_boundary": "构图仅承担所选静态时刻的输入依据，不自动作为整组首尾帧。具体手别、纸向和采样时刻属于可调整实现方式；需改正文时交回具体证据。"
+    },
+    "scope": [
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qwxb-013",
+        "version": 2
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-407987cb1b59",
+        "version": 3
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-09a28cdbb4e3",
+        "version": 2
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-25a7c2a06f69",
+        "version": 3
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-cd9ab32b2b1f",
+        "version": 2
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-c48ea915da16",
+        "version": 2
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-2f322f51b557",
+        "version": 10
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-377292c951cd",
+        "version": 2
+      }
+    ],
+    "acceptance_criteria": [
+      "第13镜实际9:16构图图片已保存并完成用途检查，符合当前镜头的面部表达及桌面动作容纳需求。",
+      "纸张仅有已补写经过与周明署名，纸笔唯一，所选时刻的接触与遮挡可信。",
+      "已保存第13镜精确构图绑定及用途限制，未覆盖其他镜头、基础资产或在途任务。",
+      "返纸、松手、口型与自然回应节奏明确保留为未来视频验证事项，未声称整组准备完成。"
+    ],
+    "expected_output_schema": {},
+    "expected_output_slot_ids": [],
+    "created_at": "2026-09-12T10:30:48.901165Z"
+  },
+  "successful_read_turn": {
+    "id": "specialist-turn-95511bdf7d07424387edaf58d431957c",
+    "sequence": 1,
+    "tool_name": "artifact.read_current",
+    "arguments": {
+      "project_id": "project-bd8595b4b332",
+      "shot_id": "shot-qwxb-013"
+    },
+    "reason": "第13镜所附正文已明确桌面覆盖、不含脸，与工单的面部检查措辞存在差异；先读取本镜当前正文及精确引用，确认当前制作范围，避免擅改景别。",
+    "status": "COMPLETED",
+    "result": {
+      "tool_id": "artifact.read_current",
+      "status": "SUCCEEDED",
+      "output": {
+        "content": {
+          "project_id": "project-bd8595b4b332",
+          "script_id": "project-bd8595b4b332-script-v2",
+          "episode_title": "第 1 集",
+          "input_text": "请从这个空项目出发，创作并完成一部45–60秒、9:16竖屏、真人摄影质感短剧的视频生成前全部制作准备。现实职场题材，两名成年主要人物，一个主要室内场景；人物、故事、台词、片名和镜头由你创作决定。\n\n开头尽快让观众看懂矛盾，人物通过行动和回应改变局势，转折有前因，结尾回收前面的信息。对白像真人会说的话，不靠突然出现的第三人、神秘身份或不合常理的巧合解决问题。画面需要清楚的面部与表演，人物和空间统一，动作与对白留出自然可表演的时间。\n\n完成完整剧本、分镜、全部必要人物/场景/道具和剧情状态的原创图片、镜头所需的构图参考、正文与具体媒体的绑定，以及所有生成组可执行的视频输入和提示词路线准备。图片从零制作，不借用其他项目素材。按真实结果判断清晰度、身份、状态和输入是否满足用途；有实际问题就自主修订，保留可用结果。制作细节由你决定，无需逐步询问确认。\n\n如选定路线确实需要声音参考，也在本次资产内准备并核验，不把尚未听到的生成对白当作已验收。\n\n本次停止点是所有视频生成前准备完成。视频参数按2K、9:16准备，允许语言编译和保存生成路线，但不要创建、入队、提交或执行任何视频生成，也不要继续后期声音、剪辑或导出。准备完成后直接结束本次任务，说明已完成内容、实际图片及仍需之后视频验证的动态表现。",
+          "scene_index": [
+            {
+              "id": "scene-7c6c7817bf70",
+              "heading": "第一场｜内景·物流公司小会议室·夜",
+              "summary": "主管周明要求许宁独自签下发货差错说明。许宁承认漏核对，但追问是否只有自己署名，并指出事先已提醒尚未复核；周明以怕错过发车为由回应，印证了他决定先发货的前因。许宁把纸笔退到桌中央，坚持经过写全才签。周明补写并先署名，承诺次日说明；许宁随后签名并主动同行，最后以“签完了。下班。”回收开头。",
+              "narrative_purpose": "让普通职员通过承认自己的疏漏、停止独签并提出明确条件，迫使主管从单方追责转为共同记录事实；用同一张纸、同一支笔的归属变化和先后署名兑现职场边界的情绪回报。"
+            }
+          ],
+          "shot_index": [
+            {
+              "id": "shot-qwxb-001",
+              "sequence": 1,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 4.8
+            },
+            {
+              "id": "shot-qwxb-002",
+              "sequence": 2,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 3.7
+            },
+            {
+              "id": "shot-qwxb-003",
+              "sequence": 3,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.0
+            },
+            {
+              "id": "shot-qwxb-004",
+              "sequence": 4,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 5.6
+            },
+            {
+              "id": "shot-qwxb-005",
+              "sequence": 5,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.9
+            },
+            {
+              "id": "shot-qwxb-006",
+              "sequence": 6,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 4.0
+            },
+            {
+              "id": "shot-qwxb-007",
+              "sequence": 7,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.0
+            },
+            {
+              "id": "shot-qwxb-008",
+              "sequence": 8,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.5
+            },
+            {
+              "id": "shot-qwxb-009",
+              "sequence": 9,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 4.0
+            },
+            {
+              "id": "shot-qwxb-010",
+              "sequence": 10,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 3.5
+            },
+            {
+              "id": "shot-qwxb-011",
+              "sequence": 11,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 1.8
+            },
+            {
+              "id": "shot-qwxb-012",
+              "sequence": 12,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 1.2
+            },
+            {
+              "id": "shot-qwxb-013",
+              "sequence": 13,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 3.5
+            },
+            {
+              "id": "shot-qwxb-014",
+              "sequence": 14,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 4.5
+            },
+            {
+              "id": "shot-qwxb-015",
+              "sequence": 15,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 3.0
+            },
+            {
+              "id": "shot-qwxb-016",
+              "sequence": 16,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 2.5
+            },
+            {
+              "id": "shot-qwxb-017",
+              "sequence": 17,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 3.0
+            },
+            {
+              "id": "shot-qwxb-018",
+              "sequence": 18,
+              "scene_id": "scene-7c6c7817bf70",
+              "duration_seconds": 1.5
+            }
+          ],
+          "asset_index": [
+            {
+              "id": "asset-a999f3e98732",
+              "name": "许宁",
+              "kind": "CHARACTER",
+              "media": [
+                {
+                  "id": "asset-version-cd9ab32b2b1f",
+                  "descriptor": "许宁原创身份母图候选：近正面头顶至大腿中部，29岁中国成年女性，浅蓝扣袖口长袖棉衬衫与深灰直筒裤；中性背景，仅供身份及服装参考。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-25a7c2a06f69",
+                  "descriptor": "许宁近正面脸部身份参考；从原创母图保留原始像素裁取完整头发、可见双耳、下颌、颈部与领口。用于近景和对话人物身份，不代表会议室构图或镜头首帧；服装、袖口及裤腰仍引用母图。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-9c102fb6c1ce",
+              "name": "周明",
+              "kind": "CHARACTER",
+              "media": [
+                {
+                  "id": "asset-version-09a28cdbb4e3",
+                  "descriptor": "周明原创正面身份与服装母图；38岁中国成年男性，短黑发、略方脸、炭灰长袖衬衫和黑裤；中性浅灰背景，头顶至大腿中段。用于人物身份及衣着连续性，不作为具体镜头首帧。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-407987cb1b59",
+                  "descriptor": "周明正面脸部身份参考，裁自本项目原创母图；保留完整短黑发、双耳、下颌、颈部和少量炭灰衣领。仅集中原有像素，供后续近景生成保持身份，不作为高清近景成片。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-24c91a5b7fba",
+              "name": "物流公司小会议室",
+              "kind": "LOCATION",
+              "media": [
+                {
+                  "id": "asset-version-c48ea915da16",
+                  "descriptor": "原创无人物会议室空间母版候选：浅木矩形桌与相对两椅，画面左椅近关闭入口、右椅靠素灰内墙，桌远端一侧为磨砂玻璃；暖中性顶灯、空桌。用于空间与照明继承，不是最终竖屏镜头或纸笔状态图。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-d9b912d71f3d",
+              "name": "发货差错说明",
+              "kind": "PROP",
+              "media": [
+                {
+                  "id": "asset-version-ce73e20ad056",
+                  "descriptor": "原创A4纸张空白实体母底，仅供后续同纸打印与签写状态派生，不作为开场已打印状态。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-2015128024a3",
+                  "descriptor": "未签状态准确打印字版，供同一张原创A4母底合成使用。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-6121f0476318",
+                  "descriptor": "开场未签实体母版：同一张原创哑光A4纸，上半部只有“发货差错说明 / 事项：发货核对 / 请记录有关经过。”稀疏打印，下半部留白，无补写及姓名。保留母底纸边、光照和接触影；仅为道具身份与纸面状态参考，不锁定后续机位或动作。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-8280d28b9673",
+                  "descriptor": "周明补写并先签状态的准确文字参考；保持原三项打印，仅新增经过与周明，无许宁姓名。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-afd5379a92f7",
+                  "descriptor": "局部编辑图示：周明先签状态的局部追加图示与遮罩。区域来自已观察纸内留白；不改变上半部稀疏打印、纸张外形和原光照，底部继续留白供许宁后签。图示本身不是已完成纸张状态。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-9d357930d74d",
+                  "descriptor": "局部编辑遮罩：周明先签状态的局部追加图示与遮罩。区域来自已观察纸内留白；不改变上半部稀疏打印、纸张外形和原光照，底部继续留白供许宁后签。图示本身不是已完成纸张状态。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-753b6a6f31de",
+                  "descriptor": "周明补写经过并先署名的同纸静态候选：在开场未签实体母版下半部局部追加黑色手写经过与“周明”，许宁署名区域仍空白。保留原打印、纸边与光照；尚待实际观察，不代表书写动作已验证。｜同次编辑的 Provider 原图候选；尚未应用本地遮罩保护，内容与圈外变化未验收。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-f676bd7f077a",
+                  "descriptor": "周明补写经过并先署名的同纸静态候选：在开场未签实体母版下半部局部追加黑色手写经过与“周明”，许宁署名区域仍空白。保留原打印、纸边与光照；尚待实际观察，不代表书写动作已验证。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-2f322f51b557",
+                  "descriptor": "周明补写并先签的本地修复候选：从已生成摄影手写区分离原墨迹，原位叠入同一未签实体母版。保留纸边、原打印、纸面光照，以及“未等复核，由我决定先发货。”和“周明”的实际笔画；尚无许宁署名。仅静态道具状态，待检查纸色接缝与墨迹完整性。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-acf904ecaccb",
+                  "descriptor": "双方已签状态的准确文字参考：原打印、经过与周明姓名保持，仅追加许宁姓名。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-9481cf56c627",
+                  "descriptor": "局部编辑图示：依据已观察的纸内留白，只在周明署名下方追加许宁姓名。两字自然黑色签字笔笔迹，大小与已有周明署名相称，完整落在区域内部；无手、笔、日期、印章或新纸。保持全部原打印、经过、周明姓名、纸边和光照。红框与标签仅为编辑说明，不出现在成品。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-ebc68592416c",
+                  "descriptor": "局部编辑遮罩：依据已观察的纸内留白，只在周明署名下方追加许宁姓名。两字自然黑色签字笔笔迹，大小与已有周明署名相称，完整落在区域内部；无手、笔、日期、印章或新纸。保持全部原打印、经过、周明姓名、纸边和光照。红框与标签仅为编辑说明，不出现在成品。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-dd31b80c5d96",
+                  "descriptor": "双方已签静态纸面候选：以已采用周明先签版本为母图，仅在原下方留白追加自然黑色手写“许宁”。保留原纸、全部打印、补写经过及周明笔迹；待观察新增字形、纸色连续性与同纸状态，不代表书写或交接动作已验证。｜同次编辑的 Provider 原图候选；尚未应用本地遮罩保护，内容与圈外变化未验收。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-dd6a58f9e33e",
+                  "descriptor": "双方已签静态纸面候选：以已采用周明先签版本为母图，仅在原下方留白追加自然黑色手写“许宁”。保留原纸、全部打印、补写经过及周明笔迹；待观察新增字形、纸色连续性与同纸状态，不代表书写或交接动作已验证。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-7bc44f2faed1",
+              "name": "黑色签字笔",
+              "kind": "PROP",
+              "media": [
+                {
+                  "id": "asset-version-377292c951cd",
+                  "descriptor": "原创黑色按动签字笔整笔摄影母版候选：哑黑细圆笔杆、简洁银色金属笔夹、单一黑色按动端、已伸出银色书写笔尖；无帽、无商标、无人物。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-7687da76f6c6",
+              "name": "第4镜｜许宁近门席胸部近景",
+              "kind": "REFERENCE",
+              "media": [
+                {
+                  "id": "asset-version-48b4a1aa4f51",
+                  "descriptor": "第4镜许宁近门席9:16胸部近景候选：沿用指定身份、浅蓝衬衫与会议室光色，坐着朝画右看画外周明，脸部清楚，纸笔在下方画外。仅供shot-qwxb-004的软COMPOSITION参考，不是整组首帧，不证明持笔手下降、未签状态或对白动态。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-cef59723d93f",
+                  "descriptor": "第4镜许宁近门席胸部近景候选：从已生成的场内照片按实际检查建议本地裁切，裁框微调为整数像素9:16。保留原有清楚五官、黑色侧分齐肩发、浅蓝衬衫肩胸、朝画右视线及闭门背景局部，去除腹部裤腰与过多头顶留白。仅供第4镜软COMPOSITION，不是整组首帧；纸笔及双手在下方画外，静态图不验证持笔手下降、签字状态、对白口型、换气或语气。",
+                  "media_type": "IMAGE"
+                },
+                {
+                  "id": "asset-version-2bafed1b55ca",
+                  "descriptor": "第4镜许宁场内胸部近景候选：从已生成场内照片按实际观察建议的像素框[112,144,949,1632]本地裁取9:16画面，保留原像素，不放大、不重绘。裁框用于兼顾清楚面部、浅蓝衬衫肩胸、朝画右视线与画左最小闭门及门框线索，裁后实际效果另行观察。仅供第4镜软COMPOSITION，不是整组首帧；不依赖画外纸笔，静态图不验证持笔手下降、仍持笔、未签字、对白口型、换气或语气。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-d53fb34389ed",
+              "name": "周明内墙侧靠背近景｜第3、5镜共用",
+              "kind": "REFERENCE",
+              "media": [
+                {
+                  "id": "asset-version-212295319408",
+                  "descriptor": "第3镜shot-qwxb-003与第5镜shot-qwxb-005共同使用的周明内墙侧靠背胸部近景候选。1152×2048竖屏摄影构图，朝画左看画外许宁，炭灰衬衫、素灰内墙、暖中性办公光。仅作为COMPOSITION静态覆盖，不作为整组首尾帧，不证明对白、口型、回应间距或画外纸笔状态。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-448a1759c507",
+              "name": "许宁悬笔追问｜第2镜构图",
+              "kind": "REFERENCE",
+              "media": [
+                {
+                  "id": "asset-version-b47ec801ba80",
+                  "descriptor": "第2镜悬笔追问候选：9:16真人摄影坐姿中近景，许宁沿用近门席，抬眼朝画右；计划以自身右手持唯一黑笔，笔尖悬在局部未签纸面上。仅作已取笔后的软COMPOSITION代表时刻，不作取笔前首帧、整组边界或第4镜近景；实际手物与悬停状态待观察。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            },
+            {
+              "id": "asset-7803cd86c3aa",
+              "name": "开场递纸双人构图｜第1镜",
+              "kind": "REFERENCE",
+              "media": [
+                {
+                  "id": "asset-version-de1a9cf02822",
+                  "descriptor": "第1镜9:16斜侧双人开场构图候选：周明内墙侧画右，许宁近门侧画左；周明左手开始推未签原纸，右手仍控制唯一出尖黑笔，许宁尚未取笔。只供软COMPOSITION，不自动作整组首尾帧。",
+                  "media_type": "IMAGE"
+                }
+              ]
+            }
+          ],
+          "structure_stale_scene_ids": [],
+          "editorial_revision": 0,
+          "text_change_reviews": [],
+          "story_intent": null,
+          "bible": {
+            "id": "project-bd8595b4b332-bible-v1",
+            "project_id": "project-bd8595b4b332",
+            "version": 1,
+            "characters": [],
+            "locations": [],
+            "props": [],
+            "style": {
+              "medium": "未指定",
+              "genre": "未指定",
+              "cinematography": "未指定",
+              "color": "未指定",
+              "texture": "未指定",
+              "forbidden": []
+            },
+            "approval_status": "APPROVED",
+            "freshness": "CURRENT",
+            "parent_version_id": null,
+            "created_at": "2026-09-12T10:01:05.551+00:00"
+          },
+          "production_documents": [
+            {
+              "id": "production-document-c1975b6db157",
+              "kind": "production.spec",
+              "version_id": "production-document-version-4645bac79257"
+            },
+            {
+              "id": "production-document-29073ee1a194",
+              "kind": "story.contracts",
+              "version_id": "production-document-version-80af747d0462"
+            },
+            {
+              "id": "production-document-25cceff9567d",
+              "kind": "storyboard.draft",
+              "version_id": "production-document-version-46da1024c025"
+            },
+            {
+              "id": "production-document-331fea1b73bb",
+              "kind": "storyboard",
+              "version_id": "production-document-version-e85778711c86"
+            }
+          ],
+          "shot": {
+            "id": "shot-qwxb-013",
+            "project_id": "project-bd8595b4b332",
+            "sequence": 13,
+            "scene_id": "scene-7c6c7817bf70",
+            "duration_seconds": 3.5,
+            "narrative_purpose": "看见周明先署名并把同一张原纸和笔交回许宁，承诺次日说明；为许宁后签建立已变状态。",
+            "visual": "回到桌面斜俯覆盖，@周明衣装的炭灰袖口及写字手在画右。@主管签写说明的留白已有简短补写，周明用@黑色签字笔完成自己的署名末笔；许宁署名区域仍空着。随后笔离纸、放到纸侧。周明再以一手接触纸边、另一手接触笔杆，分别将原纸和笔沿桌面送向画左近门席，到位后松手收回；笔不因纸移动而自行滑走。落笔与完成状态可分切承接，不靠识读小字证明责任。",
+            "framing": "9:16桌面近景略宽，完整纸主体、笔和周明两手可见，留出从右向左的送物距离；不含双方脸。",
+            "camera": "沿镜11同侧斜俯方向，固定，不翻转纸和左右关系。",
+            "audio_intent": "前段写字声清楚。送纸笔时周明画外原句：明早我去说明。没有许宁对白；声源归周明，不让画外说明变旁白。",
+            "dialogue_line_ids": [
+              "line-qwxb-010"
+            ],
+            "references": [
+              {
+                "subject_asset_id": "asset-9c102fb6c1ce",
+                "id": "shot-qwxb-013-reference-0",
+                "asset_version_id": "asset-version-09a28cdbb4e3",
+                "field": "visual",
+                "text_start": 9,
+                "text_end": 14,
+                "alias": "周明衣装",
+                "required_tags": [],
+                "purpose": "通过炭灰袖口识别先署名与送纸者。",
+                "image_reference_role": "WARDROBE",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-d9b912d71f3d",
+                "id": "shot-qwxb-013-reference-1",
+                "asset_version_id": null,
+                "field": "visual",
+                "text_start": 27,
+                "text_end": 34,
+                "alias": "主管签写说明",
+                "required_tags": [
+                  "supervisor_added_and_signed"
+                ],
+                "purpose": "需原纸补写且只有周明署名的状态，用于署名完成后及送回段；不是整镜硬首帧，不让末笔前状态提前包含许宁署名。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              },
+              {
+                "subject_asset_id": "asset-7bc44f2faed1",
+                "id": "shot-qwxb-013-reference-2",
+                "asset_version_id": "asset-version-377292c951cd",
+                "field": "visual",
+                "text_start": 47,
+                "text_end": 53,
+                "alias": "黑色签字笔",
+                "required_tags": [],
+                "purpose": "签写及送回均保持同一支笔外观，笔图不当接触状态图。",
+                "image_reference_role": "PROP_IDENTITY",
+                "usage": "GENERATION"
+              }
+            ],
+            "timeline_beats": [
+              {
+                "start_seconds": 0.0,
+                "end_seconds": 1.4,
+                "visual": "简短补写已完成，炭灰袖口的手收完周明署名末笔；另一处留白仍空。",
+                "framing": "桌面斜俯近景。",
+                "camera": "固定。",
+                "action": "周明用@黑色签字笔写完最后几笔，抬笔后放到纸侧，手松开笔；原纸暂不移动。",
+                "performance": "只做自然收笔，不展示准确姓名笔顺。",
+                "emotion": null,
+                "dialogue_line_ids": [],
+                "sound": "笔尖摩擦停止，轻微落笔声。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-7bc44f2faed1",
+                    "id": "shot-qwxb-013-reference-3",
+                    "asset_version_id": "asset-version-377292c951cd",
+                    "field": "action",
+                    "text_start": 3,
+                    "text_end": 9,
+                    "alias": "黑色签字笔",
+                    "required_tags": [],
+                    "purpose": "落笔、离纸、放下的同一物体。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  }
+                ]
+              },
+              {
+                "start_seconds": 1.4,
+                "end_seconds": 3.5,
+                "visual": "@主管签写说明与原笔在周明双手分别接触下，沿桌面从周明侧送到近门席；许宁尚未取笔。",
+                "framing": "保持桌面覆盖和移动目的地。",
+                "camera": "固定。",
+                "action": "周明一手接触纸边，另一手重新接触笔杆，分别平稳推动两件物品；纸笔同时到达许宁面前后，他才松开并收回双手。移动由对应接触带动，不让旁侧的笔仅随纸自行漂移，不安排掌间递接。",
+                "performance": "周明画外平实地说原句，承担下一步说明。",
+                "emotion": null,
+                "dialogue_line_ids": [
+                  "line-qwxb-010"
+                ],
+                "sound": "原对白与轻微滑纸声并行；只发声一次。",
+                "references": [
+                  {
+                    "subject_asset_id": "asset-d9b912d71f3d",
+                    "id": "shot-qwxb-013-reference-4",
+                    "asset_version_id": null,
+                    "field": "visual",
+                    "text_start": 0,
+                    "text_end": 7,
+                    "alias": "主管签写说明",
+                    "required_tags": [
+                      "supervisor_added_and_signed"
+                    ],
+                    "purpose": "此时必须已有周明补写与署名，许宁签写仍不存在。",
+                    "image_reference_role": "PROP_IDENTITY",
+                    "usage": "GENERATION"
+                  }
+                ]
+              }
+            ],
+            "continuity": {
+              "character_positions": "两席不变；画内只需周明两手与炭灰袖口。",
+              "eyeline": "无面部入画；许宁画外等待。",
+              "prop_state_in": "补写完成，同一原纸在周明前，周明正在完成先署名末段。",
+              "prop_state_out": "纸上有补写及周明署名，无许宁署名；纸和笔均在许宁面前桌上，周明已收手。",
+              "action_in": "承接省略后的先署名收束，不能倒转为先签后补。",
+              "action_out": "周明分别接触并送回纸笔，到位后收手；已承诺说明，许宁可以先看后决定。"
+            },
+            "transition_out": "切许宁抬眼回应，保留纸笔已送到她面前的结果；不重新播放送纸。",
+            "merge_candidate": false,
+            "local_rework_risk": "未来需验证真实笔尖接触、放笔后重新接触笔杆、分别推动纸笔及到位松手；静态主管签写完成态只证明外观，不证明书写或交接过程。",
+            "approval_status": "DRAFT",
+            "freshness": "CURRENT",
+            "revision": 2
+          }
+        }
+      },
+      "artifact_refs": [],
+      "warnings": [],
+      "error": null,
+      "receipt": null
+    },
+    "requested_at": "2026-09-12T10:31:10.335387Z",
+    "updated_at": "2026-09-12T10:31:12.444259Z"
+  },
+  "submitted_result": {
+    "status": "PARTIAL",
+    "concise_summary": "已核对第13镜当前正文：镜头明确采用不含双方脸的桌面覆盖，与本工单要求面部表达及清晰度验收存在冲突。未擅改分镜，也未生成可能不符合用途的图片；需负责人对齐本镜制作范围后继续。",
+    "saved_tool_result_sequences": [
+      1
+    ],
+    "deliverable": {
+      "completed_scope": "核对第13镜当前景别、对白呈现、手物动作及先签纸张的可用事实。",
+      "current_shot": {
+        "shot_id": "shot-qwxb-013",
+        "revision": 2,
+        "framing": "9:16桌面近景略宽，完整纸主体、笔和周明两手可见，留出从右向左的送物距离；不含双方脸。",
+        "dialogue_presentation": "周明画外说“明早我去说明。”，无许宁对白。",
+        "contact_requirement": "周明两手分别接触纸边和笔杆推动，到位后松手收回。"
+      },
+      "available_input": {
+        "signed_paper_version_id": "asset-version-2f322f51b557",
+        "state": "已有补写经过与周明署名，许宁署名处仍空白；该静态道具状态已有实际检查和用途登记。"
+      },
+      "pending_delivery": "第13镜专用构图图片、实际用途检查、参考登记及精确镜头绑定尚未完成。",
+      "boundary": "未修改任何镜头或基础资产，未创建图像任务、视频任务或整组路线。"
+    },
+    "created_artifacts": [],
+    "updated_artifacts": [],
+    "findings": [
+      "第13镜当前framing明确“不含双方脸”，continuity.eyeline明确“无面部入画；许宁画外等待”，不是仅有措辞含糊的景别。",
+      "本工单同时要求面部表达与清晰度验收，并禁止自行改成桌面插入镜。若制作带脸构图，将偏离当前分镜；若制作无脸构图，则无法如实交付工单要求的面部检查。这不是调整手别、纸向或静态采样时刻即可消除的差异。",
+      "导演已保存的设计采用人物近景与独立桌面接触覆盖，无需因本次范围冲突重做人物、会议室、纸张或笔。",
+      "周明先签纸张已可直接复用；本任务不存在等待前段书写构图或双签纸张的依赖。当前尚无本工单构图候选。"
+    ],
+    "decisions": [
+      "保留第13镜当前正文，不以资产制作代替导演修改景别。",
+      "不使用双签纸张，不重做已采用的基础媒体。",
+      "将冲突交回负责人处理，不向用户重复询问已委托的制作细节。"
+    ],
+    "assumptions": [],
+    "unresolved_questions": [
+      "负责人需将本工单的面部验收要求与第13镜现行无脸桌面覆盖对齐，或由导演明确保存新的带脸覆盖。"
+    ],
+    "evidence_refs": [
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "shot",
+        "artifact_id": "shot-qwxb-013",
+        "version": 2
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "asset_version",
+        "artifact_id": "asset-version-2f322f51b557",
+        "version": 10
+      },
+      {
+        "project_id": "project-bd8595b4b332",
+        "artifact_type": "reference_pack_entry",
+        "artifact_id": "reference-entry-3e8c45625636",
+        "version": null
+      }
+    ],
+    "recommended_next_actions": [
+      "最小方案：负责人保留当前导演的桌面覆盖，将本工单验收对齐为炭灰袖口、两手真实接触、单张先签纸与唯一黑笔、左右送物路径及签痕遮挡；随后续派本构图制作，无需重做上游媒体。",
+      "若确实要求第13镜呈现周明面部说话，则由导演仅修订本镜相关景别、画内外对白与连续性描述，再交回图片制作；保留原对白、先后署名因果及分别接触推动的动作。",
+      "无论采用哪种覆盖，返纸、到位松手、对白声源与自然回应节奏仍须留待未来视频验证；本次继续禁止任何视频生成。"
+    ],
+    "next_owner": "LEADER_REPLAN"
+  },
+  "rejection_event": {
+    "id": 25857,
+    "kind": "worker.error",
+    "at": "2026-09-12T10:32:35.003651+00:00",
+    "data": {
+      "job_id": "studio-job-11fda417622f",
+      "run_id": "agent-run-2e912068740048388fdfce51dac66b04",
+      "agent_role": "leader",
+      "work_order_id": "work-order-878318269869472480e7c36817514588",
+      "error": "Agent result does not satisfy the WorkOrder contract: saved_tool_result_sequences/1: result has no saved artifact references; report its analysis directly",
+      "error_kind": "ProductionManagerError"
+    }
+  },
+  "fixture_note": "Cropped actual Fresh6 saved inputs/results. Draft fixture keeps only the selected committed group; omitted groups are not reconstructed. Image paths normalized to /fixtures; temporary test pixels prove protocol wiring only, never visual quality."
+}

@@ -79,7 +79,8 @@ from short_drama.agent_runtime.leader_context import (
 )
 from short_drama.agent_runtime.media_handoffs import MEDIA_OBSERVATION_GUIDANCE, asset_inspection_reports, asset_inspection_scope, observed_media_handoffs
 from short_drama.agent_runtime.shot_repair_context import attempted_shot_media_relations
-from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
+from short_drama.agent_runtime.tool_context import initial_tool_schema_ids, leader_artifact_tool_schema_ids, normalized_read_arguments, project_retained_read_results, schema_request_feedback
+from short_drama.agent_runtime.visual_input import prepare_worker_visual_input
 from short_drama.studio_trace import record_trace, trace_context
 from short_drama.image_models import ImageGenerationTask
 from short_drama.models import (
@@ -170,6 +171,10 @@ from short_drama.production_contracts import AssetPlanMutationSummaryResponse
 
 class ProductionManagerError(ValueError):
     """Raised when an Agent run cannot be planned or advanced as requested."""
+
+
+class SpecialistResultContractError(ProductionManagerError):
+    """A parsed Worker result failed the saved-fact or WorkOrder contract."""
 
 
 class AgentToolScopeError(ProductionManagerError):
@@ -622,7 +627,7 @@ class AgentWorkOrderResultRequest(DomainModel):
     concise_summary: str = Field(min_length=1, max_length=4000, description="本次分工的完成判断与结果摘要；无需重复逐项抄写已保存的媒体元数据。")
     saved_tool_result_sequences: list[Annotated[int, Field(strict=True, ge=1)]] = Field(
         default_factory=list[int],
-        description="可选：本 WorkOrder 已成功 Tool 的 source_sequence。runtime 附其精确产物、现成审核/用途及可回读原回执；不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
+        description="可选：本 WorkOrder 已成功 Tool 的 source_sequence。READ 可作为已保存观察，包括无产物 refs 的读取；不代表新产物。runtime 附精确产物、现成审核/用途及原回执定位，不必再抄 ID、路径或尺寸。不自动判断任务完成或 QA 通过，不替代自定义 deliverable 合同。",
     )
     deliverable: dict[str, JsonValue] = Field(
         default_factory=dict[str, JsonValue],
@@ -1627,13 +1632,6 @@ class LanguageProductionPlanner:
                 "planning_response": planning_response_guidance(),
                 "context": context.model_context_dump(),
                 "available_tools": tool_catalog,
-                "tool_schemas": {
-                    tool_id: {
-                        "description": tools_by_id[tool_id].description,
-                        "input_schema": tools_by_id[tool_id].input_schema,
-                    }
-                    for tool_id in loaded_schema_ids
-                },
                 "available_production_methods": [
                     {
                         "id": item.id,
@@ -1681,6 +1679,21 @@ class LanguageProductionPlanner:
                         "current_goal": run.goal_summary,
                         "latest_user_instructions": run.latest_user_instructions,
                     }
+            unresolved = {ref.identity() for ref in context.unresolved_artifact_refs}
+            saved_refs = [ref for ref in context.artifact_index.values() if ref.identity() not in unresolved]
+            related_ids = leader_artifact_tool_schema_ids(
+                [*saved_refs, *observed_artifact_refs], context.project_id,
+            )
+            new_ids = [tool_id for tool_id in related_ids
+                       if tool_id in tools_by_id and tool_id not in loaded_schema_ids]
+            if new_ids:
+                loaded_schema_ids.extend(new_ids)
+                remember_schemas()
+            payload["tool_schemas"] = {
+                tool_id: {"description": tools_by_id[tool_id].description,
+                          "input_schema": tools_by_id[tool_id].input_schema}
+                for tool_id in loaded_schema_ids
+            }
             try:
                 raw = generate_context_managed_text(
                     self._client, self.context_compiler,
@@ -3574,6 +3587,7 @@ def _fold_specialist_entities(
             key = ("asset_review", json.dumps([
                 arguments.get("project_id"), asset_id, version_id, scope,
                 review.get("narrative_context"), review.get("shot_revision"),
+                review.get("shot_source"),
             ], ensure_ascii=False, sort_keys=True))
             prior = entities.get(key)
             # Keep short display identities, while the private dictionary key
@@ -3602,7 +3616,7 @@ def _fold_specialist_entities(
                     "issues": review.get("issues"),
                     "evidence_references": review.get("evidence_references"),
                     **{field: review[field] for field in ("candidate_output_layout", "region_evidence", "narrative_context",
-                        "review_focus", "implementation_preferences", "shot_revision", "version", "image_task_id")
+                        "review_focus", "implementation_preferences", "shot_revision", "shot_source", "version", "image_task_id")
                        if field in review},
                     **({"crop_suggestion": review["crop_suggestion"]}
                        if review.get("crop_suggestion") is not None else {}),
@@ -4168,7 +4182,10 @@ def _compact_specialist_tool_result(
                 decisions.append(decision)
             plan["decisions"] = decisions
             plans.append(plan)
-        return {**result, "output": {"plans": plans, "details_tool": "route.get_h3_plan"}}
+        compact_output: dict[str, JsonValue] = {"plans": plans, "details_tool": "route.get_h3_plan"}
+        if "source_checks" in output_value:
+            compact_output["source_checks"] = output_value["source_checks"]
+        return {**result, "output": compact_output}
 
     if tool_name == "route.compile_h3_prompt":
         output_value = result.get("output")
@@ -5254,6 +5271,7 @@ class LanguageSpecialistAgent:
                 known_refs = {ref.identity(): ref for ref in _artifact_refs_from_json(working_set_payload.get("artifact_refs"))}
                 known_refs.update({ref.identity(): ref for ref in media_refs})
                 working_set_payload["artifact_refs"] = [ref.model_dump(mode="json") for ref in known_refs.values()]
+        visual_input = prepare_worker_visual_input(work_order.work_order, project_id=work_order.context.project_id)
         while True:
             execution_boundary()
             payload = {
@@ -5309,6 +5327,7 @@ class LanguageSpecialistAgent:
                 # This is transport headroom so the Agent can finish valid JSON,
                 # not a creative length target or a fixed batching requirement.
                 max_output_tokens=20000,
+                visual_input=visual_input,
             )
             payload = _normalize_specialist_response_payload(raw)
             try:
@@ -7170,7 +7189,7 @@ class ProductionManager:
             *request.evidence_refs,
         ]
         if any(ref.project_id != run.project_id for ref in result_refs):
-            raise ProductionManagerError(
+            raise SpecialistResultContractError(
                 "Agent result contains an artifact outside the current run project"
             )
         stale_reason = self._work_order_stale_reason(
@@ -7207,6 +7226,7 @@ class ProductionManager:
         try:
             saved_results = prepare_saved_completion_results(
                 self._require_project(run.project_id), work_order, request.saved_tool_result_sequences,
+                read_tool_ids=frozenset(tool.id for tool in self.tools.list() if tool.effect == ToolEffect.READ),
             )
             evidence_refs = list({ref.identity(): ref for ref in [
                 *request.evidence_refs, *saved_results.artifact_refs,
@@ -7237,7 +7257,7 @@ class ProductionManager:
                 completion_receipts=completion_receipts,
             )
         except AgentResultContractError as exc:
-            raise ProductionManagerError(
+            raise SpecialistResultContractError(
                 f"Agent result does not satisfy the WorkOrder contract: {exc}"
             ) from exc
         action = next(
@@ -7440,52 +7460,7 @@ class ProductionManager:
                     self.runtime.store.save_work_order(interrupted)
             raise
         except SpecialistResponseProtocolError as exc:
-            next_owner = self._return_specialist_protocol_failure_to_worker(
-                work_order_id,
-                exc,
-            )
-            repeated_without_progress = (
-                next_owner == WorkOrderNextOwner.LEADER_REPLAN
-            )
-            return self.submit_work_order_result(
-                work_order_id,
-                AgentWorkOrderResultRequest(
-                    status=AgentResultStatus.PARTIAL,
-                    concise_summary=(
-                        "专业 Agent 在收到类型化协议反馈后仍返回"
-                        "语义等价的非法结构；已保留所有落盘内容并"
-                        "交回 Leader 重新划分剩余修复范围。"
-                        if repeated_without_progress
-                        else (
-                            "专业 Agent 的响应结构未通过协议校验，"
-                            "已保留同一 WorkOrder 和已完成内容，由原 "
-                            "Worker 依据类型化反馈修正交接结构。"
-                        )
-                    ),
-                    findings=[
-                        (
-                            "同一 Worker 未对已给出的协议问题产生实质修正；"
-                            "当前交付形式或语义范围需要由 Leader 重组。"
-                            if repeated_without_progress
-                            else (
-                                "这是首次响应协议问题，不改变创意范围或"
-                                "调度计划。"
-                            )
-                        )
-                    ],
-                    recommended_next_actions=[
-                        (
-                            "Leader 保留已持久化工件，按自然语义边界收缩"
-                            "或重组剩余 WorkOrder，不要原样重发。"
-                            if repeated_without_progress
-                            else (
-                                "让同一专业 Agent 修正已持久化的结构化响应。"
-                            )
-                        )
-                    ],
-                    next_owner=next_owner,
-                ),
-            )
+            return self._submit_specialist_protocol_feedback(work_order_id, exc)
         except Exception as exc:
             self._return_specialist_failure(work_order_id, exc)
             if isinstance(exc, ProductionManagerError):
@@ -7493,7 +7468,6 @@ class ProductionManager:
             raise ProductionManagerError(
                 f"Specialist Agent execution failed: {exc}"
             ) from exc
-        self._clear_specialist_protocol_feedback(work_order_id)
         if isinstance(decision, SpecialistToolRequest):
             with self._run_lock(work_order.parent_run_id):
                 current = self.runtime.store.get_work_order(work_order_id)
@@ -7542,7 +7516,7 @@ class ProductionManager:
                 current.next_owner = WorkOrderNextOwner.WORKER_TOOL
                 current.updated_at = utc_now()
                 self.runtime.store.save_work_order(current)
-            return self.submit_work_order_result(
+            response = self.submit_work_order_result(
                 work_order_id,
                 AgentWorkOrderResultRequest(
                     status=AgentResultStatus.PARTIAL,
@@ -7556,8 +7530,22 @@ class ProductionManager:
                     next_owner=WorkOrderNextOwner.WORKER_TOOL,
                 ),
             )
+            if not response.result.stale_handoff:
+                self._clear_specialist_protocol_feedback(work_order_id)
+            return response
         try:
-            return self.submit_work_order_result(work_order_id, decision)
+            response = self.submit_work_order_result(work_order_id, decision)
+        except SpecialistResultContractError as exc:
+            current = self.runtime.store.get_work_order(work_order_id)
+            feedback = SpecialistProtocolFeedback(
+                id=f"specialist-feedback-{uuid4().hex}",
+                rejected_response=decision.model_dump_json(),
+                validation_issues={"AgentWorkOrderResultRequest": _validation_issues(exc)},
+                loaded_tool_schema_ids=[] if current is None else current.loaded_tool_schema_ids,
+            )
+            return self._submit_specialist_protocol_feedback(
+                work_order_id, SpecialistResponseProtocolError(feedback),
+            )
         except Exception as exc:
             self._return_specialist_failure(work_order_id, exc)
             if isinstance(exc, ProductionManagerError):
@@ -7566,8 +7554,39 @@ class ProductionManager:
                 f"Specialist Agent result handoff failed: {exc}"
             ) from exc
 
+        if not response.result.stale_handoff:
+            self._clear_specialist_protocol_feedback(work_order_id)
+        return response
+
+    def _submit_specialist_protocol_feedback(
+        self, work_order_id: str, error: SpecialistResponseProtocolError,
+    ) -> AgentWorkOrderResultResponse:
+        """Keep the rejected judgment beside its error, without accepting its refs."""
+        next_owner = self._return_specialist_protocol_failure_to_worker(work_order_id, error)
+        repeated = next_owner == WorkOrderNextOwner.LEADER_REPLAN
+        try:
+            rejected = cast(JsonValue, json.loads(error.feedback.rejected_response))
+        except ValueError:
+            rejected = error.feedback.rejected_response
+        return self.submit_work_order_result(work_order_id, AgentWorkOrderResultRequest(
+            status=AgentResultStatus.PARTIAL,
+            concise_summary=(
+                "专业 Agent 重复了同一交接合同问题；已保留原判断与错误，交回 Leader 调整剩余范围。"
+                if repeated else
+                "专业 Agent 的交接未通过合同校验；已保留原判断、错误及落盘内容，由同一 Worker 修正。"
+            ),
+            deliverable={"rejected_handoff": {"accepted": False, "response": rejected,
+                "validation_issues": cast(JsonValue, error.feedback.validation_issues)}},
+            findings=["被拒响应只作为修复来源，不将其中的产物声明或完成判断视为已验收事实。"],
+            recommended_next_actions=[
+                "保留已保存内容，由 Leader 调整剩余交接范围。" if repeated else
+                "让原 Worker 依据 pending_protocol_feedback 修正交接，不重复已成功的 Tool。"
+            ],
+            next_owner=next_owner,
+        ))
+
     def _clear_specialist_protocol_feedback(self, work_order_id: str) -> None:
-        """Clear pending protocol feedback after one valid Worker decision."""
+        """Clear feedback only after the Worker decision was accepted and persisted."""
 
         current = self.runtime.store.get_work_order(work_order_id)
         if current is None or current.pending_protocol_feedback is None:

@@ -415,7 +415,7 @@ def test_read_adapters_use_the_real_service_without_bypassing_it(tmp_path: Path)
         {"project_id": project_id},
     )
     assert route_plans.status == ToolCallStatus.SUCCEEDED
-    assert route_plans.output == {"plans": []}
+    assert route_plans.output == {"plans": [], "source_checks": []}
 
     visual_reports = service.tool_registry.invoke(
         "qa.list_visual_input_reports",

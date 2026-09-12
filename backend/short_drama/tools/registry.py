@@ -104,6 +104,7 @@ class _RegisteredTool(Generic[InputT, OutputT]):
             artifact_refs=list(execution.artifact_refs),
             warnings=list(execution.warnings),
             receipt=receipt,
+            visual_attachments=list(execution.visual_attachments),
         )
         self._trace_finished(tool_call_id, result, started)
         return result

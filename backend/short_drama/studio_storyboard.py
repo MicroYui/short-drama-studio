@@ -1,8 +1,9 @@
 """The content page projects committed draft groups as they are written."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from short_drama.models import ProjectDocument, ProductionDocument, ProductionDocumentVersion, ProductionDocumentOrigin
+from short_drama.models import ProjectDocument, ProductionDocument, ProductionDocumentVersion, ProductionDocumentOrigin, ShotPlan
 from short_drama.production_contracts import StoryboardDraftContent, StoryboardDraftGroupReplaceRequest, StoryboardWorkUnitContract
 from short_drama.studio_models import StudioShotSave
 
@@ -20,17 +21,44 @@ def current_draft(document: ProjectDocument) -> tuple[ProductionDocument, Produc
     return source, version, StoryboardDraftContent.model_validate(version.payload)
 
 
-def project_draft_shots(document: ProjectDocument) -> None:
-    value = current_draft(document)
-    if value is None:
-        return
-    draft = value[2]
+def _draft_shots(draft: StoryboardDraftContent) -> list[ShotPlan]:
     order = {node.id: node.sequence for node in draft.scene_nodes}
     groups = sorted(draft.committed_groups, key=lambda group: (order[group.scene_node_id], group.scene_group_sequence))
     shots = [shot.model_copy(deep=True) for group in groups for shot in group.shots]
     for index, shot in enumerate(shots, 1):
         shot.sequence = index
-    document.shots = shots
+    return shots
+
+
+def project_draft_shots(document: ProjectDocument) -> None:
+    value = current_draft(document)
+    if value is not None:
+        document.shots = _draft_shots(value[2])
+
+
+@dataclass(frozen=True)
+class ResolvedCurrentShot:
+    shot: ShotPlan
+    draft_source: tuple[ProductionDocument, ProductionDocumentVersion] | None = None
+
+
+def resolve_current_shot(document: ProjectDocument, shot_id: str) -> ResolvedCurrentShot | None:
+    """Use the same committed draft projection as current content reads.
+
+    A formal storyboard takes precedence. Never search an old draft after its
+    shot was removed or finalized, and preserve the actual saved source version.
+    """
+    draft = current_draft(document)
+    shots = document.shots if draft is None else _draft_shots(draft[2])
+    if draft is not None:
+        from short_drama.studio_references import project_legacy_references
+        # Match current reads' deterministic cue IDs/legacy view without
+        # modifying either the saved draft or its containing document.
+        project_legacy_references(document.model_copy(update={"shots": shots}))
+    shot = next((item for item in shots if item.id == shot_id), None)
+    if shot is None:
+        return None
+    return ResolvedCurrentShot(shot, None if draft is None else (draft[0], draft[1]))
 
 
 def save_draft_shot(service: ShortDramaService, document: ProjectDocument, shot_id: str, request: StudioShotSave) -> bool:

@@ -9,6 +9,7 @@ from typing import Callable, Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from short_drama.agent_runtime.models import ArtifactRef
+from short_drama.image_observation import VisualAttachment
 
 
 class ToolModel(BaseModel):
@@ -100,6 +101,7 @@ class ToolResult(ToolModel):
     warnings: list[str] = Field(default_factory=list[str])
     error: ToolError | None = None
     receipt: ToolWriteReceipt | None = None
+    visual_attachments: list[VisualAttachment] = Field(default_factory=list[VisualAttachment])
 
 
 InputT = TypeVar("InputT", bound=BaseModel)
@@ -114,6 +116,7 @@ class ToolExecution(Generic[OutputT]):
     artifact_refs: tuple[ArtifactRef, ...] = ()
     warnings: tuple[str, ...] = ()
     receipt: ToolWriteReceipt | None = None
+    visual_attachments: tuple[VisualAttachment, ...] = ()
 
 
 @dataclass(frozen=True)

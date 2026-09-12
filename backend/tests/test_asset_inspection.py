@@ -637,6 +637,7 @@ def test_asset_version_semantic_inspection_is_agent_callable_before_review(
         "plane_composite_suggestion": None,
         "provider_output_review": None,
         "shot_revision": None,
+        "shot_source": None,
     }
     assert {item.artifact_type for item in result.artifact_refs} == {
         "asset",
@@ -1010,14 +1011,14 @@ def test_local_review_rejects_source_that_exceeds_decode_pixel_bound(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import short_drama.asset_inspection as inspection_module
+    import short_drama.image_observation as inspection_module
 
     source_path = tmp_path / "oversized-for-review.png"
     Image.new("RGB", (128, 128), "#dbeafe").save(source_path)
-    monkeypatch.setattr(inspection_module, "_ANALYSIS_IMAGE_MAX_SOURCE_PIXELS", 100)
+    monkeypatch.setattr(inspection_module, "ANALYSIS_IMAGE_MAX_SOURCE_PIXELS", 100)
 
     with pytest.raises(ValueError, match="too large for in-process semantic review"):
-        inspection_module._analysis_thumbnail_bytes(source_path)
+        inspection_module.analysis_thumbnail_bytes(source_path)
 
 
 def test_asset_inspection_keeps_superseded_authoritative_source_as_history(

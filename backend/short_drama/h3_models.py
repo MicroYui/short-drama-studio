@@ -370,6 +370,12 @@ class H3ShotRoutePlan(DomainModel):
         return self
 
 
+class H3SavedRouteSource(DomainModel):
+    route_plan_id: str = Field(min_length=1)
+    state_revision: int = Field(ge=1)
+    generation_unit_id: str = Field(min_length=1, description="Exact source decision identity; must equal the current target group.")
+
+
 class H3ProductionRoutePlan(DomainModel):
     id: str
     project_id: str
@@ -403,6 +409,7 @@ class H3ProductionRoutePlan(DomainModel):
     updated_at: str
     executed_at: str | None = None
     source_operation_id: str | None = None
+    reused_route_source: H3SavedRouteSource | None = None
 
 
 class H3RouteAssetPreparationUpdateRequest(DomainModel):
@@ -460,6 +467,7 @@ class H3ShotRouteDirective(DomainModel):
     shot_id: str = Field(default="", max_length=200)
     generation_unit_id: str | None = Field(default=None, min_length=1, max_length=200)
     candidate_id: str | None = Field(default=None, min_length=1, max_length=300)
+    saved_route_source: H3SavedRouteSource | None = Field(default=None, description="Actively reuse one exact saved route decision after checking its prompt against this current group. Reads its unchanged prompt, format and ordered media; no language call. Mutually exclusive with candidate/prompt/media/take choices. Current facts and files are revalidated and saved as a new source.")
     reuse_take_id: str | None = Field(default=None, min_length=1, max_length=200)
     reference_selection_candidate_ids: list[str] | None = None
     camera_previs_motion: H3CameraMotionPreset | None = None
@@ -474,6 +482,12 @@ class H3ShotRouteDirective(DomainModel):
             raise ValueError(
                 "An H3 route directive must target exactly one shot or generation unit"
             )
+        if self.saved_route_source is not None:
+            if self.generation_unit_id != self.saved_route_source.generation_unit_id:
+                raise ValueError("Saved route reuse must target its same generation unit")
+            if any(value is not None for value in (self.candidate_id, self.prompt_override, self.media_inputs,
+                    self.reuse_take_id, self.reference_selection_candidate_ids, self.camera_previs_motion)):
+                raise ValueError("saved_route_source is exclusive with candidate, prompt, media, take and guide choices")
         if self.prompt_override is not None or self.media_inputs is not None:
             if self.generation_unit_id is None or self.candidate_id is None:
                 raise ValueError(
@@ -522,6 +536,10 @@ class H3ProductionRoutePlanRequest(DomainModel):
 
     @model_validator(mode="after")
     def validate_shot_directives(self) -> H3ProductionRoutePlanRequest:
+        reused = [item for item in self.shot_directives if item.saved_route_source is not None]
+        if reused and (len(self.shot_directives) != 1 or self.unit_ids != [reused[0].generation_unit_id]
+                       or self.source_operation_id is not None):
+            raise ValueError("Saved route reuse requires one explicit unit/directive and captures a new source operation")
         generation_plan_selected = any(
             (
                 self.generation_plan_document_id is not None,
@@ -562,12 +580,25 @@ class H3ProductionRoutePlanRequest(DomainModel):
         return self
 
 
+class H3RouteSourceCheck(DomainModel):
+    route_plan_id: str
+    state_revision: int
+    generation_unit_id: str | None = None
+    shot_id: str
+    checked_at: str
+    status: Literal["CURRENT", "STALE", "UNKNOWN"]
+    scope: Literal["SAVED_OPERATION_SOURCE", "CURRENT_INPUTS_ONLY"]
+    reason: str | None = None
+
+
 class H3ProductionRoutePlanResponse(DomainModel):
     plan: H3ProductionRoutePlan
+    source_checks: list[H3RouteSourceCheck] = Field(default_factory=list[H3RouteSourceCheck])
 
 
 class H3ProductionRoutePlanListResponse(DomainModel):
     plans: list[H3ProductionRoutePlan]
+    source_checks: list[H3RouteSourceCheck] = Field(default_factory=list[H3RouteSourceCheck])
 
 
 class H3ProductionRouteExecuteRequest(DomainModel):

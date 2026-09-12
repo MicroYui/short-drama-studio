@@ -1,0 +1,660 @@
+{
+  "provenance": {
+    "project_id": "project-bd8595b4b332",
+    "work_order_id": "work-order-9d60a066c546435a8ee30efc317de49f",
+    "text_plate_asset_source": "output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-bd8595b4b332/studio-trace/studio-job-11fda417622f/20260912T101623565514-0164cc2b-model.input.json",
+    "text_plate_turn_source": "output/quality-e2e-2026-09-12/observations/fresh6-paper-state-chain-source.json",
+    "preview_source": "output/quality-e2e-2026-09-12/observations/fresh6-paper-ui-selection-source.json",
+    "scope": "Exact original asset definition and failed t6 request/result; later UI snapshot independently reduced to four relevant versions, ReferencePack entries, and paper cues. Unrelated metadata and versions omitted; timestamps remain distinct."
+  },
+  "asset_before_text_plate": {
+    "id": "asset-d9b912d71f3d",
+    "kind": "PROP",
+    "name": "发货差错说明",
+    "descriptor": "原创A4纸张空白实体母底，仅供后续同纸打印与签写状态派生，不作为开场已打印状态。",
+    "brief": {
+      "identity_anchor": "同一张白色A4发货差错内部说明，是从单方担责变为共同记录经过的实物载体。",
+      "tone_or_temperament": null,
+      "visual_attributes": [
+        "单张完整白纸，不撕毁、不更换",
+        "上半部少量灰黑印刷行，下半部明显留白",
+        "不带公司标志、二维码或密集表格"
+      ],
+      "wardrobe_or_materials": [
+        "普通哑光办公纸",
+        "灰黑印刷与黑色手写墨迹"
+      ],
+      "background_constraints": [
+        "不得用纸面小字、特写阅读或额外证据解释关键因果"
+      ],
+      "texture_constraints": [
+        "真实纸张与墨迹，不发光，不浮现字幕"
+      ],
+      "continuity_anchors": [
+        "入场状态：无人署名，周明把纸推到许宁面前",
+        "交涉状态：许宁将原纸推到桌中央，不签",
+        "主管处理状态：周明拉近原纸，补写一行经过并署名",
+        "结束状态：许宁在同张纸的另一处空白署名；周明拿回原纸，留下两处可见黑色签写痕迹",
+        "具体字形不作为观众理解前提，不需在图片中强求微小文字准确"
+      ],
+      "named_views_or_zones": [
+        "纸张上半部打印区",
+        "下半部补写与两人署名区"
+      ],
+      "presentation_mode": "PHYSICAL_MASTER",
+      "required_visible_text": [],
+      "reference_strategy": "LIGHTWEIGHT",
+      "layout_profile": "LIGHTWEIGHT_SINGLE",
+      "requested_views": [],
+      "strategy_rationale": null
+    }
+  },
+  "text_plate_attempt": {
+    "id": "specialist-turn-8f66a6e4985b436282d7590567b0f6dd",
+    "sequence": 6,
+    "tool_name": "image.compose_text_plate",
+    "arguments": {
+      "project_id": "project-bd8595b4b332",
+      "asset_id": "asset-d9b912d71f3d",
+      "request": {
+        "size": "1136x1600",
+        "background_color": "#FFFFFF",
+        "foreground_color": "#414141",
+        "content_state": {
+          "name": "开场稀疏打印、无人署名的纸面内容",
+          "required_visible_text": [
+            "发货差错说明",
+            "本次发货出现差错，现作情况说明。",
+            "经过记录："
+          ]
+        },
+        "text_blocks": [
+          {
+            "text": "发货差错说明",
+            "content_box": [
+              0.08,
+              0.045,
+              0.84,
+              0.075
+            ],
+            "font_size": 58,
+            "text_align": "center",
+            "vertical_align": "center"
+          },
+          {
+            "text": "本次发货出现差错，现作情况说明。",
+            "content_box": [
+              0.075,
+              0.195,
+              0.85,
+              0.055
+            ],
+            "font_size": 32
+          },
+          {
+            "text": "经过记录：",
+            "content_box": [
+              0.075,
+              0.28,
+              0.5,
+              0.05
+            ],
+            "font_size": 32
+          }
+        ],
+        "layout_description": "准确内容源，不是摄影母图。标题与两行稀疏灰黑打印仅占上半部；下半部完全留白，不印人名、签字或密集表格。全图对应母底已观察的纸内安全平面，未来机位不必照搬。",
+        "descriptor": "发货差错说明的未签打印字版；用于叠入同一张原创A4实体母底。",
+        "parent_version_id": "asset-version-ce73e20ad056"
+      }
+    },
+    "reason": "在已观察的空白实体纸张上制作稀疏打印内容的准确字版，保留下半部供后续补写与两人署名。",
+    "status": "COMPLETED",
+    "result": {
+      "tool_id": "image.compose_text_plate",
+      "status": "FAILED",
+      "output": null,
+      "artifact_refs": [],
+      "warnings": [],
+      "error": {
+        "kind": "WorkflowConflictError",
+        "message": "Text plate asset brief must declare required_visible_text; preserve the physical carrier's presentation_mode",
+        "phase": "EXECUTION",
+        "scope": {
+          "project_id": "project-bd8595b4b332",
+          "asset_id": "asset-d9b912d71f3d"
+        },
+        "details": [],
+        "suggested_actions": [
+          "Use the specific error and current object scope to repair this operation. Check its persisted task state before retrying external work."
+        ],
+        "retryable": false
+      },
+      "receipt": null
+    },
+    "requested_at": "2026-09-12T10:17:24.475482Z",
+    "updated_at": "2026-09-12T10:17:24.728721Z"
+  },
+  "preview_snapshot": {
+    "observed_at": "2026-09-12T11:14:05.576236+00:00",
+    "document_updated_at": "2026-09-12T11:13:37.994+00:00",
+    "asset": {
+      "id": "asset-d9b912d71f3d",
+      "name": "发货差错说明",
+      "kind": "PROP",
+      "current_version_id": "asset-version-dd6a58f9e33e",
+      "approved_version_id": null,
+      "versions": [
+        {
+          "id": "asset-version-6121f0476318",
+          "version": 4,
+          "descriptor": "开场未签实体母版：同一张原创哑光A4纸，上半部只有“发货差错说明 / 事项：发货核对 / 请记录有关经过。”稀疏打印，下半部留白，无补写及姓名。保留母底纸边、光照和接触影；仅为道具身份与纸面状态参考，不锁定后续机位或动作。",
+          "media_type": "IMAGE",
+          "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-bd8595b4b332/assets/asset-d9b912d71f3d/v4-asset-version-6121f0476318-plane.png",
+          "external_url": null,
+          "origin_type": "LOCAL_DERIVED",
+          "freshness": "CURRENT",
+          "approval_status": "DRAFT",
+          "width": 1024,
+          "height": 1536,
+          "file_size_bytes": 1815063
+        },
+        {
+          "id": "asset-version-2f322f51b557",
+          "version": 10,
+          "descriptor": "周明补写并先签的本地修复候选：从已生成摄影手写区分离原墨迹，原位叠入同一未签实体母版。保留纸边、原打印、纸面光照，以及“未等复核，由我决定先发货。”和“周明”的实际笔画；尚无许宁署名。仅静态道具状态，待检查纸色接缝与墨迹完整性。",
+          "media_type": "IMAGE",
+          "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-bd8595b4b332/assets/asset-d9b912d71f3d/v10-asset-version-2f322f51b557-plane.png",
+          "external_url": null,
+          "origin_type": "LOCAL_DERIVED",
+          "freshness": "CURRENT",
+          "approval_status": "DRAFT",
+          "width": 1024,
+          "height": 1536,
+          "file_size_bytes": 1844631
+        },
+        {
+          "id": "asset-version-dd31b80c5d96",
+          "version": 14,
+          "descriptor": "双方已签静态纸面候选：以已采用周明先签版本为母图，仅在原下方留白追加自然黑色手写“许宁”。保留原纸、全部打印、补写经过及周明笔迹；待观察新增字形、纸色连续性与同纸状态，不代表书写或交接动作已验证。｜同次编辑的 Provider 原图候选；尚未应用本地遮罩保护，内容与圈外变化未验收。",
+          "media_type": "IMAGE",
+          "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-bd8595b4b332/assets/.provider-output/image-task-8af01a89bd59.png",
+          "external_url": null,
+          "origin_type": "LOCAL_DERIVED",
+          "freshness": "CURRENT",
+          "approval_status": "DRAFT",
+          "width": 1024,
+          "height": 1536,
+          "file_size_bytes": 1681971
+        },
+        {
+          "id": "asset-version-dd6a58f9e33e",
+          "version": 15,
+          "descriptor": "双方已签静态纸面候选：以已采用周明先签版本为母图，仅在原下方留白追加自然黑色手写“许宁”。保留原纸、全部打印、补写经过及周明笔迹；待观察新增字形、纸色连续性与同纸状态，不代表书写或交接动作已验证。",
+          "media_type": "IMAGE",
+          "local_path": "/Users/liyifan/Documents/ChatGPT/ai短剧调研/output/quality-e2e-2026-09-12/runtime/outputs/short-drama-projects/project-bd8595b4b332/assets/asset-d9b912d71f3d/v15-asset-version-dd6a58f9e33e.png",
+          "external_url": null,
+          "origin_type": "AI_EDITED",
+          "freshness": "CURRENT",
+          "approval_status": "REJECTED",
+          "width": 1024,
+          "height": 1536,
+          "file_size_bytes": 1847355
+        }
+      ]
+    },
+    "reference_packs": [
+      {
+        "id": "reference-pack-asset-d9b912d71f3d",
+        "project_id": "project-bd8595b4b332",
+        "subject_asset_id": "asset-d9b912d71f3d",
+        "name": "发货差错说明参考包",
+        "entries": [
+          {
+            "id": "reference-entry-02fc0e01841a",
+            "asset_version_id": "asset-version-6121f0476318",
+            "lineage_root_version_id": "asset-version-6121f0476318",
+            "role": "CANONICAL_MASTER",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "发货差错说明",
+              "纸张身份",
+              "稀疏打印",
+              "同纸母版"
+            ],
+            "description": "已观察选用的实体母版：完整白色哑光A4纸，上半部三行灰黑打印，下半部留白。固定同纸外观、打印版式与纸质；中性台面和近俯拍仅供道具展示，不绑定未来会议室构图、纸向或手势。",
+            "priority": 100
+          },
+          {
+            "id": "reference-entry-874eb02ffc67",
+            "asset_version_id": "asset-version-6121f0476318",
+            "lineage_root_version_id": "asset-version-6121f0476318",
+            "role": "PROP_STATE",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "开场未签",
+              "无人署名",
+              "无补写",
+              "推纸与退纸前后"
+            ],
+            "description": "开场及许宁拒绝独签阶段的纸面状态：只有“发货差错说明”“事项：发货核对”“请记录有关经过。”稀疏打印，无补写、无周明或许宁署名。实际文字与自然贴合已观察；仅静态道具状态，未证明推纸、握笔或书写动作。",
+            "priority": 90
+          },
+          {
+            "id": "reference-entry-3e8c45625636",
+            "asset_version_id": "asset-version-2f322f51b557",
+            "lineage_root_version_id": "asset-version-6121f0476318",
+            "role": "PROP_STATE",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "周明先签",
+              "已补写经过",
+              "许宁未签",
+              "同纸递进"
+            ],
+            "description": "已选用并观察的周明先签静态纸面：保留开场同一张A4纸、三项稀疏打印及光照；新增自然黑色手写“未等复核，由我决定先发货。”与“周明”，许宁署名处仍空白。本地分离摄影墨迹后未见明显矩形纸色接缝或缺笔。仅提供道具身份、版式和纸面状态，不约束后续纸张摆放、机位，不验证握笔、动态补写或交接。",
+            "priority": 90
+          },
+          {
+            "id": "reference-entry-b9e0148b9cbd",
+            "asset_version_id": "asset-version-dd31b80c5d96",
+            "lineage_root_version_id": "asset-version-6121f0476318",
+            "role": "PROP_STATE",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "双方已签",
+              "周明先签",
+              "许宁后签",
+              "已补写经过",
+              "同纸递进",
+              "结尾收回"
+            ],
+            "description": "已观察并选用的双方已签静态纸面。由周明先签图派生，采用同任务已登记的供应商原图，而非有截字和矩形接缝的遮罩合成图。完整保留可辨的“发货差错说明”、两行打印、补写经过“未等复核，由我决定先发货。”及周明原署名；原留白新增完整自然的黑色手写“许宁”，不覆盖旧墨迹。与未签母版和先签图对照，纸张轮廓、打印及旧笔迹位置、台面和接触影可见一致；纸面灰度细纹略有差异但过渡自然，不宣称逐像素相同。许宁姓名略大、位置比原编辑框高，不影响两人先后署名的状态用途。用于许宁署名完成后及周明收回原纸阶段的道具身份与纸面状态参考；不得提前用于未签或仅周明已签阶段。近俯拍、中性台面不绑定后续机位、纸向或手势，不证明动态书写、握笔、交接及视频文字稳定。",
+            "priority": 90
+          },
+          {
+            "id": "reference-entry-721444c28987",
+            "asset_version_id": "asset-version-e58b50ae3b79",
+            "lineage_root_version_id": "asset-version-2f322f51b557",
+            "role": "PROP_IN_HAND",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "第15镜",
+              "shot-qwxb-015",
+              "clip-qwxb-05",
+              "COMPOSITION",
+              "首次触纸",
+              "周明先签",
+              "许宁未签",
+              "浅蓝袖口",
+              "左手执笔"
+            ],
+            "description": "已实际检查并采用的第15镜软COMPOSITION。采样于0–3秒动作段内取笔之后、许宁首次触到另一处空白，不是开始握笔前或签写末段，也不是整组首尾帧。实际可见左手执笔，浅蓝前臂自画左下进入，袖口、掌腕和握笔支撑连接可信；唯一哑黑按动笔带银夹及伸出短尖，尖端与纸面相接。标题端朝画右上较远处，下方签名空白靠近画左下执笔者。可辨三项打印、单行补写经过和独立周明署名均保留，未见删项、重排、关键旧墨迹遮断或完整许宁姓名提前出现；不是逐像素配准证明。右上部分纸边出画不影响本图接触用途。浅木桌与暖光相容，无脸，不能核定面部身份或完整房间拓扑。握笔手别与原生成自定右手不同，采用实际左手供相邻构图延续；取笔、连续签写、抬笔及跨镜无换手仍待未来视频验证。",
+            "priority": 90
+          },
+          {
+            "id": "reference-entry-81c4a476affb",
+            "asset_version_id": "asset-version-1880adb38aef",
+            "lineage_root_version_id": "asset-version-dd31b80c5d96",
+            "role": "PROP_IN_HAND",
+            "angle": "NOT_APPLICABLE",
+            "framing": "DETAIL",
+            "tags": [
+              "第16镜",
+              "shot-qwxb-016",
+              "clip-qwxb-05",
+              "COMPOSITION",
+              "放笔后双接触",
+              "双方已签",
+              "已补写经过",
+              "浅蓝左手",
+              "炭灰袖接收",
+              "标题朝画右上",
+              "笔独立留桌",
+              "9:16"
+            ],
+            "description": "明确采用的第16镜软COMPOSITION，图片保存在专用回交构图资产，不替代纸张母版。仅采样约0.6–1.9秒回交段：许宁已签完并放笔，双方仍接触原纸，许宁尚未收手；不是镜头首帧或交接终态。已实际对照第15镜接触构图、双签摄影纸面、双方衣装、黑笔及会议室来源。浅蓝袖自左下进入，可辨为左手，与第15镜相容；炭灰袖自右上进入，部分掌指遮挡，手别不确定。可见腕掌袖口连接连续，未见断指、穿纸或额外肢体。实际为拇指压纸、其余指绕边的捏边姿态，局部纸缘微翘；可供回交接触依据，不宣称整页完全平贴滑动或纯指腹平推，不锁定全程手势。单纸整体在框，少量左下边缘被手遮，三项打印、单行补写“未等复核，由我决定先发货。”、完整“周明”及“许宁”均可辨无遮挡，分区和次序保留。字距、部分笔画及页内边距有轻微重绘，不是原墨逐像素移植；未见旧墨消失、缺字、换行或糊团，无需纸面修复。标题端朝右上、署名端朝左下，浅木桌和暖中性光与前镜相容。唯一哑黑按动笔及银夹、伸出短尖完整可见，独立落在纸下方木桌，与纸和手均有间隙，承托及阴影可信。没有脸、第二纸笔、拼缝或水印；局部桌面不证明全房席位拓扑。放笔与松手顺序、推纸方向、接触先于停纸、许宁收手、纸停笔留和跨镜连续性仍须未来视频验证。",
+            "priority": 90
+          }
+        ],
+        "created_at": "2026-09-12T10:20:43.812+00:00",
+        "updated_at": "2026-09-12T10:59:54.022+00:00"
+      }
+    ],
+    "shot_cues": [
+      {
+        "shot_id": "shot-qwxb-001",
+        "sequence": 1,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-001-reference-3",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 119,
+            "text_end": 126,
+            "alias": "发货差错说明",
+            "required_tags": [
+              "单张A4",
+              "未署名",
+              "下半部留白"
+            ],
+            "purpose": "提供同一原纸的稀疏打印与未补写、未署名状态；纸上小字不承担剧情阅读。新构图要留出接触和推送路径，不能将旧缺陷候选当整镜空间输入。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-001-beat-0-ref-1",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 11,
+            "text_end": 18,
+            "alias": "发货差错说明",
+            "required_tags": [
+              "单张A4",
+              "未署名",
+              "下半部留白"
+            ],
+            "purpose": "0–0.4秒推纸开端的同一单张未签原纸；必须有手接触纸边，不凭状态图宣称滑动已实现。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-001-beat-1-ref-0",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 7,
+            "alias": "发货差错说明",
+            "required_tags": [
+              "单张A4",
+              "未署名",
+              "下半部留白"
+            ],
+            "purpose": "0.4–4.5秒送达许宁面前的同一未签原纸，保留原打印和留白。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "shot_id": "shot-qwxb-002",
+        "sequence": 2,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-002-reference-2",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 23,
+            "text_end": 30,
+            "alias": "发货差错说明",
+            "required_tags": [
+              "未署名",
+              "单张原纸"
+            ],
+            "purpose": "同一张有稀疏打印、未补写未署名的原纸；本镜只需笔尖附近留白，不要求全文可读。保持第1镜推纸后的物理纸向，不镜像或凭切镜翻转原纸；悬笔构图印字虚焦，不能证明其阅读方向或画外全页状态。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "shot_id": "shot-qwxb-008",
+        "sequence": 8,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-008-reference-3",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 62,
+            "text_end": 71,
+            "alias": "未签发货差错说明",
+            "required_tags": [
+              "开场未签",
+              "无人署名",
+              "无补写",
+              "推纸与退纸前后"
+            ],
+            "purpose": "采用已观察的开场未签原A4纸：上半部三项稀疏打印，下半部留白，无补写或任何署名。只提供纸张身份与未签状态，不继承展示台面、纸向或机位。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-008-reference-5",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 12,
+            "text_end": 21,
+            "alias": "未签发货差错说明",
+            "required_tags": [
+              "开场未签",
+              "无人署名",
+              "无补写",
+              "推纸与退纸前后"
+            ],
+            "purpose": "第8镜0–2.5秒始终保持同一张仅有稀疏打印的原纸，无补写和署名；采用已检查的未签实体母版。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "shot_id": "shot-qwxb-010",
+        "sequence": 10,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-010-reference-3",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 51,
+            "text_end": 56,
+            "alias": "未签说明",
+            "required_tags": [
+              "开场未签",
+              "无人署名",
+              "无补写"
+            ],
+            "purpose": "已采用的同一张已打印原纸，无补写和任何署名；只提供道具身份与纸面状态，不固定当前机位和摆放。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-010-reference-6",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "action",
+            "text_start": 3,
+            "text_end": 8,
+            "alias": "未签说明",
+            "required_tags": [
+              "开场未签",
+              "无人署名",
+              "无补写"
+            ],
+            "purpose": "原纸未签状态，只改变归属位置。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "shot_id": "shot-qwxb-011",
+        "sequence": 11,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-011-reference-1",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 46,
+            "text_end": 51,
+            "alias": "未签说明",
+            "required_tags": [],
+            "purpose": "同一张未签原纸的纸质、三项打印相对布局与下方留白来源；本镜只取必要局部，镜内才新增短墨。保留清楚的末行行首与新行关系，实体纸和印字共同透视；不继承产品展示读向或中性台面，不证明落笔。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-011-beat-0-paper",
+            "asset_version_id": "asset-version-6121f0476318",
+            "field": "visual",
+            "text_start": 29,
+            "text_end": 34,
+            "alias": "未签说明",
+            "required_tags": [],
+            "purpose": "0–1.8秒同纸与起笔前留白的来源；只保留必要可见打印局部，不要求全页。动作后允许新增短墨，但不得出现已写完经过或任何署名。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "shot_id": "shot-qwxb-013",
+        "sequence": 13,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-013-reference-1",
+            "asset_version_id": "asset-version-2f322f51b557",
+            "field": "visual",
+            "text_start": 59,
+            "text_end": 66,
+            "alias": "主管签写说明",
+            "required_tags": [
+              "周明先签",
+              "已补写经过",
+              "许宁未签",
+              "同纸递进"
+            ],
+            "purpose": "已采用的同一原纸补写并仅周明署名状态，保留原打印和旧墨迹；用于时间省略后0–1.4秒收笔放笔及1.4–3.5秒送回段的道具状态。不是末笔之前或整镜的硬首帧，不提前出现许宁署名，不证明书写过程。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-013-beat-0-paper",
+            "asset_version_id": "asset-version-2f322f51b557",
+            "field": "visual",
+            "text_start": 8,
+            "text_end": 15,
+            "alias": "主管签写说明",
+            "required_tags": [
+              "周明先签",
+              "已补写经过",
+              "许宁未签",
+              "同纸递进"
+            ],
+            "purpose": "0–1.4秒时间省略后的已补写、周明先签完成态；保留旧打印、补写和唯一周明署名。仅为道具状态，不作末笔之前硬首帧，也不证明画外签写过程。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-013-reference-4",
+            "asset_version_id": "asset-version-2f322f51b557",
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 7,
+            "alias": "主管签写说明",
+            "required_tags": [
+              "周明先签",
+              "已补写经过",
+              "许宁未签",
+              "同纸递进"
+            ],
+            "purpose": "1.4–3.5秒的纸面状态依据：已有原打印、周明补写与唯一周明署名，下方后签区仍留白；许宁签写尚未发生。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "shot_id": "shot-qwxb-015",
+        "sequence": 15,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-015-reference-2",
+            "asset_version_id": "asset-version-2f322f51b557",
+            "field": "visual",
+            "text_start": 46,
+            "text_end": 56,
+            "alias": "发货差错说明先签态",
+            "required_tags": [
+              "周明先签",
+              "许宁未签"
+            ],
+            "purpose": "已采用摄影先签态：三项打印、补写经过和周明署名保留，许宁署名位置空白。只供本镜取笔至首次落笔的起态依据，不替代场内接触构图。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-015-reference-5",
+            "asset_version_id": "asset-version-2f322f51b557",
+            "field": "visual",
+            "text_start": 17,
+            "text_end": 27,
+            "alias": "发货差错说明先签态",
+            "required_tags": [
+              "周明先签",
+              "许宁未签"
+            ],
+            "purpose": "实际先签纸提供落笔前状态：原打印、主管补写和署名仍在，许宁尚未签。不得以该静态起态锁住全镜纸面；本镜末段新增许宁签痕，双签完成结果由第16镜覆盖。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      },
+      {
+        "shot_id": "shot-qwxb-016",
+        "sequence": 16,
+        "cues": [
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-016-reference-0",
+            "asset_version_id": "asset-version-dd31b80c5d96",
+            "field": "visual",
+            "text_start": 17,
+            "text_end": 27,
+            "alias": "发货差错说明双签态",
+            "required_tags": [
+              "双方已签",
+              "已补写经过"
+            ],
+            "purpose": "采用已检查的双签摄影纸面：保留三项打印、单行补写及完整周明、许宁署名。仅用于许宁签完后的本镜，不提前用于第15镜初态，不以静态道具图替代场内交接。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          },
+          {
+            "subject_asset_id": "asset-d9b912d71f3d",
+            "id": "shot-qwxb-016-reference-5",
+            "asset_version_id": "asset-version-dd31b80c5d96",
+            "field": "visual",
+            "text_start": 0,
+            "text_end": 10,
+            "alias": "发货差错说明双签态",
+            "required_tags": [
+              "双方已签",
+              "已补写经过"
+            ],
+            "purpose": "本段已完成双签的摄影状态依据，原打印、补写、周明及许宁署名须持续保留；不证明动态书写或回交已经实现。",
+            "image_reference_role": "PROP_IDENTITY",
+            "usage": "GENERATION"
+          }
+        ]
+      }
+    ]
+  }
+}
